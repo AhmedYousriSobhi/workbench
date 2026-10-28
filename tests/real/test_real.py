@@ -229,7 +229,7 @@ def test_real_governor_posts_annotations_with_token(tmp_path):
 
     srv = HTTPServer(("127.0.0.1", 0), H)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    gov, sig, sock = _gov(tmp_path, "--dry-run", "--no-watchdog",
+    gov, sig, _sock = _gov(tmp_path, "--dry-run", "--no-watchdog",
                           "--grafana-url", f"http://127.0.0.1:{srv.server_port}",
                           env={"HPCSIM_GRAFANA_TOKEN": "sekret-test-token"})
     try:
