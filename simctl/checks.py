@@ -129,9 +129,41 @@ def governor_request(req: dict, path: str = GOV_SOCKET, timeout: float = 3) -> d
         return json.loads(c.makefile().readline())
 
 
+def container_violations(inspected: list[dict]) -> list[str]:
+    """Security/limit gaps in `docker inspect` output for sim containers (ADR 0002)."""
+    bad = []
+    for c in inspected:
+        name, hc = c["Name"].lstrip("/"), c["HostConfig"]
+        if hc.get("Privileged"):
+            bad.append(f"{name}: privileged")
+        if hc.get("CapAdd"):
+            bad.append(f"{name}: extra capabilities {hc['CapAdd']}")
+        if any("unconfined" in o for o in hc.get("SecurityOpt") or []):
+            bad.append(f"{name}: confinement disabled {hc['SecurityOpt']}")
+        if hc.get("NetworkMode") == "host" or hc.get("PidMode") == "host":
+            bad.append(f"{name}: shares host network/pid namespace")
+        if any(m.get("Source", "").endswith("docker.sock") for m in c.get("Mounts", [])):
+            bad.append(f"{name}: mounts the Docker socket")
+        if not hc.get("Memory"):
+            bad.append(f"{name}: no memory limit")
+    return bad
+
+
+def check_containers(runner=run) -> Check:
+    ids = runner(["docker", "ps", "-q", "--filter", "label=hpcsim.class"])
+    if ids.returncode != 0 or not ids.stdout.split():
+        return Check("sim containers", OK, "none running")
+    r = runner(["docker", "inspect", *ids.stdout.split()], 30)
+    bad = container_violations(json.loads(r.stdout)) if r.returncode == 0 else ["docker inspect failed"]
+    if bad:
+        return Check("sim containers", FAIL, "; ".join(bad[:5]) + (f" (+{len(bad) - 5} more)" if len(bad) > 5 else ""),
+                     "remove the extra privilege from the generated compose, or record an ADR exception")
+    return Check("sim containers", OK, f"{len(ids.stdout.split())} running, unprivileged, memory-limited")
+
+
 def run_all() -> list[Check]:
     return [check_cgroup_v2(), check_psi(), check_kernel(), check_docker(), check_libvirt(),
-            check_swap(), check_memlock(), *check_tools(), check_governor()]
+            check_swap(), check_memlock(), *check_tools(), check_containers(), check_governor()]
 
 
 # ---- profile pre-flight (SPEC 6) ----

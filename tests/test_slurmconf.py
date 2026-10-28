@@ -23,7 +23,7 @@ def test_single_node_range_and_no_gpu():
 
 
 def test_gres_only_names_gpu_nodes():
-    assert "NodeName=gpu[001-002] Name=gpu Type=h200 Count=8" in slurmconf.gres_conf(SIM)
+    assert "NodeName=gpu[001-002] Name=gpu Type=h200 File=/dev/hpcsim-gpu[0-7]" in slurmconf.gres_conf(SIM)
     assert "NodeName=ALL" not in slurmconf.gres_conf(SIM)
 
 

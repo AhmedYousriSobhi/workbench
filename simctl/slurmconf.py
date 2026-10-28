@@ -21,7 +21,7 @@ def slurm_conf(sim: dict, compute_override: int | None = None) -> str:
         "SlurmdSpoolDir=/var/spool/slurmd",
         "SlurmctldPidFile=/run/slurmctld.pid",
         "SlurmdPidFile=/run/slurmd.pid",
-        # Containers have no real cgroup delegation or accounting: keep slurmd tiny.
+        # Jobs are synthetic and containers get no cgroup write access (26.05 accepts CgroupPlugin=disabled).
         "ProctrackType=proctrack/linuxproc",
         "TaskPlugin=task/none",
         "JobAcctGatherType=jobacct_gather/none",
@@ -51,11 +51,13 @@ def slurm_conf(sim: dict, compute_override: int | None = None) -> str:
 def gres_conf(sim: dict) -> str:
     """Count-only fake GPUs need no /dev files; only the GPU nodes get a line."""
     g = sim.get("gpu", {})
-    head = "# GENERATED; count-based fake GPUs\n"
+    head = "# GENERATED; fake GPUs backed by stand-in device files\n"
     if not g.get("nodes"):
         return head
     gpu = [n for n, k in node_names(sim) if k == "gpu"]
-    return head + f"NodeName={_range(gpu)} Name=gpu Type={g['type']} Count={g['gpus_per_node']}\n"
+    last = g["gpus_per_node"] - 1
+    files = f"/dev/hpcsim-gpu[0-{last}]" if last else "/dev/hpcsim-gpu0"
+    return head + f"NodeName={_range(gpu)} Name=gpu Type={g['type']} File={files}\n"
 
 
 def _range(names: list[str]) -> str:
@@ -70,7 +72,7 @@ def _range(names: list[str]) -> str:
 def write(sim: dict, out_dir: Path, compute_override: int | None = None) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     files = {"slurm.conf": slurm_conf(sim, compute_override), "gres.conf": gres_conf(sim),
-             "cgroup.conf": "CgroupPlugin=autodetect\nIgnoreSystemd=yes\n"}
+             "cgroup.conf": "CgroupPlugin=disabled\n"}
     for name, text in files.items():
         (out_dir / name).write_text(text)
     return [out_dir / n for n in files]

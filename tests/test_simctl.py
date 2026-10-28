@@ -149,3 +149,36 @@ def test_snapshot_is_flat_and_readonly_on_this_host():
     s = measure.snapshot()
     assert s["host:available"] > 0
     assert all(isinstance(v, int) for v in s.values())
+
+
+# --- container security monitoring --------------------------------------------------------
+
+def _ctr(name="/cn001", **hc):
+    return {"Name": name, "HostConfig": {"Memory": 1, **hc}, "Mounts": hc.pop("mounts", [])}
+
+
+def test_clean_container_has_no_violations():
+    assert checks.container_violations([_ctr()]) == []
+
+
+def test_each_gap_is_reported():
+    got = " | ".join(checks.container_violations([
+        _ctr("/a", Privileged=True),
+        _ctr("/b", CapAdd=["SYS_ADMIN"]),
+        _ctr("/c", SecurityOpt=["apparmor=unconfined"]),
+        _ctr("/d", NetworkMode="host"),
+        {"Name": "/e", "HostConfig": {"Memory": 1}, "Mounts": [{"Source": "/var/run/docker.sock"}]},
+        {"Name": "/f", "HostConfig": {"Memory": 0}, "Mounts": []},
+    ]))
+    for needle in ("a: privileged", "b: extra capabilities", "c: confinement disabled",
+                   "d: shares host", "e: mounts the Docker socket", "f: no memory limit"):
+        assert needle in got
+
+
+def test_check_containers_fails_on_privileged():
+    def fake(cmd, timeout=10):
+        out = "abc\n" if cmd[1] == "ps" else json.dumps([_ctr(Privileged=True)])
+        return subprocess.CompletedProcess(cmd, 0, out, "")
+
+    c = checks.check_containers(fake)
+    assert c.status == checks.FAIL and "privileged" in c.detail

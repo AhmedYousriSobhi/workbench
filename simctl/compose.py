@@ -55,6 +55,8 @@ def generate(sim: dict, profile: dict) -> dict:
         svc = _service("hpcsim/node-base:dev", SLURMD_MB, SLURMD_PRIO, "../../images/node-base")
         svc["hostname"] = name
         svc["labels"]["hpcsim.node"] = kind
+        if kind == "gpu":
+            svc["environment"] = {"HPCSIM_GPUS": str(sim["gpu"]["gpus_per_node"])}
         if "slurmctld" in services:
             svc["depends_on"] = ["slurmctld"]
         services[name] = svc
