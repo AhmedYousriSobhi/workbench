@@ -55,3 +55,19 @@ class Sampler:
             rate = (pswp - self._last[1]) / (now - self._last[0])
         self._last = (now, pswp)
         return Signals(mem["MemAvailable"], psi["some"], psi.get("full", 0.0), rate)
+
+
+class FileSampler:
+    """Reads signals from a JSON file ({"mem_available", "psi_some", "psi_full"}).
+
+    For tests and threshold tuning: lets a scenario drive the ladder without real pressure.
+    """
+
+    def __init__(self, path: Path):
+        self.path = path
+
+    def sample(self, now: float) -> Signals:
+        import json
+
+        d = json.loads(self.path.read_text())
+        return Signals(int(d["mem_available"]), float(d["psi_some"]), float(d["psi_full"]))

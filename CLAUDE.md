@@ -37,5 +37,7 @@ See README section 9. Top level: `sim.yaml`, `profiles/`, `simctl/`, `governor/`
 ## Commands
 
 - `./scripts/validate.sh`: **run before every commit** (secrets scan, compile, ruff, bash -n, YAML/JSON, systemd verify, pytest, governor smoke). `./scripts/validate.sh --install-hook` makes it a pre-commit hook. Set `PYLIBS=<dir>` if tools are installed with `pip --target`.
+- `./scripts/real-test.sh`: real-host tests (user cgroups via systemd-run, Docker, a live governor process). Run when touching `governor/`.
+- `python -m governor --dry-run --once`; `--signals-file F.json` drives the ladder from a file for tests/tuning.
 
 Not yet implemented; as each lands, document it here: `make demo`, `simctl up --profile std`, `pytest`, `ruff check .`.
