@@ -127,7 +127,7 @@ _A real scheduler the app can read, built from sim.yaml._
 | Compose generation | ✅ Done | `simctl compose --profile X` renders services with mem_limit, cgroup_parent and the hpcsim.class label from sim.yaml and profiles. | `simctl/compose.py` | [#30](https://github.com/AhmedYousriSobhi/opti-sim/pull/30) |
 | slurmrestd with JWT | ✅ Done | JWT-only REST on the internal network, own user, no privileges; skips two unshare steps instead of loosening seccomp (ADR 0003, ADR 0004). Verified live: no token 401, bad tokens get no data. | `simctl/compose.py` | [#38](https://github.com/AhmedYousriSobhi/opti-sim/pull/38) |
 | Accounting | ✅ Done | MariaDB on a capped tmpfs plus slurmdbd; sacctmgr bootstrap creates cluster, QOS and users from sim.yaml; secrets stay in a gitignored folder. Verified live: a job as alice appears in sacct and the REST slurmdb endpoint. | `simctl/slurmconf.py` | [#38](https://github.com/AhmedYousriSobhi/opti-sim/pull/38) |
-| simctl up / down / scale | 🟡 Partial | Pre-flight, staged start (observability, slurm, nodes), skips unbuilt mocks, scale regenerates slurm.conf, Grafana token created once (0600). Verified live with min. Governor scale/set-profile still only log. | `simctl/stack.py` | [#46](https://github.com/AhmedYousriSobhi/opti-sim/pull/46) |
+| simctl up / down / scale | 🟡 Partial | Pre-flight, staged start (observability, slurm, nodes), skips unbuilt mocks, scale regenerates slurm.conf, Grafana token created once (0600). Verified live with min. Governor scale/set-profile still only log. | `simctl/stack.py` | [#45](https://github.com/AhmedYousriSobhi/opti-sim/pull/45) |
 
 5/6 done
 
