@@ -79,3 +79,89 @@ def test_plan_l5_spares_p0_p1():
 def test_reversible_before_destructive():
     verbs = [a.verb for a in reversible_first(plan(4, GROUPS))]
     assert verbs.index("stop") > max(i for i, v in enumerate(verbs) if v in ("freeze", "reclaim"))
+
+
+# --- security watchdog ---------------------------------------------------------------------
+
+class FakeWatchdog:
+    def __init__(self, *scans):
+        self.scans, self.calls = list(scans), 0
+
+    def scan(self):
+        self.calls += 1
+        r = self.scans.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+
+def _gov_with(wd, interval=15.0):
+    import json
+    import pathlib
+    import tempfile
+
+    from governor.core import Governor
+    from governor.ladder import Ladder
+    from governor.signals import FileSampler
+
+    f = pathlib.Path(tempfile.mkdtemp()) / "s.json"
+    f.write_text(json.dumps({"mem_available": 8 * 1024**3, "psi_some": 0, "psi_full": 0}))
+    return Governor(FileSampler(f), Ladder(), [], lambda a: None, True, wd, interval)
+
+
+def test_watchdog_reports_new_then_resolved_once():
+    wd = FakeWatchdog(["a: privileged"], ["a: privileged"], [])
+    g = _gov_with(wd)
+    g.step(0)
+    g.step(16)  # same finding: not repeated
+    g.step(32)
+    assert [x for x in g.audit if "privileged" in x] == ["SECURITY: a: privileged", "RESOLVED: a: privileged"]
+    assert g.violations == set()
+
+
+def test_watchdog_is_rate_limited_and_status_lists_violations():
+    wd = FakeWatchdog(["b: no memory limit"], [])
+    g = _gov_with(wd, 15)
+    g.step(0)
+    g.step(5)  # not due yet
+    assert wd.calls == 1
+    assert g.handle("status", {})["violations"] == ["b: no memory limit"]
+
+
+def test_watchdog_failure_is_logged_once_and_not_fatal():
+    wd = FakeWatchdog(RuntimeError("docker down"), RuntimeError("docker down"))
+    g = _gov_with(wd)
+    g.step(0)
+    g.step(16)
+    assert sum("watchdog unavailable" in x for x in g.audit) == 1
+
+
+def test_watchdog_skipped_under_pressure():
+    from governor.core import Governor
+
+    wd = FakeWatchdog(["x: privileged"])
+    g = _gov_with(wd)
+    g._watch(0, 3)
+    assert wd.calls == 0 and isinstance(g, Governor)
+    g._watch(0, 2)
+    assert wd.calls == 1
+
+
+def test_limit_drift_and_scan(tmp_path):
+    import json
+    import subprocess
+
+    from governor.watchdog import Watchdog, limit_drift
+
+    info = [{"Name": "/c1", "Id": "x", "HostConfig": {"Memory": 100}, "Mounts": []}]
+    (tmp_path / "memory.max").write_text("max\n")
+    assert "differs" in limit_drift(info, lambda c: tmp_path)[0]
+    (tmp_path / "memory.max").write_text("100\n")
+    assert limit_drift(info, lambda c: tmp_path) == []
+    assert limit_drift(info, lambda c: tmp_path / "gone") == []  # invisible cgroup: skipped
+
+    def fake(cmd, timeout=15):
+        out = "id1\n" if cmd[1] == "ps" else json.dumps(info)
+        return subprocess.CompletedProcess(cmd, 0, out, "")
+
+    assert Watchdog(fake, lambda c: tmp_path).scan() == []

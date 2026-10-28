@@ -14,6 +14,7 @@ from .ladder import Ladder, Thresholds
 from .memlock import MitigationPath, lock_memory, locked_kb, raise_memlock_limit
 from .planner import Group
 from .signals import GB, CgroupSampler, FileSampler, Sampler
+from .watchdog import Watchdog
 
 log = logging.getLogger("governor")
 
@@ -31,6 +32,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--watch-cgroup", default=None, help="take signals from one cgroup dir (tests)")
     ap.add_argument("--thresholds", default=None, help='JSON overrides, e.g. {"l4_mem": 1000000}')
     ap.add_argument("--arrivals-flag", default=ARRIVALS_FLAG)
+    ap.add_argument("--no-watchdog", action="store_true", help="disable container security/limit checks")
+    ap.add_argument("--watch-interval", type=float, default=15.0, help="seconds between security scans")
     ap.add_argument("--require-lock", action="store_true", help="exit if mlockall fails")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -47,7 +50,8 @@ def main(argv: list[str] | None = None) -> None:
         sampler = Sampler()
     ladder = Ladder(Thresholds(**json.loads(args.thresholds or "{}")))
     executor = Executor(groups, cgroups, path, arrivals_flag=args.arrivals_flag)
-    gov = Governor(sampler, ladder, groups, executor, args.dry_run)
+    watchdog = None if args.no_watchdog else Watchdog()
+    gov = Governor(sampler, ladder, groups, executor, args.dry_run, watchdog, args.watch_interval)
     srv = control.serve(args.socket, gov.handle, gov.group_names, gid=args.socket_gid) \
         if args.socket else None
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(SystemExit(0)))
