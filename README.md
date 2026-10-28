@@ -290,7 +290,7 @@ expect:   # optional assertions for automated demo/CI runs
   - jira.issue_created: {labels: [gpu, xid], within: 3m}
 ```
 
-Starter catalog: `node-down`, `gpu-xid-storm`, `ecc-uncorrectable`, `thermal-throttle`, `fan-failure`, `psu-redundancy-lost`, `slurm-drain-storm`, `job-storm`, `oom-jobs`, `queue-backlog`, `k8s-node-notready`, `pod-crashloop`, `network-partition` (`tc netem`), `disk-full` (fake metrics), `jira-outage` / `jira-429` (via Toxiproxy), `ticket-storm`, `bcm-api-timeout`.
+Starter catalog: `node-down`, `gpu-xid-storm`, `ecc-uncorrectable`, `thermal-throttle`, `fan-failure`, `psu-redundancy-lost`, `slurm-drain-storm`, `job-storm`, `oom-jobs`, `queue-backlog`, `k8s-node-notready`, `pod-crashloop`, `network-partition` (`tc netem`), `disk-full` (fake metrics), `jira-outage` / `jira-429` (via Toxiproxy), `jira-transition-refused`, `ticket-storm`, `bcm-api-timeout`.
 
 ## 8. macOS testing (read this before planning)
 
