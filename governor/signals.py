@@ -71,3 +71,21 @@ class FileSampler:
 
         d = json.loads(self.path.read_text())
         return Signals(int(d["mem_available"]), float(d["psi_some"]), float(d["psi_full"]))
+
+
+class CgroupSampler:
+    """Signals scoped to one cgroup: PSI from its memory.pressure, headroom = memory.max - current.
+
+    Lets the ladder react to a single capped group (per-cgroup PSI, GV-2) and makes a safe
+    real-pressure test possible without squeezing the whole host.
+    """
+
+    def __init__(self, cg: Path):
+        self.cg = cg
+
+    def sample(self, now: float) -> Signals:
+        psi = parse_psi((self.cg / "memory.pressure").read_text())
+        cap = (self.cg / "memory.max").read_text().strip()
+        cur = int((self.cg / "memory.current").read_text())
+        headroom = max(int(cap) - cur, 0) if cap != "max" else 1 << 40
+        return Signals(headroom, psi["some"], psi.get("full", 0.0))

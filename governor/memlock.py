@@ -42,6 +42,9 @@ class MitigationPath:
             self._fds[path] = os.open(path, flags)
         return self._fds[path]
 
+    def has(self, path: str) -> bool:
+        return path in self._fds
+
     def write(self, path: str, data: bytes) -> None:
         """Write to a pre-opened handle; opening here would defeat the purpose."""
         os.pwrite(self._fds[path], data, 0)  # cgroup files ignore the offset; plain files need it
