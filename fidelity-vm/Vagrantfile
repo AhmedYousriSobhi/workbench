@@ -1,0 +1,20 @@
+# Fidelity VM: the single real VM (real kernel, systemd, sshd, node_exporter). On demand only.
+# Hard cap 2 GB (SPEC C-10). DHCP-only networking: static private_network IPs did not fix
+# vagrant-libvirt's intermittent IP-detection failure in the legacy lab (see up.sh).
+Vagrant.configure("2") do |config|
+  config.vm.box = "generic/ubuntu2204"
+  config.vm.box_check_update = false
+  config.vm.boot_timeout = 600
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+
+  config.vm.define "fidelity" do |node|
+    node.vm.hostname = "fidelity"
+    node.vm.provider :libvirt do |lv|
+      lv.driver = "kvm"
+      lv.cpus = 2
+      lv.memory = 2048
+    end
+    node.vm.provision "shell", path: "provision/common.sh", privileged: true
+    node.vm.provision "shell", path: "provision/node.sh", privileged: true
+  end
+end
