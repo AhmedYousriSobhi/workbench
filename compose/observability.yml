@@ -1,0 +1,37 @@
+# Core observability (priority P1). Data directories live on capped tmpfs: sim state is disposable.
+services:
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=2d
+      - --storage.tsdb.path=/prometheus
+    volumes:
+      - ../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../observability/targets:/etc/prometheus/targets:ro
+    tmpfs: ["/prometheus:size=200m"]
+    mem_limit: 300m
+    ports: ["127.0.0.1:9090:9090"]
+    cgroup_parent: hpcsim-p1.slice
+    extra_hosts: ["host.docker.internal:host-gateway"]
+  grafana:
+    image: grafana/grafana-oss:11.1.0
+    environment:
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_PLUGINS_PLUGIN_ADMIN_ENABLED: "false"
+    volumes:
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../observability/dashboards:/var/lib/grafana/dashboards:ro
+    mem_limit: 300m
+    ports: ["127.0.0.1:3000:3000"]
+    cgroup_parent: hpcsim-p1.slice
+    depends_on: [prometheus]
+  gpu-exporter-farm:
+    image: python:3.12-slim
+    command: sh -c "pip install -q pyyaml && python /app/exporter.py /sim.yaml 9400"
+    volumes:
+      - ../components/gpu-exporter-farm/exporter.py:/app/exporter.py:ro
+      - ../sim.yaml:/sim.yaml:ro
+    mem_limit: 100m
+    cgroup_parent: hpcsim-p2.slice
