@@ -1,4 +1,5 @@
 # Profile: mac-agent
 name: mac-agent
 budget_gb: 3   # planning estimate; replace with measured value after Phase 0
-extends: []
+extends: [min]
+groups: []

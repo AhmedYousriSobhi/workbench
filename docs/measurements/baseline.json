@@ -1,0 +1,95 @@
+{
+  "label": "baseline",
+  "taken": "2026-10-28T22:36:55",
+  "samples": 5,
+  "stats": {
+    "host:available": {
+      "mean": 3421570662,
+      "peak": 3655778304
+    },
+    "host:swap_used": {
+      "mean": 2142853529,
+      "peak": 2147479552
+    },
+    "host:used": {
+      "mean": 13063895449,
+      "peak": 13205114880
+    },
+    "proc:Isolated Web Co": {
+      "mean": 3988756480,
+      "peak": 4119610368
+    },
+    "proc:Privileged Cont": {
+      "mean": 70711705,
+      "peak": 70877184
+    },
+    "proc:RDD Process": {
+      "mean": 39623680,
+      "peak": 40307712
+    },
+    "proc:Web Content": {
+      "mean": 30679859,
+      "peak": 38352896
+    },
+    "proc:WebExtensions": {
+      "mean": 80950272,
+      "peak": 82787328
+    },
+    "proc:Xorg": {
+      "mean": 44247040,
+      "peak": 44449792
+    },
+    "proc:claude": {
+      "mean": 695289651,
+      "peak": 701465600
+    },
+    "proc:code": {
+      "mean": 3331285811,
+      "peak": 3424215040
+    },
+    "proc:dockerd": {
+      "mean": 63211929,
+      "peak": 63246336
+    },
+    "proc:firefox": {
+      "mean": 744917196,
+      "peak": 758002688
+    },
+    "proc:fwupd": {
+      "mean": 39727104,
+      "peak": 39727104
+    },
+    "proc:gjs": {
+      "mean": 7615488,
+      "peak": 38077440
+    },
+    "proc:gnome-shell": {
+      "mean": 164366745,
+      "peak": 164446208
+    },
+    "proc:nautilus": {
+      "mean": 162783232,
+      "peak": 162783232
+    },
+    "proc:qemu-system-x86": {
+      "mean": 3034130841,
+      "peak": 3034132480
+    },
+    "proc:xdg-desktop-por": {
+      "mean": 64320512,
+      "peak": 64320512
+    },
+    "vm:hpc-compute1": {
+      "mean": 1048113152,
+      "peak": 1048113152
+    },
+    "vm:hpc-compute2": {
+      "mean": 1098194944,
+      "peak": 1098194944
+    },
+    "vm:hpc-login": {
+      "mean": 886022144,
+      "peak": 886022144
+    }
+  }
+}
