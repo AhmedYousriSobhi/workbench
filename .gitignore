@@ -7,3 +7,4 @@ compose/generated/
 observability/generated/
 .vagrant/
 observability/targets/*.json
+docs/measurements/

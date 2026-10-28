@@ -1,6 +1,6 @@
 import typer
 
-from . import checks, diag
+from . import checks, diag, measure
 
 app = typer.Typer(help="opti-sim control CLI")
 ICON = {checks.OK: "ok  ", checks.WARN: "WARN", checks.FAIL: "FAIL"}
@@ -47,6 +47,32 @@ def diag_cmd(out: str = typer.Option(None, "--out")) -> None:
     from pathlib import Path
 
     typer.echo(str(diag.write_bundle(Path(out) if out else None)))
+
+
+measure_app = typer.Typer(help="Phase 0: read-only memory measurement")
+app.add_typer(measure_app, name="measure")
+
+
+@measure_app.command("run")
+def measure_run(label: str = typer.Argument(..., help="e.g. idle, loaded"),
+                duration: float = typer.Option(30, help="seconds to sample"),
+                interval: float = typer.Option(5, help="seconds between samples")) -> None:
+    """Sample host, containers, processes (PSS) and VMs; save docs/measurements/<label>.json."""
+    snaps = measure.sample(duration, interval)
+    typer.echo(f"{len(snaps)} samples -> {measure.save(label, snaps)}")
+
+
+@measure_app.command("report")
+def measure_report(idle: str = typer.Argument(..., help="label of the idle run"),
+                   loaded: str = typer.Argument(None, help="label of the loaded run")) -> None:
+    """Markdown table: idle vs loaded peak with suggested budgets (peak x 1.2)."""
+    import json
+    from pathlib import Path
+
+    def load(label: str) -> dict:
+        return json.loads((Path("docs/measurements") / f"{label}.json").read_text())
+
+    typer.echo(measure.report(load(idle), load(loaded) if loaded else None))
 
 
 if __name__ == "__main__":
