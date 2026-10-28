@@ -9,7 +9,7 @@ from pathlib import Path
 
 log = logging.getLogger("governor.control")
 
-ALLOWED = {"status", "scale", "freeze", "thaw", "stop", "start", "set-profile"}
+ALLOWED = {"status", "scale", "freeze", "thaw", "stop", "start", "set-profile", "admit"}
 MAX_REQUEST = 4096
 TARGETED = {"freeze", "thaw", "stop", "start"}  # require a known group name
 
@@ -35,6 +35,8 @@ def dispatch(line: bytes, handle: Handler, groups: Callable[[], set[str]]) -> di
             return {"ok": False, "error": "scale needs group:str and n:int>=0"}
         if cmd == "set-profile" and not isinstance(req.get("profile"), str):
             return {"ok": False, "error": "set-profile needs profile:str"}
+        if cmd == "admit" and not (isinstance(req.get("budget_mb"), int) and req["budget_mb"] >= 0):
+            return {"ok": False, "error": "admit needs budget_mb:int>=0"}
         return handle(cmd, req)
     except (ValueError, UnicodeDecodeError) as e:
         return {"ok": False, "error": f"bad json: {e}"}

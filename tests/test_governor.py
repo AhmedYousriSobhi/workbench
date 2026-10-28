@@ -1,3 +1,4 @@
+from governor.core import Governor
 from governor.ladder import Ladder
 from governor.planner import Group, plan, reversible_first
 from governor.signals import GB, Signals, parse_meminfo, parse_psi
@@ -319,3 +320,62 @@ def test_slurmrestd_extra_options_are_violations():
         got = container_violations([_restd([f"SLURMRESTD_SECURITY={bad}"])])
         assert any("unaccepted options" in g for g in got), bad
     assert container_violations([{"Name": "/x", "HostConfig": {"Memory": 1}}]) == []  # no Config key at all
+
+
+def _calm_gov(tmp_path, avail=4 * GB, effector=None, dry_run=False):
+    import json
+
+    from governor.signals import FileSampler
+    f = tmp_path / "s.json"
+    f.write_text(json.dumps({"mem_available": int(avail), "psi_some": 0, "psi_full": 0}))
+    g = Governor(FileSampler(f), Ladder(), [], lambda a: None, dry_run, effector=effector)
+    g.step(0)
+    return g, f
+
+
+def test_admit_approves_when_calm_and_fits(tmp_path):
+    g, _ = _calm_gov(tmp_path)
+    assert g.handle("admit", {"budget_mb": 1000})["ok"]
+    r = g.handle("admit", {"budget_mb": 3000})  # 4 GB - 3000 MB < 1.5 GB floor
+    assert not r["ok"] and "floor" in r["error"]
+
+
+def test_admit_refused_under_pressure(tmp_path):
+    g, f = _calm_gov(tmp_path)
+    import json
+    f.write_text(json.dumps({"mem_available": 4 * GB, "psi_some": 25, "psi_full": 0}))
+    g.step(1)
+    g.step(11)  # L2 needs 10 s of sustained pressure
+    assert g.ladder.level >= 2
+    r = g.handle("admit", {"budget_mb": 1})
+    assert not r["ok"] and "L" in r["error"]
+    assert not g.handle("scale", {"group": "compute", "n": 3})["ok"]  # GV-8
+
+
+def test_scale_and_set_profile_run_effector_only_when_calm(tmp_path):
+    import threading
+    calls, done = [], threading.Event()
+
+    def eff(args):
+        calls.append(args)
+        done.set()
+        return 0
+
+    g, _ = _calm_gov(tmp_path, effector=eff)
+    assert g.handle("scale", {"group": "compute", "n": 3})["started"]
+    assert done.wait(5) and calls == [["scale", "3"]]
+    assert not g.handle("scale", {"group": "gpu", "n": 1})["ok"]
+    done.clear()
+    g.handle("set-profile", {"profile": "min"})
+    assert done.wait(5) and calls[-1] == ["up", "--profile", "min"]
+    assert any("scale=3: done" in a for a in g.audit)
+
+
+def test_scale_dry_run_does_not_execute(tmp_path):
+    g, _ = _calm_gov(tmp_path, effector=lambda a: 1 / 0, dry_run=True)
+    assert g.handle("scale", {"group": "compute", "n": 2}) == {"ok": True, "dry_run": True}
+
+
+def test_control_validates_admit():
+    from governor.control import dispatch
+    assert not dispatch(b'{"cmd":"admit","budget_mb":"x"}', lambda c, r: {"ok": True}, set)["ok"]
