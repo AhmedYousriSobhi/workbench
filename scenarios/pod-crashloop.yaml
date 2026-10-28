@@ -1,0 +1,8 @@
+name: pod-crashloop
+description: A pod enters CrashLoopBackOff and another is OOMKilled; the app should surface both
+steps:
+  - {at: 0s,  target: k8s, do: {apply: [k8s/fixtures/10-workloads.yaml]}}
+  - {at: 60s, target: k8s, do: {scale: {deploy: web, namespace: team-a, replicas: 0}}}
+expect:
+  - k8s.pod_status: {namespace: team-b, name: crashloop, reason: CrashLoopBackOff, within: 3m}
+  - k8s.pod_status: {namespace: team-b, name: oom, reason: OOMKilled, within: 3m}
