@@ -1,0 +1,189 @@
+# Single source of truth for docs/PROGRESS.md and docs/progress.html.
+# Regenerate with: python -m simctl.progress   (validate.sh fails if the outputs are stale)
+# status: done = merged and verified | review = in an open PR | partial = some of it works | todo = not started
+# `where` paths are checked to exist for done/partial items.
+updated: 2026-10-29
+repo: https://github.com/AhmedYousriSobhi/opti-sim
+
+phases:
+  - id: p0
+    title: Baseline
+    goal: Measure real memory so budgets stop being guesses
+    items:
+      - {name: Measurement tooling, status: done, pr: 28, where: simctl/measure.py,
+         how: "`simctl measure run/report` samples host, Docker containers, PSS per process and libvirt domains (read-only), saves JSON, suggests budgets = peak x 1.2."}
+      - {name: Host baseline, status: partial,
+         how: "Idle host and a small Slurm stack were measured (slurmd 5 MiB, slurmctld 13, MariaDB 171). No loaded run with mocks yet."}
+      - {name: Budgets replaced by measured values, status: todo,
+         how: "README section 5 and profiles/*.yaml still hold planning estimates; needs a loaded run of the full stack."}
+
+  - id: p1
+    title: Governor
+    goal: A root service that keeps the host alive by escalating through a ladder
+    items:
+      - {name: Signals and escalation ladder, status: done, pr: 14, where: "governor/signals.py, governor/ladder.py",
+         how: "MemAvailable, PSI and swap rate feed levels L0-L5. Escalates at once, steps down one level per 60 s calm with a 10 s dwell."}
+      - {name: Priority planner, status: done, pr: 14, where: governor/planner.py,
+         how: "P0-P6 classes; lowest priority first, reversible actions before destructive ones; undo on de-escalation."}
+      - {name: Executors, status: done, pr: 20, where: governor/executors.py,
+         how: "freeze, throttle (memory.high), reclaim, stop (cgroup.kill then docker stop), managedsave for VMs, via cgroup files opened in advance."}
+      - {name: mlockall and pre-allocated mitigation path, status: done, pr: 19, where: governor/memlock.py,
+         how: "Locks its own pages and pre-opens handles and buffers so L3/L4 performs no allocation (SPEC GV-8)."}
+      - {name: Control socket, status: done, pr: 19, where: governor/control.py,
+         how: "JSON lines on /run/hpcsim/gov.sock with a fixed allow-list; unknown commands are rejected."}
+      - {name: NF-1 memory-hog test, status: done, pr: 24, where: tests/real/test_root.py,
+         how: "A real container hog is throttled, frozen then stopped in order; no host OOM. Runs as root via scripts/real-test-root.sh."}
+      - {name: Security watchdog, status: done, pr: 34, where: governor/watchdog.py,
+         how: "Every 15 s flags privileged/capability/unconfined/host-namespace/docker.sock containers, missing limits and live memory.max drift. Report only; skipped from L3 up."}
+      - {name: Monitored slurmrestd exception, status: done, pr: 44, where: governor/watchdog.py,
+         how: "slurmrestd runs with two unshare steps disabled (ADR 0004). Any wider SLURMRESTD_SECURITY option is a violation; doctor lists the accepted exception."}
+      - {name: Inventory refresh and Grafana annotations, status: done, pr: 36, where: "governor/annotate.py, governor/core.py",
+         how: "Re-discovers containers so late starters are governed; posts audit events to Grafana with a token from the environment (SPEC GV-6)."}
+      - {name: systemd unit installed permanently, status: partial, where: systemd,
+         how: "Unit and slice pass systemd-analyze and ran as a transient service in tests; not yet installed as the standing service."}
+      - {name: scale and set-profile take effect, status: todo,
+         how: "Both commands are accepted and logged only; they need the up/down work (issue 39)."}
+      - {name: Host tuning script and simctl top, status: todo,
+         how: "zram, swappiness and THP tuning with confirmation, and a live view of the governor."}
+
+  - id: p2
+    title: Slurm
+    goal: A real scheduler the app can read, built from sim.yaml
+    items:
+      - {name: Slurm 26.05.5 images, status: done, pr: 32, where: images/node-base/Dockerfile,
+         how: "Built from the SchedMD tarball (pinned and SHA256-checked) because Ubuntu's 23.11 lacks the 2026 security fixes; no extra container privileges (ADR 0002)."}
+      - {name: Generated Slurm config, status: done, pr: 32, where: simctl/slurmconf.py,
+         how: "slurm.conf, gres.conf and cgroup.conf derive from sim.yaml so node names match everywhere; fake GPUs use /dev/null-backed device files."}
+      - {name: Compose generation, status: done, pr: 30, where: simctl/compose.py,
+         how: "`simctl compose --profile X` renders services with mem_limit, cgroup_parent and the hpcsim.class label from sim.yaml and profiles."}
+      - {name: slurmrestd with JWT, status: done, pr: 38, where: simctl/compose.py,
+         how: "JWT-only REST on the internal network, own user, no privileges; skips two unshare steps instead of loosening seccomp (ADR 0003, ADR 0004). Verified live: no token 401, bad tokens get no data."}
+      - {name: Accounting, status: done, pr: 38, where: simctl/slurmconf.py,
+         how: "MariaDB on a capped tmpfs plus slurmdbd; sacctmgr bootstrap creates cluster, QOS and users from sim.yaml; secrets stay in a gitignored folder. Verified live: a job as alice appears in sacct and the REST slurmdb endpoint."}
+      - {name: simctl up / down / scale, status: todo,
+         how: "One-command start with pre-flight, governor admission and Grafana token provisioning (issue 39)."}
+
+  - id: p3
+    title: Mocks
+    goal: Fake BMC, BCM and Jira so the app's integrations can be exercised
+    items:
+      - {name: gpu-exporter-farm, status: done, where: components/gpu-exporter-farm/exporter.py,
+         how: "One process serving fake DCGM metrics for every simulated GPU, with fault injection over /sim/inject."}
+      - {name: bmc-farm, status: todo, how: "Many Redfish endpoints from one process."}
+      - {name: bcm-mock, status: todo, how: "Only the BCM surface the app calls; blocked on open decision 2."}
+      - {name: jira-mock, status: todo, how: "Jira REST subset with failure modes and required-field rules; modes mock/cloud/dc."}
+
+  - id: p4
+    title: People and chaos
+    goal: Simulated users and engineers, scripted faults
+    items:
+      - {name: Starter scenario files, status: partial, where: scenarios,
+         how: "Three YAML scenarios exist (gpu-xid-storm, pod-crashloop, k8s-node-notready); no engine runs them yet."}
+      - {name: user-sim and ticket-bot, status: todo, how: "Personas with Poisson arrivals and engineers working tickets."}
+      - {name: scenario-engine, status: todo, how: "Runs scenarios with at/target/do steps and expect assertions."}
+
+  - id: p5
+    title: Kubernetes
+    goal: Mixed real and fake K8s nodes
+    items:
+      - {name: Cluster fixtures, status: done, where: k8s/fixtures,
+         how: "Namespaces, workloads, failure signals and a read-only RBAC role, applied with apply.sh."}
+      - {name: k3d plus KWOK cluster, status: partial,
+         how: "Design is set but kubectl and k3d are not installed on this host, so it has not been brought up."}
+
+  - id: p6
+    title: Fidelity VM
+    goal: One real Ubuntu VM with Redfish power control
+    items:
+      - {name: VM scaffold, status: partial, where: fidelity-vm,
+         how: "Vagrantfile, provisioning scripts and up/down helpers exist; not re-verified end to end since the scaffold merge."}
+
+  - id: p7
+    title: Web UI and profiles
+    goal: One click from cold start to a busy cluster
+    items:
+      - {name: Profile pre-flight (CLI), status: done, pr: 26, where: simctl/checks.py,
+         how: "`simctl preflight` refuses a profile when free memory minus its budget is under the safety floor and suggests a smaller one."}
+      - {name: Web UI, status: todo, how: "FastAPI plus HTMX over the governor socket only; canvas, dashboard, orchestrator, budget manager."}
+
+  - id: p8
+    title: macOS agent and CI
+    goal: External Mac agent and unattended scenario runs
+    items:
+      - {name: Mac agent profile and headless CI, status: todo, how: "External agent only (licence); scenario suite with assertions."}
+
+  - id: x
+    title: Platform and tooling
+    goal: What keeps every change safe and debuggable
+    items:
+      - {name: validate.sh gate, status: done, pr: 18, where: scripts/validate.sh,
+         how: "Secrets scan, compile, ruff, shellcheck, YAML/JSON, systemd verify, pytest and a governor smoke run before every commit."}
+      - {name: Real-host tests, status: done, pr: [20, 22], where: "scripts/real-test.sh, scripts/real-test-root.sh",
+         how: "User-level tests with cgroups, Docker, libvirt and a live governor; a sudo suite for root-only paths."}
+      - {name: simctl doctor / status / diag, status: done, pr: 26, where: "simctl/checks.py, simctl/diag.py",
+         how: "Environment checks with fixes, governor state, a masked diagnostics tarball, and the container security check."}
+      - {name: Observability stack, status: done, where: compose/observability.yml,
+         how: "Prometheus (2 d, tmpfs), Grafana with provisioned dashboard, fake GPU exporter."}
+      - {name: Decisions as ADRs, status: done, where: docs/adr,
+         how: "0001 record decisions, 0002 Slurm from source with no extra privileges, 0003 slurmrestd/JWT and accounting, 0004 slurmrestd keeps its unshare steps disabled."}
+      - {name: Progress tracker, status: review, pr: 42, where: simctl/progress.py,
+         how: "This page, generated from docs/progress.yaml (issue 41)."}
+
+architecture:
+  groups:
+    - {id: host, title: "Host (root, outside every container)"}
+    - {id: net, title: "Docker network (sim containers, no privileges)"}
+    - {id: ext, title: "Outside the 16 GB budget"}
+  nodes:
+    - {id: simctl, group: host, label: "simctl CLI", status: partial}
+    - {id: gov, group: host, label: "Governor (ladder + watchdog)", status: done}
+    - {id: sock, group: host, label: "gov.sock", status: done}
+    - {id: docker, group: host, label: "Docker + cgroups", status: done}
+    - {id: libvirt, group: host, label: "libvirt VMs", status: partial}
+    - {id: ctld, group: net, label: "slurmctld", status: done}
+    - {id: slurmd, group: net, label: "slurmd x N (fake GPUs)", status: done}
+    - {id: restd, group: net, label: "slurmrestd (JWT)", status: done}
+    - {id: dbd, group: net, label: "slurmdbd", status: done}
+    - {id: maria, group: net, label: "MariaDB (tmpfs)", status: done}
+    - {id: prom, group: net, label: "Prometheus", status: done}
+    - {id: graf, group: net, label: "Grafana", status: done}
+    - {id: gpux, group: net, label: "gpu-exporter-farm", status: done}
+    - {id: bmc, group: net, label: "bmc-farm", status: todo}
+    - {id: bcm, group: net, label: "bcm-mock", status: todo}
+    - {id: jira, group: net, label: "jira-mock", status: todo}
+    - {id: users, group: net, label: "user-sim / ticket-bot", status: todo}
+    - {id: k8s, group: net, label: "k3d + KWOK", status: partial}
+    - {id: webui, group: net, label: "Web UI", status: todo}
+    - {id: app, group: ext, label: "App under test", status: partial}
+    - {id: mac, group: ext, label: "macOS agent", status: todo}
+  edges:
+    - [simctl, sock, commands]
+    - [sock, gov, ""]
+    - [gov, docker, "freeze / throttle / stop"]
+    - [gov, libvirt, "managedsave"]
+    - [gov, graf, "annotations"]
+    - [slurmd, ctld, "register"]
+    - [restd, ctld, ""]
+    - [restd, dbd, ""]
+    - [ctld, dbd, ""]
+    - [dbd, maria, ""]
+    - [prom, gpux, "scrape"]
+    - [graf, prom, ""]
+    - [webui, sock, "only path to the host"]
+    - [app, restd, "REST"]
+    - [app, bmc, "Redfish"]
+    - [app, bcm, ""]
+    - [app, jira, ""]
+
+next:
+  - "Issue 39: simctl up / down / scale, so the stack starts from one command."
+  - "Phase 3 mocks: bmc-farm first (the app's Redfish integration)."
+  - "A loaded Phase 0 run of the full stack to replace the budget estimates."
+  - "Install the governor as a standing systemd service."
+
+gaps:
+  - "Nothing starts the whole stack yet; it is brought up by hand with docker compose."
+  - "The governor's scale and set-profile commands only log."
+  - "Budgets are still estimates until a loaded Phase 0 run."
+  - "The governor's own locked memory is about 100-170 MB, slightly over its 0.15 GB budget."
+  - "Host swap is 100% full and kubectl/k3d are missing, which blocks the Kubernetes phase here."
