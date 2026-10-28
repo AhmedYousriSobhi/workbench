@@ -12,6 +12,22 @@ from .executors import cgroup_dir, run
 log = logging.getLogger("governor.watchdog")
 
 
+# slurmrestd options we accept (ADR 0003/0004). Anything else (disable_user_check, become_user, typos)
+# weakens it further and is reported.
+ACCEPTED_SLURMRESTD = frozenset({"disable_unshare_sysv", "disable_unshare_files"})
+
+
+def _slurmrestd_options(c: dict) -> set[str]:
+    env = dict(e.partition("=")[::2] for e in (c.get("Config") or {}).get("Env") or [])
+    return {o for o in env.get("SLURMRESTD_SECURITY", "").split(",") if o}
+
+
+def accepted_exceptions(inspected: list[dict]) -> list[str]:
+    """Known, documented deviations (not violations); doctor lists them so they stay visible."""
+    return [f"{c['Name'].lstrip('/')}: slurmrestd skips its unshare steps (ADR 0004)"
+            for c in inspected if _slurmrestd_options(c) & ACCEPTED_SLURMRESTD]
+
+
 def container_violations(inspected: list[dict]) -> list[str]:
     """Security/limit gaps in `docker inspect` output for sim containers."""
     bad = []
@@ -29,6 +45,9 @@ def container_violations(inspected: list[dict]) -> list[str]:
             bad.append(f"{name}: mounts the Docker socket")
         if not hc.get("Memory"):
             bad.append(f"{name}: no memory limit")
+        extra = _slurmrestd_options(c) - ACCEPTED_SLURMRESTD
+        if extra:
+            bad.append(f"{name}: SLURMRESTD_SECURITY has unaccepted options {sorted(extra)}")
     return bad
 
 

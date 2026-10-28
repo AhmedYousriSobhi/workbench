@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-from governor.watchdog import container_violations
+from governor.watchdog import accepted_exceptions, container_violations
 
 GB = 1024**3
 SAFETY_FLOOR = int(1.5 * GB)  # MemAvailable must stay above this after the profile starts
@@ -136,11 +136,14 @@ def check_containers(runner=run) -> Check:
     if ids.returncode != 0 or not ids.stdout.split():
         return Check("sim containers", OK, "none running")
     r = runner(["docker", "inspect", *ids.stdout.split()], 30)
-    bad = container_violations(json.loads(r.stdout)) if r.returncode == 0 else ["docker inspect failed"]
+    info = json.loads(r.stdout) if r.returncode == 0 else []
+    bad = container_violations(info) if r.returncode == 0 else ["docker inspect failed"]
     if bad:
         return Check("sim containers", FAIL, "; ".join(bad[:5]) + (f" (+{len(bad) - 5} more)" if len(bad) > 5 else ""),
                      "remove the extra privilege from the generated compose, or record an ADR exception")
-    return Check("sim containers", OK, f"{len(ids.stdout.split())} running, unprivileged, memory-limited")
+    note = "".join(f"; accepted exception: {x}" for x in accepted_exceptions(info))
+    return Check("sim containers", OK,
+                 f"{len(ids.stdout.split())} running, unprivileged, memory-limited{note}")
 
 
 def run_all() -> list[Check]:
