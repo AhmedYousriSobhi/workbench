@@ -10,6 +10,8 @@ from pathlib import Path
 
 import yaml
 
+from governor.watchdog import container_violations
+
 GB = 1024**3
 SAFETY_FLOOR = int(1.5 * GB)  # MemAvailable must stay above this after the profile starts
 GOV_SOCKET = "/run/hpcsim/gov.sock"
@@ -127,26 +129,6 @@ def governor_request(req: dict, path: str = GOV_SOCKET, timeout: float = 3) -> d
         c.connect(path)
         c.sendall(json.dumps(req).encode() + b"\n")
         return json.loads(c.makefile().readline())
-
-
-def container_violations(inspected: list[dict]) -> list[str]:
-    """Security/limit gaps in `docker inspect` output for sim containers (ADR 0002)."""
-    bad = []
-    for c in inspected:
-        name, hc = c["Name"].lstrip("/"), c["HostConfig"]
-        if hc.get("Privileged"):
-            bad.append(f"{name}: privileged")
-        if hc.get("CapAdd"):
-            bad.append(f"{name}: extra capabilities {hc['CapAdd']}")
-        if any("unconfined" in o for o in hc.get("SecurityOpt") or []):
-            bad.append(f"{name}: confinement disabled {hc['SecurityOpt']}")
-        if hc.get("NetworkMode") == "host" or hc.get("PidMode") == "host":
-            bad.append(f"{name}: shares host network/pid namespace")
-        if any(m.get("Source", "").endswith("docker.sock") for m in c.get("Mounts", [])):
-            bad.append(f"{name}: mounts the Docker socket")
-        if not hc.get("Memory"):
-            bad.append(f"{name}: no memory limit")
-    return bad
 
 
 def check_containers(runner=run) -> Check:

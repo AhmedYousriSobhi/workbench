@@ -37,6 +37,8 @@ def status(socket: str = checks.GOV_SOCKET) -> None:
     typer.echo(f"level L{st['level']}{' (dry-run)' if st['dry_run'] else ''}  "
                f"avail {gb:.2f} GB  psi some {st['psi_some']}% full {st['psi_full']}%")
     typer.echo(f"groups: {', '.join(st['groups']) or '-'}")
+    for v in st.get("violations", []):
+        typer.echo(f"  SECURITY: {v}")
     for line in st["audit"]:
         typer.echo(f"  {line}")
 

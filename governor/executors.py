@@ -25,6 +25,12 @@ def run(cmd: list[str], timeout: float = 15) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
 
 
+def cgroup_dir(c: dict) -> Path:
+    """Cgroup directory of one `docker inspect` entry (systemd driver layout)."""
+    parent = c["HostConfig"].get("CgroupParent") or "system.slice"
+    return CGROUP_ROOT / parent / f"docker-{c['Id']}.scope"
+
+
 def discover_docker(run_cmd: Callable = run) -> tuple[list[Group], dict[str, Path]]:
     """Containers labelled hpcsim.class=P<n> -> groups and their cgroup directories."""
     ps = run_cmd(["docker", "ps", "-q", "--filter", "label=hpcsim.class"])
@@ -37,8 +43,7 @@ def discover_docker(run_cmd: Callable = run) -> tuple[list[Group], dict[str, Pat
         name = c["Name"].lstrip("/")
         prio = int(c["Config"]["Labels"]["hpcsim.class"].lstrip("Pp"))
         groups.append(Group(name, prio))
-        parent = c["HostConfig"].get("CgroupParent") or "system.slice"
-        cgroups[name] = CGROUP_ROOT / parent / f"docker-{c['Id']}.scope"
+        cgroups[name] = cgroup_dir(c)
     return groups, cgroups
 
 

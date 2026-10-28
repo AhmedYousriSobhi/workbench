@@ -130,3 +130,42 @@ def test_real_governor_process_end_to_end(container, tmp_path):
         gov.terminate()
         gov.wait(timeout=10)
     assert not sock.exists()  # SIGTERM cleanup
+
+
+def test_real_governor_flags_privileged_container_then_resolves(tmp_path):
+    """The live watchdog reports an over-privileged sim container and clears it once removed."""
+    sig = tmp_path / "sig.json"
+    sock = tmp_path / "gov.sock"
+    sig.write_text(json.dumps({"mem_available": 8 * 1024**3, "psi_some": 0, "psi_full": 0}))
+    clean, bad = (f"hpcsim-test-{uuid.uuid4().hex[:6]}" for _ in range(2))
+
+    def start(name, *extra):
+        subprocess.run(["docker", "run", "-d", "--rm", "--name", name, "--label", "hpcsim.class=P4",
+                        "--memory", "30m", *extra, "busybox", "sleep", "300"],
+                       check=True, capture_output=True)
+
+    start(clean)
+    gov = subprocess.Popen(
+        [sys.executable, "-m", "governor", "--dry-run", "--signals-file", str(sig), "--socket", str(sock),
+         "--interval", "0.2", "--watch-interval", "0.5"], cwd=ROOT, stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE)
+    try:
+        assert wait_for(sock.exists)
+
+        def violations():
+            with socket.socket(socket.AF_UNIX) as c:
+                c.connect(str(sock))
+                c.sendall(b'{"cmd": "status"}\n')
+                return json.loads(c.makefile().readline())["violations"]
+
+        time.sleep(1.5)
+        assert violations() == []  # unprivileged and limited: nothing to report
+        start(bad, "--cap-add", "SYS_ADMIN")
+        assert wait_for(lambda: any(bad in v and "SYS_ADMIN" in v for v in violations()))
+        subprocess.run(["docker", "rm", "-f", bad], capture_output=True, check=False)
+        assert wait_for(lambda: violations() == [])
+    finally:
+        gov.terminate()
+        gov.wait(timeout=10)
+        for n in (clean, bad):
+            subprocess.run(["docker", "rm", "-f", n], capture_output=True, check=False)
