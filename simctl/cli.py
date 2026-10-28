@@ -1,6 +1,6 @@
 import typer
 
-from . import checks, compose, diag, measure
+from . import checks, compose, diag, measure, stack
 
 app = typer.Typer(help="opti-sim control CLI")
 ICON = {checks.OK: "ok  ", checks.WARN: "WARN", checks.FAIL: "FAIL"}
@@ -63,6 +63,33 @@ def compose_cmd(profile: str = typer.Option("std", "--profile")) -> None:
     data = compose.generate(sim, prof)
     typer.echo(f"{compose.write(data, sim=sim, compute_nodes=prof.get('compute_nodes'))}: {len(data['services'])} services, "
                f"{compose.budget_mb(data)} MB of limits (plus observability)")
+
+
+def _sim() -> dict:
+    from pathlib import Path
+
+    import yaml
+
+    return yaml.safe_load(Path("sim.yaml").read_text())
+
+
+@app.command()
+def up(profile: str = typer.Option("std", "--profile")) -> None:
+    """Pre-flight, then start the profile in dependency order (refuses if it does not fit)."""
+    raise typer.Exit(0 if stack.up(_sim(), profile, say=typer.echo) else 1)
+
+
+@app.command()
+def down() -> None:
+    """Stop and remove the hpcsim compose project (nothing else)."""
+    raise typer.Exit(0 if stack.down(say=typer.echo) else 1)
+
+
+@app.command()
+def scale(n: int = typer.Argument(..., min=0, help="compute node count"),
+          profile: str = typer.Option("std", "--profile")) -> None:
+    """Change the compute-node count: regenerates slurm.conf, restarts slurmctld, starts/stops slurmd."""
+    raise typer.Exit(0 if stack.scale(_sim(), profile, n, say=typer.echo) else 1)
 
 
 measure_app = typer.Typer(help="Phase 0: read-only memory measurement")

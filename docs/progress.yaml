@@ -60,8 +60,8 @@ phases:
          how: "JWT-only REST on the internal network, own user, no privileges; skips two unshare steps instead of loosening seccomp (ADR 0003, ADR 0004). Verified live: no token 401, bad tokens get no data."}
       - {name: Accounting, status: done, pr: 38, where: simctl/slurmconf.py,
          how: "MariaDB on a capped tmpfs plus slurmdbd; sacctmgr bootstrap creates cluster, QOS and users from sim.yaml; secrets stay in a gitignored folder. Verified live: a job as alice appears in sacct and the REST slurmdb endpoint."}
-      - {name: simctl up / down / scale, status: todo,
-         how: "One-command start with pre-flight, governor admission and Grafana token provisioning (issue 39)."}
+      - {name: simctl up / down / scale, status: partial, pr: 46, where: simctl/stack.py,
+         how: "Pre-flight, staged start (observability, slurm, nodes), skips unbuilt mocks, scale regenerates slurm.conf, Grafana token created once (0600). Verified live with min. Governor scale/set-profile still only log."}
 
   - id: p3
     title: Mocks
@@ -176,7 +176,7 @@ architecture:
     - [app, jira, ""]
 
 next:
-  - "Issue 39: simctl up / down / scale, so the stack starts from one command."
+  - "Governor scale / set-profile taking real effect (rest of issue 39)."
   - "Phase 3 mocks: bmc-farm first (the app's Redfish integration)."
   - "A loaded Phase 0 run of the full stack to replace the budget estimates."
   - "Install the governor as a standing systemd service."
