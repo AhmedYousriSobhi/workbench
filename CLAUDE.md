@@ -8,6 +8,7 @@ opti-sim: a memory-governed simulation of an HPC/AI cluster (Slurm, Kubernetes, 
 
 ## Git workflow (mandatory)
 
+- Before starting any new task or piece of work, create a GitHub issue for it (`gh issue create`: what, why, acceptance criteria). Branch from it, name the branch after it, and reference it in the PR (`Closes #N`).
 - Never commit directly to `main` or `dev`. Always work on a separate branch, unless told to stick to a branch for a feature.
 - Branch names: `feat/...`, `fix/...`, `docs/...`, `chore/...`, branched from `dev`.
 - Open a PR to `dev` for every branch. `dev` collects all PRs; `dev` to `main` merges are made separately, only when asked.
