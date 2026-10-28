@@ -57,8 +57,9 @@ def compose_cmd(profile: str = typer.Option("std", "--profile")) -> None:
     import yaml
 
     sim = yaml.safe_load(Path("sim.yaml").read_text())
-    data = compose.generate(sim, compose.load_profile(profile))
-    typer.echo(f"{compose.write(data)}: {len(data['services'])} services, "
+    prof = compose.load_profile(profile)
+    data = compose.generate(sim, prof)
+    typer.echo(f"{compose.write(data, sim=sim, compute_nodes=prof.get('compute_nodes'))}: {len(data['services'])} services, "
                f"{compose.budget_mb(data)} MB of limits (plus observability)")
 
 

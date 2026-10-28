@@ -3,11 +3,14 @@ from pathlib import Path
 
 import yaml
 
+from . import slurmconf
+from .nodes import node_names
+
 OBSERVABILITY = "../observability.yml"  # static; hosts prometheus, grafana, gpu-exporter-farm
 
 # group -> service -> (image, mem_mb, priority class). Images are built from images/ and components/.
 CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {
-    "core": {"slurmctld": ("hpcsim/slurm-ctl:dev", 200, 1)},
+    "core": {"slurmctld": ("hpcsim/slurm-ctl:dev", 200, 1)},  # also hosts slurmrestd later
     "accounting": {"mariadb": ("mariadb:11", 150, 2), "slurmdbd": ("hpcsim/slurm-ctl:dev", 80, 2)},
     "mocks": {
         "bmc-farm": ("hpcsim/bmc-farm:dev", 100, 2),
@@ -34,15 +37,6 @@ def load_profile(name: str, root: Path = Path("profiles")) -> dict:
     return {**merged, **own, "groups": groups}
 
 
-def node_names(sim: dict, compute_override: int | None = None) -> list[tuple[str, str]]:
-    """[(name, kind)] with the same naming as components/gpu-exporter-farm."""
-    c, g = sim.get("compute", {}), sim.get("gpu", {})
-    count = compute_override if compute_override is not None else c.get("count", 0)
-    names = [(f"{c['prefix']}{i:03d}", "compute") for i in range(1, count + 1)]
-    names += [(f"{g['prefix']}{i:03d}", "gpu") for i in range(1, g.get("nodes", 0) + 1)]
-    return names
-
-
 def _service(image: str, mem_mb: int, prio: int, build: str | None = None) -> dict:
     svc: dict = {"image": image, "mem_limit": f"{mem_mb}m", "cgroup_parent": f"hpcsim-p{prio}.slice",
                  "labels": {"hpcsim.class": f"P{prio}"}, "restart": "unless-stopped"}
@@ -61,9 +55,16 @@ def generate(sim: dict, profile: dict) -> dict:
         svc = _service("hpcsim/node-base:dev", SLURMD_MB, SLURMD_PRIO, "../../images/node-base")
         svc["hostname"] = name
         svc["labels"]["hpcsim.node"] = kind
+        if kind == "gpu":
+            svc["environment"] = {"HPCSIM_GPUS": str(sim["gpu"]["gpus_per_node"])}
         if "slurmctld" in services:
             svc["depends_on"] = ["slurmctld"]
         services[name] = svc
+    slurm_mount = "./slurm:/etc/slurm:ro"
+    for name, svc in services.items():
+        if name == "slurmctld" or svc["labels"].get("hpcsim.node"):
+            svc["volumes"] = [slurm_mount]
+            svc["hostname"] = name
     return {"name": "hpcsim", "include": [OBSERVABILITY], "services": services}
 
 
@@ -72,8 +73,11 @@ def budget_mb(compose: dict) -> int:
     return sum(int(s["mem_limit"].rstrip("m")) for s in compose["services"].values())
 
 
-def write(compose: dict, out: Path = Path("compose/generated/docker-compose.yml")) -> Path:
+def write(compose: dict, out: Path = Path("compose/generated/docker-compose.yml"),
+          sim: dict | None = None, compute_nodes: int | None = None) -> Path:
     out.parent.mkdir(parents=True, exist_ok=True)
+    if sim is not None:
+        slurmconf.write(sim, out.parent / "slurm", compute_nodes)
     out.write_text("# GENERATED from sim.yaml by `simctl compose`; do not edit.\n"
                    + yaml.safe_dump(compose, sort_keys=False))
     return out
