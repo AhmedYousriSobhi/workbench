@@ -56,6 +56,15 @@ class Executor:
         self.arrivals_flag = arrivals_flag
         self.prealloc()
 
+    def refresh(self, groups: list[Group], cgroups: dict[str, Path]) -> None:
+        """Swap in a new inventory: close handles of vanished cgroups, pre-open the new ones."""
+        for name, cg in self.cgroups.items():
+            if cgroups.get(name) != cg:
+                self.path.forget(str(cg))
+        self.kinds = {g.name: g.kind for g in groups}
+        self.cgroups = cgroups
+        self.prealloc()
+
     def prealloc(self) -> None:
         """Open every writable control file now, before pressure exists."""
         for cg in self.cgroups.values():

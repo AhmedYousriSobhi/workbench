@@ -165,3 +165,134 @@ def test_limit_drift_and_scan(tmp_path):
         return subprocess.CompletedProcess(cmd, 0, out, "")
 
     assert Watchdog(fake, lambda c: tmp_path).scan() == []
+
+
+# --- inventory refresh and annotations -----------------------------------------------------
+
+def test_refresh_adds_and_drops_groups_and_acts_on_newcomers_at_current_level(tmp_path):
+    from pathlib import Path
+
+    from governor.core import Governor
+    from governor.ladder import Ladder
+    from governor.planner import Group
+    from governor.signals import FileSampler
+
+    sig = tmp_path / "s.json"
+    sig.write_text('{"mem_available": 8589934592, "psi_some": 25, "psi_full": 0}')  # L2: refresh allowed
+    inv = [[Group("old", 4)]]
+    acted = []
+
+    class Ex:
+        def __call__(self, a):
+            acted.append(str(a))
+
+        def refresh(self, groups, cgroups):
+            self.seen = [g.name for g in groups]
+
+    ex = Ex()
+    groups = [Group("old", 4), Group("vm1", 6, "vm")]
+    g = Governor(FileSampler(sig), Ladder(), groups, ex, False, None, 15,
+                 inventory=lambda: (inv[0], {"x": Path("/nonexistent")}), refresh_interval=5)
+    g.step(0)
+    assert g.step(11) == 2  # 25% PSI held for the sustain window: L2 throttles P4/P5
+    inv[0] = [Group("old", 4), Group("fresh", 5)]
+    acted.clear()
+    g.step(17)
+    assert {gr.name for gr in groups} == {"old", "fresh", "vm1"}  # vm survives: it is configured, not found
+    assert set(ex.seen) == {"old", "fresh", "vm1"}
+    assert any("fresh" in a for a in acted) and not any("old" in a for a in acted)
+    inv[0] = [Group("fresh", 5)]
+    g.step(23)
+    assert "old" not in g.group_names()
+    assert any(m == "inventory: - old" for m in g.audit)
+
+
+def test_executor_refresh_opens_new_and_forgets_removed(tmp_path):
+    from governor.executors import Executor
+    from governor.memlock import MitigationPath
+    from governor.planner import Group
+
+    a, b = tmp_path / "a", tmp_path / "b"
+    for d in (a, b):
+        d.mkdir()
+        (d / "cgroup.freeze").write_text("0")
+    path = MitigationPath()
+    ex = Executor([Group("a", 4)], {"a": a}, path)
+    assert path.has(str(a / "cgroup.freeze"))
+    ex.refresh([Group("b", 4)], {"b": b})
+    assert path.has(str(b / "cgroup.freeze")) and not path.has(str(a / "cgroup.freeze"))
+
+
+def test_annotator_posts_in_order_and_survives_failures():
+    import time
+
+    from governor.annotate import Annotator
+
+    posted = []
+
+    def post(url, token, body):
+        if body["text"] == "boom":
+            raise OSError("down")
+        posted.append((url, token, body["text"], body["tags"]))
+
+    an = Annotator("http://g", "tok", post)
+    for t in ("one", "boom", "two"):
+        an.emit(t)
+    deadline = time.time() + 5
+    while len(posted) < 2 and time.time() < deadline:
+        time.sleep(0.05)
+    an.close()
+    assert [p[2] for p in posted] == ["one", "two"]
+    assert posted[0][:2] == ("http://g", "tok") and "hpcsim" in posted[0][3]
+    assert an.failed is False  # recovered after the successful post
+
+
+def test_annotator_paused_holds_events_until_resumed():
+    import time
+
+    from governor.annotate import Annotator
+
+    got = []
+    an = Annotator("u", "t", lambda u, t, b: got.append(b["text"]))
+    an.paused.set()
+    an.emit("held")
+    time.sleep(0.8)
+    assert got == []
+    an.paused.clear()
+    deadline = time.time() + 5
+    while not got and time.time() < deadline:
+        time.sleep(0.05)
+    an.close()
+    assert got == ["held"]
+
+
+def test_governor_forwards_audit_to_annotator_and_pauses_at_l3():
+    from governor.core import Governor
+    from governor.ladder import Ladder
+    from governor.planner import Group
+
+    class Rec:
+        def __init__(self):
+            self.texts = []
+            self.paused = threading_event()
+
+        def emit(self, t):
+            self.texts.append(t)
+
+    def threading_event():
+        import threading
+        return threading.Event()
+
+    import json
+    import pathlib
+    import tempfile
+
+    from governor.signals import FileSampler
+
+    f = pathlib.Path(tempfile.mkdtemp()) / "s.json"
+    f.write_text(json.dumps({"mem_available": 1, "psi_some": 0, "psi_full": 0}))
+    rec = Rec()
+    g = Governor(FileSampler(f), Ladder(), [Group("c", 4)], lambda a: None, True, annotator=rec)
+    g.step(0)
+    assert any(t.startswith("level L0 -> L") for t in rec.texts)
+    assert rec.paused.is_set()  # starved host: annotator paused

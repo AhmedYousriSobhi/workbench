@@ -169,3 +169,77 @@ def test_real_governor_flags_privileged_container_then_resolves(tmp_path):
         gov.wait(timeout=10)
         for n in (clean, bad):
             subprocess.run(["docker", "rm", "-f", n], capture_output=True, check=False)
+
+
+def _gov(tmp_path, *extra, env=None):
+    sig, sock = tmp_path / "sig.json", tmp_path / "gov.sock"
+    sig.write_text(json.dumps({"mem_available": 8 * 1024**3, "psi_some": 0, "psi_full": 0}))
+    import os
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "governor", "--signals-file", str(sig), "--socket", str(sock),
+         "--interval", "0.2", *extra], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+        env={**os.environ, **(env or {})})
+    assert wait_for(sock.exists)
+    return proc, sig, sock
+
+
+def _ask(sock, req):
+    with socket.socket(socket.AF_UNIX) as c:
+        c.connect(str(sock))
+        c.sendall(json.dumps(req).encode() + b"\n")
+        return json.loads(c.makefile().readline())
+
+
+def test_real_container_started_after_governor_is_governed(tmp_path):
+    """Inventory refresh: a container created after start-up is discovered and stopped at L4."""
+    gov, sig, sock = _gov(tmp_path, "--refresh-interval", "1", "--no-watchdog")
+    late = f"hpcsim-test-{uuid.uuid4().hex[:6]}"
+    try:
+        assert late not in _ask(sock, {"cmd": "status"})["groups"]
+        subprocess.run(["docker", "run", "-d", "--rm", "--name", late, "--label", "hpcsim.class=P4",
+                        "--memory", "30m", "busybox", "sleep", "300"], check=True, capture_output=True)
+        assert wait_for(lambda: late in _ask(sock, {"cmd": "status"})["groups"])
+        sig.write_text(json.dumps({"mem_available": 4 * 1024**3, "psi_some": 40, "psi_full": 9}))
+        assert wait_for(lambda: not running(late), timeout=30)
+        subprocess.run(["docker", "rm", "-f", late], capture_output=True, check=False)
+        sig.write_text(json.dumps({"mem_available": 8 * 1024**3, "psi_some": 0, "psi_full": 0}))
+    finally:
+        gov.terminate()
+        gov.wait(timeout=10)
+        subprocess.run(["docker", "rm", "-f", late], capture_output=True, check=False)
+
+
+def test_real_governor_posts_annotations_with_token(tmp_path):
+    """Audit events reach an HTTP endpoint as Grafana annotations; the token is sent, never logged."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    got: list[dict] = []
+
+    class H(BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            got.append({"path": self.path, "auth": self.headers["Authorization"], **body})
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"{}")
+
+        def log_message(self, *a):
+            pass
+
+    srv = HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    gov, sig, sock = _gov(tmp_path, "--dry-run", "--no-watchdog",
+                          "--grafana-url", f"http://127.0.0.1:{srv.server_port}",
+                          env={"HPCSIM_GRAFANA_TOKEN": "sekret-test-token"})
+    try:
+        sig.write_text(json.dumps({"mem_available": int(1.5 * 1024**3), "psi_some": 0, "psi_full": 0}))
+        assert wait_for(lambda: any("L0 -> L1" in g["text"] for g in got))
+        first = got[0]
+        assert first["path"] == "/api/annotations" and first["auth"] == "Bearer sekret-test-token"
+        assert "governor" in first["tags"]
+    finally:
+        gov.terminate()
+        _, err = gov.communicate(timeout=10)
+        srv.shutdown()
+    assert b"sekret-test-token" not in err  # the token never reaches the log

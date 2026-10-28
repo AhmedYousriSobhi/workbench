@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 from . import control
+from .annotate import Annotator
 from .core import Governor
 from .executors import ARRIVALS_FLAG, Executor, discover_docker
 from .ladder import Ladder, Thresholds
@@ -34,6 +35,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--arrivals-flag", default=ARRIVALS_FLAG)
     ap.add_argument("--no-watchdog", action="store_true", help="disable container security/limit checks")
     ap.add_argument("--watch-interval", type=float, default=15.0, help="seconds between security scans")
+    ap.add_argument("--grafana-url", default=None,
+                    help="publish audit events as annotations; token from $HPCSIM_GRAFANA_TOKEN")
+    ap.add_argument("--refresh-interval", type=float, default=30.0, help="seconds between inventory refreshes")
     ap.add_argument("--require-lock", action="store_true", help="exit if mlockall fails")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -51,7 +55,12 @@ def main(argv: list[str] | None = None) -> None:
     ladder = Ladder(Thresholds(**json.loads(args.thresholds or "{}")))
     executor = Executor(groups, cgroups, path, arrivals_flag=args.arrivals_flag)
     watchdog = None if args.no_watchdog else Watchdog()
-    gov = Governor(sampler, ladder, groups, executor, args.dry_run, watchdog, args.watch_interval)
+    token = os.environ.get("HPCSIM_GRAFANA_TOKEN", "")
+    annotator = Annotator(args.grafana_url, token) if args.grafana_url and token else None
+    if args.grafana_url and not token:
+        log.warning("--grafana-url given but HPCSIM_GRAFANA_TOKEN is empty: annotations disabled")
+    gov = Governor(sampler, ladder, groups, executor, args.dry_run, watchdog, args.watch_interval,
+                   annotator, discover_docker, args.refresh_interval)
     srv = control.serve(args.socket, gov.handle, gov.group_names, gid=args.socket_gid) \
         if args.socket else None
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(SystemExit(0)))

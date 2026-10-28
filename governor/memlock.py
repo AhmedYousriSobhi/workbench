@@ -49,6 +49,11 @@ class MitigationPath:
         """Write to a pre-opened handle; opening here would defeat the purpose."""
         os.pwrite(self._fds[path], data, 0)  # cgroup files ignore the offset; plain files need it
 
+    def forget(self, prefix: str) -> None:
+        """Close handles under a path prefix (a container that no longer exists)."""
+        for path in [p for p in self._fds if p.startswith(prefix)]:
+            os.close(self._fds.pop(path))
+
     def close(self) -> None:
         for fd in self._fds.values():
             os.close(fd)
