@@ -57,7 +57,8 @@ def test_docker_cgroup_freeze_throttle_reclaim(container):
     assert wait_for(lambda: frozen(cg) == "0")
     before = int((cg / "memory.current").read_text())
     ex(Action("throttle", container, 2))
-    assert int((cg / "memory.high").read_text()) == int(before * 0.8)
+    high = int((cg / "memory.high").read_text())
+    assert abs(high - int(before * 0.8)) < 4096  # kernel rounds memory.high down to a page
     ex(Action("unthrottle", container, 0))
     assert (cg / "memory.high").read_text().strip() == "max"
     ex(Action("reclaim", container, 3))
