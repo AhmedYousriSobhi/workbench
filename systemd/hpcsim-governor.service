@@ -1,0 +1,20 @@
+[Unit]
+Description=opti-sim memory governor
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -m governor --socket /run/hpcsim/gov.sock --require-lock
+WorkingDirectory=/opt/opti-sim
+Slice=hpcsim-governor.slice
+OOMScoreAdjust=-900
+MemoryLow=64M
+LimitMEMLOCK=infinity
+Restart=always
+RestartSec=2
+# Web UI group (user hpcsim) reaches the socket through its group
+RuntimeDirectory=hpcsim
+RuntimeDirectoryMode=0750
+
+[Install]
+WantedBy=multi-user.target
