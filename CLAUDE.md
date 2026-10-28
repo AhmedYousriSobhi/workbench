@@ -34,6 +34,8 @@ See README section 9. Top level: `sim.yaml`, `profiles/`, `simctl/`, `governor/`
 - Do not add real NFS/Lustre or heavy JS frameworks; see SPEC C-11 and W-1.
 - Record significant decisions as ADRs in `docs/adr/`.
 
+- **Keep the progress tracker current.** Any PR that changes what is built updates `docs/progress.yaml` (status, how, where, PR; architecture nodes and edges), then `python -m simctl.progress` regenerates `docs/PROGRESS.md` and `docs/progress.html`. `validate.sh` fails on stale output. See [docs/guides/progress-and-diagrams.md](docs/guides/progress-and-diagrams.md).
+
 ## Commands
 
 - `./scripts/validate.sh`: **run before every commit** (secrets scan, compile, ruff, bash -n, YAML/JSON, systemd verify, pytest, governor smoke). `./scripts/validate.sh --install-hook` makes it a pre-commit hook. Set `PYLIBS=<dir>` if tools are installed with `pip --target`.

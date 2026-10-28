@@ -57,6 +57,9 @@ for f in files:
 sys.exit(rc)
 PY
 
+step "progress docs"
+python3 -m simctl.progress --check || bad "docs/PROGRESS.md or progress.html is stale"
+
 step "json"
 for f in $(git ls-files '*.json'); do python3 -m json.tool "$f" >/dev/null || bad "json $f"; done
 
