@@ -1,5 +1,8 @@
+import json
 import subprocess
 import tarfile
+
+import pytest
 
 from simctl import checks, diag
 
@@ -56,7 +59,7 @@ def test_load_profiles_reads_repo():
 
 
 def test_mask_secrets():
-    t = ("origin https://ghp_abcdefghijklmnopqrstuvwxyz0123@github.com/x\n"
+    t = ("origin https://" + "ghp_" + "A" * 30 + "@github.com/x\n"
          'password: hunter2\ntoken="abc123"\nok line\n'
          "url https://user:pw@host/path\n")
     m = diag.mask(t)
@@ -71,3 +74,78 @@ def test_bundle_has_no_tokens(tmp_path):
         blob = b"".join(tar.extractfile(n).read() for n in names if tar.getmember(n).isfile())
     assert "diag/doctor.txt" in names and "diag/proc_meminfo.txt" in names
     assert b"ghp_" not in blob and b"github_pat_" not in blob
+
+
+# --- Phase 0 measurement -------------------------------------------------------------------
+
+def test_parse_size_and_docker_stats():
+    from simctl import measure
+
+    assert measure.parse_size("12.5MiB") == int(12.5 * 1024**2)
+    assert measure.parse_size("1GiB") == 1024**3
+    with pytest.raises(ValueError):
+        measure.parse_size("lots")
+    out = "prometheus\t180MiB / 300MiB\ngrafana\t90.5MiB / 300MiB\n"
+    assert measure.parse_docker_stats(out) == {"prometheus": 180 * 1024**2, "grafana": int(90.5 * 1024**2)}
+
+
+def test_parse_dommemstat_prefers_rss():
+    from simctl import measure
+
+    assert measure.parse_dommemstat("actual 2097152\nrss 1048576\n") == 1048576 * 1024
+    assert measure.parse_dommemstat("actual 2097152\n") == 2097152 * 1024
+    assert measure.parse_dommemstat("") == 0
+
+
+def test_pss_falls_back_to_rss(tmp_path):
+    from simctl import measure
+
+    (tmp_path / "status").write_text("Name:\tx\nVmRSS:\t  500 kB\n")
+    assert measure.pss_kb(tmp_path) == 500
+    (tmp_path / "smaps_rollup").write_text("Rss: 900 kB\nPss: 400 kB\n")
+    assert measure.pss_kb(tmp_path) == 400
+    assert measure.pss_kb(tmp_path / "nope") is None
+
+
+def test_processes_sum_by_name(tmp_path):
+    from simctl import measure
+
+    for pid, comm, kb in ((1, "python", 100), (2, "python", 50), (3, "redis", 10)):
+        d = tmp_path / str(pid)
+        d.mkdir()
+        (d / "comm").write_text(comm + "\n")
+        (d / "smaps_rollup").write_text(f"Pss: {kb} kB\n")
+    (tmp_path / "meminfo").write_text("x")  # non-pid entries are ignored
+    assert measure.processes(tmp_path) == {"python": 150 * 1024, "redis": 10 * 1024}
+
+
+def test_aggregate_sample_and_save(tmp_path):
+    from simctl import measure
+
+    seq = iter([{"docker:a": 100, "vm:x": 50}, {"docker:a": 300}, {"docker:a": 200}])
+    snaps = measure.sample(10, 5, take=lambda: next(seq), sleep=lambda s: None)
+    assert len(snaps) == 3
+    agg = measure.aggregate(snaps)
+    assert agg["docker:a"] == {"mean": 200, "peak": 300}
+    assert agg["vm:x"] == {"mean": 16, "peak": 50}  # absent samples count as zero
+    path = measure.save("t", snaps, tmp_path)
+    assert json.loads(path.read_text())["stats"]["docker:a"]["peak"] == 300
+
+
+def test_report_suggests_headroom():
+    from simctl import measure
+
+    mib = 1024**2
+    idle = {"stats": {"docker:a": {"mean": 100 * mib, "peak": 100 * mib}, "host:used": {"mean": 1, "peak": 1}}}
+    loaded = {"stats": {"docker:a": {"mean": 200 * mib, "peak": 250 * mib}}}
+    rep = measure.report(idle, loaded)
+    assert "| docker:a | 100 | 250 | 300 |" in rep
+    assert "host:" not in rep
+
+
+def test_snapshot_is_flat_and_readonly_on_this_host():
+    from simctl import measure
+
+    s = measure.snapshot()
+    assert s["host:available"] > 0
+    assert all(isinstance(v, int) for v in s.values())

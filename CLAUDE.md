@@ -43,5 +43,6 @@ See README section 9. Top level: `sim.yaml`, `profiles/`, `simctl/`, `governor/`
 - `python -m simctl.cli doctor | preflight --profile X | status | diag`: environment check, memory pre-flight, governor state, and a masked diagnostics tarball. **Attach `diag` output when reporting or debugging an environment problem.**
 
 - `python -m simctl.cli compose --profile X`: generates `compose/generated/docker-compose.yml` (gitignored) from `sim.yaml` + `profiles/X.yaml` (`groups`, `compute_nodes`, `extends`). Add components in `CATALOG` in `simctl/compose.py`; never hand-edit the output.
+- `python -m simctl.cli measure run <label> [--duration S]`, then `measure report <idle> [<loaded>]`: Phase 0 read-only memory sampling (host, containers, PSS by process, VMs). Results go to `docs/measurements/` (gitignored); copy the suggested budgets into README section 5 and `profiles/*.yaml`.
 
 Not yet implemented; as each lands, document it here: `make demo`, `simctl up --profile std`, `pytest`, `ruff check .`.
