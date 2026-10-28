@@ -35,6 +35,8 @@ phases:
          how: "A real container hog is throttled, frozen then stopped in order; no host OOM. Runs as root via scripts/real-test-root.sh."}
       - {name: Security watchdog, status: done, pr: 34, where: governor/watchdog.py,
          how: "Every 15 s flags privileged/capability/unconfined/host-namespace/docker.sock containers, missing limits and live memory.max drift. Report only; skipped from L3 up."}
+      - {name: Monitored slurmrestd exception, status: done, pr: 44, where: governor/watchdog.py,
+         how: "slurmrestd runs with two unshare steps disabled (ADR 0004). Any wider SLURMRESTD_SECURITY option is a violation; doctor lists the accepted exception."}
       - {name: Inventory refresh and Grafana annotations, status: done, pr: 36, where: "governor/annotate.py, governor/core.py",
          how: "Re-discovers containers so late starters are governed; posts audit events to Grafana with a token from the environment (SPEC GV-6)."}
       - {name: systemd unit installed permanently, status: partial, where: systemd,
@@ -54,10 +56,10 @@ phases:
          how: "slurm.conf, gres.conf and cgroup.conf derive from sim.yaml so node names match everywhere; fake GPUs use /dev/null-backed device files."}
       - {name: Compose generation, status: done, pr: 30, where: simctl/compose.py,
          how: "`simctl compose --profile X` renders services with mem_limit, cgroup_parent and the hpcsim.class label from sim.yaml and profiles."}
-      - {name: slurmrestd with JWT, status: review, pr: 38,
-         how: "JWT-only REST on the internal network, own user, no privileges; skips two unshare steps instead of loosening seccomp (ADR 0003, issue 40 reviews this)."}
-      - {name: Accounting, status: review, pr: 38,
-         how: "MariaDB on a capped tmpfs plus slurmdbd; sacctmgr bootstrap creates cluster, QOS and users from sim.yaml; secrets stay in a gitignored folder."}
+      - {name: slurmrestd with JWT, status: done, pr: 38, where: simctl/compose.py,
+         how: "JWT-only REST on the internal network, own user, no privileges; skips two unshare steps instead of loosening seccomp (ADR 0003, ADR 0004). Verified live: no token 401, bad tokens get no data."}
+      - {name: Accounting, status: done, pr: 38, where: simctl/slurmconf.py,
+         how: "MariaDB on a capped tmpfs plus slurmdbd; sacctmgr bootstrap creates cluster, QOS and users from sim.yaml; secrets stay in a gitignored folder. Verified live: a job as alice appears in sacct and the REST slurmdb endpoint."}
       - {name: simctl up / down / scale, status: todo,
          how: "One-command start with pre-flight, governor admission and Grafana token provisioning (issue 39)."}
 
@@ -123,8 +125,8 @@ phases:
       - {name: Observability stack, status: done, where: compose/observability.yml,
          how: "Prometheus (2 d, tmpfs), Grafana with provisioned dashboard, fake GPU exporter."}
       - {name: Decisions as ADRs, status: done, where: docs/adr,
-         how: "0001 record decisions, 0002 Slurm from source with no extra privileges, 0003 slurmrestd/JWT (in PR 38)."}
-      - {name: Progress tracker, status: review, pr: null,
+         how: "0001 record decisions, 0002 Slurm from source with no extra privileges, 0003 slurmrestd/JWT and accounting, 0004 slurmrestd keeps its unshare steps disabled."}
+      - {name: Progress tracker, status: review, pr: 42, where: simctl/progress.py,
          how: "This page, generated from docs/progress.yaml (issue 41)."}
 
 architecture:
@@ -140,9 +142,9 @@ architecture:
     - {id: libvirt, group: host, label: "libvirt VMs", status: partial}
     - {id: ctld, group: net, label: "slurmctld", status: done}
     - {id: slurmd, group: net, label: "slurmd x N (fake GPUs)", status: done}
-    - {id: restd, group: net, label: "slurmrestd (JWT)", status: review}
-    - {id: dbd, group: net, label: "slurmdbd", status: review}
-    - {id: maria, group: net, label: "MariaDB (tmpfs)", status: review}
+    - {id: restd, group: net, label: "slurmrestd (JWT)", status: done}
+    - {id: dbd, group: net, label: "slurmdbd", status: done}
+    - {id: maria, group: net, label: "MariaDB (tmpfs)", status: done}
     - {id: prom, group: net, label: "Prometheus", status: done}
     - {id: graf, group: net, label: "Grafana", status: done}
     - {id: gpux, group: net, label: "gpu-exporter-farm", status: done}
@@ -174,10 +176,10 @@ architecture:
     - [app, jira, ""]
 
 next:
-  - "Merge PR 38 (slurmrestd and accounting)."
   - "Issue 39: simctl up / down / scale, so the stack starts from one command."
-  - "Issue 40: decide whether a narrow seccomp profile can restore slurmrestd's own hardening without privilege."
   - "Phase 3 mocks: bmc-farm first (the app's Redfish integration)."
+  - "A loaded Phase 0 run of the full stack to replace the budget estimates."
+  - "Install the governor as a standing systemd service."
 
 gaps:
   - "Nothing starts the whole stack yet; it is brought up by hand with docker compose."
