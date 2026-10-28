@@ -10,8 +10,10 @@ OBSERVABILITY = "../observability.yml"  # static; hosts prometheus, grafana, gpu
 
 # group -> service -> (image, mem_mb, priority class). Images are built from images/ and components/.
 CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {
-    "core": {"slurmctld": ("hpcsim/slurm-ctl:dev", 200, 1)},  # also hosts slurmrestd later
-    "accounting": {"mariadb": ("mariadb:11", 150, 2), "slurmdbd": ("hpcsim/slurm-ctl:dev", 80, 2)},
+    "core": {"slurmctld": ("hpcsim/slurm-ctl:dev", 200, 1), "slurmrestd": ("hpcsim/slurm-ctl:dev", 60, 1)},
+    # mariadb's 100m tmpfs data dir counts against its cgroup, so the limit covers tmpfs + server.
+    "accounting": {"mariadb": ("mariadb:11", 250, 2), "slurmdbd": ("hpcsim/slurm-ctl:dev", 80, 2),
+                   "accounting-init": ("hpcsim/slurm-ctl:dev", 30, 2)},
     "mocks": {
         "bmc-farm": ("hpcsim/bmc-farm:dev", 100, 2),
         "bcm-mock": ("hpcsim/bcm-mock:dev", 100, 2),
@@ -62,10 +64,55 @@ def generate(sim: dict, profile: dict) -> dict:
         services[name] = svc
     slurm_mount = "./slurm:/etc/slurm:ro"
     for name, svc in services.items():
-        if name == "slurmctld" or svc["labels"].get("hpcsim.node"):
+        if name in ("slurmctld", "slurmrestd") or svc["labels"].get("hpcsim.node"):
             svc["volumes"] = [slurm_mount]
             svc["hostname"] = name
+            svc.setdefault("environment", {})["HPCSIM_USERS"] = users_env(sim)
+    _wire_slurm_services(services)
     return {"name": "hpcsim", "include": [OBSERVABILITY], "services": services}
+
+
+def users_env(sim: dict) -> str:
+    """'alice:1001 bob:1002': same names and UIDs on every Slurm container."""
+    return " ".join(f"{u['name']}:{1001 + i}" for i, u in enumerate(sim.get("users", [])))
+
+
+def _wire_slurm_services(services: dict) -> None:
+    """Commands, mounts and ordering for slurmrestd and the accounting stack (secrets stay in ./secrets)."""
+    if "slurmrestd" in services:
+        r = services["slurmrestd"]
+        # slurmrestd refuses to run as root or SlurmUser; JWT auth, reachable on the internal network only.
+        r["command"] = ["su", "-s", "/bin/sh", "slurmrestd", "-c", "exec /opt/slurm/sbin/slurmrestd -a rest_auth/jwt 0.0.0.0:6820"]
+        # Docker's seccomp profile forbids the unshare(2) calls slurmrestd makes by default (SysV sem, fds); skipping just
+        # those steps beats loosening seccomp (ADR 0003). The container still has its own IPC namespace.
+        r["environment"]["SLURM_JWT"] = "daemon"  # JWT-only mode: accept per-request tokens
+        r["environment"]["SLURMRESTD_SECURITY"] = "disable_unshare_sysv,disable_unshare_files"
+        r["depends_on"] = ["slurmctld"] if "slurmctld" in services else []
+    if "mariadb" not in services:
+        return
+    services["mariadb"].update({
+        "env_file": ["./secrets/mariadb.env"],
+        "command": ["--innodb-buffer-pool-size=32M", "--innodb-log-file-size=8M", "--max-connections=20",
+                    "--performance-schema=OFF"],
+        "tmpfs": ["/var/lib/mysql:size=100m"],
+        "healthcheck": {"test": ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"],
+                        "interval": "3s", "timeout": "3s", "retries": 30},
+    })
+    db = services["slurmdbd"]
+    db["hostname"] = "slurmdbd"
+    db["volumes"] = ["./secrets/slurmdbd:/run/hpcsim/etc:ro"]
+    # slurmdbd insists its config is owned by SlurmUser and mode 0600, so install a copy at start.
+    install = ("cp /run/hpcsim/etc/* /etc/slurm/ && chown slurm:slurm /etc/slurm/slurmdbd.conf"
+               " && chmod 600 /etc/slurm/slurmdbd.conf && exec slurmdbd -D")
+    db["command"] = ["sh", "-c", install]
+    db["depends_on"] = {"mariadb": {"condition": "service_healthy"}}
+    init = services["accounting-init"]
+    init["volumes"] = ["./slurm:/etc/slurm:ro", "./slurm/accounting.sh:/accounting.sh:ro"]
+    init["command"] = ["sh", "/accounting.sh"]
+    init["restart"] = "no"
+    init["depends_on"] = ["slurmdbd"]
+    if "slurmctld" in services:
+        services["slurmctld"]["depends_on"] = ["slurmdbd"]
 
 
 def budget_mb(compose: dict) -> int:
@@ -77,7 +124,7 @@ def write(compose: dict, out: Path = Path("compose/generated/docker-compose.yml"
           sim: dict | None = None, compute_nodes: int | None = None) -> Path:
     out.parent.mkdir(parents=True, exist_ok=True)
     if sim is not None:
-        slurmconf.write(sim, out.parent / "slurm", compute_nodes)
+        slurmconf.write(sim, out.parent / "slurm", compute_nodes, "mariadb" in compose["services"])
     out.write_text("# GENERATED from sim.yaml by `simctl compose`; do not edit.\n"
                    + yaml.safe_dump(compose, sort_keys=False))
     return out
