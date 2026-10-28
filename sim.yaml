@@ -1,0 +1,36 @@
+# Single source of truth for opti-sim. All generated artifacts derive from this file.
+time_dilation: 1.0        # >1 compresses job durations and arrival intervals
+
+jira:
+  mode: mock              # mock | cloud | dc
+
+compute:
+  count: 4
+  prefix: cn
+  memory_mb: 4096         # fake RealMemory per node
+  cpus: 8
+
+gpu:
+  nodes: 2
+  prefix: gpu
+  gpus_per_node: 8
+  type: h200
+
+partitions:
+  - {name: cpu, nodes: compute}
+  - {name: gpu, nodes: gpu}
+
+users:
+  - {name: alice, persona: ml-trainer, qos: normal}
+  - {name: bob, persona: mpi-researcher, qos: normal}
+
+kubernetes:
+  real_agents: 1
+  kwok_nodes: 0
+
+bmc:
+  per_node: true
+
+host:
+  reserve_gb: 3
+  safety_floor_gb: 2

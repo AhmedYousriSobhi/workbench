@@ -1,0 +1,4 @@
+# Profile: jira-real
+name: jira-real
+budget_gb: 7.5   # planning estimate; replace with measured value after Phase 0
+extends: []
