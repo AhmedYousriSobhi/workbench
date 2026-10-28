@@ -1,4 +1,5 @@
 """Generate slurm.conf and gres.conf from sim.yaml so node names agree everywhere (SPEC section 3)."""
+import secrets
 from pathlib import Path
 
 from .nodes import node_names
@@ -6,7 +7,7 @@ from .nodes import node_names
 CTLD = "slurmctld"
 
 
-def slurm_conf(sim: dict, compute_override: int | None = None) -> str:
+def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool = False) -> str:
     c, g = sim["compute"], sim.get("gpu", {})
     names = node_names(sim, compute_override)
     compute = [n for n, k in names if k == "compute"]
@@ -33,7 +34,12 @@ def slurm_conf(sim: dict, compute_override: int | None = None) -> str:
         "SlurmctldTimeout=60",
         "SlurmdTimeout=120",
         "GresTypes=gpu",
+        # slurmrestd authenticates callers with JWT; the key is baked into the lab image (ADR 0002).
+        "AuthAltTypes=auth/jwt",
+        "AuthAltParameters=jwt_key=/var/spool/slurmctld/jwt_hs256.key",
     ]
+    if accounting:
+        lines += ["AccountingStorageType=accounting_storage/slurmdbd", "AccountingStorageHost=slurmdbd"]
     if compute:
         lines.append(f"NodeName={_range(compute)} CPUs={c['cpus']} RealMemory={c['memory_mb']} State=UNKNOWN")
     if gpu:
@@ -69,10 +75,58 @@ def _range(names: list[str]) -> str:
     return f"{prefix}[{nums[0]}-{nums[-1]}]"
 
 
-def write(sim: dict, out_dir: Path, compute_override: int | None = None) -> list[Path]:
+def slurmdbd_conf(password: str) -> str:
+    return "\n".join([
+        "# GENERATED; contains a secret, never commit", "AuthType=auth/munge", "DbdHost=slurmdbd",
+        "AuthAltTypes=auth/jwt", "AuthAltParameters=jwt_key=/var/spool/slurmctld/jwt_hs256.key",
+        "SlurmUser=slurm", "LogFile=/dev/stderr", "PidFile=/run/slurmdbd.pid",
+        "StorageType=accounting_storage/mysql", "StorageHost=mariadb", "StorageUser=slurm",
+        f"StoragePass={password}", "StorageLoc=slurm_acct_db", ""])
+
+
+def accounting_script(sim: dict) -> str:
+    """Idempotent sacctmgr bootstrap: cluster, QOS, one account, users from sim.yaml."""
+    users = sim.get("users", [])
+    qos = sorted({u["qos"] for u in users if u["qos"] != "normal"})
+    lines = ["#!/bin/sh", "# GENERATED from sim.yaml; safe to re-run",
+             "until sacctmgr -i show cluster >/dev/null 2>&1; do sleep 2; done",
+             "sacctmgr -i add cluster hpcsim || true", "sacctmgr -i add account sim || true"]
+    lines += [f"sacctmgr -i add qos {q} || true" for q in qos]
+    lines += [f"sacctmgr -i add user {u['name']} account=sim qos={u['qos']} || true" for u in users]
+    return "\n".join(lines) + "\n"
+
+
+def write(sim: dict, out_dir: Path, compute_override: int | None = None,
+          accounting: bool = False) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
-    files = {"slurm.conf": slurm_conf(sim, compute_override), "gres.conf": gres_conf(sim),
+    files = {"slurm.conf": slurm_conf(sim, compute_override, accounting), "gres.conf": gres_conf(sim),
              "cgroup.conf": "CgroupPlugin=disabled\n"}
+    if accounting:
+        files["accounting.sh"] = accounting_script(sim)
     for name, text in files.items():
         (out_dir / name).write_text(text)
+    if accounting:
+        _write_secrets(sim, out_dir.parent / "secrets", out_dir)
     return [out_dir / n for n in files]
+
+
+def _write_secrets(sim: dict, sec: Path, slurm_dir: Path) -> None:
+    """DB credentials live only in the gitignored generated tree; an existing password is kept so a
+    running database keeps matching after a regeneration."""
+    env = sec / "mariadb.env"
+    sec.mkdir(parents=True, exist_ok=True)
+    pw = None
+    if env.exists():
+        pw = next((ln.split("=", 1)[1] for ln in env.read_text().splitlines()
+                   if ln.startswith("MARIADB_PASSWORD=")), None)
+    pw = pw or secrets.token_urlsafe(24)
+    env.write_text(f"MARIADB_RANDOM_ROOT_PASSWORD=yes\nMARIADB_USER=slurm\nMARIADB_PASSWORD={pw}\n"
+                   "MARIADB_DATABASE=slurm_acct_db\n")
+    etc = sec / "slurmdbd"
+    etc.mkdir(exist_ok=True)
+    for d in (sec, etc):
+        d.chmod(0o700)
+    (etc / "slurmdbd.conf").write_text(slurmdbd_conf(pw))
+    (etc / "slurm.conf").write_text((slurm_dir / "slurm.conf").read_text())
+    for f in (env, etc / "slurmdbd.conf"):
+        f.chmod(0o600)
