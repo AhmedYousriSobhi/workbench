@@ -28,8 +28,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       munge libjson-c5 libhttp-parser2.9 libyaml-0-2 libjwt2 libmariadb3 libdbus-1-3 \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --system --no-create-home slurm \
+ && groupadd --system slurmjwt \
+ && useradd --system --no-create-home --groups slurmjwt slurmrestd \
+ && usermod -aG slurmjwt slurm \
  && mkdir -p /etc/slurm /var/spool/slurmd /var/spool/slurmctld /run/munge /var/log/munge \
  && chown slurm:slurm /var/spool/slurmctld \
+ && dd if=/dev/urandom bs=32 count=1 of=/var/spool/slurmctld/jwt_hs256.key 2>/dev/null \
+ && chown slurm:slurmjwt /var/spool/slurmctld/jwt_hs256.key && chmod 0640 /var/spool/slurmctld/jwt_hs256.key \
  && dd if=/dev/urandom bs=1 count=1024 of=/etc/munge/munge.key 2>/dev/null \
  && chown -R munge:munge /etc/munge /var/lib/munge /var/log/munge /run/munge \
  && chmod 0400 /etc/munge/munge.key

@@ -55,7 +55,7 @@ def test_slurmd_count_follows_profile():
 
 def test_budget_matches_limits():
     data = compose.generate(SIM, compose.load_profile("min"))
-    assert compose.budget_mb(data) == 200 + 3 * 100 + 60 + (4 + SIM["gpu"]["nodes"]) * 60
+    assert compose.budget_mb(data) == 200 + 60 + 3 * 100 + 60 + (4 + SIM["gpu"]["nodes"]) * 60
 
 
 def test_write_marks_generated(tmp_path):
