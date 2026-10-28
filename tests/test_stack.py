@@ -47,18 +47,33 @@ def test_down_reports_failure():
     assert not stack.down(runner=lambda c: cp(1, err="boom"), say=lambda m: None)
 
 
-def test_token_created_once_with_private_mode(tmp_path):
+def test_token_created_reused_and_replaced_when_stale(tmp_path):
     calls = []
 
     def http(method, path, body, url, auth):
         calls.append(path)
-        return {"id": 7} if path.endswith("serviceaccounts") else {"key": "glsa_fake"}
+        return {"id": 7} if path.endswith("serviceaccounts") else {"key": f"glsa_{len(calls)}"}
 
     f = tmp_path / "s" / "tok"
-    assert stack.provision_token(path=f, http=http) == f
-    assert f.read_text() == "glsa_fake" and oct(f.stat().st_mode)[-3:] == "600"
-    stack.provision_token(path=f, http=http)
-    assert len(calls) == 2  # second call reuses the file
+    assert stack.provision_token(path=f, http=http, valid=lambda t, u: True) == f
+    assert f.read_text() == "glsa_2" and oct(f.stat().st_mode)[-3:] == "600"
+    stack.provision_token(path=f, http=http, valid=lambda t, u: True)
+    assert len(calls) == 2  # valid token is reused
+    stack.provision_token(path=f, http=http, valid=lambda t, u: False)  # new Grafana: stale token
+    assert f.read_text() == "glsa_4" and oct(f.stat().st_mode)[-3:] == "600"
+
+
+def test_token_waits_for_grafana(tmp_path):
+    n = {"i": 0}
+
+    def http(method, path, body, url, auth):
+        n["i"] += 1
+        if n["i"] < 3:
+            raise ConnectionRefusedError
+        return {"id": 1} if path.endswith("serviceaccounts") else {"key": "k"}
+
+    stack.provision_token(path=tmp_path / "t", http=http, valid=lambda t, u: False, sleep=lambda s: None)
+    assert (tmp_path / "t").read_text() == "k"
 
 
 def test_unbuildable_services_are_skipped(tmp_path):

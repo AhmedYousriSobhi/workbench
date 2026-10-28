@@ -150,14 +150,40 @@ def _grafana(method: str, path: str, body: dict | None, url: str, auth: str) -> 
         return json.loads(r.read() or b"{}")
 
 
+def token_valid(token: str, url: str = "http://127.0.0.1:3000") -> bool:
+    """Does Grafana accept this service-account token? (False also when Grafana is unreachable.)"""
+    import urllib.error
+    import urllib.request
+
+    req = urllib.request.Request(url + "/api/org", headers={"Authorization": f"Bearer {token}"})
+    try:
+        with urllib.request.urlopen(req, timeout=5):
+            return True
+    except (urllib.error.URLError, OSError):
+        return False
+
+
 def provision_token(url: str = "http://127.0.0.1:3000", auth: str = "admin:admin",
-                    path: Path = TOKEN_FILE, http=_grafana) -> Path:
-    """Create the governor's annotation service-account token once; the file (0600) is the only copy."""
-    if path.exists():
+                    path: Path = TOKEN_FILE, http=_grafana, valid=token_valid,
+                    retries: int = 30, sleep: Callable[[float], None] = time.sleep) -> Path:
+    """Ensure the governor's annotation token exists and works; the 0600 file is the only copy.
+
+    Grafana's state is disposable (no volume), so a token left over from a previous `up` is
+    replaced. Grafana needs a moment after start, hence the retries.
+    """
+    if path.exists() and valid(path.read_text().strip(), url):
         return path
-    sa = http("POST", "/api/serviceaccounts", {"name": "hpcsim-governor", "role": "Editor"}, url, auth)
+    for attempt in range(retries):
+        try:
+            sa = http("POST", "/api/serviceaccounts", {"name": "hpcsim-governor", "role": "Editor"}, url, auth)
+            break
+        except OSError:
+            if attempt == retries - 1:
+                raise
+            sleep(2)
     tok = http("POST", f"/api/serviceaccounts/{sa['id']}/tokens", {"name": "governor"}, url, auth)
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path.unlink(missing_ok=True)
     path.touch(mode=0o600)
     path.write_text(tok["key"])
     return path
