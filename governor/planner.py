@@ -3,7 +3,8 @@ from dataclasses import dataclass
 
 # action name -> reversible?
 REVERSIBLE = {"notify": True, "stop-arrivals": True, "throttle": True, "freeze": True,
-              "reclaim": True, "stop": False, "save": False}
+              "reclaim": True, "stop": False, "save": False,
+              "thaw": True, "unthrottle": True, "resume-arrivals": True}
 
 
 @dataclass(frozen=True)
@@ -32,7 +33,7 @@ def plan(level: int, groups: list[Group]) -> list[Action]:
     acts: list[Action] = []
     if level >= 1:
         acts.append(Action("notify", "events", 1))
-        acts += [Action("stop-arrivals", g.name, 1) for g in _by_prio(groups, {5})]
+        acts.append(Action("stop-arrivals", "*", 1))  # global flag read by user-sim/ticket-bot
     if level >= 2:
         acts += [Action("throttle", g.name, 2) for g in _by_prio(groups, {5, 4})]
     if level >= 3:
@@ -54,3 +55,18 @@ def plan(level: int, groups: list[Group]) -> list[Action]:
 def reversible_first(acts: list[Action]) -> list[Action]:
     """Stable sort: reversible actions precede destructive ones."""
     return sorted(acts, key=lambda a: not REVERSIBLE[a.verb])
+
+
+def undo(old: int, new: int, groups: list[Group]) -> list[Action]:
+    """Reverse reversible actions whose level is above `new` (stops are never auto-undone)."""
+    if new >= old:
+        return []
+    inverse = {"freeze": "thaw", "throttle": "unthrottle", "stop-arrivals": "resume-arrivals"}
+    seen: set[tuple[str, str]] = set()
+    out: list[Action] = []
+    for a in plan(old, groups):
+        if a.verb in inverse and a.level > new and (a.verb, a.target) not in seen:
+            seen.add((a.verb, a.target))
+            # reverse in the opposite order: highest priority first
+            out.append(Action(inverse[a.verb], a.target, new))
+    return out[::-1]

@@ -4,7 +4,7 @@ import threading
 from collections.abc import Callable
 
 from .ladder import Ladder
-from .planner import Action, Group, plan, reversible_first
+from .planner import Action, Group, plan, reversible_first, undo
 from .signals import Sampler, Signals
 
 log = logging.getLogger("governor")
@@ -32,7 +32,11 @@ class Governor:
         self.audit.append(msg)
         del self.audit[:-1000]
         if not self.dry_run:
-            self.executor(a)
+            try:
+                self.executor(a)
+            except Exception as e:  # noqa: BLE001  one failed action must not abort the plan
+                log.error("action failed: %s: %s", a, e)
+                self.audit.append(f"FAILED {a}: {e}")
 
     def step(self, now: float) -> int:
         """One control cycle: sample, update the ladder, act on level changes."""
@@ -41,8 +45,10 @@ class Governor:
             self.signals = s
             level = self.ladder.update(s, now)
             if level != self._prev:
+                acts = undo(self._prev, level, self.groups) if level < self._prev else \
+                    reversible_first(plan(level, self.groups))
                 self._prev = level
-                for a in reversible_first(plan(level, self.groups)):
+                for a in acts:
                     self._act(a)
         return level
 

@@ -4,19 +4,17 @@ import logging
 import os
 import signal
 import time
+from pathlib import Path
 
 from . import control
 from .core import Governor
+from .executors import Executor, discover_docker
 from .ladder import Ladder
 from .memlock import MitigationPath, lock_memory, locked_kb, raise_memlock_limit
-from .planner import Action, Group
-from .signals import GB, Sampler
+from .planner import Group
+from .signals import GB, FileSampler, Sampler
 
 log = logging.getLogger("governor")
-
-
-def no_executor(a: Action) -> None:
-    raise NotImplementedError(f"no executor for {a.verb}")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -26,13 +24,18 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--interval", type=float, default=1.0)
     ap.add_argument("--socket", default=None, help="control socket path (default: none)")
     ap.add_argument("--socket-gid", type=int, default=None)
+    ap.add_argument("--vm", action="append", default=[], metavar="DOMAIN=PRIO",
+                    help="libvirt domain managed via virsh managedsave (repeatable)")
+    ap.add_argument("--signals-file", default=None, help="drive the ladder from a JSON file (tests)")
     ap.add_argument("--require-lock", action="store_true", help="exit if mlockall fails")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 
-    groups: list[Group] = []  # populated from the compose/profile inventory later
-    gov = Governor(Sampler(), Ladder(), groups, no_executor, args.dry_run)
     path = MitigationPath()  # pre-allocate before locking so the pages are included (GV-8)
+    groups, cgroups = discover_docker()
+    groups += [Group(n, int(p), "vm") for n, p in (v.split("=") for v in args.vm)]
+    log.info("inventory: %s", [(g.name, g.prio) for g in groups])
+    gov = Governor(FileSampler(Path(args.signals_file)) if args.signals_file else Sampler(), Ladder(), groups, Executor(groups, cgroups, path), args.dry_run)
     srv = control.serve(args.socket, gov.handle, gov.group_names, gid=args.socket_gid) \
         if args.socket else None
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(SystemExit(0)))
