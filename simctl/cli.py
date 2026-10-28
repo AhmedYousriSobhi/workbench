@@ -1,6 +1,6 @@
 import typer
 
-from . import checks, diag, measure
+from . import checks, compose, diag, measure
 
 app = typer.Typer(help="opti-sim control CLI")
 ICON = {checks.OK: "ok  ", checks.WARN: "WARN", checks.FAIL: "FAIL"}
@@ -47,6 +47,19 @@ def diag_cmd(out: str = typer.Option(None, "--out")) -> None:
     from pathlib import Path
 
     typer.echo(str(diag.write_bundle(Path(out) if out else None)))
+
+
+@app.command("compose")
+def compose_cmd(profile: str = typer.Option("std", "--profile")) -> None:
+    """Generate compose/generated/docker-compose.yml from sim.yaml and the profile."""
+    from pathlib import Path
+
+    import yaml
+
+    sim = yaml.safe_load(Path("sim.yaml").read_text())
+    data = compose.generate(sim, compose.load_profile(profile))
+    typer.echo(f"{compose.write(data)}: {len(data['services'])} services, "
+               f"{compose.budget_mb(data)} MB of limits (plus observability)")
 
 
 measure_app = typer.Typer(help="Phase 0: read-only memory measurement")

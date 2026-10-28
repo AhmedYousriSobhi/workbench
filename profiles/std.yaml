@@ -1,4 +1,6 @@
 # Profile: std
 name: std
 budget_gb: 6   # planning estimate; replace with measured value after Phase 0
-extends: []
+extends: [min]
+groups: [accounting, load]
+compute_nodes: 16

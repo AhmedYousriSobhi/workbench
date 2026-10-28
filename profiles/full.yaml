@@ -1,4 +1,6 @@
 # Profile: full
 name: full
 budget_gb: 8.5   # planning estimate; replace with measured value after Phase 0
-extends: []
+extends: [std]
+groups: []
+compute_nodes: 32

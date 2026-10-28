@@ -2,3 +2,5 @@
 name: min
 budget_gb: 3   # planning estimate; replace with measured value after Phase 0
 extends: []
+groups: [core, mocks, scenarios]
+compute_nodes: 4
