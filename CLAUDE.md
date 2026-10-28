@@ -1,0 +1,38 @@
+# CLAUDE.md
+
+Guidance for Claude Code when working in this repository.
+
+## Project
+
+opti-sim: a memory-governed simulation of an HPC/AI cluster (Slurm, Kubernetes, BMC, BCM, Jira, Grafana) for a 16 GB Ubuntu workstation. Read [README.md](README.md) for architecture and rationale, and [SPEC.md](SPEC.md) for the requirements. When they disagree, SPEC.md wins; fix the other.
+
+## Git workflow (mandatory)
+
+- Never commit directly to `main` or `dev`. Always work on a separate branch, unless told to stick to a branch for a feature.
+- Branch names: `feat/...`, `fix/...`, `docs/...`, `chore/...`, branched from `dev`.
+- Open a PR to `dev` for every branch. `dev` collects all PRs; `dev` to `main` merges are made separately, only when asked.
+- After each commit, add a PR comment describing that commit (what and why).
+- Commit author must use the GitHub noreply address (the repo rejects private emails); this is set in local git config.
+- Do not put tokens in files, commit messages, or output. The `origin` URL contains a token: mask it when printing remotes.
+
+## Layout
+
+See README section 9. Top level: `sim.yaml`, `profiles/`, `simctl/`, `governor/`, `systemd/`, `images/`, `components/`, `webui/`, `compose/`, `k8s/`, `fidelity-vm/`, `observability/`, `scenarios/`, `docs/adr/`.
+
+## Conventions
+
+- Python 3.11+, Typer for the CLI, FastAPI for services, type hints, `ruff` for lint/format, `pytest` for tests.
+- Generated files (compose, `slurm.conf`, Prometheus targets) are derived from `sim.yaml`; never hand-edit them.
+- Every component declares a memory budget and priority class (P0-P6).
+
+## Hard rules
+
+- The governor runs on the host, as root, and must not depend on anything it may stop. It must `mlockall` at startup and pre-allocate its mitigation path (SPEC GV-8).
+- The Web UI never gets root or direct Docker/libvirt access; it only talks to `/run/hpcsim/gov.sock` (SPEC W-3).
+- Do not add macOS-in-VM tooling (license). macOS is an external agent only.
+- Do not add real NFS/Lustre or heavy JS frameworks; see SPEC C-11 and W-1.
+- Record significant decisions as ADRs in `docs/adr/`.
+
+## Commands
+
+Not implemented yet. As each lands, document it here: `make demo`, `simctl up --profile std`, `pytest`, `ruff check .`.
