@@ -51,4 +51,6 @@ See README section 9. Top level: `sim.yaml`, `profiles/`, `simctl/`, `governor/`
 
 - Generated secrets (DB password) live only in `compose/generated/secrets` (gitignored); never copy them into tracked files or output. REST access to Slurm: JWT via `scontrol token username=<user>` (not root), see ADR 0003.
 
-Not yet implemented; as each lands, document it here: `make demo`, `simctl up --profile std`, `pytest`, `ruff check .`.
+- `python -m simctl.cli up --profile X | down | scale N`: pre-flight, ordered start of the compose project (`simctl/stack.py`), skips components without a Dockerfile, creates the governor's Grafana token once in `compose/generated/secrets/grafana_token`; `down` touches only the `hpcsim` project.
+
+Not yet implemented; as each lands, document it here: `make demo`, `pytest`, `ruff check .`.

@@ -9,7 +9,7 @@ services:
     volumes:
       - ../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ../observability/targets:/etc/prometheus/targets:ro
-    tmpfs: ["/prometheus:size=200m"]
+    tmpfs: ["/prometheus:size=200m,uid=65534,gid=65534"]
     mem_limit: 300m
     ports: ["127.0.0.1:9090:9090"]
     cgroup_parent: hpcsim-p1.slice
