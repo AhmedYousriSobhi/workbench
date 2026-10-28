@@ -1,0 +1,14 @@
+[project]
+name = "opti-sim"
+version = "0.0.0"
+requires-python = ">=3.11"
+dependencies = ["typer", "pyyaml", "fastapi", "uvicorn"]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+simctl = "simctl.cli:app"
+
+[tool.ruff]
+line-length = 100
