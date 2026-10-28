@@ -53,7 +53,7 @@ def test_stop_save_use_cli():
     ex = Executor([Group("cn1", 4), Group("vm", 6, "vm")], {}, MitigationPath(), run_cmd=fake)
     ex(Action("stop", "cn1", 4))
     ex(Action("save", "vm", 4))
-    assert calls[0][:2] == ["docker", "stop"] and calls[1][:2] == ["virsh", "managedsave"]
+    assert calls[0][:2] == ["docker", "stop"] and calls[1][:4] == ["virsh", "-c", "qemu:///system", "managedsave"]
 
 
 def test_discover_docker_parses_inspect():

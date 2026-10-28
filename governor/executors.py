@@ -18,6 +18,7 @@ CGROUP_ROOT = Path("/sys/fs/cgroup")
 THROTTLE_FRACTION = 0.8  # memory.high = 80% of current usage
 RECLAIM_FRACTION = 0.5  # ask the kernel to reclaim half of current usage
 ARRIVALS_FLAG = "/run/hpcsim/arrivals.paused"
+LIBVIRT_URI = "qemu:///system"  # a user-session virsh would not see system domains
 
 
 def run(cmd: list[str], timeout: float = 15) -> subprocess.CompletedProcess:
@@ -95,7 +96,7 @@ class Executor:
         elif verb == "start":
             self._check(self.run(["docker", "start", target]), a)
         elif verb == "save":
-            self._check(self.run(["virsh", "managedsave", target], timeout=60), a)
+            self._check(self.run(["virsh", "-c", LIBVIRT_URI, "managedsave", target], timeout=60), a)
         else:
             raise NotImplementedError(f"verb {a.verb}")
 
