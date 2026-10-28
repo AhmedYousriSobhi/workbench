@@ -54,7 +54,7 @@ class Executor:
     def prealloc(self) -> None:
         """Open every writable control file now, before pressure exists."""
         for cg in self.cgroups.values():
-            for f in ("cgroup.freeze", "memory.high", "memory.reclaim"):
+            for f in ("cgroup.freeze", "memory.high", "memory.reclaim", "cgroup.kill"):
                 p = cg / f
                 if p.exists():
                     try:
@@ -92,7 +92,12 @@ class Executor:
             except BlockingIOError:  # EAGAIN: kernel reclaimed less than asked (no swap/zram); not a failure
                 log.warning("reclaim on %s only partially satisfied", target)
         elif verb == "stop":
-            self._check(self.run(["docker", "stop", "-t", "5", target], timeout=20), a)
+            # cgroup.kill through a pre-opened handle stops a runaway instantly and needs no
+            # allocation; docker stop then reconciles container state.
+            cg = self.cgroups.get(target)
+            if cg and self.path.has(str(cg / "cgroup.kill")):
+                self._write(target, "cgroup.kill", "1")
+            self._check(self.run(["docker", "stop", "-t", "2", target], timeout=20), a)
         elif verb == "start":
             self._check(self.run(["docker", "start", target]), a)
         elif verb == "save":

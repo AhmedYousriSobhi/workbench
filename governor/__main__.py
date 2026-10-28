@@ -1,5 +1,6 @@
 """Governor entry point: `python -m governor [--dry-run] [--once] [--socket PATH]`."""
 import argparse
+import json
 import logging
 import os
 import signal
@@ -8,11 +9,11 @@ from pathlib import Path
 
 from . import control
 from .core import Governor
-from .executors import Executor, discover_docker
-from .ladder import Ladder
+from .executors import ARRIVALS_FLAG, Executor, discover_docker
+from .ladder import Ladder, Thresholds
 from .memlock import MitigationPath, lock_memory, locked_kb, raise_memlock_limit
 from .planner import Group
-from .signals import GB, FileSampler, Sampler
+from .signals import GB, CgroupSampler, FileSampler, Sampler
 
 log = logging.getLogger("governor")
 
@@ -27,6 +28,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--vm", action="append", default=[], metavar="DOMAIN=PRIO",
                     help="libvirt domain managed via virsh managedsave (repeatable)")
     ap.add_argument("--signals-file", default=None, help="drive the ladder from a JSON file (tests)")
+    ap.add_argument("--watch-cgroup", default=None, help="take signals from one cgroup dir (tests)")
+    ap.add_argument("--thresholds", default=None, help='JSON overrides, e.g. {"l4_mem": 1000000}')
+    ap.add_argument("--arrivals-flag", default=ARRIVALS_FLAG)
     ap.add_argument("--require-lock", action="store_true", help="exit if mlockall fails")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -35,7 +39,15 @@ def main(argv: list[str] | None = None) -> None:
     groups, cgroups = discover_docker()
     groups += [Group(n, int(p), "vm") for n, p in (v.split("=") for v in args.vm)]
     log.info("inventory: %s", [(g.name, g.prio) for g in groups])
-    gov = Governor(FileSampler(Path(args.signals_file)) if args.signals_file else Sampler(), Ladder(), groups, Executor(groups, cgroups, path), args.dry_run)
+    if args.signals_file:
+        sampler = FileSampler(Path(args.signals_file))
+    elif args.watch_cgroup:
+        sampler = CgroupSampler(Path(args.watch_cgroup))
+    else:
+        sampler = Sampler()
+    ladder = Ladder(Thresholds(**json.loads(args.thresholds or "{}")))
+    executor = Executor(groups, cgroups, path, arrivals_flag=args.arrivals_flag)
+    gov = Governor(sampler, ladder, groups, executor, args.dry_run)
     srv = control.serve(args.socket, gov.handle, gov.group_names, gid=args.socket_gid) \
         if args.socket else None
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(SystemExit(0)))
