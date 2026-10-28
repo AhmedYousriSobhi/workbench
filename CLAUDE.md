@@ -36,4 +36,6 @@ See README section 9. Top level: `sim.yaml`, `profiles/`, `simctl/`, `governor/`
 
 ## Commands
 
-Not implemented yet. As each lands, document it here: `make demo`, `simctl up --profile std`, `pytest`, `ruff check .`.
+- `./scripts/validate.sh`: **run before every commit** (secrets scan, compile, ruff, bash -n, YAML/JSON, systemd verify, pytest, governor smoke). `./scripts/validate.sh --install-hook` makes it a pre-commit hook. Set `PYLIBS=<dir>` if tools are installed with `pip --target`.
+
+Not yet implemented; as each lands, document it here: `make demo`, `simctl up --profile std`, `pytest`, `ruff check .`.
