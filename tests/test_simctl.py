@@ -182,3 +182,14 @@ def test_check_containers_fails_on_privileged():
 
     c = checks.check_containers(fake)
     assert c.status == checks.FAIL and "privileged" in c.detail
+
+
+def test_check_containers_lists_accepted_exception():
+    def fake(cmd, timeout=10):
+        c = {"Name": "/slurmrestd", "HostConfig": {"Memory": 1}, "Mounts": [],
+             "Config": {"Env": ["SLURMRESTD_SECURITY=disable_unshare_sysv,disable_unshare_files"]}}
+        out = "abc\n" if cmd[1] == "ps" else json.dumps([c])
+        return subprocess.CompletedProcess(cmd, 0, out, "")
+
+    c = checks.check_containers(fake)
+    assert c.status == checks.OK and "accepted exception" in c.detail and "ADR 0004" in c.detail

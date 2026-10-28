@@ -296,3 +296,26 @@ def test_governor_forwards_audit_to_annotator_and_pauses_at_l3():
     g.step(0)
     assert any(t.startswith("level L0 -> L") for t in rec.texts)
     assert rec.paused.is_set()  # starved host: annotator paused
+
+
+def _restd(env):
+    return {"Name": "/slurmrestd", "HostConfig": {"Memory": 1}, "Mounts": [],
+            "Config": {"Env": ["PATH=/bin", *env]}}
+
+
+def test_slurmrestd_accepted_options_pass_and_are_listed_as_exception():
+    from governor.watchdog import accepted_exceptions, container_violations
+
+    c = _restd(["SLURMRESTD_SECURITY=disable_unshare_sysv,disable_unshare_files"])
+    assert container_violations([c]) == []
+    assert accepted_exceptions([c]) == ["slurmrestd: slurmrestd skips its unshare steps (ADR 0004)"]
+    assert accepted_exceptions([_restd([])]) == []
+
+
+def test_slurmrestd_extra_options_are_violations():
+    from governor.watchdog import container_violations
+
+    for bad in ("disable_user_check", "become_user", "disable_unshare_sysv,disable_unshare_filez"):
+        got = container_violations([_restd([f"SLURMRESTD_SECURITY={bad}"])])
+        assert any("unaccepted options" in g for g in got), bad
+    assert container_violations([{"Name": "/x", "HostConfig": {"Memory": 1}}]) == []  # no Config key at all
