@@ -110,12 +110,7 @@ built yet (Kubernetes, ticket-bot) are reported as skipped.
 .venv/bin/python -m webui        # prints a login link such as http://127.0.0.1:8088/login?token=...
 ```
 
-Open that link once (it sets a cookie; the token is kept in `compose/generated/secrets/ui_token`). **Governor** shows the
-level banner, free memory and pressure over the last two minutes, and the governor's log. **Cluster** shows each
-simulated node (power, temperature, fans, GPU errors) and which mock services are up; open *Fault actions* on a node to
-power it off, overheat it, fail its fans or inject a GPU error, then *Clear faults*. **Cluster** also draws the traffic: a round dot travels from *Clients* to a service each time that service answers a real request (the app, a Prometheus scrape, `curl`), and a diamond travels from *Scenarios & buttons* when a fault is applied. *Pause animation* stops the dots (the counts keep updating); the dots stop by themselves when the governor reaches L3 or your system asks for reduced motion. Slurm jobs are not drawn because the page cannot read the scheduler (no Docker access). **Scenarios** lists the
-fault scripts: pick a speed, press Play, watch each step turn ok/skipped/failed, press Stop to abort. Slurm steps are
-skipped on this page (it has no Docker access by design); use `./scripts/simctl scenario run` for those.
+Open that link once (it sets a cookie; the token is kept in `compose/generated/secrets/ui_token`). Everything is on one page. The strip at the top shows the governor level, free memory, how many services and nodes are healthy, any running scenario, and a theme switch (auto, light, dark). The **left panel** is the governor: level, memory and pressure with two-minute trends. The **middle** is the cluster: service chips, the traffic diagram (a round dot travels from *Clients* to a service for each real request; a diamond from *Fault injector* when a fault is applied; *Pause animation* stops them, and they stop by themselves at governor L3 or for reduced motion) and a card per node. Open *Fault actions* on a node to power it off, overheat it, fail its fans or inject a GPU error, then *Clear faults*. The **right panel** has *Needs attention*, the scenarios (pick a speed, press Play, watch each step turn ok/skipped/failed, press Stop to abort) and the governor's log. Slurm steps are skipped on this page (it has no Docker access by design); use `./scripts/simctl scenario run` for those. On a phone the panels stack under each other.
 
 ## 5. When something is wrong
 
