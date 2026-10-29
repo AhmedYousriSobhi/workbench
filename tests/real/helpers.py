@@ -7,6 +7,8 @@ import sys
 import time
 from pathlib import Path
 
+from simctl import stack
+
 ROOT = Path(__file__).resolve().parents[2]
 GB = 1024**3
 
@@ -18,6 +20,18 @@ def wait_for(pred, timeout: float = 15) -> bool:
             return True
         time.sleep(0.2)
     return False
+
+
+def bring_up(sim: dict, profile: str = "min") -> None:
+    """Start the stack for a fixture. On failure say why: a refusal by the governor (host memory low, GV-9) is the
+    environment, not a defect in the code under test, so the message says so instead of a bare AssertionError."""
+    said: list[str] = []
+    if stack.up(sim, profile, say=said.append, available=64 * GB):
+        return
+    why = " | ".join(said[-4:]) or "no output"
+    if "REFUSED by governor" in why:
+        raise AssertionError(f"ENVIRONMENT, not a code defect: the governor refused `up` (free host memory, then rerun): {why}")
+    raise AssertionError(f"stack.up failed: {why}")
 
 
 def signals(path: Path, avail_gb: float = 8, some: float = 0, full: float = 0) -> None:

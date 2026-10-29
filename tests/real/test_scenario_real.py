@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import wait_for
+from helpers import bring_up, wait_for
 
 from simctl import scenario, stack
 
@@ -35,7 +35,7 @@ def slurm_state(node: str) -> str:
 def live():
     os.chdir(ROOT)
     sim = yaml.safe_load((ROOT / "sim.yaml").read_text())
-    assert stack.up(sim, "min", say=lambda m: None, available=64 * 1024**3)
+    bring_up(sim)
     assert wait_for(ready, timeout=40)
     assert wait_for(lambda: slurm_state("cn003") != "", timeout=40)
     yield sim

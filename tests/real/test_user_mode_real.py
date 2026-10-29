@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import ask, signals, start_governor, stop_governor, wait_for
+from helpers import ask, bring_up, signals, start_governor, stop_governor, wait_for
 
 from governor.executors import discover_docker
 from simctl import stack
@@ -66,7 +66,7 @@ def test_nf1_memory_hog_is_paused_then_stopped_without_root_and_without_oom(tmp_
 def sim(monkeypatch):
     monkeypatch.chdir(ROOT)
     s = yaml.safe_load((ROOT / "sim.yaml").read_text())
-    assert stack.up(s, "min", say=lambda m: None, available=64 * 1024**3)
+    bring_up(s)
     yield s
     stack.down(say=lambda m: None)
 
