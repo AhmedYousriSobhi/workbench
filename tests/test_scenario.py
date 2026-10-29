@@ -135,90 +135,36 @@ def test_a_failed_step_fails_the_report_but_a_skip_does_not():
     assert not r.ok
 
 
-def ssh_step(**do):
-    return scenario.Step(0, "ssh", do)
+def test_ssh_step_commands_per_fault():
+    cmds = scenario.ssh_commands({"state": "down"})
+    assert cmds == [["docker", "stop", "-t", "1", "hpcsim-login-1"]]
+    assert scenario.ssh_commands({"state": "hung"}) == [["docker", "pause", "hpcsim-login-1"]]
+    assert scenario.ssh_commands({"state": "up"}) == [["docker", "unpause", "hpcsim-login-1"], ["docker", "start", "hpcsim-login-1"]]
+    rot = scenario.ssh_commands({"rotate_host_key": True})
+    assert len(rot) == 1 and "ssh-keygen" in rot[0][-1] and "kill -HUP" in rot[0][-1]
+    lim = scenario.ssh_commands({"max_sessions": 2})[0][-1]
+    assert "MaxSessions 2" in lim and "kill -HUP" in lim
+    reset = scenario.ssh_commands({"reset": True})
+    assert reset[0][1] == "unpause" and "/run/hpcsim/ssh/ssh_host_ed25519_key" in reset[-1][-1] and "MaxSessions" in reset[-1][-1]
 
 
-def test_validate_checks_ssh_actions_nodes_and_limits():
-    ok = {"steps": [{"at": "0s", "target": "ssh", "do": {"login": "limit", "max_startups": 2}},
-                    {"at": "1s", "target": "ssh", "do": {"nodes": ["cn001"], "sshd": "down"}}]}
-    assert scenario.validate(ok, SIM) == []
-    bad = {"steps": [{"at": "0s", "target": "ssh", "do": {}}, {"at": "0s", "target": "ssh", "do": {"login": "melt"}},
-                     {"at": "0s", "target": "ssh", "do": {"sshd": "down"}},
-                     {"at": "0s", "target": "ssh", "do": {"login": "limit", "max_startups": 0}},
-                     {"at": "0s", "target": "ssh", "do": {"nodes": ["cn999"], "sshd": "up"}}]}
-    problems = scenario.validate(bad, SIM)
-    assert len(problems) == 5 and any("cn999" in p for p in problems)
-
-
-def test_ssh_login_actions_map_to_docker():
-    cmds = {a: scenario.ssh_commands({"login": a}) for a in ("down", "up", "hang", "resume")}
-    assert [c[0][1] for c in cmds.values()] == ["stop", "start", "pause", "unpause"]
-    assert all(c[0][-1] == scenario.LOGIN for c in cmds.values())
-
-
-def test_ssh_reject_limit_and_clear_write_the_fault_file_and_reload_sshd():
-    reject = scenario.ssh_commands({"login": "reject_auth"})[0][-1]
-    assert "DenyUsers *" in reject and scenario.SSH_FAULT_FILE in reject and "kill -HUP" in reject
-    limit = scenario.ssh_commands({"login": "limit", "max_startups": 3, "max_sessions": 2})[0][-1]
-    assert "MaxStartups 3:100:3" in limit and "MaxSessions 2" in limit
-    assert "rm -f" in scenario.ssh_commands({"login": "unlimit"})[0][-1]
-    assert "rm -f" in scenario.ssh_commands({"login": "accept_auth"})[0][-1]
-
-
-def test_ssh_node_sshd_down_and_up():
-    down, up = (scenario.ssh_commands({"nodes": ["cn001", "gpu001"], "sshd": a}) for a in ("down", "up"))
-    assert [c[2] for c in down] == ["hpcsim-cn001-1", "hpcsim-gpu001-1"] and "kill" in down[0][-1]
-    assert up[0][-1] == "/usr/sbin/sshd"
-
-
-def test_execute_ssh_runs_commands_and_reports_failure():
-    seen = []
-    ok = scenario.execute(ssh_step(login="down"), runner=lambda c: seen.append(c) or CP())
-    assert ok.status == "ok" and seen == [["docker", "stop", scenario.LOGIN]]
-    bad = scenario.execute(ssh_step(login="up"), runner=lambda c: CP(code=1, err="no such container"))
-    assert bad.status == "failed" and "no such container" in bad.detail
-
-
-def test_execute_ssh_is_skipped_without_host_access():
-    assert scenario.execute(ssh_step(login="down"), host=False).status == "skipped"
-
-
-def test_host_key_rotation_keeps_the_original_and_restore_puts_it_back(tmp_path, monkeypatch):
-    monkeypatch.setattr(scenario, "SSH_DIR", tmp_path)
-    (tmp_path / "ssh_host_ed25519_key").write_text("old")
-    (tmp_path / "ssh_host_ed25519_key.pub").write_text("old.pub")
-    seen = []
+def test_execute_ssh_runs_the_commands_and_ignores_unpause_and_start_noise():
+    calls = []
 
     def runner(cmd):
-        seen.append(cmd)
-        if cmd[0] == "ssh-keygen":
-            Path(cmd[-1]).write_text("new")
-            Path(cmd[-1] + ".pub").write_text("new.pub")
-        return CP()
+        calls.append(cmd)
+        return CP(code=1, err="not paused") if cmd[1] in ("unpause", "start") else CP()
 
-    assert scenario.execute(ssh_step(login="rotate_host_key"), runner=runner).status == "ok"
-    assert (tmp_path / "ssh_host_ed25519_key").read_text() == "new"
-    assert seen[-1] == ["docker", "restart", scenario.LOGIN]  # sshd reads its host key only at start
-    scenario.execute(ssh_step(login="rotate_host_key"), runner=runner)  # a second rotation keeps the first original
-    assert (tmp_path / "ssh_host_ed25519_key.orig").read_text() == "old"
-    assert scenario.execute(ssh_step(login="restore_host_key"), runner=runner).status == "ok"
-    assert (tmp_path / "ssh_host_ed25519_key").read_text() == "old"
-    assert (tmp_path / "ssh_host_ed25519_key.pub").read_text() == "old.pub"
-    assert scenario.execute(ssh_step(login="restore_host_key"), runner=runner).status == "ok"  # nothing to restore
+    assert scenario.execute(scenario.Step(0, "ssh", {"state": "up"}), runner=runner).status == "ok"
+    assert [c[1] for c in calls] == ["unpause", "start"]
+    bad = scenario.execute(scenario.Step(0, "ssh", {"state": "down"}), runner=lambda c: CP(code=1, err="no such container"))
+    assert bad.status == "failed" and bad.detail == "no such container"
 
 
-def test_host_key_rotation_before_the_first_up_and_a_failing_keygen(tmp_path, monkeypatch):
-    monkeypatch.setattr(scenario, "SSH_DIR", tmp_path)
-    out = scenario.execute(ssh_step(login="rotate_host_key"), runner=lambda c: CP())
-    assert out.status == "failed" and "simctl up" in out.detail
-    (tmp_path / "ssh_host_ed25519_key").write_text("old")
-    (tmp_path / "ssh_host_ed25519_key.pub").write_text("old.pub")
-    out = scenario.execute(ssh_step(login="rotate_host_key"), runner=lambda c: CP(code=1, err="keygen broke"))
-    assert out.status == "failed" and "keygen broke" in out.detail
-
-
-def test_execute_ssh_restart_failure_is_reported(tmp_path, monkeypatch):
-    monkeypatch.setattr(scenario, "SSH_DIR", tmp_path)
-    out = scenario.execute(ssh_step(login="restore_host_key"), runner=lambda c: CP(code=1, err="restart failed"))
-    assert out.status == "failed" and "restart failed" in out.detail
+def test_ssh_steps_are_skipped_without_docker_and_validated():
+    assert scenario.execute(scenario.Step(0, "ssh", {"state": "down"}), host=False).status == "skipped"
+    sc = lambda do: {"steps": [{"at": "0s", "target": "ssh", "do": do}]}
+    assert scenario.validate(sc({"state": "down"}), SIM) == []
+    assert scenario.validate(sc({"max_sessions": 1, "rotate_host_key": True}), SIM) == []
+    for bad in ({"state": "slow"}, {"max_sessions": 0}, {"max_sessions": True}, {"bogus": 1}, {}):
+        assert scenario.validate(sc(bad), SIM), bad

@@ -1,5 +1,3 @@
-# Faults (scenario target ssh) drop a file into sshd_config.d; the Include comes first because the first value wins.
-Include /etc/ssh/sshd_config.d/*.conf
 # Key login only, no root, forwarding on (clients reach BMC mocks through this connection).
 Port 22
 HostKey /etc/ssh/ssh_host_ed25519_key

@@ -43,8 +43,12 @@ def test_up_starts_in_order_and_waits(tmp_path, monkeypatch):
         shutil.copytree(root / d, tmp_path / d, dirs_exist_ok=True)
     sim = yaml.safe_load((root / "sim.yaml").read_text())
     started: list[str] = []
+    built: list[str] = []
 
     def runner(cmd):
+        if "build" in cmd:
+            built.append(cmd[-1])
+            started.append("<build>")
         if "up" in cmd:
             started.extend(cmd[cmd.index("--no-deps") + 1:])
         if "ps" in cmd:
@@ -55,6 +59,7 @@ def test_up_starts_in_order_and_waits(tmp_path, monkeypatch):
     monkeypatch.setattr(stack, "provision_token", lambda **kw: kw.get("path", tmp_path / "t"))
     assert stack.up(sim, "min", runner=runner, say=lambda m: None, available=12 * 1024**3, wait=1)
     assert started.index("prometheus") < started.index("slurmctld") < started.index("cn001")
+    assert built == ["cn001"] and started.index("<build>") < started.index("prometheus")  # node-base before its dependants
 
 
 def test_down_reports_failure():
@@ -182,32 +187,6 @@ def test_up_stops_at_the_first_stage_that_fails_to_start(tmp_path, monkeypatch):
     assert not stack.up(sim, "min", runner=runner, say=msgs.append, available=12 * 1024**3, wait=1)
     assert len(ups) == 1  # later stages are never attempted
     assert any(m.startswith("FAILED observability") and "no such image" in m for m in msgs)
-
-
-def test_up_builds_node_base_before_anything_built_on_it(tmp_path, monkeypatch):
-    """The controller and login node are FROM node-base; a stale one would carry another munge key."""
-    sim = _workdir(tmp_path, monkeypatch)
-    seen = []
-
-    def runner(cmd):
-        seen.append(cmd)
-        return cp(out="\n".join(c for run in seen for c in run)) if "ps" in cmd else cp()
-
-    monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
-    monkeypatch.setattr(stack, "provision_token", lambda **kw: kw.get("path", tmp_path / "t"))
-    assert stack.up(sim, "min", runner=runner, say=lambda m: None, available=12 * 1024**3, wait=1)
-    builds = [i for i, c in enumerate(seen) if "build" in c and "--build" not in c]
-    first_up = next(i for i, c in enumerate(seen) if "up" in c)
-    assert builds == [builds[0]] and builds[0] < first_up and seen[builds[0]][-1] == "cn001"
-
-
-def test_up_stops_when_node_base_fails_to_build(tmp_path, monkeypatch):
-    sim = _workdir(tmp_path, monkeypatch)
-    msgs = []
-    monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
-    runner = lambda cmd: cp(rc=1, err="apt failed") if "build" in cmd else cp()
-    assert not stack.up(sim, "min", runner=runner, say=msgs.append, available=12 * 1024**3, wait=1)
-    assert any(m.startswith("FAILED node-base build") and "apt failed" in m for m in msgs)
 
 
 def test_up_fails_when_a_started_service_never_runs(tmp_path, monkeypatch):
@@ -388,10 +367,10 @@ def test_ssh_keys_are_made_once_and_authorize_the_client_key(tmp_path):
         return CompletedProcess(cmd, 0, "", "")
 
     d = stack.ensure_ssh_keys(tmp_path / "ssh", fake)
-    assert len(calls) == 3 and (d / "authorized_keys").read_text() == "ssh-ed25519 AAAA pub\n"
-    assert (d / "ssh_node_host_ed25519_key").exists()  # one host key shared by every node
+    # client and cluster key are both authorized (the cluster key is what a login-node user hops to a node with)
+    assert len(calls) == 4 and (d / "authorized_keys").read_text() == "ssh-ed25519 AAAA pub\n" * 2
     stack.ensure_ssh_keys(d, fake)
-    assert len(calls) == 3  # the host keys are stable across runs
+    assert len(calls) == 4  # the host keys are stable across runs
 
 
 def test_ssh_keygen_failure_is_reported(tmp_path):

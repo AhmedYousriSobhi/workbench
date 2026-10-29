@@ -1,21 +1,7 @@
 # 4. Nodes and shells
 
-**You reach a simulated node by SSH through the login node**, or open a shell with `docker exec`. Every node runs a small
-`sshd` (key login only, no root, no port published on your machine); the login node on `127.0.0.1:2222` is the way in
-([ADR 0014](../adr/0014-node-sshd-and-ssh-fault-scenarios.md)). The other machine with a real `sshd` is the optional
-[fidelity VM](#the-fidelity-vm).
-
-## SSH to a node
-
-```bash
-KEY=compose/generated/secrets/ssh/id_ed25519
-ssh -i $KEY -p 2222 alice@127.0.0.1 ssh cn001 hostname     # a hop from the login node: prints cn001
-ssh -i $KEY -p 2222 alice@127.0.0.1 srun -N1 -w cn001 hostname
-ssh -tt -i $KEY -p 2222 alice@127.0.0.1 srun --pty -N1 -w gpu001 bash    # an interactive shell on a GPU node
-```
-
-From your own machine, a client reaches a node through the login node (ProxyJump or a forwarded channel to `cn001:22`),
-using the same key. The login node already trusts every node's host key, so a first hop does not prompt.
+**There is no `ssh` into a simulated node.** The nodes are unprivileged containers without an SSH server. You open a shell
+with `docker exec`. The only machine with a real `sshd` is the optional [fidelity VM](#the-fidelity-vm).
 
 ## Find the nodes
 
@@ -61,7 +47,7 @@ ls /dev/hpcsim-gpu*                # the fake GPUs (GPU nodes only)
   governor's `start` command or `simctl up`.
 - Nodes are small: each is capped at 60 MB and runs `slurmd` and `munge`, not a full set of system services.
 - Scaling down (`simctl scale 2`) removes nodes, and a shell open on one ends.
-- Nodes run `sshd` only when the profile has a login node, and only the login node can reach it. There is no real NFS or Lustre; storage is faked with metrics only.
+- Nodes run `sshd`, reachable only through the login node (`ssh cn001` there, ADR 0014). There is no real NFS or Lustre; storage is faked with metrics only.
 - Do not add `--privileged`, extra capabilities or the Docker socket to a container; `simctl doctor` fails the stack if
   you do, and the governor's watchdog flags it.
 
@@ -79,7 +65,9 @@ ssh -i .vagrant/machines/fidelity/libvirt/private_key vagrant@<IP>      # plain 
 ./bin/down.sh                      # destroy it
 ```
 
-## Not built: Teleport to the simulated nodes
+## Not built: SSH or Teleport to the simulated nodes
 
 The application under test is meant to reach nodes through Teleport (issue #77). That needs decisions that are still
-open (which access types, real Teleport or a mock). Plain SSH through the login node works (above).
+open (which access types, real Teleport or a mock) and an `sshd` in the node image. Until then, `docker exec` from the
+host is the way to reach a node; the application under test reaches the cluster through Slurm REST, Redfish and the
+other APIs in [chapter 3](03-using-the-cluster.md).

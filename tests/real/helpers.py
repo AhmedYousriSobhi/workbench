@@ -61,14 +61,3 @@ def stop_governor(proc) -> bytes:
     proc.terminate()
     _, err = proc.communicate(timeout=10)
     return err
-
-
-def ssh_login(*cmd: str, user: str = "alice", port: int = 2222, key: Path | None = None, known_hosts: Path | None = None,
-              opts: tuple[str, ...] = (), tty: bool = False) -> subprocess.CompletedProcess:
-    """ssh to the login node as a client would. Without `known_hosts` the host key is not checked; with one it is pinned."""
-    key = key or ROOT / stack.SSH_DIR / "id_ed25519"
-    pin = ("-o", "StrictHostKeyChecking=yes", "-o", f"UserKnownHostsFile={known_hosts}") if known_hosts else (
-        "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null")
-    return subprocess.run(["ssh", *(["-tt"] if tty else []), "-i", str(key), "-p", str(port), "-o", "IdentitiesOnly=yes",
-                           *pin, "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", *opts, f"{user}@127.0.0.1", *cmd],
-                          capture_output=True, text=True, timeout=60, check=False)

@@ -1,0 +1,5 @@
+name: login-node-hung
+description: The login node freezes (connections hang, no refusal) for 30 s, then thaws; tests a client's connect timeout and keepalive
+steps:
+  - {at: 0s,  target: ssh, do: {state: hung}}
+  - {at: 30s, target: ssh, do: {state: up}}
