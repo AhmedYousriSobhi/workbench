@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/assets/logo.svg" alt="opti-sim logo" width="96"></p>
+
 # opti-sim
 
 A memory-governed simulation of an HPC/AI cluster that runs on a **16 GB Ubuntu workstation**. It gives the
