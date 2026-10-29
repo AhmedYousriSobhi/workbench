@@ -3,8 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m simctl.progress`; do not edit. -->
 Last updated 2026-10-29. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**69% built** (31 done, 0 in review, 9 partial, 5 to do, 45 items).
-**70% built** (32 done, 0 in review, 10 partial, 4 to do, 46 items).
+**67% built** (32 done, 0 in review, 11 partial, 5 to do, 48 items).
 
 ## Roadmap
 
@@ -17,7 +16,7 @@ flowchart LR
     p4["People and chaos<br/>0%"]:::partial
     p5["Kubernetes<br/>50%"]:::partial
     p6["Fidelity VM<br/>0%"]:::partial
-    p7["Web UI and profiles<br/>33%"]:::partial
+    p7["Web UI and profiles<br/>25%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
     p0 --> p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7 --> p8
     classDef done fill:#1a7f37,stroke:#1a7f37,color:#fff
@@ -185,17 +184,18 @@ _One real Ubuntu VM with Redfish power control._
 
 0/1 done
 
-### Web UI and profiles (33%)
+### Web UI and profiles (25%)
 
 _One click from cold start to a busy cluster._
 
 | Part | Status | How it is built | Where | PR |
 |---|---|---|---|---|
 | Profile pre-flight (CLI) | ✅ Done | `simctl preflight` refuses a profile when free memory minus its budget is under the safety floor and suggests a smaller one. | `simctl/checks.py` | [#26](https://github.com/AhmedYousriSobhi/opti-sim/pull/26) |
-| Web UI base | 🟡 Partial | `python -m webui` on 127.0.0.1:8088 with a login token: Governor dashboard (level banner, MemAvailable/PSI sparklines, audit log over SSE) and Scenario Orchestrator (list, Play with speed, Stop, per-step timeline). Reads the governor socket only; Slurm steps are skipped in the UI. ~48 MB RSS. Reviewed in headless Chromium (desktop/phone, light/dark; no console errors or overflow; ARIA tabs, keyboard, status not by colour alone). | `webui/` | [#76](https://github.com/AhmedYousriSobhi/opti-sim/pull/76) |
-| Web UI canvas and budget manager | ⬜ To do | Cluster Canvas with node fault actions (W-4), profile/budget form (W-7), animated workload dots (issue 74). | - | - |
+| Web UI base | 🟡 Partial | `python -m webui` on 127.0.0.1:8088 with a login token: Governor dashboard (level banner, MemAvailable/PSI sparklines, audit log over SSE) and Scenario Orchestrator (list, Play with speed, Stop, per-step timeline). Reads the governor socket only; Slurm steps are skipped in the UI. ~32 MB RSS on Starlette (ADR 0008). Reviewed in headless Chromium (desktop/phone, light/dark; no console errors or overflow; ARIA tabs, keyboard, status not by colour alone). | `webui/` | [#76](https://github.com/AhmedYousriSobhi/opti-sim/pull/76) |
+| Cluster Canvas | 🟡 Partial | Cluster tab: service reachability chips and a card per sim.yaml node (power, CPU temp, fans, BCM state, GPU XID) refreshed every 3 s, with Power off/on, Overheat, Fan failure, GPU error and Clear actions that go through the mocks. Slurm drain and K8s faults are not offered (UI has no Docker access; K8s not built). Verified live. | `webui/cluster.py`, `webui/static/index.html` | [#84](https://github.com/AhmedYousriSobhi/opti-sim/pull/84) |
+| Budget manager and workload animation | ⬜ To do | Profile/budget form (W-7); animated workload dots (issue 74). | - | - |
 
-1/3 done
+1/4 done
 
 ### macOS agent and CI (0%)
 

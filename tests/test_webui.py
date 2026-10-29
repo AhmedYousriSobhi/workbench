@@ -8,13 +8,13 @@ from urllib.error import HTTPError
 
 import pytest
 
-pytest.importorskip("fastapi")
+pytest.importorskip("starlette")
 pytest.importorskip("uvicorn")
 import uvicorn
 
 from governor import control
 from webui import __main__ as launcher
-from webui.app import create_app
+from webui.app import create_app, governor_status
 
 ROOT = Path(__file__).resolve().parent.parent
 TOKEN = "test-token-123"
@@ -103,9 +103,7 @@ def test_sse_streams_governor_status(ui):
 
 
 def test_governor_down_is_reported_not_crashed(tmp_path):
-    app = create_app(TOKEN, str(tmp_path / "missing.sock"), tmp_path, ROOT / "sim.yaml")
-    status = next(r.endpoint for r in app.routes if getattr(r, "path", "") == "/api/status")
-    out = status()
+    out = governor_status(str(tmp_path / "missing.sock"))
     assert out["ok"] is False and "not reachable" in out["error"]
 
 
@@ -160,3 +158,16 @@ def test_launcher_prints_a_login_link_and_serves_with_the_token(monkeypatch, tmp
     token = launcher.load_token(tmp_path / "secrets" / "ui_token")
     assert out.strip() == f"opti-sim UI: http://127.0.0.1:9123/login?token={token}"
     assert ran["kw"] == {"host": "127.0.0.1", "port": 9123, "log_level": "warning"}  # localhost only (W-8)
+
+
+def test_cluster_endpoints_need_auth_csrf_and_validate(ui):
+    assert req(ui, "/api/cluster", auth=False)[0] == 401
+    code, body = req(ui, "/api/cluster")  # no stack in unit tests: every node is "unknown", not a 500
+    snap = json.loads(body)
+    assert code == 200 and len(snap["nodes"]) == 6 and {n["state"] for n in snap["nodes"]} == {"unknown"}
+    assert req(ui, "/api/nodes/cn001/clear", "POST")[0] == 403  # CSRF header missing
+    h = {"X-Requested-With": "opti-sim"}
+    assert req(ui, "/api/nodes/nope/clear", "POST", headers=h)[0] == 422
+    assert req(ui, "/api/nodes/cn001/gpu-xid", "POST", headers=h)[0] == 422
+    code, body = req(ui, "/api/nodes/cn001/overheat", "POST", headers=h)
+    assert code == 200 and json.loads(body)["results"][0]["status"] == "failed"  # mocks not running: reported, not crashed

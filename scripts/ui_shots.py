@@ -2,7 +2,7 @@
 
     .venv/bin/python scripts/ui_shots.py [OUTDIR]     # default /tmp/opti-ui-shots
 
-Starts `python -m webui` on a free port, captures both tabs at desktop and phone width in light and dark, and reports
+Starts `python -m webui` on a free port, captures every tab at desktop and phone width in light and dark, and reports
 console errors and horizontal overflow. Prints the PNG paths; exit 1 if any check fails.
 """
 import socket
@@ -48,7 +48,7 @@ def capture(out: Path) -> dict:
                                 raise
                             time.sleep(0.3)
                     page.wait_for_timeout(1500)
-                    for tab in ("dash", "scen"):
+                    for tab in ("dash", "cluster", "scen"):
                         page.click(f"#tab-{tab}")
                         page.wait_for_timeout(500)
                         path = out / f"{tab}-{vp}-{scheme}.png"
@@ -59,7 +59,9 @@ def capture(out: Path) -> dict:
                     selected = page.evaluate("[...document.querySelectorAll('[role=tab]')].filter(t => t.getAttribute('aria-selected')==='true').length")
                     if selected != 1:
                         result["a11y"].append(f"{selected} tabs selected")
-                    page.keyboard.press("ArrowLeft")  # keyboard operation of the tablist
+                    page.focus("#tab-scen")
+                    page.keyboard.press("ArrowLeft")  # keyboard operation of the tablist: scen -> cluster -> dash
+                    page.keyboard.press("ArrowLeft")
                     if page.get_attribute("#tab-dash", "aria-selected") != "true":
                         result["a11y"].append("arrow keys do not move between tabs")
                     page.close()
