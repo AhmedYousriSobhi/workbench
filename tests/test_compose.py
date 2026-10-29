@@ -92,6 +92,13 @@ def test_bmc_farm_publishes_tls_and_a_dns_alias_per_node():
     assert any(v.endswith(":/run/hpcsim/bmc_credentials:ro") for v in farm["volumes"])
 
 
+def test_compute_nodes_run_sshd_with_the_shared_keys():
+    svcs = compose.generate(SIM, compose.load_profile("min"))["services"]
+    for name in ("cn001", "gpu001"):
+        assert "./secrets/ssh:/run/hpcsim/ssh:ro" in svcs[name]["volumes"]
+        assert svcs[name]["environment"]["HPCSIM_SSHD"] == "1" and "ports" not in svcs[name]  # reached via login only
+
+
 def test_login_node_is_local_only_with_keys_mounted():
     login = compose.generate(SIM, compose.load_profile("min"))["services"]["login"]
     assert login["ports"] == ["127.0.0.1:2222:22"]

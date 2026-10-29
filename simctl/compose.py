@@ -53,7 +53,9 @@ def generate(sim: dict, profile: dict) -> dict:
     services: dict = {}
     for group in profile["groups"]:
         for name, (image, mem, prio) in CATALOG.get(group, {}).items():
-            build = next((f"../../{d}/{name}" for d in ("components", "images") if (Path(d) / name).is_dir()), None)
+            # the build directory is the service name, or the image name (slurmctld and slurmrestd share images/slurm-ctl)
+            img = image.split("/")[-1].split(":")[0]
+            build = next((f"../../{d}/{n}" for n in (name, img) for d in ("components", "images") if (Path(d) / n).is_dir()), None)
             services[name] = _service(image, mem, prio, build)
     for name, kind in node_names(sim, profile.get("compute_nodes")):
         svc = _service("hpcsim/node-base:dev", SLURMD_MB, SLURMD_PRIO, "../../images/node-base")
@@ -68,6 +70,9 @@ def generate(sim: dict, profile: dict) -> dict:
     for name, svc in services.items():
         if name in ("slurmctld", "slurmrestd", "login") or svc["labels"].get("hpcsim.node"):
             svc["volumes"] = [slurm_mount]
+            if svc["labels"].get("hpcsim.node"):  # sshd on every compute node (ADR 0014)
+                svc["volumes"].append("./secrets/ssh:/run/hpcsim/ssh:ro")
+                svc.setdefault("environment", {})["HPCSIM_SSHD"] = "1"
             svc["hostname"] = name
             svc.setdefault("environment", {})["HPCSIM_USERS"] = users_env(sim)
     if "login" in services:  # SSH for clients such as a monitoring app: localhost only, keys from ./secrets/ssh
