@@ -8,3 +8,5 @@ observability/generated/
 .vagrant/
 observability/targets/*.json
 docs/measurements/
+.coverage
+cov-report.txt

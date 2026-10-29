@@ -4,6 +4,7 @@
 Last updated 2026-10-29. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
 **69% built** (31 done, 0 in review, 9 partial, 5 to do, 45 items).
+**70% built** (32 done, 0 in review, 10 partial, 4 to do, 46 items).
 
 ## Roadmap
 
@@ -16,7 +17,7 @@ flowchart LR
     p4["People and chaos<br/>0%"]:::partial
     p5["Kubernetes<br/>50%"]:::partial
     p6["Fidelity VM<br/>0%"]:::partial
-    p7["Web UI and profiles<br/>50%"]:::partial
+    p7["Web UI and profiles<br/>33%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
     p0 --> p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7 --> p8
     classDef done fill:#1a7f37,stroke:#1a7f37,color:#fff
@@ -54,7 +55,7 @@ flowchart TB
         chaos["scenario engine (simctl)"]:::partial
         users["user-sim / ticket-bot"]:::todo
         k8s["k3d + KWOK"]:::partial
-        webui["Web UI"]:::todo
+        webui["Web UI"]:::partial
     end
     subgraph ext["Outside the 16 GB budget"]
         app["App under test"]:::partial
@@ -184,16 +185,17 @@ _One real Ubuntu VM with Redfish power control._
 
 0/1 done
 
-### Web UI and profiles (50%)
+### Web UI and profiles (33%)
 
 _One click from cold start to a busy cluster._
 
 | Part | Status | How it is built | Where | PR |
 |---|---|---|---|---|
 | Profile pre-flight (CLI) | ✅ Done | `simctl preflight` refuses a profile when free memory minus its budget is under the safety floor and suggests a smaller one. | `simctl/checks.py` | [#26](https://github.com/AhmedYousriSobhi/opti-sim/pull/26) |
-| Web UI | ⬜ To do | FastAPI plus HTMX over the governor socket only; canvas, dashboard, orchestrator, budget manager. | - | - |
+| Web UI base | 🟡 Partial | `python -m webui` on 127.0.0.1:8088 with a login token: Governor dashboard (level banner, MemAvailable/PSI sparklines, audit log over SSE) and Scenario Orchestrator (list, Play with speed, Stop, per-step timeline). Reads the governor socket only; Slurm steps are skipped in the UI. ~48 MB RSS. Reviewed in headless Chromium (desktop/phone, light/dark; no console errors or overflow; ARIA tabs, keyboard, status not by colour alone). | `webui/` | [#76](https://github.com/AhmedYousriSobhi/opti-sim/pull/76) |
+| Web UI canvas and budget manager | ⬜ To do | Cluster Canvas with node fault actions (W-4), profile/budget form (W-7), animated workload dots (issue 74). | - | - |
 
-1/2 done
+1/3 done
 
 ### macOS agent and CI (0%)
 
@@ -212,6 +214,7 @@ _What keeps every change safe and debuggable._
 | Part | Status | How it is built | Where | PR |
 |---|---|---|---|---|
 | validate.sh gate | ✅ Done | Secrets scan, compile, ruff, shellcheck, YAML/JSON, systemd verify, pytest and a governor smoke run before every commit. | `scripts/validate.sh` | [#18](https://github.com/AhmedYousriSobhi/opti-sim/pull/18) |
+| Unit-test coverage gate | ✅ Done | validate.sh runs the unit tests under coverage and fails below 90% (override COV_FLOOR). 226 tests, 98% of simctl, governor, webui and components. Not covered by unit tests, by design: code that needs root, a live Docker stack or a browser (tests/real). | `tests/`, `scripts/validate.sh` | [#81](https://github.com/AhmedYousriSobhi/opti-sim/pull/81) |
 | Real-host tests | ✅ Done | User-level tests with cgroups, Docker, libvirt and a live governor; a sudo suite for root-only paths. | `scripts/real-test.sh`, `scripts/real-test-root.sh` | [#20](https://github.com/AhmedYousriSobhi/opti-sim/pull/20), [#22](https://github.com/AhmedYousriSobhi/opti-sim/pull/22) |
 | simctl doctor / status / diag | ✅ Done | Environment checks with fixes, governor state, a masked diagnostics tarball, and the container security check. | `simctl/checks.py`, `simctl/diag.py` | [#26](https://github.com/AhmedYousriSobhi/opti-sim/pull/26) |
 | Observability stack | ✅ Done | Prometheus (2 d, tmpfs), Grafana with provisioned dashboard, fake GPU exporter. | `compose/observability.yml` | - |
@@ -220,11 +223,11 @@ _What keeps every change safe and debuggable._
 | Verification helpers | ✅ Done | verify.sh runs validate.sh plus real tests (--full adds the live stack lifecycle); tests/real/helpers.py starts a live governor and talks to its socket. | `scripts/verify.sh` | [#48](https://github.com/AhmedYousriSobhi/opti-sim/pull/48) |
 | Progress tracker | ✅ Done | This page, generated from docs/progress.yaml (issue 41). | `simctl/progress.py` | [#42](https://github.com/AhmedYousriSobhi/opti-sim/pull/42) |
 
-8/8 done
+9/9 done
 
 ## Next up
 
-1. Web UI (Scenario Orchestrator first), then user-sim and ticket-bot.
+1. Look at the Web UI in a real browser; then Cluster Canvas, then user-sim and ticket-bot.
 2. Phase 0 for std/full (16-32 slurmd, k3d) once those profiles are buildable; only min is measured.
 
 ## Known gaps

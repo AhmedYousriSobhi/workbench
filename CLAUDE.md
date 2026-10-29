@@ -38,7 +38,7 @@ See README section 9. Top level: `sim.yaml`, `profiles/`, `simctl/`, `governor/`
 
 ## Commands
 
-- `./scripts/validate.sh`: **run before every commit** (secrets scan, compile, ruff, bash -n, YAML/JSON, systemd verify, pytest, governor smoke). `./scripts/validate.sh --install-hook` makes it a pre-commit hook. Set `PYLIBS=<dir>` if tools are installed with `pip --target`.
+- `./scripts/validate.sh`: **run before every commit** (coverage floor 90%, `COV_FLOOR=N` to override; needs `coverage`, in the dev extras; secrets scan, compile, ruff, bash -n, YAML/JSON, systemd verify, pytest, governor smoke). `./scripts/validate.sh --install-hook` makes it a pre-commit hook. Set `PYLIBS=<dir>` if tools are installed with `pip --target`.
 - `./scripts/real-test.sh`: real-host tests (user cgroups via systemd-run, Docker, a live governor process). Run when touching `governor/`.
 - `python -m governor --dry-run --once` (add `--watch-interval S` / `--no-watchdog` for the container security watchdog: new/resolved findings land in the audit log and `status`, skipped from L3 up); `--refresh-interval S` re-discovers containers (late starters get the current level's actions); `--grafana-url URL` publishes audit events as annotations (token only via `$HPCSIM_GRAFANA_TOKEN`, paused from L3 up); `--signals-file F.json` drives the ladder from a file for tests/tuning.
 
@@ -61,5 +61,9 @@ See README section 9. Top level: `sim.yaml`, `profiles/`, `simctl/`, `governor/`
 - `bcm-mock` (127.0.0.1:8081, CMDaemon-style `POST /json`) and `jira-mock` (127.0.0.1:8080, REST v2 subset, `POST /sim/failure`) are stdlib-only; surfaces and gaps in ADR 0005.
 
 - `python -m simctl.cli scenario list | run NAME [--speed N] [--dry-run]`: scenario engine (`simctl/scenario.py`, ADR 0006) over `scenarios/*.yaml`; add a target in `execute()` and in `ENDPOINTS`/`validate`. gpu-exporter-farm publishes 127.0.0.1:9400 for injection.
+
+- `python -m webui [port]`: Web UI on 127.0.0.1:8088 (ADR 0007), token in `compose/generated/secrets/ui_token`. Backend `webui/app.py` talks to the governor socket only and plays scenarios with `host=False` (no Docker). Keep it under 50 MB RSS (SPEC W-1; it sits near 48 MB now).
+
+- **UI debugging:** `pip install -e '.[browser]' && .venv/bin/python -m playwright install chromium`, then `.venv/bin/python scripts/ui_shots.py [OUTDIR]` screenshots both tabs (desktop/phone, light/dark) and checks console errors, overflow and tab keyboard use; read the PNGs. `tests/real/test_webui_browser.py` runs the same checks. UI rules: status never by colour alone, text contrast >= 4.5:1 in both themes, tables stack as cards under 640 px, tap targets >= 40 px, ARIA tabs.
 
 Not yet implemented; as each lands, document it here: `make demo`, `pytest`, `ruff check .`.
