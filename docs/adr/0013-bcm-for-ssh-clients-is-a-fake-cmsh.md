@@ -3,8 +3,8 @@
 Status: accepted
 
 ## Context
-ADR 0005 gave bcm-mock a CMDaemon-style `POST /json` surface on an assumed call list. The one client we now know,
-Gate-H, never calls it. Its BCM section reaches the head node through the cluster's login node (an SSH hop with its own
+ADR 0005 gave bcm-mock a CMDaemon-style `POST /json` surface on an assumed call list. The one client we now know (a desktop monitoring app),
+never calls it. Its BCM section reaches the head node through the cluster's login node (an SSH hop with its own
 saved credentials), then runs `cmsh` there: `cmsh -c "device; list"` and `device; status` for the device table, other
 fixed read-only scripts (categories, job queues, health checks), an interactive `cmsh` console, and a tail of the
 CMDaemon events log. Nothing in that path is HTTP.
