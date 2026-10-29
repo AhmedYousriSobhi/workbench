@@ -14,6 +14,7 @@ import pytest
 import yaml
 from helpers import ask, signals, start_governor, stop_governor, wait_for
 
+from governor.executors import cgroup_dir
 from simctl import stack
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -101,13 +102,10 @@ def test_ladder_climbs_and_recovers_on_the_live_stack(sim, tmp_path):
 @pytest.mark.skipif(os.geteuid() != 0, reason="needs root to write container cgroups")
 def test_real_freeze_and_thaw_of_live_containers(sim, tmp_path):
     def frozen(name: str) -> bool:
-        cid = subprocess.run(["docker", "inspect", "-f", "{{.Id}}", name], capture_output=True,
-                             text=True, check=True).stdout.strip()
-        for p in (f"/sys/fs/cgroup/system.slice/docker-{cid}.scope/cgroup.events",
-                  f"/sys/fs/cgroup/docker/{cid}/cgroup.events"):
-            if os.path.exists(p):
-                return "frozen 1" in Path(p).read_text()
-        raise AssertionError("container cgroup not found")
+        info = json.loads(subprocess.run(["docker", "inspect", name], capture_output=True, text=True,
+                                         check=True).stdout)[0]
+        events = cgroup_dir(info) / "cgroup.events"  # the same lookup the governor uses
+        return "frozen 1" in events.read_text()
 
     gov, sig, sock = start_governor(tmp_path, "--no-watchdog", "--thresholds", FAST,
                                     "--refresh-interval", "1")

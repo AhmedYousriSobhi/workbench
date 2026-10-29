@@ -38,3 +38,14 @@ def test_pyproject_declares_installable_packages():
     cfg = tomllib.loads((Path(__file__).parent.parent / "pyproject.toml").read_text())
     # flat layout with many top-level dirs: setuptools refuses to guess
     assert cfg["tool"]["setuptools"]["packages"] == ["simctl", "governor"]
+
+
+def test_simctl_wrapper_explains_a_missing_venv(tmp_path):
+    import shutil
+    import subprocess
+
+    (tmp_path / "scripts").mkdir()
+    shutil.copy(Path(__file__).parent.parent / "scripts" / "simctl", tmp_path / "scripts" / "simctl")
+    r = subprocess.run([str(tmp_path / "scripts" / "simctl"), "status"], capture_output=True, text=True,
+                       check=False)
+    assert r.returncode == 1 and "python3 -m venv .venv" in r.stderr
