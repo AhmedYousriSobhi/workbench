@@ -96,7 +96,6 @@ def test_screenshot_of_a_faulted_cluster(ui, tmp_path):
         for vp, size in (("desktop", (1280, 900)), ("phone", (390, 800))):
             page = browser.new_page(viewport={"width": size[0], "height": size[1]})
             page.goto(f"{base}/login?token={token}")
-            page.click("#tab-cluster")
             page.wait_for_selector(".node.fault")
             page.click("details[data-node=cn001] summary")  # opening an actions menu must survive the 3 s refresh
             page.wait_for_timeout(3500)
