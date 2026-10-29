@@ -61,7 +61,6 @@ def test_dots_move_in_a_real_browser_and_pause(ui, tmp_path):  # noqa: F811
         errors = []
         page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
         page.goto(f"{base}/login?token={token}")
-        page.click("#tab-cluster")
         page.wait_for_selector("#fb-jira-mock.up")  # block turns green once the feed reports it reachable
         shot = {"done": False}
 
@@ -89,7 +88,8 @@ def test_dots_move_in_a_real_browser_and_pause(ui, tmp_path):  # noqa: F811
         assert page.locator("#dots circle").count() == 0
         assert "paused by you" in page.inner_text("#flowstate")
         # leaving the tab closes the feed
-        page.click("#tab-dash")
+        # a hidden page closes the live feed
+        page.evaluate("Object.defineProperty(document, 'hidden', {value: true, configurable: true}); document.dispatchEvent(new Event('visibilitychange'))")
         page.wait_for_timeout(500)
         assert page.evaluate("flowEs === null")
         assert errors == []
