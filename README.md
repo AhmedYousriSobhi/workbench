@@ -47,6 +47,20 @@ sudo ./scripts/install-governor.sh                           # 3. the governor s
 ./scripts/simctl down                                        # stop (only the hpcsim project)
 ```
 
+## Try it (about 10 minutes)
+
+After the quick start above, with the stack up and the web page open:
+
+1. **Overview** (left menu): the governor level, free memory, and a *Needs attention* list. All clear means all is well.
+2. **Cluster**: six simulated nodes and four mock services. Open *Fault actions* on `cn002`, press *Power off*: the card turns grey, and a diamond travels from *Fault injector* to the BMC. Press *Clear faults* to undo.
+3. **See traffic**: in a second terminal run `for i in 1 2 3 4 5; do curl -s -o /dev/null "http://127.0.0.1:8080/rest/api/2/search?jql=project%3DOPS"; done`. Round dots travel from *Clients* to *jira-mock* and its counter rises.
+4. **Scenarios**: pick `node-down`, speed 20x, press *Play*, and watch each step turn green. The status strip at the top shows it running on every page.
+5. **Slurm steps** need the CLI: `./scripts/simctl scenario run node-down --speed 10`.
+6. **Look behind the scenes**: Grafana http://127.0.0.1:3000 (admin / admin), Prometheus :9090, fake BMC `curl http://127.0.0.1:8000/cn001/redfish/v1/Systems/1`.
+7. **Stop**: `./scripts/simctl down`.
+
+Something wrong? `./scripts/simctl diag` writes one masked file to attach to a bug report. More detail: [docs/guides/getting-started.md](docs/guides/getting-started.md).
+
 ## Build and run scopes
 
 | I want to | Command | Needs |
