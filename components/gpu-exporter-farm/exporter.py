@@ -6,6 +6,7 @@ POST /sim/inject   {"node": "gpu001", "xid": 79} | {"node": ..., "temp": 92} | {
 import json
 import random
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -97,9 +98,22 @@ class State:
         return "\n".join(out) + "\n"
 
 
+PROBE = "x-opti-probe"  # the web UI sets this on its own polls so they are not drawn as client traffic
+
+
+def counted(path: str, headers) -> bool:
+    """A real client request: not a health check, not /sim control, not a UI probe."""
+    return not (path.startswith(("/healthz", "/sim/")) or headers.get(PROBE))
+
+
 def make_handler(state: State):
+    stats, lock = {"requests": 0}, threading.Lock()
+
     class Handler(BaseHTTPRequestHandler):
         def _send(self, code: int, body: str, ctype: str = "text/plain; version=0.0.4") -> None:
+            if counted(self.path, self.headers):
+                with lock:
+                    stats["requests"] += 1
             data = body.encode()
             self.send_response(code)
             self.send_header("Content-Type", ctype)
@@ -108,7 +122,9 @@ def make_handler(state: State):
             self.wfile.write(data)
 
         def do_GET(self):
-            if self.path == "/metrics":
+            if self.path == "/sim/stats":
+                self._send(200, json.dumps(stats), "application/json")
+            elif self.path == "/metrics":
                 self._send(200, state.render())
             else:
                 self._send(404, "not found\n")

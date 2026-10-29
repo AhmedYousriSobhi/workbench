@@ -77,6 +77,12 @@
     #timeline tr { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; padding:10px 0; border-bottom:1px solid var(--line); }
     #timeline td { border:0; padding:0; } #timeline td:nth-child(3), #timeline td:nth-child(4) { grid-column:1 / -1; }
   }
+  #flow { width:100%; max-width:560px; display:block; margin:6px auto; }
+  #flow .blk { fill:var(--panel); stroke:var(--line); stroke-width:2; } #flow .blk.up { stroke:var(--ok); } #flow .blk.down { stroke:var(--bad); stroke-dasharray:5 4; }
+  #flow text { fill:var(--fg); font:600 12px system-ui,sans-serif; } #flow text.sub { fill:var(--dim); font-weight:400; font-size:10.5px; }
+  #flow line { stroke:var(--line); stroke-width:1.5; } #flow .dotc { fill:var(--accent); } #flow .dotf { fill:var(--warn); stroke:var(--fg); stroke-width:1; }
+  .legend { display:flex; flex-wrap:wrap; gap:4px 18px; margin:4px 0 0; }
+  .btn.small { min-height:36px; padding:0 12px; font-weight:500; background:var(--panel); color:var(--fg); border:1px solid var(--line); }
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
 </head>
@@ -109,6 +115,12 @@
 </section>
 <section id="cluster" role="tabpanel" aria-labelledby="tab-cluster" hidden>
   <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/simctl up --profile min</code>.</div>
+  <div class="panel"><div class="row"><h2 style="margin:0">Traffic</h2>
+    <button class="btn small" id="flowpause" aria-pressed="false">Pause animation</button></div>
+    <svg id="flow" viewBox="0 0 360 330" role="img" aria-label="Traffic from clients and from injected faults to the four mock services"></svg>
+    <p class="legend small dim"><span><b style="color:var(--accent)" aria-hidden="true">●</b> round dot: requests from clients (the app, Prometheus, curl)</span>
+      <span><b style="color:var(--warn)" aria-hidden="true">◆</b> diamond: a fault applied by a scenario or a button</span></p>
+    <p id="flowstate" class="dim small" role="status" style="margin-bottom:0"></p></div>
   <div class="panel"><h2>Services</h2><div id="services" class="chips"></div></div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <h2 class="grouphead">Compute nodes</h2><div id="nodes-compute" class="nodes"></div>
@@ -217,12 +229,90 @@ async function nodeAction(name, action, label) {
   lastCluster = ''; loadCluster();
 }
 
+// ---- traffic dots (#74): real request counters from the mocks plus injected faults, over SSE ----
+const SVGNS = 'http:' + '//www.w3.org/2000/svg';  // an XML namespace name, not a fetch; split so the no-external-URL test stays strict
+const BLOCKS = { clients: { x: 8, y: 50, w: 120, h: 80, t: 'Clients', s: 'app · Prometheus · curl' },
+  injector: { x: 8, y: 190, w: 120, h: 80, t: 'Scenarios & buttons', s: 'faults you inject' },
+  'bmc-farm': { x: 220, y: 10, w: 132, h: 64 }, 'bcm-mock': { x: 220, y: 90, w: 132, h: 64 },
+  'jira-mock': { x: 220, y: 170, w: 132, h: 64 }, 'gpu-exporter': { x: 220, y: 250, w: 132, h: 64 } };
+const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+let flowEs = null, flowPaused = false, flowCursor = 0, dots = [], raf = 0, recent = [], flowSnap = null, flowLevel = 0;
+function sv(tag, attrs, text) { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; }
+function buildFlow() {
+  const g = $('flow'); g.innerHTML = '';
+  for (const src of ['clients', 'injector']) for (const dst of Object.keys(BLOCKS).slice(2)) {
+    const a = BLOCKS[src], b = BLOCKS[dst]; g.append(sv('line', { x1: a.x + a.w, y1: a.y + a.h / 2, x2: b.x, y2: b.y + b.h / 2 }));
+  }
+  for (const [k, b] of Object.entries(BLOCKS)) {
+    g.append(sv('rect', { class: 'blk', id: 'fb-' + k, x: b.x, y: b.y, width: b.w, height: b.h, rx: 8 }));
+    g.append(sv('text', { x: b.x + 8, y: b.y + 22 }, b.t || k));
+    g.append(sv('text', { class: 'sub', id: 'fs-' + k, x: b.x + 8, y: b.y + 40 }, b.s || ''));
+    g.append(sv('text', { class: 'sub', id: 'fc-' + k, x: b.x + 8, y: b.y + 55 }, ''));
+  }
+  g.append(sv('g', { id: 'dots' }));
+}
+function paintBlocks() {
+  if (!flowSnap) return;
+  const rate = {}, cut = Date.now() - 60000;
+  recent = recent.filter(r => r.t > cut); recent.forEach(r => { rate[r.to] = (rate[r.to] || 0) + r.n; });
+  let sent = 0;
+  for (const k of Object.keys(BLOCKS).slice(2)) {
+    const up = flowSnap.reachable[k]; sent += flowSnap.totals[k] || 0;
+    $('fb-' + k).setAttribute('class', 'blk ' + (up ? 'up' : 'down'));
+    $('fs-' + k).textContent = up ? '✓ up · ' + (rate[k] || 0) + ' req/min' : '✗ not reachable';
+    $('fc-' + k).textContent = (flowSnap.totals[k] || 0).toLocaleString() + ((flowSnap.totals[k] || 0) === 1 ? ' request seen' : ' requests seen');
+  }
+  $('fc-clients').textContent = sent.toLocaleString() + ' requests sent';
+  $('fc-injector').textContent = (flowSnap.faults || 0) + ' faults applied';
+}
+function flowNote() {
+  const why = flowPaused ? 'Animation paused by you.' : reduced.matches ? 'Animation off: your system asks for reduced motion; counts still update.'
+    : flowLevel >= 3 ? `Animation paused: the governor is at level L${flowLevel} and needs the resources.` : 'Live. Dots appear when a service gets a request or a fault is applied.';
+  $('flowstate').textContent = why;
+}
+function animating() { return !flowPaused && !reduced.matches && flowLevel < 3 && !document.hidden; }
+function launch(ev) {
+  const a = BLOCKS[ev.from], b = BLOCKS[ev.to];
+  for (let i = 0; i < Math.min(ev.n, 5) && dots.length < 60; i++) {
+    const el = ev.from === 'injector' ? sv('rect', { class: 'dotf', width: 9, height: 9, transform: 'rotate(45)' }) : sv('circle', { class: 'dotc', r: 4.5 });
+    $('dots').append(el);
+    dots.push({ el, diamond: ev.from === 'injector', x1: a.x + a.w, y1: a.y + a.h / 2, x2: b.x, y2: b.y + b.h / 2, t0: performance.now() + i * 130, dur: 1100 });
+  }
+  if (!raf) raf = requestAnimationFrame(step);
+}
+function step(now) {
+  dots = dots.filter(d => {
+    const p = (now - d.t0) / d.dur;
+    if (p >= 1) { d.el.remove(); return false; }
+    const q = Math.max(p, 0), x = d.x1 + (d.x2 - d.x1) * q, y = d.y1 + (d.y2 - d.y1) * q;
+    d.el.setAttribute('visibility', p < 0 ? 'hidden' : 'visible');
+    if (d.diamond) d.el.setAttribute('transform', `translate(${x} ${y}) rotate(45) translate(-4.5 -4.5)`); else { d.el.setAttribute('cx', x); d.el.setAttribute('cy', y); }
+    return true;
+  });
+  raf = dots.length ? requestAnimationFrame(step) : 0;
+}
+function onFlow(snap) {
+  flowLevel = snap.level; flowCursor = snap.cursor;
+  snap.faults = (flowSnap?.faults || 0) + snap.events.filter(e => e.from === 'injector').length;
+  snap.events.forEach(e => recent.push({ t: Date.now(), to: e.to, n: e.from === 'clients' ? e.n : 0 }));
+  flowSnap = snap; paintBlocks(); flowNote();
+  if (animating()) snap.events.forEach(launch);
+}
+function openFlow() {
+  if (flowEs) return;
+  if (!$('flow').firstChild) buildFlow();
+  flowEs = new EventSource('/api/flow?after=' + (flowCursor || ''));
+  flowEs.onmessage = e => onFlow(JSON.parse(e.data));
+}
+function closeFlow() { if (flowEs) flowEs.close(); flowEs = null; flowCursor = 0; dots.forEach(d => d.el.remove()); dots = []; }
+$('flowpause').onclick = () => { flowPaused = !flowPaused; $('flowpause').setAttribute('aria-pressed', flowPaused); $('flowpause').textContent = flowPaused ? 'Resume animation' : 'Pause animation'; flowNote(); };
+
 const tabs = ['dash', 'cluster', 'scen'];
 function tab(name, focus) {
   tabs.forEach(t => { const on = t === name; $(t).hidden = !on; const b = $('tab-' + t); b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; if (on && focus) b.focus(); });
   if (name === 'scen') { loadScenarios(); poll(); }
   clearTimeout(clusterTimer);
-  if (name === 'cluster') loadCluster();
+  if (name === 'cluster') { loadCluster(); openFlow(); } else closeFlow();
 }
 tabs.forEach(t => { $('tab-' + t).onclick = () => tab(t); });
 document.querySelector('[role=tablist]').onkeydown = e => {

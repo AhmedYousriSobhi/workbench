@@ -9,6 +9,7 @@ POST /sim/inject  {"node": n, "temp": 95} | {"node": n, "fan_fail": 2} | {"node"
 import json
 import random
 import sys
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -118,9 +119,22 @@ class Farm:
         return table.get(path.strip("/"))
 
 
+PROBE = "x-opti-probe"  # the web UI sets this on its own polls so they are not drawn as client traffic
+
+
+def counted(path: str, headers) -> bool:
+    """A real client request: not a health check, not /sim control, not a UI probe."""
+    return not (path.startswith(("/healthz", "/sim/")) or headers.get(PROBE))
+
+
 def make_handler(farm: Farm):
+    stats, lock = {"requests": 0}, threading.Lock()
+
     class Handler(BaseHTTPRequestHandler):
         def _send(self, code: int, obj) -> None:
+            if counted(self.path, self.headers):
+                with lock:
+                    stats["requests"] += 1
             data = (json.dumps(obj) if not isinstance(obj, str) else obj).encode()
             self.send_response(code)
             self.send_header("Content-Type", "application/json")
@@ -137,6 +151,8 @@ def make_handler(farm: Farm):
         def do_GET(self):
             if self.path == "/healthz":
                 return self._send(200, {"nodes": len(farm.nodes)})
+            if self.path == "/sim/stats":
+                return self._send(200, dict(stats))
             hit = self._split()
             body = farm.resource(*hit) if hit else None
             self._send(200, body) if body is not None else self._send(404, {"error": "not found"})
