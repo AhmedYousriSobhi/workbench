@@ -127,9 +127,9 @@ def test_bcm_power_and_injection_in_the_container(mocks):
     assert "Unknown device" in rpc("cmdevice", "getDevice", "nope")["error"]
 
 
-def test_gate_h_style_search_and_myself_in_the_container(mocks):
+def test_monitoring_client_style_search_and_myself_in_the_container(mocks):
     """The calls a monitoring client makes: POST /search/jql with a grouped JQL, then /myself and /serverInfo."""
-    key = issue("gate-h", labels=["gpu-farm"])
+    key = issue("monitor", labels=["gpu-farm"])
     body = {"jql": '(project = "LIVE" AND (labels in ("gpu-farm") OR text ~ "zzz")) ORDER BY updated DESC',
             "maxResults": 25, "fields": ["summary", "status", "issuetype", "updated", "assignee"]}
     status, page, _ = call(f"{JIRA}/rest/api/3/search/jql", body)

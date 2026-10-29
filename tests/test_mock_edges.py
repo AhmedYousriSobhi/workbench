@@ -113,7 +113,7 @@ def test_jql_grouping_text_and_errors():
                                          "comment": {"comments": [{"body": "fan alarm"}]},
                                          "created": "2026-01-01T00:00:00.000+0000"}}
     ok = lambda q: jira.Query(q).pred(issue)
-    # the shape Gate-H sends: a parenthesised scope with OR inside, escaped text, ORDER BY at the end
+    # the shape a monitoring client sends: a parenthesised scope with OR inside, escaped text, ORDER BY at the end
     assert ok('(project = "OPS" AND (labels in ("gpu-farm") OR text ~ "other")) ORDER BY updated DESC')
     assert ok('text ~ "node\\[1\\]"') and ok('text ~ "FAN"') and not ok('text ~ "absent"')
     assert ok("NOT project = X") and ok("project = X OR project = OPS") and not ok("project = X AND project = OPS")

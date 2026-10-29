@@ -127,7 +127,7 @@ def test_failure_modes_count_down(server):
     assert call(base, "/healthz")[0] == 200  # health is never failed
 
 
-# --- the calls Gate-H makes: POST search (v3 token paging, v2 offset paging), /myself, /field, /serverInfo ---
+# --- the calls a monitoring client makes: POST search (v3 token paging, v2 offset paging), /myself, /field, /serverInfo ---
 
 FIELDS = ["summary", "status", "issuetype", "updated", "assignee"]
 
