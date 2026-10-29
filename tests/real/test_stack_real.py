@@ -38,6 +38,22 @@ def project_containers() -> list[str]:
     return r.stdout.split()
 
 
+def redfish(path: str) -> dict:
+    from helpers import wait_for
+    out: dict = {}
+
+    def get() -> bool:
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:8000/{path}", timeout=5) as r:
+                out.update(json.loads(r.read()))
+            return True
+        except OSError:
+            return False
+
+    assert wait_for(get, timeout=30), "bmc-farm not answering"
+    return out
+
+
 def annotate(token: str) -> int:
     req = urllib.request.Request(
         "http://127.0.0.1:3000/api/annotations", method="POST",
@@ -62,6 +78,7 @@ def test_stack_lifecycle(sim):
     token = stack.TOKEN_FILE.read_text().strip()
     assert oct(stack.TOKEN_FILE.stat().st_mode)[-3:] == "600"
     assert annotate(token) == 200  # the governor's token really works
+    assert redfish("cn001/redfish/v1/Systems/1")["PowerState"] == "On"  # bmc-farm answers
     assert stack.up(sim, "min", say=say)  # idempotent: second up on a running stack
     assert stack.scale(sim, "min", 2, say=say)
     assert sinfo() == "cn[001-002],gpu[001-002]"

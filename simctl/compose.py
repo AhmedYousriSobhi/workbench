@@ -68,6 +68,8 @@ def generate(sim: dict, profile: dict) -> dict:
             svc["volumes"] = [slurm_mount]
             svc["hostname"] = name
             svc.setdefault("environment", {})["HPCSIM_USERS"] = users_env(sim)
+    if "bmc-farm" in services:  # Redfish endpoints for every node in sim.yaml, localhost only
+        services["bmc-farm"].update({"volumes": ["../../sim.yaml:/sim.yaml:ro"], "ports": ["127.0.0.1:8000:8000"]})
     _wire_slurm_services(services)
     return {"name": "hpcsim", "include": [OBSERVABILITY], "services": services}
 

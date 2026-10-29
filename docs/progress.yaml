@@ -40,7 +40,7 @@ phases:
       - {name: Inventory refresh and Grafana annotations, status: done, pr: 36, where: "governor/annotate.py, governor/core.py",
          how: "Re-discovers containers so late starters are governed; posts audit events to Grafana with a token from the environment (SPEC GV-6)."}
       - {name: systemd unit installed permanently, status: partial, where: systemd,
-         how: "Unit and slice pass systemd-analyze and ran as a transient service in tests; not yet installed as the standing service."}
+         how: "Unit and slice pass systemd-analyze and ran as a transient service in tests; scripts/install-governor.sh installs it as the standing service (printed unit tested; the sudo install itself is run by the user)."}
       - {name: Admission and real scale / set-profile, status: done, pr: 48, where: governor/core.py,
          how: "admit command (GV-9): refused at L2+ or if it would breach the floor; scale and set-profile run simctl in the background at L0-L1 only (GV-8). simctl up/scale ask first. Verified live through the socket."}
       - {name: Host tuning script and simctl top, status: todo,
@@ -69,7 +69,8 @@ phases:
     items:
       - {name: gpu-exporter-farm, status: done, where: components/gpu-exporter-farm/exporter.py,
          how: "One process serving fake DCGM metrics for every simulated GPU, with fault injection over /sim/inject."}
-      - {name: bmc-farm, status: todo, how: "Many Redfish endpoints from one process."}
+      - {name: bmc-farm, status: done, pr: 52, where: components/bmc-farm/bmc.py,
+         how: "One process serves /<node>/redfish/v1 for every node: Systems, Chassis Thermal/Power, Managers, event log, Reset action, POST /sim/inject (temp, fans, power, events). Verified live in the stack."}
       - {name: bcm-mock, status: todo, how: "Only the BCM surface the app calls; blocked on open decision 2."}
       - {name: jira-mock, status: todo, how: "Jira REST subset with failure modes and required-field rules; modes mock/cloud/dc."}
 
@@ -126,6 +127,8 @@ phases:
          how: "Prometheus (2 d, tmpfs), Grafana with provisioned dashboard, fake GPU exporter."}
       - {name: Decisions as ADRs, status: done, where: docs/adr,
          how: "0001 record decisions, 0002 Slurm from source with no extra privileges, 0003 slurmrestd/JWT and accounting, 0004 slurmrestd keeps its unshare steps disabled."}
+      - {name: Getting-started guide, status: done, pr: 52, where: docs/guides/getting-started.md,
+         how: "Step-by-step use of the app; tests/test_docs.py fails if a documented command disappears."}
       - {name: Verification helpers, status: done, pr: 48, where: scripts/verify.sh,
          how: "verify.sh runs validate.sh plus real tests (--full adds the live stack lifecycle); tests/real/helpers.py starts a live governor and talks to its socket."}
       - {name: Progress tracker, status: done, pr: 42, where: simctl/progress.py,
@@ -150,7 +153,7 @@ architecture:
     - {id: prom, group: net, label: "Prometheus", status: done}
     - {id: graf, group: net, label: "Grafana", status: done}
     - {id: gpux, group: net, label: "gpu-exporter-farm", status: done}
-    - {id: bmc, group: net, label: "bmc-farm", status: todo}
+    - {id: bmc, group: net, label: "bmc-farm", status: done}
     - {id: bcm, group: net, label: "bcm-mock", status: todo}
     - {id: jira, group: net, label: "jira-mock", status: todo}
     - {id: users, group: net, label: "user-sim / ticket-bot", status: todo}
@@ -178,9 +181,8 @@ architecture:
     - [app, jira, ""]
 
 next:
-  - "Phase 3 mocks: bmc-farm first (the app's Redfish integration)."
+  - "Phase 3 mocks: bcm-mock and jira-mock next (bmc-farm is done)."
   - "A loaded Phase 0 run of the full stack to replace the budget estimates."
-  - "Install the governor as a standing systemd service."
 
 gaps:
   - "Nothing starts the whole stack yet; it is brought up by hand with docker compose."
