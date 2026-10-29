@@ -26,7 +26,7 @@ flowchart LR
   LOAD --> MOCKS
   UI["Web UI + simctl CLI"] --> LOAD
   UI --> GOV
-  GOV["Governor (root, on the host)<br/>PSI + cgroups, ladder L0-L5"] -. "throttle / freeze / stop" .-> SLURM
+  GOV["Governor (on the host)<br/>PSI + cgroups, ladder L0-L5"] -. "throttle / freeze / stop" .-> SLURM
   GOV -.-> MOCKS
   GOV -.-> K8S
   GOV -.-> LOAD
@@ -98,7 +98,7 @@ not built yet are skipped with a note. The step-by-step guide is
 |---|---|
 | `sim.yaml`, `profiles/` | the topology and the memory profiles (single source of truth) |
 | `simctl/` | the CLI: machine check, doctor, up/down/scale, scenarios, measurements |
-| `governor/`, `systemd/` | the root memory governor and its service units |
+| `governor/`, `systemd/` | the memory governor (rootless by default) and its optional root service units |
 | `components/`, `images/` | the mocks (BMC, BCM, Jira, GPU exporter) and the Slurm images |
 | `webui/` | the web page (Starlette + one JS page, under 50 MB) |
 | `scenarios/` | fault scripts in YAML |
@@ -108,4 +108,4 @@ not built yet are skipped with a note. The step-by-step guide is
 ## Contributing
 
 Work by issue, branch and PR into `dev`; read [CLAUDE.md](CLAUDE.md) for the workflow and the hard rules
-(the governor runs as root on the host; the web UI never gets Docker access; no macOS VMs).
+(the governor runs on the host, rootless by default; the web UI never gets Docker access; no macOS VMs).
