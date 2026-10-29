@@ -39,11 +39,11 @@ Normative requirements for opti-sim. [README.md](README.md) gives the overview a
 | C-6 | gpu-exporter-farm | Fake DCGM metrics (util, memory, temp, power, XID/ECC) per simulated GPU, scenario-controllable. Series carry the real DCGM labels (`Hostname`, `gpu`, `UUID`, `device`, `modelName`) next to `node`, and `FB_USED` + `FB_FREE` add up to the GPU type's framebuffer. |
 | C-7 | Observability | Prometheus (about 2 d retention) + Grafana + Alertmanager with file-provisioned dashboards. Governor metrics exposed independently of Prometheus. |
 | C-8 | user-sim / ticket-bot | Personas with Poisson arrivals and failure behavior; fake engineers working Jira tickets on realistic delays. Submission via `slurmrestd` and CLI. |
-| C-9 | scenario-engine | Runs YAML scenarios (steps with `at`, `target`, `do`; optional `expect` assertions). |
+| C-9 | scenario-engine | Runs YAML scenarios (steps with `at`, `target`, `do`; optional `expect` assertions). Target `ssh` makes the login node hang, go down, refuse keys or sessions or change its host key, and stops a node's `sshd` (ADR 0014). |
 | C-10 | Fidelity VM | Single on-demand libvirt Ubuntu VM, hard cap 2 GB, power via sushy-tools. |
 | C-11 | Storage sim | No NFS/Lustre servers. Static `node_exporter` textfile metrics for fake mounts. MariaDB and Prometheus TSDB on capped tmpfs (about 200 MB). |
 | C-12 | Network chaos | `tc netem` on Docker bridge networks for latency, loss, partition. Toxiproxy only on the Jira HTTP path. |
-| C-14 | Login node | One `login` container (`sshd`, Slurm client tools, key login only, no root, TCP forwarding on, simulated users from `sim.yaml`) on 127.0.0.1:2222, unprivileged and memory-limited, keys generated into `compose/generated/secrets/ssh`; for SSH-based clients that run `squeue`/`sinfo`/`sacct` over SSH (ADR 0011). |
+| C-14 | Login node | One `login` container (`sshd`, Slurm client tools, key login only, no root, TCP forwarding on, simulated users from `sim.yaml`) on 127.0.0.1:2222, unprivileged and memory-limited, keys generated into `compose/generated/secrets/ssh`; for SSH-based clients that run `squeue`/`sinfo`/`sacct` over SSH (ADR 0011). Every compute and GPU node also runs `sshd` (key login only, no root, no published port) so `ssh <node>`, ProxyJump and `srun --pty` work through the login node (ADR 0014). |
 | C-13 | Time dilation | `time_dilation` scales job durations and arrival rates inversely in user-sim and scenario-engine. |
 
 ## 4a. Component interfaces (summary)

@@ -98,3 +98,20 @@ def test_login_node_is_local_only_with_keys_mounted():
     assert "./secrets/ssh:/run/hpcsim/ssh:ro" in login["volumes"] and "./slurm:/etc/slurm:ro" in login["volumes"]
     assert login["build"] == "../../images/login" and login["labels"]["hpcsim.class"] == "P2"
     assert "cap_add" not in login and login["environment"]["HPCSIM_USERS"]
+
+
+def test_every_node_runs_sshd_for_hops_from_the_login_node():
+    svcs = compose.generate(SIM, compose.load_profile("min"))["services"]
+    nodes = [n for n, v in svcs.items() if v["labels"].get("hpcsim.node")]
+    assert nodes and svcs["login"]["environment"]["HPCSIM_NODES"].split() == nodes
+    for n in nodes:
+        assert svcs[n]["environment"]["HPCSIM_NODE_SSHD"] == "1" and "ports" not in svcs[n]  # reachable via login only
+        assert "./secrets/ssh:/run/hpcsim/ssh:ro" in svcs[n]["volumes"]
+    assert "HPCSIM_NODE_SSHD" not in svcs["slurmctld"].get("environment", {})
+
+
+def test_controller_services_are_built_from_the_image_they_share():
+    """A changed node-base must reach the controller (same munge key), so it is built by `up`, not by hand."""
+    svcs = compose.generate(SIM, compose.load_profile("min"))["services"]
+    assert svcs["slurmctld"]["build"] == svcs["slurmrestd"]["build"] == "../../images/slurm-ctl"
+    assert "build" not in compose.generate(SIM, {"groups": ["accounting"]})["services"]["mariadb"]

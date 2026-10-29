@@ -41,6 +41,13 @@ def load_profile(name: str, root: Path = Path("profiles")) -> dict:
     return {**merged, **own, "groups": groups}
 
 
+def _build_dir(name: str, image: str) -> str | None:
+    """Build context for a service: a directory named after it, else after its own image (hpcsim/slurm-ctl:dev is built
+    from images/slurm-ctl for slurmctld, slurmrestd and slurmdbd alike, so a changed node-base reaches all of them)."""
+    stems = [name] + ([image.split("/")[1].split(":")[0]] if image.startswith("hpcsim/") else [])
+    return next((f"../../{d}/{stem}" for stem in stems for d in ("components", "images") if (Path(d) / stem).is_dir()), None)
+
+
 def _service(image: str, mem_mb: int, prio: int, build: str | None = None) -> dict:
     svc: dict = {"image": image, "mem_limit": f"{mem_mb}m", "cgroup_parent": f"hpcsim-p{prio}.slice",
                  "labels": {"hpcsim.class": f"P{prio}"}, "restart": "unless-stopped"}
@@ -53,7 +60,7 @@ def generate(sim: dict, profile: dict) -> dict:
     services: dict = {}
     for group in profile["groups"]:
         for name, (image, mem, prio) in CATALOG.get(group, {}).items():
-            build = next((f"../../{d}/{name}" for d in ("components", "images") if (Path(d) / name).is_dir()), None)
+            build = _build_dir(name, image)
             services[name] = _service(image, mem, prio, build)
     for name, kind in node_names(sim, profile.get("compute_nodes")):
         svc = _service("hpcsim/node-base:dev", SLURMD_MB, SLURMD_PRIO, "../../images/node-base")
@@ -72,6 +79,11 @@ def generate(sim: dict, profile: dict) -> dict:
             svc.setdefault("environment", {})["HPCSIM_USERS"] = users_env(sim)
     if "login" in services:  # SSH for clients such as a monitoring app: localhost only, keys from ./secrets/ssh
         services["login"]["volumes"].append("./secrets/ssh:/run/hpcsim/ssh:ro")
+        nodes = [n for n, _ in node_names(sim, profile.get("compute_nodes"))]
+        services["login"]["environment"]["HPCSIM_NODES"] = " ".join(nodes)  # trusted host names for `ssh <node>`
+        for n in nodes:  # sshd on every node, reached from the login node (hops, ProxyJump, srun --pty)
+            services[n]["volumes"].append("./secrets/ssh:/run/hpcsim/ssh:ro")
+            services[n].setdefault("environment", {})["HPCSIM_NODE_SSHD"] = "1"
         services["login"].update({"ports": [f"127.0.0.1:{SSH_PORT}:22"],
                                   "depends_on": ["slurmctld"] if "slurmctld" in services else []})
     if "bmc-farm" in services:  # Redfish endpoints for every node in sim.yaml, localhost only

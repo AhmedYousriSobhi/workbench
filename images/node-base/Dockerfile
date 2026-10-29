@@ -25,8 +25,9 @@ RUN curl -fsSLo /slurm.tar.bz2 "https://download.schedmd.com/slurm/slurm-${SLURM
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive PATH=/opt/slurm/bin:/opt/slurm/sbin:$PATH
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      munge libjson-c5 libhttp-parser2.9 libyaml-0-2 libjwt2 libmariadb3 libdbus-1-3 \
+      munge libjson-c5 libhttp-parser2.9 libyaml-0-2 libjwt2 libmariadb3 libdbus-1-3 openssh-server \
  && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /run/sshd /etc/ssh/sshd_config.d \
  && useradd --system --no-create-home slurm \
  && groupadd --system slurmjwt \
  && useradd --system --no-create-home --groups slurmjwt slurmrestd \
@@ -40,6 +41,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && chmod 0400 /etc/munge/munge.key
 COPY --from=build /opt/slurm /opt/slurm
 RUN echo /opt/slurm/lib >/etc/ld.so.conf.d/slurm.conf && ldconfig
+# sshd gives non-interactive sessions a minimal PATH, so `ssh <node> squeue` needs the Slurm tools linked in.
+# sshd runs only where the compose file sets HPCSIM_NODE_SSHD (compute and GPU nodes next to a login node).
+RUN for f in /opt/slurm/bin/*; do ln -sf "$f" /usr/local/bin/; done
+COPY sshd_config /etc/ssh/sshd_config
 COPY entrypoint.sh /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["slurmd", "-D"]

@@ -125,6 +125,14 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         except OSError as e:
             say(f"FAILED login node keys: {e}")
             return False
+    # The controller and the login node are built FROM node-base, and each build of it bakes a new munge key: build it
+    # first, or a changed node-base leaves the controller on the old key and every node fails Slurm authentication.
+    base = next((n for n, s in todo.items() if s.get("build") == "../../images/node-base"), None)
+    if base:
+        r = runner(dc("build", base, file=path))
+        if r.returncode != 0:
+            say(f"FAILED node-base build: {r.stderr.strip()[-300:]}")
+            return False
     names = [n for n in data["services"] if n not in skip] + ["prometheus", "grafana", "gpu-exporter-farm"]
     for label, svcs in stage_services(names):
         say(f"starting {label}: {', '.join(svcs)}")
@@ -212,12 +220,12 @@ SSH_DIR = Path("compose/generated/secrets/ssh")
 
 
 def ensure_ssh_keys(path: Path = SSH_DIR, runner: Runner = _run) -> Path:
-    """Host key, one client key and authorized_keys for the login node (0600, never tracked).
+    """Login host key, the nodes' shared host key, one client key and authorized_keys (0600, never tracked).
 
-    Kept across `up`s so a client that pinned the host key keeps trusting it.
+    Kept across `up`s so a client that pinned a host key keeps trusting it.
     """
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
-    for name in ("ssh_host_ed25519_key", "id_ed25519"):
+    for name in ("ssh_host_ed25519_key", "ssh_node_host_ed25519_key", "id_ed25519"):
         if not (path / name).exists():
             r = runner(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", f"hpcsim-{name}", "-f", str(path / name)])
             if r.returncode != 0:

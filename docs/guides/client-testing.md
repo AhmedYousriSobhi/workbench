@@ -17,6 +17,7 @@ never print or commit them).
 | Client feature | Endpoint | Credential | Status |
 |---|---|---|---|
 | SSH terminal, Slurm (`squeue`, `sinfo`; `sacct` needs an accounting profile), port forwarding | `127.0.0.1:2222` | user `alice` or `bob` (from `sim.yaml`), key `secrets/ssh/id_ed25519` | merged (ADR 0011) |
+| `ssh <node>` hops, ProxyJump, `srun --pty` | through `127.0.0.1:2222`; every node runs `sshd`, none is published | same user and key | built (ADR 0014) |
 | GPU usage through Grafana `/api/ds/query` | Grafana `127.0.0.1:3000`, datasource uid `prometheus`, host label `Hostname` | Viewer token in `secrets/grafana_viewer_token` | merged |
 | Jira search (`/rest/api/3/search/jql`, fallback `/rest/api/2/search`), `/myself`, `/field` | `http://127.0.0.1:8080` | none in mock mode | merged (ADR 0005) |
 | BMC Redfish over TLS, certificate pinning | `127.0.0.1:8443`, one listener for all nodes, node chosen by the `Host: bmc-<node>` header | `admin` and the password in `secrets/bmc_credentials` | merged (ADR 0012); plain HTTP on `:8000` also remains |
@@ -43,6 +44,8 @@ If port 2222 refuses connections, the checkout is probably on a branch without t
   (`eval "$(ssh-agent -s)"; ssh-add compose/generated/secrets/ssh/id_ed25519`) and use agent authentication.
 - **Host key:** the first connection needs the client's trust-on-first-use confirmation. `up` keeps the same host key
   across restarts, so the pin stays valid.
+- **Slurm on another node:** point the client's "run Slurm on a different node" setting at `cn001`. The client runs
+  `ssh cn001 <command>` from the login node with the login user's own key; it works without a prompt.
 - **Slurm:** the client's refresh runs fixed `squeue`/`sinfo` commands; submit work as `alice` with
   `sbatch --wrap="sleep 300" -p cpu` (add `-p gpu --gres=gpu:2` for GPUs) so there is something to show.
 - **Drain a node** for the node-issues view: `docker exec <slurmctld container> scontrol update nodename=cn004
@@ -62,6 +65,31 @@ the same wire behaviour against the live stack (`HPCSIM_REAL=1 pytest tests/real
 For the real window, run the client in its dev mode with a throwaway config directory and a remote-debugging port,
 create a synthetic profile through its own API, then read screenshots and page text over that port. Use synthetic
 data only, stop every process you start, and never commit screenshots that show real data.
+
+## Check the SSH connection handling
+
+A client verifies an SSH endpoint before and while it is connected: a banner probe (TCP, read `SSH-`, reply, close), a
+pinned host key, keepalives and reconnects, and the hop to a Slurm node. The `ssh` scenario target makes each of those
+fail on purpose; `ssh-connection-checks` plays them in turn (about 5 minutes; `--speed 4` shortens it). It needs the host
+CLI, so run it from the terminal, not the web page.
+
+```bash
+./scripts/simctl scenario run ssh-connection-checks --dry-run
+./scripts/simctl scenario run ssh-connection-checks --speed 4
+```
+
+| `do:` in a step | What the client sees | What a client should show |
+|---|---|---|
+| `login: hang`, later `login: resume` | the port accepts, no banner arrives (resume after N seconds is a slow banner) | offline, reason timeout; back online after resume |
+| `login: down`, later `login: up` | connection refused | offline, reason refused; a reconnect succeeds after `up` (open sessions end) |
+| `login: reject_auth`, later `accept_auth` | the key is refused, `Permission denied (publickey)` | an authentication error, not "offline"; recovers after `accept_auth` |
+| `login: rotate_host_key`, later `restore_host_key` | a different host key after the login node restarts | the connection is blocked with a host-key-changed alert; trusted again after restore |
+| `login: limit` (`max_startups: N`, `max_sessions: M`), later `unlimit` | the next connection while N are still unauthenticated is dropped | a connect error that retries, not a crash |
+| `sshd: down` with `nodes: [cn001]`, later `sshd: up` | the login node works, the hop to `cn001` says `Connection refused` | the Slurm view reports it cannot reach the Slurm host, naming the node |
+
+Run a single fault by hand with a one-step scenario file in `scenarios/` rather than `docker` commands, so the
+timeline and its cleanup stay repeatable. If a run is stopped halfway, undo it with the matching `up`, `resume`,
+`accept_auth`, `unlimit` or `restore_host_key` step; `simctl down` and `up` do not touch a rotated host key.
 
 ## Write a scenario and watch the client
 
@@ -100,5 +128,5 @@ engine's targets, not in ad hoc `docker exec` commands.
 
 ## Known gaps
 
-Compute nodes have no `sshd` (no `srun` or `ssh <node>` hops); BCM over SSH, Kubernetes and Teleport are not built.
+BCM over SSH, Kubernetes and Teleport are not built; neither are extra SSH endpoints for multi-cluster tests (issue #140) or a non-SSH service answering on the login port (a client's "not SSH" reason).
 The full list is the roadmap, issue #134.

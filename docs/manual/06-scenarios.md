@@ -11,7 +11,7 @@ A scenario is a named, repeatable timeline of faults. They live in `scenarios/*.
 ```
 
 The command exits 1 when a step errors or an `expect` line does not hold. Steps for parts that are not built (Kubernetes,
-ticket-bot) are reported as **skipped**, not failed. From the web page ([chapter 5](05-web-page.md)) the `slurm` steps are skipped.
+ticket-bot) are reported as **skipped**, not failed. From the web page ([chapter 5](05-web-page.md)) the `slurm` and `ssh` steps are skipped.
 
 ## The scenarios shipped
 
@@ -22,6 +22,7 @@ ticket-bot) are reported as **skipped**, not failed. From the web page ([chapter
 | `gpu-xid-storm` | GPU errors on both GPU nodes, thermal rise, Slurm drain; the app should open tickets |
 | `jira-429` | Jira rate-limits the next 5 calls (429 with Retry-After); the app must back off |
 | `jira-outage` | Jira answers 503 to the next 20 calls, then recovers |
+| `ssh-connection-checks` | the login node hangs, goes down, refuses keys, changes its host key and limits sessions, then a node's `sshd` stops; each recovers (needs the host CLI) |
 | `k8s-node-notready` | a KWOK node flips to NotReady (**Kubernetes not built**: skipped) |
 | `pod-crashloop` | a pod crash-loops and another is OOMKilled (**Kubernetes not built**: skipped) |
 
@@ -40,10 +41,12 @@ expect:
 ```
 
 - `at`: when the step runs, as `10s`, `2m`. `--speed` and `time_dilation` in `sim.yaml` compress it.
-- `target`: `bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira`, `slurm` (built); `k8s`, `ticket-bot` (not built, skipped).
+- `target`: `bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira`, `slurm`, `ssh` (built); `k8s`, `ticket-bot` (not built, skipped).
 - `do`: the body for that target. `nodes: [...]` fans out one request per node and must name nodes from `sim.yaml`. `slurm`
   takes `drain` and `resume` (node lists); `jira` takes `failure: {mode: "429"|"503"|null, count: N}`; `bmc-farm` takes `power`,
-  `temp`, `fan_fail`, `ramp: {to, over}`, `clear`.
+  `temp`, `fan_fail`, `ramp: {to, over}`, `clear`; `ssh` takes `login:` one of `down`, `up`, `hang`, `resume`,
+  `reject_auth`, `accept_auth`, `limit` (with `max_startups`, `max_sessions`), `unlimit`, `rotate_host_key`,
+  `restore_host_key`, or `sshd: down|up` with `nodes`.
 - `expect`: assertions checked after the steps. Anything that needs the app under test (such as `jira.issue_created`) only
   holds when the app, or ticket-bot once built, does its part.
 
