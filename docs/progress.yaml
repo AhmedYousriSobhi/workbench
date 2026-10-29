@@ -112,7 +112,9 @@ phases:
     items:
       - {name: Profile pre-flight (CLI), status: done, pr: 26, where: simctl/checks.py,
          how: "`simctl preflight` refuses a profile when free memory minus its budget is under the safety floor and suggests a smaller one."}
-      - {name: Web UI, status: todo, how: "FastAPI plus HTMX over the governor socket only; canvas, dashboard, orchestrator, budget manager."}
+      - {name: Web UI base, status: partial, pr: 76, where: webui/,
+         how: "`python -m webui` on 127.0.0.1:8088 with a login token: Governor dashboard (level banner, MemAvailable/PSI sparklines, audit log over SSE) and Scenario Orchestrator (list, Play with speed, Stop, per-step timeline). Reads the governor socket only; Slurm steps are skipped in the UI. ~48 MB RSS. Reviewed in headless Chromium (desktop/phone, light/dark; no console errors or overflow; ARIA tabs, keyboard, status not by colour alone)."}
+      - {name: Web UI canvas and budget manager, status: todo, how: "Cluster Canvas with node fault actions (W-4), profile/budget form (W-7), animated workload dots (issue 74)."}
 
   - id: p8
     title: macOS agent and CI
@@ -166,7 +168,7 @@ architecture:
     - {id: chaos, group: net, label: "scenario engine (simctl)", status: partial}
     - {id: users, group: net, label: "user-sim / ticket-bot", status: todo}
     - {id: k8s, group: net, label: "k3d + KWOK", status: partial}
-    - {id: webui, group: net, label: "Web UI", status: todo}
+    - {id: webui, group: net, label: "Web UI", status: partial}
     - {id: app, group: ext, label: "App under test", status: partial}
     - {id: mac, group: ext, label: "macOS agent", status: todo}
   edges:
@@ -190,7 +192,7 @@ architecture:
     - [app, jira, ""]
 
 next:
-  - "Web UI (Scenario Orchestrator first), then user-sim and ticket-bot."
+  - "Look at the Web UI in a real browser; then Cluster Canvas, then user-sim and ticket-bot."
   - "Phase 0 for std/full (16-32 slurmd, k3d) once those profiles are buildable; only min is measured."
 
 gaps:
