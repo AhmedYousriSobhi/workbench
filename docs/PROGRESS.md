@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m simctl.progress`; do not edit. -->
 Last updated 2026-10-29. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**70% built** (31 done, 0 in review, 5 partial, 8 to do, 44 items).
+**70% built** (31 done, 0 in review, 6 partial, 7 to do, 44 items).
 
 ## Roadmap
 
@@ -92,7 +92,7 @@ _Measure real memory so budgets stop being guesses._
 |---|---|---|---|---|
 | Measurement tooling | ✅ Done | `simctl measure run/report` samples host, Docker containers, PSS per process and libvirt domains (read-only), saves JSON, suggests budgets = peak x 1.2. | `simctl/measure.py` | [#28](https://github.com/AhmedYousriSobhi/opti-sim/pull/28) |
 | Host baseline | 🟡 Partial | Idle host and a small Slurm stack were measured (slurmd 5 MiB, slurmctld 13, MariaDB 171). No loaded run with mocks yet. | - | - |
-| Budgets replaced by measured values | ⬜ To do | README section 5 and profiles/*.yaml still hold planning estimates; needs a loaded run of the full stack. | - | - |
+| Budgets replaced by measured values | 🟡 Partial | min measured live (VMs off, 60 queued jobs): 0.17 GB peak across containers, budget set to 1 GB. std/full are still estimates. | `profiles/min.yaml` | [#68](https://github.com/AhmedYousriSobhi/opti-sim/pull/68) |
 
 1/3 done
 
@@ -221,11 +221,10 @@ _What keeps every change safe and debuggable._
 ## Next up
 
 1. Phase 3 mocks: bcm-mock and jira-mock next (bmc-farm is done).
-2. A loaded Phase 0 run of the full stack to replace the budget estimates.
+2. Phase 0 for std/full (16-32 slurmd, k3d) once those profiles are buildable; only min is measured.
 
 ## Known gaps
 
-- Idle min stack uses about 0.4 GB against a 3.0 GB profile budget, so preflight is far too pessimistic until a loaded Phase 0 run.
-- Budgets are still estimates until a loaded Phase 0 run.
+- Only the min budget is measured (0.17 GB loaded with 60 queued jobs, VMs off); std/full budgets are still estimates.
 - The governor's own locked memory is about 100-170 MB, slightly over its 0.15 GB budget.
 - Host swap is 100% full and kubectl/k3d are missing, which blocks the Kubernetes phase here.
