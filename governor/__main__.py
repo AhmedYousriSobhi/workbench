@@ -23,6 +23,13 @@ from .watchdog import Watchdog
 log = logging.getLogger("governor")
 
 
+def arrivals_flag_path(given: str, user_mode: bool) -> str:
+    """The flag file defaults to /run/hpcsim, which only root can write: rootless mode uses the user's runtime dir."""
+    if user_mode and given == ARRIVALS_FLAG:
+        return str(Path(os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/hpcsim-{os.getuid()}") / "hpcsim" / "arrivals.paused")
+    return given
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="governor")
     ap.add_argument("--dry-run", action="store_true")
@@ -62,7 +69,7 @@ def main(argv: list[str] | None = None) -> None:
     else:
         sampler = Sampler()
     ladder = Ladder(Thresholds(**json.loads(args.thresholds or "{}")))
-    executor = (UserExecutor if args.user_mode else Executor)(groups, cgroups, path, arrivals_flag=args.arrivals_flag)
+    executor = (UserExecutor if args.user_mode else Executor)(groups, cgroups, path, arrivals_flag=arrivals_flag_path(args.arrivals_flag, args.user_mode))
     watchdog = None if args.no_watchdog else Watchdog()
     token = os.environ.get("HPCSIM_GRAFANA_TOKEN", "")
     annotator = Annotator(args.grafana_url, token) if args.grafana_url and token else None

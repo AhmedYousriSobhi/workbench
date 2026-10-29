@@ -84,8 +84,11 @@ class CgroupSampler:
         self.cg = cg
 
     def sample(self, now: float) -> Signals:
-        psi = parse_psi((self.cg / "memory.pressure").read_text())
-        cap = (self.cg / "memory.max").read_text().strip()
-        cur = int((self.cg / "memory.current").read_text())
+        try:
+            psi = parse_psi((self.cg / "memory.pressure").read_text())
+            cap = (self.cg / "memory.max").read_text().strip()
+            cur = int((self.cg / "memory.current").read_text())
+        except FileNotFoundError:  # the watched container was stopped and its cgroup removed: calm, not a crash
+            return Signals(1 << 40, 0.0, 0.0)
         headroom = max(int(cap) - cur, 0) if cap != "max" else 1 << 40
         return Signals(headroom, psi["some"], psi.get("full", 0.0))

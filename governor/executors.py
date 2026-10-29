@@ -159,6 +159,9 @@ class UserExecutor(Executor):
         elif verb == "thaw":
             self._docker(a, "unpause", target, tolerate="is not paused")
         elif verb == "stop":
+            # SIGKILL first, like cgroup.kill in the root path: `docker stop -t 2` waits for SIGTERM, which a runaway
+            # PID 1 ignores, and the kernel OOM killer wins that race (found by the live hog test). Then stop reconciles.
+            self._docker(a, "kill", target, tolerate="is not running")
             self._docker(a, "stop", "-t", "2", target)
         elif verb in ("throttle", "unthrottle", "reclaim"):
             if verb not in self._warned:

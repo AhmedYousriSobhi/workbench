@@ -30,7 +30,8 @@ def test_freeze_thaw_stop_go_through_docker(tmp_path):
     e = ex(run, tmp_path)
     for verb in ("freeze", "thaw", "stop"):
         e(Action(verb, "web", 3))
-    assert run.calls == [["docker", "pause", "web"], ["docker", "unpause", "web"], ["docker", "stop", "-t", "2", "web"]]
+    assert run.calls == [["docker", "pause", "web"], ["docker", "unpause", "web"],
+                         ["docker", "kill", "web"], ["docker", "stop", "-t", "2", "web"]]  # kill first: SIGTERM can be ignored
 
 
 def test_already_paused_is_fine_other_failures_are_not(tmp_path):
@@ -38,6 +39,23 @@ def test_already_paused_is_fine_other_failures_are_not(tmp_path):
     ex(Fake(1, "Error: container web is not paused"), tmp_path)(Action("thaw", "web", 3))
     with pytest.raises(RuntimeError, match="no such container"):
         ex(Fake(1, "Error: no such container"), tmp_path)(Action("freeze", "web", 3))
+
+
+def test_stop_tolerates_an_already_dead_container(tmp_path):
+    class KillFails(Fake):
+        def __call__(self, cmd, timeout=15):
+            self.calls.append(cmd)
+            dead = cmd[1] == "kill"
+            return subprocess.CompletedProcess(cmd, 1 if dead else 0, "", "web is not running" if dead else "")
+    run = KillFails()
+    ex(run, tmp_path)(Action("stop", "web", 4))
+    assert [c[1] for c in run.calls] == ["kill", "stop"]
+
+
+def test_cgroup_sampler_survives_the_cgroup_vanishing(tmp_path):
+    from governor.signals import CgroupSampler
+    s = CgroupSampler(tmp_path / "gone").sample(0.0)
+    assert s.mem_available > 1 << 30 and s.psi_some_avg10 == 0.0
 
 
 def test_root_only_verbs_are_skipped_once_each(tmp_path, caplog):
@@ -100,8 +118,38 @@ def test_default_socket_prefers_env_then_system_then_user():
     assert checks.default_socket({}, lambda p: False) == sysp  # nothing yet: the documented default
 
 
+def test_arrivals_flag_moves_to_the_runtime_dir_in_rootless_mode(monkeypatch):
+    from governor.executors import ARRIVALS_FLAG
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/4242")
+    assert gm.arrivals_flag_path(ARRIVALS_FLAG, True) == "/run/user/4242/hpcsim/arrivals.paused"
+    assert gm.arrivals_flag_path(ARRIVALS_FLAG, False) == ARRIVALS_FLAG  # root keeps /run/hpcsim
+    assert gm.arrivals_flag_path("/custom/flag", True) == "/custom/flag"  # an explicit choice is respected
+
+
 def test_user_socket_lives_under_the_runtime_dir(monkeypatch):
     monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/4242")
     assert checks.user_socket() == "/run/user/4242/hpcsim/gov.sock"
     monkeypatch.delenv("XDG_RUNTIME_DIR")
     assert checks.user_socket().startswith("/tmp/hpcsim-") and checks.user_socket().endswith("/hpcsim/gov.sock")
+
+
+def test_a_container_the_governor_stopped_can_still_be_started_by_name(tmp_path):
+    """Found by the live test: stopped containers leave `docker ps`, so `start web` was refused as an unknown group."""
+    from governor.ladder import Ladder
+    from governor.signals import FileSampler
+    sig = tmp_path / "s.json"
+    sig.write_text(json.dumps({"mem_available": 8 * 2**30, "psi_some": 0.0, "psi_full": 0.0}))
+    run = Fake()
+    groups = [Group("web", 4)]
+    inventory = {"found": [Group("web", 4)]}
+    gov = Governor(FileSampler(sig), Ladder(), groups, UserExecutor(groups, {}, run_cmd=run), False,
+                   inventory=lambda: (inventory["found"], {}), refresh_interval=1)
+    gov._act(Action("stop", "web", 4))
+    inventory["found"] = []  # docker ps no longer lists it
+    gov._refresh(5.0, 0)
+    assert "web" not in {g.name for g in gov.groups} and "web" in gov.group_names()  # not governed, still addressable
+    assert gov.handle("start", {"target": "web"})["ok"] and ["docker", "start", "web"] in run.calls
+    assert "web" not in gov.group_names()
+    inventory["found"] = [Group("web", 4)]  # and when it shows up again it is governed again
+    gov._refresh(10.0, 0)
+    assert "web" in {g.name for g in gov.groups}
