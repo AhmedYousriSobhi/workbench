@@ -16,7 +16,7 @@ never print or commit them).
 
 | Client feature | Endpoint | Credential | Status |
 |---|---|---|---|
-| SSH terminal, Slurm (`squeue`, `sinfo`; `sacct` needs an accounting profile), port forwarding | `127.0.0.1:2222` | user `alice` or `bob` (from `sim.yaml`), key `secrets/ssh/id_ed25519` | merged (ADR 0011) |
+| SSH terminal, Slurm (`squeue`, `sinfo`; `sacct` needs an accounting profile), port forwarding | `127.0.0.1:2222` | user `alice` or `bob` (from `sim.yaml`), key `secrets/ssh/id_ed25519` | merged (ADR 0011); compute nodes `cn001`... and `gpu001`... have sshd too, reached from the login node (ADR 0014) |
 | GPU usage through Grafana `/api/ds/query` | Grafana `127.0.0.1:3000`, datasource uid `prometheus`, host label `Hostname` | Viewer token in `secrets/grafana_viewer_token` | merged |
 | Jira search (`/rest/api/3/search/jql`, fallback `/rest/api/2/search`), `/myself`, `/field` | `http://127.0.0.1:8080` | none in mock mode | merged (ADR 0005) |
 | BMC Redfish over TLS, certificate pinning | `127.0.0.1:8443`, one listener for all nodes, node chosen by the `Host: bmc-<node>` header | `admin` and the password in `secrets/bmc_credentials` | merged (ADR 0012); plain HTTP on `:8000` also remains |
@@ -38,6 +38,7 @@ If port 2222 refuses connections, the checkout is probably on a branch without t
 
 ## Point the client at it
 
+- **Execution target:** set a node such as `cn001` as the scheduler's execution target (the client runs `ssh <node> <command>` from the login node); no keys to set up, the login node already trusts the nodes.
 - **SSH:** host `127.0.0.1`, port `2222`, user `alice`. Many clients only read private keys under `~/.ssh`; either
   copy the generated key there for the test and delete it afterwards, or load it into a throwaway `ssh-agent`
   (`eval "$(ssh-agent -s)"; ssh-add compose/generated/secrets/ssh/id_ed25519`) and use agent authentication.
@@ -66,7 +67,7 @@ data only, stop every process you start, and never commit screenshots that show 
 ## Write a scenario and watch the client
 
 A scenario is a YAML file in `scenarios/` (see [scenarios and faults](../manual/06-scenarios.md)); steps run at
-offsets and can target `bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira` and `slurm` (Kubernetes and the ticket bot are
+offsets and can target `bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira`, `slurm` and `ssh` (login-node host key, down, hung, session limit; Kubernetes and the ticket bot are
 not built; their steps are skipped).
 
 ```yaml
@@ -100,5 +101,5 @@ engine's targets, not in ad hoc `docker exec` commands.
 
 ## Known gaps
 
-Compute nodes have no `sshd` (no `srun` or `ssh <node>` hops); Kubernetes and Teleport are not built; the fake `cmsh` has no interactive console.
+Kubernetes and Teleport are not built; the fake `cmsh` has no interactive console.
 The full list is the roadmap, issue #134.

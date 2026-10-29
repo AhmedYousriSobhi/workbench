@@ -21,6 +21,9 @@ from .nodes import node_names
 ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "http://127.0.0.1:8000/sim/inject",
              "bcm-mock": "http://127.0.0.1:8081/sim/inject", "jira": "http://127.0.0.1:8080/sim/failure"}
 SLURMCTLD = "hpcsim-slurmctld-1"
+LOGIN = "hpcsim-login-1"
+HOST_TARGETS = ("slurm", "ssh")  # steps that need Docker on the host
+SSH_STATES = ("down", "up", "hung")
 NOT_BUILT = ("k8s", "ticket-bot")
 RAMP_STEP_S = 10.0
 RAMP_START_C = 50.0
@@ -104,12 +107,53 @@ def validate(sc: dict, sim: dict) -> list[str]:
         except (KeyError, ScenarioError):
             problems.append(f"step {i}: bad or missing 'at'")
         t = s.get("target")
-        if t not in ENDPOINTS and t != "slurm" and t not in NOT_BUILT:
+        if t not in ENDPOINTS and t not in HOST_TARGETS and t not in NOT_BUILT:
             problems.append(f"step {i}: unknown target {t!r}")
         do = s.get("do") or {}
+        if t == "ssh":
+            problems += [f"step {i}: {m}" for m in ssh_problems(do)]
         names = (do.get("nodes") or []) + (do.get("drain") or []) + (do.get("resume") or [])
         problems += [f"step {i}: unknown node {n!r}" for n in names if n not in nodes]
     return problems
+
+
+def ssh_problems(do: dict) -> list[str]:
+    known = {"state", "rotate_host_key", "max_sessions", "reset"}
+    out = [f"unknown ssh key {k!r}" for k in do if k not in known]
+    if "state" in do and do["state"] not in SSH_STATES:
+        out.append(f"ssh state must be one of {', '.join(SSH_STATES)}")
+    ms = do.get("max_sessions")
+    if "max_sessions" in do and not (isinstance(ms, int) and not isinstance(ms, bool) and ms >= 1):
+        out.append("ssh max_sessions must be a whole number of at least 1")
+    return out or ([] if do else ["ssh step does nothing"])
+
+
+SSHD_HUP = "kill -HUP $(cat /run/sshd.pid)"  # sshd re-executes and re-reads its config and host keys; open sessions stay
+SSH_SCRIPTS = {
+    "rotate_host_key": "rm -f /etc/ssh/ssh_host_ed25519_key /etc/ssh/ssh_host_ed25519_key.pub && "
+                       "ssh-keygen -q -t ed25519 -N '' -f /etc/ssh/ssh_host_ed25519_key && " + SSHD_HUP,
+    "reset": "install -m 600 /run/hpcsim/ssh/ssh_host_ed25519_key /etc/ssh/ssh_host_ed25519_key && "
+             "rm -f /etc/ssh/ssh_host_ed25519_key.pub && sed -i '/^MaxSessions/d' /etc/ssh/sshd_config && " + SSHD_HUP,
+}
+
+
+def ssh_commands(do: dict) -> list[list[str]]:
+    """The docker commands for one ssh step, in order: the login node's state, then sshd settings inside it."""
+    cmds = []
+    state = {"down": ["docker", "stop", "-t", "1", LOGIN], "hung": ["docker", "pause", LOGIN]}
+    if do.get("reset") or do.get("state") == "up":  # undo a hang and a stop before touching sshd
+        cmds += [["docker", "unpause", LOGIN], ["docker", "start", LOGIN]]
+    if do.get("state") in state:
+        cmds.append(state[do["state"]])
+    exec_ = ["docker", "exec", LOGIN, "sh", "-c"]
+    if do.get("reset"):
+        cmds.append([*exec_, SSH_SCRIPTS["reset"]])
+    if do.get("rotate_host_key"):
+        cmds.append([*exec_, SSH_SCRIPTS["rotate_host_key"]])
+    if "max_sessions" in do:
+        n = int(do["max_sessions"])
+        cmds.append([*exec_, f"sed -i '/^MaxSessions/d' /etc/ssh/sshd_config && echo 'MaxSessions {n}' >> /etc/ssh/sshd_config && {SSHD_HUP}"])
+    return cmds
 
 
 def post(url: str, body: dict, timeout: float = 10) -> None:
@@ -125,10 +169,16 @@ def execute(step: Step, poster=post, runner=checks.run, host: bool = True) -> Ou
     label = f"{step.target} {json.dumps(step.do, sort_keys=True)}"
     if step.target in NOT_BUILT:
         return Outcome(label, "skipped", f"{step.target} is not built yet")
-    if step.target == "slurm" and not host:
-        return Outcome(label, "skipped", "Slurm steps need the host CLI (no Docker access here)")
+    if step.target in HOST_TARGETS and not host:
+        return Outcome(label, "skipped", f"{step.target} steps need the host CLI (no Docker access here)")
     try:
-        if step.target == "slurm":
+        if step.target == "ssh":
+            for cmd in ssh_commands(step.do):
+                r = runner(cmd)
+                # unpause/start on a container that is already running are expected to complain; only real steps fail
+                if r.returncode and cmd[1] not in ("unpause", "start"):
+                    return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+        elif step.target == "slurm":
             for n in step.do.get("drain", []):
                 r = runner(["docker", "exec", SLURMCTLD, "scontrol", "update", f"nodename={n}", "state=drain",
                             f"reason={step.do.get('reason', 'scenario')}"])

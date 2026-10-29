@@ -133,3 +133,38 @@ def test_a_failed_step_fails_the_report_but_a_skip_does_not():
     assert r.ok
     r.expects.append(scenario.Outcome("e", "failed"))
     assert not r.ok
+
+
+def test_ssh_step_commands_per_fault():
+    cmds = scenario.ssh_commands({"state": "down"})
+    assert cmds == [["docker", "stop", "-t", "1", "hpcsim-login-1"]]
+    assert scenario.ssh_commands({"state": "hung"}) == [["docker", "pause", "hpcsim-login-1"]]
+    assert scenario.ssh_commands({"state": "up"}) == [["docker", "unpause", "hpcsim-login-1"], ["docker", "start", "hpcsim-login-1"]]
+    rot = scenario.ssh_commands({"rotate_host_key": True})
+    assert len(rot) == 1 and "ssh-keygen" in rot[0][-1] and "kill -HUP" in rot[0][-1]
+    lim = scenario.ssh_commands({"max_sessions": 2})[0][-1]
+    assert "MaxSessions 2" in lim and "kill -HUP" in lim
+    reset = scenario.ssh_commands({"reset": True})
+    assert reset[0][1] == "unpause" and "/run/hpcsim/ssh/ssh_host_ed25519_key" in reset[-1][-1] and "MaxSessions" in reset[-1][-1]
+
+
+def test_execute_ssh_runs_the_commands_and_ignores_unpause_and_start_noise():
+    calls = []
+
+    def runner(cmd):
+        calls.append(cmd)
+        return CP(code=1, err="not paused") if cmd[1] in ("unpause", "start") else CP()
+
+    assert scenario.execute(scenario.Step(0, "ssh", {"state": "up"}), runner=runner).status == "ok"
+    assert [c[1] for c in calls] == ["unpause", "start"]
+    bad = scenario.execute(scenario.Step(0, "ssh", {"state": "down"}), runner=lambda c: CP(code=1, err="no such container"))
+    assert bad.status == "failed" and bad.detail == "no such container"
+
+
+def test_ssh_steps_are_skipped_without_docker_and_validated():
+    assert scenario.execute(scenario.Step(0, "ssh", {"state": "down"}), host=False).status == "skipped"
+    sc = lambda do: {"steps": [{"at": "0s", "target": "ssh", "do": do}]}
+    assert scenario.validate(sc({"state": "down"}), SIM) == []
+    assert scenario.validate(sc({"max_sessions": 1, "rotate_host_key": True}), SIM) == []
+    for bad in ({"state": "slow"}, {"max_sessions": 0}, {"max_sessions": True}, {"bogus": 1}, {}):
+        assert scenario.validate(sc(bad), SIM), bad

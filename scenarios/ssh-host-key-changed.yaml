@@ -1,0 +1,5 @@
+name: ssh-host-key-changed
+description: The login node presents a different host key (a reinstall, or someone in the middle); a client that pinned the old key must refuse, then the key is restored
+steps:
+  - {at: 0s,  target: ssh, do: {rotate_host_key: true}}
+  - {at: 60s, target: ssh, do: {reset: true}}

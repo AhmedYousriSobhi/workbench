@@ -25,8 +25,9 @@ RUN curl -fsSLo /slurm.tar.bz2 "https://download.schedmd.com/slurm/slurm-${SLURM
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive PATH=/opt/slurm/bin:/opt/slurm/sbin:$PATH
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      munge libjson-c5 libhttp-parser2.9 libyaml-0-2 libjwt2 libmariadb3 libdbus-1-3 \
+      munge libjson-c5 libhttp-parser2.9 libyaml-0-2 libjwt2 libmariadb3 libdbus-1-3 openssh-server \
  && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /run/sshd \
  && useradd --system --no-create-home slurm \
  && groupadd --system slurmjwt \
  && useradd --system --no-create-home --groups slurmjwt slurmrestd \
@@ -39,7 +40,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && chown -R munge:munge /etc/munge /var/lib/munge /var/log/munge /run/munge \
  && chmod 0400 /etc/munge/munge.key
 COPY --from=build /opt/slurm /opt/slurm
-RUN echo /opt/slurm/lib >/etc/ld.so.conf.d/slurm.conf && ldconfig
+# sshd gives non-interactive sessions a minimal PATH, so the Slurm tools are linked into /usr/local/bin.
+RUN echo /opt/slurm/lib >/etc/ld.so.conf.d/slurm.conf && ldconfig \
+ && for f in /opt/slurm/bin/*; do ln -sf "$f" /usr/local/bin/; done
+COPY sshd_config /etc/ssh/sshd_config
 COPY entrypoint.sh /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["slurmd", "-D"]
