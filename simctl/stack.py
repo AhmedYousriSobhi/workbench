@@ -118,7 +118,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     names = [n for n in data["services"] if n not in skip] + ["prometheus", "grafana", "gpu-exporter-farm"]
     for label, svcs in stage_services(names):
         say(f"starting {label}: {', '.join(svcs)}")
-        r = runner(dc("up", "-d", "--no-deps", *svcs, file=path))
+        r = runner(dc("up", "-d", "--build", "--no-deps", *svcs, file=path))
         if r.returncode != 0:
             say(f"FAILED {label}: {r.stderr.strip()[-300:]}")
             return False

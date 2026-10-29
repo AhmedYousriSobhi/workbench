@@ -21,6 +21,7 @@ from starlette.routing import Route
 from simctl import checks, scenario
 
 from .cluster import ActionError, Cluster
+from .flow import PAUSE_LEVEL, Flow
 
 STATIC = Path(__file__).parent / "static"
 COOKIE = "hpcsim_ui"
@@ -37,8 +38,8 @@ def governor_status(socket: str) -> dict:
 class Runs:
     """At most one scenario at a time; state is what the page polls."""
 
-    def __init__(self, root: Path, sim: dict):
-        self.root, self.sim = root, sim
+    def __init__(self, root: Path, sim: dict, flow: Flow | None = None):
+        self.root, self.sim, self.flow = root, sim, flow
         self.lock = threading.Lock()
         self.stop_flag = threading.Event()
         self.state: dict = {"running": False}
@@ -68,6 +69,8 @@ class Runs:
         def on_step(step, outcome) -> None:
             row = self.state["steps"][done[0]]
             row.update(status=outcome.status, detail=outcome.detail)
+            if self.flow and outcome.status == "ok":
+                self.flow.note(step.target, outcome.label)
             done[0] += 1
 
         def on_expect(outcome) -> None:
@@ -88,7 +91,8 @@ class Runs:
 def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Path("scenarios"),
                sim_yaml: Path = Path("sim.yaml"), interval: float = 1.0) -> Starlette:
     sim = yaml.safe_load(sim_yaml.read_text())
-    runs = Runs(scenarios, sim)
+    flow = Flow()
+    runs = Runs(scenarios, sim, flow)
     cluster = Cluster(sim)
 
     def authed(request: Request) -> None:
@@ -128,6 +132,21 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
                 await asyncio.sleep(interval)
         return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
+    async def flow_events(request: Request):
+        """SSE feed of workload events for the dots; the page opens it only while the Cluster tab is showing."""
+        async def stream():
+            after = int(request.query_params.get("after") or flow.seq)  # no cursor: only what happens from now on
+            while True:
+                level = (await asyncio.to_thread(governor_status, socket)).get("level") or 0
+                paused = level >= PAUSE_LEVEL
+                if not paused:
+                    await asyncio.to_thread(flow.poll)
+                snap = await asyncio.to_thread(flow.since, after)
+                after = snap["cursor"]
+                yield f"data: {json.dumps({**snap, 'paused': paused, 'level': level})}\n\n"
+                await asyncio.sleep(interval)
+        return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+
     async def cluster_state(request: Request):
         return JSONResponse(await asyncio.to_thread(cluster.snapshot))
 
@@ -136,6 +155,9 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             results = await asyncio.to_thread(cluster.act, request.path_params["node"], request.path_params["action"])
         except ActionError as e:
             raise HTTPException(422, str(e)) from e
+        for r in results:
+            if r["status"] == "ok":
+                flow.note(r["target"], f"{request.path_params['action']} on {request.path_params['node']}")
         return JSONResponse({"results": results})
 
     async def list_scenarios(request: Request):
@@ -167,6 +189,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/status", protected(status)),
             Route("/api/events", protected(events)),
             Route("/api/cluster", protected(cluster_state)),
+            Route("/api/flow", protected(flow_events)),
             Route("/api/nodes/{node}/{action}", protected(node_action, write=True), methods=["POST"]),
             Route("/api/scenarios", protected(list_scenarios)),
             Route("/api/scenarios/run", protected(run_state)),

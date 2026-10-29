@@ -12,6 +12,7 @@ The call names follow CMDaemon's service/call convention but are an assumed subs
 """
 import json
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -78,9 +79,22 @@ class Cluster:
         return None, f"Unknown call: {service}.{call}"
 
 
+PROBE = "x-opti-probe"  # the web UI sets this on its own polls so they are not drawn as client traffic
+
+
+def counted(path: str, headers) -> bool:
+    """A real client request: not a health check, not /sim control, not a UI probe."""
+    return not (path.startswith(("/healthz", "/sim/")) or headers.get(PROBE))
+
+
 def make_handler(cluster: Cluster):
+    stats, lock = {"requests": 0}, threading.Lock()
+
     class Handler(BaseHTTPRequestHandler):
         def _send(self, code: int, obj) -> None:
+            if counted(self.path, self.headers):
+                with lock:
+                    stats["requests"] += 1
             data = json.dumps(obj).encode()
             self.send_response(code)
             self.send_header("Content-Type", "application/json")
@@ -91,6 +105,8 @@ def make_handler(cluster: Cluster):
         def do_GET(self):
             if self.path == "/healthz":
                 return self._send(200, {"nodes": len(cluster.nodes)})
+            if self.path == "/sim/stats":
+                return self._send(200, dict(stats))
             self._send(404, {"error": "not found"})
 
         def do_POST(self):

@@ -179,9 +179,22 @@ def match(issue: dict, field: str, op: str, values: list[str]) -> bool:
 API = re.compile(r"^/rest/api/[23]/(.*)$")
 
 
+PROBE = "x-opti-probe"  # the web UI sets this on its own polls so they are not drawn as client traffic
+
+
+def counted(path: str, headers) -> bool:
+    """A real client request: not a health check, not /sim control, not a UI probe."""
+    return not (path.startswith(("/healthz", "/sim/")) or headers.get(PROBE))
+
+
 def make_handler(jira: Jira):
+    stats, lock = {"requests": 0}, threading.Lock()
+
     class Handler(BaseHTTPRequestHandler):
         def _send(self, code: int, obj=None, headers=None) -> None:
+            if counted(self.path, self.headers):
+                with lock:
+                    stats["requests"] += 1
             data = b"" if obj is None else json.dumps(obj).encode()
             self.send_response(code)
             self.send_header("Content-Type", "application/json")
@@ -201,6 +214,8 @@ def make_handler(jira: Jira):
             url = urlparse(self.path)
             if url.path == "/healthz":
                 return 200, {"issues": len(jira.issues)}
+            if url.path == "/sim/stats":
+                return 200, dict(stats)
             if url.path == "/sim/failure" and method == "POST":
                 jira.set_failure(self._body())
                 return 200, {"ok": True}

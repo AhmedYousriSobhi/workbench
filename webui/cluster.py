@@ -34,7 +34,8 @@ class ActionError(ValueError):
 
 def http_json(url: str, body: dict | None = None, timeout: float = 2.0):
     req = urllib.request.Request(url, data=None if body is None else json.dumps(body).encode(),
-                                 method="GET" if body is None else "POST")
+                                 method="GET" if body is None else "POST",
+                                 headers={"X-Opti-Probe": "1"})  # the mocks do not count this as client traffic
     with urllib.request.urlopen(req, timeout=timeout) as r:
         raw = r.read()
     try:
