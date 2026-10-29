@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import wait_for
+from helpers import bring_up, wait_for
 
 from simctl import stack
 
@@ -26,7 +26,7 @@ def free_port() -> int:
 def ui():
     os.chdir(ROOT)
     sim = yaml.safe_load((ROOT / "sim.yaml").read_text())
-    assert stack.up(sim, "min", say=lambda m: None, available=64 * 1024**3)
+    bring_up(sim)
     port = free_port()
     proc = subprocess.Popen([sys.executable, "-m", "webui", str(port)], cwd=ROOT, stdout=subprocess.PIPE, text=True)
     token = proc.stdout.readline().split("token=")[1].strip()
