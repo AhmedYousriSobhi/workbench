@@ -16,15 +16,14 @@ never print or commit them).
 
 | Client feature | Endpoint | Credential | Status |
 |---|---|---|---|
-| SSH terminal, Slurm (`squeue`, `sinfo`, `sacct`), port forwarding | `127.0.0.1:2222` | user `alice` or `bob` (from `sim.yaml`), key `secrets/ssh/id_ed25519` | login node, PR #123 (ADR 0011) |
-| GPU usage through Grafana `/api/ds/query` | Grafana `127.0.0.1:3000`, datasource uid `prometheus`, host label `Hostname` | Viewer token in `secrets/grafana_viewer_token` | PR #126 |
+| SSH terminal, Slurm (`squeue`, `sinfo`; `sacct` needs an accounting profile), port forwarding | `127.0.0.1:2222` | user `alice` or `bob` (from `sim.yaml`), key `secrets/ssh/id_ed25519` | merged (ADR 0011) |
+| GPU usage through Grafana `/api/ds/query` | Grafana `127.0.0.1:3000`, datasource uid `prometheus`, host label `Hostname` | Viewer token in `secrets/grafana_viewer_token` | merged |
 | Jira search (`/rest/api/3/search/jql`, fallback `/rest/api/2/search`), `/myself`, `/field` | `http://127.0.0.1:8080` | none in mock mode | merged (ADR 0005) |
-| BMC Redfish over TLS, certificate pinning | `127.0.0.1:8443`, one listener for all nodes, node chosen by the `Host: bmc-<node>` header | `admin` and the password in `secrets/bmc_credentials` | PR #124 (ADR 0012); plain HTTP on `:8000` already exists |
+| BMC Redfish over TLS, certificate pinning | `127.0.0.1:8443`, one listener for all nodes, node chosen by the `Host: bmc-<node>` header | `admin` and the password in `secrets/bmc_credentials` | merged (ADR 0012); plain HTTP on `:8000` also remains |
 | BCM (`cmsh` on a head node) | not available over SSH yet | | decided in ADR 0013, build is issue #127 |
 | Kubernetes, Teleport | not built | | SPEC section 11 |
 
-Check which of these are on your branch before testing: a missing login node shows up as "connection refused" on
-port 2222, not as a client bug.
+If port 2222 refuses connections, the checkout is probably on a branch without the login node; that is not a client bug.
 
 ## Bring it up
 
@@ -101,5 +100,5 @@ engine's targets, not in ad hoc `docker exec` commands.
 
 ## Known gaps
 
-Compute nodes have no `sshd` (no `srun` or `ssh <node>` hops); BCM over SSH, Kubernetes and Teleport are not built;
-the via-login-node BMC route has no live test yet.
+Compute nodes have no `sshd` (no `srun` or `ssh <node>` hops); BCM over SSH, Kubernetes and Teleport are not built.
+The full list is the roadmap, issue #134.
