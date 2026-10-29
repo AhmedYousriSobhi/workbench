@@ -112,4 +112,4 @@ Work by issue, branch and PR into `dev`; read [CLAUDE.md](CLAUDE.md) for the wor
 
 ## License
 
-[Apache-2.0](LICENSE). Slurm is built locally from its pinned upstream source (ADR 0002) and is not redistributed here.
+Dual-licensed under [Apache-2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT), at your option. Slurm is built locally from its pinned upstream source (ADR 0002) and is not redistributed here.
