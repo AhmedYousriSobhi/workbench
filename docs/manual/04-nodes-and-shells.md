@@ -31,6 +31,10 @@ docker exec hpcsim-cn001-1 hostname            # one command, no shell
 The shell starts as root *inside the container*; that is not root on your host. Simulated users (`alice`, `bob`, from
 `sim.yaml`) exist with the same UID on the controller and every node. Exit with `exit` or Ctrl-D.
 
+The simulated users' login shell is `bash`, so a terminal session (a client's terminal, `ssh -p 2222 alice@127.0.0.1`, or
+`docker exec -u alice -it ... bash`) has Tab completion for commands, paths and Slurm tools (`squeue`, `sbatch`, `scontrol`...),
+the up arrow and Ctrl-R for history, and a `user@node:dir$` prompt. Commands a client runs without a terminal are unaffected.
+
 Useful things to run inside:
 
 ```bash

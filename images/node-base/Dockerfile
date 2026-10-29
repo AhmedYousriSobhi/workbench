@@ -23,11 +23,14 @@ RUN curl -fsSLo /slurm.tar.bz2 "https://download.schedmd.com/slurm/slurm-${SLURM
 # Shared base for every Slurm node (slurmd) and the controller image. The munge key is baked in:
 # the sim is a closed lab network, so all containers share one key by design.
 FROM ubuntu:24.04
+ARG SLURM_VERSION
 ENV DEBIAN_FRONTEND=noninteractive PATH=/opt/slurm/bin:/opt/slurm/sbin:$PATH
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      munge libjson-c5 libhttp-parser2.9 libyaml-0-2 libjwt2 libmariadb3 libdbus-1-3 openssh-server \
+      munge libjson-c5 libhttp-parser2.9 libyaml-0-2 libjwt2 libmariadb3 libdbus-1-3 openssh-server bash-completion less \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /run/sshd \
+ && sed -i 's#^SHELL=.*#SHELL=/bin/bash#' /etc/default/useradd \
+ && printf '%s\n' 'export PATH=/opt/slurm/bin:$PATH' > /etc/profile.d/slurm.sh \
  && useradd --system --no-create-home slurm \
  && groupadd --system slurmjwt \
  && useradd --system --no-create-home --groups slurmjwt slurmrestd \
@@ -40,6 +43,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && chown -R munge:munge /etc/munge /var/lib/munge /var/log/munge /run/munge \
  && chmod 0400 /etc/munge/munge.key
 COPY --from=build /opt/slurm /opt/slurm
+# Tab completion for squeue, sbatch, srun, scontrol ... (shipped in the Slurm source tree)
+COPY --from=build /tmp/slurm-${SLURM_VERSION}/contribs/slurm_completion_help/slurm_completion.sh /etc/bash_completion.d/slurm
 # sshd gives non-interactive sessions a minimal PATH, so the Slurm tools are linked into /usr/local/bin.
 RUN echo /opt/slurm/lib >/etc/ld.so.conf.d/slurm.conf && ldconfig \
  && for f in /opt/slurm/bin/*; do ln -sf "$f" /usr/local/bin/; done
