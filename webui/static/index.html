@@ -148,11 +148,11 @@
 </aside>
 <main id="main" tabindex="-1" aria-label="Cluster components">
   <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/opti start</code>.</div>
-  <div class="tiles">
+  <div class="tiles" id="tiles">
     <div class="tile"><h2>Services</h2><div class="big" id="t-svc-v">–</div><div class="sub" id="t-svc-s">checking…</div></div>
     <div class="tile"><h2>Nodes</h2><div class="big" id="t-nodes-v">–</div><div class="sub" id="t-nodes-s">checking…</div></div>
   </div>
-  <div class="panel"><h2>Services</h2><div id="services" class="chips"></div></div>
+  <div class="panel" id="svcpanel"><h2>Services</h2><div id="services" class="chips"></div></div>
   <div class="panel"><div class="row"><h2 style="margin:0">Traffic</h2>
     <button class="btn small" id="flowpause" aria-pressed="false">Pause animation</button></div>
     <svg id="flow" viewBox="0 0 360 330" role="img" aria-label="Traffic from clients and from injected faults to the four mock services"></svg>
@@ -160,9 +160,11 @@
       <span><b style="color:var(--warn)" aria-hidden="true">◆</b> diamond: a fault applied by a scenario or a button</span></p>
     <p id="flowstate" class="dim small" role="status" style="margin-bottom:0"></p></div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <div id="nodegroups">
   <h2 class="grouphead">Compute nodes</h2><div id="nodes-compute" class="nodes"></div>
   <h2 class="grouphead">GPU nodes</h2><div id="nodes-gpu" class="nodes"></div>
   <p class="dim small">Drain in Slurm and Kubernetes node faults are not available here: the page has no Docker access by design, and Kubernetes is not built yet. Use <code>./scripts/simctl scenario run node-down</code> for Slurm.</p>
+  </div>
 </main>
 <aside class="rail right" aria-label="Operate">
   <div class="panel"><h2 class="rh">Needs attention</h2><ul class="attn" id="attn"><li class="skel">Checking…</li></ul></div>
@@ -241,7 +243,7 @@ function render(st) {
   const banner = $('banner');
   if (!st.ok) {
     banner.style.setProperty('--lv', 'var(--bad)'); banner.className = 'banner';
-    banner.innerHTML = '<i class="orb" aria-hidden="true"></i><div><b>Governor not reachable</b><span class="m">Install or restart it: <code>sudo ./scripts/install-governor.sh</code></span></div>';
+    banner.innerHTML = '<i class="orb" aria-hidden="true"></i><div><b>Governor not reachable</b><span class="m">Start it with <code>./scripts/opti start</code> (no sudo). Optional boot service: <code>sudo ./scripts/install-governor.sh</code>.</span></div>';
     lastGov = null; setChip('c-level', 'bad', '✗', 'Governor offline'); paintAttention();
     return;
   }
@@ -278,7 +280,9 @@ function node(n, actions) {
 }
 function renderCluster(c) {
   paintHealth(c);
-  $('stackdown').hidden = Object.values(c.services).some(Boolean);
+  const stackUp = Object.values(c.services).some(Boolean);
+  $('stackdown').hidden = stackUp;
+  for (const id of ['tiles', 'svcpanel', 'nodegroups']) $(id).hidden = !stackUp;  // one message when down, not five
   $('services').innerHTML = Object.entries(c.services).map(([k, up]) =>
     `<span class="chip ${up ? 'up' : 'down'}"><b aria-hidden="true">${up ? '✓' : '✗'}</b> ${esc(k)} <span class="dim">${up ? 'answering' : 'not answering'}</span></span>`).join('');
   for (const kind of ['compute', 'gpu']) {
