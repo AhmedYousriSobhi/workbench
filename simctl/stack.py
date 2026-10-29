@@ -21,6 +21,7 @@ STAGES = [  # (label, service-name pattern); later stages depend on earlier ones
     ("slurm services", r"slurmrestd|accounting-init"),
     ("mocks", r"bmc-farm|bcm-mock|jira-mock"),
     ("nodes", r"(cn|gpu)\d+"),
+    ("login node", r"login"),
     ("scenarios", r"scenario-engine"),
 ]
 
@@ -115,6 +116,12 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     PROFILE_FILE.write_text(profile)
     if skip:
         say(f"skipping (not implemented yet): {', '.join(skip)}")
+    if "login" in todo:
+        try:
+            ensure_ssh_keys()
+        except OSError as e:
+            say(f"FAILED login node keys: {e}")
+            return False
     names = [n for n in data["services"] if n not in skip] + ["prometheus", "grafana", "gpu-exporter-farm"]
     for label, svcs in stage_services(names):
         say(f"starting {label}: {', '.join(svcs)}")
@@ -129,6 +136,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         say(f"grafana token: {provision_token()}")
     except OSError as e:
         say(f"WARN no grafana token ({e}); the governor will not publish annotations")
+    if "login" in todo:
+        say(f"ssh: ssh -i {SSH_DIR}/id_ed25519 -p {compose.SSH_PORT} <user>@127.0.0.1 (users from sim.yaml)")
     say("stack is up")
     return True
 
@@ -186,6 +195,28 @@ def scale(sim: dict, profile: str, n: int, runner: Runner = _run,
     ok = r.returncode == 0 and not wait_running(["slurmctld", *want], runner)
     say(f"compute nodes: {n}" if ok else f"FAILED: {r.stderr.strip()[-300:]}")
     return ok
+
+
+SSH_DIR = Path("compose/generated/secrets/ssh")
+
+
+def ensure_ssh_keys(path: Path = SSH_DIR, runner: Runner = _run) -> Path:
+    """Host key, one client key and authorized_keys for the login node (0600, never tracked).
+
+    Kept across `up`s so a client that pinned the host key keeps trusting it.
+    """
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    for name in ("ssh_host_ed25519_key", "id_ed25519"):
+        if not (path / name).exists():
+            r = runner(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", f"hpcsim-{name}", "-f", str(path / name)])
+            if r.returncode != 0:
+                raise OSError(f"ssh-keygen failed: {r.stderr.strip()[-200:]}")
+    (path / "authorized_keys").write_text((path / "id_ed25519.pub").read_text())
+    if os.geteuid() == 0:  # run under sudo: hand the secrets back to the checkout's owner
+        owner = path.parent.parent.stat()
+        for p in (path, *path.iterdir()):
+            os.chown(p, owner.st_uid, owner.st_gid)
+    return path
 
 
 TOKEN_FILE = Path("compose/generated/secrets/grafana_token")
