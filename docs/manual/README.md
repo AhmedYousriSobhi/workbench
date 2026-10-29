@@ -9,7 +9,7 @@ The complete guide to using opti-sim. Read it front to back once, then use it as
 | 1 | [What opti-sim is](01-what-it-is.md) | the idea, the parts, the profiles, the ports |
 | 2 | [Install and start](02-install-and-start.md) | prerequisites, first start, stop, status |
 | 3 | [Using the cluster](03-using-the-cluster.md) | up, scale, down, Slurm jobs, the mock services, Grafana |
-| 4 | [Nodes and shells](04-nodes-and-shells.md) | **how to open a shell on a node** (there is no `ssh`), users, the fidelity VM |
+| 4 | [Nodes and shells](04-nodes-and-shells.md) | **how to open a shell on a node** (`ssh` through the login node, or `docker exec`), users, the fidelity VM |
 | 5 | [The web page](05-web-page.md) | login, panels, fault actions, scenarios |
 | 6 | [Scenarios and faults](06-scenarios.md) | play, fast-forward, inject by hand, write your own |
 | 7 | [The governor](07-governor.md) | memory protection, levels, what gets paused or stopped |
@@ -19,7 +19,7 @@ The complete guide to using opti-sim. Read it front to back once, then use it as
 
 Screenshots of the web page and of real terminal output are in chapters 3, 4 and 5 (`img/`).
 
-Short on time? [Getting started](../guides/getting-started.md) is the 10-minute version.
+Short on time? [Getting started](../guides/getting-started.md) is the 10-minute version. Testing a client's SSH handling? Follow [SSH connection testing](../guides/ssh-connection-testing.md) (with screenshots).
 
 ## Conventions
 

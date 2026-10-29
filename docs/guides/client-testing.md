@@ -68,6 +68,8 @@ data only, stop every process you start, and never commit screenshots that show 
 
 ## Check the SSH connection handling
 
+Step by step with screenshots: [ssh-connection-testing.md](ssh-connection-testing.md).
+
 A client verifies an SSH endpoint before and while it is connected: a banner probe (TCP, read `SSH-`, reply, close), a
 pinned host key, keepalives and reconnects, and the hop to a Slurm node. The `ssh` scenario target makes each of those
 fail on purpose; `ssh-connection-checks` plays them in turn (about 5 minutes; `--speed 4` shortens it). It needs the host
