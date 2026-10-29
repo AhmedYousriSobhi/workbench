@@ -240,4 +240,8 @@ def provision_token(url: str = "http://127.0.0.1:3000", auth: str = "admin:admin
     path.unlink(missing_ok=True)
     path.touch(mode=0o600)
     path.write_text(tok["key"])
+    if os.geteuid() == 0:  # run under sudo: hand the secret back to the checkout's owner
+        owner = path.parent.parent.stat()
+        for p in (path.parent, path):
+            os.chown(p, owner.st_uid, owner.st_gid)
     return path

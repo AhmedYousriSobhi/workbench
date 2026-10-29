@@ -11,7 +11,7 @@ Ubuntu has `python3`, not `python`, and `simctl` needs a few packages. Use a vir
 python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'
 ```
 
-After activating it, `python -m simctl.cli ...` works as written below (or just `simctl ...`). The
+The venv is per shell: activate it again in every new terminal (`. .venv/bin/activate`), or skip activation with `./scripts/simctl <command>`, which uses `.venv` directly (`./scripts/simctl status`). With the venv active, `python -m simctl.cli ...` works as written below (or just `simctl ...`). The
 governor service needs no packages; it runs on the system `python3`.
 
 ## 1. Check the machine

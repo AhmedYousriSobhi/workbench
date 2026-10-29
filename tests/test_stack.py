@@ -143,3 +143,17 @@ def test_up_on_a_running_stack_is_not_refused_for_low_memory(tmp_path, monkeypat
     monkeypatch.setattr(stack, "provision_token", lambda: tmp_path / "t")
     assert stack.up(sim, "min", runner=runner, say=said.append, available=1 * 1024**3, wait=1)
     assert any("already running" in m for m in said)
+
+
+def test_token_is_handed_back_to_the_checkout_owner_when_run_as_root(tmp_path, monkeypatch):
+    """`sudo simctl up` must not leave a root-owned secret that breaks the next normal run."""
+    import os
+    gen = tmp_path / "generated"
+    (gen / "secrets").mkdir(parents=True)
+    chowned = []
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(os, "chown", lambda p, u, g: chowned.append((Path(p).name, u)))
+    http = lambda m, p, b, u, a: {"id": 1, "key": "k"}
+    f = gen / "secrets" / "grafana_token"
+    stack.provision_token(path=f, http=http, valid=lambda t, u: False)
+    assert chowned == [("secrets", os.stat(gen).st_uid), ("grafana_token", os.stat(gen).st_uid)]

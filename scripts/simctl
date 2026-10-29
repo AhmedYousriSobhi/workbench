@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Run simctl with the repo's virtualenv, no activation needed:  ./scripts/simctl status
+set -eu
+repo="$(cd "$(dirname "$0")/.." && pwd)"
+py="$repo/.venv/bin/python"
+if [ ! -x "$py" ]; then
+  echo "no virtualenv at $repo/.venv; create it once:" >&2
+  echo "  python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'" >&2
+  exit 1
+fi
+cd "$repo"
+exec "$py" -m simctl.cli "$@"
