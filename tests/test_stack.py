@@ -1,6 +1,7 @@
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 from simctl import stack
@@ -31,7 +32,7 @@ def test_refused_when_it_does_not_fit():
     calls, msgs = [], []
     sim = yaml.safe_load(Path("sim.yaml").read_text())
     assert not stack.up(sim, "min", runner=lambda c: calls.append(c) or cp(), say=msgs.append, available=1 * 1024**3)
-    assert calls == [] and msgs[0].startswith("REFUSED")
+    assert not any("up" in c for c in calls) and msgs[0].startswith("REFUSED")  # only read-only `ps`
 
 
 def test_up_starts_in_order_and_waits(tmp_path, monkeypatch):
@@ -120,3 +121,25 @@ def test_scale_down_removes_containers_by_label_not_compose_file(tmp_path, monke
     assert stack.scale(sim, "min", 2, runner=runner, say=lambda m: None)
     removed = [c for c in cmds if c[:3] == ["docker", "rm", "-f"]]
     assert len(removed) == 2  # cn003 and cn004
+
+
+def test_up_on_a_running_stack_is_not_refused_for_low_memory(tmp_path, monkeypatch):
+    """The running stack is already in "used" memory; counting its budget again refused a no-op."""
+    monkeypatch.chdir(tmp_path)
+    import shutil
+    root = Path(__file__).resolve().parents[1]
+    for d in ("profiles", "components", "images"):
+        shutil.copytree(root / d, tmp_path / d, dirs_exist_ok=True)
+    sim = yaml.safe_load((root / "sim.yaml").read_text())
+    from simctl import compose
+    every = "\n".join([*compose.generate(sim, compose.load_profile("min"))["services"],
+                       "prometheus", "grafana", "gpu-exporter-farm"])
+    said: list[str] = []
+
+    def runner(cmd):
+        return cp(out=every) if "ps" in cmd else cp()
+
+    monkeypatch.setattr(stack, "governor_admits", lambda n, say: pytest.fail("nothing to admit"))
+    monkeypatch.setattr(stack, "provision_token", lambda: tmp_path / "t")
+    assert stack.up(sim, "min", runner=runner, say=said.append, available=1 * 1024**3, wait=1)
+    assert any("already running" in m for m in said)

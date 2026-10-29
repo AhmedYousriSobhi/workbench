@@ -54,6 +54,7 @@ See README section 9. Top level: `sim.yaml`, `profiles/`, `simctl/`, `governor/`
 - **`./scripts/verify.sh [--full | --only KEYWORD]`: run before asking for a merge** (validate.sh + real-host tests; `--full` adds the live stack lifecycle). Put reusable live-test helpers in `tests/real/helpers.py`, and add a `tests/real` test for every new live behaviour; assert on containers, not only on config.
 - User guide: [docs/guides/getting-started.md](docs/guides/getting-started.md); update it when a user-facing command changes (`tests/test_docs.py` checks its commands). Standing governor service: `sudo ./scripts/install-governor.sh`.
 - Governor `admit` (GV-9): `simctl up`/`scale` ask `/run/hpcsim/gov.sock` first (`$HPCSIM_GOV_SOCKET` overrides); governor `scale`/`set-profile` need `--workdir <repo>` and run only at L0-L1.
+- Governor `--metrics-addr HOST:PORT` serves Prometheus `/metrics` (the install script binds the docker bridge gateway so the Prometheus container can scrape it; never 0.0.0.0). `tests/real/test_pressure_real.py` drives the ladder against the live stack.
 - `python -m simctl.cli up --profile X | down | scale N`: pre-flight, ordered start of the compose project (`simctl/stack.py`), skips components without a Dockerfile, creates the governor's Grafana token once in `compose/generated/secrets/grafana_token`; `down` touches only the `hpcsim` project.
 
 Not yet implemented; as each lands, document it here: `make demo`, `pytest`, `ruff check .`.

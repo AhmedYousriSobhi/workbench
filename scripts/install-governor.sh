@@ -11,10 +11,12 @@ repo="$(cd "$(dirname "$0")/.." && pwd)"
 unit=/etc/systemd/system/hpcsim-governor.service
 slice=/etc/systemd/system/hpcsim-governor.slice
 gid="$(getent group docker | cut -d: -f3 || true)"
+# Prometheus (a container) scrapes the host through host-gateway = the docker bridge address
+bridge="$(ip -4 -o addr show docker0 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1)"
 
 render() {  # the repo's unit with this checkout's path, Grafana wiring and socket group
   sed -e "s|^WorkingDirectory=.*|WorkingDirectory=$repo|" \
-      -e "s|^ExecStart=.*|ExecStart=/bin/sh -c 'HPCSIM_GRAFANA_TOKEN=\$\$(cat $repo/compose/generated/secrets/grafana_token 2>/dev/null) exec /usr/bin/python3 -m governor --socket /run/hpcsim/gov.sock --require-lock --workdir $repo --grafana-url http://127.0.0.1:3000${gid:+ --socket-gid $gid}'|" \
+      -e "s|^ExecStart=.*|ExecStart=/bin/sh -c 'HPCSIM_GRAFANA_TOKEN=\$\$(cat $repo/compose/generated/secrets/grafana_token 2>/dev/null) exec /usr/bin/python3 -m governor --socket /run/hpcsim/gov.sock --require-lock --workdir $repo --grafana-url http://127.0.0.1:3000${gid:+ --socket-gid $gid}${bridge:+ --metrics-addr $bridge:9401}'|" \
       "$repo/systemd/hpcsim-governor.service"
 }
 
