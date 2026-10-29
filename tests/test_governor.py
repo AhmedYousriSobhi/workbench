@@ -336,7 +336,7 @@ def _calm_gov(tmp_path, avail=4 * GB, effector=None, dry_run=False):
 def test_admit_approves_when_calm_and_fits(tmp_path):
     g, _ = _calm_gov(tmp_path)
     assert g.handle("admit", {"budget_mb": 1000})["ok"]
-    r = g.handle("admit", {"budget_mb": 3000})  # 4 GB - 3000 MB < 1.5 GB floor
+    r = g.handle("admit", {"budget_mb": 3500})  # 4 GB - 3500 MB < 1 GB floor
     assert not r["ok"] and "floor" in r["error"]
 
 

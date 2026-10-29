@@ -14,7 +14,7 @@ log = logging.getLogger("governor")
 Executor = Callable[[Action], None]
 Effector = Callable[[list[str]], int]  # runs `simctl <args>`; returns the exit code
 
-ADMIT_FLOOR = int(1.5 * 1024**3)  # MemAvailable that must remain after a start (matches simctl preflight)
+ADMIT_FLOOR = int(1.0 * 1024**3)  # MemAvailable that must remain after a start (matches simctl preflight)
 CHANGE_MAX_LEVEL = 1  # scale/set-profile fork docker; GV-8 forbids that under pressure (L2+)
 
 
