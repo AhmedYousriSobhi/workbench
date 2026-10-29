@@ -1,6 +1,6 @@
 # opti-sim Specification
 
-Normative requirements for opti-sim. [README.md](README.md) explains the rationale and architecture; this file defines what must be built and how it is verified. Key words MUST / SHOULD / MAY follow RFC 2119.
+Normative requirements for opti-sim. [README.md](README.md) gives the overview and [docs/architecture/](docs/architecture/README.md) the rationale and architecture; this file defines what must be built and how it is verified. Key words MUST / SHOULD / MAY follow RFC 2119.
 
 ## 1. Goals and non-goals
 
@@ -48,7 +48,7 @@ Normative requirements for opti-sim. [README.md](README.md) explains the rationa
 
 - Governor control socket: `/run/hpcsim/gov.sock`, JSON requests, a fixed allow-list of commands (status, scale, freeze, thaw, stop, start, set-profile). Unknown commands MUST be rejected.
 - bmc-farm: Redfish under `/redfish/v1/...` per endpoint; control API `POST /sim/inject`.
-- Scenario file: YAML, see README section 7.
+- Scenario file: YAML, see [architecture section 7](docs/architecture/06-ux-and-scenarios.md).
 
 ## 5. Governor
 
@@ -56,7 +56,7 @@ Normative requirements for opti-sim. [README.md](README.md) explains the rationa
 |---|---|
 | GV-1 | Runs on the host as a systemd service in its own slice: `OOMScoreAdjust=-900`, `MemoryLow=`, `Restart=always`. |
 | GV-2 | Signals: `MemAvailable`, swap rate, memory PSI (system and per-cgroup), `memory.current`/`memory.events`, CPU/IO PSI as secondary. |
-| GV-3 | Escalation ladder L0 to L5 as in README section 6.3. Thresholds are configurable; the README values are defaults. |
+| GV-3 | Escalation ladder L0 to L5 as in [architecture section 6.3](docs/architecture/05-governor.md). Thresholds are configurable; the README values are defaults. |
 | GV-4 | Hysteresis: escalate immediately, de-escalate only after 60 s calm, with a minimum dwell per level. |
 | GV-5 | Priority classes P0 to P6; lowest priority is acted on first; reversible actions precede destructive ones. |
 | GV-6 | Every action is logged and published as a Grafana annotation and to the Web UI audit log. |
@@ -67,7 +67,7 @@ Normative requirements for opti-sim. [README.md](README.md) explains the rationa
 
 ## 6. Profiles and pre-flight
 
-Profiles: `min`, `std`, `full`, `jira-real`, `mac-agent` (README section 5). `simctl up --profile X` MUST refuse to start when `MemAvailable - profile budget` is below the safety floor and MUST suggest a smaller profile. Budgets are planning estimates until Phase 0 replaces them with measured values.
+Profiles: `min`, `std`, `full`, `jira-real`, `mac-agent` ([architecture section 5](docs/architecture/04-memory-and-profiles.md)). `simctl up --profile X` MUST refuse to start when `MemAvailable - profile budget` is below the safety floor and MUST suggest a smaller profile. Budgets are planning estimates until Phase 0 replaces them with measured values.
 
 ## 7. CLI (`simctl`)
 
@@ -94,8 +94,8 @@ Profiles: `min`, `std`, `full`, `jira-real`, `mac-agent` (README section 5). `si
 
 ## 10. Acceptance (per roadmap phase)
 
-Exit tests are listed in README section 11 and are the acceptance criteria for each phase. Phase 0 (measurement) gates all budget numbers.
+Exit tests are listed in [architecture section 11](docs/architecture/09-roadmap-decisions-risks.md) and are the acceptance criteria for each phase. Phase 0 (measurement) gates all budget numbers.
 
 ## 11. Open decisions
 
-See README section 12 (Slurm access path, BCM surface, Jira features, real GPUs, Mac access). Each MUST be resolved before the dependent component is implemented.
+See [architecture section 12](docs/architecture/09-roadmap-decisions-risks.md) (Slurm access path, BCM surface, Jira features, real GPUs, Mac access). Each MUST be resolved before the dependent component is implemented.

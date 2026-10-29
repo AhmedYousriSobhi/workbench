@@ -101,7 +101,7 @@ python -m simctl.cli diag           # one masked tarball: attach it to bug repor
 ```
 
 If memory is tight the governor pauses then stops containers lowest priority first (P6 down to P2); that
-is the design, see README section 6. `up` and `scale` are refused from level L2 up.
+is the design, see [the governor](../architecture/05-governor.md). `up` and `scale` are refused from level L2 up.
 
 ## 6. For developers
 

@@ -1,9 +1,9 @@
 # ADR 0005: bcm-mock and jira-mock surfaces (provisional defaults for open decisions 2 and 3)
 
-Status: accepted as a default; the owner can override (README section 12)
+Status: accepted as a default; the owner can override (architecture section 12, docs/architecture/09-roadmap-decisions-risks.md)
 
 ## Context
-README section 12 leaves the BCM surface (CMDaemon REST, `pythoncm`, JSON API) and the Jira features the app needs
+Architecture section 12 (docs/architecture/09-roadmap-decisions-risks.md) leaves the BCM surface (CMDaemon REST, `pythoncm`, JSON API) and the Jira features the app needs
 undecided, and says each must be resolved before the component is built. The app under test is not known yet.
 
 ## Decision
@@ -18,4 +18,4 @@ undecided, and says each must be resolved before the component is built. The app
 
 ## Revisit when
 The app's real BCM or Jira calls are known: replace the call list or surface, and record real responses as
-fixtures (README section 13, contract tests).
+fixtures (architecture section 13, contract tests).
