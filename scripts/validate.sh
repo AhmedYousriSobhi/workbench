@@ -71,7 +71,18 @@ if command -v systemd-analyze >/dev/null; then
 fi
 
 step "pytest"
-python3 -m pytest -q tests || bad "pytest"
+if python3 -c "import coverage" 2>/dev/null; then
+  # coverage floor: the unit tests must keep covering the code (what needs root or a live host is in tests/real)
+  python3 -m coverage run --source=simctl,governor,webui,components -m pytest -q tests || bad "pytest"
+  COV_FLOOR="${COV_FLOOR:-90}"
+  python3 -m coverage report --skip-empty --fail-under="$COV_FLOOR" > cov-report.txt || bad "coverage below ${COV_FLOOR}%"
+  tail -3 cov-report.txt
+  rm -f cov-report.txt
+  rm -f .coverage
+else
+  python3 -m pytest -q tests || bad "pytest"
+  echo "note: install coverage to enforce the coverage floor"
+fi
 
 step "governor smoke"
 python3 -m governor --dry-run --once >/dev/null 2>&1 || bad "governor dry-run --once"

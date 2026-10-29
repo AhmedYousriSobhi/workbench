@@ -157,3 +157,117 @@ def test_token_is_handed_back_to_the_checkout_owner_when_run_as_root(tmp_path, m
     f = gen / "secrets" / "grafana_token"
     stack.provision_token(path=f, http=http, valid=lambda t, u: False)
     assert chowned == [("secrets", os.stat(gen).st_uid), ("grafana_token", os.stat(gen).st_uid)]
+
+
+def _workdir(tmp_path, monkeypatch):
+    import shutil
+    monkeypatch.chdir(tmp_path)
+    root = Path(__file__).resolve().parents[1]
+    for d in ("profiles", "components", "images"):
+        shutil.copytree(root / d, tmp_path / d, dirs_exist_ok=True)
+    return yaml.safe_load((root / "sim.yaml").read_text())
+
+
+def test_up_stops_at_the_first_stage_that_fails_to_start(tmp_path, monkeypatch):
+    sim = _workdir(tmp_path, monkeypatch)
+    msgs, ups = [], []
+
+    def runner(cmd):
+        if "up" in cmd:
+            ups.append(cmd[cmd.index("--no-deps") + 1:])
+            return cp(rc=1, err="no such image")
+        return cp()
+
+    monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
+    assert not stack.up(sim, "min", runner=runner, say=msgs.append, available=12 * 1024**3, wait=1)
+    assert len(ups) == 1  # later stages are never attempted
+    assert any(m.startswith("FAILED observability") and "no such image" in m for m in msgs)
+
+
+def test_up_fails_when_a_started_service_never_runs(tmp_path, monkeypatch):
+    sim = _workdir(tmp_path, monkeypatch)
+    msgs = []
+    clock = iter(range(0, 1000, 5))
+    monkeypatch.setattr(stack.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(stack.time, "sleep", lambda s: None)
+    monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
+    runner = lambda cmd: cp(out="") if "ps" in cmd else cp()
+    assert not stack.up(sim, "min", runner=runner, say=msgs.append, available=12 * 1024**3, wait=1)
+    assert any("not running" in m for m in msgs)
+
+
+def test_up_warns_but_still_succeeds_when_the_token_cannot_be_made(tmp_path, monkeypatch):
+    sim = _workdir(tmp_path, monkeypatch)
+    started, msgs = [], []
+
+    def runner(cmd):
+        if "up" in cmd:
+            started.extend(cmd[cmd.index("--no-deps") + 1:])
+        return cp(out="\n".join(started)) if "ps" in cmd else cp()
+
+    def no_token():
+        raise OSError("grafana down")
+
+    monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
+    monkeypatch.setattr(stack, "provision_token", no_token)
+    assert stack.up(sim, "min", runner=runner, say=msgs.append, available=12 * 1024**3, wait=1)
+    assert any(m.startswith("WARN no grafana token") for m in msgs) and msgs[-1] == "stack is up"
+
+
+def test_current_profile_reads_the_file_or_falls_back(tmp_path, monkeypatch):
+    f = tmp_path / "profile"
+    monkeypatch.setattr(stack, "PROFILE_FILE", f)
+    assert stack.current_profile() == "std" and stack.current_profile("min") == "min"
+    f.write_text("full\n")
+    assert stack.current_profile() == "full"
+
+
+def test_scale_up_is_refused_when_the_governor_says_no(tmp_path, monkeypatch):
+    sim = _workdir(tmp_path, monkeypatch)
+    msgs, runs = [], []
+    monkeypatch.setattr(stack, "governor_admits", lambda n, say: say("refused: L3") or False)
+    monkeypatch.setattr(stack, "running_nodes", lambda runner=None: ["cn001"])
+    assert not stack.scale(sim, "min", 4, runner=lambda c: runs.append(c) or cp(), say=msgs.append)
+    assert "refused: L3" in msgs and not any("up" in c for c in runs)
+
+
+def test_grafana_http_helpers_against_a_local_server():
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    seen = []
+
+    class H(BaseHTTPRequestHandler):
+        def do_GET(self):
+            seen.append(("GET", self.path, self.headers.get("Authorization")))
+            self.send_response(200 if self.headers.get("Authorization") == "Bearer good" else 401)
+            self.send_header("Content-Length", "2")
+            self.end_headers()
+            self.wfile.write(b"{}")
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            seen.append(("POST", self.path, self.headers.get("Authorization"), body))
+            data = json.dumps({"id": 7}).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *a):
+            pass
+
+    srv = HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{srv.server_port}"
+    try:
+        assert stack.token_valid("good", url) is True
+        assert stack.token_valid("bad", url) is False  # 401 is a refusal, not a crash
+        out = stack._grafana("POST", "/api/serviceaccounts", {"name": "n"}, url, "admin:admin")
+        assert out == {"id": 7}
+        import base64
+        assert seen[-1][2] == "Basic " + base64.b64encode(b"admin:admin").decode() and seen[-1][3] == {"name": "n"}
+    finally:
+        srv.shutdown()
+    assert stack.token_valid("good", url) is False  # server gone: unreachable counts as invalid

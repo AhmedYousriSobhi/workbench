@@ -148,3 +148,15 @@ def test_token_file_is_created_private_and_stable(tmp_path):
     first = launcher.load_token(path)
     assert len(first) >= 24 and oct(path.stat().st_mode)[-3:] == "600"
     assert launcher.load_token(path) == first
+
+
+def test_launcher_prints_a_login_link_and_serves_with_the_token(monkeypatch, tmp_path, capsys):
+    ran = {}
+    monkeypatch.setattr(launcher, "TOKEN_FILE", tmp_path / "secrets" / "ui_token")
+    monkeypatch.setattr(launcher.uvicorn, "run", lambda app, **kw: ran.update(kw=kw, app=app))
+    monkeypatch.setattr(launcher.sys, "argv", ["webui", "9123"])
+    launcher.main()
+    out = capsys.readouterr().out
+    token = launcher.load_token(tmp_path / "secrets" / "ui_token")
+    assert out.strip() == f"opti-sim UI: http://127.0.0.1:9123/login?token={token}"
+    assert ran["kw"] == {"host": "127.0.0.1", "port": 9123, "log_level": "warning"}  # localhost only (W-8)

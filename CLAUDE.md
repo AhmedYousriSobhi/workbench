@@ -38,7 +38,7 @@ See README section 9. Top level: `sim.yaml`, `profiles/`, `simctl/`, `governor/`
 
 ## Commands
 
-- `./scripts/validate.sh`: **run before every commit** (secrets scan, compile, ruff, bash -n, YAML/JSON, systemd verify, pytest, governor smoke). `./scripts/validate.sh --install-hook` makes it a pre-commit hook. Set `PYLIBS=<dir>` if tools are installed with `pip --target`.
+- `./scripts/validate.sh`: **run before every commit** (coverage floor 90%, `COV_FLOOR=N` to override; needs `coverage`, in the dev extras; secrets scan, compile, ruff, bash -n, YAML/JSON, systemd verify, pytest, governor smoke). `./scripts/validate.sh --install-hook` makes it a pre-commit hook. Set `PYLIBS=<dir>` if tools are installed with `pip --target`.
 - `./scripts/real-test.sh`: real-host tests (user cgroups via systemd-run, Docker, a live governor process). Run when touching `governor/`.
 - `python -m governor --dry-run --once` (add `--watch-interval S` / `--no-watchdog` for the container security watchdog: new/resolved findings land in the audit log and `status`, skipped from L3 up); `--refresh-interval S` re-discovers containers (late starters get the current level's actions); `--grafana-url URL` publishes audit events as annotations (token only via `$HPCSIM_GRAFANA_TOKEN`, paused from L3 up); `--signals-file F.json` drives the ladder from a file for tests/tuning.
 

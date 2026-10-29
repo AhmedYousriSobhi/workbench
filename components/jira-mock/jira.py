@@ -156,7 +156,7 @@ class Jira:
 def parse_jql(jql: str) -> list[tuple[str, str, list[str]]]:
     """[(field, op, values)] from `a = x AND b in (y, "z")`; ORDER BY is ignored, anything else is a 400."""
     out = []
-    for part in re.split(r"\s+AND\s+", re.split(r"\s+ORDER\s+BY\s+", jql.strip(), flags=re.IGNORECASE)[0], flags=re.IGNORECASE):
+    for part in re.split(r"\s+AND\s+", re.split(r"(?:^|\s+)ORDER\s+BY\s+", jql.strip(), flags=re.IGNORECASE)[0], flags=re.IGNORECASE):
         if not part:
             continue
         m = re.fullmatch(r'(\w+)\s*(=|!=|in|not in)\s*(.+)', part.strip(), flags=re.IGNORECASE)

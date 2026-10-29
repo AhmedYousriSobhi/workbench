@@ -5,7 +5,7 @@ requires-python = ">=3.11"
 dependencies = ["typer", "pyyaml", "fastapi", "uvicorn"]
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff"]
+dev = ["pytest", "ruff", "coverage"]
 browser = ["playwright"]  # UI screenshots/checks: then `playwright install chromium`
 
 [project.scripts]

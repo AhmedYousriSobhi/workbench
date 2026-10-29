@@ -128,6 +128,8 @@ phases:
     items:
       - {name: validate.sh gate, status: done, pr: 18, where: scripts/validate.sh,
          how: "Secrets scan, compile, ruff, shellcheck, YAML/JSON, systemd verify, pytest and a governor smoke run before every commit."}
+      - {name: Unit-test coverage gate, status: done, pr: 81, where: "tests/, scripts/validate.sh",
+         how: "validate.sh runs the unit tests under coverage and fails below 90% (override COV_FLOOR). 226 tests, 98% of simctl, governor, webui and components. Not covered by unit tests, by design: code that needs root, a live Docker stack or a browser (tests/real)."}
       - {name: Real-host tests, status: done, pr: [20, 22], where: "scripts/real-test.sh, scripts/real-test-root.sh",
          how: "User-level tests with cgroups, Docker, libvirt and a live governor; a sudo suite for root-only paths."}
       - {name: simctl doctor / status / diag, status: done, pr: 26, where: "simctl/checks.py, simctl/diag.py",
