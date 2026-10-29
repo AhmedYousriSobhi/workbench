@@ -32,7 +32,7 @@ Normative requirements for opti-sim. [README.md](README.md) gives the overview a
 |---|---|---|
 | C-1 | Slurm | `slurmctld` + `slurmrestd` in core; `slurmdbd`/MariaDB only in accounting profiles; N `slurmd` containers from one shared base image; GPUs as count-based GRES; jobs are synthetic. |
 | C-2 | Kubernetes | k3d/kind with 1 server + 1 real agent, plus KWOK fake nodes (incl. `nvidia.com/gpu` capacity). Governor addresses nodes by container name/label. |
-| C-3 | bmc-farm | One process serving N Redfish endpoints with inventory, power, thermals, fans, sensors, event log; fault injection via `/sim/inject`. |
+| C-3 | bmc-farm | One process serving N Redfish endpoints with inventory, power, thermals, fans, sensors, event log; fault injection via `/sim/inject`. Also standard Redfish over TLS on 127.0.0.1:8443 (`/redfish/v1`, node chosen by the `Host` header, network alias `bmc-<node>`, session login, collections, firmware, accounts; ADR 0012). |
 | C-4 | bcm-mock | Implements only the BCM surface the app calls (CMDaemon REST or `pythoncm`), data-driven from fixtures and `sim.yaml`. |
 | C-5 | jira-mock | Jira REST subset (issue create/transition/comment, JQL subset, webhooks) with failure modes (429, 503, slow); per-transition required-field rules that refuse a transition with a per-field error, as real workflow validators do. Modes: `mock` (default), `cloud`, `dc`. |
 | C-6 | gpu-exporter-farm | Fake DCGM metrics (util, memory, temp, power, XID/ECC) per simulated GPU, scenario-controllable. |
@@ -47,7 +47,7 @@ Normative requirements for opti-sim. [README.md](README.md) gives the overview a
 ## 4a. Component interfaces (summary)
 
 - Governor control socket: `/run/hpcsim/gov.sock`, JSON requests, a fixed allow-list of commands (status, scale, freeze, thaw, stop, start, set-profile). Unknown commands MUST be rejected.
-- bmc-farm: Redfish under `/redfish/v1/...` per endpoint; control API `POST /sim/inject`.
+- bmc-farm: Redfish under `/redfish/v1/...` per endpoint (TLS :8443, ADR 0012; plain `/<node>/redfish/v1` on :8000); control API `POST /sim/inject`.
 - Scenario file: YAML, see [architecture section 7](docs/architecture/06-ux-and-scenarios.md).
 
 ## 5. Governor

@@ -82,3 +82,11 @@ def test_docker_compose_accepts_generated_file():
         assert r.returncode == 0, r.stderr
     finally:
         out.unlink()
+
+
+def test_bmc_farm_publishes_tls_and_a_dns_alias_per_node():
+    farm = compose.generate(SIM, compose.load_profile("min"))["services"]["bmc-farm"]
+    assert "127.0.0.1:8443:8443" in farm["ports"] and "127.0.0.1:8000:8000" in farm["ports"]
+    aliases = farm["networks"]["default"]["aliases"]
+    assert "bmc-cn001" in aliases and "bmc-gpu001" in aliases
+    assert any(v.endswith(":/run/hpcsim/bmc_credentials:ro") for v in farm["volumes"])

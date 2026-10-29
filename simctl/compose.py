@@ -69,7 +69,12 @@ def generate(sim: dict, profile: dict) -> dict:
             svc["hostname"] = name
             svc.setdefault("environment", {})["HPCSIM_USERS"] = users_env(sim)
     if "bmc-farm" in services:  # Redfish endpoints for every node in sim.yaml, localhost only
-        services["bmc-farm"].update({"volumes": ["../../sim.yaml:/sim.yaml:ro"], "ports": ["127.0.0.1:8000:8000"]})
+        # :8443 is TLS at the standard /redfish/v1, the node chosen by Host: clients reach it as bmc-<node>
+        names = [n for n, _ in node_names(sim)]
+        services["bmc-farm"].update({
+            "volumes": ["../../sim.yaml:/sim.yaml:ro", "./secrets/bmc_credentials:/run/hpcsim/bmc_credentials:ro"],
+            "ports": ["127.0.0.1:8000:8000", "127.0.0.1:8443:8443"],
+            "networks": {"default": {"aliases": [f"bmc-{n}" for n in names]}}})
     if "bcm-mock" in services:  # CMDaemon JSON API on the same node inventory, localhost only
         services["bcm-mock"].update({"volumes": ["../../sim.yaml:/sim.yaml:ro"], "ports": ["127.0.0.1:8081:8081"]})
     if "jira-mock" in services:

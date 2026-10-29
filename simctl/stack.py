@@ -115,6 +115,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     PROFILE_FILE.write_text(profile)
     if skip:
         say(f"skipping (not implemented yet): {', '.join(skip)}")
+    if "bmc-farm" in todo:
+        ensure_bmc_credentials()
     names = [n for n in data["services"] if n not in skip] + ["prometheus", "grafana", "gpu-exporter-farm"]
     for label, svcs in stage_services(names):
         say(f"starting {label}: {', '.join(svcs)}")
@@ -129,6 +131,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         say(f"grafana token: {provision_token()}")
     except OSError as e:
         say(f"WARN no grafana token ({e}); the governor will not publish annotations")
+    if "bmc-farm" in todo:
+        say(f"bmc: https://127.0.0.1:8443/redfish/v1 (Host bmc-<node>), user admin, password in {BMC_CREDENTIALS}")
     say("stack is up")
     return True
 
@@ -186,6 +190,26 @@ def scale(sim: dict, profile: str, n: int, runner: Runner = _run,
     ok = r.returncode == 0 and not wait_running(["slurmctld", *want], runner)
     say(f"compute nodes: {n}" if ok else f"FAILED: {r.stderr.strip()[-300:]}")
     return ok
+
+
+BMC_CREDENTIALS = Path("compose/generated/secrets/bmc_credentials")
+
+
+def ensure_bmc_credentials(path: Path = BMC_CREDENTIALS) -> Path:
+    """'admin:<random>' for the bmc-farm's TLS surface, made once. Mounted read-only into a container that runs as
+    `nobody`, so the file is world-readable; the 0700 folder above it keeps other host users out."""
+    if path.exists():
+        return path
+    import secrets
+
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path.write_text(f"admin:{secrets.token_urlsafe(18)}\n")
+    path.chmod(0o644)
+    if os.geteuid() == 0:
+        owner = path.parent.parent.stat()
+        for p in (path.parent, path):
+            os.chown(p, owner.st_uid, owner.st_gid)
+    return path
 
 
 TOKEN_FILE = Path("compose/generated/secrets/grafana_token")
