@@ -3,6 +3,17 @@
 How to run opti-sim on your workstation and see it working. Keep this page in step with the commands:
 `tests/test_docs.py` fails if a `simctl` command named here no longer exists.
 
+## 0. Install the tools (once)
+
+Ubuntu has `python3`, not `python`, and `simctl` needs a few packages. Use a virtualenv in the repo:
+
+```bash
+python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'
+```
+
+After activating it, `python -m simctl.cli ...` works as written below (or just `simctl ...`). The
+governor service needs no packages; it runs on the system `python3`.
+
 ## 1. Check the machine
 
 ```bash

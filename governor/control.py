@@ -74,5 +74,8 @@ def serve(path: str, handle: Handler, groups: Callable[[], set[str]],
     os.chmod(path, mode)
     if gid is not None:
         os.chown(path, -1, gid)
+        # the group must also traverse the directory holding the socket
+        os.chown(p.parent, -1, gid)
+        os.chmod(p.parent, 0o750)
     threading.Thread(target=srv.serve_forever, daemon=True, name="control").start()
     return srv
