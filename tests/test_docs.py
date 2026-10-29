@@ -12,7 +12,7 @@ def test_getting_started_commands_exist():
     text = (ROOT / "docs/guides/getting-started.md").read_text()
     runner = CliRunner()
     cmds = set(re.findall(r"python -m simctl\.cli (\w+)", text))
-    assert {"doctor", "up", "scale", "down", "status", "diag", "preflight"} <= cmds
+    assert {"check", "doctor", "up", "scale", "down", "status", "diag", "preflight"} <= cmds
     for c in cmds:
         assert runner.invoke(app, [c, "--help"]).exit_code == 0, c
 
