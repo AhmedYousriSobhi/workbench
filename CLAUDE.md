@@ -4,7 +4,7 @@ Guidance for Claude Code when working in this repository.
 
 ## Project
 
-opti-sim: a memory-governed simulation of an HPC/AI cluster (Slurm, Kubernetes, BMC, BCM, Jira, Grafana) for a 16 GB Ubuntu workstation. Read [README.md](README.md) for architecture and rationale, and [SPEC.md](SPEC.md) for the requirements. When they disagree, SPEC.md wins; fix the other.
+opti-sim: a memory-governed simulation of an HPC/AI cluster (Slurm, Kubernetes, BMC, BCM, Jira, Grafana) for a 16 GB Ubuntu workstation. Read [README.md](README.md) for the overview, [docs/architecture/](docs/architecture/README.md) for the architecture and rationale, and [SPEC.md](SPEC.md) for the requirements. When they disagree, SPEC.md wins; fix the other.
 
 ## Git workflow (mandatory)
 
@@ -18,11 +18,11 @@ opti-sim: a memory-governed simulation of an HPC/AI cluster (Slurm, Kubernetes, 
 
 ## Layout
 
-See README section 9. Top level: `sim.yaml`, `profiles/`, `simctl/`, `governor/`, `systemd/`, `images/`, `components/`, `webui/`, `compose/`, `k8s/`, `fidelity-vm/`, `observability/`, `scenarios/`, `docs/adr/`.
+See [docs/architecture/08-repository-and-migration.md](docs/architecture/08-repository-and-migration.md). Top level: `sim.yaml`, `profiles/`, `simctl/`, `governor/`, `systemd/`, `images/`, `components/`, `webui/`, `compose/`, `k8s/`, `fidelity-vm/`, `observability/`, `scenarios/`, `docs/adr/`.
 
 ## Conventions
 
-- Python 3.11+, Typer for the CLI, FastAPI for services, type hints, `ruff` for lint/format, `pytest` for tests.
+- Python 3.11+, Typer for the CLI, Starlette for the web UI (ADR 0008), type hints, `ruff` for lint/format, `pytest` for tests.
 - Generated files (compose, `slurm.conf`, Prometheus targets) are derived from `sim.yaml`; never hand-edit them.
 - Every component declares a memory budget and priority class (P0-P6).
 
@@ -45,7 +45,7 @@ See README section 9. Top level: `sim.yaml`, `profiles/`, `simctl/`, `governor/`
 - `./scripts/check-machine.sh` (stdlib only, before any build; `simctl check` once the venv exists; `simctl/machine.py`) confirms the machine meets the requirements. `python -m simctl.cli doctor | preflight --profile X | status | diag`: environment check, memory pre-flight, governor state, and a masked diagnostics tarball. **Attach `diag` output when reporting or debugging an environment problem.**
 
 - `python -m simctl.cli compose --profile X`: generates `compose/generated/docker-compose.yml` (gitignored) from `sim.yaml` + `profiles/X.yaml` (`groups`, `compute_nodes`, `extends`). Add components in `CATALOG` in `simctl/compose.py`; never hand-edit the output.
-- `python -m simctl.cli measure run <label> [--duration S]`, then `measure report <idle> [<loaded>]`: Phase 0 read-only memory sampling (host, containers, PSS by process, VMs). Results go to `docs/measurements/` (gitignored); copy the suggested budgets into README section 5 and `profiles/*.yaml`.
+- `python -m simctl.cli measure run <label> [--duration S]`, then `measure report <idle> [<loaded>]`: Phase 0 read-only memory sampling (host, containers, PSS by process, VMs). Results go to `docs/measurements/` (gitignored); copy the suggested budgets into docs/architecture/04-memory-and-profiles.md (section 5), the README profile table and `profiles/*.yaml`.
 
 - Containers must stay unprivileged (no `cap_add`, no `apparmor=unconfined`, no Docker socket) and memory-limited; `simctl doctor` fails otherwise. Slurm is built from source in `images/node-base` (pinned version + SHA256, ADR 0002).
 
