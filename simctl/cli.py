@@ -93,6 +93,27 @@ def down() -> None:
     raise typer.Exit(0 if stack.down(say=typer.echo) else 1)
 
 
+ssh_key_app = typer.Typer(help="Put the login key where a client that only reads ~/.ssh can use it")
+app.add_typer(ssh_key_app, name="ssh-key")
+
+
+@ssh_key_app.command("install")
+def ssh_key_install() -> None:
+    """Copy the login key to ~/.ssh/opti-sim_ed25519 (mode 600) and print the path to give the client."""
+    try:
+        stack.install_client_key()
+    except (OSError, FileNotFoundError) as e:
+        typer.echo(str(e))
+        raise typer.Exit(1)
+    typer.echo(f"key: ~/.ssh/{stack.CLIENT_KEY}  (host 127.0.0.1, port 2222, user alice)\nremove it when done: simctl ssh-key remove")
+
+
+@ssh_key_app.command("remove")
+def ssh_key_remove() -> None:
+    """Delete ~/.ssh/opti-sim_ed25519 (only if it is the opti-sim key)."""
+    typer.echo("removed" if stack.remove_client_key() else "nothing to remove")
+
+
 @app.command()
 def scale(n: int = typer.Argument(..., min=0, help="compute node count"),
           profile: str = typer.Option(None, "--profile", help="default: the profile `up` last started")) -> None:

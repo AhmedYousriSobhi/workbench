@@ -124,3 +124,20 @@ def test_measure_run_saves_and_report_reads_it_back(monkeypatch, tmp_path):
     invoke("measure", "run", "loaded")
     both = invoke("measure", "report", "idle", "loaded")
     assert both.exit_code == 0 and "Loaded peak MB" in both.output
+
+
+def test_ssh_key_commands(monkeypatch, tmp_path):
+    dest = tmp_path / "opti-sim_ed25519"
+    src = tmp_path / "ssh"
+    src.mkdir()
+    (src / "id_ed25519").write_text("KEY")
+    real_install, real_remove = stack.install_client_key, stack.remove_client_key
+    monkeypatch.setattr(stack, "install_client_key", lambda: real_install(dest, src))
+    monkeypatch.setattr(stack, "remove_client_key", lambda: real_remove(dest, src))
+    r = invoke("ssh-key", "install")
+    assert r.exit_code == 0 and "~/.ssh/opti-sim_ed25519" in r.output and dest.exists()
+    assert "removed" in invoke("ssh-key", "remove").output
+    assert "nothing to remove" in invoke("ssh-key", "remove").output
+    (src / "id_ed25519").unlink()
+    r = invoke("ssh-key", "install")
+    assert r.exit_code == 1 and "simctl up" in r.output
