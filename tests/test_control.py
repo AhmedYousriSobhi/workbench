@@ -82,3 +82,16 @@ def test_mitigation_path_preopened():
         mp.write(f.name, b"x")
         mp.close()
         assert Path(f.name).read_bytes() == b"x"
+
+
+def test_socket_dir_follows_socket_gid():
+    g = make()
+    with tempfile.TemporaryDirectory() as d:
+        run = os.path.join(d, "run")
+        srv = control.serve(os.path.join(run, "gov.sock"), g.handle, g.group_names,
+                            gid=os.getgid())
+        try:
+            st = os.stat(run)
+            assert st.st_gid == os.getgid() and st.st_mode & 0o777 == 0o750
+        finally:
+            srv.shutdown()
