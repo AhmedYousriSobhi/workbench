@@ -3,7 +3,7 @@
 Status: accepted
 
 ## Context
-Real Redfish clients (Gate-H's BMC inspector) address one BMC as `host:port` over HTTPS, pin its certificate, log in
+Real Redfish clients address one BMC as `host:port` over HTTPS, pin its certificate, log in
 with `POST /redfish/v1/SessionService/Sessions`, and follow `@odata.id` links from `/redfish/v1`. bmc-farm served one
 process under `/<node>/redfish/v1` over plain HTTP, with no collections, sessions, firmware or accounts. The web page,
 scenarios and tests use that path form.

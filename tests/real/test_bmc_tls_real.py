@@ -1,4 +1,4 @@
-"""bmc-farm's TLS surface in the live min stack: what a Redfish client (Gate-H) sees of a BMC.
+"""bmc-farm's TLS surface in the live min stack: what a Redfish client sees of a BMC.
 
 Real TLS with a self-signed certificate the client pins, a session login, the node picked by the Host header.
 """
