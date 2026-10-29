@@ -66,7 +66,7 @@ def test_discover_docker_parses_inspect():
 
     groups, cgs = discover_docker(fake)
     assert groups == [Group("cn1", 4)]
-    assert cgs["cn1"] == Path("/sys/fs/cgroup/hpcsim-p4.slice/docker-abc.scope")
+    assert cgs["cn1"] == Path("/sys/fs/cgroup/hpcsim.slice/hpcsim-p4.slice/docker-abc.scope")  # systemd nests dashed slices
 
 
 def test_undo_reverses_in_reverse_order():
@@ -120,3 +120,12 @@ def test_reclaim_eagain_is_partial_not_failure(tmp_path):
 
     ex = Executor([Group("cn1", 4)], {"cn1": d}, Eagain())
     ex(Action("reclaim", "cn1", 3))  # must not raise
+
+
+def test_slice_path_nests_dashed_names_like_systemd():
+    from governor.executors import slice_path
+    assert slice_path("hpcsim-p4.slice") == Path("hpcsim.slice/hpcsim-p4.slice")
+    assert slice_path("a-b-c.slice") == Path("a.slice/a-b.slice/a-b-c.slice")
+    assert slice_path("system.slice") == Path("system.slice")
+    assert slice_path("-.slice") == Path("-.slice")
+    assert slice_path("custom") == Path("custom")  # not a slice name: used as given
