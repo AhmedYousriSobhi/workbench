@@ -6,6 +6,7 @@ dependencies = ["typer", "pyyaml", "fastapi", "uvicorn"]
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff"]
+browser = ["playwright"]  # UI screenshots/checks: then `playwright install chromium`
 
 [project.scripts]
 simctl = "simctl.cli:app"

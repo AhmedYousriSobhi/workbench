@@ -64,4 +64,6 @@ See README section 9. Top level: `sim.yaml`, `profiles/`, `simctl/`, `governor/`
 
 - `python -m webui [port]`: Web UI on 127.0.0.1:8088 (ADR 0007), token in `compose/generated/secrets/ui_token`. Backend `webui/app.py` talks to the governor socket only and plays scenarios with `host=False` (no Docker). Keep it under 50 MB RSS (SPEC W-1; it sits near 48 MB now).
 
+- **UI debugging:** `pip install -e '.[browser]' && .venv/bin/python -m playwright install chromium`, then `.venv/bin/python scripts/ui_shots.py [OUTDIR]` screenshots both tabs (desktop/phone, light/dark) and checks console errors, overflow and tab keyboard use; read the PNGs. `tests/real/test_webui_browser.py` runs the same checks. UI rules: status never by colour alone, text contrast >= 4.5:1 in both themes, tables stack as cards under 640 px, tap targets >= 40 px, ARIA tabs.
+
 Not yet implemented; as each lands, document it here: `make demo`, `pytest`, `ruff check .`.

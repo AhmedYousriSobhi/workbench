@@ -113,7 +113,7 @@ phases:
       - {name: Profile pre-flight (CLI), status: done, pr: 26, where: simctl/checks.py,
          how: "`simctl preflight` refuses a profile when free memory minus its budget is under the safety floor and suggests a smaller one."}
       - {name: Web UI base, status: partial, pr: 76, where: webui/,
-         how: "`python -m webui` on 127.0.0.1:8088 with a login token: Governor dashboard (level banner, MemAvailable/PSI sparklines, audit log over SSE) and Scenario Orchestrator (list, Play with speed, Stop, per-step timeline). Reads the governor socket only; Slurm steps are skipped in the UI. ~48 MB RSS. Page not yet seen in a browser."}
+         how: "`python -m webui` on 127.0.0.1:8088 with a login token: Governor dashboard (level banner, MemAvailable/PSI sparklines, audit log over SSE) and Scenario Orchestrator (list, Play with speed, Stop, per-step timeline). Reads the governor socket only; Slurm steps are skipped in the UI. ~48 MB RSS. Reviewed in headless Chromium (desktop/phone, light/dark; no console errors or overflow; ARIA tabs, keyboard, status not by colour alone)."}
       - {name: Web UI canvas and budget manager, status: todo, how: "Cluster Canvas with node fault actions (W-4), profile/budget form (W-7), animated workload dots (issue 74)."}
 
   - id: p8

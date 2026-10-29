@@ -5,108 +5,217 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>opti-sim</title>
 <style>
-  :root { --bg:#0f1419; --panel:#1a2129; --line:#2b3540; --fg:#e6edf3; --dim:#8b98a5; --ok:#3fb950; --warn:#d29922; --hot:#f0883e; --bad:#f85149; --accent:#58a6ff; }
-  @media (prefers-color-scheme: light) { :root { --bg:#f6f8fa; --panel:#fff; --line:#d0d7de; --fg:#1f2328; --dim:#59636e; --accent:#0969da; } }
+  :root { color-scheme: light dark;
+    --bg:#f6f8fa; --panel:#fff; --line:#d0d7de; --fg:#1f2328; --dim:#57606a; --accent:#0969da; --on-accent:#fff;
+    --ok:#1a7f37; --warn:#9a6700; --bad:#cf222e; --pending:#57606a;
+    --L0:#1a7f37; --L1:#8a6d0b; --L2:#9a5b00; --L3:#bc4c00; --L4:#cf222e; --L5:#a40e26; --none:#57606a; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --fg:#e6edf3; --dim:#9da7b3; --accent:#58a6ff; --on-accent:#0d1117;
+    --ok:#3fb950; --warn:#e3b341; --bad:#ff7b72; --pending:#9da7b3; --L0:#238636; --L1:#9e6a03; --L2:#b35900; --L3:#c2561b; --L4:#da3633; --L5:#b62324; --none:#484f58; } }
   * { box-sizing: border-box; }
-  body { margin:0; font:14px/1.45 system-ui,sans-serif; background:var(--bg); color:var(--fg); }
-  header { display:flex; gap:16px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
-  header h1 { font-size:16px; margin:0 12px 0 0; }
-  nav button { background:none; border:0; color:var(--dim); font:inherit; padding:6px 10px; cursor:pointer; border-bottom:2px solid transparent; }
-  nav button.on { color:var(--fg); border-color:var(--accent); }
+  body { margin:0; font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--fg); }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  header { display:flex; align-items:center; gap:8px 20px; padding:8px 16px; border-bottom:1px solid var(--line); background:var(--panel); flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0; }
+  [role=tablist] { display:flex; gap:4px; flex:1; }
+  [role=tab] { background:none; border:0; border-bottom:3px solid transparent; color:var(--dim); font:inherit; font-weight:500; padding:10px 14px; min-height:44px; cursor:pointer; }
+  [role=tab][aria-selected=true] { color:var(--fg); border-color:var(--accent); }
+  #conn { display:flex; align-items:center; gap:6px; color:var(--dim); font-size:13px; }
+  #conn i { width:9px; height:9px; border-radius:50%; background:var(--bad); display:inline-block; }
+  #conn.live i { background:var(--ok); }
   main { padding:16px; max-width:1100px; margin:0 auto; }
-  .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; margin-bottom:14px; }
-  .banner { font-size:22px; font-weight:600; padding:14px; border-radius:8px; color:#fff; }
-  .L0 { background:#2a7d3f; } .L1 { background:#8a6d0b; } .L2 { background:#a67a0a; } .L3 { background:#c2561b; } .L4,.L5 { background:#b62324; } .none { background:#555; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; }
-  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--dim); margin:0 0 8px; }
-  .big { font-size:26px; font-weight:600; } .dim { color:var(--dim); }
-  svg.spark { width:100%; height:60px; } svg.spark polyline { fill:none; stroke:var(--accent); stroke-width:2; }
-  pre { margin:0; font:12px/1.4 ui-monospace,monospace; white-space:pre-wrap; max-height:260px; overflow:auto; }
-  table { width:100%; border-collapse:collapse; } td,th { text-align:left; padding:5px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
-  button.act { background:var(--accent); color:#fff; border:0; border-radius:6px; padding:5px 12px; cursor:pointer; font:inherit; }
-  button.stop { background:var(--bad); } select { font:inherit; }
-  .st-ok { color:var(--ok); } .st-failed { color:var(--bad); } .st-skipped { color:var(--warn); } .st-pending { color:var(--dim); }
-  [hidden] { display:none; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin:0 0 10px; font-weight:600; }
+  .banner { padding:16px 18px; border-radius:10px; color:#fff; }
+  .banner b { font-size:22px; display:block; } .banner span { opacity:.95; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:16px; margin:16px 0; }
+  .grid .panel { margin:0; }
+  .big { font-size:30px; font-weight:650; font-variant-numeric:tabular-nums; line-height:1.2; }
+  .dim { color:var(--dim); } .small { font-size:13px; }
+  svg.spark { width:100%; height:72px; display:block; margin-top:8px; }
+  svg.spark polyline { fill:none; stroke:var(--accent); stroke-width:2; vector-effect:non-scaling-stroke; }
+  .axis { display:flex; justify-content:space-between; color:var(--dim); font-size:12px; font-variant-numeric:tabular-nums; }
+  .row { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:8px; }
+  label.chk { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--dim); cursor:pointer; }
+  pre { margin:0; font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap; word-break:break-word; max-height:300px; overflow:auto; }
+  .tablewrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; font-size:12px; color:var(--dim); font-weight:600; }
+  td,th { padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  .btn { white-space:nowrap; background:var(--accent); color:var(--on-accent); border:0; border-radius:6px; padding:0 16px; min-height:40px; cursor:pointer; font:inherit; font-weight:600; }
+  .btn:disabled { opacity:.45; cursor:not-allowed; } .btn.stop { background:var(--bad); color:#fff; }
+  select { font:inherit; min-height:40px; border-radius:6px; border:1px solid var(--line); background:var(--panel); color:var(--fg); padding:0 8px; }
+  .st { font-weight:600; white-space:nowrap; } .st-ok { color:var(--ok); } .st-failed { color:var(--bad); } .st-skipped { color:var(--warn); } .st-pending { color:var(--pending); }
+  .result { display:inline-block; padding:3px 12px; border-radius:999px; font-weight:650; color:#fff; }
+  .result.passed { background:var(--ok); } .result.failed { background:var(--bad); } .result.stopped, .result.running { background:var(--none); }
+  .notice { border-left:4px solid var(--warn); background:var(--bg); padding:10px 12px; border-radius:4px; margin:10px 0; }
+  .progress { height:6px; background:var(--line); border-radius:3px; overflow:hidden; margin:8px 0 12px; } .progress div { height:100%; background:var(--accent); transition:width .3s; }
+  code { font:12.5px ui-monospace,monospace; background:var(--bg); padding:1px 5px; border-radius:4px; }
+  [hidden] { display:none !important; }
+  @media (max-width:640px) {  /* tables become stacked cards so every control stays on screen */
+    #list tr:first-child, #timeline tr:first-child { display:none; }
+    #list tr { display:grid; grid-template-columns:1fr auto; gap:8px 12px; padding:14px 0; border-bottom:1px solid var(--line); align-items:center; }
+    #list td { border:0; padding:0; } #list td:nth-child(3) { grid-column:1 / -1; order:3; }
+    #list td:nth-child(2) { text-align:right; color:var(--dim); } 
+    #list td:nth-child(4) { order:4; } #list td:nth-child(5) { order:5; text-align:right; } #list select { width:100%; }
+    #timeline tr { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; padding:10px 0; border-bottom:1px solid var(--line); }
+    #timeline td { border:0; padding:0; } #timeline td:nth-child(3), #timeline td:nth-child(4) { grid-column:1 / -1; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
 </head>
 <body>
 <header>
   <h1>opti-sim</h1>
-  <nav><button id="tab-dash" class="on">Governor</button><button id="tab-scen">Scenarios</button></nav>
-  <span id="conn" class="dim"></span>
+  <div role="tablist" aria-label="Sections">
+    <button role="tab" id="tab-dash" aria-controls="dash" aria-selected="true">Governor</button>
+    <button role="tab" id="tab-scen" aria-controls="scen" aria-selected="false" tabindex="-1">Scenarios</button>
+  </div>
+  <div id="conn" role="status"><i></i><span>connecting…</span></div>
 </header>
 <main>
-<section id="dash">
-  <div id="banner" class="banner none">connecting…</div>
-  <div class="grid" style="margin-top:14px">
-    <div class="panel"><h2>Memory available</h2><div class="big" id="mem">–</div><svg class="spark" id="sp-mem" viewBox="0 0 120 40" preserveAspectRatio="none"><polyline points=""/></svg></div>
-    <div class="panel"><h2>Memory pressure (PSI some, 10 s avg)</h2><div class="big" id="psi">–</div><svg class="spark" id="sp-psi" viewBox="0 0 120 40" preserveAspectRatio="none"><polyline points=""/></svg></div>
+<section id="dash" role="tabpanel" aria-labelledby="tab-dash">
+  <div id="banner" class="banner" role="status" style="background:var(--none)"><b>Connecting…</b><span>Waiting for the governor.</span></div>
+  <div class="grid">
+    <div class="panel"><h2>Memory available</h2><div class="big" id="mem">–</div>
+      <svg class="spark" id="sp-mem" viewBox="0 0 120 40" preserveAspectRatio="none" role="img" aria-label="Free memory over the last two minutes"><polyline points=""/></svg>
+      <div class="axis"><span id="mem-lo"></span><span>last 2 min</span><span id="mem-hi"></span></div></div>
+    <div class="panel"><h2>Memory pressure (PSI, 10 s average)</h2><div class="big" id="psi">–</div>
+      <svg class="spark" id="sp-psi" viewBox="0 0 120 40" preserveAspectRatio="none" role="img" aria-label="Memory pressure over the last two minutes"><polyline points=""/></svg>
+      <div class="axis"><span>0 %</span><span>last 2 min</span><span id="psi-hi"></span></div></div>
   </div>
-  <div class="panel"><h2>Governor log</h2><pre id="audit">–</pre></div>
+  <div class="panel">
+    <div class="row"><h2 style="margin:0">Governor log <span id="logcount" class="dim"></span></h2>
+      <label class="chk"><input type="checkbox" id="onlyactions" checked> Hide container inventory lines</label></div>
+    <pre id="audit" tabindex="0" aria-label="Governor log, newest first">–</pre>
+  </div>
 </section>
-<section id="scen" hidden>
+<section id="scen" role="tabpanel" aria-labelledby="tab-scen" hidden>
   <div class="panel"><h2>Scenarios</h2>
-    <p class="dim">Plays faults against the running stack. Slurm steps are skipped here (the UI has no Docker access); use <code>simctl scenario run</code> for those.</p>
-    <table id="list"></table></div>
-  <div class="panel" id="runpanel" hidden><h2 id="runtitle">Run</h2><div id="runmeta" class="dim"></div><table id="timeline"></table><div id="expects"></div></div>
+    <p class="dim small" style="margin-top:0">Each scenario is a timed list of faults played against the running stack (start it with <code>./scripts/simctl up --profile min</code>). Slurm steps are skipped on this page because it has no Docker access; <code>./scripts/simctl scenario run NAME</code> runs those.</p>
+    <div class="tablewrap"><table id="list"></table></div></div>
+  <div class="panel" id="runpanel" hidden aria-live="polite"><h2 id="runtitle">Run</h2>
+    <div class="row"><div id="runresult"></div><div id="runctl"></div></div>
+    <div class="progress" aria-hidden="true"><div id="bar" style="width:0"></div></div>
+    <div id="runnote"></div>
+    <div class="tablewrap"><table id="timeline"></table></div><div id="expects"></div></div>
 </section>
 </main>
 <script>
 const $ = id => document.getElementById(id);
 const H = { 'X-Requested-With': 'opti-sim' };
+const LEVELS = ['Normal', 'Watching', 'Throttling', 'Freezing', 'Stopping', 'Emergency'];
+const MEANING = ['Plenty of free memory. Nothing is being limited.',
+  'Free memory is getting low. The governor is watching closely.',
+  'Low-priority containers are being throttled.',
+  'Memory is tight. Low-priority containers are frozen and reclaimed; no new work is admitted.',
+  'Very low. Containers are being stopped to protect the host.', 'Critical. Only the essential services are kept alive.'];
+const ICON = { ok: '✓', failed: '✗', skipped: '↷', pending: '○' };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const mem = [], psi = [];
-function spark(id, arr, max) {
-  const m = max || Math.max(...arr, 1e-9);
-  $(id).firstElementChild.setAttribute('points', arr.map((v, i) => `${(i / Math.max(arr.length - 1, 1)) * 120},${38 - (v / m) * 36}`).join(' '));
+let lastLog = [];
+
+function spark(id, arr, lo, hi) {
+  const span = Math.max(hi - lo, 1e-9);
+  $(id).firstElementChild.setAttribute('points', arr.map((v, i) => `${(i / Math.max(arr.length - 1, 1)) * 120},${38 - ((v - lo) / span) * 36}`).join(' '));
+}
+function renderLog() {
+  const lines = lastLog.filter(l => !$('onlyactions').checked || !l.startsWith('inventory:')).reverse();
+  $('logcount').textContent = `(${lines.length})`;
+  $('audit').textContent = lines.length ? lines.join('\n') : 'Nothing to show yet: the governor has taken no actions.';
 }
 function render(st) {
-  if (!st.ok) { $('banner').className = 'banner none'; $('banner').textContent = st.error || 'governor not reachable'; return; }
-  $('banner').className = 'banner L' + st.level;
-  $('banner').textContent = `Level L${st.level}${st.dry_run ? ' (dry-run)' : ''}` + (st.violations.length ? ` · ${st.violations.length} security finding(s)` : '');
+  const live = $('conn'); live.className = st.ok ? 'live' : ''; live.lastElementChild.textContent = st.ok ? 'live' : 'governor offline';
+  const banner = $('banner');
+  if (!st.ok) {
+    banner.style.background = 'var(--none)';
+    banner.innerHTML = '<b>Governor not reachable</b><span>Install or restart it: <code style="color:#000">sudo ./scripts/install-governor.sh</code></span>';
+    return;
+  }
+  const l = Math.min(st.level, 5);
+  banner.style.background = `var(--L${l})`;
+  banner.innerHTML = `<b>L${l} · ${LEVELS[l]}${st.dry_run ? ' (dry-run: no actions taken)' : ''}</b><span>${MEANING[l]}${st.violations.length ? ` ${st.violations.length} security finding(s).` : ''}</span>`;
   const gb = (st.mem_available || 0) / 2 ** 30;
   $('mem').textContent = gb.toFixed(2) + ' GB'; $('psi').textContent = (st.psi_some ?? 0).toFixed(1) + ' %';
   mem.push(gb); psi.push(st.psi_some ?? 0); if (mem.length > 120) { mem.shift(); psi.shift(); }
-  spark('sp-mem', mem); spark('sp-psi', psi, Math.max(10, ...psi));
-  $('audit').textContent = st.audit.length ? st.audit.slice().reverse().join('\n') : 'no actions yet';
+  const lo = Math.min(...mem), hi = Math.max(...mem), pad = Math.max(0.25, (1 - (hi - lo)) / 2);
+  spark('sp-mem', mem, lo - pad, hi + pad);
+  $('mem-lo').textContent = (lo - pad).toFixed(1) + ' GB'; $('mem-hi').textContent = (hi + pad).toFixed(1) + ' GB';
+  const phi = Math.max(10, ...psi); spark('sp-psi', psi, 0, phi); $('psi-hi').textContent = phi.toFixed(0) + ' %';
+  lastLog = st.audit; renderLog();
 }
+$('onlyactions').onchange = renderLog;
 const es = new EventSource('/api/events');
-es.onmessage = e => { $('conn').textContent = 'live'; render(JSON.parse(e.data)); };
-es.onerror = () => { $('conn').textContent = 'reconnecting…'; };
+es.onmessage = e => render(JSON.parse(e.data));
+es.onerror = () => { $('conn').className = ''; $('conn').lastElementChild.textContent = 'reconnecting…'; };
 
-function tab(name) {
-  $('dash').hidden = name !== 'dash'; $('scen').hidden = name !== 'scen';
-  $('tab-dash').className = name === 'dash' ? 'on' : ''; $('tab-scen').className = name === 'scen' ? 'on' : '';
-  if (name === 'scen') loadScenarios();
+const tabs = ['dash', 'scen'];
+function tab(name, focus) {
+  tabs.forEach(t => { const on = t === name; $(t).hidden = !on; const b = $('tab-' + t); b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; if (on && focus) b.focus(); });
+  if (name === 'scen') { loadScenarios(); poll(); }
 }
-$('tab-dash').onclick = () => tab('dash'); $('tab-scen').onclick = () => tab('scen');
+tabs.forEach(t => { $('tab-' + t).onclick = () => tab(t); });
+document.querySelector('[role=tablist]').onkeydown = e => {
+  const i = tabs.findIndex(t => $('tab-' + t).getAttribute('aria-selected') === 'true');
+  if (e.key === 'ArrowRight') tab(tabs[(i + 1) % tabs.length], true);
+  if (e.key === 'ArrowLeft') tab(tabs[(i + tabs.length - 1) % tabs.length], true);
+};
 
+function describe(s) {
+  const d = s.do, n = (d.nodes || []).join(', ');
+  if (d.drain) return `Drain ${d.drain.join(', ')} in Slurm (${d.reason || 'scenario'})`;
+  if (d.resume) return `Resume ${d.resume.join(', ')} in Slurm`;
+  if (d.failure) return d.failure.mode ? `Make Jira answer ${d.failure.mode} for the next ${d.failure.count || 1} calls` : 'Jira back to normal';
+  if (d.clear) return `Clear injected faults on ${n}`;
+  if (d.power) return `Power ${d.power} ${n}`;
+  if (d.state) return `Set ${n} to ${d.state}`;
+  if (d.xid) return `GPU error XID ${d.xid} on ${n}`;
+  if (d.temp) return `Temperature of ${n} to ${d.temp} °C`;
+  if (d.fan_fail) return `${d.fan_fail} fan(s) fail on ${n}`;
+  return JSON.stringify(d);
+}
+function plain(x) {
+  if (!x.detail) return '';
+  if (/unreachable/.test(x.detail)) return `can't reach ${x.target}: is the stack running?`;
+  if (/Slurm steps need/.test(x.detail)) return 'needs the host CLI';
+  return x.detail;
+}
 async function loadScenarios() {
   const list = await (await fetch('/api/scenarios')).json();
-  $('list').innerHTML = '<tr><th>Name</th><th>Steps</th><th>What it does</th><th></th></tr>' + list.map(s =>
-    `<tr><td>${s.name}</td><td>${s.steps}</td><td>${s.description}</td><td><select id="sp-${s.name}"><option value="1">1×</option><option value="5">5×</option><option value="20">20×</option></select> <button class="act" data-name="${s.name}">Play</button></td></tr>`).join('');
+  $('list').innerHTML = '<tr><th>Name</th><th>Length</th><th>What it does</th><th>Speed</th><th></th></tr>' + list.map(s =>
+    `<tr><td><b>${esc(s.name)}</b></td><td>${s.steps}${s.steps === 1 ? ' step' : ' steps'}</td><td>${esc(s.description)}</td>
+     <td><select id="sp-${s.name}" aria-label="Speed for ${esc(s.name)}"><option value="1">1× real time</option><option value="5">5×</option><option value="20">20×</option></select></td>
+     <td><button class="btn" data-name="${esc(s.name)}" aria-label="Play ${esc(s.name)}">▶ Play</button></td></tr>`).join('');
   document.querySelectorAll('#list button').forEach(b => b.onclick = () => play(b.dataset.name));
 }
 async function play(name) {
-  const speed = $('sp-' + name).value;
-  const r = await fetch(`/api/scenarios/${name}/run?speed=${speed}`, { method: 'POST', headers: H });
-  if (!r.ok) alert((await r.json()).detail);
+  const r = await fetch(`/api/scenarios/${name}/run?speed=${$('sp-' + name).value}`, { method: 'POST', headers: H });
+  if (!r.ok) { $('runpanel').hidden = false; $('runnote').innerHTML = `<div class="notice">${esc((await r.json()).detail)}</div>`; return; }
   poll();
 }
 async function stopRun() { await fetch('/api/scenarios/stop', { method: 'POST', headers: H }); }
-const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+let pollTimer;
 async function poll() {
+  clearTimeout(pollTimer);
   const s = await (await fetch('/api/scenarios/run')).json();
+  document.querySelectorAll('#list .btn').forEach(b => { b.disabled = !!s.running; });
   if (!s.name) return;
   $('runpanel').hidden = false;
-  $('runtitle').textContent = 'Run: ' + s.name;
-  $('runmeta').innerHTML = (s.running ? `running at ${s.speed}× <button class="act stop" id="stopbtn">Stop</button>` : (s.stopped ? 'stopped' : (s.ok ? 'finished: passed' : 'finished: FAILED')));
+  $('runtitle').textContent = 'Run: ' + s.name + (s.running ? ` (${s.speed}×)` : '');
+  const done = s.steps.filter(x => x.status !== 'pending').length;
+  const verdict = s.running ? 'running' : s.stopped ? 'stopped' : s.ok ? 'passed' : 'failed';
+  $('runresult').innerHTML = `<span class="result ${verdict}">${{ running: `Running · step ${done}/${s.steps.length}`, stopped: 'Stopped', passed: 'Passed', failed: 'Failed' }[verdict]}</span>`;
+  $('runctl').innerHTML = s.running ? '<button class="btn stop" id="stopbtn">■ Stop</button>' : '';
   if ($('stopbtn')) $('stopbtn').onclick = stopRun;
-  $('timeline').innerHTML = '<tr><th>At</th><th>Target</th><th>Do</th><th>Status</th></tr>' + s.steps.map(x =>
-    `<tr><td>${x.at.toFixed(0)}s</td><td>${esc(x.target)}</td><td>${esc(JSON.stringify(x.do))}</td><td class="st-${x.status}">${x.status}${x.detail ? ' · ' + esc(x.detail) : ''}</td></tr>`).join('');
-  $('expects').innerHTML = s.expects.map(x => `<p class="st-${x.status}">expect ${x.status}: ${esc(x.label)} ${esc(x.detail)}</p>`).join('');
-  if (s.running) setTimeout(poll, 1000);
+  $('bar').style.width = (s.steps.length ? (done / s.steps.length) * 100 : 0) + '%';
+  const failed = s.steps.filter(x => x.status === 'failed').length;
+  $('runnote').innerHTML = !s.running && failed ? `<div class="notice">${failed} of ${s.steps.length} steps failed. If the messages say a service is unreachable, the stack is probably not running: <code>./scripts/simctl up --profile min</code></div>` : '';
+  $('timeline').innerHTML = '<tr><th>At</th><th>Target</th><th>What</th><th>Result</th></tr>' + s.steps.map(x =>
+    `<tr><td>${x.at.toFixed(0)} s</td><td>${esc(x.target)}</td><td>${esc(describe(x))}</td>
+     <td class="st st-${x.status}"><span aria-hidden="true">${ICON[x.status]}</span> ${x.status}${x.detail ? `<div class="small dim" style="font-weight:400">${esc(plain(x))}</div>` : ''}</td></tr>`).join('');
+  $('expects').innerHTML = s.expects.length ? '<h2 style="margin-top:14px">Expectations</h2>' + s.expects.map(x =>
+    `<p class="st st-${x.status}" style="font-weight:500"><span aria-hidden="true">${ICON[x.status]}</span> ${x.status}: ${esc(x.label)} <span class="dim">${esc(x.detail)}</span></p>`).join('') : '';
+  if (s.running) pollTimer = setTimeout(poll, 1000);
 }
-poll();
 </script>
 </body>
 </html>

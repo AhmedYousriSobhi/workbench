@@ -188,7 +188,7 @@ _One click from cold start to a busy cluster._
 | Part | Status | How it is built | Where | PR |
 |---|---|---|---|---|
 | Profile pre-flight (CLI) | ✅ Done | `simctl preflight` refuses a profile when free memory minus its budget is under the safety floor and suggests a smaller one. | `simctl/checks.py` | [#26](https://github.com/AhmedYousriSobhi/opti-sim/pull/26) |
-| Web UI base | 🟡 Partial | `python -m webui` on 127.0.0.1:8088 with a login token: Governor dashboard (level banner, MemAvailable/PSI sparklines, audit log over SSE) and Scenario Orchestrator (list, Play with speed, Stop, per-step timeline). Reads the governor socket only; Slurm steps are skipped in the UI. ~48 MB RSS. Page not yet seen in a browser. | `webui/` | [#76](https://github.com/AhmedYousriSobhi/opti-sim/pull/76) |
+| Web UI base | 🟡 Partial | `python -m webui` on 127.0.0.1:8088 with a login token: Governor dashboard (level banner, MemAvailable/PSI sparklines, audit log over SSE) and Scenario Orchestrator (list, Play with speed, Stop, per-step timeline). Reads the governor socket only; Slurm steps are skipped in the UI. ~48 MB RSS. Reviewed in headless Chromium (desktop/phone, light/dark; no console errors or overflow; ARIA tabs, keyboard, status not by colour alone). | `webui/` | [#76](https://github.com/AhmedYousriSobhi/opti-sim/pull/76) |
 | Web UI canvas and budget manager | ⬜ To do | Cluster Canvas with node fault actions (W-4), profile/budget form (W-7), animated workload dots (issue 74). | - | - |
 
 1/3 done

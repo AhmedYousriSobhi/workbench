@@ -103,4 +103,6 @@ is the design, see README section 6. `up` and `scale` are refused from level L2 
 
 ## 6. For developers
 
+To look at the web page without a screen: `pip install -e '.[browser]'`, `.venv/bin/python -m playwright install chromium`, then `.venv/bin/python scripts/ui_shots.py` writes screenshots to `/tmp/opti-ui-shots` and reports problems.
+
 `./scripts/verify.sh` (add `--full` for the live stack) before asking for a merge; see CLAUDE.md.
