@@ -103,3 +103,24 @@ def test_session_limit_refuses_the_second_channel_on_one_connection(login, tmp_p
     # ssh's own mux client then retries on a fresh connection (exit 0); the refusal is what a library client would see
     assert "refused by peer" in second.stderr, second.stderr
     step(reset=True)
+
+
+def test_refused_key_gets_permission_denied_not_a_dead_port_and_reset_restores_it(login):
+    step(reject_auth=True)
+    r = ssh("true")
+    assert r.returncode != 0 and "permission denied" in r.stderr.lower(), r.stderr
+    assert fingerprint() != ""  # the port still answers and the host key is unchanged
+    step(reset=True)
+    assert wait_for(lambda: ssh("true").returncode == 0, timeout=15)
+
+
+def test_one_nodes_sshd_down_fails_that_hop_only_and_up_restores_it(login):
+    hop = lambda node: ssh("ssh", "-o", "ConnectTimeout=4", "-o", "BatchMode=yes", node, "hostname")
+    assert wait_for(lambda: hop("cn001").returncode == 0, timeout=30), hop("cn001").stderr
+    step(node_sshd="down", nodes=["cn001"])
+    r = hop("cn001")
+    assert r.returncode != 0 and "refused" in r.stderr.lower(), r.stderr
+    assert hop("cn002").returncode == 0  # only the one node
+    assert ssh("true").returncode == 0  # and the login node itself
+    step(node_sshd="up", nodes=["cn001"])
+    assert wait_for(lambda: hop("cn001").returncode == 0, timeout=15)
