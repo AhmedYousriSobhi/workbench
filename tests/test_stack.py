@@ -337,3 +337,43 @@ def test_token_gives_up_on_other_http_errors_and_unknown_accounts(tmp_path):
 
     with pytest.raises(urllib.error.HTTPError):
         stack.provision_token(path=tmp_path / "t", http=odd, valid=lambda t, u: False)
+
+
+def test_bmc_credentials_are_made_once(tmp_path):
+    f = stack.ensure_bmc_credentials(tmp_path / "s" / "bmc_credentials")
+    user, _, pw = f.read_text().strip().partition(":")
+    assert user == "admin" and len(pw) >= 20 and (f.stat().st_mode & 0o777) == 0o644
+    assert (f.parent.stat().st_mode & 0o777) == 0o700
+    before = f.read_text()
+    stack.ensure_bmc_credentials(f)
+    assert f.read_text() == before
+
+
+def test_ssh_keys_are_made_once_and_authorize_the_client_key(tmp_path):
+    from subprocess import CompletedProcess
+
+    calls = []
+
+    def fake(cmd):
+        calls.append(cmd)
+        f = Path(cmd[-1])
+        f.write_text("private")
+        Path(str(f) + ".pub").write_text("ssh-ed25519 AAAA pub\n")
+        return CompletedProcess(cmd, 0, "", "")
+
+    d = stack.ensure_ssh_keys(tmp_path / "ssh", fake)
+    assert len(calls) == 2 and (d / "authorized_keys").read_text() == "ssh-ed25519 AAAA pub\n"
+    stack.ensure_ssh_keys(d, fake)
+    assert len(calls) == 2  # the host key is stable across runs
+
+
+def test_ssh_keygen_failure_is_reported(tmp_path):
+    from subprocess import CompletedProcess
+
+    with pytest.raises(OSError, match="ssh-keygen failed"):
+        stack.ensure_ssh_keys(tmp_path / "s", lambda c: CompletedProcess(c, 1, "", "boom"))
+
+
+def test_login_node_starts_after_the_nodes():
+    labels = [label for label, _ in stack.stage_services(["login", "cn001", "slurmctld"])]
+    assert labels.index("nodes") < labels.index("login node")
