@@ -5,6 +5,7 @@ from collections.abc import Callable
 
 from . import metrics
 from .annotate import Annotator
+from .executors import UserExecutor
 from .ladder import Ladder
 from .planner import Action, Group, plan, reversible_first, undo
 from .signals import Sampler, Signals
@@ -182,6 +183,7 @@ class Governor:
             if cmd == "status":
                 s = self.signals
                 return {"ok": True, "level": self.ladder.level, "dry_run": self.dry_run,
+                        "mode": "user" if isinstance(self.executor, UserExecutor) else "root",
                         "mem_available": s.mem_available if s else None,
                         "psi_some": s.psi_some_avg10 if s else None,
                         "psi_full": s.psi_full_avg10 if s else None,

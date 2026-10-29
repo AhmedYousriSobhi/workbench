@@ -46,17 +46,20 @@ python -m simctl.cli preflight --profile min    # would this profile fit in free
 
 ## 2. Start the governor (outside monitoring and control)
 
-The governor watches memory and security and may stop low-priority containers under pressure. Run it
-before the stack.
+The governor watches memory and security and may stop low-priority containers under pressure. `./scripts/opti start`
+starts it for you, **as your own user, no sudo**: it pauses and stops containers through Docker. (Rootless mode cannot
+throttle with `memory.high`, reclaim, or guarantee its own memory is never swapped; ADR 0010.) Look at it with:
 
 ```bash
-sudo ./scripts/install-governor.sh        # standing service, starts at boot
-python -m simctl.cli status               # level, memory, groups, security findings
+python -m simctl.cli status               # level, mode (user or root), memory, groups, security findings
 ```
 
-For a one-off foreground run instead:
-`sudo python -m governor --socket /run/hpcsim/gov.sock --workdir $PWD --grafana-url http://127.0.0.1:3000`.
-Remove the service with `sudo ./scripts/install-governor.sh --uninstall`.
+For full protection, an optional root service that starts at boot and uses cgroup files:
+
+```bash
+sudo ./scripts/install-governor.sh        # optional; opti start then uses it instead of its own
+sudo ./scripts/install-governor.sh --uninstall
+```
 
 ## 3. Start, scale and stop the cluster
 

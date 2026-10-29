@@ -42,7 +42,7 @@ def status(socket: str = checks.GOV_SOCKET) -> None:
         typer.echo(f"governor not reachable at {socket}: {e}")
         raise typer.Exit(1) from e
     gb = (st["mem_available"] or 0) / checks.GB
-    typer.echo(f"level L{st['level']}{' (dry-run)' if st['dry_run'] else ''}  "
+    typer.echo(f"level L{st['level']}{' (dry-run)' if st['dry_run'] else ''}  [{st.get('mode', 'root')} mode]  "
                f"avail {gb:.2f} GB  psi some {st['psi_some']}% full {st['psi_full']}%")
     typer.echo(f"groups: {', '.join(st['groups']) or '-'}")
     for v in st.get("violations", []):

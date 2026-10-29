@@ -131,3 +131,38 @@ class Executor:
     def _check(r: subprocess.CompletedProcess, a: Action) -> None:
         if r.returncode != 0:
             raise RuntimeError(f"{a} failed: {r.stderr.strip()}")
+
+
+class UserExecutor(Executor):
+    """Rootless governor (no sudo): the Docker API replaces the cgroup files only root can write.
+
+    freeze/thaw -> docker pause/unpause, stop -> docker stop. throttle (memory.high) and reclaim need root and are
+    skipped with one log line each: the ladder still runs, it just has fewer rungs. See ADR 0010.
+    """
+
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+        self._warned: set[str] = set()
+
+    def prealloc(self) -> None:  # nothing to pre-open: no cgroup files are used
+        pass
+
+    def _docker(self, a: Action, *cmd: str, tolerate: str = "") -> None:
+        r = self.run(["docker", *cmd], timeout=20)
+        if r.returncode != 0 and not (tolerate and tolerate in r.stderr):
+            raise RuntimeError(f"{a} failed: {r.stderr.strip()}")
+
+    def __call__(self, a: Action) -> None:
+        verb, target = a.verb.split("=")[0], a.target
+        if verb == "freeze":
+            self._docker(a, "pause", target, tolerate="already paused")
+        elif verb == "thaw":
+            self._docker(a, "unpause", target, tolerate="is not paused")
+        elif verb == "stop":
+            self._docker(a, "stop", "-t", "2", target)
+        elif verb in ("throttle", "unthrottle", "reclaim"):
+            if verb not in self._warned:
+                self._warned.add(verb)
+                log.info("rootless mode: %s needs root, skipped (install the system service for it)", verb)
+        else:
+            super().__call__(a)

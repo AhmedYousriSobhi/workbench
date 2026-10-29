@@ -14,7 +14,25 @@ from governor.watchdog import accepted_exceptions, container_violations
 
 GB = 1024**3
 SAFETY_FLOOR = int(1.0 * GB)  # MemAvailable must stay above this after the profile starts
-GOV_SOCKET = "/run/hpcsim/gov.sock"
+SYSTEM_SOCKET = "/run/hpcsim/gov.sock"
+
+
+def user_socket() -> str:
+    """Where the rootless governor listens: under the user's runtime dir, no root needed."""
+    return f"{os.environ.get('XDG_RUNTIME_DIR') or f'/tmp/hpcsim-{os.getuid()}'}/hpcsim/gov.sock"
+
+
+def default_socket(env: dict | None = None, exists=os.path.exists) -> str:
+    """$HPCSIM_GOV_SOCKET, else the system service's socket, else the rootless governor's if only that one exists."""
+    env = os.environ if env is None else env
+    if env.get("HPCSIM_GOV_SOCKET"):
+        return env["HPCSIM_GOV_SOCKET"]
+    if not exists(SYSTEM_SOCKET) and exists(user_socket()):
+        return user_socket()
+    return SYSTEM_SOCKET
+
+
+GOV_SOCKET = default_socket()  # processes started after the governor (the launcher does) pick the right one
 OK, WARN, FAIL = "ok", "warn", "fail"
 
 

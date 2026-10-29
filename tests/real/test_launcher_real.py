@@ -22,6 +22,21 @@ def opti(*args, env=None, timeout=600):
                           env={**os.environ, **(env or {})})
 
 
+def _freeze_and_thaw_a_real_container(checks, usock):
+    """The rootless governor really pauses and unpauses a running simulation container through Docker."""
+    import time
+    name = "hpcsim-bmc-farm-1"
+    deadline = time.time() + 20
+    while time.time() < deadline and name not in checks.governor_request({"cmd": "status"}, usock)["groups"]:
+        time.sleep(0.5)  # the inventory refresh picks up containers started after the governor
+    def paused():
+        out = subprocess.run(["docker", "inspect", "-f", "{{.State.Paused}}", name], capture_output=True, text=True,
+                             check=False)
+        return out.stdout.strip() == "true"
+    assert checks.governor_request({"cmd": "freeze", "target": name}, usock)["ok"] and paused()
+    assert checks.governor_request({"cmd": "thaw", "target": name}, usock)["ok"] and not paused()
+
+
 def test_usage_and_status_need_no_stack():
     r = opti()
     assert r.returncode == 2 and "start" in r.stdout and "stop" in r.stdout
@@ -29,13 +44,24 @@ def test_usage_and_status_need_no_stack():
     assert s.returncode == 0 and "governor" in s.stdout and "web page" in s.stdout
 
 
-def test_start_serves_the_page_and_stop_cleans_up():
+def test_start_serves_the_page_and_stop_cleans_up(tmp_path):
+    """Also the no-sudo guarantee: a sudo that fails the test if called is first on PATH, the governor is rootless."""
     port = str(free_port())
-    env = {"OPTI_UI_PORT": port}
+    shim = tmp_path / "bin"
+    shim.mkdir()
+    (shim / "sudo").write_text(f"#!/bin/sh\necho \"$@\" >> {tmp_path}/sudo-called\nexit 1\n")
+    (shim / "sudo").chmod(0o755)
+    usock = f"{os.environ.get('XDG_RUNTIME_DIR') or '/tmp/hpcsim-' + str(os.getuid())}/hpcsim/gov.sock"
+    env = {"OPTI_UI_PORT": port, "OPTI_GOVERNOR": "user", "PATH": f"{shim}:{os.environ['PATH']}"}
     try:
         r = opti("start", env=env)
         assert r.returncode == 0, r.stdout + r.stderr
         assert "READY" in r.stdout and "Web page: http://127.0.0.1:" in r.stdout
+        assert "running as you" in r.stdout and "not reachable" not in r.stdout, r.stdout
+        from simctl import checks
+        st = checks.governor_request({"cmd": "status"}, usock)  # the rootless governor answers on the user socket
+        assert st["ok"] and st["mode"] == "user"
+        _freeze_and_thaw_a_real_container(checks, usock)
         link = re.search(r"Web page: (\S+)", r.stdout).group(1)
         assert f":{port}/login?token=" in link
         opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor())
@@ -50,6 +76,8 @@ def test_start_serves_the_page_and_stop_cleans_up():
     finally:
         s = opti("stop", env=env)
     assert s.returncode == 0
+    assert not (tmp_path / "sudo-called").exists(), "start/stop called sudo"
+    assert not os.path.exists(usock), "the rootless governor was left running"
     try:
         urllib.request.urlopen(f"http://127.0.0.1:{port}/login", timeout=3)
         raise AssertionError("the web page is still answering after stop")

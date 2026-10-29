@@ -39,12 +39,12 @@ with a memory budget that `simctl up` enforces, and every fault is a named scena
 ## Quick start
 
 ```bash
-sudo ./scripts/install-governor.sh   # once: the memory governor (recommended; start works without it, unprotected)
-./scripts/opti start                 # checks the machine, builds and starts the cluster and the web page, prints the link
+./scripts/opti start                 # checks the machine, builds and starts everything, prints the link (no sudo)
 ./scripts/opti stop                  # stops the web page and the cluster (only the hpcsim project)
 ```
 
-`./scripts/opti status` shows what is running and `./scripts/opti open` prints the login link again. The first
+No `sudo` anywhere: the memory governor runs as you (it pauses and stops containers through Docker). The only
+prerequisite is Docker usable by your user, which `start` checks first. `./scripts/opti status` shows what is running and `./scripts/opti open` prints the login link again. The first
 `start` builds images (a few minutes) and creates the Python environment. Prefer the steps one by one? They are in
 the table below.
 
@@ -56,7 +56,7 @@ the table below.
 | Check the machine before building | `./scripts/check-machine.sh` | system `python3` only |
 | Install the CLI and test tools | `python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'` | python 3.11+ |
 | Check the setup in depth | `./scripts/simctl doctor` then `./scripts/simctl preflight --profile std` | venv, Docker |
-| Run the governor | `sudo ./scripts/install-governor.sh` (remove: `--uninstall`) | root once |
+| Run the governor | automatic with `opti start` (as you). Optional full protection at boot: `sudo ./scripts/install-governor.sh` | nothing |
 | Build and start a profile | `./scripts/simctl up --profile min\|std\|full` | Docker; first build takes minutes |
 | Change the node count | `./scripts/simctl scale 8` | stack running |
 | Look at it | web page `python -m webui`; Grafana http://127.0.0.1:3000; Prometheus :9090 | stack running |
