@@ -52,7 +52,7 @@ def test_up_starts_in_order_and_waits(tmp_path, monkeypatch):
         return cp()
 
     monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
-    monkeypatch.setattr(stack, "provision_token", lambda: tmp_path / "t")
+    monkeypatch.setattr(stack, "provision_token", lambda **kw: kw.get("path", tmp_path / "t"))
     assert stack.up(sim, "min", runner=runner, say=lambda m: None, available=12 * 1024**3, wait=1)
     assert started.index("prometheus") < started.index("slurmctld") < started.index("cn001")
 
@@ -140,7 +140,7 @@ def test_up_on_a_running_stack_is_not_refused_for_low_memory(tmp_path, monkeypat
         return cp(out=every) if "ps" in cmd else cp()
 
     monkeypatch.setattr(stack, "governor_admits", lambda n, say: pytest.fail("nothing to admit"))
-    monkeypatch.setattr(stack, "provision_token", lambda: tmp_path / "t")
+    monkeypatch.setattr(stack, "provision_token", lambda **kw: kw.get("path", tmp_path / "t"))
     assert stack.up(sim, "min", runner=runner, say=said.append, available=1 * 1024**3, wait=1)
     assert any("already running" in m for m in said)
 
@@ -205,7 +205,7 @@ def test_up_warns_but_still_succeeds_when_the_token_cannot_be_made(tmp_path, mon
             started.extend(cmd[cmd.index("--no-deps") + 1:])
         return cp(out="\n".join(started)) if "ps" in cmd else cp()
 
-    def no_token():
+    def no_token(**kw):
         raise OSError("grafana down")
 
     monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
@@ -271,6 +271,72 @@ def test_grafana_http_helpers_against_a_local_server():
     finally:
         srv.shutdown()
     assert stack.token_valid("good", url) is False  # server gone: unreachable counts as invalid
+
+
+def test_up_also_makes_a_read_only_grafana_token_for_clients(tmp_path, monkeypatch):
+    sim = yaml.safe_load((Path(__file__).resolve().parent.parent / "sim.yaml").read_text())
+    msgs, made = [], []
+
+    def runner(cmd):
+        return cp(out="") if "ps" in cmd else cp()
+
+    monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
+    monkeypatch.setattr(stack, "provision_token", lambda **kw: made.append(kw) or tmp_path / "t")
+    monkeypatch.setattr(stack, "wait_running", lambda *a, **k: [])
+    assert stack.up(sim, "min", runner=runner, say=msgs.append, available=12 * 1024**3, wait=1)
+    viewer = [k for k in made if k.get("role") == "Viewer"]
+    assert viewer and viewer[0]["path"] == stack.VIEWER_TOKEN_FILE and viewer[0]["account"] == "hpcsim-viewer"
+    assert any("viewer token" in m and "uid: prometheus" in m for m in msgs)
+
+
+def test_viewer_token_failure_only_warns(tmp_path, monkeypatch):
+    sim = yaml.safe_load((Path(__file__).resolve().parent.parent / "sim.yaml").read_text())
+    msgs = []
+
+    def tokens(**kw):
+        if kw.get("role") == "Viewer":
+            raise OSError("nope")
+        return tmp_path / "t"
+
+    monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
+    monkeypatch.setattr(stack, "provision_token", tokens)
+    monkeypatch.setattr(stack, "wait_running", lambda *a, **k: [])
+    assert stack.up(sim, "min", runner=lambda c: cp(out="") if "ps" in c else cp(), say=msgs.append,
+                    available=12 * 1024**3, wait=1)
+    assert any(m.startswith("WARN no grafana viewer token") for m in msgs)
+
+
+def test_token_reuses_an_existing_service_account_after_a_lost_token_file(tmp_path):
+    import urllib.error
+
+    def http(method, path, body, url, auth):
+        if method == "POST" and path.endswith("serviceaccounts"):
+            raise urllib.error.HTTPError(url, 400, "already exists", {}, None)
+        if method == "GET":
+            return {"serviceAccounts": [{"id": 3, "name": "other"}, {"id": 9, "name": "hpcsim-viewer"}]}
+        assert path == "/api/serviceaccounts/9/tokens"
+        return {"key": "k"}
+
+    stack.provision_token(path=tmp_path / "t", http=http, valid=lambda t, u: False, account="hpcsim-viewer", role="Viewer")
+    assert (tmp_path / "t").read_text() == "k"
+
+
+def test_token_gives_up_on_other_http_errors_and_unknown_accounts(tmp_path):
+    import urllib.error
+
+    def refused(method, path, body, url, auth):
+        raise urllib.error.HTTPError(url, 401, "no", {}, None)
+
+    with pytest.raises(urllib.error.HTTPError):
+        stack.provision_token(path=tmp_path / "t", http=refused, valid=lambda t, u: False)
+
+    def odd(method, path, body, url, auth):
+        if method == "POST":
+            raise urllib.error.HTTPError(url, 400, "bad", {}, None)
+        return {"serviceAccounts": []}
+
+    with pytest.raises(urllib.error.HTTPError):
+        stack.provision_token(path=tmp_path / "t", http=odd, valid=lambda t, u: False)
 
 
 def test_bmc_credentials_are_made_once(tmp_path):

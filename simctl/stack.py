@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import time
+import urllib.error
 from collections.abc import Callable
 from pathlib import Path
 
@@ -138,6 +139,12 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         say(f"grafana token: {provision_token()}")
     except OSError as e:
         say(f"WARN no grafana token ({e}); the governor will not publish annotations")
+    else:
+        try:  # a read-only token for monitoring clients: dashboards and /api/ds/query, no writes
+            say(f"grafana viewer token: {provision_token(path=VIEWER_TOKEN_FILE, account='hpcsim-viewer', role='Viewer')}"
+                " (datasource uid: prometheus)")
+        except OSError as e:
+            say(f"WARN no grafana viewer token ({e})")
     if "bmc-farm" in todo:
         say(f"bmc: https://127.0.0.1:8443/redfish/v1 (Host bmc-<node>), user admin, password in {BMC_CREDENTIALS}")
     if "login" in todo:
@@ -272,10 +279,23 @@ def token_valid(token: str, url: str = "http://127.0.0.1:3000") -> bool:
         return False
 
 
+def token_name(account: str) -> str:
+    """Grafana keeps token names unique across the whole organisation, so a re-made token needs a new name."""
+    import secrets
+
+    return f"{account.removeprefix('hpcsim-')}-{secrets.token_hex(3)}"
+
+
+VIEWER_TOKEN_FILE = Path("compose/generated/secrets/grafana_viewer_token")
+
+
 def provision_token(url: str = "http://127.0.0.1:3000", auth: str = "admin:admin",
                     path: Path = TOKEN_FILE, http=_grafana, valid=token_valid,
-                    retries: int = 30, sleep: Callable[[float], None] = time.sleep) -> Path:
-    """Ensure the governor's annotation token exists and works; the 0600 file is the only copy.
+                    retries: int = 30, sleep: Callable[[float], None] = time.sleep,
+                    account: str = "hpcsim-governor", role: str = "Editor") -> Path:
+    """Ensure a service-account token exists and works; the 0600 file is the only copy.
+
+    The governor's (Editor, annotations) and a read-only one for monitoring clients (Viewer, dashboards and queries).
 
     Grafana's state is disposable (no volume), so a token left over from a previous `up` is
     replaced. Grafana needs a moment after start, hence the retries.
@@ -284,13 +304,21 @@ def provision_token(url: str = "http://127.0.0.1:3000", auth: str = "admin:admin
         return path
     for attempt in range(retries):
         try:
-            sa = http("POST", "/api/serviceaccounts", {"name": "hpcsim-governor", "role": "Editor"}, url, auth)
+            sa = http("POST", "/api/serviceaccounts", {"name": account, "role": role}, url, auth)
+            break
+        except urllib.error.HTTPError as e:
+            if e.code != 400:  # 400 is "already exists": a lost token file, the account is reused
+                raise
+            found = http("GET", f"/api/serviceaccounts/search?query={account}", None, url, auth)
+            sa = next((a for a in found.get("serviceAccounts", []) if a["name"] == account), None)
+            if sa is None:
+                raise
             break
         except OSError:
             if attempt == retries - 1:
                 raise
             sleep(2)
-    tok = http("POST", f"/api/serviceaccounts/{sa['id']}/tokens", {"name": "governor"}, url, auth)
+    tok = http("POST", f"/api/serviceaccounts/{sa['id']}/tokens", {"name": token_name(account)}, url, auth)
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     path.unlink(missing_ok=True)
     path.touch(mode=0o600)

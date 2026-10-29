@@ -72,7 +72,7 @@ phases:
     goal: Fake BMC, BCM and Jira so the app's integrations can be exercised
     items:
       - {name: gpu-exporter-farm, status: done, where: components/gpu-exporter-farm/exporter.py,
-         how: "One process serving fake DCGM metrics for every simulated GPU, with fault injection over /sim/inject."}
+         how: "One process serving fake DCGM metrics for every simulated GPU (util, FB used and free, temp, power, XID) with the real exporter labels (Hostname, UUID, modelName), fault injection over /sim/inject. A read-only Grafana token for clients is made by simctl up. Verified live through Grafana /api/ds/query."}
       - {name: bmc-farm, status: done, pr: 52, where: components/bmc-farm/bmc.py,
          how: "One process serves /<node>/redfish/v1 for every node: Systems, Chassis Thermal/Power, Managers, event log, Reset action, POST /sim/inject (temp, fans, power, events). Also standard Redfish over TLS on 127.0.0.1:8443 (Host picks the node, session login, collections, firmware, accounts; ADR 0012). Verified live in the stack."}
       - {name: bcm-mock, status: partial, pr: 71, where: components/bcm-mock/bcm.py,
