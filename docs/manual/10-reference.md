@@ -33,6 +33,7 @@ Run `./scripts/simctl COMMAND --help` for the exact flags.
 
 | Script | Does |
 |---|---|
+| `scripts/sync_wiki.py --out DIR \| --push` | generate the GitHub Wiki from `docs/`, or sync it to the wiki repository ([how](../guides/github-wiki.md)) |
 | `scripts/check-machine.sh` | stdlib-only machine check, before any build |
 | `scripts/install-governor.sh [--uninstall\|--print]` | optional root governor service (sudo) |
 | `scripts/install-hooks.sh` | git hooks for contributors (no sudo) |
