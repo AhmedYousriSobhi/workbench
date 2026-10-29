@@ -120,7 +120,7 @@ def test_manual_node_names_match_the_nodes_sim_yaml_generates():
 
 def test_getting_started_explains_how_to_get_a_shell_on_a_node():
     text = (ROOT / "docs/guides/getting-started.md").read_text()
-    assert "docker exec -it hpcsim-cn001-1 bash" in text and "no SSH server" in text
+    assert "docker exec -it hpcsim-cn001-1 bash" in text and "ssh cn001 hostname" in text  # docker exec, and a hop through the login node
 
 
 def test_manual_images_are_all_used_and_have_alt_text():

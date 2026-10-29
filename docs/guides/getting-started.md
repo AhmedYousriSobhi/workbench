@@ -107,7 +107,7 @@ built yet (Kubernetes, ticket-bot) are reported as skipped.
 
 ## 4a. Get a shell on a node
 
-The compute nodes have no SSH server, so there is no `ssh cn001`; the **login node** is the SSH entry point (below). Open a shell on a node with `docker exec` (nodes are named
+The compute nodes run `sshd` but publish no port, so the **login node** is the SSH entry point (below); from it `ssh cn001` works. You can also open a shell on a node with `docker exec` (nodes are named
 `cn001`, `gpu001`, ... and their containers `hpcsim-<name>-1`):
 
 ```bash
@@ -120,11 +120,12 @@ For tools that connect over SSH (a desktop monitoring client), `simctl up` start
 
 ```bash
 ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1 sinfo
+ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1 ssh cn001 hostname   # a hop to a node
 ```
 
 See what the output looks like in [Nodes and shells](../manual/04-nodes-and-shells.md). A shell that hangs may be a node the governor paused under memory pressure (`./scripts/simctl status`). The other machine
-with a real `sshd` is the optional fidelity VM (`cd fidelity-vm && ./bin/up.sh`, then `vagrant ssh fidelity`). SSH or
-Teleport access to the simulated nodes is not built yet (issue 77). More in [Nodes and shells](../manual/04-nodes-and-shells.md).
+with a real `sshd` is the optional fidelity VM (`cd fidelity-vm && ./bin/up.sh`, then `vagrant ssh fidelity`). Teleport
+access to the simulated nodes is not built yet (issue 77). More in [Nodes and shells](../manual/04-nodes-and-shells.md).
 
 ## 4b. The web page
 
