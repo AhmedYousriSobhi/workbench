@@ -14,7 +14,7 @@ import pytest
 import yaml
 from helpers import ask, signals, start_governor, stop_governor, wait_for
 
-from governor.executors import cgroup_dir
+from governor.executors import cgroup_dir, discover_docker
 from simctl import stack
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -35,6 +35,15 @@ def containers() -> list[str]:
     r = subprocess.run(["docker", "ps", "-q", "--filter", "label=com.docker.compose.project=hpcsim"],
                        capture_output=True, text=True, check=True)
     return sorted(r.stdout.split())
+
+
+def test_discovered_cgroups_exist_with_the_files_the_governor_writes(sim):
+    """The governor acts through these paths; a wrong path means no throttle/freeze at all."""
+    groups, cgroups = discover_docker()
+    assert len(groups) >= 6 and len(cgroups) == len(groups)
+    for name, cg in cgroups.items():
+        for f in ("cgroup.freeze", "memory.high", "memory.reclaim", "cgroup.kill", "memory.current"):
+            assert (cg / f).exists(), f"{name}: {cg / f} missing"
 
 
 def free_port() -> int:

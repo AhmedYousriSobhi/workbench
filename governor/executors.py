@@ -25,10 +25,18 @@ def run(cmd: list[str], timeout: float = 15) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
 
 
+def slice_path(name: str) -> Path:
+    """Where systemd puts a slice: a dash nests it, so a-b-c.slice is a.slice/a-b.slice/a-b-c.slice."""
+    if name == "-.slice" or not name.endswith(".slice"):
+        return Path(name)
+    parts = name.removesuffix(".slice").split("-")
+    return Path(*(f"{'-'.join(parts[:i])}.slice" for i in range(1, len(parts) + 1)))
+
+
 def cgroup_dir(c: dict) -> Path:
     """Cgroup directory of one `docker inspect` entry (systemd driver layout)."""
     parent = c["HostConfig"].get("CgroupParent") or "system.slice"
-    return CGROUP_ROOT / parent / f"docker-{c['Id']}.scope"
+    return CGROUP_ROOT / slice_path(parent) / f"docker-{c['Id']}.scope"
 
 
 def discover_docker(run_cmd: Callable = run) -> tuple[list[Group], dict[str, Path]]:
