@@ -58,4 +58,6 @@ See README section 9. Top level: `sim.yaml`, `profiles/`, `simctl/`, `governor/`
 - `./scripts/simctl <cmd>` runs simctl with `.venv` without activating it (the venv is per shell). Same as `python -m simctl.cli`.
 - `python -m simctl.cli up --profile X | down | scale N`: pre-flight, ordered start of the compose project (`simctl/stack.py`), skips components without a Dockerfile, creates the governor's Grafana token once in `compose/generated/secrets/grafana_token`; `down` touches only the `hpcsim` project.
 
+- `bcm-mock` (127.0.0.1:8081, CMDaemon-style `POST /json`) and `jira-mock` (127.0.0.1:8080, REST v2 subset, `POST /sim/failure`) are stdlib-only; surfaces and gaps in ADR 0005.
+
 Not yet implemented; as each lands, document it here: `make demo`, `pytest`, `ruff check .`.

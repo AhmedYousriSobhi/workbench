@@ -75,8 +75,10 @@ phases:
          how: "One process serving fake DCGM metrics for every simulated GPU, with fault injection over /sim/inject."}
       - {name: bmc-farm, status: done, pr: 52, where: components/bmc-farm/bmc.py,
          how: "One process serves /<node>/redfish/v1 for every node: Systems, Chassis Thermal/Power, Managers, event log, Reset action, POST /sim/inject (temp, fans, power, events). Verified live in the stack."}
-      - {name: bcm-mock, status: todo, how: "Only the BCM surface the app calls; blocked on open decision 2."}
-      - {name: jira-mock, status: todo, how: "Jira REST subset with failure modes and required-field rules; modes mock/cloud/dc."}
+      - {name: bcm-mock, status: partial, pr: 71, where: components/bcm-mock/bcm.py,
+         how: "CMDaemon-style POST /json (cmdevice, cmstatus, cmpart) over the sim.yaml nodes, power calls and /sim/inject. Call names are an assumed subset (ADR 0005); verified live, 12 MiB."}
+      - {name: jira-mock, status: partial, pr: 71, where: components/jira-mock/jira.py,
+         how: "Mode mock only: REST v2/v3 issues, comments, workflow transitions with required-field errors, JQL subset, webhooks, 429/503/slow failures (ADR 0005). Verified live, 15 MiB. cloud/dc modes not built."}
 
   - id: p4
     title: People and chaos
@@ -158,8 +160,8 @@ architecture:
     - {id: graf, group: net, label: "Grafana", status: done}
     - {id: gpux, group: net, label: "gpu-exporter-farm", status: done}
     - {id: bmc, group: net, label: "bmc-farm", status: done}
-    - {id: bcm, group: net, label: "bcm-mock", status: todo}
-    - {id: jira, group: net, label: "jira-mock", status: todo}
+    - {id: bcm, group: net, label: "bcm-mock", status: partial}
+    - {id: jira, group: net, label: "jira-mock", status: partial}
     - {id: users, group: net, label: "user-sim / ticket-bot", status: todo}
     - {id: k8s, group: net, label: "k3d + KWOK", status: partial}
     - {id: webui, group: net, label: "Web UI", status: todo}
@@ -186,7 +188,7 @@ architecture:
     - [app, jira, ""]
 
 next:
-  - "Phase 3 mocks: bcm-mock and jira-mock next (bmc-farm is done)."
+  - "Next: scenario engine, then user-sim and ticket-bot (they drive Slurm and jira-mock)."
   - "Phase 0 for std/full (16-32 slurmd, k3d) once those profiles are buildable; only min is measured."
 
 gaps:

@@ -66,6 +66,23 @@ def annotate(token: str) -> int:
         return r.status
 
 
+def post_json(url: str, body: dict) -> dict:
+    from helpers import wait_for
+    out: dict = {}
+
+    def go() -> bool:
+        try:
+            req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST")
+            with urllib.request.urlopen(req, timeout=5) as r:
+                out.update(json.loads(r.read()))
+            return True
+        except OSError:
+            return False
+
+    assert wait_for(go, timeout=30), f"{url} not answering"
+    return out
+
+
 @pytest.fixture
 def sim(monkeypatch):
     monkeypatch.chdir(ROOT)
@@ -82,6 +99,11 @@ def test_stack_lifecycle(sim):
     assert oct(stack.TOKEN_FILE.stat().st_mode)[-3:] == "600"
     assert annotate(token) == 200  # the governor's token really works
     assert redfish("cn001/redfish/v1/Systems/1")["PowerState"] == "On"  # bmc-farm answers
+    devices = post_json("http://127.0.0.1:8081/json", {"service": "cmdevice", "call": "getDevices"})["result"]
+    assert [d["hostname"] for d in devices] == ["cn001", "cn002", "cn003", "cn004", "gpu001", "gpu002"]  # bcm-mock
+    issue = post_json("http://127.0.0.1:8080/rest/api/2/issue",
+                      {"fields": {"project": {"key": "OPS"}, "summary": "real-test"}})
+    assert issue["key"] == "OPS-1"  # jira-mock
     assert stack.up(sim, "min", say=say, available=ROOMY)  # idempotent: second up on a running stack
     assert stack.scale(sim, "min", 2, say=say)
     assert sinfo() == "cn[001-002],gpu[001-002]"
