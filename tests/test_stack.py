@@ -383,3 +383,28 @@ def test_ssh_keygen_failure_is_reported(tmp_path):
 def test_login_node_starts_after_the_nodes():
     labels = [label for label, _ in stack.stage_services(["login", "cn001", "slurmctld"])]
     assert labels.index("nodes") < labels.index("login node")
+
+
+def test_client_key_install_remove(tmp_path):
+    src = tmp_path / "ssh"
+    src.mkdir()
+    (src / "id_ed25519").write_text("KEY")
+    dest = tmp_path / "home" / ".ssh" / "opti-sim_ed25519"
+    assert stack.install_client_key(dest, src) == dest
+    assert dest.read_text() == "KEY" and oct(dest.stat().st_mode & 0o777) == "0o600"
+    assert stack.install_client_key(dest, src) == dest  # idempotent
+    assert stack.remove_client_key(dest, src) and not dest.exists()
+    assert not stack.remove_client_key(dest, src)
+
+
+def test_client_key_refuses_foreign_file_and_missing_key(tmp_path):
+    src = tmp_path / "ssh"
+    src.mkdir()
+    dest = tmp_path / "other"
+    dest.write_text("mine")
+    with pytest.raises(FileNotFoundError):
+        stack.install_client_key(dest, src)
+    (src / "id_ed25519").write_text("KEY")
+    with pytest.raises(FileExistsError):
+        stack.install_client_key(dest, src)
+    assert not stack.remove_client_key(dest, src) and dest.read_text() == "mine"

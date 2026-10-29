@@ -336,3 +336,30 @@ def provision_token(url: str = "http://127.0.0.1:3000", auth: str = "admin:admin
         for p in (path.parent, path):
             os.chown(p, owner.st_uid, owner.st_gid)
     return path
+
+
+CLIENT_KEY = "opti-sim_ed25519"
+
+
+def install_client_key(dest: Path | None = None, src: Path = SSH_DIR) -> Path:
+    """Copy the login key to ~/.ssh for clients that only read keys there (0600); refuses a foreign file."""
+    dest = dest or Path.home() / ".ssh" / CLIENT_KEY
+    key = src / "id_ed25519"
+    if not key.exists():
+        raise FileNotFoundError("no login key yet: run `simctl up` first")
+    if dest.exists() and dest.read_bytes() != key.read_bytes():
+        raise FileExistsError(f"{dest.name} exists and is not the opti-sim key; not overwriting it")
+    dest.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    dest.write_bytes(key.read_bytes())
+    dest.chmod(0o600)
+    return dest
+
+
+def remove_client_key(dest: Path | None = None, src: Path = SSH_DIR) -> bool:
+    """Delete the copy made by install_client_key; leaves any other file alone."""
+    dest = dest or Path.home() / ".ssh" / CLIENT_KEY
+    key = src / "id_ed25519"
+    if not dest.exists() or not key.exists() or dest.read_bytes() != key.read_bytes():
+        return False
+    dest.unlink()
+    return True
