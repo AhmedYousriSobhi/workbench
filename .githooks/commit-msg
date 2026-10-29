@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Every commit points at its issue (CLAUDE.md: issue first, branch from it) and carries no personal data.
+set -u
+cd "$(git rev-parse --show-toplevel)" || exit 1
+file=$1
+subject=$(grep -vE '^\s*(#|$)' "$file" | head -1)
+
+case "$subject" in
+  Merge*|Revert*|fixup!*|squash!*|amend!*) ;;  # generated subjects
+  *)
+    if ! grep -vE '^\s*#' "$file" | grep -qE '#[0-9]+'; then
+      echo "commit-msg: reference the issue, e.g. 'fix: short subject (#123)' (CLAUDE.md)." >&2
+      exit 1
+    fi ;;
+esac
+
+exec ./scripts/check-privacy.sh --message "$file"
