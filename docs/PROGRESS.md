@@ -164,7 +164,7 @@ _Simulated users and engineers, scripted faults._
 |---|---|---|---|---|
 | Scenario files | 🟡 Partial | Seven scenarios: gpu-xid-storm, node-down, fan-failure, jira-429, jira-outage run now; pod-crashloop and k8s-node-notready need k3d/KWOK. | `scenarios` | [#73](https://github.com/AhmedYousriSobhi/opti-sim/pull/73) |
 | user-sim and ticket-bot | ⬜ To do | Personas with Poisson arrivals and engineers working tickets. | - | - |
-| scenario-engine | 🟡 Partial | `simctl scenario list|run NAME [--speed N] [--dry-run]`: steps drive bmc-farm, bcm-mock, gpu-exporter, jira-mock and Slurm (scontrol); ramps; expect (slurm.node_state, jira.issue_created) watched from the start; k8s and ticket-bot steps skipped. Runs in the host CLI, not a container (ADR 0006). Verified live. | `simctl/scenario.py` | [#73](https://github.com/AhmedYousriSobhi/opti-sim/pull/73) |
+| scenario-engine | 🟡 Partial | `simctl scenario list|run NAME [--speed N] [--dry-run]`: steps drive bmc-farm, bcm-mock, gpu-exporter, jira-mock, Slurm (scontrol) and the login node's sshd (ssh target: down, hung, up, rotate_host_key, max_sessions, reset; scenarios ssh-host-key-changed, login-node-down, login-node-hung, ssh-session-limit; tests/real/test_ssh_faults_real.py); ramps; expect (slurm.node_state, jira.issue_created) watched from the start; k8s and ticket-bot steps skipped. Runs in the host CLI, not a container (ADR 0006). Verified live. | `simctl/scenario.py` | [#73](https://github.com/AhmedYousriSobhi/opti-sim/pull/73) |
 
 0/3 done
 

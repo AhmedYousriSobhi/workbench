@@ -22,6 +22,10 @@ ticket-bot) are reported as **skipped**, not failed. From the web page ([chapter
 | `gpu-xid-storm` | GPU errors on both GPU nodes, thermal rise, Slurm drain; the app should open tickets |
 | `jira-429` | Jira rate-limits the next 5 calls (429 with Retry-After); the app must back off |
 | `jira-outage` | Jira answers 503 to the next 20 calls, then recovers |
+| `ssh-host-key-changed` | the login node presents a different host key for 60 s; a client that pinned the old one must refuse it |
+| `login-node-down` | the login node refuses connections for 30 s, then returns with the same host key |
+| `login-node-hung` | the login node freezes (connections time out, nothing refuses) for 30 s |
+| `ssh-session-limit` | one session per connection for 60 s: a client opening several channels is refused the extra ones |
 | `k8s-node-notready` | a KWOK node flips to NotReady (**Kubernetes not built**: skipped) |
 | `pod-crashloop` | a pod crash-loops and another is OOMKilled (**Kubernetes not built**: skipped) |
 
@@ -40,10 +44,11 @@ expect:
 ```
 
 - `at`: when the step runs, as `10s`, `2m`. `--speed` and `time_dilation` in `sim.yaml` compress it.
-- `target`: `bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira`, `slurm` (built); `k8s`, `ticket-bot` (not built, skipped).
+- `target`: `bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira`, `slurm`, `ssh` (built); `k8s`, `ticket-bot` (not built, skipped).
 - `do`: the body for that target. `nodes: [...]` fans out one request per node and must name nodes from `sim.yaml`. `slurm`
   takes `drain` and `resume` (node lists); `jira` takes `failure: {mode: "429"|"503"|null, count: N}`; `bmc-farm` takes `power`,
-  `temp`, `fan_fail`, `ramp: {to, over}`, `clear`.
+  `temp`, `fan_fail`, `ramp: {to, over}`, `clear`; `ssh` (the login node) takes `state: down|hung|up` (stop, freeze, restore),
+  `rotate_host_key: true`, `max_sessions: N` (OpenSSH MaxSessions) and `reset: true` (original key, default limit, node up).
 - `expect`: assertions checked after the steps. Anything that needs the app under test (such as `jira.issue_created`) only
   holds when the app, or ticket-bot once built, does its part.
 

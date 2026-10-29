@@ -66,7 +66,7 @@ data only, stop every process you start, and never commit screenshots that show 
 ## Write a scenario and watch the client
 
 A scenario is a YAML file in `scenarios/` (see [scenarios and faults](../manual/06-scenarios.md)); steps run at
-offsets and can target `bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira` and `slurm` (Kubernetes and the ticket bot are
+offsets and can target `bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira`, `slurm` and `ssh` (login-node host key, down, hung, session limit; Kubernetes and the ticket bot are
 not built; their steps are skipped).
 
 ```yaml
