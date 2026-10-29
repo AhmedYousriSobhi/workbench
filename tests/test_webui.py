@@ -178,3 +178,10 @@ def test_page_has_the_app_shell(ui):
     for needle in ('class="skip"', '<main id="main"', 'aria-label="Governor"', 'aria-label="Operate"',
                    'id="theme"', 'id="strip"', 'id="attn"', 'id="list"', 'id="flow"', 'prefers-reduced-motion'):
         assert needle in body, needle
+
+
+def test_page_recovery_hint_needs_no_sudo():
+    """ADR 0010: a dead governor is started with `opti start`; the sudo service is only an optional upgrade."""
+    page = (ROOT / "webui" / "static" / "index.html").read_text()
+    offline = next(line for line in page.splitlines() if "Governor not reachable" in line)
+    assert "./scripts/opti start" in offline and offline.index("opti start") < offline.index("sudo")
