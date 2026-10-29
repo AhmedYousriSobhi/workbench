@@ -35,8 +35,8 @@ Normative requirements for opti-sim. [README.md](README.md) gives the overview a
 | C-3 | bmc-farm | One process serving N Redfish endpoints with inventory, power, thermals, fans, sensors, event log; fault injection via `/sim/inject`. |
 | C-4 | bcm-mock | Implements only the BCM surface the app calls (CMDaemon REST or `pythoncm`), data-driven from fixtures and `sim.yaml`. |
 | C-5 | jira-mock | Jira REST subset (issue create/transition/comment, JQL subset, webhooks) with failure modes (429, 503, slow); per-transition required-field rules that refuse a transition with a per-field error, as real workflow validators do. Modes: `mock` (default), `cloud`, `dc`. |
-| C-6 | gpu-exporter-farm | Fake DCGM metrics (util, memory, temp, power, XID/ECC) per simulated GPU, scenario-controllable. |
-| C-7 | Observability | Prometheus (about 2 d retention) + Grafana + Alertmanager with file-provisioned dashboards. Governor metrics exposed independently of Prometheus. |
+| C-6 | gpu-exporter-farm | Fake DCGM metrics (util, memory, temp, power, XID/ECC) per simulated GPU, scenario-controllable. Series carry the real DCGM labels (`Hostname`, `gpu`, `UUID`, `device`, `modelName`) next to `node`, and `FB_USED` + `FB_FREE` add up to the GPU type's framebuffer. |
+| C-7 | Observability | Prometheus (about 2 d retention) + Grafana + Alertmanager with file-provisioned dashboards. Governor metrics exposed independently of Prometheus. The Prometheus datasource has the fixed uid `prometheus`; `simctl up` also makes a read-only (Viewer) service-account token in `compose/generated/secrets/grafana_viewer_token` for monitoring clients. |
 | C-8 | user-sim / ticket-bot | Personas with Poisson arrivals and failure behavior; fake engineers working Jira tickets on realistic delays. Submission via `slurmrestd` and CLI. |
 | C-9 | scenario-engine | Runs YAML scenarios (steps with `at`, `target`, `do`; optional `expect` assertions). |
 | C-10 | Fidelity VM | Single on-demand libvirt Ubuntu VM, hard cap 2 GB, power via sushy-tools. |
