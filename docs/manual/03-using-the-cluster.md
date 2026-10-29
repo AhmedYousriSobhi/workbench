@@ -24,6 +24,10 @@ docker exec hpcsim-slurmctld-1 scontrol show node cn001
 ```
 
 Jobs are synthetic; GPUs are count-based GRES (`gpu:h200:8` per GPU node, fake device files). Partitions are `cpu` and `gpu`.
+![Terminal: sinfo lists six idle nodes in the cpu and gpu partitions, sbatch submits job 2 as alice, squeue shows it pending](img/term-slurm.png)
+
+*Real output from the `min` profile: six idle nodes, a job submitted as `alice`, and the queue.*
+
 For an interactive session see [chapter 4](04-nodes-and-shells.md).
 
 **Slurm REST** goes through `slurmrestd` with a JWT, not root:

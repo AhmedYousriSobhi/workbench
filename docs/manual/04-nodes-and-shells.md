@@ -14,6 +14,10 @@ docker ps --format '{{.Names}}' --filter label=hpcsim.node       # only compute 
 docker exec hpcsim-slurmctld-1 sinfo -N -l                       # Slurm's view of the nodes
 ```
 
+![Terminal: docker ps lists hpcsim-cn001-1 through hpcsim-gpu002-1, then a command run in cn001 and one as alice in gpu001](img/term-find-and-shell.png)
+
+*Real output from the `min` profile: the six node containers, a command run inside `cn001`, and the simulated user `alice` on `gpu001` with its eight fake GPU device files.*
+
 ## Open a shell
 
 ```bash

@@ -116,7 +116,7 @@ docker exec -it hpcsim-cn001-1 bash                            # a shell on a co
 docker exec -u alice -it hpcsim-gpu001-1 bash                  # the same, as a simulated user
 ```
 
-A shell that hangs may be a node the governor paused under memory pressure (`./scripts/simctl status`). The only machine
+See what the output looks like in [Nodes and shells](../manual/04-nodes-and-shells.md). A shell that hangs may be a node the governor paused under memory pressure (`./scripts/simctl status`). The only machine
 with a real `sshd` is the optional fidelity VM (`cd fidelity-vm && ./bin/up.sh`, then `vagrant ssh fidelity`). SSH or
 Teleport access to the simulated nodes is not built yet (issue 77). More in [Nodes and shells](../manual/04-nodes-and-shells.md).
 

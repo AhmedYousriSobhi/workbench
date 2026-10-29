@@ -17,6 +17,8 @@ The complete guide to using opti-sim. Read it front to back once, then use it as
 | 9 | [Troubleshooting](09-troubleshooting.md) | symptoms, causes, fixes, the diagnostics bundle |
 | 10 | [Reference](10-reference.md) | every command, script, port, file and environment variable |
 
+Screenshots of the web page and of real terminal output are in chapters 3, 4 and 5 (`img/`).
+
 Short on time? [Getting started](../guides/getting-started.md) is the 10-minute version.
 
 ## Conventions

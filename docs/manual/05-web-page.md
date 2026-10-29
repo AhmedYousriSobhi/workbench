@@ -11,6 +11,10 @@ One dashboard over everything: governor, cluster, scenarios.
 Open the link once: it sets a cookie. The token lives in `compose/generated/secrets/ui_token`; anyone with the link on
 this machine can use the page, so keep it private. The page listens on `127.0.0.1` only.
 
+![The dashboard: governor on the left, services and the traffic diagram in the middle, needs-attention and scenarios on the right](img/web-overview.png)
+
+*The dashboard with a healthy cluster: L0 Normal, 4 of 4 services answering, 6 of 6 nodes healthy, "All clear" under Needs attention.*
+
 ## Layout
 
 | Area | Shows |
@@ -20,7 +24,7 @@ this machine can use the page, so keep it private. The page listens on `127.0.0.
 | **Middle: cluster** | service chips, the traffic diagram, one card per node |
 | **Right** | *Needs attention*, the scenario list and the governor's log |
 
-On a phone the panels stack. The page has a skip link and landmarks, and honours reduced motion.
+On a phone the panels stack (see the [phone view](img/web-phone.png)). The page has a skip link and landmarks, and honours reduced motion.
 
 ## Traffic diagram
 
@@ -34,16 +38,32 @@ Open *Fault actions* on a node card to **Power off**, **Power on**, **Overheat (
 (XID 79)** (GPU nodes only) or **Clear faults**. The card changes state and a diamond shows the injection. Nothing here
 opens a shell on a node; use [`docker exec`](04-nodes-and-shells.md).
 
+![A node card with its Fault actions expanded: Power off, Power on, Overheat, Fan failure, Clear faults](img/web-fault-actions.png)
+
+*A node card with Fault actions open.*
+
+![cn002 shown as Powered off with BCM DOWN; the top strip says Nodes 5/6 healthy](img/web-node-powered-off.png)
+
+*After Power off on cn002: the card is marked "Powered off" in words as well as colour, BCM shows DOWN, and the strip counts 5 of 6 nodes healthy. Press Clear faults to undo.*
+
 ## Scenarios
 
 In the right panel pick a scenario and a speed, press **Play**, and watch each step turn ok, skipped or failed. **Stop**
 aborts. Steps that need Docker (the `slurm` target: drain and resume) are **skipped on this page**, because the page has no
 Docker access by design; run those with `./scripts/simctl scenario run NAME`.
 
+![Run panel showing node-down, step 2 of 6, with each step marked ok or pending and a Stop button](img/web-scenario-running.png)
+
+*A scenario playing (node-down, step 2 of 6). The strip at the top also shows it running; Stop aborts.*
+
 ## One message per condition
 
 If the cluster is down the page shows one notice and one *Needs attention* entry, hides data that cannot exist and names
 the recovery command, which never needs `sudo`. If the governor is down it says so the same way.
+
+![The dashboard with the stack stopped: one notice in the middle, one entry under Needs attention, services shown offline, no node cards](img/web-stack-down.png)
+
+*The cluster is stopped: one notice with the command to start it, services shown offline with dashed outlines, and no node cards. The memory figures are the host's, taken at the time of the screenshot.*
 
 ## Limits
 

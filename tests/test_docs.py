@@ -121,3 +121,10 @@ def test_manual_node_names_match_the_nodes_sim_yaml_generates():
 def test_getting_started_explains_how_to_get_a_shell_on_a_node():
     text = (ROOT / "docs/guides/getting-started.md").read_text()
     assert "docker exec -it hpcsim-cn001-1 bash" in text and "no SSH server" in text
+
+
+def test_manual_images_are_all_used_and_have_alt_text():
+    text = "\n".join(p.read_text() for p in MANUAL.glob("*.md"))
+    used = set(re.findall(r"\]\(img/([\w.-]+\.png)\)", text))
+    assert used == {p.name for p in (MANUAL / "img").glob("*.png")}
+    assert not re.findall(r"!\[\]\(", text)
