@@ -10,5 +10,12 @@ dev = ["pytest", "ruff"]
 [project.scripts]
 simctl = "simctl.cli:app"
 
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["simctl", "governor"]
+
 [tool.ruff]
 line-length = 100
