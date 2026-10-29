@@ -77,7 +77,7 @@ def test_ladder_really_pauses_and_stops_live_containers_and_recovers(sim, tmp_pa
     cn, ctl, bmc = "hpcsim-cn001-1", "hpcsim-slurmctld-1", "hpcsim-bmc-farm-1"
     try:
         assert wait_for(lambda: cn in ask(sock, {"cmd": "status"})["groups"], 30)
-        high = lambda n: subprocess.run(["docker", "exec", n, "cat", "/sys/fs/cgroup/memory.high"],  # noqa: E731
+        high = lambda n: subprocess.run(["docker", "exec", n, "cat", "/sys/fs/cgroup/memory.high"],
                                         capture_output=True, text=True, check=False).stdout.strip()
 
         signals(sig, avail_gb=4, some=25)  # L2: throttle, which rootless mode skips rather than fails

@@ -9,7 +9,7 @@ the governor, which was a root systemd service because it writes cgroup files (f
 
 ## Decision
 `python -m governor --user-mode` runs as the user. `UserExecutor` replaces the cgroup files with the Docker API
-(the user is in the `docker` group): freeze/thaw become `docker pause/unpause`, stop becomes `docker stop`. Admission
+(the user is in the `docker` group): freeze/thaw become `docker pause/unpause`, stop becomes `docker kill` then `docker stop`. Admission
 (GV-9), the escalation ladder, the security watchdog, Grafana annotations, `/metrics` and the control socket all work
 unchanged; the socket lives under `$XDG_RUNTIME_DIR/hpcsim/` and `simctl`/the web page find it automatically when no
 system socket exists. `./scripts/opti start` starts it (`OPTI_GOVERNOR=auto|user|system|off`) and `stop` ends it.
@@ -29,3 +29,17 @@ The root service stays available as an optional upgrade and wins when it is runn
 - The machine prerequisites (Docker installed, the user able to use it) are one-time host setup that
   `scripts/check-machine.sh` verifies; the app itself never asks for sudo.
 - SPEC GV-8 now reads "met by the system service; rootless mode is best effort".
+
+## Verified under real conditions (as an ordinary user)
+`tests/real/test_user_mode_real.py`: a real container filling its 200 MB cap (NF-1) is warned about, paused and killed
+before the kernel OOM killer; on the live stack real containers are paused at L3, stopped at L4, un-paused when calm,
+and a stopped one comes back with the `start` command. Running them found four defects, now fixed:
+- `docker stop -t 2` loses the race to the OOM killer: a runaway PID 1 ignores SIGTERM for the 2 s grace. Rootless stop
+  is now `docker kill` (SIGKILL, like `cgroup.kill` in the root path) followed by `docker stop`.
+- The arrivals flag defaulted to `/run/hpcsim/` (root-only), so every L1 action failed; it now defaults to the user's
+  runtime directory in rootless mode.
+- The one-cgroup test sampler crashed the governor when the watched container's cgroup vanished.
+- Containers the governor stopped dropped out of the inventory, so `start NAME` was refused as an unknown group in both
+  modes. They are now remembered until they run again. A stop is still never undone automatically (by design).
+A shared host also matters: if a system governor runs on the same machine it governs the same containers from host
+signals, so rootless tests need that one calm (L0).
