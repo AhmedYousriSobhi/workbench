@@ -61,7 +61,7 @@ Normative requirements for opti-sim. [README.md](README.md) gives the overview a
 | GV-5 | Priority classes P0 to P6; lowest priority is acted on first; reversible actions precede destructive ones. |
 | GV-6 | Every action is logged and published as a Grafana annotation and to the Web UI audit log. |
 | GV-7 | `--dry-run` logs intended actions without executing them. |
-| GV-8 | The governor MUST lock its memory (`mlockall`) at startup and MUST pre-allocate the L3/L4 execution path so mitigations perform no dynamic allocation. |
+| GV-8 | The governor MUST lock its memory (`mlockall`) at startup and MUST pre-allocate the L3/L4 execution path so mitigations perform no dynamic allocation. The rootless mode (`--user-mode`, ADR 0010, used when no system service runs) is best effort and cannot meet the lock guarantee. |
 | GV-9 | Admission control: `simctl up` and any scenario that starts workloads MUST be approved by the governor first. |
 | GV-10 | Backstops: per-container `memory.max`; `systemd-oomd` on a sacrificial slice. |
 

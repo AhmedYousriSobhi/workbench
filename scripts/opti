@@ -4,12 +4,49 @@
 #   ./scripts/opti stop                             stop the web page and the cluster (only the hpcsim project)
 #   ./scripts/opti status                           governor, cluster and web page at a glance
 #   ./scripts/opti open                             print the login link (and open it in a browser when possible)
+# No sudo is needed. The memory governor runs as you (pause/stop through Docker) unless the optional system
+# service is installed. OPTI_GOVERNOR=auto|user|system|off picks it (default auto: system service if running, else yours).
 set -u
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo" || exit 2
 state=compose/generated; pidf=$state/ui.pid; logf=$state/ui.log
 port="${OPTI_UI_PORT:-8088}"
 mkdir -p "$state"
+
+govpid=$state/governor.pid; govlog=$state/governor.log; govflag=$state/governor.grafana
+gov_mode="${OPTI_GOVERNOR:-auto}"
+sys_sock=/run/hpcsim/gov.sock
+usock="${XDG_RUNTIME_DIR:-/tmp/hpcsim-$(id -u)}/hpcsim/gov.sock"
+token_file=$state/secrets/grafana_token
+
+gov_alive() { .venv/bin/python -m simctl.cli status --socket "$1" >/dev/null 2>&1; }
+gov_pid() { [ -f "$govpid" ] && kill -0 "$(cat "$govpid")" 2>/dev/null && cat "$govpid"; }
+stop_own_governor() {
+  if gov_pid >/dev/null; then kill "$(gov_pid)" 2>/dev/null; sleep 0.5; fi
+  rm -f "$govpid" "$govflag" "$usock"
+}
+start_governor() {  # prints one status line; exports HPCSIM_GOV_SOCKET for everything started after it
+  case "$gov_mode" in
+    off) echo "off (OPTI_GOVERNOR=off): memory is not protected"; return 0 ;;
+    auto|system) if gov_alive "$sys_sock"; then export HPCSIM_GOV_SOCKET="$sys_sock"; echo "system service (full protection)"; return 0; fi
+      [ "$gov_mode" = system ] && { echo "the system service is not running" >&2; return 1; } ;;
+  esac
+  if gov_pid >/dev/null && gov_alive "$usock"; then export HPCSIM_GOV_SOCKET="$usock"; echo "running as you (pause and stop; no sudo)"; return 0; fi
+  stop_own_governor
+  mkdir -p "${usock%/*}"; chmod 700 "${usock%/*}"
+  args=(--user-mode --refresh-interval 5 --socket "$usock" --arrivals-flag "${usock%/*}/arrivals.paused" --workdir "$repo")
+  bridge="$(ip -4 -o addr show docker0 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1)"
+  [ -n "$bridge" ] && args+=(--metrics-addr "$bridge:9401")
+  grafana=0; tok=""
+  [ -s "$token_file" ] && { grafana=1; tok="$(cat "$token_file")"; args+=(--grafana-url http://127.0.0.1:3000); }
+  (umask 077; HPCSIM_GRAFANA_TOKEN="$tok" nohup .venv/bin/python -m governor "${args[@]}" >"$govlog" 2>&1 & echo $! >"$govpid")
+  echo "$grafana" >"$govflag"
+  for _ in $(seq 1 40); do gov_alive "$usock" && { export HPCSIM_GOV_SOCKET="$usock"; echo "running as you (pause and stop; no sudo)"; return 0; }; sleep 0.25; done
+  echo "the governor did not start; see $govlog" >&2; return 1
+}
+refresh_governor() {  # the Grafana token only exists after the first `up`: restart our own governor once to use it
+  [ -f "$govflag" ] && [ "$(cat "$govflag")" = 0 ] && [ -s "$token_file" ] && gov_pid >/dev/null && start_governor >/dev/null
+}
 
 ui_pid() { [ -f "$pidf" ] && kill -0 "$(cat "$pidf")" 2>/dev/null && cat "$pidf"; }
 link() { sed -n 's/.*opti-sim UI: //p' "$logf" 2>/dev/null | tail -1; }
@@ -44,10 +81,10 @@ cmd_start() {
   [ $rc -eq 0 ] || { echo "Fix the FAIL lines, then run this again."; exit 1; }
   echo "== 2/4 tools"; ensure_venv || exit 1
   echo "== 3/4 governor"
-  if [ -S /run/hpcsim/gov.sock ]; then echo "running"; else
-    echo "NOT installed: memory is not protected. Recommended, once: sudo ./scripts/install-governor.sh (continuing without it)"; fi
+  start_governor || exit 1
   echo "== 4/4 starting the cluster (profile $profile; the first run builds images and takes a few minutes)"
   ./scripts/simctl up --profile "$profile" || { echo "cluster did not start; ./scripts/simctl diag collects details" >&2; exit 1; }
+  refresh_governor
   start_ui || exit 1
   show_link; open_link
   echo; echo "Stop everything with: ./scripts/opti stop"
@@ -56,9 +93,12 @@ cmd_stop() {
   if ui_pid >/dev/null; then kill "$(ui_pid)" 2>/dev/null; echo "web page stopped"; else echo "web page was not running"; fi
   rm -f "$pidf"
   ./scripts/simctl down
+  stop_own_governor
 }
 cmd_status() {
-  [ -S /run/hpcsim/gov.sock ] && echo "governor : running" || echo "governor : not running (sudo ./scripts/install-governor.sh)"
+  if gov_alive "$sys_sock"; then echo "governor : running (system service)"
+  elif gov_alive "$usock"; then echo "governor : running (as you, no sudo)"
+  else echo "governor : not running (./scripts/opti start starts it)"; fi
   n=$(docker ps --filter name=hpcsim --format '{{.Names}}' 2>/dev/null | wc -l)
   [ "$n" -gt 0 ] && echo "cluster  : $n containers running" || echo "cluster  : stopped (./scripts/opti start)"
   if ui_pid >/dev/null; then echo "web page : running, $(link)"; else echo "web page : stopped"; fi

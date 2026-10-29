@@ -13,7 +13,7 @@ from pathlib import Path
 from . import control, metrics
 from .annotate import Annotator
 from .core import Governor
-from .executors import ARRIVALS_FLAG, Executor, discover_docker
+from .executors import ARRIVALS_FLAG, Executor, UserExecutor, discover_docker
 from .ladder import Ladder, Thresholds
 from .memlock import MitigationPath, lock_memory, locked_kb, raise_memlock_limit
 from .planner import Group
@@ -21,6 +21,13 @@ from .signals import GB, CgroupSampler, FileSampler, Sampler
 from .watchdog import Watchdog
 
 log = logging.getLogger("governor")
+
+
+def arrivals_flag_path(given: str, user_mode: bool) -> str:
+    """The flag file defaults to /run/hpcsim, which only root can write: rootless mode uses the user's runtime dir."""
+    if user_mode and given == ARRIVALS_FLAG:
+        return str(Path(os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/hpcsim-{os.getuid()}") / "hpcsim" / "arrivals.paused")
+    return given
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -45,6 +52,8 @@ def main(argv: list[str] | None = None) -> None:
                     help="repo root; enables scale/set-profile by running simctl there")
     ap.add_argument("--metrics-addr", default=None, metavar="HOST:PORT",
                     help="serve Prometheus /metrics here (bind the docker bridge gateway, not 0.0.0.0)")
+    ap.add_argument("--user-mode", action="store_true",
+                    help="rootless: pause/stop through the Docker API instead of cgroup files (no sudo; ADR 0010)")
     ap.add_argument("--require-lock", action="store_true", help="exit if mlockall fails")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -60,7 +69,7 @@ def main(argv: list[str] | None = None) -> None:
     else:
         sampler = Sampler()
     ladder = Ladder(Thresholds(**json.loads(args.thresholds or "{}")))
-    executor = Executor(groups, cgroups, path, arrivals_flag=args.arrivals_flag)
+    executor = (UserExecutor if args.user_mode else Executor)(groups, cgroups, path, arrivals_flag=arrivals_flag_path(args.arrivals_flag, args.user_mode))
     watchdog = None if args.no_watchdog else Watchdog()
     token = os.environ.get("HPCSIM_GRAFANA_TOKEN", "")
     annotator = Annotator(args.grafana_url, token) if args.grafana_url and token else None
@@ -90,8 +99,8 @@ def main(argv: list[str] | None = None) -> None:
         raise_memlock_limit()
         lock_memory()
         log.info("memory locked: %d kB", locked_kb())
-    except OSError as e:
-        log.error("mlockall failed: %s", e)
+    except (OSError, ValueError) as e:
+        (log.info if args.user_mode else log.error)("mlockall failed: %s", e)  # normal without root
         if args.require_lock:
             raise SystemExit(2)
     try:

@@ -5,6 +5,7 @@ from collections.abc import Callable
 
 from . import metrics
 from .annotate import Annotator
+from .executors import UserExecutor
 from .ladder import Ladder
 from .planner import Action, Group, plan, reversible_first, undo
 from .signals import Sampler, Signals
@@ -42,9 +43,10 @@ class Governor:
         self.inventory, self.refresh_interval = inventory, refresh_interval
         self._next_refresh = refresh_interval
         self._static = [g for g in groups if g.kind == "vm"]  # VMs are configured, not discovered
+        self.stopped: set[str] = set()  # stopped by us: gone from `docker ps`, but an operator can still `start` them
 
     def group_names(self) -> set[str]:
-        return {g.name for g in self.groups}
+        return {g.name for g in self.groups} | self.stopped
 
     def _act(self, a: Action) -> None:
         """Run or (dry-run) log one action, recording it in the audit trail (GV-6)."""
@@ -55,6 +57,10 @@ class Governor:
         if not self.dry_run:
             try:
                 self.executor(a)
+                if a.verb in ("stop", "save"):
+                    self.stopped.add(a.target)
+                elif a.verb == "start":
+                    self.stopped.discard(a.target)
             except Exception as e:  # noqa: BLE001  one failed action must not abort the plan
                 self.counts["action_failures"] += 1
                 log.error("action failed: %s: %s", a, e)
@@ -92,8 +98,9 @@ class Governor:
             log.warning("inventory refresh failed: %s", e)
             return
         with self._lock:
-            known = self.group_names()
+            known = {g.name for g in self.groups}
             new = [g for g in found if g.name not in known]
+            self.stopped -= {g.name for g in new}  # it is running again (started by someone else)
             gone = known - {g.name for g in found} - {g.name for g in self._static}
             if not new and not gone:
                 return
@@ -182,6 +189,7 @@ class Governor:
             if cmd == "status":
                 s = self.signals
                 return {"ok": True, "level": self.ladder.level, "dry_run": self.dry_run,
+                        "mode": "user" if isinstance(self.executor, UserExecutor) else "root",
                         "mem_available": s.mem_available if s else None,
                         "psi_some": s.psi_some_avg10 if s else None,
                         "psi_full": s.psi_full_avg10 if s else None,
