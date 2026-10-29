@@ -39,18 +39,20 @@ with a memory budget that `simctl up` enforces, and every fault is a named scena
 ## Quick start
 
 ```bash
-./scripts/check-machine.sh                                   # 1. does this machine qualify? (no install needed)
-python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'   # 2. tools (once)
-sudo ./scripts/install-governor.sh                           # 3. the governor service (once)
-./scripts/simctl up --profile min                            # 4. build and start (first run builds images)
-.venv/bin/python -m webui                                    # 5. web page; open the printed link
-./scripts/simctl down                                        # stop (only the hpcsim project)
+sudo ./scripts/install-governor.sh   # once: the memory governor (recommended; start works without it, unprotected)
+./scripts/opti start                 # checks the machine, builds and starts the cluster and the web page, prints the link
+./scripts/opti stop                  # stops the web page and the cluster (only the hpcsim project)
 ```
+
+`./scripts/opti status` shows what is running and `./scripts/opti open` prints the login link again. The first
+`start` builds images (a few minutes) and creates the Python environment. Prefer the steps one by one? They are in
+the table below.
 
 ## Build and run scopes
 
 | I want to | Command | Needs |
 |---|---|---|
+| Start everything in one go | `./scripts/opti start` (stop: `./scripts/opti stop`, look: `./scripts/opti status`) | Docker, python 3.11+ |
 | Check the machine before building | `./scripts/check-machine.sh` | system `python3` only |
 | Install the CLI and test tools | `python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'` | python 3.11+ |
 | Check the setup in depth | `./scripts/simctl doctor` then `./scripts/simctl preflight --profile std` | venv, Docker |
