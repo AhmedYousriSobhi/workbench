@@ -60,4 +60,6 @@ See README section 9. Top level: `sim.yaml`, `profiles/`, `simctl/`, `governor/`
 
 - `bcm-mock` (127.0.0.1:8081, CMDaemon-style `POST /json`) and `jira-mock` (127.0.0.1:8080, REST v2 subset, `POST /sim/failure`) are stdlib-only; surfaces and gaps in ADR 0005.
 
+- `python -m simctl.cli scenario list | run NAME [--speed N] [--dry-run]`: scenario engine (`simctl/scenario.py`, ADR 0006) over `scenarios/*.yaml`; add a target in `execute()` and in `ENDPOINTS`/`validate`. gpu-exporter-farm publishes 127.0.0.1:9400 for injection.
+
 Not yet implemented; as each lands, document it here: `make demo`, `pytest`, `ruff check .`.

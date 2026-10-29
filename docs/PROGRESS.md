@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m simctl.progress`; do not edit. -->
 Last updated 2026-10-29. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**70% built** (31 done, 0 in review, 8 partial, 5 to do, 44 items).
+**70% built** (31 done, 0 in review, 9 partial, 4 to do, 44 items).
 
 ## Roadmap
 
@@ -50,6 +50,7 @@ flowchart TB
         bmc["bmc-farm"]:::done
         bcm["bcm-mock"]:::partial
         jira["jira-mock"]:::partial
+        chaos["scenario engine (simctl)"]:::partial
         users["user-sim / ticket-bot"]:::todo
         k8s["k3d + KWOK"]:::partial
         webui["Web UI"]:::todo
@@ -153,9 +154,9 @@ _Simulated users and engineers, scripted faults._
 
 | Part | Status | How it is built | Where | PR |
 |---|---|---|---|---|
-| Starter scenario files | 🟡 Partial | Three YAML scenarios exist (gpu-xid-storm, pod-crashloop, k8s-node-notready); no engine runs them yet. | `scenarios` | - |
+| Scenario files | 🟡 Partial | Seven scenarios: gpu-xid-storm, node-down, fan-failure, jira-429, jira-outage run now; pod-crashloop and k8s-node-notready need k3d/KWOK. | `scenarios` | [#73](https://github.com/AhmedYousriSobhi/opti-sim/pull/73) |
 | user-sim and ticket-bot | ⬜ To do | Personas with Poisson arrivals and engineers working tickets. | - | - |
-| scenario-engine | ⬜ To do | Runs scenarios with at/target/do steps and expect assertions. | - | - |
+| scenario-engine | 🟡 Partial | `simctl scenario list|run NAME [--speed N] [--dry-run]`: steps drive bmc-farm, bcm-mock, gpu-exporter, jira-mock and Slurm (scontrol); ramps; expect (slurm.node_state, jira.issue_created) watched from the start; k8s and ticket-bot steps skipped. Runs in the host CLI, not a container (ADR 0006). Verified live. | `simctl/scenario.py` | [#73](https://github.com/AhmedYousriSobhi/opti-sim/pull/73) |
 
 0/3 done
 
@@ -220,7 +221,7 @@ _What keeps every change safe and debuggable._
 
 ## Next up
 
-1. Next: scenario engine, then user-sim and ticket-bot (they drive Slurm and jira-mock).
+1. Web UI (Scenario Orchestrator first), then user-sim and ticket-bot.
 2. Phase 0 for std/full (16-32 slurmd, k3d) once those profiles are buildable; only min is measured.
 
 ## Known gaps

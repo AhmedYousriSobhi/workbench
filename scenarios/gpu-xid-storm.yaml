@@ -1,9 +1,12 @@
 name: gpu-xid-storm
-description: GPU errors on 3 nodes, thermal rise, Slurm drains, app should open tickets
+description: GPU errors on both GPU nodes, thermal rise, Slurm drain; the app should open tickets
 steps:
-  - {at: 0s,  target: gpu-exporter, do: {nodes: [gpu003, gpu004, gpu007], xid: 79, rate: 2/min}}
-  - {at: 30s, target: bmc-farm,     do: {nodes: [gpu003], sensor: GPU_TEMP, ramp_to: 92C, over: 2m}}
-  - {at: 90s, target: slurm,        do: {drain: [gpu003], reason: "xid 79"}}
+  - {at: 0s,  target: gpu-exporter, do: {nodes: [gpu001, gpu002], xid: 79}}
+  - {at: 30s, target: bmc-farm,     do: {nodes: [gpu001], ramp: {to: 92, over: 2m}}}
+  - {at: 90s, target: slurm,        do: {drain: [gpu001], reason: "xid 79"}}
   - {at: 2m,  target: ticket-bot,   do: {sla_profile: p1-fast}}
+  - {at: 3m,  target: gpu-exporter, do: {nodes: [gpu001, gpu002], clear: true}}
+  - {at: 3m,  target: bmc-farm,     do: {nodes: [gpu001], clear: true}}
+  - {at: 3m,  target: slurm,        do: {resume: [gpu001]}}
 expect:
-  - jira.issue_created: {labels: [gpu, xid], within: 3m}
+  - jira.issue_created: {labels: [gpu, xid], within: 3m}   # needs the app (or ticket-bot) to file it

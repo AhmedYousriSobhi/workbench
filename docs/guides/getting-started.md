@@ -46,7 +46,7 @@ python -m simctl.cli down                 # stops only the hpcsim project; your 
 ```
 
 Profiles are in `profiles/` (`min`, `std`, `full`); `up` refuses a profile that does not fit and names one
-that does. Components not built yet (`bcm-mock`, `jira-mock`, `scenario-engine`) are skipped with a note.
+that does. Components not built yet are skipped with a note.
 
 ## 4. What to look at
 
@@ -68,6 +68,17 @@ curl -X POST http://127.0.0.1:8000/sim/inject -d '{"node": "gpu001", "temp": 95,
 curl http://127.0.0.1:8000/gpu001/redfish/v1/Chassis/1/Thermal
 curl -X POST http://127.0.0.1:8000/sim/inject -d '{"node": "gpu001", "clear": true}'
 ```
+
+Or run a named scenario (a timed list of faults) instead of injecting by hand:
+
+```bash
+./scripts/simctl scenario list
+./scripts/simctl scenario run node-down --dry-run   # show the timeline, change nothing
+./scripts/simctl scenario run node-down --speed 10  # play it ten times faster
+```
+
+A scenario fails (exit 1) when a step errors or an `expect` line does not hold. Steps for parts that are not
+built yet (Kubernetes, ticket-bot) are reported as skipped.
 
 ## 5. When something is wrong
 
