@@ -11,8 +11,9 @@ from .app import create_app
 TOKEN_FILE = Path("compose/generated/secrets/ui_token")
 
 
-def load_token(path: Path = TOKEN_FILE) -> str:
+def load_token(path: Path | None = None) -> str:
     """The login token, created 0600 on first use and kept so bookmarks keep working."""
+    path = path or TOKEN_FILE
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
