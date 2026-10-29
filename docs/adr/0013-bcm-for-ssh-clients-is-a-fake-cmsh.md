@@ -1,6 +1,6 @@
 # 0013. BCM for SSH-based clients is a fake `cmsh` on the login node
 
-Status: accepted
+Status: accepted; built in issue 127
 
 ## Context
 ADR 0005 gave bcm-mock a CMDaemon-style `POST /json` surface on an assumed call list. The one client we now know (a desktop monitoring app),
@@ -22,3 +22,9 @@ CMDaemon events log. Nothing in that path is HTTP.
 - No new container and no new port: the cost is one script in `images/login`.
 - A client that expects a separate head-node host can be pointed at `login`.
 - The BCM surface stays unverified against a real BCM; SPEC C-4 says so.
+
+## As built
+`images/login/cmsh.py` (Python 3 on the login image) calls bcm-mock's `POST /json` and prints `device; list` (head node row first,
+then every node; Type, Hostname, MAC, Category, IP, Network and `[   UP   ]`-style status), `device; status` (`name ..... [   UP   ]`),
+`category; list`, `jobqueue; list` (from `sinfo`) and `monitoring; healthchecks; list`. Verbs that change state are refused
+(`Error: this cmsh is read-only`, exit 1); there is no interactive console. The head node is the login container itself.
