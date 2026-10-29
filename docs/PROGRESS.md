@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m simctl.progress`; do not edit. -->
 Last updated 2026-10-29. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**70% built** (32 done, 6 in review, 11 partial, 5 to do, 54 items).
+**71% built** (32 done, 7 in review, 11 partial, 5 to do, 55 items).
 
 ## Roadmap
 
@@ -226,10 +226,11 @@ _What keeps every change safe and debuggable._
 | Observability stack | ✅ Done | Prometheus (2 d, tmpfs), Grafana with provisioned dashboard, fake GPU exporter. | `compose/observability.yml` | - |
 | Decisions as ADRs | ✅ Done | 0001 record decisions, 0002 Slurm from source with no extra privileges, 0003 slurmrestd/JWT and accounting, 0004 slurmrestd keeps its unshare steps disabled. | `docs/adr` | - |
 | Getting-started guide | ✅ Done | Step-by-step use of the app; tests/test_docs.py fails if a documented command disappears. | `docs/guides/getting-started.md` | [#52](https://github.com/AhmedYousriSobhi/opti-sim/pull/52) |
+| User manual | 🔍 In review | Ten chapters with screenshots of the web page and real terminal output (concepts, install, using the cluster, nodes and shells, web page, scenarios, governor, configuration, troubleshooting, reference). Commands were run against a live min stack; tests/test_docs.py checks that every command, script and node name it uses exists. The guide gained a step for getting a shell on a node (docker exec; nodes have no sshd). | `docs/manual` | - |
 | Verification helpers | ✅ Done | verify.sh runs validate.sh plus real tests (--full adds the live stack lifecycle); tests/real/helpers.py starts a live governor and talks to its socket. | `scripts/verify.sh` | [#48](https://github.com/AhmedYousriSobhi/opti-sim/pull/48) |
 | Progress tracker | ✅ Done | This page, generated from docs/progress.yaml (issue 41). | `simctl/progress.py` | [#42](https://github.com/AhmedYousriSobhi/opti-sim/pull/42) |
 
-9/13 done
+9/14 done
 
 ## Next up
 

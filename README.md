@@ -62,7 +62,7 @@ After the quick start above, with the stack up and the web page open:
 6. **Look behind the scenes**: Grafana http://127.0.0.1:3000 (admin / admin), Prometheus :9090, fake BMC `curl http://127.0.0.1:8000/cn001/redfish/v1/Systems/1`.
 7. **Stop**: `./scripts/opti stop`.
 
-Something wrong? `./scripts/simctl diag` writes one masked file to attach to a bug report. More detail: [docs/guides/getting-started.md](docs/guides/getting-started.md).
+Something wrong? `./scripts/simctl diag` writes one masked file to attach to a bug report. More detail: [docs/guides/getting-started.md](docs/guides/getting-started.md); everything about the tool: the [user manual](docs/manual/README.md).
 
 ## Build and run scopes
 
@@ -104,7 +104,7 @@ not built yet are skipped with a note. The step-by-step guide is
 | `components/`, `images/` | the mocks (BMC, BCM, Jira, GPU exporter) and the Slurm images |
 | `webui/` | the web page (Starlette + one JS page, under 50 MB) |
 | `scenarios/` | fault scripts in YAML |
-| `docs/` | [architecture](docs/architecture/README.md), [guides](docs/guides/getting-started.md), [decision records](docs/adr/), [progress](docs/PROGRESS.md) |
+| `docs/` | [user manual](docs/manual/README.md), [architecture](docs/architecture/README.md), [guides](docs/guides/getting-started.md), [decision records](docs/adr/), [progress](docs/PROGRESS.md) |
 | [SPEC.md](SPEC.md) | the normative requirements (wins over any other doc) |
 
 ## Contributing
