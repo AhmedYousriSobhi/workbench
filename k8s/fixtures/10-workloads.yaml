@@ -1,4 +1,4 @@
-# Ported from hgate-k8slab bin/fixtures.sh. GPUs are fake: see apply.sh for the capacity patch.
+# Ported from the earlier Kubernetes lab bin/fixtures.sh. GPUs are fake: see apply.sh for the capacity patch.
 apiVersion: v1
 kind: Pod
 metadata: {name: gpu-train, namespace: team-a}
