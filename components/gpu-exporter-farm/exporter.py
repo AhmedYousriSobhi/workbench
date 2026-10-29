@@ -13,6 +13,11 @@ from pathlib import Path
 import yaml
 
 MOUNT = "/mnt/lustre"
+# Framebuffer size per sim.yaml GPU type (MiB); DCGM reports used and free, clients add them for the total.
+FB_TOTAL_MIB = {"h200": 143771, "h100": 81559, "a100": 81920, "l40s": 46068}
+FB_DEFAULT_MIB = 81920
+MODEL_NAME = {"h200": "NVIDIA H200", "h100": "NVIDIA H100 80GB HBM3", "a100": "NVIDIA A100-SXM4-80GB",
+              "l40s": "NVIDIA L40S"}
 FS_SIZE = 500 * 1024**4
 
 
@@ -29,9 +34,15 @@ def load_nodes(sim_yaml: Path) -> dict[str, int]:
     return nodes
 
 
+def load_gpu_type(sim_yaml: Path) -> str:
+    return str(yaml.safe_load(sim_yaml.read_text()).get("gpu", {}).get("type", "")).lower()
+
+
 class State:
-    def __init__(self, nodes: dict[str, int], rng: random.Random | None = None):
+    def __init__(self, nodes: dict[str, int], rng: random.Random | None = None, gpu_type: str = ""):
         self.nodes = nodes
+        self.fb_total = FB_TOTAL_MIB.get(gpu_type, FB_DEFAULT_MIB)
+        self.model = MODEL_NAME.get(gpu_type, gpu_type.upper() or "NVIDIA GPU")
         self.rng = rng or random.Random()
         self.xid: dict[str, int] = {}
         self.temp_override: dict[str, float] = {}
@@ -59,26 +70,33 @@ class State:
             out.append(f"# HELP {name} {help_}")
             out.append(f"# TYPE {name} {typ}")
 
+        used = {(n, g): r.randint(1000, self.fb_total - 1000) for n, gpus in self.nodes.items() for g in range(gpus)}
+
         def per_gpu(name: str, help_: str, value) -> None:
+            """`node` is this sim's own label; the rest are the labels the real DCGM exporter puts on every series
+            (clients filter on Hostname and read modelName)."""
             head(name, help_)
             for n, gpus in self.nodes.items():
                 for g in range(gpus):
-                    out.append(f'{name}{{node="{n}",gpu="{g}"}} {value(n)}')
+                    labels = (f'node="{n}",gpu="{g}",Hostname="{n}",device="nvidia{g}",'
+                              f'UUID="GPU-{n}-{g:02d}",modelName="{self.model}"')
+                    out.append(f"{name}{{{labels}}} {value(n, g)}")
 
         def per_node(name: str, help_: str, value, labels: str = "", typ: str = "gauge") -> None:
             head(name, help_, typ)
             for n in self.nodes:
                 out.append(f'{name}{{node="{n}"{labels}}} {value(n)}')
 
-        per_gpu("DCGM_FI_DEV_GPU_UTIL", "GPU utilization (percent)", lambda n: r.randint(0, 100))
-        per_gpu("DCGM_FI_DEV_FB_USED", "Framebuffer used (MiB)", lambda n: r.randint(1000, 80000))
+        per_gpu("DCGM_FI_DEV_GPU_UTIL", "GPU utilization (percent)", lambda n, g: r.randint(0, 100))
+        per_gpu("DCGM_FI_DEV_FB_USED", "Framebuffer used (MiB)", lambda n, g: used[n, g])
+        per_gpu("DCGM_FI_DEV_FB_FREE", "Framebuffer free (MiB)", lambda n, g: self.fb_total - used[n, g])
         per_gpu(
             "DCGM_FI_DEV_GPU_TEMP",
             "GPU temperature (C)",
-            lambda n: f"{self.temp_override.get(n, r.uniform(45, 70)):.1f}",
+            lambda n, g: f"{self.temp_override.get(n, r.uniform(45, 70)):.1f}",
         )
-        per_gpu("DCGM_FI_DEV_POWER_USAGE", "Power draw (W)", lambda n: f"{r.uniform(80, 650):.1f}")
-        per_gpu("DCGM_FI_DEV_XID_ERRORS", "Last XID error code (0 = none)", lambda n: self.xid.get(n, 0))
+        per_gpu("DCGM_FI_DEV_POWER_USAGE", "Power draw (W)", lambda n, g: f"{r.uniform(80, 650):.1f}")
+        per_gpu("DCGM_FI_DEV_XID_ERRORS", "Last XID error code (0 = none)", lambda n, g: self.xid.get(n, 0))
         per_node(
             "sim_gpu_xid_events_total",
             "Injected XID events",
@@ -148,7 +166,7 @@ def make_handler(state: State):
 def main() -> None:
     sim = Path(sys.argv[1] if len(sys.argv) > 1 else "sim.yaml")
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 9400
-    state = State(load_nodes(sim))
+    state = State(load_nodes(sim), gpu_type=load_gpu_type(sim))
     ThreadingHTTPServer(("0.0.0.0", port), make_handler(state)).serve_forever()
 
 

@@ -13,7 +13,7 @@ SIM = yaml.safe_load(Path("sim.yaml").read_text())
 
 def test_profile_extends_union_and_override():
     std = compose.load_profile("std")
-    assert std["groups"] == ["core", "mocks", "scenarios", "accounting", "load"]
+    assert std["groups"] == ["core", "mocks", "access", "scenarios", "accounting", "load"]
     assert std["compute_nodes"] == 16  # own value beats the parent's
     assert compose.load_profile("full")["compute_nodes"] == 32
     assert compose.load_profile("mac-agent")["compute_nodes"] == 4  # inherited
@@ -63,7 +63,7 @@ def test_slurmd_count_follows_profile():
 
 def test_budget_matches_limits():
     data = compose.generate(SIM, compose.load_profile("min"))
-    assert compose.budget_mb(data) == 200 + 60 + 3 * 100 + 60 + (4 + SIM["gpu"]["nodes"]) * 60
+    assert compose.budget_mb(data) == 200 + 60 + 3 * 100 + 40 + 60 + (4 + SIM["gpu"]["nodes"]) * 60
 
 
 def test_write_marks_generated(tmp_path):
@@ -82,3 +82,19 @@ def test_docker_compose_accepts_generated_file():
         assert r.returncode == 0, r.stderr
     finally:
         out.unlink()
+
+
+def test_bmc_farm_publishes_tls_and_a_dns_alias_per_node():
+    farm = compose.generate(SIM, compose.load_profile("min"))["services"]["bmc-farm"]
+    assert "127.0.0.1:8443:8443" in farm["ports"] and "127.0.0.1:8000:8000" in farm["ports"]
+    aliases = farm["networks"]["default"]["aliases"]
+    assert "bmc-cn001" in aliases and "bmc-gpu001" in aliases
+    assert any(v.endswith(":/run/hpcsim/bmc_credentials:ro") for v in farm["volumes"])
+
+
+def test_login_node_is_local_only_with_keys_mounted():
+    login = compose.generate(SIM, compose.load_profile("min"))["services"]["login"]
+    assert login["ports"] == ["127.0.0.1:2222:22"]
+    assert "./secrets/ssh:/run/hpcsim/ssh:ro" in login["volumes"] and "./slurm:/etc/slurm:ro" in login["volumes"]
+    assert login["build"] == "../../images/login" and login["labels"]["hpcsim.class"] == "P2"
+    assert "cap_add" not in login and login["environment"]["HPCSIM_USERS"]

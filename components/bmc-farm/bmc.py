@@ -3,11 +3,19 @@
 GET  /<node>/redfish/v1/{,Systems/1,Chassis/1,Chassis/1/Thermal,Chassis/1/Power,Managers/1,
                           Systems/1/LogServices/Log/Entries}
 POST /<node>/redfish/v1/Systems/1/Actions/ComputerSystem.Reset   {"ResetType": "ForceOff|On|..."}
+Over TLS (:8443, how a real client sees a BMC) each node answers at the standard /redfish/v1 and is chosen by the
+Host header: bmc-<node> or <node>, e.g. the compose-network alias bmc-cn001; any other Host gets the first node.
+Everything but the service root needs a session (POST /redfish/v1/SessionService/Sessions, X-Auth-Token) or Basic
+auth with the account in the credentials file; with no file, auth is off.
+
 POST /sim/inject  {"node": n, "temp": 95} | {"node": n, "fan_fail": 2} | {"node": n, "power": "Off"}
                   | {"node": n, "event": "text"} | {"node": n, "clear": true}
 """
+import base64
 import json
 import random
+import secrets
+import ssl
 import sys
 import threading
 import time
@@ -17,6 +25,7 @@ from pathlib import Path
 import yaml
 
 FANS = 6
+FIRMWARE = {"BMC": ("BMC firmware", "2.4.0"), "BIOS": ("BIOS", "1.0.0")}
 RESET_TO = {"On": "On", "ForceOn": "On", "ForceOff": "Off", "GracefulShutdown": "Off",
             "ForceRestart": "On", "GracefulRestart": "On", "PowerCycle": "On"}
 
@@ -41,11 +50,11 @@ class Farm:
         self.temp: dict[str, float] = {}
         self.fans_failed: dict[str, int] = {}
         self.log: dict[str, list[dict]] = {n: [] for n in nodes}
+        self.account = "admin"  # the read-only account the AccountService lists; main() sets it from the credentials
 
     def event(self, node: str, message: str, severity: str = "OK") -> None:
         entries = self.log[node]
-        entries.append({"@odata.id": f"/{node}/redfish/v1/Systems/1/LogServices/Log/Entries/{len(entries) + 1}",
-                        "Id": str(len(entries) + 1), "Created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        entries.append({"Id": str(len(entries) + 1), "Created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                         "Severity": severity, "Message": message})
 
     def inject(self, req: dict) -> None:
@@ -76,8 +85,9 @@ class Farm:
         self.event(node, f"Reset {kind}")
 
     # --- Redfish resources -------------------------------------------------
-    def resource(self, node: str, path: str) -> dict | None:
-        base, info, r = f"/{node}/redfish/v1", self.nodes[node], self.rng
+    def resource(self, node: str, path: str, root: str | None = None) -> dict | None:
+        """One Redfish resource; `root` is the service root in links (legacy /<node>/redfish/v1 when None)."""
+        base, info, r = root or f"/{node}/redfish/v1", self.nodes[node], self.rng
         on = self.power[node] == "On"
         cpu_t = self.temp.get(node, round(r.uniform(40, 65), 1)) if on else 18.0
         healthy = {"State": "Enabled" if on else "Disabled",
@@ -85,8 +95,12 @@ class Farm:
         table = {
             "": {"@odata.id": base + "/", "RedfishVersion": "1.15.0", "Name": f"{node} service root",
                  "Systems": {"@odata.id": base + "/Systems"}, "Chassis": {"@odata.id": base + "/Chassis"},
-                 "Managers": {"@odata.id": base + "/Managers"}},
-            "Systems/1": {"@odata.id": f"{base}/Systems/1", "Id": "1", "Name": node, "HostName": node,
+                 "Managers": {"@odata.id": base + "/Managers"},
+                 "UpdateService": {"@odata.id": base + "/UpdateService"},
+                 "AccountService": {"@odata.id": base + "/AccountService"},
+                 "SessionService": {"@odata.id": base + "/SessionService"}},
+            "Systems/1": {"@odata.id": f"{base}/Systems/1", "Id": "1", "Name": node, "HostName": node, "Manufacturer": "opti-sim", "Model": "SimServer",
+                          "SerialNumber": f"SIM-{node.upper()}", "BiosVersion": "1.0.0",
                           "PowerState": self.power[node], "Status": healthy,
                           "ProcessorSummary": {"Count": info["cpus"], "Status": healthy},
                           "MemorySummary": {"TotalSystemMemoryGiB": info["memory_mb"] // 1024, "Status": healthy},
@@ -111,11 +125,35 @@ class Farm:
             "Chassis/1/Power": {"@odata.id": f"{base}/Chassis/1/Power", "Name": "Power",
                                 "PowerControl": [{"PowerConsumedWatts": r.randint(300, 900) if on else 0}]},
             "Managers/1": {"@odata.id": f"{base}/Managers/1", "Id": "1", "ManagerType": "BMC",
-                           "Name": f"{node} BMC", "Status": {"State": "Enabled", "Health": "OK"}},
+                           "Name": f"{node} BMC", "Model": "SimBMC", "FirmwareVersion": "2.4.0",
+                           "Status": {"State": "Enabled", "Health": "OK"}},
+            "Systems/1/LogServices/Log": {"@odata.id": f"{base}/Systems/1/LogServices/Log", "Id": "Log",
+                                          "Name": "Hardware event log",
+                                          "Entries": {"@odata.id": f"{base}/Systems/1/LogServices/Log/Entries"}},
             "Systems/1/LogServices/Log/Entries": {
                 "@odata.id": f"{base}/Systems/1/LogServices/Log/Entries", "Name": "Log Entries",
-                "Members@odata.count": len(self.log[node]), "Members": self.log[node]},
+                "Members@odata.count": len(self.log[node]),
+                "Members": [{**e, "@odata.id": f"{base}/Systems/1/LogServices/Log/Entries/{e['Id']}"}
+                            for e in self.log[node]]},
         }
+        for fw, (name, version) in FIRMWARE.items():
+            table[f"UpdateService/FirmwareInventory/{fw}"] = {
+                "@odata.id": f"{base}/UpdateService/FirmwareInventory/{fw}", "Id": fw, "Name": name, "Version": version}
+        links = {"Systems": ["Systems/1"], "Chassis": ["Chassis/1"], "Managers": ["Managers/1"],
+                 "Systems/1/LogServices": ["Systems/1/LogServices/Log"], "AccountService/Accounts": ["AccountService/Accounts/1"],
+                 "UpdateService/FirmwareInventory": [f"UpdateService/FirmwareInventory/{fw}" for fw in FIRMWARE],
+                 "SessionService/Sessions": []}
+        for coll, members in links.items():
+            table[coll] = {"@odata.id": f"{base}/{coll}", "Name": coll.rsplit("/", 1)[-1],
+                           "Members@odata.count": len(members), "Members": [{"@odata.id": f"{base}/{m}"} for m in members]}
+        table["UpdateService"] = {"@odata.id": f"{base}/UpdateService", "Name": "Update service",
+                                  "FirmwareInventory": {"@odata.id": f"{base}/UpdateService/FirmwareInventory"}}
+        table["AccountService"] = {"@odata.id": f"{base}/AccountService", "Name": "Account service",
+                                   "Accounts": {"@odata.id": f"{base}/AccountService/Accounts"}}
+        table["AccountService/Accounts/1"] = {"@odata.id": f"{base}/AccountService/Accounts/1", "Id": "1",
+                                              "UserName": self.account, "RoleId": "ReadOnly", "Enabled": True}
+        table["SessionService"] = {"@odata.id": f"{base}/SessionService", "Name": "Session service", "ServiceEnabled": True,
+                                   "Sessions": {"@odata.id": f"{base}/SessionService/Sessions"}}
         return table.get(path.strip("/"))
 
 
@@ -127,26 +165,91 @@ def counted(path: str, headers) -> bool:
     return not (path.startswith(("/healthz", "/sim/")) or headers.get(PROBE))
 
 
-def make_handler(farm: Farm):
-    stats, lock = {"requests": 0}, threading.Lock()
+class Sessions:
+    """Redfish sessions for the TLS surface: login gives a token, a token or Basic auth reads. Capped like a real BMC."""
+    MAX = 32
+
+    def __init__(self, creds: tuple[str, str] | None):
+        self.creds, self.tokens, self.lock = creds, {}, threading.Lock()
+
+    def login(self, user: str, password: str) -> tuple[str, str] | None:
+        if self.creds and (user, password) != self.creds:
+            return None
+        token, sid = secrets.token_hex(16), secrets.token_hex(4)
+        with self.lock:
+            if len(self.tokens) >= self.MAX:
+                self.tokens.pop(next(iter(self.tokens)))
+            self.tokens[token] = sid
+        return token, sid
+
+    def logout(self, sid: str) -> bool:
+        with self.lock:
+            hit = next((t for t, i in self.tokens.items() if i == sid), None)
+            return self.tokens.pop(hit, None) is not None
+
+    def allows(self, headers) -> bool:
+        if not self.creds:
+            return True
+        if headers.get("X-Auth-Token") in self.tokens:
+            return True
+        auth = headers.get("Authorization", "")
+        if auth.startswith("Basic "):
+            try:
+                user, _, pw = base64.b64decode(auth[6:]).decode().partition(":")
+            except ValueError:
+                return False
+            return (user, pw) == self.creds
+        return False
+
+
+SESSIONS = "/redfish/v1/SessionService/Sessions"
+ROOTS = ("/redfish/v1", "/redfish/v1/")
+
+
+def node_for(farm: Farm, host_header: str) -> str:
+    """The node a Host header names (bmc-<node> or <node>, port ignored); anything else gets the first node."""
+    host = host_header.rsplit(":", 1)[0] if host_header.count(":") == 1 else host_header
+    name = host.removeprefix("bmc-").split(".")[0]
+    return name if name in farm.nodes else next(iter(farm.nodes))
+
+
+def make_handler(farm: Farm, sessions: Sessions | None = None, stats: dict | None = None,
+                 lock=None):
+    """Legacy HTTP surface (/<node>/redfish/v1, no auth) when `sessions` is None, else the TLS surface."""
+    if stats is None:
+        stats, lock = {"requests": 0}, threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
-        def _send(self, code: int, obj) -> None:
+        def _send(self, code: int, obj, headers: dict | None = None) -> None:
             if counted(self.path, self.headers):
                 with lock:
                     stats["requests"] += 1
-            data = (json.dumps(obj) if not isinstance(obj, str) else obj).encode()
+            data = b"" if obj is None else (json.dumps(obj) if not isinstance(obj, str) else obj).encode()
             self.send_response(code)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
+            for k, v in (headers or {}).items():
+                self.send_header(k, v)
             self.end_headers()
             self.wfile.write(data)
 
-        def _split(self) -> tuple[str, str] | None:
-            parts = self.path.split("?")[0].strip("/").split("/", 3)  # node, redfish, v1, rest
+        def _split(self) -> tuple[str, str, str | None] | None:
+            """(node, resource path, link root) for this request, or None when it is not a Redfish path."""
+            path = self.path.split("?")[0]
+            if sessions is not None:
+                if path.rstrip("/") == "/redfish/v1" or path.startswith("/redfish/v1/"):
+                    return node_for(farm, self.headers.get("Host", "")), path[len("/redfish/v1"):].strip("/"), "/redfish/v1"
+                return None
+            parts = path.strip("/").split("/", 3)  # node, redfish, v1, rest
             if len(parts) >= 3 and parts[1:3] == ["redfish", "v1"] and parts[0] in farm.nodes:
-                return parts[0], parts[3] if len(parts) > 3 else ""
+                return parts[0], parts[3] if len(parts) > 3 else "", None
             return None
+
+        def _unauthorized(self) -> bool:
+            if sessions is None or sessions.allows(self.headers):
+                return False
+            self._send(401, {"error": "authentication required"}, {"WWW-Authenticate": 'Basic realm="opti-sim"'})
+            return True
 
         def do_GET(self):
             if self.path == "/healthz":
@@ -154,17 +257,37 @@ def make_handler(farm: Farm):
             if self.path == "/sim/stats":
                 return self._send(200, dict(stats))
             hit = self._split()
+            if hit and self.path.split("?")[0] not in ROOTS and self._unauthorized():
+                return
             body = farm.resource(*hit) if hit else None
             self._send(200, body) if body is not None else self._send(404, {"error": "not found"})
+
+        def do_DELETE(self):
+            path = self.path.split("?")[0]
+            if sessions is None or not path.startswith(SESSIONS + "/"):
+                return self._send(404, {"error": "not found"})
+            if self._unauthorized():
+                return
+            self._send(204, None) if sessions.logout(path.rsplit("/", 1)[1]) else self._send(404, {"error": "no such session"})
 
         def do_POST(self):
             try:
                 req = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
-                if self.path == "/sim/inject":
+                path = self.path.split("?")[0]
+                if path == "/sim/inject":
                     farm.inject(req)
                     return self._send(200, {"ok": True})
+                if sessions is not None and path.rstrip("/") == SESSIONS:
+                    made = sessions.login(str(req.get("UserName", "")), str(req.get("Password", "")))
+                    if made is None:
+                        return self._send(401, {"error": "invalid credentials"})
+                    token, sid = made
+                    return self._send(201, {"@odata.id": f"{SESSIONS}/{sid}", "Id": sid, "UserName": req["UserName"]},
+                                      {"X-Auth-Token": token, "Location": f"{SESSIONS}/{sid}"})
                 hit = self._split()
                 if hit and hit[1] == "Systems/1/Actions/ComputerSystem.Reset":
+                    if self._unauthorized():
+                        return
                     farm.reset(hit[0], req.get("ResetType", ""))
                     return self._send(200, {"ok": True})
                 self._send(404, {"error": "not found"})
@@ -177,10 +300,31 @@ def make_handler(farm: Farm):
     return Handler
 
 
+def read_credentials(path: Path) -> tuple[str, str] | None:
+    """'user:password' from a file the host generates; None (auth off) when there is none."""
+    try:
+        user, _, pw = path.read_text().strip().partition(":")
+    except OSError:
+        return None
+    return (user, pw) if user and pw else None
+
+
 def main() -> None:
     sim = Path(sys.argv[1] if len(sys.argv) > 1 else "sim.yaml")
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 8000
-    ThreadingHTTPServer(("0.0.0.0", port), make_handler(Farm(load_nodes(sim)))).serve_forever()
+    tls_port = int(sys.argv[3]) if len(sys.argv) > 3 else 8443
+    farm, stats, lock = Farm(load_nodes(sim)), {"requests": 0}, threading.Lock()
+    creds = read_credentials(Path("/run/hpcsim/bmc_credentials"))
+    if creds:
+        farm.account = creds[0]
+    cert, key = Path("/app/certs/cert.pem"), Path("/app/certs/key.pem")
+    if tls_port and cert.is_file():
+        secure = ThreadingHTTPServer(("0.0.0.0", tls_port), make_handler(farm, Sessions(creds), stats, lock))
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(cert, key)
+        secure.socket = ctx.wrap_socket(secure.socket, server_side=True)
+        threading.Thread(target=secure.serve_forever, daemon=True).start()
+    ThreadingHTTPServer(("0.0.0.0", port), make_handler(farm, None, stats, lock)).serve_forever()
 
 
 if __name__ == "__main__":

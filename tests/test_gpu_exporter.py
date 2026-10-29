@@ -26,6 +26,43 @@ def test_nodes_from_sim_yaml():
     assert len(nodes) == 6
 
 
+def series(text: str, metric: str) -> list[tuple[dict, str]]:
+    """[(labels, value)] for one metric from a Prometheus text scrape."""
+    import re
+    out = []
+    for line in text.splitlines():
+        m = re.fullmatch(metric + r"\{(.*)\} (\S+)", line)
+        if m:
+            out.append((dict(re.findall(r'(\w+)="([^"]*)"', m.group(1))), m.group(2)))
+    return out
+
+
+def test_gpu_series_carry_the_labels_of_the_real_dcgm_exporter():
+    s = exporter.State({"gpu001": 2}, random.Random(1), "h200")
+    for labels, _ in series(s.render(), "DCGM_FI_DEV_GPU_UTIL"):
+        assert labels["Hostname"] == labels["node"] == "gpu001"
+        assert labels["modelName"] == "NVIDIA H200" and labels["device"] == f"nvidia{labels['gpu']}"
+    uuids = {lb["UUID"] for lb, _ in series(s.render(), "DCGM_FI_DEV_GPU_UTIL")}
+    assert len(uuids) == 2
+
+
+def test_used_and_free_framebuffer_add_up_to_the_gpu_total():
+    s = exporter.State({"gpu001": 3}, random.Random(2), "h200")
+    text = s.render()
+    used = {lb["gpu"]: float(v) for lb, v in series(text, "DCGM_FI_DEV_FB_USED")}
+    free = {lb["gpu"]: float(v) for lb, v in series(text, "DCGM_FI_DEV_FB_FREE")}
+    assert used.keys() == free.keys() == {"0", "1", "2"}
+    assert {used[g] + free[g] for g in used} == {exporter.FB_TOTAL_MIB["h200"]}
+    assert all(f > 0 for f in free.values())
+
+
+def test_gpu_type_comes_from_sim_yaml_and_unknown_types_get_a_default():
+    assert exporter.load_gpu_type(ROOT / "sim.yaml") == "h200"
+    s = exporter.State({"gpu001": 1}, random.Random(1), "mystery")
+    assert s.fb_total == exporter.FB_DEFAULT_MIB and s.model == "MYSTERY"
+    assert exporter.State({"gpu001": 1}).model == "NVIDIA GPU"
+
+
 def test_render_has_gpu_and_fs_metrics():
     s = exporter.State(exporter.load_nodes(ROOT / "sim.yaml"), random.Random(1))
     text = s.render()
@@ -37,10 +74,9 @@ def test_inject_xid_and_clear():
     s = exporter.State({"gpu001": 1}, random.Random(1))
     s.inject({"node": "gpu001", "xid": 79, "temp": 92})
     t = s.render()
-    assert 'DCGM_FI_DEV_XID_ERRORS{node="gpu001",gpu="0"} 79' in t
-    assert 'DCGM_FI_DEV_GPU_TEMP{node="gpu001",gpu="0"} 92.0' in t
+    assert series(t, "DCGM_FI_DEV_XID_ERRORS")[0][1] == "79" and series(t, "DCGM_FI_DEV_GPU_TEMP")[0][1] == "92.0"
     s.inject({"node": "gpu001", "clear": True})
-    assert 'XID_ERRORS{node="gpu001",gpu="0"} 0' in s.render()
+    assert series(s.render(), "DCGM_FI_DEV_XID_ERRORS")[0][1] == "0"
 
 
 def test_inject_unknown_node():

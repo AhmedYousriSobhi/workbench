@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import time
+import urllib.error
 from collections.abc import Callable
 from pathlib import Path
 
@@ -21,6 +22,7 @@ STAGES = [  # (label, service-name pattern); later stages depend on earlier ones
     ("slurm services", r"slurmrestd|accounting-init"),
     ("mocks", r"bmc-farm|bcm-mock|jira-mock"),
     ("nodes", r"(cn|gpu)\d+"),
+    ("login node", r"login"),
     ("scenarios", r"scenario-engine"),
 ]
 
@@ -115,6 +117,14 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     PROFILE_FILE.write_text(profile)
     if skip:
         say(f"skipping (not implemented yet): {', '.join(skip)}")
+    if "bmc-farm" in todo:
+        ensure_bmc_credentials()
+    if "login" in todo:
+        try:
+            ensure_ssh_keys()
+        except OSError as e:
+            say(f"FAILED login node keys: {e}")
+            return False
     names = [n for n in data["services"] if n not in skip] + ["prometheus", "grafana", "gpu-exporter-farm"]
     for label, svcs in stage_services(names):
         say(f"starting {label}: {', '.join(svcs)}")
@@ -129,6 +139,16 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         say(f"grafana token: {provision_token()}")
     except OSError as e:
         say(f"WARN no grafana token ({e}); the governor will not publish annotations")
+    else:
+        try:  # a read-only token for monitoring clients: dashboards and /api/ds/query, no writes
+            say(f"grafana viewer token: {provision_token(path=VIEWER_TOKEN_FILE, account='hpcsim-viewer', role='Viewer')}"
+                " (datasource uid: prometheus)")
+        except OSError as e:
+            say(f"WARN no grafana viewer token ({e})")
+    if "bmc-farm" in todo:
+        say(f"bmc: https://127.0.0.1:8443/redfish/v1 (Host bmc-<node>), user admin, password in {BMC_CREDENTIALS}")
+    if "login" in todo:
+        say(f"ssh: ssh -i {SSH_DIR}/id_ed25519 -p {compose.SSH_PORT} <user>@127.0.0.1 (users from sim.yaml)")
     say("stack is up")
     return True
 
@@ -188,6 +208,48 @@ def scale(sim: dict, profile: str, n: int, runner: Runner = _run,
     return ok
 
 
+SSH_DIR = Path("compose/generated/secrets/ssh")
+
+
+def ensure_ssh_keys(path: Path = SSH_DIR, runner: Runner = _run) -> Path:
+    """Host key, one client key and authorized_keys for the login node (0600, never tracked).
+
+    Kept across `up`s so a client that pinned the host key keeps trusting it.
+    """
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    for name in ("ssh_host_ed25519_key", "id_ed25519"):
+        if not (path / name).exists():
+            r = runner(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", f"hpcsim-{name}", "-f", str(path / name)])
+            if r.returncode != 0:
+                raise OSError(f"ssh-keygen failed: {r.stderr.strip()[-200:]}")
+    (path / "authorized_keys").write_text((path / "id_ed25519.pub").read_text())
+    if os.geteuid() == 0:  # run under sudo: hand the secrets back to the checkout's owner
+        owner = path.parent.parent.stat()
+        for p in (path, *path.iterdir()):
+            os.chown(p, owner.st_uid, owner.st_gid)
+    return path
+
+
+BMC_CREDENTIALS = Path("compose/generated/secrets/bmc_credentials")
+
+
+def ensure_bmc_credentials(path: Path = BMC_CREDENTIALS) -> Path:
+    """'admin:<random>' for the bmc-farm's TLS surface, made once. Mounted read-only into a container that runs as
+    `nobody`, so the file is world-readable; the 0700 folder above it keeps other host users out."""
+    if path.exists():
+        return path
+    import secrets
+
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path.write_text(f"admin:{secrets.token_urlsafe(18)}\n")
+    path.chmod(0o644)
+    if os.geteuid() == 0:
+        owner = path.parent.parent.stat()
+        for p in (path.parent, path):
+            os.chown(p, owner.st_uid, owner.st_gid)
+    return path
+
+
 TOKEN_FILE = Path("compose/generated/secrets/grafana_token")
 
 
@@ -217,10 +279,23 @@ def token_valid(token: str, url: str = "http://127.0.0.1:3000") -> bool:
         return False
 
 
+def token_name(account: str) -> str:
+    """Grafana keeps token names unique across the whole organisation, so a re-made token needs a new name."""
+    import secrets
+
+    return f"{account.removeprefix('hpcsim-')}-{secrets.token_hex(3)}"
+
+
+VIEWER_TOKEN_FILE = Path("compose/generated/secrets/grafana_viewer_token")
+
+
 def provision_token(url: str = "http://127.0.0.1:3000", auth: str = "admin:admin",
                     path: Path = TOKEN_FILE, http=_grafana, valid=token_valid,
-                    retries: int = 30, sleep: Callable[[float], None] = time.sleep) -> Path:
-    """Ensure the governor's annotation token exists and works; the 0600 file is the only copy.
+                    retries: int = 30, sleep: Callable[[float], None] = time.sleep,
+                    account: str = "hpcsim-governor", role: str = "Editor") -> Path:
+    """Ensure a service-account token exists and works; the 0600 file is the only copy.
+
+    The governor's (Editor, annotations) and a read-only one for monitoring clients (Viewer, dashboards and queries).
 
     Grafana's state is disposable (no volume), so a token left over from a previous `up` is
     replaced. Grafana needs a moment after start, hence the retries.
@@ -229,13 +304,21 @@ def provision_token(url: str = "http://127.0.0.1:3000", auth: str = "admin:admin
         return path
     for attempt in range(retries):
         try:
-            sa = http("POST", "/api/serviceaccounts", {"name": "hpcsim-governor", "role": "Editor"}, url, auth)
+            sa = http("POST", "/api/serviceaccounts", {"name": account, "role": role}, url, auth)
+            break
+        except urllib.error.HTTPError as e:
+            if e.code != 400:  # 400 is "already exists": a lost token file, the account is reused
+                raise
+            found = http("GET", f"/api/serviceaccounts/search?query={account}", None, url, auth)
+            sa = next((a for a in found.get("serviceAccounts", []) if a["name"] == account), None)
+            if sa is None:
+                raise
             break
         except OSError:
             if attempt == retries - 1:
                 raise
             sleep(2)
-    tok = http("POST", f"/api/serviceaccounts/{sa['id']}/tokens", {"name": "governor"}, url, auth)
+    tok = http("POST", f"/api/serviceaccounts/{sa['id']}/tokens", {"name": token_name(account)}, url, auth)
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     path.unlink(missing_ok=True)
     path.touch(mode=0o600)

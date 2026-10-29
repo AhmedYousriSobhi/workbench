@@ -77,9 +77,9 @@ that does. Components not built yet are skipped with a note.
 
 | What | Where |
 |---|---|
-| Grafana dashboards and governor annotations | http://127.0.0.1:3000 (user `admin`, password `admin`) |
+| Grafana dashboards and governor annotations | http://127.0.0.1:3000 (user `admin`, password `admin`). For a monitoring client: datasource uid `prometheus`, GPU host label `Hostname`, and a read-only service-account token in `compose/generated/secrets/grafana_viewer_token` |
 | Prometheus | http://127.0.0.1:9090 (the `governor` job scrapes the governor's `/metrics`: `hpcsim_governor_level`, `hpcsim_host_mem_available_bytes`, ...) |
-| Fake BMCs (Redfish) | `curl http://127.0.0.1:8000/cn001/redfish/v1/Systems/1` |
+| Fake BMCs (Redfish) | `curl http://127.0.0.1:8000/cn001/redfish/v1/Systems/1`; standard TLS surface for real clients: `curl -k --resolve bmc-cn001:8443:127.0.0.1 https://bmc-cn001:8443/redfish/v1` (login with the account in `compose/generated/secrets/bmc_credentials`, ADR 0012) |
 | Fake BCM (CMDaemon JSON) | `curl -X POST http://127.0.0.1:8081/json -d '{"service": "cmdevice", "call": "getDevices"}'` |
 | Fake Jira | `curl -X POST http://127.0.0.1:8080/rest/api/2/issue -d '{"fields": {"project": {"key": "OPS"}, "summary": "hi"}}'`; failures: `curl -X POST http://127.0.0.1:8080/sim/failure -d '{"mode": "429", "count": 3}'` |
 | Slurm jobs | `docker exec hpcsim-slurmctld-1 sinfo` / `squeue` / `sbatch` |
@@ -107,7 +107,7 @@ built yet (Kubernetes, ticket-bot) are reported as skipped.
 
 ## 4a. Get a shell on a node
 
-Simulated nodes have no SSH server, so there is no `ssh cn001`. Open a shell with `docker exec` (nodes are named
+The compute nodes have no SSH server, so there is no `ssh cn001`; the **login node** is the SSH entry point (below). Open a shell on a node with `docker exec` (nodes are named
 `cn001`, `gpu001`, ... and their containers `hpcsim-<name>-1`):
 
 ```bash
@@ -116,7 +116,13 @@ docker exec -it hpcsim-cn001-1 bash                            # a shell on a co
 docker exec -u alice -it hpcsim-gpu001-1 bash                  # the same, as a simulated user
 ```
 
-See what the output looks like in [Nodes and shells](../manual/04-nodes-and-shells.md). A shell that hangs may be a node the governor paused under memory pressure (`./scripts/simctl status`). The only machine
+For tools that connect over SSH (a desktop monitoring client), `simctl up` starts a `login` container on `127.0.0.1:2222` with key login only and the Slurm client tools on PATH; the key is `compose/generated/secrets/ssh/id_ed25519` (ADR 0011):
+
+```bash
+ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1 sinfo
+```
+
+See what the output looks like in [Nodes and shells](../manual/04-nodes-and-shells.md). A shell that hangs may be a node the governor paused under memory pressure (`./scripts/simctl status`). The other machine
 with a real `sshd` is the optional fidelity VM (`cd fidelity-vm && ./bin/up.sh`, then `vagrant ssh fidelity`). SSH or
 Teleport access to the simulated nodes is not built yet (issue 77). More in [Nodes and shells](../manual/04-nodes-and-shells.md).
 
