@@ -3,6 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m simctl.progress`; do not edit. -->
 Last updated 2026-10-29. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
+**69% built** (31 done, 0 in review, 9 partial, 5 to do, 45 items).
 **70% built** (32 done, 0 in review, 10 partial, 4 to do, 46 items).
 
 ## Roadmap
@@ -12,7 +13,7 @@ flowchart LR
     p0["Baseline<br/>33%"]:::partial
     p1["Governor<br/>86%"]:::partial
     p2["Slurm<br/>100%"]:::done
-    p3["Mocks<br/>50%"]:::partial
+    p3["Mocks<br/>40%"]:::partial
     p4["People and chaos<br/>0%"]:::partial
     p5["Kubernetes<br/>50%"]:::partial
     p6["Fidelity VM<br/>0%"]:::partial
@@ -50,6 +51,7 @@ flowchart TB
         bmc["bmc-farm"]:::done
         bcm["bcm-mock"]:::partial
         jira["jira-mock"]:::partial
+        tele["Teleport access"]:::todo
         chaos["scenario engine (simctl)"]:::partial
         users["user-sim / ticket-bot"]:::todo
         k8s["k3d + KWOK"]:::partial
@@ -77,6 +79,7 @@ flowchart TB
     app -->|"Redfish"| bmc
     app --> bcm
     app --> jira
+    app -->|"ssh via Teleport"| tele
     classDef done fill:#1a7f37,stroke:#1a7f37,color:#fff
     classDef review fill:#0969da,stroke:#0969da,color:#fff
     classDef partial fill:#bf8700,stroke:#bf8700,color:#fff
@@ -135,7 +138,7 @@ _A real scheduler the app can read, built from sim.yaml._
 
 6/6 done
 
-### Mocks (50%)
+### Mocks (40%)
 
 _Fake BMC, BCM and Jira so the app's integrations can be exercised._
 
@@ -145,8 +148,9 @@ _Fake BMC, BCM and Jira so the app's integrations can be exercised._
 | bmc-farm | ✅ Done | One process serves /<node>/redfish/v1 for every node: Systems, Chassis Thermal/Power, Managers, event log, Reset action, POST /sim/inject (temp, fans, power, events). Verified live in the stack. | `components/bmc-farm/bmc.py` | [#52](https://github.com/AhmedYousriSobhi/opti-sim/pull/52) |
 | bcm-mock | 🟡 Partial | CMDaemon-style POST /json (cmdevice, cmstatus, cmpart) over the sim.yaml nodes, power calls and /sim/inject. Call names are an assumed subset (ADR 0005); verified live, 12 MiB. | `components/bcm-mock/bcm.py` | [#71](https://github.com/AhmedYousriSobhi/opti-sim/pull/71) |
 | jira-mock | 🟡 Partial | Mode mock only: REST v2/v3 issues, comments, workflow transitions with required-field errors, JQL subset, webhooks, 429/503/slow failures (ADR 0005). Verified live in the container (transitions, JQL, webhook to an outside receiver, 429/503), 15 MiB. cloud/dc modes not built. | `components/jira-mock/jira.py` | [#71](https://github.com/AhmedYousriSobhi/opti-sim/pull/71) |
+| Teleport access | ⬜ To do | Issue 77: the app reaches nodes through Teleport (auth + proxy, node access, outage and cert-expiry scenarios). Needs open decisions 6 first; will need sshd in node-base and a Phase 0 budget. | - | - |
 
-2/4 done
+2/5 done
 
 ### People and chaos (0%)
 

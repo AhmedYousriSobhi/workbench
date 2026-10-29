@@ -9,7 +9,7 @@
     p0["Baseline<br/>33%"]:::partial
     p1["Governor<br/>86%"]:::partial
     p2["Slurm<br/>100%"]:::done
-    p3["Mocks<br/>50%"]:::partial
+    p3["Mocks<br/>40%"]:::partial
     p4["People and chaos<br/>0%"]:::partial
     p5["Kubernetes<br/>50%"]:::partial
     p6["Fidelity VM<br/>0%"]:::partial
@@ -41,6 +41,7 @@
         bmc["bmc-farm"]:::done
         bcm["bcm-mock"]:::partial
         jira["jira-mock"]:::partial
+        tele["Teleport access"]:::todo
         chaos["scenario engine (simctl)"]:::partial
         users["user-sim / ticket-bot"]:::todo
         k8s["k3d + KWOK"]:::partial
@@ -68,6 +69,7 @@
     app -->|"Redfish"| bmc
     app --> bcm
     app --> jira
+    app -->|"ssh via Teleport"| tele
     classDef done fill:#1a7f37,stroke:#1a7f37,color:#fff
     classDef review fill:#0969da,stroke:#0969da,color:#fff
     classDef partial fill:#bf8700,stroke:#bf8700,color:#fff
