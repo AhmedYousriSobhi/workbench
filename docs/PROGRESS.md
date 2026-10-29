@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m simctl.progress`; do not edit. -->
 Last updated 2026-10-29. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**67% built** (32 done, 0 in review, 11 partial, 5 to do, 48 items).
+**67% built** (32 done, 1 in review, 11 partial, 5 to do, 49 items).
 
 ## Roadmap
 
@@ -216,6 +216,7 @@ _What keeps every change safe and debuggable._
 | validate.sh gate | ✅ Done | Secrets scan, compile, ruff, shellcheck, YAML/JSON, systemd verify, pytest and a governor smoke run before every commit. | `scripts/validate.sh` | [#18](https://github.com/AhmedYousriSobhi/opti-sim/pull/18) |
 | Unit-test coverage gate | ✅ Done | validate.sh runs the unit tests under coverage and fails below 90% (override COV_FLOOR). 226 tests, 98% of simctl, governor, webui and components. Not covered by unit tests, by design: code that needs root, a live Docker stack or a browser (tests/real). | `tests/`, `scripts/validate.sh` | [#81](https://github.com/AhmedYousriSobhi/opti-sim/pull/81) |
 | Real-host tests | ✅ Done | User-level tests with cgroups, Docker, libvirt and a live governor; a sudo suite for root-only paths. | `scripts/real-test.sh`, `scripts/real-test-root.sh` | [#20](https://github.com/AhmedYousriSobhi/opti-sim/pull/20), [#22](https://github.com/AhmedYousriSobhi/opti-sim/pull/22) |
+| Initial machine check | 🔍 In review | `./scripts/check-machine.sh` (system python3 only, runs before any build) checks OS, cores, RAM, disk, cgroup v2, Docker daemon and compose, free ports, optional tools, and which profiles fit; READY or NOT READY with a fix per problem. Also `simctl check`. | `simctl/machine.py`, `scripts/check-machine.sh` | [#87](https://github.com/AhmedYousriSobhi/opti-sim/pull/87) |
 | simctl doctor / status / diag | ✅ Done | Environment checks with fixes, governor state, a masked diagnostics tarball, and the container security check. | `simctl/checks.py`, `simctl/diag.py` | [#26](https://github.com/AhmedYousriSobhi/opti-sim/pull/26) |
 | Observability stack | ✅ Done | Prometheus (2 d, tmpfs), Grafana with provisioned dashboard, fake GPU exporter. | `compose/observability.yml` | - |
 | Decisions as ADRs | ✅ Done | 0001 record decisions, 0002 Slurm from source with no extra privileges, 0003 slurmrestd/JWT and accounting, 0004 slurmrestd keeps its unshare steps disabled. | `docs/adr` | - |
@@ -223,7 +224,7 @@ _What keeps every change safe and debuggable._
 | Verification helpers | ✅ Done | verify.sh runs validate.sh plus real tests (--full adds the live stack lifecycle); tests/real/helpers.py starts a live governor and talks to its socket. | `scripts/verify.sh` | [#48](https://github.com/AhmedYousriSobhi/opti-sim/pull/48) |
 | Progress tracker | ✅ Done | This page, generated from docs/progress.yaml (issue 41). | `simctl/progress.py` | [#42](https://github.com/AhmedYousriSobhi/opti-sim/pull/42) |
 
-9/9 done
+9/10 done
 
 ## Next up
 
