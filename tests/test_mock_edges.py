@@ -95,14 +95,31 @@ def test_jira_bad_requests_and_unknown_routes(jira_url):
 
 
 def test_jql_negation_and_empty_clauses():
-    assert jira.parse_jql("") == [] and jira.parse_jql("ORDER BY created") == []  # no filter: everything matches
-    clauses = jira.parse_jql("status not in (Open, Closed) AND project = OPS")
-    assert clauses == [("status", "not in", ["Open", "Closed"]), ("project", "=", ["OPS"])]
-    issue = {"key": "OPS-1", "fields": {"project": {"key": "OPS"}, "status": {"name": "Resolved"},
-                                         "issuetype": {"name": "Task"}, "labels": [], "assignee": None}}
-    assert jira.match(issue, "status", "not in", ["Open", "Closed"]) is True
-    assert jira.match(issue, "status", "!=", ["Resolved"]) is False
-    assert jira.match(issue, "assignee", "=", [""]) is True  # unassigned
+    issue = {"key": "OPS-1", "fields": {"project": {"key": "OPS"}, "status": jira.status_of("Resolved"),
+                                         "issuetype": {"name": "Task"}, "labels": [], "assignee": None, "summary": "s",
+                                         "comment": {"comments": []}, "created": "2026-01-01T00:00:00.000+0000"}}
+    ok = lambda q: jira.Query(q).pred(issue)
+    assert ok("") and ok("ORDER BY created")  # no filter: everything matches
+    assert ok("status not in (Open, Closed) AND project = OPS")
+    assert not ok("status != Resolved") and ok("assignee is EMPTY") and not ok("assignee is not EMPTY")
+    assert ok("statusCategory = Done") and not ok("statusCategory != Done")
+    assert ok("created < -7d") and not ok("created > -7d")
+
+
+def test_jql_grouping_text_and_errors():
+    issue = {"key": "OPS-1", "fields": {"project": {"key": "OPS"}, "status": jira.status_of("Open"),
+                                         "issuetype": {"name": "Task"}, "labels": ["gpu-farm"], "assignee": None,
+                                         "summary": "node[1] down", "description": None,
+                                         "comment": {"comments": [{"body": "fan alarm"}]},
+                                         "created": "2026-01-01T00:00:00.000+0000"}}
+    ok = lambda q: jira.Query(q).pred(issue)
+    # the shape Gate-H sends: a parenthesised scope with OR inside, escaped text, ORDER BY at the end
+    assert ok('(project = "OPS" AND (labels in ("gpu-farm") OR text ~ "other")) ORDER BY updated DESC')
+    assert ok('text ~ "node\\[1\\]"') and ok('text ~ "FAN"') and not ok('text ~ "absent"')
+    assert ok("NOT project = X") and ok("project = X OR project = OPS") and not ok("project = X AND project = OPS")
+    for bad in ("project =", "(project = OPS", "project OPS", "labels in gpu", "status ?? 1", "bogus = 1", "project = OPS OPS"):
+        with pytest.raises(jira.JiraError):
+            jira.Query(bad)
 
 
 def test_post_webhook_delivers_and_swallows_a_dead_receiver():

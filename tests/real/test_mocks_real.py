@@ -78,7 +78,7 @@ def test_jql_in_the_container(mocks):
     issue("other", labels=["live-net"])
     hits = call(f"{JIRA}/rest/api/2/search?jql=" + quote("project = LIVE AND labels = live-gpu"))[1]["issues"]
     assert [i["key"] for i in hits] == [key]
-    assert call(f"{JIRA}/rest/api/2/search?jql=" + quote("summary ~ x"))[0] == 400
+    assert call(f"{JIRA}/rest/api/2/search?jql=" + quote("nosuchfield = x"))[0] == 400
 
 
 def test_failure_modes_in_the_container(mocks):
@@ -125,3 +125,14 @@ def test_bcm_power_and_injection_in_the_container(mocks):
     assert call(f"{BCM}/sim/inject", {"node": "cn004", "closed": True})[0] == 200
     assert rpc("cmstatus", "getStatus", "cn004")["result"]["state"] == "CLOSED"
     assert "Unknown device" in rpc("cmdevice", "getDevice", "nope")["error"]
+
+
+def test_gate_h_style_search_and_myself_in_the_container(mocks):
+    """The calls a monitoring client makes: POST /search/jql with a grouped JQL, then /myself and /serverInfo."""
+    key = issue("gate-h", labels=["gpu-farm"])
+    body = {"jql": '(project = "LIVE" AND (labels in ("gpu-farm") OR text ~ "zzz")) ORDER BY updated DESC',
+            "maxResults": 25, "fields": ["summary", "status", "issuetype", "updated", "assignee"]}
+    status, page, _ = call(f"{JIRA}/rest/api/3/search/jql", body)
+    assert status == 200 and key in [i["key"] for i in page["issues"]] and page["isLast"] is True
+    assert call(f"{JIRA}/rest/api/2/myself")[1]["accountId"] == "alice-id"
+    assert call(f"{JIRA}/rest/api/2/serverInfo")[1]["version"]
