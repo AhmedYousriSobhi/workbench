@@ -1,4 +1,4 @@
-"""What a monitoring client (Gate-H) does for GPU usage, against the live stack: a read-only Grafana token and
+"""What a monitoring client does for GPU usage, against the live stack: a read-only Grafana token and
 /api/ds/query on the Prometheus datasource, filtered by the Hostname label, reading util, used, free and temp."""
 import json
 import os
@@ -49,12 +49,12 @@ def token():
 
 
 def series(response: dict, ref: str) -> list[dict]:
-    """The labels of each series of one query, as Gate-H reads them from the frames."""
+    """The labels of each series of one query, as a monitoring client reads them from the frames."""
     frames = response.get("results", {}).get(ref, {}).get("frames", [])
     return [f["labels"] for fr in frames for f in fr["schema"]["fields"] if f.get("labels")]
 
 
-def test_all_four_series_exist_per_gpu_with_the_labels_gate_h_reads(token):
+def test_all_four_series_exist_per_gpu_with_the_labels_a_client_reads(token):
     status, resp = gpu_query(token, ["gpu001", "gpu002"])
     assert status == 200
     for ref in METRICS:
