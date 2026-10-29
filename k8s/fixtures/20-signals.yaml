@@ -1,4 +1,4 @@
-# Ported from hgate-k8slab bin/fixtures-signals.sh: workload signals for monitor features.
+# Ported from the earlier Kubernetes lab bin/fixtures-signals.sh: workload signals for monitor features.
 apiVersion: apps/v1
 kind: Deployment
 metadata: {name: stuck, namespace: team-a}

@@ -1,6 +1,6 @@
 # Reuse assessment: legacy VM labs
 
-Review of two earlier labs (`../hgate-testlab`, `../hgate-k8slab`) for what opti-sim can reuse. Based on their READMEs, Vagrantfiles, `bin/` and `provision/` scripts and the Jira lab docs; the Teleport and Azure material was only skimmed.
+Review of two earlier labs (a test lab and a Kubernetes lab, both outside this repo) for what opti-sim can reuse. Based on their READMEs, Vagrantfiles, `bin/` and `provision/` scripts and the Jira lab docs; the Teleport and Azure material was only skimmed.
 
 ## Summary
 
@@ -30,7 +30,7 @@ Nothing is reused as-is: both labs are VM-based, which is exactly what opti-sim 
 
 ## Cautions
 
-- `hgate-testlab/jira-dc/lab.env` contains personal access tokens, and the directory holds a licence file and Atlassian jars. **Do not copy these into this repo.** Generate `lab.env` at runtime and git-ignore it. (Those tokens were displayed in this session's terminal output; rotate them if the lab Jira is reachable beyond localhost.)
+- The test lab's `jira-dc/lab.env` contains personal access tokens, and the directory holds a licence file and Atlassian jars. **Do not copy these into this repo.** Generate `lab.env` at runtime and git-ignore it. (Those tokens were displayed in this session's terminal output; rotate them if the lab Jira is reachable beyond localhost.)
 - The Jira DC test licence lasts 3 hours; `jira-real` must handle re-seeding.
 - Copy ideas and small scripts, not VM images or `.vagrant/` state.
 
