@@ -29,3 +29,12 @@ def test_install_script_prints_a_unit_pointing_at_this_checkout():
                          text=True, check=True).stdout
     assert f"WorkingDirectory={ROOT}" in out and f"--workdir {ROOT}" in out and "--require-lock" in out
     assert "HPCSIM_GRAFANA_TOKEN" in out and "$$(cat" in out and "sekret" not in out
+
+
+def test_pyproject_declares_installable_packages():
+    import tomllib
+    from pathlib import Path
+
+    cfg = tomllib.loads((Path(__file__).parent.parent / "pyproject.toml").read_text())
+    # flat layout with many top-level dirs: setuptools refuses to guess
+    assert cfg["tool"]["setuptools"]["packages"] == ["simctl", "governor"]
