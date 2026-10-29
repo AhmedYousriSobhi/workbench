@@ -22,7 +22,7 @@ See [docs/architecture/08-repository-and-migration.md](docs/architecture/08-repo
 
 ## Conventions
 
-- Python 3.11+, Typer for the CLI, FastAPI for services, type hints, `ruff` for lint/format, `pytest` for tests.
+- Python 3.11+, Typer for the CLI, Starlette for the web UI (ADR 0008), type hints, `ruff` for lint/format, `pytest` for tests.
 - Generated files (compose, `slurm.conf`, Prometheus targets) are derived from `sim.yaml`; never hand-edit them.
 - Every component declares a memory budget and priority class (P0-P6).
 
