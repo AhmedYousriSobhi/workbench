@@ -12,7 +12,7 @@ SPEC W-3), and user-sim does not exist yet, so Slurm job events are not availabl
   Prometheus, or `curl`, not the page watching itself.
 - `webui/flow.py` polls the counters (rate-limited, shared by all open tabs) and turns a rise into an event
   `clients -> service`. Scenario steps and fault buttons add `injector -> service` events. Nothing is invented.
-- Delivery is SSE at `/api/flow`, opened by the page only while the Cluster tab is showing, so it costs nothing
+- Delivery is SSE at `/api/flow`, opened by the page only while the page is visible, so it costs nothing
   elsewhere. A new stream starts from "now"; old events are not replayed.
 - The animation stops at governor level L3 and above (the server also stops polling), when the user pauses it, and
   when the system asks for reduced motion. Counts and states keep updating without animation.
