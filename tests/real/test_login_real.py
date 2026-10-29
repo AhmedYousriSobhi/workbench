@@ -1,6 +1,6 @@
 """The SSH login node in the live min stack: key login, Slurm tools on a non-interactive PATH, forwarding, refusals.
 
-This is what an SSH-based client (Gate-H) does: connect, run squeue/sinfo, open a forwarded channel.
+This is what an SSH-based client does: connect, run squeue/sinfo, open a forwarded channel.
 """
 import os
 import subprocess
@@ -55,7 +55,7 @@ def test_password_login_is_off(login):
 
 
 def test_forwarding_reaches_another_service(login):
-    """A client opens a channel through the login node (how Gate-H reaches a BMC); jira-mock answers behind it."""
+    """A client opens a channel through the login node (how a client reaches a BMC); jira-mock answers behind it."""
     import socket
     import urllib.request
 

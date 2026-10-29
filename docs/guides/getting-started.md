@@ -116,7 +116,7 @@ docker exec -it hpcsim-cn001-1 bash                            # a shell on a co
 docker exec -u alice -it hpcsim-gpu001-1 bash                  # the same, as a simulated user
 ```
 
-For tools that connect over SSH (a monitoring app such as Gate-H), `simctl up` starts a `login` container on `127.0.0.1:2222` with key login only and the Slurm client tools on PATH; the key is `compose/generated/secrets/ssh/id_ed25519` (ADR 0011):
+For tools that connect over SSH (a desktop monitoring client), `simctl up` starts a `login` container on `127.0.0.1:2222` with key login only and the Slurm client tools on PATH; the key is `compose/generated/secrets/ssh/id_ed25519` (ADR 0011):
 
 ```bash
 ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1 sinfo

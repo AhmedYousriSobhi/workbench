@@ -3,7 +3,7 @@
 Status: accepted
 
 ## Context
-HPC monitoring clients such as Gate-H do not call `slurmrestd`. They open one SSH connection to a login node and run
+HPC monitoring clients do not call `slurmrestd`. They open one SSH connection to a login node and run
 `squeue`, `sinfo` and `sacct` there; Kubernetes, GPU and storage reads, BMC channels (`forwardOut`) and the BCM
 head-node hop ride the same connection. Simulated nodes had no `sshd`, so none of that could reach the cluster.
 
@@ -20,5 +20,5 @@ A `login` service (group `access`, in `min` and so every profile) built from `im
 
 ## Consequences
 - `ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1 sinfo` works after `simctl up`.
-- Compute nodes still have no `sshd`; Slurm's `srun` and Gate-H's `ssh <node>` hops are not covered (follow-up).
+- Compute nodes still have no `sshd`; Slurm's `srun` and a client's `ssh <node>` hops are not covered (follow-up).
 - Teleport (issue 77) can build on this component.

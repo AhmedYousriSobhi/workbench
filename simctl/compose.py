@@ -70,7 +70,7 @@ def generate(sim: dict, profile: dict) -> dict:
             svc["volumes"] = [slurm_mount]
             svc["hostname"] = name
             svc.setdefault("environment", {})["HPCSIM_USERS"] = users_env(sim)
-    if "login" in services:  # SSH for clients such as Gate-H: localhost only, keys from ./secrets/ssh
+    if "login" in services:  # SSH for clients such as a monitoring app: localhost only, keys from ./secrets/ssh
         services["login"]["volumes"].append("./secrets/ssh:/run/hpcsim/ssh:ro")
         services["login"].update({"ports": [f"127.0.0.1:{SSH_PORT}:22"],
                                   "depends_on": ["slurmctld"] if "slurmctld" in services else []})
