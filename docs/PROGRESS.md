@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m simctl.progress`; do not edit. -->
 Last updated 2026-10-29. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**66% built** (27 done, 0 in review, 5 partial, 9 to do, 41 items).
+**69% built** (29 done, 0 in review, 5 partial, 8 to do, 42 items).
 
 ## Roadmap
 
@@ -12,7 +12,7 @@ flowchart LR
     p0["Baseline<br/>33%"]:::partial
     p1["Governor<br/>83%"]:::partial
     p2["Slurm<br/>100%"]:::done
-    p3["Mocks<br/>25%"]:::partial
+    p3["Mocks<br/>50%"]:::partial
     p4["People and chaos<br/>0%"]:::partial
     p5["Kubernetes<br/>50%"]:::partial
     p6["Fidelity VM<br/>0%"]:::partial
@@ -47,7 +47,7 @@ flowchart TB
         prom["Prometheus"]:::done
         graf["Grafana"]:::done
         gpux["gpu-exporter-farm"]:::done
-        bmc["bmc-farm"]:::todo
+        bmc["bmc-farm"]:::done
         bcm["bcm-mock"]:::todo
         jira["jira-mock"]:::todo
         users["user-sim / ticket-bot"]:::todo
@@ -110,7 +110,7 @@ _A root service that keeps the host alive by escalating through a ladder._
 | Security watchdog | ✅ Done | Every 15 s flags privileged/capability/unconfined/host-namespace/docker.sock containers, missing limits and live memory.max drift. Report only; skipped from L3 up. | `governor/watchdog.py` | [#34](https://github.com/AhmedYousriSobhi/opti-sim/pull/34) |
 | Monitored slurmrestd exception | ✅ Done | slurmrestd runs with two unshare steps disabled (ADR 0004). Any wider SLURMRESTD_SECURITY option is a violation; doctor lists the accepted exception. | `governor/watchdog.py` | [#44](https://github.com/AhmedYousriSobhi/opti-sim/pull/44) |
 | Inventory refresh and Grafana annotations | ✅ Done | Re-discovers containers so late starters are governed; posts audit events to Grafana with a token from the environment (SPEC GV-6). | `governor/annotate.py`, `governor/core.py` | [#36](https://github.com/AhmedYousriSobhi/opti-sim/pull/36) |
-| systemd unit installed permanently | 🟡 Partial | Unit and slice pass systemd-analyze and ran as a transient service in tests; not yet installed as the standing service. | `systemd` | - |
+| systemd unit installed permanently | 🟡 Partial | Unit and slice pass systemd-analyze and ran as a transient service in tests; scripts/install-governor.sh installs it as the standing service (printed unit tested; the sudo install itself is run by the user). | `systemd` | - |
 | Admission and real scale / set-profile | ✅ Done | admit command (GV-9): refused at L2+ or if it would breach the floor; scale and set-profile run simctl in the background at L0-L1 only (GV-8). simctl up/scale ask first. Verified live through the socket. | `governor/core.py` | [#48](https://github.com/AhmedYousriSobhi/opti-sim/pull/48) |
 | Host tuning script and simctl top | ⬜ To do | zram, swappiness and THP tuning with confirmation, and a live view of the governor. | - | - |
 
@@ -131,18 +131,18 @@ _A real scheduler the app can read, built from sim.yaml._
 
 6/6 done
 
-### Mocks (25%)
+### Mocks (50%)
 
 _Fake BMC, BCM and Jira so the app's integrations can be exercised._
 
 | Part | Status | How it is built | Where | PR |
 |---|---|---|---|---|
 | gpu-exporter-farm | ✅ Done | One process serving fake DCGM metrics for every simulated GPU, with fault injection over /sim/inject. | `components/gpu-exporter-farm/exporter.py` | - |
-| bmc-farm | ⬜ To do | Many Redfish endpoints from one process. | - | - |
+| bmc-farm | ✅ Done | One process serves /<node>/redfish/v1 for every node: Systems, Chassis Thermal/Power, Managers, event log, Reset action, POST /sim/inject (temp, fans, power, events). Verified live in the stack. | `components/bmc-farm/bmc.py` | [#52](https://github.com/AhmedYousriSobhi/opti-sim/pull/52) |
 | bcm-mock | ⬜ To do | Only the BCM surface the app calls; blocked on open decision 2. | - | - |
 | jira-mock | ⬜ To do | Jira REST subset with failure modes and required-field rules; modes mock/cloud/dc. | - | - |
 
-1/4 done
+2/4 done
 
 ### People and chaos (0%)
 
@@ -209,16 +209,16 @@ _What keeps every change safe and debuggable._
 | simctl doctor / status / diag | ✅ Done | Environment checks with fixes, governor state, a masked diagnostics tarball, and the container security check. | `simctl/checks.py`, `simctl/diag.py` | [#26](https://github.com/AhmedYousriSobhi/opti-sim/pull/26) |
 | Observability stack | ✅ Done | Prometheus (2 d, tmpfs), Grafana with provisioned dashboard, fake GPU exporter. | `compose/observability.yml` | - |
 | Decisions as ADRs | ✅ Done | 0001 record decisions, 0002 Slurm from source with no extra privileges, 0003 slurmrestd/JWT and accounting, 0004 slurmrestd keeps its unshare steps disabled. | `docs/adr` | - |
+| Getting-started guide | ✅ Done | Step-by-step use of the app; tests/test_docs.py fails if a documented command disappears. | `docs/guides/getting-started.md` | [#52](https://github.com/AhmedYousriSobhi/opti-sim/pull/52) |
 | Verification helpers | ✅ Done | verify.sh runs validate.sh plus real tests (--full adds the live stack lifecycle); tests/real/helpers.py starts a live governor and talks to its socket. | `scripts/verify.sh` | [#48](https://github.com/AhmedYousriSobhi/opti-sim/pull/48) |
 | Progress tracker | ✅ Done | This page, generated from docs/progress.yaml (issue 41). | `simctl/progress.py` | [#42](https://github.com/AhmedYousriSobhi/opti-sim/pull/42) |
 
-7/7 done
+8/8 done
 
 ## Next up
 
-1. Phase 3 mocks: bmc-farm first (the app's Redfish integration).
+1. Phase 3 mocks: bcm-mock and jira-mock next (bmc-farm is done).
 2. A loaded Phase 0 run of the full stack to replace the budget estimates.
-3. Install the governor as a standing systemd service.
 
 ## Known gaps
 

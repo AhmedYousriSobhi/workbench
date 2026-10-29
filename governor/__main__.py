@@ -3,6 +3,7 @@ import argparse
 import json
 import logging
 import os
+import pwd
 import signal
 import subprocess
 import sys
@@ -64,8 +65,11 @@ def main(argv: list[str] | None = None) -> None:
     if args.grafana_url and not token:
         log.warning("--grafana-url given but HPCSIM_GRAFANA_TOKEN is empty: annotations disabled")
     def effector(a: list[str]) -> int:
-        return subprocess.run([sys.executable, "-m", "simctl.cli", *a], cwd=args.workdir,
-                              capture_output=True, timeout=600, check=False).returncode
+        cmd = [sys.executable, "-m", "simctl.cli", *a]
+        owner = Path(args.workdir).stat().st_uid
+        if os.geteuid() == 0 and owner != 0:  # run as the checkout's owner so generated files stay theirs
+            cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]
+        return subprocess.run(cmd, cwd=args.workdir, capture_output=True, timeout=600, check=False).returncode
 
     gov = Governor(sampler, ladder, groups, executor, args.dry_run, watchdog, args.watch_interval,
                    annotator, discover_docker, args.refresh_interval,
