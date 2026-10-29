@@ -14,8 +14,8 @@ phases:
          how: "`simctl measure run/report` samples host, Docker containers, PSS per process and libvirt domains (read-only), saves JSON, suggests budgets = peak x 1.2."}
       - {name: Host baseline, status: partial,
          how: "Idle host and a small Slurm stack were measured (slurmd 5 MiB, slurmctld 13, MariaDB 171). No loaded run with mocks yet."}
-      - {name: Budgets replaced by measured values, status: todo,
-         how: "README section 5 and profiles/*.yaml still hold planning estimates; needs a loaded run of the full stack."}
+      - {name: Budgets replaced by measured values, status: partial, pr: 68, where: profiles/min.yaml,
+         how: "min measured live (VMs off, 60 queued jobs): 0.17 GB peak across containers, budget set to 1 GB. std/full are still estimates."}
 
   - id: p1
     title: Governor
@@ -187,10 +187,9 @@ architecture:
 
 next:
   - "Phase 3 mocks: bcm-mock and jira-mock next (bmc-farm is done)."
-  - "A loaded Phase 0 run of the full stack to replace the budget estimates."
+  - "Phase 0 for std/full (16-32 slurmd, k3d) once those profiles are buildable; only min is measured."
 
 gaps:
-  - "Idle min stack uses about 0.4 GB against a 3.0 GB profile budget, so preflight is far too pessimistic until a loaded Phase 0 run."
-  - "Budgets are still estimates until a loaded Phase 0 run."
+  - "Only the min budget is measured (0.17 GB loaded with 60 queued jobs, VMs off); std/full budgets are still estimates."
   - "The governor's own locked memory is about 100-170 MB, slightly over its 0.15 GB budget."
   - "Host swap is 100% full and kubectl/k3d are missing, which blocks the Kubernetes phase here."
