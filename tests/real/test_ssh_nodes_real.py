@@ -151,12 +151,31 @@ def test_changed_host_key_is_refused_by_a_client_that_pinned_it(cluster, tmp_pat
     assert wait_for(lambda: ssh_login("true", known_hosts=known).returncode == 0, timeout=30)  # the pin is valid again
 
 
+def hold_one() -> socket.socket:
+    """One unauthenticated connection that sshd has answered. Earlier probes may still count as pending for a moment
+    (sshd reaps a closed connection a little later), so a refused attempt is closed and tried again."""
+    held: list[socket.socket] = []
+
+    def got_banner() -> bool:
+        s = socket.create_connection(("127.0.0.1", 2222), timeout=3)
+        s.settimeout(3)
+        try:
+            if s.recv(64).startswith(b"SSH-"):
+                held.append(s)
+                return True
+        except OSError:
+            pass
+        s.close()
+        return False
+
+    assert wait_for(got_banner, timeout=20), "sshd never accepted a first connection under the limit"
+    return held[0]
+
+
 def test_startup_limit_refuses_an_extra_connection(cluster):
     fault(login="limit", max_startups=1)
     assert wait_for(settled, timeout=15)
-    with socket.create_connection(("127.0.0.1", 2222), timeout=3) as hold:  # the one allowed unauthenticated connection
-        hold.settimeout(3)
-        assert hold.recv(64).startswith(b"SSH-")
+    with hold_one():  # the one allowed unauthenticated connection
         r = ssh_login("true")
         assert r.returncode != 0 and "Connection" in r.stderr
     fault(login="unlimit")
