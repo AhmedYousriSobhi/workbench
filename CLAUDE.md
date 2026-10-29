@@ -15,6 +15,11 @@ opti-sim: a memory-governed simulation of an HPC/AI cluster (Slurm, Kubernetes, 
 - Branch names: `feat/...`, `fix/...`, `docs/...`, `chore/...`, branched from `dev`.
 - Open a PR to `dev` for every branch. `dev` collects all PRs; `dev` to `main` merges are made separately, only when asked.
 - After each commit, add a PR comment describing that commit (what and why).
+- **Definition of done for every feature (mandatory, put these as to-dos in the issue before starting):**
+  1. Update the related docs (manual, guides, ADR, SPEC, `docs/progress.yaml`; getting-started if a command changed).
+  2. Publish the wiki (`python scripts/sync_wiki.py --push`, [docs/guides/github-wiki.md](docs/guides/github-wiki.md)) and check the in-page help shows the change.
+  3. Check it is easy to follow: a new user can do it from the docs alone, commands copy-paste, one message per condition.
+  4. Test it against the monitoring client ([docs/guides/client-testing.md](docs/guides/client-testing.md)) and state what was and was not exercised.
 - Commit author must use the GitHub noreply address (the repo rejects private emails); this is set in local git config.
 - Do not put tokens in files, commit messages, or output. The `origin` URL contains a token: mask it when printing remotes.
 
