@@ -3,7 +3,18 @@
 How to run opti-sim on your workstation and see it working. Keep this page in step with the commands:
 `tests/test_docs.py` fails if a `simctl` command named here no longer exists.
 
-## 0. Install the tools (once)
+## 0. Check the machine (before building anything)
+
+```bash
+./scripts/check-machine.sh
+```
+
+Needs only the system `python3`. It checks the OS, CPU cores, RAM, free disk, cgroup v2, Docker (daemon and
+compose), free ports, optional tools (KVM, k3d, kubectl) and says which profiles fit in the memory available
+right now. It ends with `READY` or `NOT READY` and a fix line for each problem. Do not build until it says
+`READY`. The same check runs as `python -m simctl.cli check` once the venv exists.
+
+## 0b. Install the tools (once)
 
 Ubuntu has `python3`, not `python`, and `simctl` needs a few packages. Use a virtualenv in the repo:
 
@@ -14,7 +25,7 @@ python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'
 The venv is per shell: activate it again in every new terminal (`. .venv/bin/activate`), or skip activation with `./scripts/simctl <command>`, which uses `.venv` directly (`./scripts/simctl status`). With the venv active, `python -m simctl.cli ...` works as written below (or just `simctl ...`). The
 governor service needs no packages; it runs on the system `python3`.
 
-## 1. Check the machine
+## 1. Check the setup (doctor)
 
 ```bash
 python -m simctl.cli doctor        # cgroup v2, PSI, Docker, swap, memlock, containers stay unprivileged

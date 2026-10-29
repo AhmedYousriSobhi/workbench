@@ -1,9 +1,17 @@
 import typer
 
-from . import checks, compose, diag, measure, scenario, stack
+from . import checks, compose, diag, machine, measure, scenario, stack
 
 app = typer.Typer(help="opti-sim control CLI")
 ICON = {checks.OK: "ok  ", checks.WARN: "WARN", checks.FAIL: "FAIL"}
+
+
+@app.command()
+def check() -> None:
+    """Initial machine check before building (OS, RAM, disk, Docker, ports); exits 1 if not ready."""
+    results = machine.run_all()
+    typer.echo(machine.report(results))
+    raise typer.Exit(1 if any(c.status == machine.FAIL for c in results) else 0)
 
 
 @app.command()
