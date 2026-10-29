@@ -1,9 +1,13 @@
 # Testing a monitoring client against opti-sim
 
-opti-sim exists mainly to be the test target for a desktop HPC monitoring client: an app that opens SSH to a login
-node, runs `squeue`/`sinfo`, reads GPU metrics through Grafana, searches Jira and inspects BMCs. This page is the
-checklist for a fresh session: bring the stack up, point the client at it, and know what is real and what is not.
-The client's own repository is separate and is never named or copied here.
+opti-sim simulates a real cluster so that a general-purpose HPC and AI-infrastructure client, one that lets its user
+define any cluster and handles every connection type and HPC feature, can be tested without real hardware. The client
+connects to opti-sim exactly as it would to a production site (SSH to a login node, Slurm commands, Grafana GPU
+metrics, Jira search, Redfish BMCs); the user then writes scenarios (faults, outages, workloads) and watches how the
+client reacts. This page is the checklist for a fresh session: bring the stack up, point the client at it, run a
+scenario, and know what is real and what is not. The client's own repository is separate and is never named or copied
+here. Because the client is general, never fit opti-sim to one client's quirks: make the simulated service behave
+like the real one.
 
 ## What a client needs, and where it is
 
@@ -59,6 +63,33 @@ the same wire behaviour against the live stack (`HPCSIM_REAL=1 pytest tests/real
 For the real window, run the client in its dev mode with a throwaway config directory and a remote-debugging port,
 create a synthetic profile through its own API, then read screenshots and page text over that port. Use synthetic
 data only, stop every process you start, and never commit screenshots that show real data.
+
+## Write a scenario and watch the client
+
+A scenario is a YAML file in `scenarios/` (see [scenarios and faults](../manual/06-scenarios.md)); steps run at
+offsets and can target `bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira` and `slurm` (Kubernetes and the ticket bot are
+not built; their steps are skipped).
+
+```yaml
+name: gpu-node-overheats
+description: A GPU node fans out and overheats, then Slurm drains it and it recovers
+steps:
+  - {at: 0s,  target: bmc-farm, do: {nodes: [gpu002], fan_fail: 3}}
+  - {at: 5s,  target: bmc-farm, do: {nodes: [gpu002], ramp: {to: 92, over: 30s}}}
+  - {at: 20s, target: slurm,    do: {drain: [gpu002], reason: "overheating"}}
+  - {at: 60s, target: bmc-farm, do: {nodes: [gpu002], clear: true}}
+  - {at: 60s, target: slurm,    do: {resume: [gpu002]}}
+```
+
+```bash
+./scripts/simctl scenario list
+./scripts/simctl scenario run gpu-node-overheats --dry-run   # validates node names and targets
+./scripts/simctl scenario run gpu-node-overheats --speed 4   # 4x faster
+```
+
+Run it while the client is connected and compare what the client shows (node state, reasons, alerts, GPU temperature
+and XID metrics, BMC events, Jira failures) against what the scenario did. New fault kinds belong in the scenario
+engine's targets, not in ad hoc `docker exec` commands.
 
 ## Things that look like bugs but are not
 
