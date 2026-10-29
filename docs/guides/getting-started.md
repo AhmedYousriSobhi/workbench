@@ -126,4 +126,6 @@ is the design, see [the governor](../architecture/05-governor.md). `up` and `sca
 
 To look at the web page without a screen: `pip install -e '.[browser]'`, `.venv/bin/python -m playwright install chromium`, then `.venv/bin/python scripts/ui_shots.py` writes screenshots to `/tmp/opti-ui-shots` and reports problems.
 
+Once per clone: `./scripts/install-hooks.sh` (no sudo) installs the git hooks: no commits on `main`/`dev`, an issue reference in every commit message, `validate.sh` before each commit, and a privacy scan (`./scripts/check-privacy.sh`) so no personal path, email or token is published. The repository is public, and the Claude skills under `.claude/` are symlinks into a home directory, so that folder is gitignored.
+
 `./scripts/verify.sh` (add `--full` for the live stack) before asking for a merge; see CLAUDE.md.

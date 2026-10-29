@@ -135,6 +135,8 @@ phases:
     items:
       - {name: validate.sh gate, status: done, pr: 18, where: scripts/validate.sh,
          how: "Secrets scan, compile, ruff, shellcheck, YAML/JSON, systemd verify, pytest and a governor smoke run before every commit."}
+      - {name: Public-repo privacy guard and git hooks, status: review, where: "scripts/check-privacy.sh, .githooks/, scripts/install-hooks.sh, SECURITY.md",
+         how: "check-privacy.sh blocks home paths, the local username, personal emails, tokens and keys, local-only paths (.claude/, graphify-out/) and symlinks that leave the repo, and prints only file:line and the rule. Tracked hooks: pre-commit (no commits on main/dev, privacy, validate.sh), commit-msg (issue reference), pre-push (no push to main/dev, full scan); installed by install-hooks.sh. validate.sh runs the scan too. Issue 104."}
       - {name: Unit-test coverage gate, status: done, pr: 81, where: "tests/, scripts/validate.sh",
          how: "validate.sh runs the unit tests under coverage and fails below 90% (override COV_FLOOR). 226 tests, 98% of simctl, governor, webui and components. Not covered by unit tests, by design: code that needs root, a live Docker stack or a browser (tests/real)."}
       - {name: Real-host tests, status: done, pr: [20, 22], where: "scripts/real-test.sh, scripts/real-test-root.sh",

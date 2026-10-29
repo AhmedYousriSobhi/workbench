@@ -77,7 +77,7 @@ Profiles: `min`, `std`, `full`, `jira-real`, `mac-agent` ([architecture section 
 
 | ID | Requirement |
 |---|---|
-| W-1 | Backend FastAPI; frontend HTMX + Tailwind, no client-side build step; total host RAM under 50 MB. |
+| W-1 | Backend Starlette (ADR 0008: importing FastAPI alone costs ~39 MB); frontend one static HTML page with vanilla JS and a hand-written stylesheet, no framework, no CDN, no build step (ADR 0007); total host RAM under 50 MB. |
 | W-2 | Live telemetry via Server-Sent Events at 1 s intervals. |
 | W-3 | Runs as the restricted `hpcsim` user and talks to the governor only through the Unix socket; it MUST NOT have root, Docker-socket or libvirt access of its own. |
 | W-4 | Cluster Canvas: topology from `sim.yaml` with per-node fault actions (Set K8s NotReady, Inject GPU XID, Drain slurmd). |
@@ -85,12 +85,18 @@ Profiles: `min`, `std`, `full`, `jira-real`, `mac-agent` ([architecture section 
 | W-6 | Scenario Orchestrator: browse, Play, Stop, Fast-Forward, timeline of upcoming steps. |
 | W-7 | Profile & Budget Manager: `sim.yaml` form editor, projected PSS memory calculator, deployment blocked when over budget. |
 | W-8 | Authentication is required; default bind is localhost. |
+| W-9 | Accessibility: status is never shown by colour alone; text contrast is at least 4.5:1 in light and dark; tap targets are at least 40 px; tables stack as cards under 640 px; the page has ARIA landmarks and a skip link; reduced motion is respected; nothing scrolls sideways at 390 px. |
+| W-10 | One message per condition. When the stack or the governor is down the page shows a single notice and one "needs attention" entry, hides data that cannot exist (no red or empty placeholders), and names a recovery command that works in a supported mode (the start path never needs sudo). |
+| W-11 | Live feeds (SSE, polling) run only while the page is visible, and animation stops at governor L3 and under reduced motion (ADR 0009). |
 
 ## 9. Non-functional requirements
 
 - NF-1. A synthetic memory hog MUST be throttled, frozen, then stopped in ladder order, and the system MUST recover without a host OOM.
 - NF-2. Mocks MUST be covered by contract tests against recorded real responses where available.
 - NF-3. Everything is reproducible from the repository plus `sim.yaml`; no manual per-node setup.
+- NF-4. The repository is public: tracked files, commit messages, issues and pull requests MUST NOT contain personal data (home-directory paths, local usernames, personal emails, hostnames), tokens or keys. Local-only tooling (`.claude/`, whose skills are symlinks into a home directory, and `graphify-out/`) is gitignored and never committed. `scripts/check-privacy.sh` enforces this in the git hooks (`scripts/install-hooks.sh`), in `validate.sh` and before every push; commits are authored with the GitHub noreply address.
+- NF-5. Starting, building and stopping the simulation MUST NOT need sudo (ADR 0010); root is only for the optional boot-time governor service.
+- NF-6. When the governor refuses an action (admission at L2 and above, GV-9) the tool MUST say so and why, and tests and scripts MUST NOT report that as a defect in the code under test.
 
 ## 10. Acceptance (per roadmap phase)
 
@@ -99,3 +105,7 @@ Exit tests are listed in [architecture section 11](docs/architecture/09-roadmap-
 ## 11. Open decisions
 
 See [architecture section 12](docs/architecture/09-roadmap-decisions-risks.md) (Slurm access path, BCM surface, Jira features, real GPUs, Mac access). Each MUST be resolved before the dependent component is implemented.
+
+Not built yet (so no requirement above is satisfied by them): W-7 Profile and Budget Manager; the user simulator and ticket bot; Slurm job dots on the traffic diagram; Teleport access (issue #77, which waits on its open decisions); Kubernetes and the fidelity VM.
+
+Also open: the governor serves control commands under the same lock that executes a plan, so `status` waits for the whole plan. Measured with the rootless executor, a container stop costs about 175 ms and a pause about 28 ms (about 2 s for 12 containers); decide whether control commands need a bound before the `full` profile is relied on (issue #102).
