@@ -114,7 +114,7 @@ _A root service that keeps the host alive by escalating through a ladder._
 | systemd unit installed permanently | 🟡 Partial | Unit and slice pass systemd-analyze and ran as a transient service in tests; scripts/install-governor.sh installs it as the standing service (printed unit tested; the sudo install itself is run by the user). | `systemd` | - |
 | Admission and real scale / set-profile | ✅ Done | admit command (GV-9): refused at L2+ or if it would breach the floor; scale and set-profile run simctl in the background at L0-L1 only (GV-8). simctl up/scale ask first. Verified live through the socket. | `governor/core.py` | [#48](https://github.com/AhmedYousriSobhi/opti-sim/pull/48) |
 | Governor /metrics endpoint | ✅ Done | Prometheus text (level, MemAvailable, PSI, swap, groups per priority, actions, admissions) bound to the docker bridge address, rendered once per step so a scrape does no work (GV-8). The Prometheus 'governor' target is up on the live stack. | `governor/metrics.py` | [#60](https://github.com/AhmedYousriSobhi/opti-sim/pull/60) |
-| Live ladder test on the real stack | ✅ Done | Dry-run governor against the running containers: L0 to L3 and back, /metrics, Grafana annotations and the planned throttle/freeze/thaw actions. The root variant that checks the real cgroup freeze is written but not yet run (needs sudo). | `tests/real/test_pressure_real.py` | [#60](https://github.com/AhmedYousriSobhi/opti-sim/pull/60) |
+| Live ladder test on the real stack | ✅ Done | Dry-run governor against the running containers: L0 to L3 and back, /metrics, Grafana annotations and the planned throttle/freeze/thaw actions. The root variant passes on the dev machine: L3 really freezes a live container's cgroup (cgroup.events frozen 1), keeps P1 services running, and thaws on recovery; it also exposed and fixed the nested-slice cgroup path bug (PR 64). | `tests/real/test_pressure_real.py` | [#60](https://github.com/AhmedYousriSobhi/opti-sim/pull/60) |
 | Host tuning script and simctl top | ⬜ To do | zram, swappiness and THP tuning with confirmation, and a live view of the governor. | - | - |
 
 12/14 done
@@ -226,7 +226,6 @@ _What keeps every change safe and debuggable._
 ## Known gaps
 
 - Idle min stack uses about 0.4 GB against a 3.0 GB profile budget, so preflight is far too pessimistic until a loaded Phase 0 run.
-- The root test of the real cgroup freeze/thaw (tests/real/test_pressure_real.py) has not been run.
 - Budgets are still estimates until a loaded Phase 0 run.
 - The governor's own locked memory is about 100-170 MB, slightly over its 0.15 GB budget.
 - Host swap is 100% full and kubectl/k3d are missing, which blocks the Kubernetes phase here.
