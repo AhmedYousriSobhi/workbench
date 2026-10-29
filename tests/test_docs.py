@@ -81,3 +81,43 @@ def test_readme_build_scopes_use_real_commands():
         assert runner.invoke(app, [c, "--help"]).exit_code == 0, c
     for s in set(re.findall(r"\./(scripts/[\w.-]+)", text)):
         assert (ROOT / s).is_file(), s
+
+
+MANUAL = ROOT / "docs/manual"
+
+
+def test_manual_has_an_index_that_lists_every_chapter():
+    chapters = sorted(p.name for p in MANUAL.glob("[0-9][0-9]-*.md"))
+    assert len(chapters) >= 10
+    index = (MANUAL / "README.md").read_text()
+    for name in chapters:
+        assert name in index, name
+
+
+def test_manual_commands_and_scripts_exist():
+    text = "\n".join(p.read_text() for p in MANUAL.glob("*.md"))
+    runner = CliRunner()
+    cmds = set(re.findall(r"(?:simctl\.cli|\./scripts/simctl|simctl) (check|doctor|preflight|status|diag|compose|up|down|"
+                          r"scale|scenario|measure)\b", text))
+    assert {"up", "down", "scale", "scenario", "status", "diag", "measure"} <= cmds
+    for c in cmds:
+        assert runner.invoke(app, [c, "--help"]).exit_code == 0, c
+    for s in set(re.findall(r"\./(scripts/[\w.-]+)", text)):
+        assert (ROOT / s).is_file(), s
+
+
+def test_manual_node_names_match_the_nodes_sim_yaml_generates():
+    """The shell examples use hpcsim-cn001-1 and hpcsim-gpu001-1: they must be real node names."""
+    import yaml
+
+    from simctl.nodes import node_names
+
+    names = {n for n, _ in node_names(yaml.safe_load((ROOT / "sim.yaml").read_text()))}
+    text = (MANUAL / "04-nodes-and-shells.md").read_text()
+    for used in set(re.findall(r"hpcsim-((?:cn|gpu)\d+)-1", text)):
+        assert used in names, used
+
+
+def test_getting_started_explains_how_to_get_a_shell_on_a_node():
+    text = (ROOT / "docs/guides/getting-started.md").read_text()
+    assert "docker exec -it hpcsim-cn001-1 bash" in text and "no SSH server" in text

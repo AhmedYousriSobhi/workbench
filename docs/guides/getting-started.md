@@ -1,7 +1,8 @@
 # Getting started
 
 How to run opti-sim on your workstation and see it working. Keep this page in step with the commands:
-`tests/test_docs.py` fails if a `simctl` command named here no longer exists.
+`tests/test_docs.py` fails if a `simctl` command named here no longer exists. For everything about the tool, read the
+[user manual](../manual/README.md).
 
 ## Quickest way
 
@@ -104,6 +105,21 @@ Or run a named scenario (a timed list of faults) instead of injecting by hand:
 A scenario fails (exit 1) when a step errors or an `expect` line does not hold. Steps for parts that are not
 built yet (Kubernetes, ticket-bot) are reported as skipped.
 
+## 4a. Get a shell on a node
+
+Simulated nodes have no SSH server, so there is no `ssh cn001`. Open a shell with `docker exec` (nodes are named
+`cn001`, `gpu001`, ... and their containers `hpcsim-<name>-1`):
+
+```bash
+docker ps --format '{{.Names}}' --filter label=hpcsim.node     # list the compute and GPU nodes
+docker exec -it hpcsim-cn001-1 bash                            # a shell on a compute node (exit to leave)
+docker exec -u alice -it hpcsim-gpu001-1 bash                  # the same, as a simulated user
+```
+
+A shell that hangs may be a node the governor paused under memory pressure (`./scripts/simctl status`). The only machine
+with a real `sshd` is the optional fidelity VM (`cd fidelity-vm && ./bin/up.sh`, then `vagrant ssh fidelity`). SSH or
+Teleport access to the simulated nodes is not built yet (issue 77). More in [Nodes and shells](../manual/04-nodes-and-shells.md).
+
 ## 4b. The web page
 
 ```bash
@@ -122,7 +138,11 @@ python -m simctl.cli diag           # one masked tarball: attach it to bug repor
 If memory is tight the governor pauses then stops containers lowest priority first (P6 down to P2); that
 is the design, see [the governor](../architecture/05-governor.md). `up` and `scale` are refused from level L2 up.
 
-## 6. For developers
+## 6. Where next
+
+The [user manual](../manual/README.md) has a chapter for each topic: concepts, the web page, scenarios, the governor, configuration, troubleshooting and a command reference.
+
+## 7. For developers
 
 To look at the web page without a screen: `pip install -e '.[browser]'`, `.venv/bin/python -m playwright install chromium`, then `.venv/bin/python scripts/ui_shots.py` writes screenshots to `/tmp/opti-ui-shots` and reports problems.
 

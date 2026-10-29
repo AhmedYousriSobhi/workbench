@@ -155,6 +155,8 @@ phases:
          how: "0001 record decisions, 0002 Slurm from source with no extra privileges, 0003 slurmrestd/JWT and accounting, 0004 slurmrestd keeps its unshare steps disabled."}
       - {name: Getting-started guide, status: done, pr: 52, where: docs/guides/getting-started.md,
          how: "Step-by-step use of the app; tests/test_docs.py fails if a documented command disappears."}
+      - {name: User manual, status: review, where: docs/manual,
+         how: "Ten chapters (concepts, install, using the cluster, nodes and shells, web page, scenarios, governor, configuration, troubleshooting, reference). Commands were run against a live min stack; tests/test_docs.py checks that every command, script and node name it uses exists. The guide gained a step for getting a shell on a node (docker exec; nodes have no sshd)."}
       - {name: Verification helpers, status: done, pr: 48, where: scripts/verify.sh,
          how: "verify.sh runs validate.sh plus real tests (--full adds the live stack lifecycle); tests/real/helpers.py starts a live governor and talks to its socket."}
       - {name: Progress tracker, status: done, pr: 42, where: simctl/progress.py,
