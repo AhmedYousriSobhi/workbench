@@ -70,6 +70,10 @@ def generate(sim: dict, profile: dict) -> dict:
             svc.setdefault("environment", {})["HPCSIM_USERS"] = users_env(sim)
     if "bmc-farm" in services:  # Redfish endpoints for every node in sim.yaml, localhost only
         services["bmc-farm"].update({"volumes": ["../../sim.yaml:/sim.yaml:ro"], "ports": ["127.0.0.1:8000:8000"]})
+    if "bcm-mock" in services:  # CMDaemon JSON API on the same node inventory, localhost only
+        services["bcm-mock"].update({"volumes": ["../../sim.yaml:/sim.yaml:ro"], "ports": ["127.0.0.1:8081:8081"]})
+    if "jira-mock" in services:
+        services["jira-mock"].update({"ports": ["127.0.0.1:8080:8080"]})
     _wire_slurm_services(services)
     return {"name": "hpcsim", "include": [OBSERVABILITY], "services": services}
 

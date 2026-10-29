@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m simctl.progress`; do not edit. -->
 Last updated 2026-10-29. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**70% built** (31 done, 0 in review, 6 partial, 7 to do, 44 items).
+**70% built** (31 done, 0 in review, 8 partial, 5 to do, 44 items).
 
 ## Roadmap
 
@@ -48,8 +48,8 @@ flowchart TB
         graf["Grafana"]:::done
         gpux["gpu-exporter-farm"]:::done
         bmc["bmc-farm"]:::done
-        bcm["bcm-mock"]:::todo
-        jira["jira-mock"]:::todo
+        bcm["bcm-mock"]:::partial
+        jira["jira-mock"]:::partial
         users["user-sim / ticket-bot"]:::todo
         k8s["k3d + KWOK"]:::partial
         webui["Web UI"]:::todo
@@ -142,8 +142,8 @@ _Fake BMC, BCM and Jira so the app's integrations can be exercised._
 |---|---|---|---|---|
 | gpu-exporter-farm | ✅ Done | One process serving fake DCGM metrics for every simulated GPU, with fault injection over /sim/inject. | `components/gpu-exporter-farm/exporter.py` | - |
 | bmc-farm | ✅ Done | One process serves /<node>/redfish/v1 for every node: Systems, Chassis Thermal/Power, Managers, event log, Reset action, POST /sim/inject (temp, fans, power, events). Verified live in the stack. | `components/bmc-farm/bmc.py` | [#52](https://github.com/AhmedYousriSobhi/opti-sim/pull/52) |
-| bcm-mock | ⬜ To do | Only the BCM surface the app calls; blocked on open decision 2. | - | - |
-| jira-mock | ⬜ To do | Jira REST subset with failure modes and required-field rules; modes mock/cloud/dc. | - | - |
+| bcm-mock | 🟡 Partial | CMDaemon-style POST /json (cmdevice, cmstatus, cmpart) over the sim.yaml nodes, power calls and /sim/inject. Call names are an assumed subset (ADR 0005); verified live, 12 MiB. | `components/bcm-mock/bcm.py` | [#71](https://github.com/AhmedYousriSobhi/opti-sim/pull/71) |
+| jira-mock | 🟡 Partial | Mode mock only: REST v2/v3 issues, comments, workflow transitions with required-field errors, JQL subset, webhooks, 429/503/slow failures (ADR 0005). Verified live in the container (transitions, JQL, webhook to an outside receiver, 429/503), 15 MiB. cloud/dc modes not built. | `components/jira-mock/jira.py` | [#71](https://github.com/AhmedYousriSobhi/opti-sim/pull/71) |
 
 2/4 done
 
@@ -220,7 +220,7 @@ _What keeps every change safe and debuggable._
 
 ## Next up
 
-1. Phase 3 mocks: bcm-mock and jira-mock next (bmc-farm is done).
+1. Next: scenario engine, then user-sim and ticket-bot (they drive Slurm and jira-mock).
 2. Phase 0 for std/full (16-32 slurmd, k3d) once those profiles are buildable; only min is measured.
 
 ## Known gaps

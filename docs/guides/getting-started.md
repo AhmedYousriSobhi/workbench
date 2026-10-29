@@ -55,6 +55,8 @@ that does. Components not built yet (`bcm-mock`, `jira-mock`, `scenario-engine`)
 | Grafana dashboards and governor annotations | http://127.0.0.1:3000 (user `admin`, password `admin`) |
 | Prometheus | http://127.0.0.1:9090 (the `governor` job scrapes the governor's `/metrics`: `hpcsim_governor_level`, `hpcsim_host_mem_available_bytes`, ...) |
 | Fake BMCs (Redfish) | `curl http://127.0.0.1:8000/cn001/redfish/v1/Systems/1` |
+| Fake BCM (CMDaemon JSON) | `curl -X POST http://127.0.0.1:8081/json -d '{"service": "cmdevice", "call": "getDevices"}'` |
+| Fake Jira | `curl -X POST http://127.0.0.1:8080/rest/api/2/issue -d '{"fields": {"project": {"key": "OPS"}, "summary": "hi"}}'`; failures: `curl -X POST http://127.0.0.1:8080/sim/failure -d '{"mode": "429", "count": 3}'` |
 | Slurm jobs | `docker exec hpcsim-slurmctld-1 sinfo` / `squeue` / `sbatch` |
 | Slurm REST | token: `docker exec hpcsim-slurmctld-1 scontrol token username=alice`; see ADR 0003 |
 | Build progress and diagrams | `docs/progress.html` |
