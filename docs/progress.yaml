@@ -139,6 +139,8 @@ phases:
          how: "validate.sh runs the unit tests under coverage and fails below 90% (override COV_FLOOR). 226 tests, 98% of simctl, governor, webui and components. Not covered by unit tests, by design: code that needs root, a live Docker stack or a browser (tests/real)."}
       - {name: Real-host tests, status: done, pr: [20, 22], where: "scripts/real-test.sh, scripts/real-test-root.sh",
          how: "User-level tests with cgroups, Docker, libvirt and a live governor; a sudo suite for root-only paths."}
+      - {name: One-command launcher, status: review, pr: 95, where: scripts/opti,
+         how: "`./scripts/opti start` runs the machine check, creates the venv if missing, notes whether the governor is installed, brings the cluster up and starts the web page in the background, then prints the login link; `stop`, `status`, `open`. Idempotent. Live-tested start, second start, stop."}
       - {name: Initial machine check, status: review, pr: 87, where: "simctl/machine.py, scripts/check-machine.sh",
          how: "`./scripts/check-machine.sh` (system python3 only, runs before any build) checks OS, cores, RAM, disk, cgroup v2, Docker daemon and compose, free ports, optional tools, and which profiles fit; READY or NOT READY with a fix per problem. Also `simctl check`."}
       - {name: simctl doctor / status / diag, status: done, pr: 26, where: "simctl/checks.py, simctl/diag.py",

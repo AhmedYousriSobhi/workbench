@@ -3,6 +3,16 @@
 How to run opti-sim on your workstation and see it working. Keep this page in step with the commands:
 `tests/test_docs.py` fails if a `simctl` command named here no longer exists.
 
+## Quickest way
+
+```bash
+./scripts/opti start      # machine check, tools, cluster, web page; prints the login link
+./scripts/opti status     # what is running
+./scripts/opti stop       # stop the web page and the cluster
+```
+
+The numbered sections below are the same steps one at a time, for when you want to see or change each.
+
 ## 0. Check the machine (before building anything)
 
 ```bash

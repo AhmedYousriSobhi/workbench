@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# One command to start, stop and look at opti-sim.
+#   ./scripts/opti start [--profile min|std|full]   check the machine, build/start the cluster, start the web page
+#   ./scripts/opti stop                             stop the web page and the cluster (only the hpcsim project)
+#   ./scripts/opti status                           governor, cluster and web page at a glance
+#   ./scripts/opti open                             print the login link (and open it in a browser when possible)
+set -u
+repo="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$repo" || exit 2
+state=compose/generated; pidf=$state/ui.pid; logf=$state/ui.log
+port="${OPTI_UI_PORT:-8088}"
+mkdir -p "$state"
+
+ui_pid() { [ -f "$pidf" ] && kill -0 "$(cat "$pidf")" 2>/dev/null && cat "$pidf"; }
+link() { sed -n 's/.*opti-sim UI: //p' "$logf" 2>/dev/null | tail -1; }
+ensure_venv() {
+  [ -x .venv/bin/python ] && return 0
+  echo "== creating the virtualenv (once)"
+  python3 -m venv .venv && .venv/bin/pip install -q -e '.[dev]' || { echo "could not install the tools" >&2; return 1; }
+}
+start_ui() {
+  if ui_pid >/dev/null; then echo "web page already running (pid $(ui_pid))"; return 0; fi
+  (umask 077; nohup .venv/bin/python -m webui "$port" >"$logf" 2>&1 & echo $! >"$pidf")
+  for _ in $(seq 1 50); do
+    [ -n "$(link)" ] && curl -s -o /dev/null "http://127.0.0.1:$port/login" && return 0
+    sleep 0.3
+  done
+  echo "the web page did not start; see $logf" >&2; return 1
+}
+show_link() {
+  echo; echo "Web page: $(link)"
+  echo "(the link signs you in once; keep it private, it is only valid on this machine)"
+}
+open_link() {
+  if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v xdg-open >/dev/null; then xdg-open "$(link)" >/dev/null 2>&1 & fi
+}
+
+cmd_start() {
+  profile=min
+  while [ $# -gt 0 ]; do case "$1" in --profile) profile="$2"; shift ;; *) echo "usage: $0 start [--profile P]" >&2; exit 2 ;; esac; shift; done
+  echo "== 1/4 checking the machine"
+  out=$(./scripts/check-machine.sh); rc=$?
+  printf '%s\n' "$out" | grep -E "WARN|FAIL|fix:|READY"
+  [ $rc -eq 0 ] || { echo "Fix the FAIL lines, then run this again."; exit 1; }
+  echo "== 2/4 tools"; ensure_venv || exit 1
+  echo "== 3/4 governor"
+  if [ -S /run/hpcsim/gov.sock ]; then echo "running"; else
+    echo "NOT installed: memory is not protected. Recommended, once: sudo ./scripts/install-governor.sh (continuing without it)"; fi
+  echo "== 4/4 starting the cluster (profile $profile; the first run builds images and takes a few minutes)"
+  ./scripts/simctl up --profile "$profile" || { echo "cluster did not start; ./scripts/simctl diag collects details" >&2; exit 1; }
+  start_ui || exit 1
+  show_link; open_link
+  echo; echo "Stop everything with: ./scripts/opti stop"
+}
+cmd_stop() {
+  if ui_pid >/dev/null; then kill "$(ui_pid)" 2>/dev/null; echo "web page stopped"; else echo "web page was not running"; fi
+  rm -f "$pidf"
+  ./scripts/simctl down
+}
+cmd_status() {
+  [ -S /run/hpcsim/gov.sock ] && echo "governor : running" || echo "governor : not running (sudo ./scripts/install-governor.sh)"
+  n=$(docker ps --filter name=hpcsim --format '{{.Names}}' 2>/dev/null | wc -l)
+  [ "$n" -gt 0 ] && echo "cluster  : $n containers running" || echo "cluster  : stopped (./scripts/opti start)"
+  if ui_pid >/dev/null; then echo "web page : running, $(link)"; else echo "web page : stopped"; fi
+}
+cmd_open() { ui_pid >/dev/null || { echo "web page is not running: ./scripts/opti start" >&2; exit 1; }; echo "$(link)"; open_link; }
+
+case "${1:-}" in
+  start) shift; cmd_start "$@" ;;
+  stop) cmd_stop ;;
+  status) cmd_status ;;
+  open) cmd_open ;;
+  *) sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac
