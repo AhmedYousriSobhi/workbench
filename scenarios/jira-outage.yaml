@@ -1,0 +1,5 @@
+name: jira-outage
+description: Jira answers 503 to the next 20 calls, then recovers
+steps:
+  - {at: 0s,  target: jira, do: {failure: {mode: "503", count: 20}}}
+  - {at: 60s, target: jira, do: {failure: {mode: null}}}

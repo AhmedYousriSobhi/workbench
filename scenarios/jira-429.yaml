@@ -1,0 +1,4 @@
+name: jira-429
+description: Jira rate-limits the next 5 API calls (429 with Retry-After); the app must back off and retry
+steps:
+  - {at: 0s, target: jira, do: {failure: {mode: "429", count: 5}}}

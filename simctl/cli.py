@@ -1,6 +1,6 @@
 import typer
 
-from . import checks, compose, diag, measure, stack
+from . import checks, compose, diag, measure, scenario, stack
 
 app = typer.Typer(help="opti-sim control CLI")
 ICON = {checks.OK: "ok  ", checks.WARN: "WARN", checks.FAIL: "FAIL"}
@@ -90,6 +90,42 @@ def scale(n: int = typer.Argument(..., min=0, help="compute node count"),
           profile: str = typer.Option(None, "--profile", help="default: the profile `up` last started")) -> None:
     """Change the compute-node count: regenerates slurm.conf, restarts slurmctld, starts/stops slurmd."""
     raise typer.Exit(0 if stack.scale(_sim(), profile or stack.current_profile(), n, say=typer.echo) else 1)
+
+
+scenario_app = typer.Typer(help="Run named fault and workload scenarios (scenarios/*.yaml)")
+app.add_typer(scenario_app, name="scenario")
+
+
+@scenario_app.command("list")
+def scenario_list() -> None:
+    """Name, step count and description of every scenario."""
+    for sc in scenario.list_all():
+        typer.echo(f"{sc['name']:22} {len(sc.get('steps', [])):2} steps  {sc.get('description', '')}")
+
+
+@scenario_app.command("run")
+def scenario_run(name: str = typer.Argument(..., help="see `scenario list`"),
+                 speed: float = typer.Option(1.0, help="fast-forward: 10 plays it ten times faster"),
+                 dry_run: bool = typer.Option(False, "--dry-run", help="validate and show the timeline only")) -> None:
+    """Play a scenario against the running stack; exit 1 if a step or expectation fails."""
+    sim = _sim()
+    try:
+        sc = scenario.load(name)
+    except scenario.ScenarioError as e:
+        typer.echo(str(e))
+        raise typer.Exit(1) from e
+    problems = scenario.validate(sc, sim)
+    for p in problems:
+        typer.echo(f"invalid: {p}")
+    if problems:
+        raise typer.Exit(1)
+    if dry_run:
+        for s in scenario.plan(sc):
+            typer.echo(f"[{s.at:6.1f}s] {s.target} {s.do}")
+        raise typer.Exit(0)
+    report = scenario.run(sc, speed=speed, dilation=float(sim.get("time_dilation", 1.0)), say=typer.echo)
+    typer.echo("scenario " + ("passed" if report.ok else "FAILED"))
+    raise typer.Exit(0 if report.ok else 1)
 
 
 measure_app = typer.Typer(help="Phase 0: read-only memory measurement")

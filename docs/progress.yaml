@@ -84,10 +84,11 @@ phases:
     title: People and chaos
     goal: Simulated users and engineers, scripted faults
     items:
-      - {name: Starter scenario files, status: partial, where: scenarios,
-         how: "Three YAML scenarios exist (gpu-xid-storm, pod-crashloop, k8s-node-notready); no engine runs them yet."}
+      - {name: Scenario files, status: partial, where: scenarios, pr: 73,
+         how: "Seven scenarios: gpu-xid-storm, node-down, fan-failure, jira-429, jira-outage run now; pod-crashloop and k8s-node-notready need k3d/KWOK."}
       - {name: user-sim and ticket-bot, status: todo, how: "Personas with Poisson arrivals and engineers working tickets."}
-      - {name: scenario-engine, status: todo, how: "Runs scenarios with at/target/do steps and expect assertions."}
+      - {name: scenario-engine, status: partial, pr: 73, where: simctl/scenario.py,
+         how: "`simctl scenario list|run NAME [--speed N] [--dry-run]`: steps drive bmc-farm, bcm-mock, gpu-exporter, jira-mock and Slurm (scontrol); ramps; expect (slurm.node_state, jira.issue_created) watched from the start; k8s and ticket-bot steps skipped. Runs in the host CLI, not a container (ADR 0006). Verified live."}
 
   - id: p5
     title: Kubernetes
@@ -162,6 +163,7 @@ architecture:
     - {id: bmc, group: net, label: "bmc-farm", status: done}
     - {id: bcm, group: net, label: "bcm-mock", status: partial}
     - {id: jira, group: net, label: "jira-mock", status: partial}
+    - {id: chaos, group: net, label: "scenario engine (simctl)", status: partial}
     - {id: users, group: net, label: "user-sim / ticket-bot", status: todo}
     - {id: k8s, group: net, label: "k3d + KWOK", status: partial}
     - {id: webui, group: net, label: "Web UI", status: todo}
@@ -188,7 +190,7 @@ architecture:
     - [app, jira, ""]
 
 next:
-  - "Next: scenario engine, then user-sim and ticket-bot (they drive Slurm and jira-mock)."
+  - "Web UI (Scenario Orchestrator first), then user-sim and ticket-bot."
   - "Phase 0 for std/full (16-32 slurmd, k3d) once those profiles are buildable; only min is measured."
 
 gaps:
