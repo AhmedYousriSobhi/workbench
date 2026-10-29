@@ -87,9 +87,9 @@ def down() -> None:
 
 @app.command()
 def scale(n: int = typer.Argument(..., min=0, help="compute node count"),
-          profile: str = typer.Option("std", "--profile")) -> None:
+          profile: str = typer.Option(None, "--profile", help="default: the profile `up` last started")) -> None:
     """Change the compute-node count: regenerates slurm.conf, restarts slurmctld, starts/stops slurmd."""
-    raise typer.Exit(0 if stack.scale(_sim(), profile, n, say=typer.echo) else 1)
+    raise typer.Exit(0 if stack.scale(_sim(), profile or stack.current_profile(), n, say=typer.echo) else 1)
 
 
 measure_app = typer.Typer(help="Phase 0: read-only memory measurement")

@@ -15,6 +15,18 @@ def test_stages_ordered():
     assert [g[0] for g in got] == ["observability", "slurm core", "slurm services", "mocks", "nodes", "other"]
 
 
+def test_governor_admission_refusal_and_absent_governor():
+    msgs = []
+    assert not stack.governor_admits(500, msgs.append, ask=lambda r: {"ok": False, "error": "refused: L2"})
+    assert "refused: L2" in msgs[0]
+    assert stack.governor_admits(500, msgs.append, ask=lambda r: {"ok": True})
+
+    def down(r):
+        raise FileNotFoundError
+
+    assert stack.governor_admits(500, msgs.append, ask=down) and msgs[-1].startswith("WARN")
+
+
 def test_refused_when_it_does_not_fit():
     calls, msgs = [], []
     sim = yaml.safe_load(Path("sim.yaml").read_text())
@@ -38,6 +50,7 @@ def test_up_starts_in_order_and_waits(tmp_path, monkeypatch):
             return cp(out="\n".join(started))
         return cp()
 
+    monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
     monkeypatch.setattr(stack, "provision_token", lambda: tmp_path / "t")
     assert stack.up(sim, "min", runner=runner, say=lambda m: None, available=12 * 1024**3, wait=1)
     assert started.index("prometheus") < started.index("slurmctld") < started.index("cn001")
@@ -82,3 +95,28 @@ def test_unbuildable_services_are_skipped(tmp_path):
     (tmp_path / "empty").mkdir()
     svcs = {"a": {"build": "ok"}, "b": {"build": "empty"}, "c": {"image": "x"}}
     assert stack.unbuildable(svcs, tmp_path) == ["b"]
+
+
+def test_scale_down_removes_containers_by_label_not_compose_file(tmp_path, monkeypatch):
+    import shutil
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(tmp_path)
+    for d in ("profiles", "components", "images"):
+        shutil.copytree(root / d, tmp_path / d, dirs_exist_ok=True)
+    sim = yaml.safe_load((root / "sim.yaml").read_text())
+    monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
+    cmds: list[list[str]] = []
+
+    def runner(cmd):
+        cmds.append(cmd)
+        if cmd[:2] == ["docker", "ps"] and "--format" in cmd:
+            return cp(out="cn001\ncn002\ncn003\ncn004")
+        if cmd[:2] == ["docker", "ps"]:  # -aq lookup by service label
+            return cp(out="abc123")
+        if "ps" in cmd:
+            return cp(out="slurmctld\ncn001\ncn002")
+        return cp()
+
+    assert stack.scale(sim, "min", 2, runner=runner, say=lambda m: None)
+    removed = [c for c in cmds if c[:3] == ["docker", "rm", "-f"]]
+    assert len(removed) == 2  # cn003 and cn004

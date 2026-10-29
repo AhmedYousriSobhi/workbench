@@ -3,15 +3,15 @@
 <!-- GENERATED from docs/progress.yaml by `python -m simctl.progress`; do not edit. -->
 Last updated 2026-10-29. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**60% built** (23 done, 1 in review, 6 partial, 10 to do, 40 items).
+**66% built** (27 done, 0 in review, 5 partial, 9 to do, 41 items).
 
 ## Roadmap
 
 ```mermaid
 flowchart LR
     p0["Baseline<br/>33%"]:::partial
-    p1["Governor<br/>75%"]:::partial
-    p2["Slurm<br/>83%"]:::partial
+    p1["Governor<br/>83%"]:::partial
+    p2["Slurm<br/>100%"]:::done
     p3["Mocks<br/>25%"]:::partial
     p4["People and chaos<br/>0%"]:::partial
     p5["Kubernetes<br/>50%"]:::partial
@@ -95,7 +95,7 @@ _Measure real memory so budgets stop being guesses._
 
 1/3 done
 
-### Governor (75%)
+### Governor (83%)
 
 _A root service that keeps the host alive by escalating through a ladder._
 
@@ -111,12 +111,12 @@ _A root service that keeps the host alive by escalating through a ladder._
 | Monitored slurmrestd exception | ✅ Done | slurmrestd runs with two unshare steps disabled (ADR 0004). Any wider SLURMRESTD_SECURITY option is a violation; doctor lists the accepted exception. | `governor/watchdog.py` | [#44](https://github.com/AhmedYousriSobhi/opti-sim/pull/44) |
 | Inventory refresh and Grafana annotations | ✅ Done | Re-discovers containers so late starters are governed; posts audit events to Grafana with a token from the environment (SPEC GV-6). | `governor/annotate.py`, `governor/core.py` | [#36](https://github.com/AhmedYousriSobhi/opti-sim/pull/36) |
 | systemd unit installed permanently | 🟡 Partial | Unit and slice pass systemd-analyze and ran as a transient service in tests; not yet installed as the standing service. | `systemd` | - |
-| scale and set-profile take effect | ⬜ To do | Both commands are accepted and logged only; they need the up/down work (issue 39). | - | - |
+| Admission and real scale / set-profile | ✅ Done | admit command (GV-9): refused at L2+ or if it would breach the floor; scale and set-profile run simctl in the background at L0-L1 only (GV-8). simctl up/scale ask first. Verified live through the socket. | `governor/core.py` | [#48](https://github.com/AhmedYousriSobhi/opti-sim/pull/48) |
 | Host tuning script and simctl top | ⬜ To do | zram, swappiness and THP tuning with confirmation, and a live view of the governor. | - | - |
 
-9/12 done
+10/12 done
 
-### Slurm (83%)
+### Slurm (100%)
 
 _A real scheduler the app can read, built from sim.yaml._
 
@@ -127,9 +127,9 @@ _A real scheduler the app can read, built from sim.yaml._
 | Compose generation | ✅ Done | `simctl compose --profile X` renders services with mem_limit, cgroup_parent and the hpcsim.class label from sim.yaml and profiles. | `simctl/compose.py` | [#30](https://github.com/AhmedYousriSobhi/opti-sim/pull/30) |
 | slurmrestd with JWT | ✅ Done | JWT-only REST on the internal network, own user, no privileges; skips two unshare steps instead of loosening seccomp (ADR 0003, ADR 0004). Verified live: no token 401, bad tokens get no data. | `simctl/compose.py` | [#38](https://github.com/AhmedYousriSobhi/opti-sim/pull/38) |
 | Accounting | ✅ Done | MariaDB on a capped tmpfs plus slurmdbd; sacctmgr bootstrap creates cluster, QOS and users from sim.yaml; secrets stay in a gitignored folder. Verified live: a job as alice appears in sacct and the REST slurmdb endpoint. | `simctl/slurmconf.py` | [#38](https://github.com/AhmedYousriSobhi/opti-sim/pull/38) |
-| simctl up / down / scale | 🟡 Partial | Pre-flight, staged start (observability, slurm, nodes), skips unbuilt mocks, scale regenerates slurm.conf, Grafana token created once (0600). Verified live with min. Governor scale/set-profile still only log. | `simctl/stack.py` | [#45](https://github.com/AhmedYousriSobhi/opti-sim/pull/45) |
+| simctl up / down / scale | ✅ Done | Pre-flight, staged start (observability, slurm, nodes), skips unbuilt mocks, scale regenerates slurm.conf, Grafana token created once (0600). Verified live with min; scale really stops containers. | `simctl/stack.py` | [#45](https://github.com/AhmedYousriSobhi/opti-sim/pull/45) |
 
-5/6 done
+6/6 done
 
 ### Mocks (25%)
 
@@ -209,21 +209,20 @@ _What keeps every change safe and debuggable._
 | simctl doctor / status / diag | ✅ Done | Environment checks with fixes, governor state, a masked diagnostics tarball, and the container security check. | `simctl/checks.py`, `simctl/diag.py` | [#26](https://github.com/AhmedYousriSobhi/opti-sim/pull/26) |
 | Observability stack | ✅ Done | Prometheus (2 d, tmpfs), Grafana with provisioned dashboard, fake GPU exporter. | `compose/observability.yml` | - |
 | Decisions as ADRs | ✅ Done | 0001 record decisions, 0002 Slurm from source with no extra privileges, 0003 slurmrestd/JWT and accounting, 0004 slurmrestd keeps its unshare steps disabled. | `docs/adr` | - |
-| Progress tracker | 🔍 In review | This page, generated from docs/progress.yaml (issue 41). | `simctl/progress.py` | [#42](https://github.com/AhmedYousriSobhi/opti-sim/pull/42) |
+| Verification helpers | ✅ Done | verify.sh runs validate.sh plus real tests (--full adds the live stack lifecycle); tests/real/helpers.py starts a live governor and talks to its socket. | `scripts/verify.sh` | [#48](https://github.com/AhmedYousriSobhi/opti-sim/pull/48) |
+| Progress tracker | ✅ Done | This page, generated from docs/progress.yaml (issue 41). | `simctl/progress.py` | [#42](https://github.com/AhmedYousriSobhi/opti-sim/pull/42) |
 
-5/6 done
+7/7 done
 
 ## Next up
 
-1. Governor scale / set-profile taking real effect (rest of issue 39).
-2. Phase 3 mocks: bmc-farm first (the app's Redfish integration).
-3. A loaded Phase 0 run of the full stack to replace the budget estimates.
-4. Install the governor as a standing systemd service.
+1. Phase 3 mocks: bmc-farm first (the app's Redfish integration).
+2. A loaded Phase 0 run of the full stack to replace the budget estimates.
+3. Install the governor as a standing systemd service.
 
 ## Known gaps
 
 - Nothing starts the whole stack yet; it is brought up by hand with docker compose.
-- The governor's scale and set-profile commands only log.
 - Budgets are still estimates until a loaded Phase 0 run.
 - The governor's own locked memory is about 100-170 MB, slightly over its 0.15 GB budget.
 - Host swap is 100% full and kubectl/k3d are missing, which blocks the Kubernetes phase here.

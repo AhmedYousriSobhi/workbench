@@ -4,6 +4,8 @@ import json
 import logging
 import os
 import signal
+import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -38,6 +40,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--grafana-url", default=None,
                     help="publish audit events as annotations; token from $HPCSIM_GRAFANA_TOKEN")
     ap.add_argument("--refresh-interval", type=float, default=30.0, help="seconds between inventory refreshes")
+    ap.add_argument("--workdir", default=None,
+                    help="repo root; enables scale/set-profile by running simctl there")
     ap.add_argument("--require-lock", action="store_true", help="exit if mlockall fails")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -59,8 +63,13 @@ def main(argv: list[str] | None = None) -> None:
     annotator = Annotator(args.grafana_url, token) if args.grafana_url and token else None
     if args.grafana_url and not token:
         log.warning("--grafana-url given but HPCSIM_GRAFANA_TOKEN is empty: annotations disabled")
+    def effector(a: list[str]) -> int:
+        return subprocess.run([sys.executable, "-m", "simctl.cli", *a], cwd=args.workdir,
+                              capture_output=True, timeout=600, check=False).returncode
+
     gov = Governor(sampler, ladder, groups, executor, args.dry_run, watchdog, args.watch_interval,
-                   annotator, discover_docker, args.refresh_interval)
+                   annotator, discover_docker, args.refresh_interval,
+                   effector if args.workdir else None)
     srv = control.serve(args.socket, gov.handle, gov.group_names, gid=args.socket_gid) \
         if args.socket else None
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(SystemExit(0)))

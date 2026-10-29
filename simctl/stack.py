@@ -3,6 +3,7 @@
 Docker is driven through `docker compose` against the generated file; every call goes through the
 injectable `runner` so the ordering logic is testable without Docker.
 """
+import os
 import re
 import subprocess
 import time
@@ -13,6 +14,7 @@ from . import checks, compose
 
 COMPOSE_FILE = Path("compose/generated/docker-compose.yml")
 PROJECT = "hpcsim"
+PROFILE_FILE = Path("compose/generated/profile")  # the profile `up` last started; scale's default
 STAGES = [  # (label, service-name pattern); later stages depend on earlier ones
     ("observability", r"prometheus|grafana|gpu-exporter-farm"),
     ("slurm core", r"slurmctld|mariadb|slurmdbd"),
@@ -52,6 +54,29 @@ def unbuildable(services: dict, base: Path) -> list[str]:
             if s.get("build") and not (base / s["build"] / "Dockerfile").is_file()]
 
 
+def governor_admits(need_mb: int, say: Callable[[str], None], ask=None) -> bool:
+    """GV-9: ask the governor to approve starting `need_mb` more. No governor reachable: warn, go on.
+
+    The socket is $HPCSIM_GOV_SOCKET when set (tests), else the standard path.
+    """
+    sock = os.environ.get("HPCSIM_GOV_SOCKET", checks.GOV_SOCKET)
+    ask = ask or (lambda r: checks.governor_request(r, sock))
+    try:
+        r = ask({"cmd": "admit", "budget_mb": need_mb})
+    except OSError:
+        say("WARN governor not reachable: starting without admission (GV-9)")
+        return True
+    if not r.get("ok"):
+        say(f"REFUSED by governor: {r.get('error')}")
+    return bool(r.get("ok"))
+
+
+def missing_mb(services: dict, runner: Runner, file: Path) -> int:
+    """Memory limits of the services that are not running yet (what a start would add)."""
+    up_now = set(runner(dc("ps", "--status", "running", "--format", "{{.Service}}", file=file)).stdout.split())
+    return sum(int(s["mem_limit"].rstrip("m")) for n, s in services.items() if n not in up_now)
+
+
 def admit(profile: str, available: int | None = None) -> tuple[bool, str]:
     """Pre-flight: refuse unless the profile fits, naming a smaller profile that does."""
     avail = checks.mem_available() if available is None else available
@@ -82,6 +107,10 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     data = compose.generate(sim, prof)
     path = compose.write(data, sim=sim, compute_nodes=prof.get("compute_nodes"))
     skip = unbuildable(data["services"], path.parent)
+    todo = {n: v for n, v in data["services"].items() if n not in skip}
+    if not governor_admits(missing_mb(todo, runner, path), say):
+        return False
+    PROFILE_FILE.write_text(profile)
     if skip:
         say(f"skipping (not implemented yet): {', '.join(skip)}")
     names = [n for n in data["services"] if n not in skip] + ["prometheus", "grafana", "gpu-exporter-farm"]
@@ -109,9 +138,28 @@ def down(runner: Runner = _run, say: Callable[[str], None] = print) -> bool:
     return r.returncode == 0
 
 
+def _project_services(runner: Runner, status: str = "running") -> list[str]:
+    """Service names of this project's containers, straight from Docker (not from the compose file)."""
+    r = runner(["docker", "ps", "-a", "--filter", f"label=com.docker.compose.project={PROJECT}",
+                "--filter", f"status={status}", "--format", '{{.Label "com.docker.compose.service"}}'])
+    return r.stdout.split()
+
+
 def running_nodes(runner: Runner = _run) -> list[str]:
-    r = runner(dc("ps", "--format", "{{.Service}}"))
-    return sorted(s for s in r.stdout.split() if re.fullmatch(r"cn\d+", s))
+    return sorted(s for s in _project_services(runner) if re.fullmatch(r"cn\d+", s))
+
+
+def remove_services(names: list[str], runner: Runner = _run) -> None:
+    """Remove containers by label. `compose rm` cannot: the regenerated file no longer lists them."""
+    for n in names:
+        r = runner(["docker", "ps", "-aq", "--filter", f"label=com.docker.compose.project={PROJECT}",
+                    "--filter", f"label=com.docker.compose.service={n}"])
+        if r.stdout.split():
+            runner(["docker", "rm", "-f", *r.stdout.split()])
+
+
+def current_profile(default: str = "std") -> str:
+    return PROFILE_FILE.read_text().strip() if PROFILE_FILE.is_file() else default
 
 
 def scale(sim: dict, profile: str, n: int, runner: Runner = _run,
@@ -121,10 +169,14 @@ def scale(sim: dict, profile: str, n: int, runner: Runner = _run,
     data = compose.generate(sim, {**prof, "compute_nodes": n})
     path = compose.write(data, sim=sim, compute_nodes=n)
     want = [s for s in data["services"] if re.fullmatch(r"cn\d+", s)]
-    stop = [s for s in running_nodes(runner) if s not in want]
+    now = running_nodes(runner)
+    grow = [s for s in want if s not in now]
+    if grow and not governor_admits(sum(int(data["services"][g]["mem_limit"].rstrip("m")) for g in grow), say):
+        return False
+    stop = [s for s in now if s not in want]
     if stop:
         say(f"stopping {', '.join(stop)}")
-        runner(dc("rm", "-sf", *stop, file=path))
+        remove_services(stop, runner)
     r = runner(dc("up", "-d", "--no-deps", "--force-recreate", "slurmctld", file=path))
     if r.returncode == 0 and want:
         say(f"starting {', '.join(want)}")

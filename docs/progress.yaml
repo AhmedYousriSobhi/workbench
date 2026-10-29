@@ -41,8 +41,8 @@ phases:
          how: "Re-discovers containers so late starters are governed; posts audit events to Grafana with a token from the environment (SPEC GV-6)."}
       - {name: systemd unit installed permanently, status: partial, where: systemd,
          how: "Unit and slice pass systemd-analyze and ran as a transient service in tests; not yet installed as the standing service."}
-      - {name: scale and set-profile take effect, status: todo,
-         how: "Both commands are accepted and logged only; they need the up/down work (issue 39)."}
+      - {name: Admission and real scale / set-profile, status: done, pr: 48, where: governor/core.py,
+         how: "admit command (GV-9): refused at L2+ or if it would breach the floor; scale and set-profile run simctl in the background at L0-L1 only (GV-8). simctl up/scale ask first. Verified live through the socket."}
       - {name: Host tuning script and simctl top, status: todo,
          how: "zram, swappiness and THP tuning with confirmation, and a live view of the governor."}
 
@@ -60,8 +60,8 @@ phases:
          how: "JWT-only REST on the internal network, own user, no privileges; skips two unshare steps instead of loosening seccomp (ADR 0003, ADR 0004). Verified live: no token 401, bad tokens get no data."}
       - {name: Accounting, status: done, pr: 38, where: simctl/slurmconf.py,
          how: "MariaDB on a capped tmpfs plus slurmdbd; sacctmgr bootstrap creates cluster, QOS and users from sim.yaml; secrets stay in a gitignored folder. Verified live: a job as alice appears in sacct and the REST slurmdb endpoint."}
-      - {name: simctl up / down / scale, status: partial, pr: 45, where: simctl/stack.py,
-         how: "Pre-flight, staged start (observability, slurm, nodes), skips unbuilt mocks, scale regenerates slurm.conf, Grafana token created once (0600). Verified live with min. Governor scale/set-profile still only log."}
+      - {name: simctl up / down / scale, status: done, pr: 45, where: simctl/stack.py,
+         how: "Pre-flight, staged start (observability, slurm, nodes), skips unbuilt mocks, scale regenerates slurm.conf, Grafana token created once (0600). Verified live with min; scale really stops containers."}
 
   - id: p3
     title: Mocks
@@ -126,7 +126,9 @@ phases:
          how: "Prometheus (2 d, tmpfs), Grafana with provisioned dashboard, fake GPU exporter."}
       - {name: Decisions as ADRs, status: done, where: docs/adr,
          how: "0001 record decisions, 0002 Slurm from source with no extra privileges, 0003 slurmrestd/JWT and accounting, 0004 slurmrestd keeps its unshare steps disabled."}
-      - {name: Progress tracker, status: review, pr: 42, where: simctl/progress.py,
+      - {name: Verification helpers, status: done, pr: 48, where: scripts/verify.sh,
+         how: "verify.sh runs validate.sh plus real tests (--full adds the live stack lifecycle); tests/real/helpers.py starts a live governor and talks to its socket."}
+      - {name: Progress tracker, status: done, pr: 42, where: simctl/progress.py,
          how: "This page, generated from docs/progress.yaml (issue 41)."}
 
 architecture:
@@ -176,14 +178,12 @@ architecture:
     - [app, jira, ""]
 
 next:
-  - "Governor scale / set-profile taking real effect (rest of issue 39)."
   - "Phase 3 mocks: bmc-farm first (the app's Redfish integration)."
   - "A loaded Phase 0 run of the full stack to replace the budget estimates."
   - "Install the governor as a standing systemd service."
 
 gaps:
   - "Nothing starts the whole stack yet; it is brought up by hand with docker compose."
-  - "The governor's scale and set-profile commands only log."
   - "Budgets are still estimates until a loaded Phase 0 run."
   - "The governor's own locked memory is about 100-170 MB, slightly over its 0.15 GB budget."
   - "Host swap is 100% full and kubectl/k3d are missing, which blocks the Kubernetes phase here."
