@@ -99,17 +99,19 @@ def wait_running(names: list[str], runner: Runner = _run, timeout: float = 120,
 
 def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None] = print,
        available: int | None = None, wait: float = 120) -> bool:
-    ok, msg = admit(profile, available)
-    say(("admitted: " if ok else "REFUSED: ") + msg)
-    if not ok:
-        return False
     prof = compose.load_profile(profile)
     data = compose.generate(sim, prof)
     path = compose.write(data, sim=sim, compute_nodes=prof.get("compute_nodes"))
     skip = unbuildable(data["services"], path.parent)
     todo = {n: v for n, v in data["services"].items() if n not in skip}
-    if not governor_admits(missing_mb(todo, runner, path), say):
-        return False
+    missing = missing_mb(todo, runner, path)
+    if missing:  # a running stack is already in "used" memory: nothing to admit when nothing starts
+        ok, msg = admit(profile, available)
+        say(("admitted: " if ok else "REFUSED: ") + msg)
+        if not ok or not governor_admits(missing, say):
+            return False
+    else:
+        say(f"admitted: {profile}: every service is already running")
     PROFILE_FILE.write_text(profile)
     if skip:
         say(f"skipping (not implemented yet): {', '.join(skip)}")

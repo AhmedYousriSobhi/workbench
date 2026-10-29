@@ -3,6 +3,7 @@ import logging
 import threading
 from collections.abc import Callable
 
+from . import metrics
 from .annotate import Annotator
 from .ladder import Ladder
 from .planner import Action, Group, plan, reversible_first, undo
@@ -28,6 +29,8 @@ class Governor:
         self.executor, self.dry_run = executor, dry_run
         self.signals: Signals | None = None
         self.audit: list[str] = []
+        self.counts = {"actions": 0, "action_failures": 0, "admit_ok": 0, "admit_refused": 0}
+        self.metrics: bytes = b""  # rendered at the end of each step, served by governor.metrics
         self._lock = threading.Lock()
         self._prev = 0
         self.watchdog, self.watch_interval = watchdog, watch_interval
@@ -48,10 +51,12 @@ class Governor:
         msg = f"{'dry-run: would ' if self.dry_run else ''}{a}"
         log.info(msg)
         self._record(msg)
+        self.counts["actions"] += 1
         if not self.dry_run:
             try:
                 self.executor(a)
             except Exception as e:  # noqa: BLE001  one failed action must not abort the plan
+                self.counts["action_failures"] += 1
                 log.error("action failed: %s: %s", a, e)
                 self._record(f"FAILED {a}: {e}")
 
@@ -70,6 +75,8 @@ class Governor:
                     self._act(a)
         self._watch(now, level)
         self._refresh(now, level)
+        with self._lock:
+            self.metrics = metrics.render(self)
         if self.annotator:
             (self.annotator.paused.set if level >= 3 else self.annotator.paused.clear)()
         return level
@@ -143,8 +150,10 @@ class Governor:
         elif left < ADMIT_FLOOR:
             why = f"refused: {budget_mb} MB would leave {left / 1024**3:.1f} GB (floor {ADMIT_FLOOR / 1024**3:.1f})"
         else:
+            self.counts["admit_ok"] += 1
             self._record(f"admit {budget_mb} MB: ok")
             return {"ok": True}
+        self.counts["admit_refused"] += 1
         self._record(f"admit {budget_mb} MB: {why}")
         return {"ok": False, "error": why}
 

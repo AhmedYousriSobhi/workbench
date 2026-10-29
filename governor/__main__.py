@@ -10,7 +10,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import control
+from . import control, metrics
 from .annotate import Annotator
 from .core import Governor
 from .executors import ARRIVALS_FLAG, Executor, discover_docker
@@ -43,6 +43,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--refresh-interval", type=float, default=30.0, help="seconds between inventory refreshes")
     ap.add_argument("--workdir", default=None,
                     help="repo root; enables scale/set-profile by running simctl there")
+    ap.add_argument("--metrics-addr", default=None, metavar="HOST:PORT",
+                    help="serve Prometheus /metrics here (bind the docker bridge gateway, not 0.0.0.0)")
     ap.add_argument("--require-lock", action="store_true", help="exit if mlockall fails")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -76,6 +78,13 @@ def main(argv: list[str] | None = None) -> None:
                    effector if args.workdir else None)
     srv = control.serve(args.socket, gov.handle, gov.group_names, gid=args.socket_gid) \
         if args.socket else None
+    msrv = None
+    if args.metrics_addr:
+        try:
+            msrv = metrics.serve(args.metrics_addr, gov)
+            log.info("metrics on http://%s/metrics", args.metrics_addr)
+        except OSError as e:  # observability must not stop the governor
+            log.error("metrics endpoint unavailable on %s: %s", args.metrics_addr, e)
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(SystemExit(0)))
     try:
         raise_memlock_limit()
@@ -95,6 +104,8 @@ def main(argv: list[str] | None = None) -> None:
                 return
             time.sleep(args.interval)
     finally:
+        if msrv:
+            msrv.shutdown()
         if srv:
             srv.shutdown()
             if args.socket and os.path.exists(args.socket):

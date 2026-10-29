@@ -13,6 +13,9 @@ import yaml
 from simctl import stack
 
 ROOT = Path(__file__).resolve().parents[2]
+# These tests exercise the lifecycle, not the budget pre-flight (its estimate is pessimistic and
+# depends on what else the workstation is running), so cold starts pass a roomy MemAvailable.
+ROOMY = 64 * 1024**3
 
 
 def sinfo() -> str:
@@ -73,13 +76,13 @@ def sim(monkeypatch):
 
 def test_stack_lifecycle(sim):
     say = lambda m: None
-    assert stack.up(sim, "min", say=say)
+    assert stack.up(sim, "min", say=say, available=ROOMY)
     assert sinfo() == "cn[001-004],gpu[001-002]"
     token = stack.TOKEN_FILE.read_text().strip()
     assert oct(stack.TOKEN_FILE.stat().st_mode)[-3:] == "600"
     assert annotate(token) == 200  # the governor's token really works
     assert redfish("cn001/redfish/v1/Systems/1")["PowerState"] == "On"  # bmc-farm answers
-    assert stack.up(sim, "min", say=say)  # idempotent: second up on a running stack
+    assert stack.up(sim, "min", say=say, available=ROOMY)  # idempotent: second up on a running stack
     assert stack.scale(sim, "min", 2, say=say)
     assert sinfo() == "cn[001-002],gpu[001-002]"
     assert cn_running() == ["cn001", "cn002"]  # the containers really stopped, not just slurm.conf
@@ -88,7 +91,7 @@ def test_stack_lifecycle(sim):
     assert stack.down(say=say)
     assert project_containers() == []
     # a fresh Grafana invalidates the old token; up must replace it
-    assert stack.up(sim, "min", say=say)
+    assert stack.up(sim, "min", say=say, available=ROOMY)
     assert annotate(stack.TOKEN_FILE.read_text().strip()) == 200
 
 
@@ -104,7 +107,7 @@ def test_governor_admission_and_scale_via_socket(sim, tmp_path, monkeypatch):
     monkeypatch.setenv("HPCSIM_GOV_SOCKET", str(sock))
     say = lambda m: None
     try:
-        assert stack.up(sim, "min", say=say)  # admitted by the live governor
+        assert stack.up(sim, "min", say=say, available=ROOMY)  # admitted by the live governor
         assert sinfo() == "cn[001-004],gpu[001-002]"
         assert ask(sock, {"cmd": "scale", "group": "compute", "n": 2})["started"]
         assert wait_for(lambda: sinfo() == "cn[001-002],gpu[001-002]", timeout=90)

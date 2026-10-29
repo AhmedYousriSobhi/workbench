@@ -3,14 +3,14 @@
 <!-- GENERATED from docs/progress.yaml by `python -m simctl.progress`; do not edit. -->
 Last updated 2026-10-29. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**69% built** (29 done, 0 in review, 5 partial, 8 to do, 42 items).
+**70% built** (31 done, 0 in review, 5 partial, 8 to do, 44 items).
 
 ## Roadmap
 
 ```mermaid
 flowchart LR
     p0["Baseline<br/>33%"]:::partial
-    p1["Governor<br/>83%"]:::partial
+    p1["Governor<br/>86%"]:::partial
     p2["Slurm<br/>100%"]:::done
     p3["Mocks<br/>50%"]:::partial
     p4["People and chaos<br/>0%"]:::partial
@@ -62,6 +62,7 @@ flowchart TB
     sock --> gov
     gov -->|"freeze / throttle / stop"| docker
     gov -->|"managedsave"| libvirt
+    prom -->|"scrapes /metrics"| gov
     gov -->|"annotations"| graf
     slurmd -->|"register"| ctld
     restd --> ctld
@@ -95,7 +96,7 @@ _Measure real memory so budgets stop being guesses._
 
 1/3 done
 
-### Governor (83%)
+### Governor (86%)
 
 _A root service that keeps the host alive by escalating through a ladder._
 
@@ -112,9 +113,11 @@ _A root service that keeps the host alive by escalating through a ladder._
 | Inventory refresh and Grafana annotations | ✅ Done | Re-discovers containers so late starters are governed; posts audit events to Grafana with a token from the environment (SPEC GV-6). | `governor/annotate.py`, `governor/core.py` | [#36](https://github.com/AhmedYousriSobhi/opti-sim/pull/36) |
 | systemd unit installed permanently | 🟡 Partial | Unit and slice pass systemd-analyze and ran as a transient service in tests; scripts/install-governor.sh installs it as the standing service (printed unit tested; the sudo install itself is run by the user). | `systemd` | - |
 | Admission and real scale / set-profile | ✅ Done | admit command (GV-9): refused at L2+ or if it would breach the floor; scale and set-profile run simctl in the background at L0-L1 only (GV-8). simctl up/scale ask first. Verified live through the socket. | `governor/core.py` | [#48](https://github.com/AhmedYousriSobhi/opti-sim/pull/48) |
+| Governor /metrics endpoint | ✅ Done | Prometheus text (level, MemAvailable, PSI, swap, groups per priority, actions, admissions) bound to the docker bridge address, rendered once per step so a scrape does no work (GV-8). The Prometheus 'governor' target is up on the live stack. | `governor/metrics.py` | [#60](https://github.com/AhmedYousriSobhi/opti-sim/pull/60) |
+| Live ladder test on the real stack | ✅ Done | Dry-run governor against the running containers: L0 to L3 and back, /metrics, Grafana annotations and the planned throttle/freeze/thaw actions. The root variant that checks the real cgroup freeze is written but not yet run (needs sudo). | `tests/real/test_pressure_real.py` | [#60](https://github.com/AhmedYousriSobhi/opti-sim/pull/60) |
 | Host tuning script and simctl top | ⬜ To do | zram, swappiness and THP tuning with confirmation, and a live view of the governor. | - | - |
 
-10/12 done
+12/14 done
 
 ### Slurm (100%)
 
@@ -222,7 +225,8 @@ _What keeps every change safe and debuggable._
 
 ## Known gaps
 
-- Nothing starts the whole stack yet; it is brought up by hand with docker compose.
+- Idle min stack uses about 0.4 GB against a 3.0 GB profile budget, so preflight is far too pessimistic until a loaded Phase 0 run.
+- The root test of the real cgroup freeze/thaw (tests/real/test_pressure_real.py) has not been run.
 - Budgets are still estimates until a loaded Phase 0 run.
 - The governor's own locked memory is about 100-170 MB, slightly over its 0.15 GB budget.
 - Host swap is 100% full and kubectl/k3d are missing, which blocks the Kubernetes phase here.

@@ -379,3 +379,32 @@ def test_scale_dry_run_does_not_execute(tmp_path):
 def test_control_validates_admit():
     from governor.control import dispatch
     assert not dispatch(b'{"cmd":"admit","budget_mb":"x"}', lambda c, r: {"ok": True}, set)["ok"]
+
+
+def test_metrics_text_and_endpoint(tmp_path):
+    import urllib.error
+    import urllib.request
+
+    from governor import metrics
+
+    g, _ = _calm_gov(tmp_path)
+    g.handle("admit", {"budget_mb": 100})
+    g.handle("admit", {"budget_mb": 99999})
+    g.step(1)
+    text = g.metrics.decode()
+    assert "hpcsim_governor_level 0" in text
+    assert f"hpcsim_host_mem_available_bytes {4 * GB}" in text
+    assert 'hpcsim_governor_admit_total{result="ok"} 1' in text
+    assert 'hpcsim_governor_admit_total{result="refused"} 1' in text
+    srv = metrics.serve("127.0.0.1:0", g)
+    try:
+        port = srv.server_address[1]
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/metrics", timeout=5) as r:
+            assert r.status == 200 and b"hpcsim_governor_level" in r.read()
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/other", timeout=5)
+            raise AssertionError("expected 404")
+        except urllib.error.HTTPError as e:
+            assert e.code == 404
+    finally:
+        srv.shutdown()
