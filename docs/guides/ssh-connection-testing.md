@@ -53,7 +53,7 @@ list and jobs view fill in before you break anything.
 
 ## 4. See what is shipped
 
-Four scenarios ship for the SSH path (see [scenarios](../manual/06-scenarios.md)); check one before playing it:
+Six scenarios ship for the SSH path (see [scenarios](../manual/06-scenarios.md)); check one before playing it:
 
 ```bash
 ./scripts/simctl scenario run login-node-down --dry-run
@@ -67,10 +67,12 @@ Four scenarios ship for the SSH path (see [scenarios](../manual/06-scenarios.md)
 | `login-node-hung` | connections hang with no refusal for 30 s |
 | `ssh-host-key-changed` | a different host key for 60 s |
 | `ssh-session-limit` | one session per connection for 60 s |
+| `ssh-key-refused` | the login node rejects the client's key (`Permission denied (publickey)`) for 60 s |
+| `ssh-node-sshd-down` | sshd on `cn001` stops for 60 s: the login node works, the hop to `cn001` is refused |
 
 SSH steps need the host terminal; the web page skips them. To watch your client between steps, break and mend one
-thing by hand as below. The `do:` keys are `state: down|hung|up`, `rotate_host_key: true`, `max_sessions: N` and
-`reset: true` (undoes the key, the session limit, a hang and a stop).
+thing by hand as below. The `do:` keys are `state: down|hung|up`, `rotate_host_key: true`, `max_sessions: N`, `reject_auth: true`,
+`node_sshd: down|up` with `nodes: [cn001]`, and `reset: true` (undoes the key, the session limit, the refused key, a hang and a stop; it does not restart a node's sshd, use `node_sshd: up`).
 
 ## 5. Break one thing at a time
 
@@ -136,6 +138,32 @@ Run the three commands together (the shared connection ends with the first sessi
 trying a new direct connection after the shared one refused it; ignore it. A client that opens several channels on one SSH connection (one for `squeue`, one for `sinfo`, a terminal) is refused the
 extra ones. Your client should queue or retry them, not fail the whole connection.
 
+### The client's key is refused
+
+```bash
+fault "reject_auth: true"; osh alice@127.0.0.1 hostname; echo "exit $?"
+fault "reset: true"; osh alice@127.0.0.1 hostname
+```
+
+![Terminal: after reject_auth the login fails with Permission denied (publickey), exit 255; after reset it prints login](img/ssh-09-refused-key.png)
+
+The port still answers and the host key is unchanged, so the client gets as far as authentication and fails there.
+Your client should report "not authorised" (check the key), not "unreachable". Only the client's key is removed; the
+cluster key that the login node uses to reach the nodes stays, so hops from an existing session still work.
+
+### One node's sshd stops
+
+```bash
+fault "node_sshd: down, nodes: [cn001]"; osh alice@127.0.0.1 ssh cn001 hostname; osh alice@127.0.0.1 ssh cn002 hostname
+fault "node_sshd: up, nodes: [cn001]"; sleep 1; osh alice@127.0.0.1 ssh cn001 hostname
+```
+
+![Terminal: with sshd down on cn001 the hop prints Connection refused while cn002 answers; after node_sshd up cn001 answers again](img/ssh-10-node-sshd.png)
+
+The login node and its connection stay healthy; only the hop to `cn001` fails (the second `ssh` line prints `cn002`;
+the refusal arrives on stderr, which the terminal shows after it). Your client should mark that node, not the whole
+cluster, as unreachable. The container keeps running, so Slurm still sees the node.
+
 ## 6. Play a shipped scenario
 
 ```bash
@@ -164,3 +192,4 @@ fault "reset: true"          # only if you stopped halfway; this also starts a s
 | the connection hangs or is refused with no fault applied | an earlier `state: hung` or `down` is still active | `fault "reset: true"` |
 | `Permission denied` or a host-key warning with no fault applied | an earlier `rotate_host_key` is still active | `fault "reset: true"` |
 | a second session is refused with no fault applied | an earlier `max_sessions` is still active | `fault "reset: true"` |
+| `ssh cn001` is refused with no fault applied | an earlier `node_sshd: down` is still active | `fault "node_sshd: up, nodes: [cn001]"` |

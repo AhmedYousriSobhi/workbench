@@ -148,6 +148,16 @@ def test_ssh_step_commands_per_fault():
     assert reset[0][1] == "unpause" and "/run/hpcsim/ssh/ssh_host_ed25519_key" in reset[-1][-1] and "MaxSessions" in reset[-1][-1]
 
 
+def test_ssh_refused_key_and_single_node_sshd_commands():
+    rej = scenario.ssh_commands({"reject_auth": True})
+    assert len(rej) == 1 and rej[0][2] == "hpcsim-login-1" and "grep -v hpcsim-id_ed25519" in rej[0][-1]
+    assert "kill -HUP" not in rej[0][-1]  # authorized_keys is read at every login
+    assert "authorized_keys" in scenario.ssh_commands({"reset": True})[-1][-1]  # reset gives the key back
+    down = scenario.ssh_commands({"node_sshd": "down", "nodes": ["cn001", "cn002"]})
+    assert [c[2] for c in down] == ["hpcsim-cn001-1", "hpcsim-cn002-1"] and "kill $(cat /run/sshd.pid)" in down[0][-1]
+    assert "/usr/sbin/sshd" in scenario.ssh_commands({"node_sshd": "up", "nodes": ["cn001"]})[0][-1]
+
+
 def test_execute_ssh_runs_the_commands_and_ignores_unpause_and_start_noise():
     calls = []
 
@@ -166,5 +176,10 @@ def test_ssh_steps_are_skipped_without_docker_and_validated():
     sc = lambda do: {"steps": [{"at": "0s", "target": "ssh", "do": do}]}
     assert scenario.validate(sc({"state": "down"}), SIM) == []
     assert scenario.validate(sc({"max_sessions": 1, "rotate_host_key": True}), SIM) == []
+    assert scenario.validate(sc({"reject_auth": True}), SIM) == []
+    assert scenario.validate(sc({"node_sshd": "down", "nodes": ["cn001"]}), SIM) == []
+    for bad in ({"node_sshd": "down"}, {"node_sshd": "hung", "nodes": ["cn001"]}, {"nodes": ["cn001"]}):
+        assert scenario.validate(sc(bad), SIM), bad
+    assert scenario.validate(sc({"node_sshd": "down", "nodes": ["nope"]}), SIM)
     for bad in ({"state": "slow"}, {"max_sessions": 0}, {"max_sessions": True}, {"bogus": 1}, {}):
         assert scenario.validate(sc(bad), SIM), bad

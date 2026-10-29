@@ -1,0 +1,5 @@
+name: ssh-key-refused
+description: The login node answers but no longer accepts the client's key (Permission denied, publickey); a client must say "not authorised", not "unreachable", then the key is restored
+steps:
+  - {at: 0s,  target: ssh, do: {reject_auth: true}}
+  - {at: 60s, target: ssh, do: {reset: true}}
