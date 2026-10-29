@@ -26,6 +26,8 @@ ticket-bot) are reported as **skipped**, not failed. From the web page ([chapter
 | `login-node-down` | the login node refuses connections for 30 s, then returns with the same host key |
 | `login-node-hung` | the login node freezes (connections time out, nothing refuses) for 30 s |
 | `ssh-session-limit` | one session per connection for 60 s: a client opening several channels is refused the extra ones |
+| `ssh-key-refused` | the login node rejects the client's key for 60 s: `Permission denied (publickey)` |
+| `ssh-node-sshd-down` | sshd on `cn001` stops for 60 s: the hop `ssh cn001` is refused, the login node and other nodes work |
 | `k8s-node-notready` | a KWOK node flips to NotReady (**Kubernetes not built**: skipped) |
 | `pod-crashloop` | a pod crash-loops and another is OOMKilled (**Kubernetes not built**: skipped) |
 
