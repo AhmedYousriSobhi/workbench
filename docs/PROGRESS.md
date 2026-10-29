@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m simctl.progress`; do not edit. -->
 Last updated 2026-10-29. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**70% built** (32 done, 5 in review, 11 partial, 5 to do, 53 items).
+**70% built** (32 done, 6 in review, 11 partial, 5 to do, 54 items).
 
 ## Roadmap
 
@@ -216,6 +216,7 @@ _What keeps every change safe and debuggable._
 | Part | Status | How it is built | Where | PR |
 |---|---|---|---|---|
 | validate.sh gate | ✅ Done | Secrets scan, compile, ruff, shellcheck, YAML/JSON, systemd verify, pytest and a governor smoke run before every commit. | `scripts/validate.sh` | [#18](https://github.com/AhmedYousriSobhi/opti-sim/pull/18) |
+| Public-repo privacy guard and git hooks | 🔍 In review | check-privacy.sh blocks home paths, the local username, personal emails, tokens and keys, local-only paths (.claude/, graphify-out/) and symlinks that leave the repo, and prints only file:line and the rule. Tracked hooks: pre-commit (no commits on main/dev, privacy, validate.sh), commit-msg (issue reference), pre-push (no push to main/dev, full scan); installed by install-hooks.sh. validate.sh runs the scan too. Issue 104. | `scripts/check-privacy.sh`, `.githooks/`, `scripts/install-hooks.sh`, `SECURITY.md` | [#105](https://github.com/AhmedYousriSobhi/opti-sim/pull/105) |
 | Unit-test coverage gate | ✅ Done | validate.sh runs the unit tests under coverage and fails below 90% (override COV_FLOOR). 226 tests, 98% of simctl, governor, webui and components. Not covered by unit tests, by design: code that needs root, a live Docker stack or a browser (tests/real). | `tests/`, `scripts/validate.sh` | [#81](https://github.com/AhmedYousriSobhi/opti-sim/pull/81) |
 | Real-host tests | ✅ Done | User-level tests with cgroups, Docker, libvirt and a live governor; a sudo suite for root-only paths. | `scripts/real-test.sh`, `scripts/real-test-root.sh` | [#20](https://github.com/AhmedYousriSobhi/opti-sim/pull/20), [#22](https://github.com/AhmedYousriSobhi/opti-sim/pull/22) |
 | Rootless governor (no sudo) | 🔍 In review | `python -m governor --user-mode` pauses/stops containers through the Docker API, skips memory.high throttle and reclaim, keeps the ladder, admission, watchdog and metrics, listens under $XDG_RUNTIME_DIR. `opti start` runs it when no system service is up. Live-tested: freeze/thaw of a real container, no sudo called. ADR 0010. | `governor/executors.py`, `scripts/opti`, `simctl/checks.py` | [#98](https://github.com/AhmedYousriSobhi/opti-sim/pull/98) |
@@ -228,7 +229,7 @@ _What keeps every change safe and debuggable._
 | Verification helpers | ✅ Done | verify.sh runs validate.sh plus real tests (--full adds the live stack lifecycle); tests/real/helpers.py starts a live governor and talks to its socket. | `scripts/verify.sh` | [#48](https://github.com/AhmedYousriSobhi/opti-sim/pull/48) |
 | Progress tracker | ✅ Done | This page, generated from docs/progress.yaml (issue 41). | `simctl/progress.py` | [#42](https://github.com/AhmedYousriSobhi/opti-sim/pull/42) |
 
-9/12 done
+9/13 done
 
 ## Next up
 

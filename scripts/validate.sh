@@ -5,9 +5,7 @@ set -u
 cd "$(dirname "$0")/.."
 
 if [ "${1:-}" = "--install-hook" ]; then
-  printf '#!/usr/bin/env bash\nexec ./scripts/validate.sh\n' > .git/hooks/pre-commit
-  chmod +x .git/hooks/pre-commit
-  echo "pre-commit hook installed"; exit 0
+  exec ./scripts/install-hooks.sh
 fi
 
 [ -n "${PYLIBS:-}" ] && export PYTHONPATH="$PYLIBS${PYTHONPATH:+:$PYTHONPATH}"
@@ -20,6 +18,11 @@ step "secrets"
 if git grep -nE 'gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}' -- . ':!scripts/validate.sh' >/dev/null; then
   bad "token-like string in tracked files"
 fi
+
+step "privacy"
+# public repo: no personal paths, emails, tokens or local-only tooling in tracked files (scripts/check-privacy.sh)
+./scripts/check-privacy.sh --all || bad "privacy scan"
+[ "$(git config core.hooksPath)" = ".githooks" ] || echo "NOTE  git hooks not installed: ./scripts/install-hooks.sh"
 
 step "python compile"
 py=$(git ls-files '*.py')
@@ -34,10 +37,10 @@ if [ -n "$RUFF" ]; then
 else echo "skip: ruff not installed"; fi
 
 step "bash -n"
-for f in $(git ls-files '*.sh'); do bash -n "$f" || bad "bash -n $f"; done
+for f in $(git ls-files '*.sh' '.githooks/*'); do bash -n "$f" || bad "bash -n $f"; done
 if command -v shellcheck >/dev/null; then
   # shellcheck disable=SC2046
-  shellcheck -S warning $(git ls-files '*.sh') || bad "shellcheck"
+  shellcheck -S warning $(git ls-files '*.sh' '.githooks/*') || bad "shellcheck"
 fi
 
 step "yaml"

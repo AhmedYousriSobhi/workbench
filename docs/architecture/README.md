@@ -16,5 +16,6 @@ original single README, so references such as "section 6.3" still mean the same 
 | [08 Repository layout and migration](08-repository-and-migration.md) | 9, 10 | Where things live; how the old Vagrant lab maps over |
 | [09 Roadmap, open decisions, risks](09-roadmap-decisions-risks.md) | 11, 12, 13 | Phases and exit tests; decisions still open; risks |
 | [10 References](10-references.md) | 14 | Sources researched |
+| [11 The governor as built](11-governor-as-built.md) | none (derived from code) | Boot order, control cycle, lock hold time as measured, follow-up candidates |
 
 Related: [decision records](../adr/), [build progress](../PROGRESS.md), [user guide](../guides/getting-started.md).

@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 import pytest
 import yaml
-from helpers import wait_for
+from helpers import bring_up, wait_for
 
 from simctl import stack
 
@@ -51,7 +51,7 @@ def mocks():
     import os
     os.chdir(ROOT)
     sim = yaml.safe_load((ROOT / "sim.yaml").read_text())
-    assert stack.up(sim, "min", say=lambda m: None, available=64 * 1024**3)
+    bring_up(sim)
     assert wait_for(lambda: ready(f"{JIRA}/healthz") and ready(f"{BCM}/healthz"), timeout=30)
     yield
     stack.down(say=lambda m: None)

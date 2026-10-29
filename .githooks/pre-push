@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# No direct pushes to main or dev (work goes through PRs), and a last full privacy scan of everything tracked.
+set -u
+cd "$(git rev-parse --show-toplevel)" || exit 1
+while read -r _ _ remote_ref _; do
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/dev)
+      if [ "${ALLOW_PROTECTED_BRANCH:-}" != 1 ]; then
+        echo "Refusing to push to '${remote_ref#refs/heads/}': open a PR from a feature branch (CLAUDE.md)." >&2
+        exit 1
+      fi ;;
+  esac
+done
+exec ./scripts/check-privacy.sh --all
