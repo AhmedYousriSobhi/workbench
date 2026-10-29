@@ -15,7 +15,7 @@ def test_preflight_allows_and_refuses():
     assert ok and "remain" in msg
     ok, msg = checks.preflight("full", PROFILES, 9 * GB)
     assert not ok and "try --profile" in msg
-    ok, msg = checks.preflight("std", PROFILES, 7 * GB)  # leaves 1 GB < 1.5 GB floor
+    ok, msg = checks.preflight("std", PROFILES, int(6.5 * GB))  # leaves 0.5 GB < 1 GB floor
     assert not ok and "--profile min" in msg
     ok, msg = checks.preflight("min", PROFILES, 2 * GB)
     assert not ok and "no profile fits" in msg

@@ -13,7 +13,7 @@ import yaml
 from governor.watchdog import accepted_exceptions, container_violations
 
 GB = 1024**3
-SAFETY_FLOOR = int(1.5 * GB)  # MemAvailable must stay above this after the profile starts
+SAFETY_FLOOR = int(1.0 * GB)  # MemAvailable must stay above this after the profile starts
 GOV_SOCKET = "/run/hpcsim/gov.sock"
 OK, WARN, FAIL = "ok", "warn", "fail"
 

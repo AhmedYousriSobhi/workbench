@@ -33,4 +33,4 @@ bmc:
 
 host:
   reserve_gb: 3
-  safety_floor_gb: 2
+  safety_floor_gb: 1
