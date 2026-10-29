@@ -60,6 +60,7 @@ class Report:
     name: str
     steps: list[Outcome] = field(default_factory=list)
     expects: list[Outcome] = field(default_factory=list)
+    stopped: bool = False
 
     @property
     def ok(self) -> bool:
@@ -116,11 +117,16 @@ def post(url: str, body: dict, timeout: float = 10) -> None:
     urllib.request.urlopen(req, timeout=timeout).close()
 
 
-def execute(step: Step, poster=post, runner=checks.run) -> Outcome:
-    """Apply one step; the label names what was done, status says whether it worked."""
+def execute(step: Step, poster=post, runner=checks.run, host: bool = True) -> Outcome:
+    """Apply one step; the label names what was done, status says whether it worked.
+
+    host=False is for callers without Docker access (the Web UI): Slurm steps are skipped, not attempted.
+    """
     label = f"{step.target} {json.dumps(step.do, sort_keys=True)}"
     if step.target in NOT_BUILT:
         return Outcome(label, "skipped", f"{step.target} is not built yet")
+    if step.target == "slurm" and not host:
+        return Outcome(label, "skipped", "Slurm steps need the host CLI (no Docker access here)")
     try:
         if step.target == "slurm":
             for n in step.do.get("drain", []):
@@ -159,12 +165,12 @@ def jira_labels(labels: list[str]) -> bool:
         return False
 
 
-def expectation(exp: dict, runner=checks.run):
+def expectation(exp: dict, runner=checks.run, host: bool = True):
     """(label, holds(), within seconds) for one assertion; holds is None when it cannot be evaluated here."""
     (kind, args), = exp.items()
     label = f"{kind} {json.dumps({k: v for k, v in args.items() if k != 'within'}, sort_keys=True)}"
     within = parse_duration(args.get("within", "0s"))
-    if kind == "slurm.node_state":
+    if kind == "slurm.node_state" and host:
         return label, lambda: args["state"] in node_state(args["node"], runner), within
     if kind == "jira.issue_created":
         return label, lambda: jira_labels(args["labels"]), within
@@ -185,7 +191,8 @@ def check_expect(exp: dict, factor: float, sleep=time.sleep, clock=time.monotoni
 
 
 def run(sc: dict, speed: float = 1.0, dilation: float = 1.0, say=print, sleep=time.sleep, clock=time.monotonic,
-        poster=post, runner=checks.run) -> Report:
+        poster=post, runner=checks.run, host: bool = True, should_stop=lambda: False,
+        on_step=lambda step, outcome: None, on_expect=lambda outcome: None) -> Report:
     """Play the scenario: wait for each step's time (divided by speed x time_dilation) and apply it.
 
     Every expectation is watched from the start: it passes the moment it holds (even if a later step undoes it) and
@@ -196,9 +203,10 @@ def run(sc: dict, speed: float = 1.0, dilation: float = 1.0, say=print, sleep=ti
     start = clock()
     pending = []
     for exp in sc.get("expect") or []:
-        label, holds, within = expectation(exp, runner)
+        label, holds, within = expectation(exp, runner, host)
         if holds is None:
             report.expects.append(Outcome(label, "skipped", "cannot be evaluated here"))
+            on_expect(report.expects[-1])
         else:
             pending.append((label, holds, start + within / factor))
 
@@ -213,20 +221,26 @@ def run(sc: dict, speed: float = 1.0, dilation: float = 1.0, say=print, sleep=ti
                 continue
             pending.remove(item)
             report.expects.append(outcome)
+            on_expect(outcome)
             say(f"expect  {outcome.status:7} {outcome.label}" + (f"  ({outcome.detail})" if outcome.detail else ""))
 
     def wait_until(t: float) -> None:
-        while (left := t - clock()) > 0:
-            sleep(min(left, 1.0) if pending else left)
+        while (left := t - clock()) > 0 and not should_stop():
+            sleep(min(left, 1.0))  # short slices so Stop and expectations are noticed promptly
             watch()
 
     for step in plan(sc):
         wait_until(start + step.at / factor)
-        outcome = execute(step, poster, runner)
+        if should_stop():
+            report.stopped = True
+            return report
+        outcome = execute(step, poster, runner, host)
         report.steps.append(outcome)
+        on_step(step, outcome)
         say(f"[{step.at:6.1f}s] {outcome.status:7} {outcome.label}" + (f"  ({outcome.detail})" if outcome.detail else ""))
         watch()
-    while pending:
+    while pending and not should_stop():
         sleep(1.0)
         watch()
+    report.stopped = should_stop()
     return report

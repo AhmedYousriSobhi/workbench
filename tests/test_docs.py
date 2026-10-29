@@ -37,7 +37,7 @@ def test_pyproject_declares_installable_packages():
 
     cfg = tomllib.loads((Path(__file__).parent.parent / "pyproject.toml").read_text())
     # flat layout with many top-level dirs: setuptools refuses to guess
-    assert cfg["tool"]["setuptools"]["packages"] == ["simctl", "governor"]
+    assert cfg["tool"]["setuptools"]["packages"] == ["simctl", "governor", "webui"]
 
 
 def test_simctl_wrapper_explains_a_missing_venv(tmp_path):

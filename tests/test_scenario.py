@@ -80,7 +80,7 @@ def test_run_waits_scaled_by_speed_and_dilation_and_stops_clean():
 
     sc = {"name": "t", "steps": [{"at": "100s", "target": "jira", "do": {"failure": {"mode": "429"}}}]}
     rep = scenario.run(sc, speed=10, dilation=2, say=lambda m: None, sleep=sleep, clock=lambda: now[0], poster=lambda u, b: None)
-    assert sleeps == [5.0] and rep.ok  # 100s / (10 x 2)
+    assert sum(sleeps) == 5.0 and rep.ok  # 100s / (10 x 2), slept in 1 s slices
 
 
 def test_expect_polls_until_it_holds_then_fails_after_the_deadline():

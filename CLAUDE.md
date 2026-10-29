@@ -62,4 +62,6 @@ See README section 9. Top level: `sim.yaml`, `profiles/`, `simctl/`, `governor/`
 
 - `python -m simctl.cli scenario list | run NAME [--speed N] [--dry-run]`: scenario engine (`simctl/scenario.py`, ADR 0006) over `scenarios/*.yaml`; add a target in `execute()` and in `ENDPOINTS`/`validate`. gpu-exporter-farm publishes 127.0.0.1:9400 for injection.
 
+- `python -m webui [port]`: Web UI on 127.0.0.1:8088 (ADR 0007), token in `compose/generated/secrets/ui_token`. Backend `webui/app.py` talks to the governor socket only and plays scenarios with `host=False` (no Docker). Keep it under 50 MB RSS (SPEC W-1; it sits near 48 MB now).
+
 Not yet implemented; as each lands, document it here: `make demo`, `pytest`, `ruff check .`.

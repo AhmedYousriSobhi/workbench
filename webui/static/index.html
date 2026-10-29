@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>opti-sim</title>
+<style>
+  :root { --bg:#0f1419; --panel:#1a2129; --line:#2b3540; --fg:#e6edf3; --dim:#8b98a5; --ok:#3fb950; --warn:#d29922; --hot:#f0883e; --bad:#f85149; --accent:#58a6ff; }
+  @media (prefers-color-scheme: light) { :root { --bg:#f6f8fa; --panel:#fff; --line:#d0d7de; --fg:#1f2328; --dim:#59636e; --accent:#0969da; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.45 system-ui,sans-serif; background:var(--bg); color:var(--fg); }
+  header { display:flex; gap:16px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0 12px 0 0; }
+  nav button { background:none; border:0; color:var(--dim); font:inherit; padding:6px 10px; cursor:pointer; border-bottom:2px solid transparent; }
+  nav button.on { color:var(--fg); border-color:var(--accent); }
+  main { padding:16px; max-width:1100px; margin:0 auto; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; margin-bottom:14px; }
+  .banner { font-size:22px; font-weight:600; padding:14px; border-radius:8px; color:#fff; }
+  .L0 { background:#2a7d3f; } .L1 { background:#8a6d0b; } .L2 { background:#a67a0a; } .L3 { background:#c2561b; } .L4,.L5 { background:#b62324; } .none { background:#555; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--dim); margin:0 0 8px; }
+  .big { font-size:26px; font-weight:600; } .dim { color:var(--dim); }
+  svg.spark { width:100%; height:60px; } svg.spark polyline { fill:none; stroke:var(--accent); stroke-width:2; }
+  pre { margin:0; font:12px/1.4 ui-monospace,monospace; white-space:pre-wrap; max-height:260px; overflow:auto; }
+  table { width:100%; border-collapse:collapse; } td,th { text-align:left; padding:5px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  button.act { background:var(--accent); color:#fff; border:0; border-radius:6px; padding:5px 12px; cursor:pointer; font:inherit; }
+  button.stop { background:var(--bad); } select { font:inherit; }
+  .st-ok { color:var(--ok); } .st-failed { color:var(--bad); } .st-skipped { color:var(--warn); } .st-pending { color:var(--dim); }
+  [hidden] { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>opti-sim</h1>
+  <nav><button id="tab-dash" class="on">Governor</button><button id="tab-scen">Scenarios</button></nav>
+  <span id="conn" class="dim"></span>
+</header>
+<main>
+<section id="dash">
+  <div id="banner" class="banner none">connecting…</div>
+  <div class="grid" style="margin-top:14px">
+    <div class="panel"><h2>Memory available</h2><div class="big" id="mem">–</div><svg class="spark" id="sp-mem" viewBox="0 0 120 40" preserveAspectRatio="none"><polyline points=""/></svg></div>
+    <div class="panel"><h2>Memory pressure (PSI some, 10 s avg)</h2><div class="big" id="psi">–</div><svg class="spark" id="sp-psi" viewBox="0 0 120 40" preserveAspectRatio="none"><polyline points=""/></svg></div>
+  </div>
+  <div class="panel"><h2>Governor log</h2><pre id="audit">–</pre></div>
+</section>
+<section id="scen" hidden>
+  <div class="panel"><h2>Scenarios</h2>
+    <p class="dim">Plays faults against the running stack. Slurm steps are skipped here (the UI has no Docker access); use <code>simctl scenario run</code> for those.</p>
+    <table id="list"></table></div>
+  <div class="panel" id="runpanel" hidden><h2 id="runtitle">Run</h2><div id="runmeta" class="dim"></div><table id="timeline"></table><div id="expects"></div></div>
+</section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const H = { 'X-Requested-With': 'opti-sim' };
+const mem = [], psi = [];
+function spark(id, arr, max) {
+  const m = max || Math.max(...arr, 1e-9);
+  $(id).firstElementChild.setAttribute('points', arr.map((v, i) => `${(i / Math.max(arr.length - 1, 1)) * 120},${38 - (v / m) * 36}`).join(' '));
+}
+function render(st) {
+  if (!st.ok) { $('banner').className = 'banner none'; $('banner').textContent = st.error || 'governor not reachable'; return; }
+  $('banner').className = 'banner L' + st.level;
+  $('banner').textContent = `Level L${st.level}${st.dry_run ? ' (dry-run)' : ''}` + (st.violations.length ? ` · ${st.violations.length} security finding(s)` : '');
+  const gb = (st.mem_available || 0) / 2 ** 30;
+  $('mem').textContent = gb.toFixed(2) + ' GB'; $('psi').textContent = (st.psi_some ?? 0).toFixed(1) + ' %';
+  mem.push(gb); psi.push(st.psi_some ?? 0); if (mem.length > 120) { mem.shift(); psi.shift(); }
+  spark('sp-mem', mem); spark('sp-psi', psi, Math.max(10, ...psi));
+  $('audit').textContent = st.audit.length ? st.audit.slice().reverse().join('\n') : 'no actions yet';
+}
+const es = new EventSource('/api/events');
+es.onmessage = e => { $('conn').textContent = 'live'; render(JSON.parse(e.data)); };
+es.onerror = () => { $('conn').textContent = 'reconnecting…'; };
+
+function tab(name) {
+  $('dash').hidden = name !== 'dash'; $('scen').hidden = name !== 'scen';
+  $('tab-dash').className = name === 'dash' ? 'on' : ''; $('tab-scen').className = name === 'scen' ? 'on' : '';
+  if (name === 'scen') loadScenarios();
+}
+$('tab-dash').onclick = () => tab('dash'); $('tab-scen').onclick = () => tab('scen');
+
+async function loadScenarios() {
+  const list = await (await fetch('/api/scenarios')).json();
+  $('list').innerHTML = '<tr><th>Name</th><th>Steps</th><th>What it does</th><th></th></tr>' + list.map(s =>
+    `<tr><td>${s.name}</td><td>${s.steps}</td><td>${s.description}</td><td><select id="sp-${s.name}"><option value="1">1×</option><option value="5">5×</option><option value="20">20×</option></select> <button class="act" data-name="${s.name}">Play</button></td></tr>`).join('');
+  document.querySelectorAll('#list button').forEach(b => b.onclick = () => play(b.dataset.name));
+}
+async function play(name) {
+  const speed = $('sp-' + name).value;
+  const r = await fetch(`/api/scenarios/${name}/run?speed=${speed}`, { method: 'POST', headers: H });
+  if (!r.ok) alert((await r.json()).detail);
+  poll();
+}
+async function stopRun() { await fetch('/api/scenarios/stop', { method: 'POST', headers: H }); }
+const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+async function poll() {
+  const s = await (await fetch('/api/scenarios/run')).json();
+  if (!s.name) return;
+  $('runpanel').hidden = false;
+  $('runtitle').textContent = 'Run: ' + s.name;
+  $('runmeta').innerHTML = (s.running ? `running at ${s.speed}× <button class="act stop" id="stopbtn">Stop</button>` : (s.stopped ? 'stopped' : (s.ok ? 'finished: passed' : 'finished: FAILED')));
+  if ($('stopbtn')) $('stopbtn').onclick = stopRun;
+  $('timeline').innerHTML = '<tr><th>At</th><th>Target</th><th>Do</th><th>Status</th></tr>' + s.steps.map(x =>
+    `<tr><td>${x.at.toFixed(0)}s</td><td>${esc(x.target)}</td><td>${esc(JSON.stringify(x.do))}</td><td class="st-${x.status}">${x.status}${x.detail ? ' · ' + esc(x.detail) : ''}</td></tr>`).join('');
+  $('expects').innerHTML = s.expects.map(x => `<p class="st-${x.status}">expect ${x.status}: ${esc(x.label)} ${esc(x.detail)}</p>`).join('');
+  if (s.running) setTimeout(poll, 1000);
+}
+poll();
+</script>
+</body>
+</html>

@@ -80,6 +80,17 @@ Or run a named scenario (a timed list of faults) instead of injecting by hand:
 A scenario fails (exit 1) when a step errors or an `expect` line does not hold. Steps for parts that are not
 built yet (Kubernetes, ticket-bot) are reported as skipped.
 
+## 4b. The web page
+
+```bash
+.venv/bin/python -m webui        # prints a login link such as http://127.0.0.1:8088/login?token=...
+```
+
+Open that link once (it sets a cookie; the token is kept in `compose/generated/secrets/ui_token`). **Governor** shows the
+level banner, free memory and pressure over the last two minutes, and the governor's log. **Scenarios** lists the
+fault scripts: pick a speed, press Play, watch each step turn ok/skipped/failed, press Stop to abort. Slurm steps are
+skipped on this page (it has no Docker access by design); use `./scripts/simctl scenario run` for those.
+
 ## 5. When something is wrong
 
 ```bash
