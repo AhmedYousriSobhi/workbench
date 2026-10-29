@@ -16,6 +16,10 @@ The complete guide to using opti-sim. Read it front to back once, then use it as
 | 8 | [Configuration](08-configuration.md) | `sim.yaml`, profiles, changing the topology |
 | 9 | [Troubleshooting](09-troubleshooting.md) | symptoms, causes, fixes, the diagnostics bundle |
 | 10 | [Reference](10-reference.md) | every command, script, port, file and environment variable |
+| 11 | [Which command do I use?](11-which-command.md) | `opti` or `simctl`, which profile, what to run for each goal |
+| 12 | [Glossary](12-glossary.md) | the words used in the manual and the web page |
+
+The same pages open inside the web page: click **? Help** in its header (http://127.0.0.1:8088/help/), with a sidebar and search.
 
 Screenshots of the web page and of real terminal output are in chapters 3, 4 and 5 (`img/`).
 

@@ -15,16 +15,24 @@ import yaml
 from starlette.applications import Starlette
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
-from starlette.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
+from starlette.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    StreamingResponse,
+)
 from starlette.routing import Route
 
 from simctl import checks, scenario
 
 from .cluster import ActionError, Cluster
 from .flow import PAUSE_LEVEL, Flow
+from .wiki import Wiki, WikiError, esc, page
 
 STATIC = Path(__file__).parent / "static"
 COOKIE = "hpcsim_ui"
+DOCS = Path(__file__).resolve().parent.parent / "docs"
 
 
 def governor_status(socket: str) -> dict:
@@ -89,11 +97,12 @@ class Runs:
 
 
 def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Path("scenarios"),
-               sim_yaml: Path = Path("sim.yaml"), interval: float = 1.0) -> Starlette:
+               sim_yaml: Path = Path("sim.yaml"), interval: float = 1.0, docs: Path = DOCS) -> Starlette:
     sim = yaml.safe_load(sim_yaml.read_text())
     flow = Flow()
     runs = Runs(scenarios, sim, flow)
     cluster = Cluster(sim)
+    wiki = Wiki(docs)
 
     def authed(request: Request) -> None:
         got = request.cookies.get(COOKIE) or request.headers.get("authorization", "").removeprefix("Bearer ")
@@ -179,6 +188,31 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             raise HTTPException(422, "speed must be between 0.1 and 1000")
         return JSONResponse(runs.start(request.path_params["name"], speed))
 
+    async def help_home(request: Request):
+        return RedirectResponse("/help/manual/README", status_code=303)
+
+    async def help_page(request: Request):
+        slug = request.path_params["slug"]
+        try:
+            title, body = await asyncio.to_thread(wiki.render, slug)
+        except WikiError as e:
+            raise HTTPException(404, f"no help page {slug!r}") from e
+        return HTMLResponse(page(wiki, title, body, current=slug))
+
+    async def help_search(request: Request):
+        q = request.query_params.get("q", "")[:100]
+        hits = await asyncio.to_thread(wiki.search, q)
+        rows = "".join(f'<div class="hit"><a href="/help/{esc(h["slug"])}">{esc(h["title"])}</a><p>…{esc(h["snippet"])}…</p></div>'
+                       for h in hits)
+        body = f"<h1>Search: {esc(q)}</h1>" + (rows or "<p>No page matches. Try fewer or different words.</p>")
+        return HTMLResponse(page(wiki, "Search", body, query=q))
+
+    async def help_file(request: Request):
+        try:
+            return FileResponse(wiki.file_path(request.path_params["rel"]))
+        except WikiError as e:
+            raise HTTPException(404, "no such file") from e
+
     async def http_error(request: Request, exc: HTTPException):
         return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
@@ -186,6 +220,11 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         routes=[
             Route("/login", login),
             Route("/", protected(index)),
+            Route("/help", protected(help_home)),
+            Route("/help/", protected(help_home)),
+            Route("/help/search", protected(help_search)),
+            Route("/help/files/{rel:path}", protected(help_file)),
+            Route("/help/{slug:path}", protected(help_page)),
             Route("/api/status", protected(status)),
             Route("/api/events", protected(events)),
             Route("/api/cluster", protected(cluster_state)),

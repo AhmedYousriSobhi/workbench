@@ -65,6 +65,14 @@ the recovery command, which never needs `sudo`. If the governor is down it says 
 
 *The cluster is stopped: one notice with the command to start it, services shown offline with dashed outlines, and no node cards. The memory figures are the host's, taken at the time of the screenshot.*
 
+## Help inside the page
+
+**? Help** in the header opens this manual (and the guides, the architecture notes and the decisions) as linked pages at
+`/help/`: a sidebar to jump between pages, a search box, and **← Dashboard** to go back. It needs the same login as the
+page. Start with [Which command do I use?](11-which-command.md) when the commands are new.
+
+![The help pages: the manual's sidebar on the left and the "Which command do I use?" table on the right](img/web-help.png)
+
 ## Limits
 
 - The Profile and Budget manager (edit `sim.yaml` in the page) is **not built**; edit the file ([chapter 8](08-configuration.md)).

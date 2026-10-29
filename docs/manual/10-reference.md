@@ -47,6 +47,7 @@ Run `./scripts/simctl COMMAND --help` for the exact flags.
 | Command | Does |
 |---|---|
 | `.venv/bin/python -m webui [port]` | the web page (default 8088) |
+| `http://127.0.0.1:8088/help/` | these pages inside the web page, with search (needs the login) |
 | `python -m governor [flags]` | the governor (`--dry-run`, `--once`, `--user-mode`, `--socket`, `--metrics-addr`, `--grafana-url`, `--thresholds`, `--workdir`, `--refresh-interval`, `--no-watchdog`) |
 | `fidelity-vm/bin/up.sh`, `down.sh` | the on-demand VM |
 
@@ -89,7 +90,7 @@ Run `./scripts/simctl COMMAND --help` for the exact flags.
 `hpcsim-<service>-1`: `slurmctld`, `slurmrestd`, `mariadb`, `slurmdbd`, `bmc-farm`, `bcm-mock`, `jira-mock`,
 `scenario-engine`, and one per node (`cn001`, `gpu001`, ...).
 
-## Glossary
+## Glossary (short; the full list is [chapter 12](12-glossary.md))
 
 | Term | Meaning |
 |---|---|

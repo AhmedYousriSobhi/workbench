@@ -36,6 +36,7 @@
   .top h1 i { width:26px; height:26px; border-radius:8px; background:var(--accent); color:var(--on-accent); display:grid; place-items:center; font-style:normal; font-size:14px; }
   .status { display:flex; flex-wrap:wrap; gap:var(--sp2); align-items:center; }
   .pillchip { display:inline-flex; align-items:center; gap:6px; padding:4px 12px; min-height:32px; border:1px solid var(--line); border-radius:999px; font-size:13px; background:var(--bg); color:var(--fg); font-variant-numeric:tabular-nums; white-space:nowrap; }
+  a.pillchip { text-decoration:none; } a.pillchip:hover { border-color:var(--accent); }
   button.pillchip { cursor:pointer; font:inherit; font-size:13px; } button.pillchip:hover { border-color:var(--accent); }
   .pillchip.good b { color:var(--ok); } .pillchip.warn b { color:var(--warn); } .pillchip.bad b { color:var(--bad); }
   #conn { display:inline-flex; align-items:center; gap:6px; color:var(--dim); font-size:13px; }
@@ -133,6 +134,7 @@
     <span class="pillchip" id="c-nodes">Nodes …</span>
     <button class="pillchip" id="c-run" hidden></button>
     <span id="conn" role="status"><i></i><span>connecting…</span></span>
+    <a class="pillchip" id="helplink" href="/help/" aria-label="Help: the manual, guides and command reference">? Help</a>
     <button class="pillchip" id="theme" aria-label="Colour theme: automatic. Press to change.">◐ Auto</button>
   </div>
 </header>

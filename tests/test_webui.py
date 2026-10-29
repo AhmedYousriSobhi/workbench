@@ -185,3 +185,19 @@ def test_page_recovery_hint_needs_no_sudo():
     page = (ROOT / "webui" / "static" / "index.html").read_text()
     offline = next(line for line in page.splitlines() if "Governor not reachable" in line)
     assert "./scripts/opti start" in offline and offline.index("opti start") < offline.index("sudo")
+
+
+def test_help_wiki_needs_the_token_and_serves_pages_images_and_search(ui):
+    assert req(ui, "/help/", auth=False)[0] == 401
+    code, body = req(ui, "/help/manual/11-which-command")
+    assert code == 200 and b"Which command do I use?" in body and b'href="/help/manual/04-nodes-and-shells"' in body
+    assert b"http://" not in body.replace(b"http://127.0.0.1", b"")  # nothing third-party is loaded
+    code, body = req(ui, "/help/search?q=governor")
+    assert code == 200 and b"/help/manual/07-governor" in body
+    assert req(ui, "/help/files/manual/img/web-overview.png")[0] == 200
+    assert req(ui, "/help/manual/nope")[0] == 404 and req(ui, "/help/files/manual/README.md")[0] == 404
+    assert req(ui, "/help/..%2F..%2FSPEC")[0] == 404 and req(ui, "/help/files/..%2F..%2Fsim.yaml")[0] == 404
+
+
+def test_dashboard_links_to_the_help(ui):
+    assert b'href="/help/"' in req(ui, "/")[1]
