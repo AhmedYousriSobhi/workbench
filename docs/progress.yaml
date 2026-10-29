@@ -79,6 +79,7 @@ phases:
          how: "CMDaemon-style POST /json (cmdevice, cmstatus, cmpart) over the sim.yaml nodes, power calls and /sim/inject. Call names are an assumed subset (ADR 0005); verified live, 12 MiB."}
       - {name: jira-mock, status: partial, pr: 71, where: components/jira-mock/jira.py,
          how: "Mode mock only: REST v2/v3 issues, comments, workflow transitions with required-field errors, JQL subset, webhooks, 429/503/slow failures (ADR 0005). Verified live in the container (transitions, JQL, webhook to an outside receiver, 429/503), 15 MiB. cloud/dc modes not built."}
+      - {name: Teleport access, status: todo, how: "Issue 77: the app reaches nodes through Teleport (auth + proxy, node access, outage and cert-expiry scenarios). Needs open decisions 6 first; will need sshd in node-base and a Phase 0 budget."}
 
   - id: p4
     title: People and chaos
@@ -163,6 +164,7 @@ architecture:
     - {id: bmc, group: net, label: "bmc-farm", status: done}
     - {id: bcm, group: net, label: "bcm-mock", status: partial}
     - {id: jira, group: net, label: "jira-mock", status: partial}
+    - {id: tele, group: net, label: "Teleport access", status: todo}
     - {id: chaos, group: net, label: "scenario engine (simctl)", status: partial}
     - {id: users, group: net, label: "user-sim / ticket-bot", status: todo}
     - {id: k8s, group: net, label: "k3d + KWOK", status: partial}
@@ -188,6 +190,7 @@ architecture:
     - [app, bmc, "Redfish"]
     - [app, bcm, ""]
     - [app, jira, ""]
+    - [app, tele, "ssh via Teleport"]
 
 next:
   - "Web UI (Scenario Orchestrator first), then user-sim and ticket-bot."
