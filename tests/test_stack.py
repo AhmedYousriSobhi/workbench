@@ -273,6 +273,16 @@ def test_grafana_http_helpers_against_a_local_server():
     assert stack.token_valid("good", url) is False  # server gone: unreachable counts as invalid
 
 
+def test_bmc_credentials_are_made_once(tmp_path):
+    f = stack.ensure_bmc_credentials(tmp_path / "s" / "bmc_credentials")
+    user, _, pw = f.read_text().strip().partition(":")
+    assert user == "admin" and len(pw) >= 20 and (f.stat().st_mode & 0o777) == 0o644
+    assert (f.parent.stat().st_mode & 0o777) == 0o700
+    before = f.read_text()
+    stack.ensure_bmc_credentials(f)
+    assert f.read_text() == before
+
+
 def test_ssh_keys_are_made_once_and_authorize_the_client_key(tmp_path):
     from subprocess import CompletedProcess
 
