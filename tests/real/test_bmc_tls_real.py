@@ -19,18 +19,19 @@ ROOT = Path(__file__).resolve().parents[2]
 PORT = 8443
 
 
-def fingerprint() -> str:
+def fingerprint(port: int = PORT) -> str:
     ctx = ssl.create_default_context()
     ctx.check_hostname, ctx.verify_mode = False, ssl.CERT_NONE
     import socket
-    with socket.create_connection(("127.0.0.1", PORT), timeout=5) as s, ctx.wrap_socket(s) as t:
+    with socket.create_connection(("127.0.0.1", port), timeout=5) as s, ctx.wrap_socket(s) as t:
         return hashlib.sha256(t.getpeercert(binary_form=True)).hexdigest()
 
 
-def request(method: str, path: str, host: str, headers: dict | None = None, body: dict | None = None):
+def request(method: str, path: str, host: str, headers: dict | None = None, body: dict | None = None,
+            port: int = PORT):
     ctx = ssl.create_default_context()
     ctx.check_hostname, ctx.verify_mode = False, ssl.CERT_NONE
-    c = http.client.HTTPSConnection("127.0.0.1", PORT, context=ctx, timeout=10)
+    c = http.client.HTTPSConnection("127.0.0.1", port, context=ctx, timeout=10)
     h = {"Host": host, "Accept": "application/json", **(headers or {})}
     c.request(method, path, body=None if body is None else json.dumps(body), headers=h)
     r = c.getresponse()
@@ -92,3 +93,39 @@ def test_legacy_http_surface_still_answers_without_auth(farm):
     import urllib.request
     with urllib.request.urlopen("http://127.0.0.1:8000/cn001/redfish/v1/Systems/1", timeout=5) as r:
         assert json.loads(r.read())["PowerState"] == "On"
+
+
+def test_bmc_is_reachable_through_the_login_node_with_the_same_pinned_certificate(farm):
+    """A client dials the BMC with an SSH forwardOut from the login node; the node is still picked by Host."""
+    import socket
+    import subprocess
+
+    from simctl import compose
+
+    user, pw = farm
+    key = ROOT / stack.SSH_DIR / "id_ed25519"
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        local = sock.getsockname()[1]
+    proc = subprocess.Popen(["ssh", "-N", "-i", str(key), "-p", str(compose.SSH_PORT), "-o", "IdentitiesOnly=yes",
+                             "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+                             "-o", "ExitOnForwardFailure=yes", "-L", f"{local}:bmc-cn002:{PORT}", "alice@127.0.0.1"])
+    try:
+        assert wait_for(lambda: _tunnel_up(local), timeout=20)
+        assert fingerprint(local) == fingerprint()  # what a client pinned directly still matches via the tunnel
+        status, headers, _ = request("POST", "/redfish/v1/SessionService/Sessions", f"bmc-cn002:{PORT}",
+                                     body={"UserName": user, "Password": pw}, port=local)
+        assert status == 201
+        _, _, system = request("GET", "/redfish/v1/Systems/1", f"bmc-cn002:{PORT}",
+                               {"X-Auth-Token": headers["X-Auth-Token"]}, port=local)
+        assert system["HostName"] == "cn002"
+    finally:
+        proc.terminate()
+        proc.wait(timeout=10)
+
+
+def _tunnel_up(port: int) -> bool:
+    try:
+        return request("GET", "/redfish/v1", "bmc-cn002", port=port)[0] == 200
+    except OSError:
+        return False
