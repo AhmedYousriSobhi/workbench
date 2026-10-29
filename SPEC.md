@@ -9,6 +9,7 @@ Normative requirements for opti-sim. [README.md](README.md) gives the overview a
 - G2. Keep the whole simulation within a declared memory budget per profile and never let the host swap-thrash.
 - G3. Make every fault and workload a named, repeatable scenario.
 - G4. One-command start (`simctl up`) and a Web UI mirroring the CLI.
+- G5. Be the primary test target for a desktop HPC monitoring client: every endpoint such a client uses (SSH login node, Slurm, Grafana GPU metrics, Jira search, Redfish BMC) MUST behave like the real service, and [docs/guides/client-testing.md](docs/guides/client-testing.md) MUST list where each is and what is not built.
 
 **Non-goals**
 - Running real training jobs, real BCM, real GPUs or a real shared filesystem.
