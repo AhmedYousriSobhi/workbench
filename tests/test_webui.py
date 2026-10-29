@@ -171,3 +171,10 @@ def test_cluster_endpoints_need_auth_csrf_and_validate(ui):
     assert req(ui, "/api/nodes/cn001/gpu-xid", "POST", headers=h)[0] == 422
     code, body = req(ui, "/api/nodes/cn001/overheat", "POST", headers=h)
     assert code == 200 and json.loads(body)["results"][0]["status"] == "failed"  # mocks not running: reported, not crashed
+
+
+def test_page_has_the_app_shell(ui):
+    body = req(ui, "/")[1].decode()
+    for needle in ('class="skip"', '<main id="main"', 'role="tablist"', 'aria-orientation="vertical"',
+                   'id="theme"', 'id="strip"', 'id="attn"', 'prefers-reduced-motion'):
+        assert needle in body, needle

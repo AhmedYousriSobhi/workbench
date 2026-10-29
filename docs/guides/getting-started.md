@@ -97,10 +97,9 @@ built yet (Kubernetes, ticket-bot) are reported as skipped.
 .venv/bin/python -m webui        # prints a login link such as http://127.0.0.1:8088/login?token=...
 ```
 
-Open that link once (it sets a cookie; the token is kept in `compose/generated/secrets/ui_token`). **Governor** shows the
-level banner, free memory and pressure over the last two minutes, and the governor's log. **Cluster** shows each
+Open that link once (it sets a cookie; the token is kept in `compose/generated/secrets/ui_token`). The left sidebar (a bottom bar on a phone) switches between three pages, and the strip at the top shows, on every page, the governor level, free memory, how many services and nodes are healthy, any running scenario, and a theme switch (auto, light, dark). **Overview** answers "is everything fine?": the level banner, four key numbers, two short trends, a *Needs attention* list, and the governor's log. **Cluster** shows each
 simulated node (power, temperature, fans, GPU errors) and which mock services are up; open *Fault actions* on a node to
-power it off, overheat it, fail its fans or inject a GPU error, then *Clear faults*. **Cluster** also draws the traffic: a round dot travels from *Clients* to a service each time that service answers a real request (the app, a Prometheus scrape, `curl`), and a diamond travels from *Scenarios & buttons* when a fault is applied. *Pause animation* stops the dots (the counts keep updating); the dots stop by themselves when the governor reaches L3 or your system asks for reduced motion. Slurm jobs are not drawn because the page cannot read the scheduler (no Docker access). **Scenarios** lists the
+power it off, overheat it, fail its fans or inject a GPU error, then *Clear faults*. **Cluster** also draws the traffic: a round dot travels from *Clients* to a service each time that service answers a real request (the app, a Prometheus scrape, `curl`), and a diamond travels from *Fault injector* when a fault is applied. *Pause animation* stops the dots (the counts keep updating); the dots stop by themselves when the governor reaches L3 or your system asks for reduced motion. Slurm jobs are not drawn because the page cannot read the scheduler (no Docker access). **Scenarios** lists the
 fault scripts: pick a speed, press Play, watch each step turn ok/skipped/failed, press Stop to abort. Slurm steps are
 skipped on this page (it has no Docker access by design); use `./scripts/simctl scenario run` for those.
 

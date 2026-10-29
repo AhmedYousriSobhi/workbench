@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m simctl.progress`; do not edit. -->
 Last updated 2026-10-29. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**68% built** (32 done, 2 in review, 11 partial, 5 to do, 50 items).
+**69% built** (32 done, 3 in review, 11 partial, 5 to do, 51 items).
 
 ## Roadmap
 
@@ -16,7 +16,7 @@ flowchart LR
     p4["People and chaos<br/>0%"]:::partial
     p5["Kubernetes<br/>50%"]:::partial
     p6["Fidelity VM<br/>0%"]:::partial
-    p7["Web UI and profiles<br/>40%"]:::partial
+    p7["Web UI and profiles<br/>50%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
     p0 --> p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7 --> p8
     classDef done fill:#1a7f37,stroke:#1a7f37,color:#fff
@@ -184,7 +184,7 @@ _One real Ubuntu VM with Redfish power control._
 
 0/1 done
 
-### Web UI and profiles (40%)
+### Web UI and profiles (50%)
 
 _One click from cold start to a busy cluster._
 
@@ -193,10 +193,11 @@ _One click from cold start to a busy cluster._
 | Profile pre-flight (CLI) | ✅ Done | `simctl preflight` refuses a profile when free memory minus its budget is under the safety floor and suggests a smaller one. | `simctl/checks.py` | [#26](https://github.com/AhmedYousriSobhi/opti-sim/pull/26) |
 | Web UI base | 🟡 Partial | `python -m webui` on 127.0.0.1:8088 with a login token: Governor dashboard (level banner, MemAvailable/PSI sparklines, audit log over SSE) and Scenario Orchestrator (list, Play with speed, Stop, per-step timeline). Reads the governor socket only; Slurm steps are skipped in the UI. ~32 MB RSS on Starlette (ADR 0008). Reviewed in headless Chromium (desktop/phone, light/dark; no console errors or overflow; ARIA tabs, keyboard, status not by colour alone). | `webui/` | [#76](https://github.com/AhmedYousriSobhi/opti-sim/pull/76) |
 | Cluster Canvas | 🟡 Partial | Cluster tab: service reachability chips and a card per sim.yaml node (power, CPU temp, fans, BCM state, GPU XID) refreshed every 3 s, with Power off/on, Overheat, Fan failure, GPU error and Clear actions that go through the mocks. Slurm drain and K8s faults are not offered (UI has no Docker access; K8s not built). Verified live. | `webui/cluster.py`, `webui/static/index.html` | [#84](https://github.com/AhmedYousriSobhi/opti-sim/pull/84) |
-| Animated workload dots | 🔍 In review | Cluster tab Traffic panel: a dot travels from Clients to a mock each time it serves a real request (the mocks count them at /sim/stats; health checks, /sim calls and the UI's own polls are excluded), a diamond from Scenarios & buttons when a fault is applied. SSE at /api/flow opened only while the tab shows; pause button; stops at governor L3+ and for reduced motion. Slurm job dots are not drawn (the UI cannot read the scheduler). ADR 0009. | `webui/flow.py`, `components/*/ (GET /sim/stats)`, `webui/static/index.html` | [#89](https://github.com/AhmedYousriSobhi/opti-sim/pull/89) |
+| App shell and layout | 🔍 In review | Sidebar navigation (bottom bar on phones), a status strip on every page (governor level, memory, services, nodes, running scenario, theme), an Overview page led by the level, key numbers, trends and a Needs attention list, a calm palette with a soft level banner and area sparklines, light/dark/auto theme, skip link and landmarks, 4 px spacing scale. Based on dashboard and navigation guidance from Splunk, Zuora, Grafana and SaaS UX guides (issue 90). | `webui/static/index.html` | [#91](https://github.com/AhmedYousriSobhi/opti-sim/pull/91) |
+| Animated workload dots | 🔍 In review | Cluster tab Traffic panel: a dot travels from Clients to a mock each time it serves a real request (the mocks count them at /sim/stats; health checks, /sim calls and the UI's own polls are excluded), a diamond from Fault injector when a fault is applied. SSE at /api/flow opened only while the tab shows; pause button; stops at governor L3+ and for reduced motion. Slurm job dots are not drawn (the UI cannot read the scheduler). ADR 0009. | `webui/flow.py`, `components/*/ (GET /sim/stats)`, `webui/static/index.html` | [#89](https://github.com/AhmedYousriSobhi/opti-sim/pull/89) |
 | Budget manager | ⬜ To do | Profile/budget form (W-7). | - | - |
 
-1/5 done
+1/6 done
 
 ### macOS agent and CI (0%)
 

@@ -9,30 +9,66 @@
     --bg:#f6f8fa; --panel:#fff; --line:#d0d7de; --fg:#1f2328; --dim:#57606a; --accent:#0969da; --on-accent:#fff;
     --ok:#1a7f37; --warn:#9a6700; --bad:#cf222e; --pending:#57606a;
     --L0:#1a7f37; --L1:#8a6d0b; --L2:#9a5b00; --L3:#bc4c00; --L4:#cf222e; --L5:#a40e26; --none:#57606a; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --fg:#e6edf3; --dim:#9da7b3; --accent:#58a6ff; --on-accent:#0d1117;
+  :root[data-theme=light] { color-scheme: light; }
+  :root[data-theme=dark] { color-scheme: dark; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --bg:#0d1117; --panel:#161b22; --line:#30363d; --fg:#e6edf3; --dim:#9da7b3; --accent:#58a6ff; --on-accent:#0d1117;
     --ok:#3fb950; --warn:#e3b341; --bad:#ff7b72; --pending:#9da7b3; --L0:#238636; --L1:#9e6a03; --L2:#b35900; --L3:#c2561b; --L4:#da3633; --L5:#b62324; --none:#484f58; } }
+  :root[data-theme=dark] { --bg:#0d1117; --panel:#161b22; --line:#30363d; --fg:#e6edf3; --dim:#9da7b3; --accent:#58a6ff; --on-accent:#0d1117;
+    --ok:#3fb950; --warn:#e3b341; --bad:#ff7b72; --pending:#9da7b3; --L0:#238636; --L1:#9e6a03; --L2:#b35900; --L3:#c2561b; --L4:#da3633; --L5:#b62324; --none:#484f58; }
+  :root { --sp1:4px; --sp2:8px; --sp3:12px; --sp4:16px; --sp5:24px; --side:208px; --shadow:0 1px 2px rgba(31,35,40,.06); --sel:rgba(9,105,218,.10); }
+  :root[data-theme=dark] { --shadow:none; --sel:rgba(88,166,255,.14); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --shadow:none; --sel:rgba(88,166,255,.14); } }
   * { box-sizing: border-box; }
-  body { margin:0; font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--fg); }
+  body { margin:0; background-image:radial-gradient(900px 320px at 12% -8%, var(--sel), transparent 70%); background-repeat:no-repeat; font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; background-color:var(--bg); color:var(--fg); }
   :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-  header { display:flex; align-items:center; gap:8px 20px; padding:8px 16px; border-bottom:1px solid var(--line); background:var(--panel); flex-wrap:wrap; }
-  header h1 { font-size:16px; margin:0; }
-  [role=tablist] { display:flex; gap:4px; flex:1; }
-  [role=tab] { background:none; border:0; border-bottom:3px solid transparent; color:var(--dim); font:inherit; font-weight:500; padding:10px 14px; min-height:44px; cursor:pointer; }
-  [role=tab][aria-selected=true] { color:var(--fg); border-color:var(--accent); }
-  #conn { display:flex; align-items:center; gap:6px; color:var(--dim); font-size:13px; }
+  .skip { position:absolute; left:-999px; top:8px; background:var(--accent); color:var(--on-accent); padding:8px 12px; border-radius:6px; z-index:20; }
+  .skip:focus { left:8px; }
+  .app { display:grid; grid-template-columns:var(--side) minmax(0,1fr); min-height:100vh; }
+  .side { position:sticky; top:0; height:100vh; display:flex; flex-direction:column; gap:var(--sp4); padding:var(--sp4) var(--sp3); background:var(--panel); border-right:1px solid var(--line); }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:700; font-size:16px; padding:var(--sp1) var(--sp2); }
+  .brand i { width:28px; height:28px; border-radius:8px; background:var(--accent); color:var(--on-accent); display:grid; place-items:center; font-style:normal; font-size:15px; }
+  .navlabel { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); padding:0 var(--sp2); margin-bottom:-8px; }
+  [role=tablist] { display:flex; flex-direction:column; gap:var(--sp1); }
+  [role=tab] { display:flex; align-items:center; gap:10px; background:none; border:0; border-radius:8px; color:var(--dim); font:inherit; font-weight:550; padding:0 var(--sp3); min-height:44px; cursor:pointer; text-align:left; }
+  [role=tab] svg { width:20px; height:20px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  [role=tab]:hover { background:var(--bg); color:var(--fg); }
+  [role=tab][aria-selected=true] { background:var(--sel); color:var(--accent); box-shadow:inset 3px 0 0 var(--accent); }
+  .sidefoot { margin-top:auto; font-size:12px; color:var(--dim); padding:0 var(--sp2); }
+  .content { min-width:0; display:flex; flex-direction:column; }
+  .top { position:sticky; top:0; z-index:10; display:flex; align-items:center; flex-wrap:wrap; gap:var(--sp2) var(--sp4); padding:var(--sp3) var(--sp5); background:var(--panel); border-bottom:1px solid var(--line); }
+  .top h1 { font-size:20px; margin:0; margin-right:auto; letter-spacing:-.01em; }
+  .status { display:flex; flex-wrap:wrap; gap:var(--sp2); align-items:center; }
+  .pillchip { display:inline-flex; align-items:center; gap:6px; padding:4px 12px; min-height:32px; border:1px solid var(--line); border-radius:999px; font-size:13px; background:var(--bg); color:var(--fg); font-variant-numeric:tabular-nums; white-space:nowrap; }
+  button.pillchip { cursor:pointer; font:inherit; font-size:13px; } button.pillchip:hover { border-color:var(--accent); }
+  .pillchip.good b { color:var(--ok); } .pillchip.warn b { color:var(--warn); } .pillchip.bad b { color:var(--bad); }
+  #conn { display:inline-flex; align-items:center; gap:6px; color:var(--dim); font-size:13px; }
   #conn i { width:9px; height:9px; border-radius:50%; background:var(--bad); display:inline-block; }
   #conn.live i { background:var(--ok); }
-  main { padding:16px; max-width:1100px; margin:0 auto; }
-  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  main { padding:var(--sp5); width:100%; max-width:1180px; margin:0 auto; }
+  .lede { margin:0 0 var(--sp4); color:var(--dim); max-width:70ch; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr)); gap:var(--sp4); margin:var(--sp4) 0; }
+  .tile { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:var(--sp4); box-shadow:var(--shadow); text-align:left; font:inherit; color:inherit; display:block; width:100%; }
+  button.tile { cursor:pointer; } button.tile:hover { border-color:var(--accent); }
+  .tile h2 { margin:0 0 var(--sp2); } .tile .big { margin-bottom:2px; } .tile .sub { font-size:13px; color:var(--dim); }
+  .two { display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:var(--sp4); align-items:start; margin-bottom:var(--sp4); } .two > .panel { margin:0; }
+  ul.attn { list-style:none; margin:0; padding:0; } ul.attn li { display:flex; gap:10px; align-items:baseline; padding:8px 0; border-bottom:1px solid var(--line); } ul.attn li:last-child { border:0; }
+  ul.attn .ic { width:1.2em; text-align:center; flex:none; font-weight:700; } .ic.warn { color:var(--warn); } .ic.bad { color:var(--bad); } .ic.good { color:var(--ok); }
+  .skel { color:var(--dim); font-style:italic; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:var(--sp4); margin-bottom:var(--sp4); box-shadow:var(--shadow); }
   h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin:0 0 10px; font-weight:600; }
-  .banner { padding:16px 18px; border-radius:10px; color:#fff; }
-  .banner b { font-size:22px; display:block; } .banner span { opacity:.95; }
+  .banner { --lv:var(--none); display:flex; align-items:center; gap:var(--sp4); padding:var(--sp4) var(--sp5); border-radius:12px; color:var(--fg); border:1px solid var(--line); border-left:4px solid var(--lv);
+    background:linear-gradient(90deg,color-mix(in srgb,var(--lv) 11%,var(--panel)),var(--panel) 75%); }
+  .banner .orb { width:14px; height:14px; border-radius:50%; background:var(--lv); box-shadow:0 0 0 6px color-mix(in srgb,var(--lv) 20%,transparent); flex:none; }
+  .banner.calm .orb { animation:breathe 5s ease-in-out infinite; }
+  @keyframes breathe { 50% { box-shadow:0 0 0 9px color-mix(in srgb,var(--lv) 8%,transparent); } }
+  .banner b { font-size:20px; display:block; letter-spacing:-.01em; } .banner span.m { color:var(--dim); }
   .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:16px; margin:16px 0; }
   .grid .panel { margin:0; }
-  .big { font-size:30px; font-weight:650; font-variant-numeric:tabular-nums; line-height:1.2; }
+  .big { font-size:30px; font-weight:600; font-variant-numeric:tabular-nums; line-height:1.2; }
   .dim { color:var(--dim); } .small { font-size:13px; }
   svg.spark { width:100%; height:72px; display:block; margin-top:8px; }
-  svg.spark polyline { fill:none; stroke:var(--accent); stroke-width:2; vector-effect:non-scaling-stroke; }
+  svg.spark polyline { fill:none; stroke:var(--accent); stroke-width:1.6; stroke-linejoin:round; vector-effect:non-scaling-stroke; }
+  svg.spark polygon { fill:var(--accent); opacity:.10; }
   .axis { display:flex; justify-content:space-between; color:var(--dim); font-size:12px; font-variant-numeric:tabular-nums; }
   .row { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:8px; }
   label.chk { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--dim); cursor:pointer; }
@@ -78,57 +114,97 @@
     #timeline td { border:0; padding:0; } #timeline td:nth-child(3), #timeline td:nth-child(4) { grid-column:1 / -1; }
   }
   #flow { width:100%; max-width:560px; display:block; margin:6px auto; }
-  #flow .blk { fill:var(--panel); stroke:var(--line); stroke-width:2; } #flow .blk.up { stroke:var(--ok); } #flow .blk.down { stroke:var(--bad); stroke-dasharray:5 4; }
+  #flow .blk { fill:var(--panel); stroke:var(--line); stroke-width:2; } #flow .blk.up { stroke:var(--ok); } #flow .blk.down { stroke:var(--bad); stroke-dasharray:5 4; } #flow .blk.off { stroke:var(--line); stroke-dasharray:3 5; opacity:.8; }
   #flow text { fill:var(--fg); font:600 12px system-ui,sans-serif; } #flow text.sub { fill:var(--dim); font-weight:400; font-size:10.5px; }
   #flow line { stroke:var(--line); stroke-width:1.5; } #flow .dotc { fill:var(--accent); } #flow .dotf { fill:var(--warn); stroke:var(--fg); stroke-width:1; }
   .legend { display:flex; flex-wrap:wrap; gap:4px 18px; margin:4px 0 0; }
   .btn.small { min-height:36px; padding:0 12px; font-weight:500; background:var(--panel); color:var(--fg); border:1px solid var(--line); }
-  @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
+  @media (max-width:900px) {  /* phone and small tablet: the sidebar becomes a bottom bar, one column */
+    .app { grid-template-columns:minmax(0,1fr); }
+    .side { position:fixed; inset:auto 0 0 0; height:auto; flex-direction:row; padding:4px 8px calc(4px + env(safe-area-inset-bottom)); border-right:0; border-top:1px solid var(--line); z-index:15; }
+    .brand, .navlabel, .sidefoot { display:none; }
+    [role=tablist] { flex-direction:row; width:100%; }
+    [role=tab] { flex:1; flex-direction:column; justify-content:center; gap:2px; font-size:12px; min-height:56px; text-align:center; }
+    [role=tab][aria-selected=true] { box-shadow:inset 0 3px 0 var(--accent); }
+    main { padding:var(--sp4) var(--sp4) 88px; }
+    .top { padding:var(--sp3) var(--sp4); } .top h1 { font-size:18px; width:100%; }
+    .status { flex-wrap:nowrap; overflow-x:auto; width:100%; padding-bottom:2px; scrollbar-width:thin; }
+    .two { grid-template-columns:minmax(0,1fr); }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
 </style>
 </head>
 <body>
-<header>
-  <h1>opti-sim</h1>
-  <div role="tablist" aria-label="Sections">
-    <button role="tab" id="tab-dash" aria-controls="dash" aria-selected="true">Governor</button>
-    <button role="tab" id="tab-cluster" aria-controls="cluster" aria-selected="false" tabindex="-1">Cluster</button>
-    <button role="tab" id="tab-scen" aria-controls="scen" aria-selected="false" tabindex="-1">Scenarios</button>
+<a class="skip" href="#main">Skip to content</a>
+<div class="app">
+<aside class="side">
+  <div class="brand"><i aria-hidden="true">◈</i> opti-sim</div>
+  <div class="navlabel" id="navlabel">Sections</div>
+  <div role="tablist" aria-label="Sections" aria-orientation="vertical">
+    <button role="tab" id="tab-dash" aria-controls="dash" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3zM13 21h8v-8h-8zM13 3v6h8V3zM3 21h8v-6H3z"/></svg>Overview</button>
+    <button role="tab" id="tab-cluster" aria-controls="cluster" aria-selected="false" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg>Cluster</button>
+    <button role="tab" id="tab-scen" aria-controls="scen" aria-selected="false" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>Scenarios</button>
   </div>
-  <div id="conn" role="status"><i></i><span>connecting…</span></div>
+  <div class="sidefoot">Local only · 127.0.0.1</div>
+</aside>
+<div class="content">
+<header class="top">
+  <h1 id="pagetitle">Overview</h1>
+  <div class="status" id="strip" aria-label="Live status">
+    <span class="pillchip" id="c-level"><b aria-hidden="true">●</b> Governor …</span>
+    <span class="pillchip" id="c-mem">Memory …</span>
+    <span class="pillchip" id="c-svc">Services …</span>
+    <span class="pillchip" id="c-nodes">Nodes …</span>
+    <button class="pillchip" id="c-run" hidden></button>
+    <span id="conn" role="status"><i></i><span>connecting…</span></span>
+    <button class="pillchip" id="theme" aria-label="Colour theme: automatic. Press to change.">◐ Auto</button>
+  </div>
 </header>
-<main>
+<main id="main" tabindex="-1">
 <section id="dash" role="tabpanel" aria-labelledby="tab-dash">
-  <div id="banner" class="banner" role="status" style="background:var(--none)"><b>Connecting…</b><span>Waiting for the governor.</span></div>
-  <div class="grid">
-    <div class="panel"><h2>Memory available</h2><div class="big" id="mem">–</div>
-      <svg class="spark" id="sp-mem" viewBox="0 0 120 40" preserveAspectRatio="none" role="img" aria-label="Free memory over the last two minutes"><polyline points=""/></svg>
-      <div class="axis"><span id="mem-lo"></span><span>last 2 min</span><span id="mem-hi"></span></div></div>
-    <div class="panel"><h2>Memory pressure (PSI, 10 s average)</h2><div class="big" id="psi">–</div>
-      <svg class="spark" id="sp-psi" viewBox="0 0 120 40" preserveAspectRatio="none" role="img" aria-label="Memory pressure over the last two minutes"><polyline points=""/></svg>
-      <div class="axis"><span>0 %</span><span>last 2 min</span><span id="psi-hi"></span></div></div>
+  <p class="lede">The health of the host and the simulated cluster at a glance. Anything that needs you is listed under <b>Needs attention</b>.</p>
+  <div id="banner" class="banner" role="status"><i class="orb" aria-hidden="true"></i><div><b>Connecting…</b><span class="m">Waiting for the governor.</span></div></div>
+  <div class="tiles">
+    <div class="tile"><h2>Memory available</h2><div class="big" id="mem">–</div><div class="sub" id="mem-sub">free for the simulation</div></div>
+    <div class="tile"><h2>Memory pressure</h2><div class="big" id="psi">–</div><div class="sub">PSI, 10 s average</div></div>
+    <button class="tile" id="t-svc" data-go="cluster"><h2>Services</h2><div class="big" id="t-svc-v">–</div><div class="sub" id="t-svc-s">open the Cluster page</div></button>
+    <button class="tile" id="t-nodes" data-go="cluster"><h2>Nodes</h2><div class="big" id="t-nodes-v">–</div><div class="sub" id="t-nodes-s">open the Cluster page</div></button>
+  </div>
+  <div class="two">
+    <div class="panel"><h2>Trends, last 2 minutes</h2>
+      <div class="small dim">Memory available</div>
+      <svg class="spark" id="sp-mem" viewBox="0 0 120 40" preserveAspectRatio="none" role="img" aria-label="Free memory over the last two minutes"><polygon points=""/><polyline points=""/></svg>
+      <div class="axis"><span id="mem-lo"></span><span>now →</span><span id="mem-hi"></span></div>
+      <div class="small dim" style="margin-top:12px">Memory pressure</div>
+      <svg class="spark" id="sp-psi" viewBox="0 0 120 40" preserveAspectRatio="none" role="img" aria-label="Memory pressure over the last two minutes"><polygon points=""/><polyline points=""/></svg>
+      <div class="axis"><span>0 %</span><span>now →</span><span id="psi-hi"></span></div></div>
+    <div class="panel"><h2>Needs attention</h2><ul class="attn" id="attn"><li class="skel">Checking…</li></ul></div>
   </div>
   <div class="panel">
-    <div class="row"><h2 style="margin:0">Governor log <span id="logcount" class="dim"></span></h2>
+    <div class="row"><h2 style="margin:0">Governor activity <span id="logcount" class="dim"></span></h2>
       <label class="chk"><input type="checkbox" id="onlyactions" checked> Hide container inventory lines</label></div>
     <pre id="audit" tabindex="0" aria-label="Governor log, newest first">–</pre>
   </div>
 </section>
 <section id="cluster" role="tabpanel" aria-labelledby="tab-cluster" hidden>
+  <p class="lede">Every simulated node and mock service, live. Open <b>Fault actions</b> on a node to break it on purpose and watch the effect.</p>
   <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/simctl up --profile min</code>.</div>
-  <div class="panel"><div class="row"><h2 style="margin:0">Traffic</h2>
+  <div class="two"><div class="panel"><div class="row"><h2 style="margin:0">Traffic</h2>
     <button class="btn small" id="flowpause" aria-pressed="false">Pause animation</button></div>
     <svg id="flow" viewBox="0 0 360 330" role="img" aria-label="Traffic from clients and from injected faults to the four mock services"></svg>
     <p class="legend small dim"><span><b style="color:var(--accent)" aria-hidden="true">●</b> round dot: requests from clients (the app, Prometheus, curl)</span>
       <span><b style="color:var(--warn)" aria-hidden="true">◆</b> diamond: a fault applied by a scenario or a button</span></p>
     <p id="flowstate" class="dim small" role="status" style="margin-bottom:0"></p></div>
-  <div class="panel"><h2>Services</h2><div id="services" class="chips"></div></div>
+  <div class="panel"><h2>Services</h2><div id="services" class="chips" style="flex-direction:column;align-items:stretch"></div>
+    <p class="dim small" style="margin-bottom:0">A dashed red border means one service is not answering; a faint dashed border means the whole stack is off.</p></div></div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <h2 class="grouphead">Compute nodes</h2><div id="nodes-compute" class="nodes"></div>
   <h2 class="grouphead">GPU nodes</h2><div id="nodes-gpu" class="nodes"></div>
   <p class="dim small">Drain in Slurm and Kubernetes node faults are not available here: the page has no Docker access by design, and Kubernetes is not built yet. Use <code>./scripts/simctl scenario run node-down</code> for Slurm.</p>
 </section>
 <section id="scen" role="tabpanel" aria-labelledby="tab-scen" hidden>
-  <div class="panel"><h2>Scenarios</h2>
+  <p class="lede">Scenarios replay a realistic incident, such as a node failure or a Jira outage, against the running stack.</p>
+  <div class="panel"><h2>Available scenarios</h2>
     <p class="dim small" style="margin-top:0">Each scenario is a timed list of faults played against the running stack (start it with <code>./scripts/simctl up --profile min</code>). Slurm steps are skipped on this page because it has no Docker access; <code>./scripts/simctl scenario run NAME</code> runs those.</p>
     <div class="tablewrap"><table id="list"></table></div></div>
   <div class="panel" id="runpanel" hidden aria-live="polite"><h2 id="runtitle">Run</h2>
@@ -138,6 +214,7 @@
     <div class="tablewrap"><table id="timeline"></table></div><div id="expects"></div></div>
 </section>
 </main>
+</div></div>
 <script>
 const $ = id => document.getElementById(id);
 const H = { 'X-Requested-With': 'opti-sim' };
@@ -152,9 +229,42 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const mem = [], psi = [];
 let lastLog = [];
 
+function setChip(id, kind, icon, text) {
+  const c = $(id); c.className = 'pillchip ' + kind + (c.tagName === 'BUTTON' ? '' : ''); c.innerHTML = `<b aria-hidden="true">${icon}</b> ${esc(text)}`;
+}
+let lastGov = null, lastCl = null;
+function paintAttention() {
+  const items = [];
+  if (!lastGov) items.push(['bad', '✗', 'The governor is not reachable, so memory is not being protected.']);
+  else {
+    if (lastGov.level >= 2) items.push(['bad', '✗', `Memory pressure is at level L${Math.min(lastGov.level, 5)}: ${LEVELS[Math.min(lastGov.level, 5)].toLowerCase()}.`]);
+    (lastGov.violations || []).slice(0, 5).forEach(v => items.push(['warn', '▲', 'Security finding: ' + (typeof v === 'string' ? v : JSON.stringify(v))]));
+  }
+  if (lastCl) {
+    const down = Object.entries(lastCl.services).filter(([, up]) => !up).map(([k]) => k);
+    if (down.length === Object.keys(lastCl.services).length) items.push(['warn', '▲', 'The simulation stack is not running. Start it with ./scripts/simctl up --profile min']);
+    else down.forEach(k => items.push(['bad', '✗', `Service ${k} is not answering.`]));
+    lastCl.nodes.filter(n => n.state !== 'ok' && !(down.length === Object.keys(lastCl.services).length)).forEach(n =>
+      items.push([n.state === 'fault' ? 'bad' : 'warn', n.state === 'fault' ? '✗' : '▲', `${n.name}: ${n.label}`]));
+  }
+  $('attn').innerHTML = items.length ? items.map(([k, ic, t]) => `<li><span class="ic ${k}" aria-hidden="true">${ic}</span><span>${esc(t)}</span></li>`).join('')
+    : '<li><span class="ic good" aria-hidden="true">✓</span><span>All clear. Nothing needs you right now.</span></li>';
+}
+function paintHealth(c) {
+  lastCl = c;
+  const svc = Object.values(c.services), up = svc.filter(Boolean).length, all = svc.length;
+  const bad = c.nodes.filter(n => n.state !== 'ok').length, nn = c.nodes.length, stackDown = up === 0;
+  setChip('c-svc', stackDown ? 'bad' : up < all ? 'warn' : 'good', stackDown ? '✗' : up < all ? '▲' : '✓', stackDown ? 'Stack not running' : `Services ${up}/${all}`);
+  setChip('c-nodes', stackDown ? 'warn' : bad ? 'warn' : 'good', stackDown ? '–' : bad ? '▲' : '✓', stackDown ? 'Nodes unknown' : `Nodes ${nn - bad}/${nn} healthy`);
+  $('t-svc-v').textContent = `${up} / ${all}`; $('t-svc-s').textContent = stackDown ? 'stack is not running' : up < all ? 'some services are down' : 'all answering';
+  $('t-nodes-v').textContent = stackDown ? '–' : `${nn - bad} / ${nn}`; $('t-nodes-s').textContent = stackDown ? 'no data' : bad ? `${bad} need attention` : 'all healthy';
+  paintAttention();
+}
 function spark(id, arr, lo, hi) {
   const span = Math.max(hi - lo, 1e-9);
-  $(id).firstElementChild.setAttribute('points', arr.map((v, i) => `${(i / Math.max(arr.length - 1, 1)) * 120},${38 - ((v - lo) / span) * 36}`).join(' '));
+  const pts = arr.map((v, i) => `${(i / Math.max(arr.length - 1, 1)) * 120},${38 - ((v - lo) / span) * 36}`).join(' ');
+  $(id).querySelector('polyline').setAttribute('points', pts);
+  $(id).querySelector('polygon').setAttribute('points', arr.length ? `0,40 ${pts} 120,40` : '');
 }
 function renderLog() {
   const lines = lastLog.filter(l => !$('onlyactions').checked || !l.startsWith('inventory:')).reverse();
@@ -165,14 +275,17 @@ function render(st) {
   const live = $('conn'); live.className = st.ok ? 'live' : ''; live.lastElementChild.textContent = st.ok ? 'live' : 'governor offline';
   const banner = $('banner');
   if (!st.ok) {
-    banner.style.background = 'var(--none)';
-    banner.innerHTML = '<b>Governor not reachable</b><span>Install or restart it: <code style="color:#000">sudo ./scripts/install-governor.sh</code></span>';
+    banner.style.setProperty('--lv', 'var(--bad)'); banner.className = 'banner';
+    banner.innerHTML = '<i class="orb" aria-hidden="true"></i><div><b>Governor not reachable</b><span class="m">Install or restart it: <code>sudo ./scripts/install-governor.sh</code></span></div>';
+    lastGov = null; setChip('c-level', 'bad', '✗', 'Governor offline'); paintAttention();
     return;
   }
   const l = Math.min(st.level, 5);
-  banner.style.background = `var(--L${l})`;
-  banner.innerHTML = `<b>L${l} · ${LEVELS[l]}${st.dry_run ? ' (dry-run: no actions taken)' : ''}</b><span>${MEANING[l]}${st.violations.length ? ` ${st.violations.length} security finding(s).` : ''}</span>`;
+  banner.style.setProperty('--lv', `var(--L${l})`); banner.className = 'banner' + (l === 0 ? ' calm' : '');
+  banner.innerHTML = `<i class="orb" aria-hidden="true"></i><div><b>L${l} · ${LEVELS[l]}${st.dry_run ? ' (dry-run: no actions taken)' : ''}</b><span class="m">${MEANING[l]}${st.violations.length ? ` ${st.violations.length} security finding(s).` : ''}</span></div>`;
   const gb = (st.mem_available || 0) / 2 ** 30;
+  lastGov = st; setChip('c-level', l <= 1 ? 'good' : l <= 2 ? 'warn' : 'bad', l === 0 ? '✓' : l <= 2 ? '▲' : '✗', `L${l} ${LEVELS[l]}`);
+  $('c-mem').textContent = gb.toFixed(1) + ' GB free'; paintAttention();
   $('mem').textContent = gb.toFixed(2) + ' GB'; $('psi').textContent = (st.psi_some ?? 0).toFixed(1) + ' %';
   mem.push(gb); psi.push(st.psi_some ?? 0); if (mem.length > 120) { mem.shift(); psi.shift(); }
   const lo = Math.min(...mem), hi = Math.max(...mem), pad = Math.max(0.25, (1 - (hi - lo)) / 2);
@@ -199,9 +312,10 @@ function node(n, actions) {
     <details data-node="${esc(n.name)}" ${openNodes.has(n.name) ? 'open' : ''}><summary>Fault actions</summary><div class="actions">${buttons}</div></details></article>`;
 }
 function renderCluster(c) {
+  paintHealth(c);
   $('stackdown').hidden = Object.values(c.services).some(Boolean);
   $('services').innerHTML = Object.entries(c.services).map(([k, up]) =>
-    `<span class="chip ${up ? 'up' : 'down'}"><b aria-hidden="true">${up ? '●' : '○'}</b> ${esc(k)} <span class="dim">${up ? 'up' : 'down'}</span></span>`).join('');
+    `<span class="chip ${up ? 'up' : 'down'}"><b aria-hidden="true">${up ? '✓' : '✗'}</b> ${esc(k)} <span class="dim">${up ? 'answering' : 'not answering'}</span></span>`).join('');
   for (const kind of ['compute', 'gpu']) {
     const rows = c.nodes.filter(n => n.kind === kind);
     $('nodes-' + kind).innerHTML = rows.length ? rows.map(n => node(n, c.actions)).join('') : '<p class="dim">None in this profile.</p>';
@@ -215,7 +329,7 @@ async function loadCluster() {
     const text = await (await fetch('/api/cluster')).text();
     if (text !== lastCluster) { lastCluster = text; renderCluster(JSON.parse(text)); }
   } catch (e) { /* keep the last view; the next poll retries */ }
-  if (!$('cluster').hidden) clusterTimer = setTimeout(loadCluster, 3000);
+  clusterTimer = setTimeout(loadCluster, document.hidden ? 15000 : 4000);
 }
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(flashTimer); flashTimer = setTimeout(() => { t.hidden = true; }, 6000);
@@ -231,10 +345,10 @@ async function nodeAction(name, action, label) {
 
 // ---- traffic dots (#74): real request counters from the mocks plus injected faults, over SSE ----
 const SVGNS = 'http:' + '//www.w3.org/2000/svg';  // an XML namespace name, not a fetch; split so the no-external-URL test stays strict
-const BLOCKS = { clients: { x: 8, y: 50, w: 120, h: 80, t: 'Clients', s: 'app · Prometheus · curl' },
-  injector: { x: 8, y: 190, w: 120, h: 80, t: 'Scenarios & buttons', s: 'faults you inject' },
-  'bmc-farm': { x: 220, y: 10, w: 132, h: 64 }, 'bcm-mock': { x: 220, y: 90, w: 132, h: 64 },
-  'jira-mock': { x: 220, y: 170, w: 132, h: 64 }, 'gpu-exporter': { x: 220, y: 250, w: 132, h: 64 } };
+const BLOCKS = { clients: { x: 6, y: 50, w: 132, h: 80, t: 'Clients', s: 'app · Prometheus' },
+  injector: { x: 6, y: 190, w: 132, h: 80, t: 'Fault injector', s: 'scenarios · buttons' },
+  'bmc-farm': { x: 222, y: 10, w: 132, h: 64 }, 'bcm-mock': { x: 222, y: 90, w: 132, h: 64 },
+  'jira-mock': { x: 222, y: 170, w: 132, h: 64 }, 'gpu-exporter': { x: 222, y: 250, w: 132, h: 64 } };
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 let flowEs = null, flowPaused = false, flowCursor = 0, dots = [], raf = 0, recent = [], flowSnap = null, flowLevel = 0;
 function sv(tag, attrs, text) { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; }
@@ -257,9 +371,9 @@ function paintBlocks() {
   recent = recent.filter(r => r.t > cut); recent.forEach(r => { rate[r.to] = (rate[r.to] || 0) + r.n; });
   let sent = 0;
   for (const k of Object.keys(BLOCKS).slice(2)) {
-    const up = flowSnap.reachable[k]; sent += flowSnap.totals[k] || 0;
-    $('fb-' + k).setAttribute('class', 'blk ' + (up ? 'up' : 'down'));
-    $('fs-' + k).textContent = up ? '✓ up · ' + (rate[k] || 0) + ' req/min' : '✗ not reachable';
+    const up = flowSnap.reachable[k], allOff = !Object.values(flowSnap.reachable).some(Boolean); sent += flowSnap.totals[k] || 0;
+    $('fb-' + k).setAttribute('class', 'blk ' + (up ? 'up' : allOff ? 'off' : 'down'));  // everything off = stack not running: stay calm, not red
+    $('fs-' + k).textContent = up ? '✓ up · ' + (rate[k] || 0) + ' req/min' : allOff ? '– offline' : '✗ not reachable';
     $('fc-' + k).textContent = (flowSnap.totals[k] || 0).toLocaleString() + ((flowSnap.totals[k] || 0) === 1 ? ' request seen' : ' requests seen');
   }
   $('fc-clients').textContent = sent.toLocaleString() + ' requests sent';
@@ -310,16 +424,46 @@ $('flowpause').onclick = () => { flowPaused = !flowPaused; $('flowpause').setAtt
 const tabs = ['dash', 'cluster', 'scen'];
 function tab(name, focus) {
   tabs.forEach(t => { const on = t === name; $(t).hidden = !on; const b = $('tab-' + t); b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; if (on && focus) b.focus(); });
+  const names = { dash: 'Overview', cluster: 'Cluster', scen: 'Scenarios' };
+  $('pagetitle').textContent = names[name]; document.title = names[name] + ' · opti-sim';
   if (name === 'scen') { loadScenarios(); poll(); }
-  clearTimeout(clusterTimer);
-  if (name === 'cluster') { loadCluster(); openFlow(); } else closeFlow();
+  if (name === 'cluster') openFlow(); else closeFlow();
+  try { history.replaceState(null, '', '#' + name); } catch (e) { /* not essential */ }
 }
 tabs.forEach(t => { $('tab-' + t).onclick = () => tab(t); });
 document.querySelector('[role=tablist]').onkeydown = e => {
   const i = tabs.findIndex(t => $('tab-' + t).getAttribute('aria-selected') === 'true');
-  if (e.key === 'ArrowRight') tab(tabs[(i + 1) % tabs.length], true);
-  if (e.key === 'ArrowLeft') tab(tabs[(i + tabs.length - 1) % tabs.length], true);
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); tab(tabs[(i + 1) % tabs.length], true); }
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); tab(tabs[(i + tabs.length - 1) % tabs.length], true); }
+  if (e.key === 'Home') { e.preventDefault(); tab(tabs[0], true); }
+  if (e.key === 'End') { e.preventDefault(); tab(tabs[tabs.length - 1], true); }
 };
+document.querySelectorAll('[data-go]').forEach(b => { b.onclick = () => tab(b.dataset.go); });
+
+// scenario chip in the status strip, so a running scenario is visible on every page
+let chipTimer;
+async function runChip() {
+  clearTimeout(chipTimer);
+  try {
+    const s = await (await fetch('/api/scenarios/run')).json(), c = $('c-run');
+    c.hidden = !s.running;
+    if (s.running) { const done = s.steps.filter(x => x.status !== 'pending').length; setChip('c-run', 'warn', '▶', `${s.name} running ${done}/${s.steps.length}`); c.onclick = () => tab('scen'); }
+  } catch (e) { /* offline: the connection chip already says so */ }
+  chipTimer = setTimeout(runChip, document.hidden ? 15000 : 3000);
+}
+
+// theme: automatic follows the system; the choice is remembered when storage allows
+const THEMES = ['auto', 'light', 'dark'], THEME_ICON = { auto: '◐ Auto', light: '☀ Light', dark: '☾ Dark' };
+function setTheme(t) {
+  if (t === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = t;
+  $('theme').textContent = THEME_ICON[t]; $('theme').setAttribute('aria-label', `Colour theme: ${t}. Press to change.`); $('theme').dataset.t = t;
+  try { localStorage.setItem('opti-theme', t); } catch (e) { /* private mode: not remembered */ }
+}
+$('theme').onclick = () => setTheme(THEMES[(THEMES.indexOf($('theme').dataset.t || 'auto') + 1) % 3]);
+let savedTheme = 'auto'; try { savedTheme = localStorage.getItem('opti-theme') || 'auto'; } catch (e) { /* default */ }
+setTheme(THEMES.includes(savedTheme) ? savedTheme : 'auto');
+loadCluster(); runChip();
+if (tabs.includes(location.hash.slice(1))) tab(location.hash.slice(1));
 
 function describe(s) {
   const d = s.do, n = (d.nodes || []).join(', ');
