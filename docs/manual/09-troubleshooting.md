@@ -24,7 +24,7 @@ Start with two commands:
 | Lost the login link | it is printed once at start | `./scripts/opti open` |
 | Port already in use | another service holds 8088, 8080, 8081, 8000, 9400, 3000 or 9090 | stop it; set `OPTI_UI_PORT` for the web page |
 | Slurm steps skipped in a web scenario | the page has no Docker access by design | run `./scripts/simctl scenario run NAME` |
-| `ssh cn001` fails | nodes have no SSH server | `docker exec -it hpcsim-cn001-1 bash` ([chapter 4](04-nodes-and-shells.md)) |
+| `ssh cn001` fails from the host | nodes are reachable only through the login node | `ssh` to the login node, then `ssh cn001`; or `docker exec -it hpcsim-cn001-1 bash` ([chapter 4](04-nodes-and-shells.md)) |
 | `doctor` fails on privileged containers | a container was changed by hand | remove it and run `simctl up` again |
 | Everything is slow, then things stop | memory pressure; the governor is doing its job | `simctl status`; free host memory |
 

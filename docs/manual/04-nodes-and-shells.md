@@ -47,7 +47,7 @@ ls /dev/hpcsim-gpu*                # the fake GPUs (GPU nodes only)
   governor's `start` command or `simctl up`.
 - Nodes are small: each is capped at 60 MB and runs `slurmd` and `munge`, not a full set of system services.
 - Scaling down (`simctl scale 2`) removes nodes, and a shell open on one ends.
-- The nodes have no SSH server and no real NFS or Lustre; storage is faked with metrics only.
+- Nodes run `sshd`, reachable only through the login node (`ssh cn001` there, ADR 0014). There is no real NFS or Lustre; storage is faked with metrics only.
 - Do not add `--privileged`, extra capabilities or the Docker socket to a container; `simctl doctor` fails the stack if
   you do, and the governor's watchdog flags it.
 

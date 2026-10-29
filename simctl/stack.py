@@ -119,13 +119,20 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         say(f"skipping (not implemented yet): {', '.join(skip)}")
     if "bmc-farm" in todo:
         ensure_bmc_credentials()
-    if "login" in todo:
+    if "login" in todo or any(re.fullmatch(r"(cn|gpu)\d+", n) for n in todo):
         try:
             ensure_ssh_keys()
         except OSError as e:
             say(f"FAILED login node keys: {e}")
             return False
     names = [n for n in data["services"] if n not in skip] + ["prometheus", "grafana", "gpu-exporter-farm"]
+    # slurmctld, slurmrestd and login build FROM node-base's tag, which only a node service rebuilds. Build it first,
+    # or a changed base (new munge key) leaves the controller on the old image and every Slurm call fails to authenticate.
+    if (first := next((n for n in names if re.fullmatch(r"(cn|gpu)\d+", n)), None)):
+        r = runner(dc("build", first, file=path))
+        if r.returncode != 0:
+            say(f"FAILED node base image: {r.stderr.strip()[-300:]}")
+            return False
     for label, svcs in stage_services(names):
         say(f"starting {label}: {', '.join(svcs)}")
         r = runner(dc("up", "-d", "--build", "--no-deps", *svcs, file=path))
@@ -212,17 +219,18 @@ SSH_DIR = Path("compose/generated/secrets/ssh")
 
 
 def ensure_ssh_keys(path: Path = SSH_DIR, runner: Runner = _run) -> Path:
-    """Host key, one client key and authorized_keys for the login node (0600, never tracked).
+    """Login host key, one host key shared by the nodes, a client key, a cluster key (login -> node hops) and
+    authorized_keys listing both public keys (0600, never tracked).
 
     Kept across `up`s so a client that pinned the host key keeps trusting it.
     """
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
-    for name in ("ssh_host_ed25519_key", "id_ed25519"):
+    for name in ("ssh_host_ed25519_key", "ssh_host_node_ed25519_key", "id_ed25519", "id_cluster"):
         if not (path / name).exists():
             r = runner(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", f"hpcsim-{name}", "-f", str(path / name)])
             if r.returncode != 0:
                 raise OSError(f"ssh-keygen failed: {r.stderr.strip()[-200:]}")
-    (path / "authorized_keys").write_text((path / "id_ed25519.pub").read_text())
+    (path / "authorized_keys").write_text((path / "id_ed25519.pub").read_text() + (path / "id_cluster.pub").read_text())
     if os.geteuid() == 0:  # run under sudo: hand the secrets back to the checkout's owner
         owner = path.parent.parent.stat()
         for p in (path, *path.iterdir()):

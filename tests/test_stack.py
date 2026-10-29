@@ -43,8 +43,12 @@ def test_up_starts_in_order_and_waits(tmp_path, monkeypatch):
         shutil.copytree(root / d, tmp_path / d, dirs_exist_ok=True)
     sim = yaml.safe_load((root / "sim.yaml").read_text())
     started: list[str] = []
+    built: list[str] = []
 
     def runner(cmd):
+        if "build" in cmd:
+            built.append(cmd[-1])
+            started.append("<build>")
         if "up" in cmd:
             started.extend(cmd[cmd.index("--no-deps") + 1:])
         if "ps" in cmd:
@@ -55,6 +59,7 @@ def test_up_starts_in_order_and_waits(tmp_path, monkeypatch):
     monkeypatch.setattr(stack, "provision_token", lambda **kw: kw.get("path", tmp_path / "t"))
     assert stack.up(sim, "min", runner=runner, say=lambda m: None, available=12 * 1024**3, wait=1)
     assert started.index("prometheus") < started.index("slurmctld") < started.index("cn001")
+    assert built == ["cn001"] and started.index("<build>") < started.index("prometheus")  # node-base before its dependants
 
 
 def test_down_reports_failure():
@@ -362,9 +367,10 @@ def test_ssh_keys_are_made_once_and_authorize_the_client_key(tmp_path):
         return CompletedProcess(cmd, 0, "", "")
 
     d = stack.ensure_ssh_keys(tmp_path / "ssh", fake)
-    assert len(calls) == 2 and (d / "authorized_keys").read_text() == "ssh-ed25519 AAAA pub\n"
+    # client and cluster key are both authorized (the cluster key is what a login-node user hops to a node with)
+    assert len(calls) == 4 and (d / "authorized_keys").read_text() == "ssh-ed25519 AAAA pub\n" * 2
     stack.ensure_ssh_keys(d, fake)
-    assert len(calls) == 2  # the host key is stable across runs
+    assert len(calls) == 4  # the host keys are stable across runs
 
 
 def test_ssh_keygen_failure_is_reported(tmp_path):
