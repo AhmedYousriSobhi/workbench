@@ -2,6 +2,8 @@
 
 Runs as an ordinary user: it reads the governor over /run/hpcsim/gov.sock and plays scenarios in-process
 (HTTP targets only; Slurm steps need Docker access, which the UI must not have). Everything needs the login token.
+Built on Starlette (FastAPI's base) rather than FastAPI itself: FastAPI's pydantic alone costs ~15 MB of the 50 MB
+budget (ADR 0008).
 """
 import asyncio
 import hmac
@@ -10,13 +12,26 @@ import threading
 from pathlib import Path
 
 import yaml
-from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
+from starlette.applications import Starlette
+from starlette.exceptions import HTTPException
+from starlette.requests import Request
+from starlette.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
+from starlette.routing import Route
 
 from simctl import checks, scenario
 
+from .cluster import ActionError, Cluster
+
 STATIC = Path(__file__).parent / "static"
 COOKIE = "hpcsim_ui"
+
+
+def governor_status(socket: str) -> dict:
+    """The governor's status, or an {"ok": False, "error": ...} the page shows as 'not reachable'."""
+    try:
+        return checks.governor_request({"cmd": "status"}, socket)
+    except OSError as e:
+        return {"ok": False, "error": f"governor not reachable: {e}"}
 
 
 class Runs:
@@ -71,9 +86,10 @@ class Runs:
 
 
 def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Path("scenarios"),
-               sim_yaml: Path = Path("sim.yaml"), interval: float = 1.0) -> FastAPI:
-    app = FastAPI(title="opti-sim", docs_url=None, redoc_url=None, openapi_url=None)
-    runs = Runs(scenarios, yaml.safe_load(sim_yaml.read_text()))
+               sim_yaml: Path = Path("sim.yaml"), interval: float = 1.0) -> Starlette:
+    sim = yaml.safe_load(sim_yaml.read_text())
+    runs = Runs(scenarios, sim)
+    cluster = Cluster(sim)
 
     def authed(request: Request) -> None:
         got = request.cookies.get(COOKIE) or request.headers.get("authorization", "").removeprefix("Bearer ")
@@ -84,53 +100,78 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         if request.headers.get("x-requested-with") != "opti-sim":
             raise HTTPException(403, "missing X-Requested-With")
 
-    def governor() -> dict:
-        try:
-            return checks.governor_request({"cmd": "status"}, socket)
-        except OSError as e:
-            return {"ok": False, "error": f"governor not reachable: {e}"}
+    def protected(fn, write: bool = False):
+        async def handler(request: Request):
+            authed(request)
+            if write:
+                csrf(request)
+            return await fn(request)
+        return handler
 
-    @app.get("/login")
-    def login(token: str = ""):
-        if not hmac.compare_digest(token.encode(), token.encode()):
+    async def login(request: Request):
+        if not hmac.compare_digest(request.query_params.get("token", "").encode(), token.encode()):
             raise HTTPException(401, "wrong token")
         resp = RedirectResponse("/", status_code=303)
         resp.set_cookie(COOKIE, token, httponly=True, samesite="strict")
         return resp
 
-    @app.get("/", dependencies=[Depends(authed)])
-    def index():
+    async def index(request: Request):
         return FileResponse(STATIC / "index.html")
 
-    @app.get("/api/status", dependencies=[Depends(authed)])
-    def status():
-        return governor()
+    async def status(request: Request):
+        return JSONResponse(await asyncio.to_thread(governor_status, socket))
 
-    @app.get("/api/events", dependencies=[Depends(authed)])
-    async def events():
+    async def events(request: Request):
         async def stream():
             while True:
-                yield f"data: {json.dumps(await asyncio.to_thread(governor))}\n\n"
+                yield f"data: {json.dumps(await asyncio.to_thread(governor_status, socket))}\n\n"
                 await asyncio.sleep(interval)
         return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
-    @app.get("/api/scenarios", dependencies=[Depends(authed)])
-    def list_scenarios():
-        return [{"name": s["name"], "description": s.get("description", ""), "steps": len(s.get("steps", []))}
-                for s in scenario.list_all(scenarios)]
+    async def cluster_state(request: Request):
+        return JSONResponse(await asyncio.to_thread(cluster.snapshot))
 
-    @app.get("/api/scenarios/run", dependencies=[Depends(authed)])
-    def run_state():
-        return runs.state
+    async def node_action(request: Request):
+        try:
+            results = await asyncio.to_thread(cluster.act, request.path_params["node"], request.path_params["action"])
+        except ActionError as e:
+            raise HTTPException(422, str(e)) from e
+        return JSONResponse({"results": results})
 
-    @app.post("/api/scenarios/stop", dependencies=[Depends(authed), Depends(csrf)])
-    def stop():
-        return runs.stop()
+    async def list_scenarios(request: Request):
+        return JSONResponse([{"name": s["name"], "description": s.get("description", ""), "steps": len(s.get("steps", []))}
+                             for s in scenario.list_all(scenarios)])
 
-    @app.post("/api/scenarios/{name}/run", dependencies=[Depends(authed), Depends(csrf)])
-    def run(name: str, speed: float = 1.0):
+    async def run_state(request: Request):
+        return JSONResponse(runs.state)
+
+    async def stop(request: Request):
+        return JSONResponse(runs.stop())
+
+    async def run(request: Request):
+        try:
+            speed = float(request.query_params.get("speed", "1"))
+        except ValueError:
+            speed = 0.0
         if not 0.1 <= speed <= 1000:
             raise HTTPException(422, "speed must be between 0.1 and 1000")
-        return runs.start(name, speed)
+        return JSONResponse(runs.start(request.path_params["name"], speed))
 
-    return app
+    async def http_error(request: Request, exc: HTTPException):
+        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+
+    return Starlette(
+        routes=[
+            Route("/login", login),
+            Route("/", protected(index)),
+            Route("/api/status", protected(status)),
+            Route("/api/events", protected(events)),
+            Route("/api/cluster", protected(cluster_state)),
+            Route("/api/nodes/{node}/{action}", protected(node_action, write=True), methods=["POST"]),
+            Route("/api/scenarios", protected(list_scenarios)),
+            Route("/api/scenarios/run", protected(run_state)),
+            Route("/api/scenarios/stop", protected(stop, write=True), methods=["POST"]),
+            Route("/api/scenarios/{name}/run", protected(run, write=True), methods=["POST"]),
+        ],
+        exception_handlers={HTTPException: http_error},
+    )

@@ -87,7 +87,9 @@ built yet (Kubernetes, ticket-bot) are reported as skipped.
 ```
 
 Open that link once (it sets a cookie; the token is kept in `compose/generated/secrets/ui_token`). **Governor** shows the
-level banner, free memory and pressure over the last two minutes, and the governor's log. **Scenarios** lists the
+level banner, free memory and pressure over the last two minutes, and the governor's log. **Cluster** shows each
+simulated node (power, temperature, fans, GPU errors) and which mock services are up; open *Fault actions* on a node to
+power it off, overheat it, fail its fans or inject a GPU error, then *Clear faults*. **Scenarios** lists the
 fault scripts: pick a speed, press Play, watch each step turn ok/skipped/failed, press Stop to abort. Slurm steps are
 skipped on this page (it has no Docker access by design); use `./scripts/simctl scenario run` for those.
 

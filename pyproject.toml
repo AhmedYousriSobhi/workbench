@@ -2,7 +2,7 @@
 name = "opti-sim"
 version = "0.0.0"
 requires-python = ">=3.11"
-dependencies = ["typer", "pyyaml", "fastapi", "uvicorn"]
+dependencies = ["typer", "pyyaml", "starlette", "uvicorn"]
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "coverage"]

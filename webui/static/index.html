@@ -51,6 +51,23 @@
   .progress { height:6px; background:var(--line); border-radius:3px; overflow:hidden; margin:8px 0 12px; } .progress div { height:100%; background:var(--accent); transition:width .3s; }
   code { font:12.5px ui-monospace,monospace; background:var(--bg); padding:1px 5px; border-radius:4px; }
   [hidden] { display:none !important; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { display:inline-flex; align-items:center; gap:6px; padding:4px 12px; border:1px solid var(--line); border-radius:999px; font-size:13px; }
+  .chip.up b { color:var(--ok); } .chip.down b { color:var(--bad); }
+  .grouphead { margin:18px 0 8px; }
+  .nodes { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,250px),1fr)); gap:12px; align-items:start; }
+  .node { background:var(--panel); border:1px solid var(--line); border-left:5px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .node.ok { border-left-color:var(--ok); } .node.warn { border-left-color:var(--warn); } .node.fault { border-left-color:var(--bad); } .node.down { border-left-color:var(--pending); } .node.unknown { border-left-color:var(--line); }
+  .node header { display:flex; justify-content:space-between; align-items:baseline; gap:8px; padding:0; border:0; background:none; }
+  .node h3 { margin:0; font-size:16px; } .pill { font-size:13px; font-weight:600; white-space:nowrap; }
+  .pill.ok { color:var(--ok); } .pill.warn { color:var(--warn); } .pill.fault { color:var(--bad); } .pill.down, .pill.unknown { color:var(--pending); }
+  .node dl { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; margin:8px 0; font-size:13px; font-variant-numeric:tabular-nums; }
+  .node dt { color:var(--dim); } .node dd { margin:0; }
+  .node details { margin-top:6px; } .node summary { cursor:pointer; min-height:36px; display:flex; align-items:center; color:var(--accent); font-weight:600; }
+  .actions { display:flex; flex-wrap:wrap; gap:8px; padding:6px 0; }
+  .actions .btn { background:var(--panel); color:var(--fg); border:1px solid var(--line); font-weight:500; }
+  .actions .btn:hover:not(:disabled) { border-color:var(--accent); }
+  .toast { position:sticky; top:8px; z-index:5; background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--accent); padding:10px 14px; border-radius:6px; margin-bottom:12px; }
   @media (max-width:640px) {  /* tables become stacked cards so every control stays on screen */
     #list tr:first-child, #timeline tr:first-child { display:none; }
     #list tr { display:grid; grid-template-columns:1fr auto; gap:8px 12px; padding:14px 0; border-bottom:1px solid var(--line); align-items:center; }
@@ -68,6 +85,7 @@
   <h1>opti-sim</h1>
   <div role="tablist" aria-label="Sections">
     <button role="tab" id="tab-dash" aria-controls="dash" aria-selected="true">Governor</button>
+    <button role="tab" id="tab-cluster" aria-controls="cluster" aria-selected="false" tabindex="-1">Cluster</button>
     <button role="tab" id="tab-scen" aria-controls="scen" aria-selected="false" tabindex="-1">Scenarios</button>
   </div>
   <div id="conn" role="status"><i></i><span>connecting…</span></div>
@@ -88,6 +106,14 @@
       <label class="chk"><input type="checkbox" id="onlyactions" checked> Hide container inventory lines</label></div>
     <pre id="audit" tabindex="0" aria-label="Governor log, newest first">–</pre>
   </div>
+</section>
+<section id="cluster" role="tabpanel" aria-labelledby="tab-cluster" hidden>
+  <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/simctl up --profile min</code>.</div>
+  <div class="panel"><h2>Services</h2><div id="services" class="chips"></div></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <h2 class="grouphead">Compute nodes</h2><div id="nodes-compute" class="nodes"></div>
+  <h2 class="grouphead">GPU nodes</h2><div id="nodes-gpu" class="nodes"></div>
+  <p class="dim small">Drain in Slurm and Kubernetes node faults are not available here: the page has no Docker access by design, and Kubernetes is not built yet. Use <code>./scripts/simctl scenario run node-down</code> for Slurm.</p>
 </section>
 <section id="scen" role="tabpanel" aria-labelledby="tab-scen" hidden>
   <div class="panel"><h2>Scenarios</h2>
@@ -148,10 +174,55 @@ const es = new EventSource('/api/events');
 es.onmessage = e => render(JSON.parse(e.data));
 es.onerror = () => { $('conn').className = ''; $('conn').lastElementChild.textContent = 'reconnecting…'; };
 
-const tabs = ['dash', 'scen'];
+const STATE_ICON = { ok: '✓', warn: '▲', fault: '✗', down: '⏻', unknown: '?' };
+const openNodes = new Set();
+let clusterTimer, lastCluster = '', flashTimer;
+function node(n, actions) {
+  const dd = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
+  const buttons = actions.filter(a => !a.gpu_only || n.kind === 'gpu').map(a =>
+    `<button class="btn" data-node="${esc(n.name)}" data-action="${a.id}">${esc(a.label)}</button>`).join('');
+  return `<article class="node ${n.state}" aria-label="${esc(n.name)}: ${esc(n.label)}">
+    <header><h3>${esc(n.name)}</h3><span class="pill ${n.state}"><span aria-hidden="true">${STATE_ICON[n.state]}</span> ${esc(n.label)}</span></header>
+    <dl>${dd('Power', n.power ?? '–')}${dd('CPU temp', n.temp == null ? '–' : n.temp.toFixed(0) + ' °C')}${dd('Fans failed', n.fans_failed)}${dd('BCM', n.bcm ?? '–')}${n.gpus ? dd('GPUs', n.gpus) : ''}</dl>
+    <details data-node="${esc(n.name)}" ${openNodes.has(n.name) ? 'open' : ''}><summary>Fault actions</summary><div class="actions">${buttons}</div></details></article>`;
+}
+function renderCluster(c) {
+  $('stackdown').hidden = Object.values(c.services).some(Boolean);
+  $('services').innerHTML = Object.entries(c.services).map(([k, up]) =>
+    `<span class="chip ${up ? 'up' : 'down'}"><b aria-hidden="true">${up ? '●' : '○'}</b> ${esc(k)} <span class="dim">${up ? 'up' : 'down'}</span></span>`).join('');
+  for (const kind of ['compute', 'gpu']) {
+    const rows = c.nodes.filter(n => n.kind === kind);
+    $('nodes-' + kind).innerHTML = rows.length ? rows.map(n => node(n, c.actions)).join('') : '<p class="dim">None in this profile.</p>';
+  }
+  document.querySelectorAll('.node details').forEach(d => d.ontoggle = () => { d.open ? openNodes.add(d.dataset.node) : openNodes.delete(d.dataset.node); });
+  document.querySelectorAll('.actions .btn').forEach(b => b.onclick = () => nodeAction(b.dataset.node, b.dataset.action, b.textContent));
+}
+async function loadCluster() {
+  clearTimeout(clusterTimer);
+  try {
+    const text = await (await fetch('/api/cluster')).text();
+    if (text !== lastCluster) { lastCluster = text; renderCluster(JSON.parse(text)); }
+  } catch (e) { /* keep the last view; the next poll retries */ }
+  if (!$('cluster').hidden) clusterTimer = setTimeout(loadCluster, 3000);
+}
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(flashTimer); flashTimer = setTimeout(() => { t.hidden = true; }, 6000);
+}
+async function nodeAction(name, action, label) {
+  const r = await fetch(`/api/nodes/${name}/${action}`, { method: 'POST', headers: H });
+  if (!r.ok) { toast(`${label} on ${name} was refused: ${(await r.json()).detail}`); return; }
+  const res = (await r.json()).results;
+  const bad = res.filter(x => x.status === 'failed');
+  toast(bad.length ? `${label} on ${name}: ${bad.length} step(s) failed — is the stack running?` : `${label} on ${name}: done`);
+  lastCluster = ''; loadCluster();
+}
+
+const tabs = ['dash', 'cluster', 'scen'];
 function tab(name, focus) {
   tabs.forEach(t => { const on = t === name; $(t).hidden = !on; const b = $('tab-' + t); b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; if (on && focus) b.focus(); });
   if (name === 'scen') { loadScenarios(); poll(); }
+  clearTimeout(clusterTimer);
+  if (name === 'cluster') loadCluster();
 }
 tabs.forEach(t => { $('tab-' + t).onclick = () => tab(t); });
 document.querySelector('[role=tablist]').onkeydown = e => {
