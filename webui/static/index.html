@@ -23,20 +23,14 @@
   :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
   .skip { position:absolute; left:-999px; top:8px; background:var(--accent); color:var(--on-accent); padding:8px 12px; border-radius:6px; z-index:20; }
   .skip:focus { left:8px; }
-  .app { display:grid; grid-template-columns:var(--side) minmax(0,1fr); min-height:100vh; }
-  .side { position:sticky; top:0; height:100vh; display:flex; flex-direction:column; gap:var(--sp4); padding:var(--sp4) var(--sp3); background:var(--panel); border-right:1px solid var(--line); }
-  .brand { display:flex; align-items:center; gap:10px; font-weight:700; font-size:16px; padding:var(--sp1) var(--sp2); }
-  .brand i { width:28px; height:28px; border-radius:8px; background:var(--accent); color:var(--on-accent); display:grid; place-items:center; font-style:normal; font-size:15px; }
-  .navlabel { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); padding:0 var(--sp2); margin-bottom:-8px; }
-  [role=tablist] { display:flex; flex-direction:column; gap:var(--sp1); }
-  [role=tab] { display:flex; align-items:center; gap:10px; background:none; border:0; border-radius:8px; color:var(--dim); font:inherit; font-weight:550; padding:0 var(--sp3); min-height:44px; cursor:pointer; text-align:left; }
-  [role=tab] svg { width:20px; height:20px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
-  [role=tab]:hover { background:var(--bg); color:var(--fg); }
-  [role=tab][aria-selected=true] { background:var(--sel); color:var(--accent); box-shadow:inset 3px 0 0 var(--accent); }
-  .sidefoot { margin-top:auto; font-size:12px; color:var(--dim); padding:0 var(--sp2); }
-  .content { min-width:0; display:flex; flex-direction:column; }
+  .cols { display:grid; grid-template-columns:272px minmax(0,1fr) 340px; gap:var(--sp4); padding:var(--sp4) var(--sp5) var(--sp5); align-items:start; max-width:1760px; margin:0 auto; }
+  .rail { display:flex; flex-direction:column; gap:var(--sp4); padding:2px; }
+  .rail.left { position:sticky; top:72px; }
+  .rail .panel, .rail .banner { margin:0; }
+  .rail h2.rh { margin:0 0 var(--sp2); }
   .top { position:sticky; top:0; z-index:10; display:flex; align-items:center; flex-wrap:wrap; gap:var(--sp2) var(--sp4); padding:var(--sp3) var(--sp5); background:var(--panel); border-bottom:1px solid var(--line); }
-  .top h1 { font-size:20px; margin:0; margin-right:auto; letter-spacing:-.01em; }
+  .top h1 { display:flex; align-items:center; gap:10px; font-size:17px; margin:0 auto 0 0; letter-spacing:-.01em; }
+  .top h1 i { width:26px; height:26px; border-radius:8px; background:var(--accent); color:var(--on-accent); display:grid; place-items:center; font-style:normal; font-size:14px; }
   .status { display:flex; flex-wrap:wrap; gap:var(--sp2); align-items:center; }
   .pillchip { display:inline-flex; align-items:center; gap:6px; padding:4px 12px; min-height:32px; border:1px solid var(--line); border-radius:999px; font-size:13px; background:var(--bg); color:var(--fg); font-variant-numeric:tabular-nums; white-space:nowrap; }
   button.pillchip { cursor:pointer; font:inherit; font-size:13px; } button.pillchip:hover { border-color:var(--accent); }
@@ -44,15 +38,20 @@
   #conn { display:inline-flex; align-items:center; gap:6px; color:var(--dim); font-size:13px; }
   #conn i { width:9px; height:9px; border-radius:50%; background:var(--bad); display:inline-block; }
   #conn.live i { background:var(--ok); }
-  main { padding:var(--sp5); width:100%; max-width:1180px; margin:0 auto; }
-  .lede { margin:0 0 var(--sp4); color:var(--dim); max-width:70ch; }
-  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr)); gap:var(--sp4); margin:var(--sp4) 0; }
+  main { min-width:0; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr)); gap:var(--sp4); margin:0 0 var(--sp4); }
   .tile { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:var(--sp4); box-shadow:var(--shadow); text-align:left; font:inherit; color:inherit; display:block; width:100%; }
   button.tile { cursor:pointer; } button.tile:hover { border-color:var(--accent); }
   .tile h2 { margin:0 0 var(--sp2); } .tile .big { margin-bottom:2px; } .tile .sub { font-size:13px; color:var(--dim); }
   .two { display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:var(--sp4); align-items:start; margin-bottom:var(--sp4); } .two > .panel { margin:0; }
   ul.attn { list-style:none; margin:0; padding:0; } ul.attn li { display:flex; gap:10px; align-items:baseline; padding:8px 0; border-bottom:1px solid var(--line); } ul.attn li:last-child { border:0; }
   ul.attn .ic { width:1.2em; text-align:center; flex:none; font-weight:700; } .ic.warn { color:var(--warn); } .ic.bad { color:var(--bad); } .ic.good { color:var(--ok); }
+  ul.scns, ul.steps { list-style:none; margin:0; padding:0; }
+  .scn { padding:10px 0; border-bottom:1px solid var(--line); } .scn:last-child { border:0; }
+  .scn .hd { display:flex; justify-content:space-between; gap:8px; align-items:baseline; } .scn p { margin:2px 0 8px; font-size:13px; color:var(--dim); }
+  .scn .ctl { display:flex; gap:8px; } .scn select { flex:1; min-width:0; }
+  ul.steps li { display:grid; grid-template-columns:auto 1fr; gap:2px 10px; padding:7px 0; border-bottom:1px solid var(--line); font-size:13px; } ul.steps li:last-child { border:0; }
+  .stt { font-weight:600; white-space:nowrap; }
   .skel { color:var(--dim); font-style:italic; }
   .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:var(--sp4); margin-bottom:var(--sp4); box-shadow:var(--shadow); }
   h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin:0 0 10px; font-weight:600; }
@@ -104,52 +103,26 @@
   .actions .btn { background:var(--panel); color:var(--fg); border:1px solid var(--line); font-weight:500; }
   .actions .btn:hover:not(:disabled) { border-color:var(--accent); }
   .toast { position:sticky; top:8px; z-index:5; background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--accent); padding:10px 14px; border-radius:6px; margin-bottom:12px; }
-  @media (max-width:640px) {  /* tables become stacked cards so every control stays on screen */
-    #list tr:first-child, #timeline tr:first-child { display:none; }
-    #list tr { display:grid; grid-template-columns:1fr auto; gap:8px 12px; padding:14px 0; border-bottom:1px solid var(--line); align-items:center; }
-    #list td { border:0; padding:0; } #list td:nth-child(3) { grid-column:1 / -1; order:3; }
-    #list td:nth-child(2) { text-align:right; color:var(--dim); } 
-    #list td:nth-child(4) { order:4; } #list td:nth-child(5) { order:5; text-align:right; } #list select { width:100%; }
-    #timeline tr { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; padding:10px 0; border-bottom:1px solid var(--line); }
-    #timeline td { border:0; padding:0; } #timeline td:nth-child(3), #timeline td:nth-child(4) { grid-column:1 / -1; }
-  }
-  #flow { width:100%; max-width:560px; display:block; margin:6px auto; }
+  #flow { width:100%; max-width:520px; display:block; margin:6px auto; }
   #flow .blk { fill:var(--panel); stroke:var(--line); stroke-width:2; } #flow .blk.up { stroke:var(--ok); } #flow .blk.down { stroke:var(--bad); stroke-dasharray:5 4; } #flow .blk.off { stroke:var(--line); stroke-dasharray:3 5; opacity:.8; }
   #flow text { fill:var(--fg); font:600 12px system-ui,sans-serif; } #flow text.sub { fill:var(--dim); font-weight:400; font-size:10.5px; }
   #flow line { stroke:var(--line); stroke-width:1.5; } #flow .dotc { fill:var(--accent); } #flow .dotf { fill:var(--warn); stroke:var(--fg); stroke-width:1; }
   .legend { display:flex; flex-wrap:wrap; gap:4px 18px; margin:4px 0 0; }
   .btn.small { min-height:36px; padding:0 12px; font-weight:500; background:var(--panel); color:var(--fg); border:1px solid var(--line); }
-  @media (max-width:900px) {  /* phone and small tablet: the sidebar becomes a bottom bar, one column */
-    .app { grid-template-columns:minmax(0,1fr); }
-    .side { position:fixed; inset:auto 0 0 0; height:auto; flex-direction:row; padding:4px 8px calc(4px + env(safe-area-inset-bottom)); border-right:0; border-top:1px solid var(--line); z-index:15; }
-    .brand, .navlabel, .sidefoot { display:none; }
-    [role=tablist] { flex-direction:row; width:100%; }
-    [role=tab] { flex:1; flex-direction:column; justify-content:center; gap:2px; font-size:12px; min-height:56px; text-align:center; }
-    [role=tab][aria-selected=true] { box-shadow:inset 0 3px 0 var(--accent); }
-    main { padding:var(--sp4) var(--sp4) 88px; }
-    .top { padding:var(--sp3) var(--sp4); } .top h1 { font-size:18px; width:100%; }
+  @media (max-width:1200px) { .cols { grid-template-columns:260px minmax(0,1fr); } .rail.right { grid-column:1 / -1; display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); align-items:start; } }
+  @media (max-width:860px) {  /* phone and small tablet: one column, status strip scrolls sideways */
+    .cols { grid-template-columns:minmax(0,1fr); padding:var(--sp3) var(--sp4) var(--sp5); }
+    .rail.left { position:static; }
+    .top { padding:var(--sp3) var(--sp4); } .top h1 { width:100%; }
     .status { flex-wrap:nowrap; overflow-x:auto; width:100%; padding-bottom:2px; scrollbar-width:thin; }
-    .two { grid-template-columns:minmax(0,1fr); }
   }
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
 </style>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
-<div class="app">
-<aside class="side">
-  <div class="brand"><i aria-hidden="true">◈</i> opti-sim</div>
-  <div class="navlabel" id="navlabel">Sections</div>
-  <div role="tablist" aria-label="Sections" aria-orientation="vertical">
-    <button role="tab" id="tab-dash" aria-controls="dash" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3zM13 21h8v-8h-8zM13 3v6h8V3zM3 21h8v-6H3z"/></svg>Overview</button>
-    <button role="tab" id="tab-cluster" aria-controls="cluster" aria-selected="false" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg>Cluster</button>
-    <button role="tab" id="tab-scen" aria-controls="scen" aria-selected="false" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>Scenarios</button>
-  </div>
-  <div class="sidefoot">Local only · 127.0.0.1</div>
-</aside>
-<div class="content">
 <header class="top">
-  <h1 id="pagetitle">Overview</h1>
+  <h1><i aria-hidden="true">◈</i> opti-sim</h1>
   <div class="status" id="strip" aria-label="Live status">
     <span class="pillchip" id="c-level"><b aria-hidden="true">●</b> Governor …</span>
     <span class="pillchip" id="c-mem">Memory …</span>
@@ -160,61 +133,53 @@
     <button class="pillchip" id="theme" aria-label="Colour theme: automatic. Press to change.">◐ Auto</button>
   </div>
 </header>
-<main id="main" tabindex="-1">
-<section id="dash" role="tabpanel" aria-labelledby="tab-dash">
-  <p class="lede">The health of the host and the simulated cluster at a glance. Anything that needs you is listed under <b>Needs attention</b>.</p>
+<div class="cols">
+<aside class="rail left" aria-label="Governor">
   <div id="banner" class="banner" role="status"><i class="orb" aria-hidden="true"></i><div><b>Connecting…</b><span class="m">Waiting for the governor.</span></div></div>
+  <div class="panel"><h2 class="rh">Memory</h2>
+    <div class="big" id="mem">–</div><div class="sub small dim">available for the simulation</div>
+    <svg class="spark" id="sp-mem" viewBox="0 0 120 40" preserveAspectRatio="none" role="img" aria-label="Free memory over the last two minutes"><polygon points=""/><polyline points=""/></svg>
+    <div class="axis"><span id="mem-lo"></span><span>last 2 min</span><span id="mem-hi"></span></div></div>
+  <div class="panel"><h2 class="rh">Pressure</h2>
+    <div class="big" id="psi">–</div><div class="sub small dim">PSI, 10 s average</div>
+    <svg class="spark" id="sp-psi" viewBox="0 0 120 40" preserveAspectRatio="none" role="img" aria-label="Memory pressure over the last two minutes"><polygon points=""/><polyline points=""/></svg>
+    <div class="axis"><span>0 %</span><span>last 2 min</span><span id="psi-hi"></span></div></div>
+  <p class="dim small" style="margin:0 var(--sp2)">Local only · 127.0.0.1</p>
+</aside>
+<main id="main" tabindex="-1" aria-label="Cluster components">
+  <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/opti start</code>.</div>
   <div class="tiles">
-    <div class="tile"><h2>Memory available</h2><div class="big" id="mem">–</div><div class="sub" id="mem-sub">free for the simulation</div></div>
-    <div class="tile"><h2>Memory pressure</h2><div class="big" id="psi">–</div><div class="sub">PSI, 10 s average</div></div>
-    <button class="tile" id="t-svc" data-go="cluster"><h2>Services</h2><div class="big" id="t-svc-v">–</div><div class="sub" id="t-svc-s">open the Cluster page</div></button>
-    <button class="tile" id="t-nodes" data-go="cluster"><h2>Nodes</h2><div class="big" id="t-nodes-v">–</div><div class="sub" id="t-nodes-s">open the Cluster page</div></button>
+    <div class="tile"><h2>Services</h2><div class="big" id="t-svc-v">–</div><div class="sub" id="t-svc-s">checking…</div></div>
+    <div class="tile"><h2>Nodes</h2><div class="big" id="t-nodes-v">–</div><div class="sub" id="t-nodes-s">checking…</div></div>
   </div>
-  <div class="two">
-    <div class="panel"><h2>Trends, last 2 minutes</h2>
-      <div class="small dim">Memory available</div>
-      <svg class="spark" id="sp-mem" viewBox="0 0 120 40" preserveAspectRatio="none" role="img" aria-label="Free memory over the last two minutes"><polygon points=""/><polyline points=""/></svg>
-      <div class="axis"><span id="mem-lo"></span><span>now →</span><span id="mem-hi"></span></div>
-      <div class="small dim" style="margin-top:12px">Memory pressure</div>
-      <svg class="spark" id="sp-psi" viewBox="0 0 120 40" preserveAspectRatio="none" role="img" aria-label="Memory pressure over the last two minutes"><polygon points=""/><polyline points=""/></svg>
-      <div class="axis"><span>0 %</span><span>now →</span><span id="psi-hi"></span></div></div>
-    <div class="panel"><h2>Needs attention</h2><ul class="attn" id="attn"><li class="skel">Checking…</li></ul></div>
-  </div>
-  <div class="panel">
-    <div class="row"><h2 style="margin:0">Governor activity <span id="logcount" class="dim"></span></h2>
-      <label class="chk"><input type="checkbox" id="onlyactions" checked> Hide container inventory lines</label></div>
-    <pre id="audit" tabindex="0" aria-label="Governor log, newest first">–</pre>
-  </div>
-</section>
-<section id="cluster" role="tabpanel" aria-labelledby="tab-cluster" hidden>
-  <p class="lede">Every simulated node and mock service, live. Open <b>Fault actions</b> on a node to break it on purpose and watch the effect.</p>
-  <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/simctl up --profile min</code>.</div>
-  <div class="two"><div class="panel"><div class="row"><h2 style="margin:0">Traffic</h2>
+  <div class="panel"><h2>Services</h2><div id="services" class="chips"></div></div>
+  <div class="panel"><div class="row"><h2 style="margin:0">Traffic</h2>
     <button class="btn small" id="flowpause" aria-pressed="false">Pause animation</button></div>
     <svg id="flow" viewBox="0 0 360 330" role="img" aria-label="Traffic from clients and from injected faults to the four mock services"></svg>
     <p class="legend small dim"><span><b style="color:var(--accent)" aria-hidden="true">●</b> round dot: requests from clients (the app, Prometheus, curl)</span>
       <span><b style="color:var(--warn)" aria-hidden="true">◆</b> diamond: a fault applied by a scenario or a button</span></p>
     <p id="flowstate" class="dim small" role="status" style="margin-bottom:0"></p></div>
-  <div class="panel"><h2>Services</h2><div id="services" class="chips" style="flex-direction:column;align-items:stretch"></div>
-    <p class="dim small" style="margin-bottom:0">A dashed red border means one service is not answering; a faint dashed border means the whole stack is off.</p></div></div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <h2 class="grouphead">Compute nodes</h2><div id="nodes-compute" class="nodes"></div>
   <h2 class="grouphead">GPU nodes</h2><div id="nodes-gpu" class="nodes"></div>
   <p class="dim small">Drain in Slurm and Kubernetes node faults are not available here: the page has no Docker access by design, and Kubernetes is not built yet. Use <code>./scripts/simctl scenario run node-down</code> for Slurm.</p>
-</section>
-<section id="scen" role="tabpanel" aria-labelledby="tab-scen" hidden>
-  <p class="lede">Scenarios replay a realistic incident, such as a node failure or a Jira outage, against the running stack.</p>
-  <div class="panel"><h2>Available scenarios</h2>
-    <p class="dim small" style="margin-top:0">Each scenario is a timed list of faults played against the running stack (start it with <code>./scripts/simctl up --profile min</code>). Slurm steps are skipped on this page because it has no Docker access; <code>./scripts/simctl scenario run NAME</code> runs those.</p>
-    <div class="tablewrap"><table id="list"></table></div></div>
-  <div class="panel" id="runpanel" hidden aria-live="polite"><h2 id="runtitle">Run</h2>
+</main>
+<aside class="rail right" aria-label="Operate">
+  <div class="panel"><h2 class="rh">Needs attention</h2><ul class="attn" id="attn"><li class="skel">Checking…</li></ul></div>
+  <div class="panel"><h2 class="rh">Scenarios</h2>
+    <p class="dim small" style="margin-top:0">Timed incidents played against the running stack. Slurm steps are skipped here (no Docker access); <code>./scripts/simctl scenario run NAME</code> runs those.</p>
+    <ul class="scns" id="list"><li class="skel">Loading…</li></ul></div>
+  <div class="panel" id="runpanel" hidden aria-live="polite"><h2 class="rh" id="runtitle">Run</h2>
     <div class="row"><div id="runresult"></div><div id="runctl"></div></div>
     <div class="progress" aria-hidden="true"><div id="bar" style="width:0"></div></div>
-    <div id="runnote"></div>
-    <div class="tablewrap"><table id="timeline"></table></div><div id="expects"></div></div>
-</section>
-</main>
-</div></div>
+    <div id="runnote"></div><ul class="steps" id="timeline"></ul><div id="expects"></div></div>
+  <div class="panel">
+    <h2 class="rh">Governor activity <span id="logcount" class="dim"></span></h2>
+    <label class="chk" style="margin-bottom:8px"><input type="checkbox" id="onlyactions" checked> Hide container inventory lines</label>
+    <pre id="audit" tabindex="0" aria-label="Governor log, newest first">–</pre>
+  </div>
+</aside>
+</div>
 <script>
 const $ = id => document.getElementById(id);
 const H = { 'X-Requested-With': 'opti-sim' };
@@ -242,7 +207,7 @@ function paintAttention() {
   }
   if (lastCl) {
     const down = Object.entries(lastCl.services).filter(([, up]) => !up).map(([k]) => k);
-    if (down.length === Object.keys(lastCl.services).length) items.push(['warn', '▲', 'The simulation stack is not running. Start it with ./scripts/simctl up --profile min']);
+    if (down.length === Object.keys(lastCl.services).length) items.push(['warn', '▲', 'The simulation stack is not running. Start it with ./scripts/opti start']);
     else down.forEach(k => items.push(['bad', '✗', `Service ${k} is not answering.`]));
     lastCl.nodes.filter(n => n.state !== 'ok' && !(down.length === Object.keys(lastCl.services).length)).forEach(n =>
       items.push([n.state === 'fault' ? 'bad' : 'warn', n.state === 'fault' ? '✗' : '▲', `${n.name}: ${n.label}`]));
@@ -421,25 +386,6 @@ function openFlow() {
 function closeFlow() { if (flowEs) flowEs.close(); flowEs = null; flowCursor = 0; dots.forEach(d => d.el.remove()); dots = []; }
 $('flowpause').onclick = () => { flowPaused = !flowPaused; $('flowpause').setAttribute('aria-pressed', flowPaused); $('flowpause').textContent = flowPaused ? 'Resume animation' : 'Pause animation'; flowNote(); };
 
-const tabs = ['dash', 'cluster', 'scen'];
-function tab(name, focus) {
-  tabs.forEach(t => { const on = t === name; $(t).hidden = !on; const b = $('tab-' + t); b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; if (on && focus) b.focus(); });
-  const names = { dash: 'Overview', cluster: 'Cluster', scen: 'Scenarios' };
-  $('pagetitle').textContent = names[name]; document.title = names[name] + ' · opti-sim';
-  if (name === 'scen') { loadScenarios(); poll(); }
-  if (name === 'cluster') openFlow(); else closeFlow();
-  try { history.replaceState(null, '', '#' + name); } catch (e) { /* not essential */ }
-}
-tabs.forEach(t => { $('tab-' + t).onclick = () => tab(t); });
-document.querySelector('[role=tablist]').onkeydown = e => {
-  const i = tabs.findIndex(t => $('tab-' + t).getAttribute('aria-selected') === 'true');
-  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); tab(tabs[(i + 1) % tabs.length], true); }
-  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); tab(tabs[(i + tabs.length - 1) % tabs.length], true); }
-  if (e.key === 'Home') { e.preventDefault(); tab(tabs[0], true); }
-  if (e.key === 'End') { e.preventDefault(); tab(tabs[tabs.length - 1], true); }
-};
-document.querySelectorAll('[data-go]').forEach(b => { b.onclick = () => tab(b.dataset.go); });
-
 // scenario chip in the status strip, so a running scenario is visible on every page
 let chipTimer;
 async function runChip() {
@@ -447,7 +393,7 @@ async function runChip() {
   try {
     const s = await (await fetch('/api/scenarios/run')).json(), c = $('c-run');
     c.hidden = !s.running;
-    if (s.running) { const done = s.steps.filter(x => x.status !== 'pending').length; setChip('c-run', 'warn', '▶', `${s.name} running ${done}/${s.steps.length}`); c.onclick = () => tab('scen'); }
+    if (s.running) { const done = s.steps.filter(x => x.status !== 'pending').length; setChip('c-run', 'warn', '▶', `${s.name} running ${done}/${s.steps.length}`); c.onclick = () => $('runpanel').scrollIntoView({ behavior: reduced.matches ? 'auto' : 'smooth', block: 'start' }); }
   } catch (e) { /* offline: the connection chip already says so */ }
   chipTimer = setTimeout(runChip, document.hidden ? 15000 : 3000);
 }
@@ -462,8 +408,7 @@ function setTheme(t) {
 $('theme').onclick = () => setTheme(THEMES[(THEMES.indexOf($('theme').dataset.t || 'auto') + 1) % 3]);
 let savedTheme = 'auto'; try { savedTheme = localStorage.getItem('opti-theme') || 'auto'; } catch (e) { /* default */ }
 setTheme(THEMES.includes(savedTheme) ? savedTheme : 'auto');
-loadCluster(); runChip();
-if (tabs.includes(location.hash.slice(1))) tab(location.hash.slice(1));
+
 
 function describe(s) {
   const d = s.do, n = (d.nodes || []).join(', ');
@@ -486,11 +431,12 @@ function plain(x) {
 }
 async function loadScenarios() {
   const list = await (await fetch('/api/scenarios')).json();
-  $('list').innerHTML = '<tr><th>Name</th><th>Length</th><th>What it does</th><th>Speed</th><th></th></tr>' + list.map(s =>
-    `<tr><td><b>${esc(s.name)}</b></td><td>${s.steps}${s.steps === 1 ? ' step' : ' steps'}</td><td>${esc(s.description)}</td>
-     <td><select id="sp-${s.name}" aria-label="Speed for ${esc(s.name)}"><option value="1">1× real time</option><option value="5">5×</option><option value="20">20×</option></select></td>
-     <td><button class="btn" data-name="${esc(s.name)}" aria-label="Play ${esc(s.name)}">▶ Play</button></td></tr>`).join('');
+  $('list').innerHTML = list.map(s =>
+    `<li class="scn"><div class="hd"><b>${esc(s.name)}</b><span class="small dim">${s.steps} ${s.steps === 1 ? 'step' : 'steps'}</span></div><p>${esc(s.description)}</p>
+     <div class="ctl"><select id="sp-${s.name}" aria-label="Speed for ${esc(s.name)}"><option value="1">1× real time</option><option value="5">5×</option><option value="20">20×</option></select>
+     <button class="btn" data-name="${esc(s.name)}" aria-label="Play ${esc(s.name)}">▶ Play</button></div></li>`).join('') || '<li class="dim">No scenarios found.</li>';
   document.querySelectorAll('#list button').forEach(b => b.onclick = () => play(b.dataset.name));
+  poll();
 }
 async function play(name) {
   const r = await fetch(`/api/scenarios/${name}/run?speed=${$('sp-' + name).value}`, { method: 'POST', headers: H });
@@ -514,13 +460,17 @@ async function poll() {
   $('bar').style.width = (s.steps.length ? (done / s.steps.length) * 100 : 0) + '%';
   const failed = s.steps.filter(x => x.status === 'failed').length;
   $('runnote').innerHTML = !s.running && failed ? `<div class="notice">${failed} of ${s.steps.length} steps failed. If the messages say a service is unreachable, the stack is probably not running: <code>./scripts/simctl up --profile min</code></div>` : '';
-  $('timeline').innerHTML = '<tr><th>At</th><th>Target</th><th>What</th><th>Result</th></tr>' + s.steps.map(x =>
-    `<tr><td>${x.at.toFixed(0)} s</td><td>${esc(x.target)}</td><td>${esc(describe(x))}</td>
-     <td class="st st-${x.status}"><span aria-hidden="true">${ICON[x.status]}</span> ${x.status}${x.detail ? `<div class="small dim" style="font-weight:400">${esc(plain(x))}</div>` : ''}</td></tr>`).join('');
-  $('expects').innerHTML = s.expects.length ? '<h2 style="margin-top:14px">Expectations</h2>' + s.expects.map(x =>
+  $('timeline').innerHTML = s.steps.map(x =>
+    `<li><span class="stt st-${x.status}"><span aria-hidden="true">${ICON[x.status]}</span> ${x.status}</span>
+     <div>${x.at.toFixed(0)} s · ${esc(describe(x))}${x.detail ? `<div class="small dim">${esc(plain(x))}</div>` : ''}</div></li>`).join('');
+  $('expects').innerHTML = s.expects.length ? '<h2 class="rh" style="margin-top:14px">Expectations</h2>' + s.expects.map(x =>
     `<p class="st st-${x.status}" style="font-weight:500"><span aria-hidden="true">${ICON[x.status]}</span> ${x.status}: ${esc(x.label)} <span class="dim">${esc(x.detail)}</span></p>`).join('') : '';
   if (s.running) pollTimer = setTimeout(poll, 1000);
 }
+// start
+loadCluster(); runChip(); loadScenarios(); poll(); openFlow();
+// the live feed is only worth its CPU while the page is visible
+document.addEventListener('visibilitychange', () => { if (document.hidden) closeFlow(); else openFlow(); });
 </script>
 </body>
 </html>

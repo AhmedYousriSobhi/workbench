@@ -47,31 +47,21 @@ def capture(out: Path) -> dict:
                             if time.time() > deadline:
                                 raise
                             time.sleep(0.3)
-                    page.wait_for_timeout(1500)
-                    for tab in ("dash", "cluster", "scen"):
-                        page.click(f"#tab-{tab}")
-                        page.wait_for_timeout(500)
-                        path = out / f"{tab}-{vp}-{scheme}.png"
-                        page.screenshot(path=str(path), full_page=True)
-                        result["shots"].append(str(path))
-                        if page.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth"):
-                            result["overflow"].append(f"{tab} {vp} {scheme}")
-                    selected = page.evaluate("[...document.querySelectorAll('[role=tab]')].filter(t => t.getAttribute('aria-selected')==='true').length")
-                    if selected != 1:
-                        result["a11y"].append(f"{selected} tabs selected")
-                    page.focus("#tab-scen")
-                    page.keyboard.press("ArrowLeft")  # keyboard operation of the tablist: scen -> cluster -> dash
-                    page.keyboard.press("ArrowLeft")
-                    if page.get_attribute("#tab-dash", "aria-selected") != "true":
-                        result["a11y"].append("arrow keys do not move between tabs")
-                    # landmarks, nav reachable inside the viewport (bottom bar on phones), theme toggle, skip link
-                    if page.locator("main#main").count() != 1 or page.locator("header.top h1").count() != 1:
+                    page.wait_for_timeout(2000)
+                    path = out / f"dashboard-{vp}-{scheme}.png"
+                    page.screenshot(path=str(path), full_page=True)
+                    result["shots"].append(str(path))
+                    if page.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth"):
+                        result["overflow"].append(f"dashboard {vp} {scheme}")
+                    for sel in ("#banner", "#attn", "#list .btn", "#services .chip", "#flow", ".node"):
+                        if page.locator(sel).count() == 0:
+                            result["a11y"].append(f"dashboard is missing {sel}")
+                    page.keyboard.press("Tab")  # the skip link is the first stop
+                    if not page.evaluate("document.activeElement.className === 'skip'"):
+                        result["a11y"].append("skip link is not the first tab stop")
+                    # landmarks and heading, theme toggle
+                    if page.locator("main#main").count() != 1 or page.locator("header.top h1").count() != 1 or page.locator("aside").count() != 2:
                         result["a11y"].append("missing main landmark or page heading")
-                    box = page.locator("#tab-dash").bounding_box()
-                    if not box or box["y"] + box["height"] > h + 1 or box["y"] < 0:
-                        result["a11y"].append(f"navigation is outside the {vp} viewport")
-                    if box and min(box["width"], box["height"]) < 40:
-                        result["a11y"].append("navigation target smaller than 40 px")
                     page.click("#theme")
                     if page.evaluate("document.documentElement.dataset.theme") != "light":
                         result["a11y"].append("theme toggle did not switch to light")
