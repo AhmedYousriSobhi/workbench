@@ -281,3 +281,33 @@ def test_bmc_credentials_are_made_once(tmp_path):
     before = f.read_text()
     stack.ensure_bmc_credentials(f)
     assert f.read_text() == before
+
+
+def test_ssh_keys_are_made_once_and_authorize_the_client_key(tmp_path):
+    from subprocess import CompletedProcess
+
+    calls = []
+
+    def fake(cmd):
+        calls.append(cmd)
+        f = Path(cmd[-1])
+        f.write_text("private")
+        Path(str(f) + ".pub").write_text("ssh-ed25519 AAAA pub\n")
+        return CompletedProcess(cmd, 0, "", "")
+
+    d = stack.ensure_ssh_keys(tmp_path / "ssh", fake)
+    assert len(calls) == 2 and (d / "authorized_keys").read_text() == "ssh-ed25519 AAAA pub\n"
+    stack.ensure_ssh_keys(d, fake)
+    assert len(calls) == 2  # the host key is stable across runs
+
+
+def test_ssh_keygen_failure_is_reported(tmp_path):
+    from subprocess import CompletedProcess
+
+    with pytest.raises(OSError, match="ssh-keygen failed"):
+        stack.ensure_ssh_keys(tmp_path / "s", lambda c: CompletedProcess(c, 1, "", "boom"))
+
+
+def test_login_node_starts_after_the_nodes():
+    labels = [label for label, _ in stack.stage_services(["login", "cn001", "slurmctld"])]
+    assert labels.index("nodes") < labels.index("login node")

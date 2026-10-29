@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Bring the fidelity VM up. Refuses without ~3 GB free memory (the VM is capped at 2 GB).
 # vagrant-libvirt's IP detection fails intermittently even when the VM boots fine (found in
-# hgate-testlab; root cause unknown), so retry up to MAX_TRIES, destroying the domain between
+# the earlier test lab; root cause unknown), so retry up to MAX_TRIES, destroying the domain between
 # attempts.
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."

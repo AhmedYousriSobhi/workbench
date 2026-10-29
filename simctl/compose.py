@@ -19,9 +19,11 @@ CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {
         "bcm-mock": ("hpcsim/bcm-mock:dev", 100, 2),
         "jira-mock": ("hpcsim/jira-mock:dev", 100, 2),
     },
+    "access": {"login": ("hpcsim/login:dev", 40, 2)},
     "scenarios": {"scenario-engine": ("hpcsim/scenario-engine:dev", 60, 5)},
     "load": {"user-sim": ("hpcsim/user-sim:dev", 60, 5), "ticket-bot": ("hpcsim/ticket-bot:dev", 40, 5)},
 }
+SSH_PORT = 2222
 SLURMD_MB = 60
 SLURMD_PRIO = 4
 
@@ -51,7 +53,7 @@ def generate(sim: dict, profile: dict) -> dict:
     services: dict = {}
     for group in profile["groups"]:
         for name, (image, mem, prio) in CATALOG.get(group, {}).items():
-            build = f"../../components/{name}" if (Path("components") / name).is_dir() else None
+            build = next((f"../../{d}/{name}" for d in ("components", "images") if (Path(d) / name).is_dir()), None)
             services[name] = _service(image, mem, prio, build)
     for name, kind in node_names(sim, profile.get("compute_nodes")):
         svc = _service("hpcsim/node-base:dev", SLURMD_MB, SLURMD_PRIO, "../../images/node-base")
@@ -64,10 +66,14 @@ def generate(sim: dict, profile: dict) -> dict:
         services[name] = svc
     slurm_mount = "./slurm:/etc/slurm:ro"
     for name, svc in services.items():
-        if name in ("slurmctld", "slurmrestd") or svc["labels"].get("hpcsim.node"):
+        if name in ("slurmctld", "slurmrestd", "login") or svc["labels"].get("hpcsim.node"):
             svc["volumes"] = [slurm_mount]
             svc["hostname"] = name
             svc.setdefault("environment", {})["HPCSIM_USERS"] = users_env(sim)
+    if "login" in services:  # SSH for clients such as a monitoring app: localhost only, keys from ./secrets/ssh
+        services["login"]["volumes"].append("./secrets/ssh:/run/hpcsim/ssh:ro")
+        services["login"].update({"ports": [f"127.0.0.1:{SSH_PORT}:22"],
+                                  "depends_on": ["slurmctld"] if "slurmctld" in services else []})
     if "bmc-farm" in services:  # Redfish endpoints for every node in sim.yaml, localhost only
         # :8443 is TLS at the standard /redfish/v1, the node chosen by Host: clients reach it as bmc-<node>
         names = [n for n, _ in node_names(sim)]

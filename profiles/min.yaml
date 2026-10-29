@@ -2,5 +2,5 @@
 name: min
 budget_gb: 1   # Phase 0 (issue 67): 4 slurmd + 2 gpu + bmc-farm + exporter + prometheus + grafana + slurmrestd peaked 0.17 GB (60 queued jobs); 1 GB leaves room for the unbuilt mocks
 extends: []
-groups: [core, mocks, scenarios]
+groups: [core, mocks, access, scenarios]
 compute_nodes: 4
