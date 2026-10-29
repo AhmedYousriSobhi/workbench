@@ -143,7 +143,7 @@ _Fake BMC, BCM and Jira so the app's integrations can be exercised._
 | gpu-exporter-farm | ✅ Done | One process serving fake DCGM metrics for every simulated GPU, with fault injection over /sim/inject. | `components/gpu-exporter-farm/exporter.py` | - |
 | bmc-farm | ✅ Done | One process serves /<node>/redfish/v1 for every node: Systems, Chassis Thermal/Power, Managers, event log, Reset action, POST /sim/inject (temp, fans, power, events). Verified live in the stack. | `components/bmc-farm/bmc.py` | [#52](https://github.com/AhmedYousriSobhi/opti-sim/pull/52) |
 | bcm-mock | 🟡 Partial | CMDaemon-style POST /json (cmdevice, cmstatus, cmpart) over the sim.yaml nodes, power calls and /sim/inject. Call names are an assumed subset (ADR 0005); verified live, 12 MiB. | `components/bcm-mock/bcm.py` | [#71](https://github.com/AhmedYousriSobhi/opti-sim/pull/71) |
-| jira-mock | 🟡 Partial | Mode mock only: REST v2/v3 issues, comments, workflow transitions with required-field errors, JQL subset, webhooks, 429/503/slow failures (ADR 0005). Verified live, 15 MiB. cloud/dc modes not built. | `components/jira-mock/jira.py` | [#71](https://github.com/AhmedYousriSobhi/opti-sim/pull/71) |
+| jira-mock | 🟡 Partial | Mode mock only: REST v2/v3 issues, comments, workflow transitions with required-field errors, JQL subset, webhooks, 429/503/slow failures (ADR 0005). Verified live in the container (transitions, JQL, webhook to an outside receiver, 429/503), 15 MiB. cloud/dc modes not built. | `components/jira-mock/jira.py` | [#71](https://github.com/AhmedYousriSobhi/opti-sim/pull/71) |
 
 2/4 done
 

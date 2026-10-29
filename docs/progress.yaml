@@ -78,7 +78,7 @@ phases:
       - {name: bcm-mock, status: partial, pr: 71, where: components/bcm-mock/bcm.py,
          how: "CMDaemon-style POST /json (cmdevice, cmstatus, cmpart) over the sim.yaml nodes, power calls and /sim/inject. Call names are an assumed subset (ADR 0005); verified live, 12 MiB."}
       - {name: jira-mock, status: partial, pr: 71, where: components/jira-mock/jira.py,
-         how: "Mode mock only: REST v2/v3 issues, comments, workflow transitions with required-field errors, JQL subset, webhooks, 429/503/slow failures (ADR 0005). Verified live, 15 MiB. cloud/dc modes not built."}
+         how: "Mode mock only: REST v2/v3 issues, comments, workflow transitions with required-field errors, JQL subset, webhooks, 429/503/slow failures (ADR 0005). Verified live in the container (transitions, JQL, webhook to an outside receiver, 429/503), 15 MiB. cloud/dc modes not built."}
 
   - id: p4
     title: People and chaos
