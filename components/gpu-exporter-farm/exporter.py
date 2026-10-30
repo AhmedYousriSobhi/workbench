@@ -4,9 +4,12 @@ GET  /metrics      Prometheus text format
 POST /sim/inject   {"node": "gpu001", "xid": 79} | {"node": ..., "temp": 92} | {"node": ..., "clear": true}
 """
 import json
+import os
 import random
 import sys
 import threading
+import time
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -19,6 +22,8 @@ FB_DEFAULT_MIB = 81920
 MODEL_NAME = {"h200": "NVIDIA H200", "h100": "NVIDIA H100 80GB HBM3", "a100": "NVIDIA A100-SXM4-80GB",
               "l40s": "NVIDIA L40S"}
 FS_SIZE = 500 * 1024**4
+ALLOC_URL = os.environ.get("ALLOC_URL", "http://slurmctld:9401/alloc")  # which GPUs running Slurm jobs hold
+ALLOC_STALE_S = 30  # keep the last answer this long when the feed is unreachable, then show every GPU idle
 
 
 def load_nodes(sim_yaml: Path) -> dict[str, int]:
@@ -47,6 +52,10 @@ class State:
         self.xid: dict[str, int] = {}
         self.temp_override: dict[str, float] = {}
         self.xid_count: dict[str, int] = {}
+        self.alloc: dict[str, set[int]] = {}  # node -> GPU indexes held by running jobs
+
+    def set_alloc(self, nodes: dict[str, list[int]]) -> None:
+        self.alloc = {n: set(g) for n, g in nodes.items()}
 
     def inject(self, req: dict) -> None:
         node = req["node"]
@@ -70,7 +79,12 @@ class State:
             out.append(f"# HELP {name} {help_}")
             out.append(f"# TYPE {name} {typ}")
 
-        used = {(n, g): r.randint(1000, self.fb_total - 1000) for n, gpus in self.nodes.items() for g in range(gpus)}
+        def busy(n: str, g: int) -> bool:
+            return g in self.alloc.get(n, ())
+
+        # A GPU a job holds works hard; every other GPU idles, so usage follows the scheduler.
+        used = {(n, g): r.randint(int(self.fb_total * 0.6), int(self.fb_total * 0.95)) if busy(n, g) else r.randint(300, 700)
+                for n, gpus in self.nodes.items() for g in range(gpus)}
 
         def per_gpu(name: str, help_: str, value) -> None:
             """`node` is this sim's own label; the rest are the labels the real DCGM exporter puts on every series
@@ -87,15 +101,15 @@ class State:
             for n in self.nodes:
                 out.append(f'{name}{{node="{n}"{labels}}} {value(n)}')
 
-        per_gpu("DCGM_FI_DEV_GPU_UTIL", "GPU utilization (percent)", lambda n, g: r.randint(0, 100))
+        per_gpu("DCGM_FI_DEV_GPU_UTIL", "GPU utilization (percent)", lambda n, g: r.randint(70, 100) if busy(n, g) else r.randint(0, 3))
         per_gpu("DCGM_FI_DEV_FB_USED", "Framebuffer used (MiB)", lambda n, g: used[n, g])
         per_gpu("DCGM_FI_DEV_FB_FREE", "Framebuffer free (MiB)", lambda n, g: self.fb_total - used[n, g])
         per_gpu(
             "DCGM_FI_DEV_GPU_TEMP",
             "GPU temperature (C)",
-            lambda n, g: f"{self.temp_override.get(n, r.uniform(45, 70)):.1f}",
+            lambda n, g: f"{self.temp_override.get(n, r.uniform(60, 80) if busy(n, g) else r.uniform(35, 45)):.1f}",
         )
-        per_gpu("DCGM_FI_DEV_POWER_USAGE", "Power draw (W)", lambda n, g: f"{r.uniform(80, 650):.1f}")
+        per_gpu("DCGM_FI_DEV_POWER_USAGE", "Power draw (W)", lambda n, g: f"{r.uniform(400, 650) if busy(n, g) else r.uniform(70, 95):.1f}")
         per_gpu("DCGM_FI_DEV_XID_ERRORS", "Last XID error code (0 = none)", lambda n, g: self.xid.get(n, 0))
         per_node(
             "sim_gpu_xid_events_total",
@@ -163,10 +177,30 @@ def make_handler(state: State):
     return Handler
 
 
+def fetch_alloc(url: str = ALLOC_URL, timeout: float = 2) -> dict[str, list[int]]:
+    with urllib.request.urlopen(url, timeout=timeout) as resp:
+        return json.load(resp)["nodes"]
+
+
+def follow_slurm(state: State, fetch=fetch_alloc, interval: float = 3, stop: threading.Event | None = None) -> None:
+    """Refresh the allocation until stopped; an unreachable feed keeps the last answer for ALLOC_STALE_S, then idles."""
+    stop = stop or threading.Event()
+    last_ok = time.monotonic()
+    while not stop.is_set():
+        try:
+            state.set_alloc(fetch())
+            last_ok = time.monotonic()
+        except (OSError, ValueError, KeyError):
+            if time.monotonic() - last_ok > ALLOC_STALE_S:
+                state.set_alloc({})
+        stop.wait(interval)
+
+
 def main() -> None:
     sim = Path(sys.argv[1] if len(sys.argv) > 1 else "sim.yaml")
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 9400
     state = State(load_nodes(sim), gpu_type=load_gpu_type(sim))
+    threading.Thread(target=follow_slurm, args=(state,), daemon=True).start()
     ThreadingHTTPServer(("0.0.0.0", port), make_handler(state)).serve_forever()
 
 
