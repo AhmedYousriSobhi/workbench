@@ -97,12 +97,14 @@ def test_screenshot_of_a_faulted_cluster(ui, tmp_path):
             page = browser.new_page(viewport={"width": size[0], "height": size[1]})
             page.goto(f"{base}/login?token={token}")
             page.wait_for_selector(".node.fault")
-            page.click("details[data-node=cn001] summary")  # opening an actions menu must survive the 3 s refresh
-            page.wait_for_timeout(3500)
-            assert page.get_attribute("details[data-node=cn001]", "open") is not None
             assert page.locator(".node.down").count() == 1 and page.locator(".node.warn").count() == 1
             assert page.locator(".node.fault").count() == 2
             page.screenshot(path=str(out / f"cluster-{vp}.png"), full_page=True)
+            page.click(".node[data-node=cn001]")  # an open node panel must survive the 3 s refresh
+            page.wait_for_timeout(3500)
+            assert page.locator("#nodepane").is_visible() and page.locator("#nodeacts-fault .btn").count() >= 3
+            page.click("#node-back")
+            assert page.locator("#tree").is_visible()
             assert not page.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth")
         browser.close()
     for name in ("cn002", "cn003", "gpu001", "gpu002"):

@@ -14,6 +14,9 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent
+SYNTH_CLUSTER = """lastCluster = JSON.stringify({services: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'gpu-exporter': true}, actions: [{id: 'power-off', label: 'Power off', gpu_only: false}, {id: 'power-on', label: 'Power on', gpu_only: false}, {id: 'overheat', label: 'Overheat', gpu_only: false}, {id: 'fan-fail', label: 'Fan failure', gpu_only: false}, {id: 'clear', label: 'Clear faults', gpu_only: false}],
+                            nodes: ['cn001', 'cn002', 'cn003', 'cn004'].map(n => ({name: n, kind: 'compute', state: 'ok', label: 'Healthy', temp: 45, power: 'On', gpus: 0}))
+                              .concat(['gpu001', 'gpu002'].map(n => ({name: n, kind: 'gpu', state: 'ok', label: 'Healthy', temp: 44, power: 'On', gpus: 8})))}); renderCluster(JSON.parse(lastCluster)); clearTimeout(clusterTimer);"""  # six healthy nodes; stops the poll so the real (stopped) stack does not overwrite them
 VIEWPORTS = {"desktop": (1280, 900), "phone": (390, 800)}
 
 
@@ -53,7 +56,7 @@ def capture(out: Path) -> dict:
                     result["shots"].append(str(path))
                     if page.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth"):
                         result["overflow"].append(f"dashboard {vp} {scheme}")
-                    for sel in ("#banner", "#attn", "#list .btn", "#services .cell", "#flow", ".node"):
+                    for sel in ("#banner", "#attn", "#list .btn", "#services .er", "#flow", ".node"):
                         if page.locator(sel).count() == 0:
                             result["a11y"].append(f"dashboard is missing {sel}")
                     down = page.locator("#stackdown").is_visible()  # stack down: one notice, nothing repeating it
@@ -92,10 +95,10 @@ def capture(out: Path) -> dict:
                     tpath = out / f"traffic-{vp}-{scheme}.png"
                     page.locator("#trafficpanel").screenshot(path=str(tpath))
                     result["shots"].append(str(tpath))
+                    if vp == "phone" and page.evaluate("document.querySelector('#nodeswrap').getBoundingClientRect().width < 300 || getComputedStyle(document.querySelector('#nodeswrap')).gridTemplateColumns.split(' ').length > 1"):
+                        result["a11y"].append("phone layout must stack traffic and the list in one column")
                     if vp == "desktop":  # one screen: with six nodes drawn, traffic and tree both fit without page scrolling
-                        page.evaluate("""lastCluster = JSON.stringify({services: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'gpu-exporter': true}, actions: [],
-                            nodes: ['cn001', 'cn002', 'cn003', 'cn004'].map(n => ({name: n, kind: 'compute', state: 'ok', label: 'Healthy', temp: 45, power: 'On', gpus: 0}))
-                              .concat(['gpu001', 'gpu002'].map(n => ({name: n, kind: 'gpu', state: 'ok', label: 'Healthy', temp: 44, power: 'On', gpus: 8})))}); renderCluster(JSON.parse(lastCluster));""")
+                        page.evaluate(SYNTH_CLUSTER)
                         page.wait_for_timeout(300)
                         if page.evaluate("document.documentElement.scrollHeight > window.innerHeight + 2"):
                             result["a11y"].append("dashboard needs page scrolling at desktop size")
@@ -121,18 +124,20 @@ def capture(out: Path) -> dict:
                     if page.locator("#plandlg[open]").count():
                         result["a11y"].append("plan sheet did not close")
                     page.click("#tb-nodes")
-                    page.evaluate("showNode('cn001')")  # node Details dialog (its button is hidden while the stack is down): text, fits, closes
-                    page.wait_for_selector("#nodedlg[open]")
+                    page.evaluate(SYNTH_CLUSTER)
+                    page.evaluate("showNode('cn001')")  # node panel replaces the list in place: info and actions as two cards, traffic stays visible
+                    page.wait_for_selector("#nodepane:not([hidden])")
                     page.wait_for_function("document.querySelector('#nodetext').textContent.includes('Name:')")
                     dpath = out / f"node-details-{vp}-{scheme}.png"
-                    page.screenshot(path=str(dpath))
+                    page.screenshot(path=str(dpath), full_page=True)
                     result["shots"].append(str(dpath))
-                    box = page.locator("#nodedlg").bounding_box()
-                    if box["x"] < 0 or box["x"] + box["width"] > w:
-                        result["overflow"].append(f"node details {vp} {scheme}")
-                    page.click("#nodedlg form .btn")
-                    if page.locator("#nodedlg[open]").count():
-                        result["a11y"].append("node details dialog did not close")
+                    if page.locator("dialog[open]").count() or not page.locator("#flow").is_visible() and vp == "desktop":
+                        result["a11y"].append("node panel must not cover the traffic diagram")
+                    if vp == "desktop" and page.locator("#nodeacts-fault .btn").count() < 3:
+                        result["a11y"].append("node panel is missing its fault actions")
+                    page.click("#node-back")
+                    if not page.locator("#nodepane").is_hidden() or page.locator("#tree").is_hidden():
+                        result["a11y"].append("node panel did not close")
                     page.close()
             browser.close()
     finally:

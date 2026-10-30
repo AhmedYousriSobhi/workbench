@@ -80,7 +80,8 @@ def test_ladder_climbs_and_recovers_on_the_live_stack(sim, tmp_path):
         "--metrics-addr", f"127.0.0.1:{port}", "--grafana-url", "http://127.0.0.1:3000",
         env={"WORKBENCH_GRAFANA_TOKEN": token})
     try:
-        assert wait_for(lambda: scrape(port)["workbench_governor_level"] == 0)
+        # the endpoint answers with an empty body until the governor's first control step has rendered the metrics
+        assert wait_for(lambda: scrape(port).get("workbench_governor_level") == 0)
         assert wait_for(lambda: "workbench-cn001-1" in ask(sock, {"cmd": "status"})["groups"])
         m = scrape(port)
         assert m['workbench_governor_groups{prio="P4"}'] >= 6  # the six nodes, discovered from Docker

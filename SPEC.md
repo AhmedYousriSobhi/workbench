@@ -82,15 +82,16 @@ Profiles: `min`, `std`, `full`, `jira-real`, `mac-agent` ([architecture section 
 | W-1 | Backend Starlette (ADR 0008: importing FastAPI alone costs ~39 MB); frontend one static HTML page with vanilla JS and a hand-written stylesheet, no framework, no CDN, no build step (ADR 0007); total host RAM under 50 MB. |
 | W-2 | Live telemetry via Server-Sent Events at 1 s intervals. |
 | W-3 | Runs as the restricted `workbench` user and talks to the governor only through the Unix socket; it MUST NOT have root, Docker-socket or libvirt access of its own. |
-| W-4 | Cluster Canvas: topology from `sim.yaml` with per-node fault actions (Set K8s NotReady, Inject GPU XID, Drain slurmd). |
-| W-5 | Governor Dashboard: MemAvailable and PSI sparklines, color-coded level banner, scrolling audit log. |
+| W-4 | Cluster view: topology from `sim.yaml` shown as a traffic diagram with every node and an entity list, with per-node fault actions (power off, overheat, fan failure, GPU XID, clear; Set K8s NotReady and Drain slurmd need Docker and run through the scenario CLI). |
+| W-5 | Governor panel: MemAvailable and PSI sparklines, color-coded level banner, audit log; reachable from the top strip, and a level of L2 or higher or an offline governor is also listed under Needs attention. |
 | W-6 | Scenario Orchestrator: browse, Play, Stop, Fast-Forward, timeline of upcoming steps. |
 | W-7 | Profile & Budget Manager: `sim.yaml` form editor, projected PSS memory calculator, deployment blocked when over budget. |
 | W-8 | Authentication is required; default bind is localhost. |
 | W-9 | Accessibility: status is never shown by colour alone; text contrast is at least 4.5:1 in light and dark; tap targets are at least 40 px; tables stack as cards under 640 px; the page has ARIA landmarks and a skip link; reduced motion is respected; nothing scrolls sideways at 390 px. |
 | W-10 | One message per condition. When the stack or the governor is down the page shows a single notice and one "needs attention" entry, hides data that cannot exist (no red or empty placeholders), and names a recovery command that works in a supported mode (the start path never needs sudo). |
 | W-11 | Live feeds (SSE, polling) run only while the page is visible, and animation stops at governor L3 and under reduced motion (ADR 0009). |
-| W-12 | The page never scrolls the cluster away: side panels stay in view and scroll on their own, long lists are bounded and filterable, and a Connections view gives each part's address, a command to try and the path of its credential (never the secret). |
+| W-12 | One screen: at 1280 x 800 with six nodes the dashboard needs no page scrolling (traffic diagram and entity list side by side; they stack under 1100 px). Long lists are bounded inside their own panel and filterable, Scenarios, Plan and Governor are sheets opened from the top strip, and a node opens in place of the list so it never covers the traffic diagram. A Connections view gives each part's address, a command to try and the path of its credential (never the secret). |
+| W-13 | Applying a plan from the page goes only through the governor (`apply-plan`: bounded counts and allow-listed parts, no free-form arguments), only at L0-L1 (GV-8), and needs the governor's `--workdir`; otherwise the page says why in one line (ADR 0017). |
 
 ## 9. Non-functional requirements
 

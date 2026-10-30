@@ -6,7 +6,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-from helpers import wait_for
+from helpers import exporter_up, wait_for
 
 from benchctl import stack, workbench
 
@@ -23,6 +23,7 @@ def built():
     out = benchctl("up", "--cpu-nodes", "2", "--gpu-nodes", "3", "--gpus-per-node", "4", "--with", "jira", "--without", "bcm")
     assert out.returncode == 0, out.stdout + out.stderr
     assert wait_for(lambda: "gpu003" in benchctl("exec", "login", "--", "sinfo", "-h", "-N", "-o", "%N", timeout=60).stdout, timeout=90)
+    assert wait_for(exporter_up, timeout=180), "the GPU exporter (it installs pyyaml at start) never answered"
     yield out.stdout
     stack.down(say=lambda m: None)
     workbench.forget()

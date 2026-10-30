@@ -7,7 +7,7 @@ import pytest
 import yaml
 from helpers import ask, bring_up, start_governor, stop_governor, wait_for
 
-from benchctl import stack
+from benchctl import stack, workbench
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -33,6 +33,7 @@ def cluster(tmp_path_factory):
     yield sock
     stop_governor(proc)
     stack.down(say=lambda m: None)
+    workbench.forget()  # `benchctl up <selection>` saves its counts; leaving them would change every later test's node list
 
 
 def test_apply_plan_shrinks_then_grows_the_running_workbench(cluster):
@@ -43,3 +44,5 @@ def test_apply_plan_shrinks_then_grows_the_running_workbench(cluster):
     assert any("apply-plan" in line and "done" in line for line in ask(cluster, {"cmd": "status"})["audit"])
     assert ask(cluster, {**plan, "cpu_nodes": 3, "gpu_nodes": 2})["started"]
     assert wait_for(lambda: {"cn003", "gpu002"} <= services(), timeout=300)
+    # let the second `benchctl up` finish (it saves the spec last) before the fixture stops the governor mid-run
+    assert wait_for(lambda: sum("apply-plan" in x and ": done" in x for x in ask(cluster, {"cmd": "status"})["audit"]) >= 2, timeout=300)

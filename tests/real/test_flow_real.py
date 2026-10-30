@@ -75,9 +75,9 @@ def test_dots_move_in_a_real_browser_and_pause(ui, tmp_path):  # noqa: F811
         assert "req/min" in page.text_content("#fs-jira-mock")
         # a fault button draws a diamond
         page.click(".node[data-node=cn001]")
-        page.click("#nodeacts .btn[data-action=fan-fail]")
+        page.click("#nodeacts-fault .btn[data-action=fan-fail]")
         page.wait_for_selector("#dots rect.pk", timeout=8000)
-        page.click("#nodeacts .btn[data-action=clear]")
+        page.click("#nodeacts-fix .btn[data-action=clear]")
         page.keyboard.press("Escape")
         # pause: counters keep counting, no new dots
         page.click("#flowpause")

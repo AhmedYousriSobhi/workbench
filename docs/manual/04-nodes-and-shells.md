@@ -30,7 +30,7 @@ It prints, like `kubectl describe`: the container (state, image, memory limit, p
 partitions, CPUs, memory, reason when drained), the jobs running on it, the GPUs (how many, which are busy and which
 idle, any XID error), the BMC (power, CPU temperature, fans) and how to `ssh` to it. A source that does not answer
 becomes one `Note:` line (for example `container not found: is the stack up?`), never an error. The web page shows the
-same text under **Details** on each node card, without the Docker and Slurm lines (the page has no Docker access by
+same text in the **Info** card of a node's panel (click the node in the list), without the Docker and Slurm lines (the page has no Docker access by
 design).
 
 ## Open a shell

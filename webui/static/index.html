@@ -233,6 +233,27 @@
   @media (max-width:1100px) { .subbar { flex-direction:column; align-items:stretch; gap:var(--sp2); } }
   #flow text { font-size:17px; } #flow text.sub { font-size:14px; } #flow .ftitle { font-size:14px; } #flow .ndt { font-size:12.5px; } #flow .ndt.cl { font-size:15.5px; }
   .nodeswrap.solo { grid-template-columns:minmax(0,760px); }
+  /* minimalist entity list (#129): one card per line */
+  .lists { display:flex; flex-direction:column; gap:var(--sp4); } .lists section[hidden] { display:none; }
+  .lists .bh { margin:0 0 var(--sp2); font-size:13px; font-weight:650; color:var(--dim); } .lists .cnt { font-weight:400; margin-left:var(--sp2); }
+  ul.rows { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; }
+  .er { display:grid; grid-template-columns:20px 96px minmax(0,1fr) auto; align-items:center; gap:0 var(--sp2); width:100%; min-height:38px; padding:4px 12px; text-align:left; font:inherit; color:var(--fg); background:transparent; border:1px solid var(--line); border-radius:10px; }
+  button.row { cursor:pointer; } button.row:hover { border-color:var(--accent); }
+  .er .g { text-align:center; } .er.ok .g { color:var(--ok); } .er .nm { font-weight:650; font-size:14px; } .er .st { font-size:13px; color:var(--dim); line-height:1.25; }
+  .er .info { font-size:12.5px; color:var(--dim); font-variant-numeric:tabular-nums; display:flex; align-items:center; gap:6px; white-space:nowrap; } .er .info b { color:var(--fg); }
+  .er.warn { background:color-mix(in srgb,var(--warn) 14%,var(--panel)); border-color:var(--warn); } .er.fault { background:color-mix(in srgb,var(--bad) 14%,var(--panel)); border-color:var(--bad); }
+  .er.warn .st, .er.fault .st { color:var(--fg); font-weight:650; } .er.down { border-style:dashed; } .er.down .nm { color:var(--dim); } .er.unknown { border-style:dotted; }
+  .meter { display:inline-block; width:44px; height:6px; border-radius:3px; background:var(--line); overflow:hidden; } .meter i { display:block; height:100%; background:var(--accent); }
+  @media (max-width:520px) { .er { grid-template-columns:20px 96px minmax(0,1fr); } .er .info { grid-column:2 / -1; } }
+  .nodesmain { max-height:calc(100vh - 150px); }
+  /* docked node panel (#129): replaces the list in place, so the traffic diagram stays visible while you act */
+  #nodepane { display:flex; flex-direction:column; gap:var(--sp3); } #nodepane[hidden] { display:none; }
+  .np-head { display:flex; align-items:center; gap:var(--sp3); flex-wrap:wrap; } .np-head h2 { margin:0; font-size:18px; flex:1; } #nodestate { font-size:13px; font-weight:650; }
+  .np-card { border:1px solid var(--line); border-radius:12px; padding:var(--sp3) var(--sp4); } .np-card h3 { margin:0 0 var(--sp2); font-size:13px; font-weight:650; color:var(--dim); }
+  .np-card .actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--sp2); padding:0; } .np-card .actions .btn { background:transparent; color:var(--fg); border:1px solid var(--line); font-weight:500; white-space:normal; }
+  .np-card .actions .btn:hover { border-color:var(--accent); } .np-card pre { max-height:180px; font-size:12px; } .np-card dl.kv { font-size:13px; margin:0 0 var(--sp2); }
+  @media (max-width:1100px) { .nodeswrap, .nodeswrap.solo { grid-template-columns:minmax(0,1fr); } .nodesmain { max-height:none; } .np-card .actions { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  @media (max-width:520px) { .np-card .actions { grid-template-columns:minmax(0,1fr); } .trafficpanel .legend span:nth-child(3) { display:none; } }
 </style>
 </head>
 <body>
@@ -279,13 +300,21 @@
     <p id="flowstate" class="dim small" role="status" style="margin-bottom:0"></p></section>
   <div class="nodesmain" id="nodesmain">
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-  <ul class="tree" id="tree" aria-label="Cluster entities"><li class="troot"><span class="tl">Cluster</span>
-    <ul>
-      <li class="br" id="svcpanel"><h3 class="bh">Services</h3><div id="services" class="cells small"></div></li>
-      <li class="br" id="br-compute"><h3 class="bh">Compute nodes</h3><div id="nodes-compute" class="cells"></div></li>
-      <li class="br" id="br-gpu"><h3 class="bh">GPU nodes</h3><div id="nodes-gpu" class="cells"></div></li>
-    </ul></li></ul>
-  <p class="dim small">Drain in Slurm and Kubernetes node faults are not available here: the page has no Docker access by design, and Kubernetes is not built yet. Use <code>./scripts/benchctl scenario run node-down</code> for Slurm.</p>
+  <section id="nodepane" hidden aria-labelledby="nodetitle">
+    <div class="np-head"><button class="btn small" id="node-back">← All nodes</button><h2 id="nodetitle"></h2><span id="nodestate" class="pill"></span></div>
+    <div class="np-card"><h3>Actions</h3>
+      <p class="small dim" style="margin:0 0 var(--sp2)">Break it, then watch the traffic diagram.</p><div class="actions" id="nodeacts-fault"></div>
+      <p class="small dim" style="margin:var(--sp3) 0 var(--sp2)">Recover</p><div class="actions" id="nodeacts-fix"></div>
+      <p id="nodeactmsg" role="status" class="small"></p></div>
+    <div class="np-card"><h3>Info</h3><dl class="kv" id="nodeconn"></dl><pre id="nodetext"></pre>
+      <p class="dim small" style="margin:var(--sp2) 0 0">Same text as <code>benchctl describe node NAME</code>, without the Docker and Slurm lines (this page has no Docker access by design).</p></div>
+  </section>
+  <div id="tree" class="lists" aria-label="Cluster entities">
+    <section id="br-compute"><h3 class="bh">Compute nodes <span class="cnt" id="cnt-compute"></span></h3><ul class="rows" id="nodes-compute"></ul></section>
+    <section id="br-gpu"><h3 class="bh">GPU nodes <span class="cnt" id="cnt-gpu"></span></h3><ul class="rows" id="nodes-gpu"></ul></section>
+    <section id="svcpanel"><h3 class="bh">Services <span class="cnt" id="cnt-svc"></span></h3><ul class="rows" id="services"></ul></section>
+  </div>
+  <p class="dim small" id="treenote">Drain in Slurm and Kubernetes node faults are not available here: the page has no Docker access by design, and Kubernetes is not built yet. Use <code>./scripts/benchctl scenario run node-down</code> for Slurm.</p>
   </div></div>
   </div>
   <div id="tab-conn" role="tabpanel" aria-labelledby="tb-conn" hidden>
@@ -293,9 +322,6 @@
       <p class="dim small">Addresses are on this machine only (127.0.0.1). Credentials are never shown here: the last column is the file that holds them. A node's own address is in its details.</p>
       <div class="tablewrap"><table class="conn"><thead><tr><th>Part</th><th>Address</th><th>Try it</th><th>Credential</th></tr></thead><tbody id="conn-rows"><tr><td colspan="4" class="skel">Loading…</td></tr></tbody></table></div></div>
   </div>
-  <dialog id="nodedlg" aria-labelledby="nodetitle"><h2 id="nodetitle"></h2><h3 class="rh" style="margin:0 0 4px;font-size:14px">Connect</h3><dl class="kv" id="nodeconn"></dl><h3 class="rh" style="margin:12px 0 4px;font-size:14px">Fault actions</h3><div class="actions" id="nodeacts"></div><p id="nodeactmsg" role="status" class="small dim"></p><h3 class="rh" style="margin:12px 0 4px;font-size:14px">Status</h3><pre id="nodetext"></pre>
-    <p class="dim small">Same text as <code>benchctl describe node NAME</code>, without the Docker and Slurm lines (this page has no Docker access by design).</p>
-    <form method="dialog"><button class="btn">Close</button></form></dialog>
   <dialog id="scndlg" class="sheet" aria-labelledby="scn-h">
     <div class="sheet-h"><div><h2 id="scn-h">Scenarios</h2><p class="dim small">Timed incidents against the running stack.</p></div>
       <button class="btn small" id="scn-close" aria-label="Close the scenarios">✕ Close</button></div>
@@ -434,9 +460,13 @@ es.onerror = () => { $('conn').className = ''; $('conn').lastElementChild.textCo
 const STATE_ICON = { ok: '✓', warn: '▲', fault: '✗', down: '⏻', unknown: '?' };
 let clusterTimer, lastCluster = '', flashTimer;
 function node(n) {
-  const meta = [n.temp == null ? null : n.temp.toFixed(0) + ' °C', n.gpus ? n.gpus + ' GPUs' : null].filter(Boolean).join(' · ') || (n.power ?? '–');
-  return `<button class="cell node ${n.state}" data-node="${esc(n.name)}" aria-label="${esc(n.name)}: ${esc(n.label)}. Open details and fault actions">
-    <span class="nm">${esc(n.name)}</span><span class="st"><b aria-hidden="true">${STATE_ICON[n.state]}</b> ${esc(n.label)}</span><span class="mt">${esc(meta)}</span></button>`;
+  const util = n.gpu_util == null ? '' : `<span class="meter" role="img" aria-label="GPU utilisation ${n.gpu_util} percent"><i style="width:${n.gpu_util}%"></i></span><b>${n.gpu_util}%</b> · ${n.gpus_busy}/${n.gpus} busy · `;
+  const info = util + [n.temp == null ? null : n.temp.toFixed(0) + ' °C', n.bcm ? 'BCM ' + n.bcm : null].filter(Boolean).join(' · ') || esc(n.power ?? '–');
+  return `<li><button class="er node ${n.state}" data-node="${esc(n.name)}" aria-label="${esc(n.name)}: ${esc(n.label)}. Open details and fault actions">
+    <b class="g" aria-hidden="true">${STATE_ICON[n.state]}</b><span class="nm">${esc(n.name)}</span><span class="st">${esc(n.label)}</span><span class="info">${info}</span></button></li>`;
+}
+function svcRow([k, up]) {
+  return `<li><div class="er svc ${up ? 'ok' : 'fault'}"><b class="g" aria-hidden="true">${up ? '✓' : '✗'}</b><span class="nm">${esc(k)}</span><span class="st">${up ? 'answering' : 'not answering'}</span><span class="info" id="si-${esc(k)}"></span></div></li>`;
 }
 function renderCluster(c) {
   paintHealth(c);
@@ -445,13 +475,15 @@ function renderCluster(c) {
   $('stackdown').hidden = stackUp;
   $('nodeswrap').classList.toggle('solo', !stackUp);
   for (const id of ['nodesmain']) $(id).hidden = !stackUp;  // one message when down, not five
-  $('services').innerHTML = Object.entries(c.services).map(([k, up]) =>
-    `<span class="cell svc ${up ? 'ok' : 'fault'}"><span class="nm">${esc(k)}</span><span class="st"><b aria-hidden="true">${up ? '✓' : '✗'}</b> ${up ? 'answering' : 'not answering'}</span></span>`).join('');
+  const svcs = Object.entries(c.services), svcUp = svcs.filter(([, u]) => u).length;
+  $('services').innerHTML = svcs.map(svcRow).join(''); $('cnt-svc').textContent = `${svcUp} of ${svcs.length} answering`; paintBlocks();
   for (const kind of ['compute', 'gpu']) {
     const rows = c.nodes.filter(n => n.kind === kind);
-    $('nodes-' + kind).innerHTML = rows.length ? rows.map(n => node(n)).join('') : '<p class="dim">None in this profile.</p>';
+    $('nodes-' + kind).innerHTML = rows.map(n => node(n)).join(''); $('br-' + kind).hidden = !rows.length;
+    $('cnt-' + kind).textContent = `${rows.filter(n => n.state === 'ok').length} of ${rows.length} healthy`;
   }
   document.querySelectorAll('.node').forEach(b => b.onclick = () => showNode(b.dataset.node));
+  if (openNode) { const n = c.nodes.find(x => x.name === openNode); if (n) { $('nodestate').className = 'pill ' + n.state; $('nodestate').textContent = `${STATE_ICON[n.state]} ${n.label}`; } }
 }
 async function loadCluster() {
   clearTimeout(clusterTimer);
@@ -538,12 +570,23 @@ $('pl-apply').onclick = async () => {
   }, 4000);
 };
 function paintNodeActions(name) {
-  const c = JSON.parse(lastCluster || '{"nodes":[],"actions":[]}'), n = c.nodes.find(x => x.name === name);
-  $('nodeacts').innerHTML = n ? c.actions.filter(a => !a.gpu_only || n.kind === 'gpu').map(a => `<button class="btn" data-node="${esc(name)}" data-action="${a.id}">${esc(a.label)}</button>`).join('') : '';
-  document.querySelectorAll('#nodeacts .btn').forEach(b => b.onclick = () => nodeAction(b.dataset.node, b.dataset.action, b.textContent));
+  const c = JSON.parse(lastCluster || '{"nodes":[],"actions":[]}'), n = c.nodes.find(x => x.name === name), fix = new Set(['power-on', 'clear']);
+  const btns = (rows) => rows.map(a => `<button class="btn" data-node="${esc(name)}" data-action="${a.id}">${esc(a.label)}</button>`).join('');
+  const ok = n ? c.actions.filter(a => !a.gpu_only || n.kind === 'gpu') : [];
+  $('nodeacts-fault').innerHTML = btns(ok.filter(a => !fix.has(a.id))); $('nodeacts-fix').innerHTML = btns(ok.filter(a => fix.has(a.id)));
+  document.querySelectorAll('#nodepane .actions .btn').forEach(b => b.onclick = () => nodeAction(b.dataset.node, b.dataset.action, b.textContent));
+  if (n) { $('nodestate').className = 'pill ' + n.state; $('nodestate').textContent = `${STATE_ICON[n.state]} ${n.label}`; }
 }
+let openNode = null, openerEl = null;
+function closeNode() {
+  openNode = null; $('nodepane').hidden = true; $('tree').hidden = false; $('treenote').hidden = false;
+  if (openerEl && document.contains(openerEl)) openerEl.focus(); else { const b = document.querySelector('.node'); if (b) b.focus(); }
+}
+$('node-back').onclick = closeNode;
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && openNode && !document.querySelector('dialog[open]')) closeNode(); });
 async function showNode(name) {
-  paintNodeActions(name); $('nodeactmsg').textContent = '';
+  openNode = name; openerEl = document.activeElement; paintNodeActions(name); $('nodeactmsg').textContent = '';
+  $('tree').hidden = true; $('treenote').hidden = true; $('nodepane').hidden = false; $('nodetitle').textContent = name; $('node-back').focus();
   const r = await fetch(`/api/nodes/${name}`);
   $('nodetitle').textContent = name;
   const cx = (await connections()).find(e => e.id === 'nodes'), kv = [];
@@ -552,7 +595,6 @@ async function showNode(name) {
     ['IP address', `assigned by Docker at start; run <code>./scripts/benchctl describe node ${esc(name)}</code>`]);
   $('nodeconn').innerHTML = kv.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
   $('nodetext').textContent = r.ok ? (await r.json()).text : `Could not read ${name}: ${(await r.json()).detail}`;
-  $('nodedlg').showModal();
 }
 async function nodeAction(name, action, label) {
   const r = await fetch(`/api/nodes/${name}/${action}`, { method: 'POST', headers: H });
@@ -621,6 +663,7 @@ function paintBlocks() {
     $('fb-' + k).setAttribute('class', 'blk ' + (up ? 'up' : allOff ? 'off' : 'down'));  // everything off = stack not running: stay calm, not red
     $('fs-' + k).textContent = up ? '✓ up · ' + (rate[k] || 0) + ' req/min' : allOff ? '– offline' : '✗ not reachable';
     $('ln-' + k).setAttribute('class', 'lane' + (rate[k] ? ' on' : ''));
+    const si = document.getElementById('si-' + (k === 'gpu-exporter' ? 'gpu-exporter' : k)); if (si) si.textContent = `${rate[k] || 0} req/min · ${(flowSnap.totals[k] || 0).toLocaleString()} seen`;
     $('fc-' + k).textContent = (flowSnap.totals[k] || 0) ? (flowSnap.totals[k]).toLocaleString() + ((flowSnap.totals[k]) === 1 ? ' request seen' : ' requests seen') : SERVICES.find(x => x[0] === k)[2];
   }
   $('fc-clients').textContent = sent.toLocaleString() + ' requests sent';
