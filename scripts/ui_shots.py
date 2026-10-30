@@ -84,7 +84,6 @@ def capture(out: Path) -> dict:
                     if vp == "desktop" and page.evaluate("getComputedStyle(document.querySelector('.rail.right')).position") != "sticky":
                         result["a11y"].append("right rail must stay in view (sticky) on desktop")
                     page.click("#tb-plan")
-                    page.click("#plan summary")  # planner: opens, estimates, reacts to a change, shows the command
                     page.wait_for_function("document.querySelector('#pl-msg').textContent.length > 5")
                     page.fill("#pl-cpu", "2")
                     page.wait_for_function("document.querySelector('#pl-cmd').textContent.includes('--cpu-nodes 2') || document.querySelector('#pl-cmd').textContent.startsWith('Does not fit')")

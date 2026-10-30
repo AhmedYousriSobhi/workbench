@@ -212,7 +212,8 @@
       <div class="tablewrap"><table class="conn"><thead><tr><th>Part</th><th>Address</th><th>Try it</th><th>Credential</th></tr></thead><tbody id="conn-rows"><tr><td colspan="4" class="skel">Loading…</td></tr></tbody></table></div></div>
   </div>
   <div id="tab-plan" role="tabpanel" aria-labelledby="tb-plan" hidden>
-  <div class="panel" id="planpanel"><details id="plan"><summary><h2 style="display:inline;margin:0">Plan a workbench</h2></summary>
+  <div class="panel" id="planpanel"><details id="plan" open><summary><h2 style="display:inline;margin:0">Plan a workbench (estimate only)</h2></summary>
+    <p class="notice"><b>Planning only: nothing changes when you edit these numbers.</b> This page cannot start or stop containers (no Docker access, by design). It shows the memory needed and the command; copy it and run it in a terminal to rebuild the workbench.</p>
     <p class="dim small">Choose how many nodes and which parts, and see the memory it needs against what is free. This page cannot start containers (no Docker access by design); it shows the command.</p>
     <div class="planform">
       <label>CPU nodes <input type="number" id="pl-cpu" min="0" max="64" value="4"></label>
@@ -224,7 +225,7 @@
       <label><input type="checkbox" value="bcm" checked> BCM</label> <label><input type="checkbox" value="scenarios" checked> Scenarios</label>
       <label><input type="checkbox" value="accounting"> Accounting</label> <label><input type="checkbox" value="load"> Load</label></fieldset>
     <progress id="pl-bar" max="100" value="0" aria-label="Memory needed as a share of free memory"></progress>
-    <p id="pl-msg" role="status" class="small"></p><pre id="pl-cmd" class="small"></pre></details></div>
+    <p id="pl-msg" role="status" class="small"></p><pre id="pl-cmd" class="small"></pre><button class="btn small" id="pl-copy" hidden>Copy command</button></details></div>
   </div>
   <dialog id="nodedlg" aria-labelledby="nodetitle"><h2 id="nodetitle"></h2><h3 class="rh" style="margin:0 0 4px;font-size:14px">Connect</h3><dl class="kv" id="nodeconn"></dl><h3 class="rh" style="margin:12px 0 4px;font-size:14px">Status</h3><pre id="nodetext"></pre>
     <p class="dim small">Same text as <code>benchctl describe node NAME</code>, without the Docker and Slurm lines (this page has no Docker access by design).</p>
@@ -379,7 +380,8 @@ async function loadPlan() {
   const p = await r.json();
   $('pl-bar').value = Math.min(100, Math.round(100 * p.total_mb / Math.max(p.available_mb, 1)));
   $('pl-msg').textContent = (p.fits ? '✓ ' : '✗ ') + p.message;
-  $('pl-cmd').textContent = p.fits ? 'Build it: ' + p.command : 'Does not fit. Change the selection, or free memory.';
+  $('pl-cmd').textContent = p.fits ? p.command : 'Does not fit. Change the selection, or free memory.';
+  $('pl-copy').hidden = !p.fits; $('pl-copy').onclick = async () => { try { await navigator.clipboard.writeText(p.command); $('pl-copy').textContent = 'Copied'; } catch (e) { $('pl-copy').textContent = 'Select and copy'; } setTimeout(() => { $('pl-copy').textContent = 'Copy command'; }, 1500); };
 }
 document.querySelectorAll('#plan input').forEach(i => i.oninput = i.onchange = () => { clearTimeout(planTimer); planTimer = setTimeout(loadPlan, 250); });
 $('plan').ontoggle = () => { if ($('plan').open) loadPlan(); };
@@ -587,7 +589,7 @@ function selectTab(t, focus) {
   if (focus) $('tb-' + t).focus();
   if (t === 'traffic' && !document.hidden) openFlow(); else closeFlow();
   if (t === 'conn') paintConnections();
-  if (t === 'plan' && $('plan').open) loadPlan();
+  if (t === 'plan') loadPlan();
   try { sessionStorage.setItem('workbench-tab', t); } catch (e) { /* not remembered */ }
 }
 TABS.forEach((k, i) => {
