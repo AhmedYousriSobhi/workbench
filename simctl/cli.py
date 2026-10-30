@@ -260,9 +260,24 @@ def open_ui() -> None:
     _launcher("open")
 
 
+def _confirm(what: str, yes: bool) -> None:
+    """Ask before a step that ends shells or removes nodes, but only for a person at a terminal: scripts and the
+    launcher (no TTY) are never blocked, and `--yes` skips the question."""
+    if not yes and sys.stdin.isatty() and not typer.confirm(f"{what} Continue?", default=False):
+        typer.echo("cancelled", err=True)
+        raise typer.Exit(1)
+
+
 @app.command()
-def down() -> None:
+def down(dry_run: bool = typer.Option(False, "-n", "--dry-run", help="list what would stop; change nothing"),
+         yes: bool = typer.Option(False, "-y", "--yes", help="do not ask (a terminal asks; scripts are never asked)")) -> None:
     """Stop and remove the hpcsim compose project (nothing else)."""
+    running = [r["name"] for r in inventory.service_rows() if r["state"] == "running"]
+    if dry_run:
+        typer.echo(f"would stop and remove {len(running)} containers: {', '.join(running) or 'none running'}")
+        return
+    if running:
+        _confirm(f"This stops {len(running)} containers and ends open shells on the nodes.", yes)
     raise typer.Exit(0 if stack.down(say=typer.echo) else 1)
 
 
@@ -275,22 +290,52 @@ def _node_names(incomplete: str) -> list[str]:
 
 
 NODE = typer.Argument(..., autocompletion=_node_names, help="node name, e.g. cn001 or gpu001")
-OUTPUT = typer.Option("table", "-o", "--output", help="table or json")
+OUTPUT = typer.Option("table", "-o", "--output", help="table, json (for scripts) or name (one per line)")
+SELECTOR = typer.Option(None, "-l", "--selector", help="keep rows where key=value or key!=value (repeat or comma-separate)")
+SORT_BY = typer.Option(None, "--sort-by", help="sort by a column name")
+WATCH = typer.Option(False, "-w", "--watch", help="redraw until Ctrl-C")
+INTERVAL = typer.Option(2.0, "--interval", help="seconds between redraws with --watch (at least 1)")
 
 get_app = typer.Typer(cls=SuggestingGroup, help="List what exists: nodes, services, profiles, scenarios")
 app.add_typer(get_app, name="get")
 
 
+def _get(rows_fn, output: str, selector: list[str] | None, sort_by: str | None, watch: bool, interval: float) -> None:
+    """One list command: query, render, and optionally redraw. Query mistakes exit 2 (usage), like an unknown flag."""
+    import time
+
+    def once() -> str:
+        return inventory.render(inventory.sort_rows(inventory.select(rows_fn(), selector or []), sort_by), output)
+
+    try:
+        if not watch:
+            typer.echo(once())
+            return
+        if interval < 1:
+            raise inventory.QueryError("--interval must be at least 1 second (each redraw asks Docker)")
+        while True:
+            text = once()
+            typer.echo(("\033[2J\033[H" if sys.stdout.isatty() else "") + text)
+            time.sleep(interval)
+    except inventory.QueryError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(2) from e
+    except KeyboardInterrupt:
+        raise typer.Exit(0) from None
+
+
 @get_app.command("nodes")
-def get_nodes(output: str = OUTPUT) -> None:
-    """Every node sim.yaml defines, its kind and container state (absent = not started)."""
-    typer.echo(inventory.render(inventory.node_rows(_sim()), output))
+def get_nodes(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by: str = SORT_BY, watch: bool = WATCH,
+              interval: float = INTERVAL) -> None:
+    """Every node sim.yaml defines, its kind and container state (absent = not started). Example: -l kind=gpu."""
+    _get(lambda: inventory.node_rows(_sim()), output, selector, sort_by, watch, interval)
 
 
 @get_app.command("services")
-def get_services(output: str = OUTPUT) -> None:
+def get_services(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by: str = SORT_BY, watch: bool = WATCH,
+                 interval: float = INTERVAL) -> None:
     """Every container of the running stack with its state."""
-    typer.echo(inventory.render(inventory.service_rows(), output))
+    _get(inventory.service_rows, output, selector, sort_by, watch, interval)
 
 
 @get_app.command("workbench")
@@ -309,15 +354,15 @@ def get_workbench(output: str = OUTPUT) -> None:
 
 
 @get_app.command("profiles")
-def get_profiles(output: str = OUTPUT) -> None:
+def get_profiles(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
     """The size presets for `benchctl up --profile`."""
-    typer.echo(inventory.render(inventory.profile_rows(), output))
+    _get(inventory.profile_rows, output, selector, sort_by, False, 2.0)
 
 
 @get_app.command("scenarios")
-def get_scenarios(output: str = OUTPUT) -> None:
+def get_scenarios(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
     """The fault and workload scenarios for `benchctl scenario run`."""
-    typer.echo(inventory.render(inventory.scenario_rows(), output))
+    _get(inventory.scenario_rows, output, selector, sort_by, False, 2.0)
 
 
 @app.command("exec", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
@@ -417,12 +462,23 @@ def ssh_key_remove() -> None:
 
 @app.command()
 def scale(n: int = typer.Argument(..., min=0, help="compute node count"),
-          profile: str = typer.Option(None, "--profile", help="default: the profile `up` last started")) -> None:
+          profile: str = typer.Option(None, "--profile", help="default: the profile `up` last started"),
+          dry_run: bool = typer.Option(False, "-n", "--dry-run", help="say which nodes start or stop; change nothing"),
+          yes: bool = typer.Option(False, "-y", "--yes", help="do not ask before removing nodes (a terminal asks)")) -> None:
     """Change the compute-node count: regenerates slurm.conf, restarts slurmctld, starts/stops slurmd."""
     if workbench.current(_base_sim()):
         typer.echo("a workbench is built: to change its size run `benchctl up --cpu-nodes N ...` "
                    "(or edit its file and `benchctl apply -f FILE`); `scale` works on a size preset (`up --profile`)")
         raise typer.Exit(1)
+    now = stack.running_nodes()
+    want = [name for name, kind in nodes.node_names(_sim(), n) if kind == "compute"]
+    stop = [x for x in now if x not in want]
+    if dry_run:
+        typer.echo(f"would start: {', '.join(x for x in want if x not in now) or 'none'}; "
+                   f"would stop and remove: {', '.join(stop) or 'none'}")
+        return
+    if stop:
+        _confirm(f"This removes {', '.join(stop)}; shells and jobs on them end.", yes)
     raise typer.Exit(0 if stack.scale(_sim(), profile or stack.current_profile(), n, say=typer.echo) else 1)
 
 

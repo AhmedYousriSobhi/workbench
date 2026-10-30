@@ -12,16 +12,16 @@ work as aliases. What each verb does not do, exit codes, and what to use in a sc
 | `start [--profile P]` | machine check, venv, governor (as you), cluster, web page; default profile `min` |
 | `stop` | stop the web page, the cluster and your own governor |
 | `open` | print the login link, open a browser if there is a display |
-| `get nodes\|services\|profiles\|scenarios\|workbench [-o json]` | list what exists; `nodes` shows every node `sim.yaml` defines and its state (`absent` = not started) |
+| `get nodes\|services\|profiles\|scenarios\|workbench [-o json\|name] [-l SEL] [--sort-by COL] [-w]` | list what exists, filter (`-l kind=gpu`), sort, redraw; `nodes` shows every node `sim.yaml` defines and its state (`absent` = not started) |
 | `describe node NAME [-o json]` | everything known about one node: container, Slurm, jobs, GPUs busy/idle, BMC |
 | `exec NODE [-u USER] [-- CMD]` | shell on a node, or one command: `benchctl exec gpu001 -- nvidia-smi` |
 | `logs NODE [-f] [--tail N]` | container log of a node or service |
 | `plan [selection]` | estimate the memory a workbench needs against free memory; exit 1 if it does not fit ([guide](../guides/choose-workbench.md)) |
 | `up --profile P` | pre-flight, governor admission, ordered start (default profile `std`) |
+| `down [-n] [-y]` | stop and remove the `hpcsim` project only; asks first in a terminal, `-n` only lists |
+| `scale N [--profile P] [-n] [-y]` | change the compute node count; asks before removing nodes in a terminal, `-n` only says what would change |
 | `up --cpu-nodes N --gpu-nodes N [--gpus-per-node N] [--with PART] [--without PART] [-f FILE]` | the same by selection: estimate first, build only if it fits |
 | `apply -f FILE` | build the workbench a file describes |
-| `down` | stop and remove the `hpcsim` project only |
-| `scale N [--profile P]` | change the compute node count |
 | `scenario list` / `scenario run NAME [--speed N] [--dry-run]` | list scenarios; play one, exit 1 on failure |
 | `export profile [-o FILE] [--bmc] [--user U] [--name N] [--format ID]` | write the workbench as a client profile file ([guide](../guides/export-profile.md)) |
 | `ssh-key install\|remove` | put the login key under `~/.ssh` for clients that only read there |
