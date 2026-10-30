@@ -24,7 +24,7 @@ for, and why. Every command runs from the repository root.
 | check my machine is ready | `./scripts/benchctl check` | OS, RAM, disk, Docker, ports |
 | turn on Tab completion | `./scripts/benchctl completion install` | one line in your rc file, no sudo; `completion remove` undoes it |
 | give a client that only reads `~/.ssh` the login key | `./scripts/benchctl ssh-key install` (and `remove` after) | copies the key to `~/.ssh/workbench_ed25519`, mode 600 |
-| import the cluster into the client in one step | `./scripts/benchctl export profile` | writes a profile file; only the key and token are set by hand ([guide](../guides/export-profile.md)) |
+| import the cluster into the client in one step | `./scripts/benchctl export profile` | writes a profile file of the running cluster (or press **⇩ Export** on the page); only the key and token are set by hand ([guide](../guides/export-profile.md)) |
 | report a problem | `./scripts/benchctl diag` | one masked tarball to attach |
 
 ## `start` or `up`?

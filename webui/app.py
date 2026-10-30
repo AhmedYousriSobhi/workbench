@@ -20,6 +20,7 @@ from starlette.responses import (
     HTMLResponse,
     JSONResponse,
     RedirectResponse,
+    Response,
     StreamingResponse,
 )
 from starlette.routing import Route
@@ -97,11 +98,12 @@ class Runs:
 
 
 def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Path("scenarios"),
-               sim_yaml: Path = Path("sim.yaml"), interval: float = 1.0, docs: Path = DOCS) -> Starlette:
+               sim_yaml: Path = Path("sim.yaml"), interval: float = 1.0, docs: Path = DOCS,
+               fetch=None, poster=None) -> Starlette:
     sim = yaml.safe_load(sim_yaml.read_text())
     flow = Flow()
     runs = Runs(scenarios, sim, flow)
-    cluster = Cluster(sim)
+    cluster = Cluster(sim, **{k: v for k, v in (("fetch", fetch), ("poster", poster)) if v})  # test seams: a host stack must not answer or be hit
     wiki = Wiki(docs)
 
     def authed(request: Request) -> None:
@@ -216,6 +218,22 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
         return JSONResponse({"entities": conn.entities(cluster.sim)})
 
+    async def export_profile(request: Request):
+        """The client profile file for the cluster on disk now. Read fresh per request (the page has no Docker, W-3),
+        so it follows a rebuild; the format ID comes from the local file, never from the repository."""
+        from benchctl import export
+
+        q = request.query_params
+        try:
+            base = yaml.safe_load(sim_yaml.read_text())
+            sim, services, label = export.configured(base)
+            body = export.build(sim, services, "workbench", q.get("bmc") == "1", q.get("user") or None)
+            text = export.to_json(body, export.format_id())
+        except export.ExportError as e:
+            raise HTTPException(422, str(e)) from e
+        return Response(text, media_type="application/json",
+                        headers={"Content-Disposition": 'attachment; filename="bench-profile.json"', "X-Profile": label})
+
     async def node_action(request: Request):
         try:
             results = await asyncio.to_thread(cluster.act, request.path_params["node"], request.path_params["action"])
@@ -289,6 +307,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/plan", protected(plan)),
             Route("/api/plan/apply", protected(plan_apply, write=True), methods=["POST"]),
             Route("/api/connections", protected(connections)),
+            Route("/api/export/profile", protected(export_profile)),
             Route("/api/nodes/{node}", protected(node_detail)),
             Route("/api/nodes/{node}/{action}", protected(node_action, write=True), methods=["POST"]),
             Route("/api/scenarios", protected(list_scenarios)),

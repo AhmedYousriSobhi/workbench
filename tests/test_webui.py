@@ -28,6 +28,10 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
+def no_stack(*args, **kw):
+    raise OSError("no stack in unit tests")  # a stack running on the host must not change the result
+
+
 @pytest.fixture
 def ui(tmp_path):
     sock = str(tmp_path / "gov.sock")
@@ -40,7 +44,7 @@ def ui(tmp_path):
     (scen / "slow.yaml").write_text("name: slow\ndescription: d\nsteps:\n  - {at: 0s, target: k8s, do: {a: 1}}\n"
                                     "  - {at: 1h, target: k8s, do: {b: 2}}\n")
     port = free_port()
-    server = uvicorn.Server(uvicorn.Config(create_app(TOKEN, sock, scen, ROOT / "sim.yaml", interval=0.05),
+    server = uvicorn.Server(uvicorn.Config(create_app(TOKEN, sock, scen, ROOT / "sim.yaml", interval=0.05, fetch=no_stack, poster=no_stack),
                                            host="127.0.0.1", port=port, log_level="error"))
     threading.Thread(target=server.run, daemon=True).start()
     deadline = time.time() + 5
@@ -240,3 +244,19 @@ def test_plan_apply_needs_csrf_validates_and_asks_the_governor(ui):
     code, body = req(ui, q, "POST", headers={"X-Requested-With": "workbench"})
     assert code == 200 and json.loads(body)["started"] is True
     assert b"pl-apply" in req(ui, "/")[1]
+
+
+def test_export_button_downloads_the_profile_and_explains_a_missing_format(ui, monkeypatch, tmp_path):
+    from benchctl import workbench
+    monkeypatch.setattr(workbench, "SAVED", tmp_path / "none.yaml")
+    monkeypatch.setattr("benchctl.export.LOCAL_FORMAT_FILE", tmp_path / "none")
+    monkeypatch.setattr("benchctl.export.format_id.__defaults__", (None, None, tmp_path / "none"))
+    monkeypatch.delenv("BENCH_EXPORT_FORMAT", raising=False)
+    code, body = req(ui, "/api/export/profile")
+    assert code == 422 and ".git/export-format" in json.loads(body)["detail"]
+    monkeypatch.setenv("BENCH_EXPORT_FORMAT", "demo:2")
+    code, body = req(ui, "/api/export/profile?bmc=1")
+    data = json.loads(body)
+    assert code == 200 and data["format"] == "demo" and data["version"] == 2 and len(data["bmc"]) == 6
+    assert "token" not in body.decode().lower() and req(ui, "/api/export/profile", auth=False)[0] == 401
+    assert b'id="expdlg"' in req(ui, "/")[1]

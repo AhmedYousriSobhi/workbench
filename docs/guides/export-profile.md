@@ -10,7 +10,7 @@ instead; `benchctl export profile` writes one that matches what the workbench co
 ./scripts/benchctl export profile                # writes bench-profile.json in the current folder
 ```
 
-Add `--bmc` for one BMC target per node, `--user bob` for another SSH user, `--name lab` for another cluster name,
+The file describes the cluster **running now** (read from Docker): a part or node that is stopped is left out. With nothing running it lists the configured cluster and says so; `--configured` forces that. Add `--bmc` for one BMC target per node, `--user bob` for another SSH user, `--name lab` for another cluster name,
 `-o -` to print instead of write, `--profile std` to export a profile other than the one running. With a workbench built ([choose the workbench](choose-workbench.md)) the file lists exactly its nodes and parts.
 
 Then in the client: **import a profile**, choose `bench-profile.json`. The cluster appears with SSH, Slurm, Grafana,
@@ -21,6 +21,10 @@ Jira and storage already filled in. A file never holds secrets, so set these thr
 | SSH key | `./scripts/benchctl ssh-key install`, then pick `~/.ssh/workbench_ed25519` in the cluster's SSH section |
 | Grafana token | `cat compose/generated/secrets/grafana_viewer_token`, paste it, save (it is new after every `up`) |
 | BMC password (with `--bmc`) | the part after `admin:` in `compose/generated/secrets/bmc_credentials` |
+
+### From the page
+
+Press **⇩ Export** in the top strip, tick *One BMC target per node* if you want it, and **Download**. The page has no Docker access, so it lists the cluster on disk (the workbench last built, else the profile `up` started) instead of probing containers. If the format ID below is not set it says so in one line.
 
 ## What is in the file
 

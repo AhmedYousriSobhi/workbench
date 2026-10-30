@@ -275,6 +275,7 @@
     <span id="conn" role="status"><i></i><span>connecting…</span></span>
     <button class="pillchip" id="scnbtn" aria-haspopup="dialog">▶ Scenarios</button>
     <button class="pillchip" id="planbtn" aria-haspopup="dialog">⚙ Plan</button>
+    <button class="pillchip" id="expbtn" aria-haspopup="dialog">⇩ Export</button>
     <a class="pillchip" id="helplink" href="/help/" aria-label="Help: the manual, guides and command reference">? Help</a>
     <button class="pillchip" id="theme" aria-label="Colour theme: automatic. Press to change.">◐ Auto</button>
   </div>
@@ -353,6 +354,15 @@
     <pre id="audit" tabindex="0" aria-label="Governor log, newest first">–</pre>
     </details>
     </div>
+  </dialog>
+  <dialog id="expdlg" class="sheet" aria-labelledby="exp-h">
+    <div class="sheet-h"><div><h2 id="exp-h">Export the cluster</h2><p class="dim small">A profile file the monitoring client can import: this cluster's SSH, Slurm, Grafana, Jira and storage.</p></div>
+      <button class="btn small" id="exp-close" aria-label="Close the export">✕ Close</button></div>
+    <div class="sheet-b">
+      <div class="toggles"><label class="tog"><input type="checkbox" id="exp-bmc"><span>One BMC target per node</span></label></div>
+      <p class="small dim">The file holds no secrets. After importing it, set the SSH key (<code>benchctl ssh-key install</code>) and the Grafana token (<code>cat compose/generated/secrets/grafana_viewer_token</code>; it changes at every <code>benchctl up</code>).</p>
+    </div>
+    <div class="sheet-f"><p id="exp-msg" role="status" class="small"></p><button class="btn small" id="exp-cancel">Cancel</button><button class="btn" id="exp-go">Download bench-profile.json</button></div>
   </dialog>
   <dialog id="plandlg" class="sheet" aria-labelledby="plan-h">
     <div class="sheet-h"><div><h2 id="plan-h">Plan a workbench</h2><p class="dim small">Pick the size, check that it fits, then apply.</p></div>
@@ -532,6 +542,19 @@ $('scnbtn').onclick = () => $('scndlg').showModal(); $('scn-close').onclick = ()
 $('scndlg').addEventListener('click', e => { if (e.target === $('scndlg')) $('scndlg').close(); });
 $('planbtn').onclick = openPlan; $('plan-close').onclick = $('plan-cancel').onclick = () => $('plandlg').close();
 $('plandlg').addEventListener('click', e => { if (e.target === $('plandlg')) $('plandlg').close(); });  // a click on the dim backdrop closes it
+$('expbtn').onclick = () => { $('exp-msg').textContent = ''; $('expdlg').showModal(); };
+$('exp-close').onclick = $('exp-cancel').onclick = () => $('expdlg').close();
+$('expdlg').addEventListener('click', e => { if (e.target === $('expdlg')) $('expdlg').close(); });
+$('exp-go').onclick = async () => {
+  $('exp-msg').textContent = 'Preparing…';
+  try {
+    const r = await fetch('/api/export/profile' + ($('exp-bmc').checked ? '?bmc=1' : ''));
+    if (!r.ok) { $('exp-msg').textContent = '✗ ' + (await r.json()).detail; return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = 'bench-profile.json';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    $('exp-msg').textContent = '✓ Saved. Import it in the client.';
+  } catch (e) { $('exp-msg').textContent = '✗ Could not reach the page backend.'; }
+};
 let connCache = null;
 async function connections() {
   if (connCache) return connCache;

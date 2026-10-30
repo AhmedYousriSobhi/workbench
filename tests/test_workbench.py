@@ -200,7 +200,7 @@ def test_compose_writes_the_effective_sim_next_to_the_file(cwd):
 def test_export_follows_the_built_workbench(cwd, monkeypatch):
     monkeypatch.setattr(stack, "up", lambda *a, **k: True)
     assert runner.invoke(cli.app, ["up", "--cpu-nodes", "1", "--gpu-nodes", "1", "--with", "bmc", "--without", "jira"]).exit_code == 0
-    r = runner.invoke(cli.app, ["export", "profile", "--format", "demo", "--bmc", "-o", "-"])
+    r = runner.invoke(cli.app, ["export", "profile", "--format", "demo", "--bmc", "--configured", "-o", "-"])
     body = json.loads(r.output)
     assert body["clusters"][0]["jira"] is None and [t["node"] for t in body["bmc"]] == ["cn001", "gpu001"]
 

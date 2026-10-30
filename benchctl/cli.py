@@ -470,22 +470,27 @@ app.add_typer(export_app, name="export")
 
 @export_app.command("profile")
 def export_profile(out: str = typer.Option("bench-profile.json", "-o", "--output", help="file to write, or - for stdout"),
-                   profile: str = typer.Option(None, "--profile", autocompletion=completion.profiles, callback=_profile_check, help="default: the profile `up` last started"),
+                   profile: str = typer.Option(None, "--profile", autocompletion=completion.profiles, callback=_profile_check, help="export this profile instead of the running containers"),
                    name: str = typer.Option("workbench", "--name", help="the cluster's name in the client"),
                    user: str = typer.Option(None, "--user", autocompletion=completion.users, help="SSH user, default the first user in sim.yaml"),
                    bmc: bool = typer.Option(False, "--bmc", help="also list one BMC target per node"),
+                   configured: bool = typer.Option(False, "--configured", help="list what the selection says, not the running containers"),
                    fmt: str = typer.Option(None, "--format", help="client format ID[:VERSION]; else $BENCH_EXPORT_FORMAT "
                                                                  "or .git/export-format")) -> None:
     """Write a profile file the monitoring client can import: SSH, Slurm, Grafana, Jira, storage (no secrets)."""
     from pathlib import Path
 
-    sim = _sim()
-    spec = workbench.current(_base_sim())
-    prof = profile or ("workbench" if spec else stack.current_profile())
+    base = _base_sim()
     try:
-        services = (set(compose.generate(*workbench.effective(_base_sim(), spec))["services"]) | {"grafana"}
-                    if spec and not profile else export.services_for(sim, prof))
-        text = export.to_json(export.build(sim, services, name, bmc, user), export.format_id(fmt))
+        live = None if configured or profile else export.running(base)
+        if live:
+            (sim, services), prof = live, "running containers"
+        else:
+            sim, services, prof = export.configured(base, profile)
+            if not configured and not profile:
+                typer.echo("note: no containers are running, so this lists the configured cluster "
+                           f"({prof}); start it first for the live one", err=True)
+        text = export.to_json(export.build(sim, services, name, bmc, user, live=bool(live)), export.format_id(fmt))
     except export.ExportError as e:
         typer.echo(f"cannot export: {e}", err=True)
         raise typer.Exit(1) from e

@@ -90,3 +90,39 @@ def test_command_without_a_format_refuses_with_the_fix(tmp_path, monkeypatch):
     monkeypatch.setattr(export.format_id, "__defaults__", (None, None, tmp_path / "none"))
     r = runner.invoke(cli.app, ["export", "profile", "--profile", "min", "-o", "-"])
     assert r.exit_code == 1 and "cannot export" in r.output and "--format" in r.output
+
+
+def fake_docker(*services):
+    class R:
+        stdout = "\n".join(services)
+    return lambda cmd: R()
+
+
+def test_running_lists_only_what_docker_reports(tmp_path):
+    none = tmp_path / "none.yaml"
+    assert export.running(SIM, fake_docker(), none) is None
+    sim, services = export.running(SIM, fake_docker("login", "slurmctld", "cn001"), none)
+    assert services == {"login", "slurmctld", "cn001"} and sim["compute"]["count"] == SIM["compute"]["count"]
+
+
+def test_live_profile_leaves_out_stopped_parts_and_nodes(tmp_path):
+    sim, services = export.running(SIM, fake_docker("login", "slurmctld", "cn001", "gpu001"), tmp_path / "none.yaml")
+    body = export.build(sim, services, include_bmc=True, live=True)
+    assert body["clusters"][0]["jira"] is None and body["clusters"][0]["grafana"] is None
+    assert "bmc" not in body  # bmc-farm is not running
+    sim, services = export.running(SIM, fake_docker("login", "bmc-farm", "cn001"), tmp_path / "none.yaml")
+    assert [t["node"] for t in export.build(sim, services, include_bmc=True, live=True)["bmc"]] == ["cn001"]
+
+
+def test_command_follows_the_running_containers_and_falls_back_with_a_note(tmp_path, monkeypatch):
+    monkeypatch.chdir(ROOT)
+    monkeypatch.setattr(export.stack, "_project_services", lambda runner: ["login", "slurmctld"])
+    r = runner.invoke(cli.app, ["export", "profile", "--format", "demo", "-o", "-"])
+    cluster = json.loads(r.stdout)["clusters"][0]
+    assert r.exit_code == 0 and cluster["jira"] is None and cluster["scheduler"]["kind"] == "slurm"
+    monkeypatch.setattr(export.stack, "_project_services", lambda runner: [])
+    monkeypatch.setattr(export.workbench, "SAVED", tmp_path / "none.yaml")
+    r = runner.invoke(cli.app, ["export", "profile", "--format", "demo", "-o", "-"])
+    assert r.exit_code == 0 and "no containers are running" in r.output
+    r = runner.invoke(cli.app, ["export", "profile", "--format", "demo", "--configured", "-o", "-"])
+    assert "no containers" not in r.output

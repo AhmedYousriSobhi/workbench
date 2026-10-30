@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 
-from . import compose, nodes
+from . import compose, nodes, stack, workbench
 
 LOCAL_FORMAT_FILE = Path(".git/export-format")
 BMC_PORT = 8443
@@ -32,9 +32,10 @@ def format_id(flag: str | None = None, env: dict | None = None, local: Path = LO
 
 
 def build(sim: dict, services: set[str], name: str = "workbench", include_bmc: bool = False,
-          user: str | None = None) -> dict:
+          user: str | None = None, live: bool = False) -> dict:
     """The profile for what the workbench contains. `services` are the compose service names that exist, so a part
-    that is not built (no Jira, no Grafana) is left out instead of pointing at nothing."""
+    that is not built (no Jira, no Grafana) is left out instead of pointing at nothing. With `live`, `services` are
+    the running containers, so a BMC target is listed only for a node that is up."""
     users = [u["name"] for u in sim.get("users", [])]
     ssh_user = user or (users[0] if users else "alice")
     if user and users and user not in users:
@@ -61,7 +62,7 @@ def build(sim: dict, services: set[str], name: str = "workbench", include_bmc: b
     out: dict = {"profile": {"name": name}, "clusters": [cluster]}
     if include_bmc and "bmc-farm" in services:
         out["bmc"] = [{"name": f"bmc-{n}", "address": "127.0.0.1", "port": BMC_PORT, "node": n, "username": "admin",
-                       "cluster": 0} for n, _ in nodes.node_names(sim)]
+                       "cluster": 0} for n, _ in nodes.node_names(sim) if not live or n in services]
     return out
 
 
@@ -73,3 +74,24 @@ def to_json(body: dict, fmt: tuple[str, int]) -> str:
 def services_for(sim: dict, profile: str) -> set[str]:
     """Service names the profile generates (what `up` would start), from sim.yaml and the profile alone."""
     return {*compose.generate(sim, compose.load_profile(profile))["services"], "grafana"}  # observability is always on
+
+
+def configured(base: dict, profile: str | None = None, saved=None) -> tuple[dict, set[str], str]:
+    """(sim, services, label) from the selection on disk: the workbench last built, else the profile `up` started.
+    Needs no Docker, so the web page (which has none, SPEC W-3) uses it."""
+    spec = workbench.current(base, saved or workbench.SAVED)
+    sim = workbench.effective(base, spec)[0] if spec else base
+    if spec and not profile:
+        return sim, set(compose.generate(*workbench.effective(base, spec))["services"]) | {"grafana"}, "workbench"
+    prof = profile or stack.current_profile()
+    return sim, services_for(sim, prof), prof
+
+
+def running(base: dict, runner=stack._run, saved=None) -> tuple[dict, set[str]] | None:
+    """(sim, services) from the containers running now, or None when none run. Node counts come from the selection
+    on disk, but only what Docker reports as running is listed."""
+    services = set(stack._project_services(runner))
+    if not services:
+        return None
+    spec = workbench.current(base, saved or workbench.SAVED)
+    return (workbench.effective(base, spec)[0] if spec else base), services

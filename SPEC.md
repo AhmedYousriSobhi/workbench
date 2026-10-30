@@ -92,6 +92,7 @@ Profiles: `min`, `std`, `full`, `jira-real`, `mac-agent` ([architecture section 
 | W-11 | Live feeds (SSE, polling) run only while the page is visible, and animation stops at governor L3 and under reduced motion (ADR 0009). |
 | W-12 | One screen: at 1280 x 800 with six nodes the dashboard needs no page scrolling (traffic diagram and entity list side by side; they stack under 1100 px). Long lists are bounded inside their own panel and filterable, Scenarios, Plan and Governor are sheets opened from the top strip, and a node opens in place of the list so it never covers the traffic diagram. A Connections view gives each part's address, a command to try and the path of its credential (never the secret). |
 | W-13 | Applying a plan from the page goes only through the governor (`apply-plan`: bounded counts and allow-listed parts, no free-form arguments), only at L0-L1 (GV-8), and needs the governor's `--workdir`; otherwise the page says why in one line (ADR 0017). |
+| W-14 | **⇩ Export** in the top strip downloads the client profile file for the cluster on disk (saved selection, else the profile `up` started), read fresh per request; no Docker access (W-3), no secret in the file, one message when the client format ID is not set locally. `benchctl export profile` lists the running containers instead (Docker), and only a node that is up gets a BMC target. |
 
 ## 9. Non-functional requirements
 
