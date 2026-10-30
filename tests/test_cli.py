@@ -193,3 +193,18 @@ def test_start_stop_open_delegate_to_the_launcher(monkeypatch):
     for args in (["start", "--profile", "min"], ["stop"], ["open"]):
         assert runner.invoke(cli.app, args).exit_code == 0
     assert seen == [["start", "--profile", "min"], ["stop"], ["open"]]
+
+
+def test_status_also_says_where_the_cluster_and_web_page_are(monkeypatch, tmp_path):
+    from simctl import inventory
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(inventory, "service_rows", lambda runner=None: [{"name": "login", "state": "running"}])
+    r = runner.invoke(cli.app, ["status", "--socket", str(tmp_path / "none.sock")])
+    assert r.exit_code == 1 and "cluster: 1 containers running" in r.output and "web page: stopped" in r.output
+    (tmp_path / "compose/generated").mkdir(parents=True)
+    (tmp_path / "compose/generated/ui.pid").write_text("1")
+    (tmp_path / "compose/generated/ui.log").write_text("opti-sim UI: http://127.0.0.1:8088/?t=x\n")
+    assert "web page: http://127.0.0.1:8088/?t=x" in runner.invoke(cli.app, ["status", "--socket", "/nope"]).output
+    monkeypatch.setattr(inventory, "service_rows", lambda runner=None: [])
+    assert "cluster: stopped" in runner.invoke(cli.app, ["status", "--socket", "/nope"]).output

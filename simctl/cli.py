@@ -36,11 +36,12 @@ def preflight(profile: str = typer.Option("std", "--profile")) -> None:
 
 @app.command()
 def status(socket: str = checks.GOV_SOCKET) -> None:
-    """Show governor level, signals and recent audit entries."""
+    """Show governor level, signals and recent audit entries, then the cluster and the web page."""
     try:
         st = checks.governor_request({"cmd": "status"}, socket)
     except OSError as e:
         typer.echo(f"governor not reachable at {socket}: {e}")
+        _cluster_and_page()
         raise typer.Exit(1) from e
     gb = (st["mem_available"] or 0) / checks.GB
     typer.echo(f"level L{st['level']}{' (dry-run)' if st['dry_run'] else ''}  [{st.get('mode', 'root')} mode]  "
@@ -50,6 +51,19 @@ def status(socket: str = checks.GOV_SOCKET) -> None:
         typer.echo(f"  SECURITY: {v}")
     for line in st["audit"]:
         typer.echo(f"  {line}")
+    _cluster_and_page()
+
+
+def _cluster_and_page() -> None:
+    """The two lines `benchctl start` users look for: how many containers run, and where the web page is."""
+    from pathlib import Path
+
+    running = [r for r in inventory.service_rows() if r["state"] == "running"]
+    typer.echo(f"cluster: {len(running)} containers running" if running else "cluster: stopped (benchctl start)")
+    log = Path("compose/generated/ui.log")
+    link = next((ln.split("opti-sim UI: ", 1)[1].strip() for ln in reversed(log.read_text().splitlines())
+                 if "opti-sim UI: " in ln), "") if log.is_file() else ""
+    typer.echo(f"web page: {link}" if link and Path("compose/generated/ui.pid").is_file() else "web page: stopped")
 
 
 @app.command("diag")

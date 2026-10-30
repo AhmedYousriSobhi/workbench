@@ -20,7 +20,7 @@ work as aliases.
 | `scale N [--profile P]` | change the compute node count |
 | `scenario list` / `scenario run NAME [--speed N] [--dry-run]` | list scenarios; play one, exit 1 on failure |
 | `ssh-key install\|remove` | put the login key under `~/.ssh` for clients that only read there |
-| `status [--socket S]` | governor level, signals, recent actions |
+| `status [--socket S]` | governor level, signals, recent actions, then whether the cluster and the web page run |
 | `check` | machine check before building (OS, RAM, disk, Docker, ports); exit 1 if not ready |
 | `doctor` | host prerequisites and container safety; exit 1 on any failure |
 | `preflight --profile P` | would this profile fit in free memory now |
