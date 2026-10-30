@@ -106,6 +106,8 @@ commands are not simulated yet (roadmap, issue #69). The dashboard's `/mnt/lustr
 curl -s -X POST 127.0.0.1:8080/sim/failure -d '{"mode":"429","count":3}'     # or 401, 503, slow
 ```
 
+To have tickets to look at, or to watch the client create and move them, see [tickets and their scenarios](jira-tickets.md): `./scripts/benchctl scenario run drain-ticket` drains a node and files, notes and resolves its ticket.
+
 ## 6. Base Command Manager (BCM)
 
 The login node is the head node, with a read-only `cmsh`. In the cluster's **Base Command Manager** section:

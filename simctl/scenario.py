@@ -19,7 +19,9 @@ from . import checks
 from .nodes import node_names
 
 ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "http://127.0.0.1:8000/sim/inject",
-             "bcm-mock": "http://127.0.0.1:8081/sim/inject", "jira": "http://127.0.0.1:8080/sim/failure"}
+             "bcm-mock": "http://127.0.0.1:8081/sim/inject", "jira": "http://127.0.0.1:8080/sim/failure",
+             "jira-tickets": "http://127.0.0.1:8080/sim/tickets"}
+JIRA_ACTIONS = ("create", "transition", "comment", "reset")
 SLURMCTLD = "hpcsim-slurmctld-1"
 LOGIN = "hpcsim-login-1"
 HOST_TARGETS = ("slurm", "ssh")  # steps that need Docker on the host
@@ -108,14 +110,26 @@ def validate(sc: dict, sim: dict) -> list[str]:
         except (KeyError, ScenarioError):
             problems.append(f"step {i}: bad or missing 'at'")
         t = s.get("target")
+        if t == "jira-tickets":  # the endpoint key, not a target: steps say `jira` with `tickets:`
+            problems.append(f"step {i}: unknown target {t!r}")
+            continue
         if t not in ENDPOINTS and t not in HOST_TARGETS and t not in NOT_BUILT:
             problems.append(f"step {i}: unknown target {t!r}")
         do = s.get("do") or {}
         if t == "ssh":
             problems += [f"step {i}: {m}" for m in ssh_problems(do)]
+        if t == "jira" and "tickets" in do:
+            problems += [f"step {i}: {m}" for m in jira_ticket_problems(do["tickets"])]
         names = (do.get("nodes") or []) + (do.get("drain") or []) + (do.get("resume") or [])
         problems += [f"step {i}: unknown node {n!r}" for n in names if n not in nodes]
     return problems
+
+
+def jira_ticket_problems(tk) -> list[str]:
+    if not isinstance(tk, dict) or tk.get("action") not in JIRA_ACTIONS:
+        return [f"jira tickets needs action: one of {', '.join(JIRA_ACTIONS)}"]
+    need = {"create": ("summary",), "transition": ("jql", "to"), "comment": ("jql", "body"), "reset": ()}[tk["action"]]
+    return [f"jira tickets {tk['action']} needs {k}" for k in need if not tk.get(k)]
 
 
 def ssh_problems(do: dict) -> list[str]:
@@ -206,7 +220,10 @@ def execute(step: Step, poster=post, runner=checks.run, host: bool = True) -> Ou
                 if r.returncode:
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip())
         elif step.target == "jira":
-            poster(ENDPOINTS["jira"], step.do.get("failure", {"mode": None}))
+            if "tickets" in step.do:  # {tickets: {action: create|transition|comment|reset, ...}}
+                poster(ENDPOINTS["jira-tickets"], step.do["tickets"])
+            else:
+                poster(ENDPOINTS["jira"], step.do.get("failure", {"mode": None}))
         else:
             for n in step.do.get("nodes", []):
                 poster(ENDPOINTS[step.target], {"node": n, **{k: v for k, v in step.do.items() if k != "nodes"}})
@@ -222,6 +239,15 @@ def node_state(node: str, runner=checks.run) -> str:
     return r.stdout.strip().split("\n")[0] if r.returncode == 0 else ""
 
 
+def jira_search(jql: str) -> list[dict]:
+    url = "http://127.0.0.1:8080/rest/api/2/search?fields=status,summary&jql=" + urllib.parse.quote(jql)
+    try:
+        with urllib.request.urlopen(url, timeout=5) as r:
+            return json.loads(r.read())["issues"]
+    except (OSError, ValueError, KeyError):
+        return []
+
+
 def jira_labels(labels: list[str]) -> bool:
     jql = "labels = " + " AND labels = ".join(labels)
     url = "http://127.0.0.1:8080/rest/api/2/search?jql=" + urllib.parse.quote(jql)
@@ -230,6 +256,12 @@ def jira_labels(labels: list[str]) -> bool:
             return json.loads(r.read())["total"] > 0
     except (OSError, ValueError):
         return False
+
+
+def jira_status(jql: str, status: str, count: int | None = None) -> bool:
+    """Every ticket matching `jql` is in `status` (and, when given, there are exactly `count` of them)."""
+    found = jira_search(jql)
+    return bool(found) and all(i["fields"]["status"]["name"] == status for i in found) and count in (None, len(found))
 
 
 def expectation(exp: dict, runner=checks.run, host: bool = True):
@@ -241,6 +273,10 @@ def expectation(exp: dict, runner=checks.run, host: bool = True):
         return label, lambda: args["state"] in node_state(args["node"], runner), within
     if kind == "jira.issue_created":
         return label, lambda: jira_labels(args["labels"]), within
+    if kind == "jira.issue_status":
+        return label, lambda: jira_status(args["jql"], args["status"], args.get("count")), within
+    if kind == "jira.issue_count":
+        return label, lambda: len(jira_search(args["jql"])) == int(args["count"]), within
     return label, None, within
 
 

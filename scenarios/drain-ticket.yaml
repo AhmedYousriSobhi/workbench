@@ -1,0 +1,12 @@
+name: drain-ticket
+description: A node drains in Slurm and gets a ticket naming the cluster and the node; resuming it resolves the ticket
+steps:
+  - {at: 0s,  target: slurm, do: {drain: [cn003], reason: "scenario: failing disk"}}
+  - {at: 5s,  target: jira,  do: {tickets: {action: create, project: OPS, summary: "cn003 drained: failing disk", labels: [workbench, cn003, node-drain], priority: High, description: "Slurm drained cn003 (reason: failing disk). Opened by the drain-ticket scenario."}}}
+  - {at: 20s, target: jira,  do: {tickets: {action: transition, jql: 'labels = cn003 AND labels = node-drain AND statusCategory != Done', to: In Progress}}}
+  - {at: 35s, target: jira,  do: {tickets: {action: comment, jql: 'labels = cn003 AND labels = node-drain AND statusCategory != Done', body: "Disk replaced; returning the node to service."}}}
+  - {at: 45s, target: slurm, do: {resume: [cn003]}}
+  - {at: 50s, target: jira,  do: {tickets: {action: transition, jql: 'labels = cn003 AND labels = node-drain AND statusCategory != Done', to: Resolved, resolution: Done}}}
+expect:
+  - slurm.node_state: {node: cn003, state: drain, within: 20s}
+  - jira.issue_status: {jql: 'labels = cn003 AND labels = node-drain', status: Resolved, within: 60s}
