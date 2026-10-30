@@ -219,7 +219,7 @@ def test_plan_endpoint_estimates_without_side_effects(ui):
     assert data["command"].startswith("benchctl up --cpu-nodes 2 --gpu-nodes 4") and "--without bmc" in data["command"]
     assert req(ui, "/api/plan?cpu_nodes=999")[0] == 422 and req(ui, "/api/plan?cpu_nodes=x")[0] == 422
     assert req(ui, "/api/plan", auth=False)[0] == 401
-    assert b'id="plan"' in req(ui, "/")[1] and b"loadPlan" in req(ui, "/")[1]
+    assert b'id="plandlg"' in req(ui, "/")[1] and b"loadPlan" in req(ui, "/")[1]
 
 
 def test_connections_endpoint_lists_every_entity_with_credential_paths_only(ui):

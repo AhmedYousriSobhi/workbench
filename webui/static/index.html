@@ -175,6 +175,35 @@
   .trafficpanel { padding:var(--sp5); }
   .node { display:flex; flex-wrap:wrap; align-items:center; gap:0 var(--sp3); } .node header, .node .facts { flex:1 0 100%; } .node details { flex:1 1 auto; margin:0; } .node details[open] { flex:1 0 100%; order:3; } .node .detailbtn { margin:0; }
   .legend span:last-child { display:none; }
+  /* shared highlight cell (#123): quiet when fine, tinted and bold when it needs you; used for nodes and services */
+  .cells { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:var(--sp3); } .cells.small { grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); }
+  .cell { display:flex; flex-direction:column; gap:2px; text-align:left; font:inherit; color:var(--fg); padding:10px 12px; min-height:64px; border:1px solid var(--line); border-radius:10px; background:transparent; }
+  .cell.node { display:flex; flex-direction:column; flex-wrap:nowrap; align-items:stretch; gap:2px; padding:10px 12px; border:1px solid var(--line); background:transparent; }
+  button.cell { cursor:pointer; } button.cell:hover { border-color:var(--accent); }
+  .cell .nm { font-weight:650; font-size:14px; } .cell .st { font-size:12.5px; color:var(--dim); } .cell .mt { font-size:12px; color:var(--dim); font-variant-numeric:tabular-nums; }
+  .cell.ok .st b { color:var(--ok); }
+  .cell.warn { background:color-mix(in srgb,var(--warn) 14%,var(--panel)); border-color:var(--warn); } .cell.fault { background:color-mix(in srgb,var(--bad) 14%,var(--panel)); border-color:var(--bad); }
+  .cell.warn .st, .cell.fault .st { color:var(--fg); font-weight:650; } .cell.down { border-style:dashed; } .cell.down .nm { color:var(--dim); } .cell.unknown { border-style:dotted; }
+  .cell.svc { min-height:0; padding:8px 12px; }
+  .scn { border:1px solid var(--line); border-radius:10px; padding:8px 12px; margin-bottom:var(--sp2); } ul.scns { max-height:min(52vh,460px); padding-right:4px; } .scn p { -webkit-line-clamp:1; }
+  .trafficpanel { padding:var(--sp5) var(--sp5) var(--sp5); } #flow { max-width:680px; margin:var(--sp4) auto; }
+  .legend span:nth-child(2) { display:none; }
+  /* plan sheet (#123): a modal panel on the same page */
+  dialog.sheet { padding:0; border:1px solid var(--line); border-radius:16px; width:min(94vw,560px); max-height:min(92vh,760px); overflow:hidden; box-shadow:0 24px 64px rgba(0,0,0,.35); }
+  dialog.sheet[open] { display:flex; flex-direction:column; } dialog::backdrop { background:rgba(10,14,20,.55); backdrop-filter:blur(2px); }
+  .sheet-h { display:flex; justify-content:space-between; align-items:flex-start; gap:var(--sp3); padding:var(--sp4) var(--sp5); border-bottom:1px solid var(--line); } .sheet-h h2 { font-size:17px; margin:0; } .sheet-h p { margin:2px 0 0; }
+  .sheet-b { padding:var(--sp4) var(--sp5); overflow-y:auto; display:flex; flex-direction:column; gap:var(--sp4); }
+  .sheet-f { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:var(--sp3); padding:var(--sp3) var(--sp5); border-top:1px solid var(--line); } .sheet-f p:empty { display:none; } .sheet-f p { flex:1 1 220px; margin:0; text-align:left; }
+  .steps3 { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--sp3); } .stp { display:flex; flex-direction:column; gap:6px; } .stp label { font-size:13px; font-weight:600; }
+  .stpin { display:flex; align-items:center; border:1px solid var(--line); border-radius:10px; overflow:hidden; } .stpin .btn { border:0; border-radius:0; min-width:40px; background:transparent; color:var(--fg); font-size:18px; }
+  .stpin input { width:100%; min-width:0; border:0; text-align:center; font:600 18px/1 inherit; background:transparent; color:var(--fg); min-height:44px; -moz-appearance:textfield; } .stpin input::-webkit-outer-spin-button, .stpin input::-webkit-inner-spin-button { -webkit-appearance:none; }
+  fieldset.planparts { border:0; padding:0; margin:0; } .toggles { display:flex; flex-wrap:wrap; gap:var(--sp2); }
+  .tog { position:relative; } .tog input { position:absolute; opacity:0; inset:0; cursor:pointer; } .tog span { display:inline-flex; align-items:center; gap:4px; min-height:40px; padding:0 14px; border:1px solid var(--line); border-radius:999px; font-size:14px; }
+  .tog input:checked + span { background:color-mix(in srgb,var(--accent) 14%,var(--panel)); border-color:var(--accent); font-weight:650; } .tog input:checked + span::before { content:'✓'; } .tog input:focus-visible + span { outline:2px solid var(--accent); outline-offset:2px; }
+  .fit { padding:var(--sp4); border:1px solid var(--line); border-radius:12px; } .fitnum b { font-size:26px; font-variant-numeric:tabular-nums; } #pl-bar { width:100%; height:10px; margin:var(--sp2) 0; } .fit p { margin:2px 0; }
+  .cmdbox summary { cursor:pointer; min-height:36px; display:flex; align-items:center; color:var(--accent); } .cmdbox pre { margin:var(--sp2) 0; }
+  @media (max-width:640px) { dialog.sheet { width:100vw; max-width:100vw; margin:auto 0 0; border-radius:16px 16px 0 0; max-height:92vh; } .steps3 { gap:var(--sp2); } }
+  .cells { grid-template-columns:repeat(auto-fill,minmax(118px,1fr)); } .cells.small { grid-template-columns:repeat(auto-fill,minmax(112px,1fr)); } .cell { min-height:60px; padding:8px 10px; }
 </style>
 </head>
 <body>
@@ -194,6 +223,7 @@
     <span class="pillchip" id="c-nodes">Nodes …</span>
     <button class="pillchip" id="c-run" hidden></button>
     <span id="conn" role="status"><i></i><span>connecting…</span></span>
+    <button class="pillchip" id="planbtn" aria-haspopup="dialog">⚙ Plan</button>
     <a class="pillchip" id="helplink" href="/help/" aria-label="Help: the manual, guides and command reference">? Help</a>
     <button class="pillchip" id="theme" aria-label="Colour theme: automatic. Press to change.">◐ Auto</button>
   </div>
@@ -215,11 +245,10 @@
   <div class="tabs" role="tablist" aria-label="Dashboard sections">
     <button role="tab" id="tb-nodes" aria-controls="tab-nodes" aria-selected="true">Nodes</button>
     <button role="tab" id="tb-conn" aria-controls="tab-conn" aria-selected="false" tabindex="-1">Connections</button>
-    <button role="tab" id="tb-plan" aria-controls="tab-plan" aria-selected="false" tabindex="-1">Plan</button>
   </div>
   <div id="tab-nodes" role="tabpanel" aria-labelledby="tb-nodes">
   <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/benchctl start</code>.</div>
-  <div id="svcpanel" class="svcline"><span class="dim small">Services</span><div id="services" class="chips"></div></div>
+  <div id="svcpanel"><h2 class="grouphead" style="margin-top:0">Services</h2><div id="services" class="cells small"></div></div>
   <div class="nodeswrap">
   <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 id="traffic-h" style="margin:0">Traffic</h2>
     <button class="btn small" id="flowpause" aria-pressed="false">Pause animation</button></div>
@@ -231,8 +260,8 @@
   <div class="nodesmain">
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <div id="nodegroups">
-    <h2 class="grouphead">Compute nodes</h2><div id="nodes-compute" class="nodes"></div>
-  <h2 class="grouphead">GPU nodes</h2><div id="nodes-gpu" class="nodes"></div>
+    <h2 class="grouphead">Compute nodes</h2><div id="nodes-compute" class="cells"></div>
+  <h2 class="grouphead">GPU nodes</h2><div id="nodes-gpu" class="cells"></div>
   <p class="dim small">Drain in Slurm and Kubernetes node faults are not available here: the page has no Docker access by design, and Kubernetes is not built yet. Use <code>./scripts/benchctl scenario run node-down</code> for Slurm.</p>
   </div>
   </div></div>
@@ -242,25 +271,28 @@
       <p class="dim small">Addresses are on this machine only (127.0.0.1). Credentials are never shown here: the last column is the file that holds them. A node's own address is in its details.</p>
       <div class="tablewrap"><table class="conn"><thead><tr><th>Part</th><th>Address</th><th>Try it</th><th>Credential</th></tr></thead><tbody id="conn-rows"><tr><td colspan="4" class="skel">Loading…</td></tr></tbody></table></div></div>
   </div>
-  <div id="tab-plan" role="tabpanel" aria-labelledby="tb-plan" hidden>
-  <div class="panel" id="planpanel"><details id="plan" open><summary><h2 style="display:inline;margin:0">Plan a workbench (estimate only)</h2></summary>
-    <p class="notice"><b>Editing the numbers changes nothing until you press Apply.</b> Apply asks the governor (the only part with Docker access) to rebuild the workbench to this plan: new nodes start, nodes you no longer want are removed. It works only while memory is calm (L0-L1). Or copy the command and run it in a terminal.</p>
-    <p class="dim small">Choose how many nodes and which parts, and see the memory it needs against what is free. This page cannot start containers (no Docker access by design); it shows the command.</p>
-    <div class="planform">
-      <label>CPU nodes <input type="number" id="pl-cpu" min="0" max="64" value="4"></label>
-      <label>GPU nodes <input type="number" id="pl-gpu" min="0" max="16" value="2"></label>
-      <label>GPUs per node <input type="number" id="pl-gpus" min="1" max="8" value="8"></label>
-    </div>
-    <fieldset class="planparts"><legend class="small dim">Parts (Slurm, login node, Prometheus and Grafana are always on)</legend>
-      <label><input type="checkbox" value="jira" checked> Jira</label> <label><input type="checkbox" value="bmc" checked> BMC</label>
-      <label><input type="checkbox" value="bcm" checked> BCM</label> <label><input type="checkbox" value="scenarios" checked> Scenarios</label>
-      <label><input type="checkbox" value="accounting"> Accounting</label> <label><input type="checkbox" value="load"> Load</label></fieldset>
-    <progress id="pl-bar" max="100" value="0" aria-label="Memory needed as a share of free memory"></progress>
-    <p id="pl-msg" role="status" class="small"></p><pre id="pl-cmd" class="small"></pre><div class="row" style="margin-top:8px"><button class="btn small" id="pl-copy" hidden>Copy command</button><button class="btn" id="pl-apply" hidden>Apply to the running workbench</button></div><p id="pl-apply-msg" role="status" class="small" style="margin-bottom:0"></p></details></div>
-  </div>
-  <dialog id="nodedlg" aria-labelledby="nodetitle"><h2 id="nodetitle"></h2><h3 class="rh" style="margin:0 0 4px;font-size:14px">Connect</h3><dl class="kv" id="nodeconn"></dl><h3 class="rh" style="margin:12px 0 4px;font-size:14px">Status</h3><pre id="nodetext"></pre>
+  <dialog id="nodedlg" aria-labelledby="nodetitle"><h2 id="nodetitle"></h2><h3 class="rh" style="margin:0 0 4px;font-size:14px">Connect</h3><dl class="kv" id="nodeconn"></dl><h3 class="rh" style="margin:12px 0 4px;font-size:14px">Fault actions</h3><div class="actions" id="nodeacts"></div><p id="nodeactmsg" role="status" class="small dim"></p><h3 class="rh" style="margin:12px 0 4px;font-size:14px">Status</h3><pre id="nodetext"></pre>
     <p class="dim small">Same text as <code>benchctl describe node NAME</code>, without the Docker and Slurm lines (this page has no Docker access by design).</p>
     <form method="dialog"><button class="btn">Close</button></form></dialog>
+  <dialog id="plandlg" class="sheet" aria-labelledby="plan-h">
+    <div class="sheet-h"><div><h2 id="plan-h">Plan a workbench</h2><p class="dim small">Pick the size, check that it fits, then apply.</p></div>
+      <button class="btn small" id="plan-close" aria-label="Close the plan">✕ Close</button></div>
+    <div class="sheet-b">
+      <div class="steps3">
+        <div class="stp"><label for="pl-cpu">CPU nodes</label><div class="stpin"><button type="button" class="btn small" data-step="pl-cpu" data-d="-1" aria-label="Fewer CPU nodes">−</button><input type="number" id="pl-cpu" min="0" max="64" value="4"><button type="button" class="btn small" data-step="pl-cpu" data-d="1" aria-label="More CPU nodes">+</button></div><span class="small dim" id="pl-now-cpu"></span></div>
+        <div class="stp"><label for="pl-gpu">GPU nodes</label><div class="stpin"><button type="button" class="btn small" data-step="pl-gpu" data-d="-1" aria-label="Fewer GPU nodes">−</button><input type="number" id="pl-gpu" min="0" max="16" value="2"><button type="button" class="btn small" data-step="pl-gpu" data-d="1" aria-label="More GPU nodes">+</button></div><span class="small dim" id="pl-now-gpu"></span></div>
+        <div class="stp"><label for="pl-gpus">GPUs per node</label><div class="stpin"><button type="button" class="btn small" data-step="pl-gpus" data-d="-1" aria-label="Fewer GPUs per node">−</button><input type="number" id="pl-gpus" min="1" max="8" value="8"><button type="button" class="btn small" data-step="pl-gpus" data-d="1" aria-label="More GPUs per node">+</button></div><span class="small dim" id="pl-now-gpus"></span></div>
+      </div>
+      <fieldset class="planparts"><legend class="small dim">Optional parts</legend>
+        <div class="toggles"><label class="tog"><input type="checkbox" value="jira" checked><span>Jira</span></label><label class="tog"><input type="checkbox" value="bmc" checked><span>BMC</span></label><label class="tog"><input type="checkbox" value="bcm" checked><span>BCM</span></label><label class="tog"><input type="checkbox" value="scenarios" checked><span>Scenarios</span></label><label class="tog"><input type="checkbox" value="accounting"><span>Accounting</span></label><label class="tog"><input type="checkbox" value="load"><span>Load</span></label></div>
+        <p class="small dim" style="margin:8px 0 0">Slurm, the login node, Prometheus and Grafana are always on.</p></fieldset>
+      <section class="fit" aria-label="Does it fit"><div class="fitnum"><b id="pl-need">–</b><span class="dim small" id="pl-free"></span></div>
+        <progress id="pl-bar" max="100" value="0" aria-label="Memory needed as a share of free memory"></progress>
+        <p id="pl-msg" role="status" class="small"></p><p id="pl-diff" class="small"></p></section>
+      <details class="cmdbox"><summary class="small">Command for a terminal</summary><pre id="pl-cmd" class="small"></pre><button class="btn small" id="pl-copy" hidden>Copy command</button></details>
+    </div>
+    <div class="sheet-f"><p id="pl-apply-msg" role="status" class="small"></p><button class="btn small" id="plan-cancel">Cancel</button><button class="btn" id="pl-apply" hidden>Apply to the running workbench</button></div>
+  </dialog>
 </main>
 <aside class="rail right" aria-label="Operate">
   <div class="panel"><h2 class="rh">Needs attention</h2><ul class="attn" id="attn"><li class="skel">Checking…</li></ul></div>
@@ -361,17 +393,11 @@ es.onmessage = e => render(JSON.parse(e.data));
 es.onerror = () => { $('conn').className = ''; $('conn').lastElementChild.textContent = 'reconnecting…'; };
 
 const STATE_ICON = { ok: '✓', warn: '▲', fault: '✗', down: '⏻', unknown: '?' };
-const openNodes = new Set();
 let clusterTimer, lastCluster = '', flashTimer;
-function node(n, actions) {
-  const dd = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
-  const buttons = actions.filter(a => !a.gpu_only || n.kind === 'gpu').map(a =>
-    `<button class="btn" data-node="${esc(n.name)}" data-action="${a.id}">${esc(a.label)}</button>`).join('');
-  return `<article class="node ${n.state}" aria-label="${esc(n.name)}: ${esc(n.label)}">
-    <header><h3>${esc(n.name)}</h3><span class="pill ${n.state}"><span aria-hidden="true">${STATE_ICON[n.state]}</span> ${esc(n.label)}</span></header>
-    <p class="facts">${[n.power ?? '–', n.temp == null ? null : n.temp.toFixed(0) + ' °C', n.fans_failed ? n.fans_failed + ' fan(s) failed' : null, n.bcm ? 'BCM ' + n.bcm : null, n.gpus ? n.gpus + ' GPUs' : null].filter(Boolean).join(' · ')}</p>
-    <details data-node="${esc(n.name)}" ${openNodes.has(n.name) ? 'open' : ''}><summary>Fault actions</summary><div class="actions">${buttons}</div></details>
-    <button class="btn detailbtn" data-node="${esc(n.name)}">Details</button></article>`;
+function node(n) {
+  const meta = [n.temp == null ? null : n.temp.toFixed(0) + ' °C', n.gpus ? n.gpus + ' GPUs' : null, n.fans_failed ? n.fans_failed + ' fan(s) failed' : null].filter(Boolean).join(' · ') || (n.power ?? '–');
+  return `<button class="cell node ${n.state}" data-node="${esc(n.name)}" aria-label="${esc(n.name)}: ${esc(n.label)}. Open details and fault actions">
+    <span class="nm">${esc(n.name)}</span><span class="st"><b aria-hidden="true">${STATE_ICON[n.state]}</b> ${esc(n.label)}</span><span class="mt">${esc(meta)}</span></button>`;
 }
 function renderCluster(c) {
   paintHealth(c);
@@ -380,14 +406,12 @@ function renderCluster(c) {
   $('stackdown').hidden = stackUp;
   for (const id of ['svcpanel', 'nodegroups']) $(id).hidden = !stackUp;  // one message when down, not five
   $('services').innerHTML = Object.entries(c.services).map(([k, up]) =>
-    `<span class="chip ${up ? 'up' : 'down'}"><b aria-hidden="true">${up ? '✓' : '✗'}</b> ${esc(k)} <span class="dim">${up ? 'answering' : 'not answering'}</span></span>`).join('');
+    `<span class="cell svc ${up ? 'ok' : 'fault'}"><span class="nm">${esc(k)}</span><span class="st"><b aria-hidden="true">${up ? '✓' : '✗'}</b> ${up ? 'answering' : 'not answering'}</span></span>`).join('');
   for (const kind of ['compute', 'gpu']) {
     const rows = c.nodes.filter(n => n.kind === kind);
-    $('nodes-' + kind).innerHTML = rows.length ? rows.map(n => node(n, c.actions)).join('') : '<p class="dim">None in this profile.</p>';
+    $('nodes-' + kind).innerHTML = rows.length ? rows.map(n => node(n)).join('') : '<p class="dim">None in this profile.</p>';
   }
-  document.querySelectorAll('.node details').forEach(d => d.ontoggle = () => { d.open ? openNodes.add(d.dataset.node) : openNodes.delete(d.dataset.node); });
-  document.querySelectorAll('.detailbtn').forEach(b => b.onclick = () => showNode(b.dataset.node));
-  document.querySelectorAll('.actions .btn').forEach(b => b.onclick = () => nodeAction(b.dataset.node, b.dataset.action, b.textContent));
+  document.querySelectorAll('.node').forEach(b => b.onclick = () => showNode(b.dataset.node));
 }
 async function loadCluster() {
   clearTimeout(clusterTimer);
@@ -405,16 +429,33 @@ async function loadPlan() {
   const parts = [...document.querySelectorAll('.planparts input:checked')].map(i => i.value).join(',');
   const q = new URLSearchParams({ cpu_nodes: $('pl-cpu').value, gpu_nodes: $('pl-gpu').value, gpus_per_node: $('pl-gpus').value, parts });
   const r = await fetch('/api/plan?' + q);
-  if (!r.ok) { $('pl-msg').textContent = (await r.json()).detail; $('pl-cmd').textContent = ''; $('pl-bar').value = 0; return; }
+  if (!r.ok) { $('pl-msg').textContent = '✗ ' + (await r.json()).detail; $('pl-cmd').textContent = ''; $('pl-bar').value = 0; $('pl-need').textContent = '–'; $('pl-free').textContent = ''; $('pl-apply').hidden = true; return; }
   const p = await r.json();
   $('pl-bar').value = Math.min(100, Math.round(100 * p.total_mb / Math.max(p.available_mb, 1)));
   $('pl-msg').textContent = (p.fits ? '✓ ' : '✗ ') + p.message;
+  $('pl-need').textContent = (p.total_mb / 1024).toFixed(1) + ' GB needed'; $('pl-free').textContent = ` of ${(p.available_mb / 1024).toFixed(1)} GB free`;
+  const c = currentSize(), d = (name, a, b) => a === b ? `${name} ${b} (no change)` : `${name} ${a} → ${b} (${b > a ? '+' : ''}${b - a})`;
+  $('pl-diff').textContent = c.cpu + c.gpu ? d('CPU nodes', c.cpu, +$('pl-cpu').value) + ' · ' + d('GPU nodes', c.gpu, +$('pl-gpu').value) : '';
   $('pl-cmd').textContent = p.fits ? p.command : 'Does not fit. Change the selection, or free memory.';
   $('pl-copy').hidden = !p.fits; $('pl-apply').hidden = !p.fits; planQuery = q.toString();
   $('pl-copy').onclick = async () => { try { await navigator.clipboard.writeText(p.command); $('pl-copy').textContent = 'Copied'; } catch (e) { $('pl-copy').textContent = 'Select and copy'; } setTimeout(() => { $('pl-copy').textContent = 'Copy command'; }, 1500); };
 }
-document.querySelectorAll('#plan input').forEach(i => i.oninput = i.onchange = () => { clearTimeout(planTimer); planTimer = setTimeout(loadPlan, 250); });
-$('plan').ontoggle = () => { if ($('plan').open) loadPlan(); };
+document.querySelectorAll('#plandlg input').forEach(i => i.oninput = i.onchange = () => planInputs());
+let armed = 0;
+function planInputs() { clearTimeout(planTimer); planTimer = setTimeout(loadPlan, 250); armed = 0; $('pl-apply').textContent = 'Apply to the running workbench'; }
+document.querySelectorAll('[data-step]').forEach(b => b.onclick = () => { const i = $(b.dataset.step); i.value = Math.min(+i.max, Math.max(+i.min, (+i.value || 0) + +b.dataset.d)); planInputs(); });
+function currentSize() {
+  const nodes = nodeList(), g = nodes.find(n => n.kind === 'gpu');
+  return { cpu: nodes.filter(n => n.kind === 'compute').length, gpu: nodes.filter(n => n.kind === 'gpu').length, gpus: g ? g.gpus : null };
+}
+function openPlan() {
+  const c = currentSize();
+  if (c.cpu + c.gpu) { $('pl-cpu').value = c.cpu; $('pl-gpu').value = c.gpu; if (c.gpus) $('pl-gpus').value = c.gpus; }
+  $('pl-now-cpu').textContent = c.cpu + c.gpu ? `now ${c.cpu}` : ''; $('pl-now-gpu').textContent = c.cpu + c.gpu ? `now ${c.gpu}` : ''; $('pl-now-gpus').textContent = c.gpus ? `now ${c.gpus}` : '';
+  $('pl-apply-msg').textContent = ''; armed = 0; $('plandlg').showModal(); loadPlan();
+}
+$('planbtn').onclick = openPlan; $('plan-close').onclick = $('plan-cancel').onclick = () => $('plandlg').close();
+$('plandlg').addEventListener('click', e => { if (e.target === $('plandlg')) $('plandlg').close(); });  // a click on the dim backdrop closes it
 let connCache = null;
 async function connections() {
   if (connCache) return connCache;
@@ -429,9 +470,13 @@ async function paintConnections() {
   document.querySelectorAll('.copy').forEach(b => b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Copied'; } catch (e) { b.textContent = 'Select and copy'; } setTimeout(() => { b.textContent = 'Copy'; }, 1500); });
 }
 $('pl-apply').onclick = async () => {
-  const cur = lastCluster ? JSON.parse(lastCluster).nodes : [], cpu = +$('pl-cpu').value, gpu = +$('pl-gpu').value;
-  const have = { compute: cur.filter(n => n.kind === 'compute').length, gpu: cur.filter(n => n.kind === 'gpu').length };
-  if (!confirm(`Rebuild the workbench to ${cpu} CPU and ${gpu} GPU nodes (now ${have.compute} and ${have.gpu})?\nNodes you no longer want are removed.`)) return;
+  if (!armed) {  // first press asks; the second one (within 8 s) applies
+    armed = Date.now(); $('pl-apply').textContent = 'Confirm: rebuild now';
+    $('pl-apply-msg').textContent = 'Nodes you no longer want are removed. Press again to apply.';
+    setTimeout(() => { if (armed && Date.now() - armed >= 8000) { armed = 0; $('pl-apply').textContent = 'Apply to the running workbench'; $('pl-apply-msg').textContent = ''; } }, 8100);
+    return;
+  }
+  armed = 0; $('pl-apply').textContent = 'Apply to the running workbench';
   const before = new Set(lastLog.filter(l => l.includes('apply-plan')));
   $('pl-apply').disabled = true; $('pl-apply-msg').textContent = 'Asking the governor…';
   const r = await fetch('/api/plan/apply?' + planQuery, { method: 'POST', headers: H });
@@ -448,7 +493,13 @@ $('pl-apply').onclick = async () => {
     } else { lastCluster = ''; loadCluster(); }
   }, 4000);
 };
+function paintNodeActions(name) {
+  const c = JSON.parse(lastCluster || '{"nodes":[],"actions":[]}'), n = c.nodes.find(x => x.name === name);
+  $('nodeacts').innerHTML = n ? c.actions.filter(a => !a.gpu_only || n.kind === 'gpu').map(a => `<button class="btn" data-node="${esc(name)}" data-action="${a.id}">${esc(a.label)}</button>`).join('') : '';
+  document.querySelectorAll('#nodeacts .btn').forEach(b => b.onclick = () => nodeAction(b.dataset.node, b.dataset.action, b.textContent));
+}
 async function showNode(name) {
+  paintNodeActions(name); $('nodeactmsg').textContent = '';
   const r = await fetch(`/api/nodes/${name}`);
   $('nodetitle').textContent = name;
   const cx = (await connections()).find(e => e.id === 'nodes'), kv = [];
@@ -461,10 +512,11 @@ async function showNode(name) {
 }
 async function nodeAction(name, action, label) {
   const r = await fetch(`/api/nodes/${name}/${action}`, { method: 'POST', headers: H });
-  if (!r.ok) { toast(`${label} on ${name} was refused: ${(await r.json()).detail}`); return; }
+  if (!r.ok) { const m = `${label} on ${name} was refused: ${(await r.json()).detail}`; toast(m); $('nodeactmsg').textContent = m; return; }
   const res = (await r.json()).results;
   const bad = res.filter(x => x.status === 'failed');
-  toast(bad.length ? `${label} on ${name}: ${bad.length} step(s) failed — is the stack running?` : `${label} on ${name}: done`);
+  const msg = bad.length ? `${label} on ${name}: ${bad.length} step(s) failed — is the stack running?` : `${label} on ${name}: done`;
+  toast(msg); $('nodeactmsg').textContent = msg;
   lastCluster = ''; loadCluster();
 }
 
@@ -669,13 +721,12 @@ async function poll() {
   if (s.running) pollTimer = setTimeout(poll, 1000);
 }
 // tabs: the live traffic feed runs only while its tab and the page are visible
-const TABS = ['nodes', 'conn', 'plan'];
+const TABS = ['nodes', 'conn'];
 function selectTab(t, focus) {
   TABS.forEach(k => { const on = k === t; $('tab-' + k).hidden = !on; $('tb-' + k).setAttribute('aria-selected', on); $('tb-' + k).tabIndex = on ? 0 : -1; });
   if (focus) $('tb-' + t).focus();
   if (t === 'nodes' && !document.hidden) openFlow(); else closeFlow();
   if (t === 'conn') paintConnections();
-  if (t === 'plan') loadPlan();
   try { sessionStorage.setItem('workbench-tab', t); } catch (e) { /* not remembered */ }
 }
 TABS.forEach((k, i) => {
