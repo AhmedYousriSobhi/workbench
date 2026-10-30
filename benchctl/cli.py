@@ -432,6 +432,22 @@ def get_scenarios(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by:
     _get(inventory.scenario_rows, output, selector, sort_by, False, 2.0)
 
 
+set_app = typer.Typer(cls=SuggestingGroup, help="Change one thing on the running cluster")
+app.add_typer(set_app, name="set")
+
+
+@set_app.command("node")
+def set_node(node: str = TARGET, state: str = typer.Argument(..., help="down (Slurm marks it not responding) or resume")) -> None:
+    """Tell Slurm a node is down or back: `benchctl set node cn001 down`. What the page's Power off/on does after the BMC."""
+    if state not in ("down", "resume"):
+        typer.echo("state must be down or resume", err=True)
+        raise typer.Exit(1)
+    o = scenario.execute(scenario.Step(0, "slurm", {state: [node], "reason": "workbench power off"}), host=True,
+                         runner=lambda c: stack._run(c))
+    typer.echo(f"{node}: {state}" if o.status == "ok" else f"cannot set {node}: {o.detail}", err=o.status != "ok")
+    raise typer.Exit(0 if o.status == "ok" else 1)
+
+
 @app.command("exec", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def exec_cmd(ctx: typer.Context, node: str = TARGET,
              user: str = typer.Option(None, "-u", "--user", autocompletion=completion.users, help="run as this simulated user, e.g. alice")) -> None:

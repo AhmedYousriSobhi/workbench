@@ -2,6 +2,7 @@
 import json
 import logging
 import os
+import re
 import socketserver
 import threading
 from collections.abc import Callable
@@ -9,7 +10,7 @@ from pathlib import Path
 
 log = logging.getLogger("governor.control")
 
-ALLOWED = {"status", "scale", "freeze", "thaw", "stop", "start", "set-profile", "admit", "apply-plan"}
+ALLOWED = {"status", "scale", "freeze", "thaw", "stop", "start", "set-profile", "admit", "apply-plan", "node-state"}
 MAX_REQUEST = 4096
 TARGETED = {"freeze", "thaw", "stop", "start"}  # require a known group name
 
@@ -29,6 +30,9 @@ def plan_error(req: dict) -> str | None:
     if not (isinstance(parts, list) and all(isinstance(p, str) and p in PLAN_PARTS for p in parts)):
         return f"apply-plan parts must be a list of: {', '.join(sorted(PLAN_PARTS))}"
     return None
+
+
+NODE_RE = re.compile(r"[a-z]{2,8}[0-9]{3}")  # sim.yaml node names: cn001, gpu002
 
 
 def dispatch(line: bytes, handle: Handler, groups: Callable[[], set[str]]) -> dict:
@@ -52,6 +56,9 @@ def dispatch(line: bytes, handle: Handler, groups: Callable[[], set[str]]) -> di
             return {"ok": False, "error": "set-profile needs profile:str"}
         if cmd == "apply-plan" and (err := plan_error(req)):
             return {"ok": False, "error": err}
+        if cmd == "node-state" and not (isinstance(req.get("node"), str) and NODE_RE.fullmatch(req["node"])
+                                        and req.get("state") in ("down", "resume")):
+            return {"ok": False, "error": "node-state needs node:NAME (cn001) and state: down|resume"}
         if cmd == "admit" and not (isinstance(req.get("budget_mb"), int) and req["budget_mb"] >= 0):
             return {"ok": False, "error": "admit needs budget_mb:int>=0"}
         return handle(cmd, req)

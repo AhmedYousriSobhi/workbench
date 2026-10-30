@@ -8,6 +8,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 
 | Verb | Does |
 |---|---|
+| `set node NAME down|resume` | tell Slurm a node is down or back (the page's Power off/on does it through the governor) |
 | `start [--profile P | --with PART ...]` | machine check, venv, governor (as you), cluster, web page; default profile `min` |
 | `stop` | stop the web page, the cluster and your own governor |
 | `open` | print the login link, open a browser if there is a display |

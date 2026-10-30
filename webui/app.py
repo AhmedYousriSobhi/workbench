@@ -36,6 +36,9 @@ COOKIE = "workbench_ui"
 DOCS = Path(__file__).resolve().parent.parent / "docs"
 
 
+SLURM_STATE = {"power-off": "down", "power-on": "resume", "clear": "resume"}  # page action -> scontrol state
+
+
 def governor_status(socket: str) -> dict:
     """The governor's status, or an {"ok": False, "error": ...} the page shows as 'not reachable'."""
     try:
@@ -235,11 +238,26 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
                         headers={"Content-Disposition": 'attachment; filename="bench-profile.json"', "X-Profile": label,
                                  "X-Warning": " ".join(export.warnings(services))})
 
+    def slurm_state(node: str, state: str) -> dict:
+        """Slurm is told through the governor (the page has no Docker, W-3); a refusal is reported, never fatal."""
+        try:
+            res = checks.governor_request({"cmd": "node-state", "node": node, "state": state}, socket)
+        except (OSError, ValueError):
+            return {"target": "slurm", "status": "skipped", "detail": "the governor is not reachable"}
+        if not res.get("ok"):
+            return {"target": "slurm", "status": "skipped", "detail": res.get("error", "refused")}
+        if res.get("dry_run"):
+            return {"target": "slurm", "status": "skipped", "detail": "the governor is in dry-run mode or has no --workdir"}
+        return {"target": "slurm", "status": "ok", "detail": f"asked Slurm to set {node} {state}"}
+
     async def node_action(request: Request):
         try:
             results = await asyncio.to_thread(cluster.act, request.path_params["node"], request.path_params["action"])
         except ActionError as e:
             raise HTTPException(422, str(e)) from e
+        state = SLURM_STATE.get(request.path_params["action"])
+        if state and any(r["status"] == "ok" for r in results):  # the BMC changed; Slurm only knows through the governor
+            results.append(await asyncio.to_thread(slurm_state, request.path_params["node"], state))
         for r in results:
             if r["status"] == "ok":
                 flow.note(r["target"], f"{request.path_params['action']} on {request.path_params['node']}", [request.path_params["node"]])

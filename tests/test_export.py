@@ -147,3 +147,11 @@ def test_start_passes_parts_to_the_launcher_and_refuses_a_mix(monkeypatch):
     assert seen[-1] == ("start", "--with", "accounting", "--without", "jira")
     assert runner.invoke(cli.app, ["start"]).exit_code == 0 and seen[-1] == ("start", "--profile", "min")
     assert runner.invoke(cli.app, ["start", "--profile", "std", "--with", "load"]).exit_code == 1
+
+
+def test_set_node_marks_a_node_down_or_back_through_scontrol(monkeypatch):
+    ran = []
+    monkeypatch.setattr(cli.stack, "_run", lambda cmd: ran.append(cmd) or type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})())
+    r = runner.invoke(cli.app, ["set", "node", "cn001", "down"])
+    assert r.exit_code == 0 and "state=down" in ran[-1] and "nodename=cn001" in ran[-1]
+    assert runner.invoke(cli.app, ["set", "node", "cn001", "sideways"]).exit_code == 1

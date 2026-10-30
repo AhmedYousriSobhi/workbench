@@ -48,7 +48,7 @@ Normative requirements for workbench. [README.md](README.md) gives the overview 
 
 ## 4a. Component interfaces (summary)
 
-- Governor control socket: `/run/workbench/gov.sock`, JSON requests, a fixed allow-list of commands (status, scale, freeze, thaw, stop, start, set-profile). Unknown commands MUST be rejected.
+- Governor control socket: `/run/workbench/gov.sock`, JSON requests, a fixed allow-list of commands (status, scale, freeze, thaw, stop, start, set-profile, admit, apply-plan, node-state: a node name and `down` or `resume`, so the page can tell Slurm about a power-off, W-4). Unknown commands MUST be rejected.
 - bmc-farm: Redfish under `/redfish/v1/...` per endpoint (TLS :8443, ADR 0012; plain `/<node>/redfish/v1` on :8000); control API `POST /sim/inject`.
 - Scenario file: YAML, see [architecture section 7](docs/architecture/06-ux-and-scenarios.md).
 

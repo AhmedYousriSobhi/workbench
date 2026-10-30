@@ -142,3 +142,7 @@ profile `up` started); tick *One BMC target per node* to include the BMC farm. T
 successful download the sheet lists what to set by hand: the SSH key (`benchctl ssh-key install`), the Grafana token
 (`compose/generated/secrets/grafana_viewer_token`), the BMC password if asked for, and that Jira needs no token. It also
 warns when Slurm accounting is missing (`sacct` would fail). See [export a profile](../guides/export-profile.md).
+
+**Power off and Slurm.** Power off sets the BMC and BCM state and also asks the governor to mark the node `down` in Slurm,
+so `sinfo` shows it down; Power on and Clear faults resume it. This needs the governor started with `--workdir` (the
+launcher does) and level L0-L1; otherwise the page says Slurm was not told and names `benchctl set node NAME down`.
