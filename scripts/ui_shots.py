@@ -79,8 +79,19 @@ def capture(out: Path) -> dict:
                     result["shots"].append(str(cpath))
                     if page.locator("#conn-rows tr").count() < 8:
                         result["a11y"].append("connections tab lists fewer than 8 parts")
-                    page.click("#tb-traffic")
+                    page.click("#tb-nodes")  # traffic sits beside the nodes: clients, services and node tiles in one diagram
                     page.wait_for_selector("#flow rect.blk")
+                    if page.locator("#flow .nd").count() < 1 or page.locator("#flow text:has-text('Monitoring app')").count() != 1:
+                        result["a11y"].append("traffic diagram is missing the node tiles or the clients")
+                    page.evaluate("""onFlow({level: 0, cursor: 9, events: [{from: 'clients', to: 'bmc-farm', n: 3, label: 'requests', nodes: []},
+                        {from: 'clients', to: 'jira-mock', n: 2, label: 'requests', nodes: []}, {from: 'injector', to: 'bmc-farm', n: 1, label: 'x', nodes: ['cn002']}],
+                        totals: {'bmc-farm': 3, 'bcm-mock': 0, 'jira-mock': 2, 'gpu-exporter': 0}, reachable: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'gpu-exporter': true}})""")
+                    page.wait_for_timeout(450)  # packets in flight
+                    if not page.evaluate("flowPaused || reduced.matches") and page.locator("#dots .pk").count() < 1:
+                        result["a11y"].append("traffic animation drew no packets for synthetic events")
+                    tpath = out / f"traffic-{vp}-{scheme}.png"
+                    page.locator("#trafficpanel").screenshot(path=str(tpath))
+                    result["shots"].append(str(tpath))
                     if vp == "desktop" and page.evaluate("getComputedStyle(document.querySelector('.rail.right')).position") != "sticky":
                         result["a11y"].append("right rail must stay in view (sticky) on desktop")
                     page.click("#tb-plan")

@@ -120,6 +120,14 @@
   .legend { display:flex; flex-wrap:wrap; gap:4px 18px; margin:4px 0 0; }
   .btn.small { min-height:36px; padding:0 12px; font-weight:500; background:var(--panel); color:var(--fg); border:1px solid var(--line); }
   .rail.right { position:sticky; top:72px; max-height:calc(100vh - 88px); overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; }
+  .nodeswrap { display:flex; flex-direction:column; gap:var(--sp4); } .nodesmain { min-width:0; order:2; } .trafficpanel { order:1; margin:0; }
+  @media (min-width:1700px) { .nodeswrap { display:grid; grid-template-columns:minmax(0,1fr) 400px; align-items:start; } .nodesmain { order:1; } .trafficpanel { order:2; position:sticky; top:72px; } }
+  #flow .frame { fill:color-mix(in srgb,var(--panel) 70%,var(--bg)); stroke:var(--line); stroke-width:1.5; } #flow .ftitle { font:700 11px system-ui,sans-serif; fill:var(--dim); letter-spacing:.05em; text-transform:uppercase; }
+  #flow .chipbg { fill:var(--panel); stroke:var(--line); stroke-width:1.2; } #flow .lane { fill:none; stroke:var(--line); stroke-width:1.5; } #flow .lane.on { stroke:var(--accent); stroke-width:2.5; opacity:.85; } #flow .lane.inj { stroke-dasharray:2 5; }
+  #flow .nd { fill:var(--panel); stroke:var(--line); stroke-width:1.5; } #flow .nd.ok { stroke:var(--ok); } #flow .nd.warn { stroke:var(--warn); stroke-width:2.2; } #flow .nd.fault { stroke:var(--bad); stroke-width:3; } #flow .nd.down { stroke:var(--pending); stroke-dasharray:3 3; } #flow .nd.unknown { stroke:var(--line); stroke-dasharray:1 3; }
+  #flow .ndt { font:600 8.5px system-ui,sans-serif; fill:var(--fg); } #flow .ring { fill:none; stroke:var(--warn); stroke-width:2.5; animation:ring 1.1s ease-out forwards; transform-box:fill-box; transform-origin:center; }
+  @keyframes ring { from { opacity:1; transform:scale(1); } to { opacity:0; transform:scale(2.2); } }
+  #flow .pk { fill:var(--accent); stroke:var(--panel); stroke-width:1.2; } #flow .pkt { fill:var(--accent); opacity:.25; }
   .tabs { display:flex; gap:var(--sp2); border-bottom:1px solid var(--line); margin:0 0 var(--sp4); overflow-x:auto; }
   .tabs button { font:inherit; font-weight:600; background:none; color:var(--dim); border:0; border-bottom:3px solid transparent; min-height:44px; padding:0 var(--sp4); cursor:pointer; white-space:nowrap; }
   .tabs button:hover { color:var(--fg); } .tabs button[aria-selected=true] { color:var(--fg); border-bottom-color:var(--accent); }
@@ -180,7 +188,6 @@
 <main id="main" tabindex="-1" aria-label="Cluster components">
   <div class="tabs" role="tablist" aria-label="Dashboard sections">
     <button role="tab" id="tb-nodes" aria-controls="tab-nodes" aria-selected="true">Nodes</button>
-    <button role="tab" id="tb-traffic" aria-controls="tab-traffic" aria-selected="false" tabindex="-1">Traffic</button>
     <button role="tab" id="tb-conn" aria-controls="tab-conn" aria-selected="false" tabindex="-1">Connections</button>
     <button role="tab" id="tb-plan" aria-controls="tab-plan" aria-selected="false" tabindex="-1">Plan</button>
   </div>
@@ -191,20 +198,22 @@
     <div class="tile"><h2>Nodes</h2><div class="big" id="t-nodes-v">–</div><div class="sub" id="t-nodes-s">checking…</div></div>
   </div>
   <div class="panel" id="svcpanel"><h2>Services</h2><div id="services" class="chips"></div></div>
+  <div class="nodeswrap">
+  <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 id="traffic-h" style="margin:0">Traffic</h2>
+    <button class="btn small" id="flowpause" aria-pressed="false">Pause animation</button></div>
+    <svg id="flow" viewBox="0 0 420 270" role="img" aria-label="Traffic from clients and from injected faults to the mock services and the nodes of the cluster"></svg>
+    <p class="legend small dim"><span><b style="color:var(--accent)" aria-hidden="true">●</b> round dot: a request from a client (the app, Prometheus, curl)</span>
+      <span><b style="color:var(--warn)" aria-hidden="true">◆</b> diamond: a fault from a scenario or a button, travelling to the node it hits</span>
+      <span>Node tiles: ✓ healthy · ▲ warning · ✗ fault · ⏻ off · ? unknown</span></p>
+    <p id="flowstate" class="dim small" role="status" style="margin-bottom:0"></p></section>
+  <div class="nodesmain">
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <div id="nodegroups">
     <h2 class="grouphead">Compute nodes</h2><div id="nodes-compute" class="nodes"></div>
   <h2 class="grouphead">GPU nodes</h2><div id="nodes-gpu" class="nodes"></div>
   <p class="dim small">Drain in Slurm and Kubernetes node faults are not available here: the page has no Docker access by design, and Kubernetes is not built yet. Use <code>./scripts/benchctl scenario run node-down</code> for Slurm.</p>
   </div>
-  </div>
-  <div id="tab-traffic" role="tabpanel" aria-labelledby="tb-traffic" hidden>
-  <div class="panel"><div class="row"><h2 style="margin:0">Traffic</h2>
-    <button class="btn small" id="flowpause" aria-pressed="false">Pause animation</button></div>
-    <svg id="flow" viewBox="0 0 360 330" role="img" aria-label="Traffic from clients and from injected faults to the four mock services"></svg>
-    <p class="legend small dim"><span><b style="color:var(--accent)" aria-hidden="true">●</b> round dot: requests from clients (the app, Prometheus, curl)</span>
-      <span><b style="color:var(--warn)" aria-hidden="true">◆</b> diamond: a fault applied by a scenario or a button</span></p>
-    <p id="flowstate" class="dim small" role="status" style="margin-bottom:0"></p></div>
+  </div></div>
   </div>
   <div id="tab-conn" role="tabpanel" aria-labelledby="tb-conn" hidden>
     <div class="panel"><h2>How to reach each part</h2>
@@ -347,6 +356,7 @@ function node(n, actions) {
 }
 function renderCluster(c) {
   paintHealth(c);
+  if ($('flow').firstChild) paintTiles();
   const stackUp = Object.values(c.services).some(Boolean);
   $('stackdown').hidden = stackUp;
   for (const id of ['tiles', 'svcpanel', 'nodegroups']) $(id).hidden = !stackUp;  // one message when down, not five
@@ -439,41 +449,71 @@ async function nodeAction(name, action, label) {
   lastCluster = ''; loadCluster();
 }
 
-// ---- traffic dots (#74): real request counters from the mocks plus injected faults, over SSE ----
+// ---- traffic (#74, #118): real request counters from the mocks plus injected faults, over SSE, drawn with the nodes in the cluster ----
 const SVGNS = 'http:' + '//www.w3.org/2000/svg';  // an XML namespace name, not a fetch; split so the no-external-URL test stays strict
-const BLOCKS = { clients: { x: 6, y: 50, w: 132, h: 80, t: 'Clients', s: 'app · Prometheus' },
-  injector: { x: 6, y: 190, w: 132, h: 80, t: 'Fault injector', s: 'scenarios · buttons' },
-  'bmc-farm': { x: 222, y: 10, w: 132, h: 64 }, 'bcm-mock': { x: 222, y: 90, w: 132, h: 64 },
-  'jira-mock': { x: 222, y: 170, w: 132, h: 64 }, 'gpu-exporter': { x: 222, y: 250, w: 132, h: 64 } };
+const SERVICES = [['bmc-farm', 'BMC farm', 'Redfish'], ['bcm-mock', 'BCM mock', 'CMDaemon'], ['jira-mock', 'Jira mock', 'tickets'], ['gpu-exporter', 'GPU exporter', 'DCGM metrics']];
+const FW = 420, G = { clients: { x: 4, y: 4, w: 104, h: 180 }, injector: { x: 4, y: 192, w: 104, h: 70 }, cluster: { x: 128, y: 4, w: 288 } };
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-let flowEs = null, flowPaused = false, flowCursor = 0, dots = [], raf = 0, recent = [], flowSnap = null, flowLevel = 0;
+let flowEs = null, flowPaused = false, flowCursor = 0, dots = [], raf = 0, recent = [], flowSnap = null, flowLevel = 0, flowNodes = '', tiles = {}, svcPos = {};
 function sv(tag, attrs, text) { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; }
+const curve = (a, b) => { const dx = (b.x - a.x) * 0.5; return [a, { x: a.x + dx, y: a.y }, { x: b.x - dx, y: b.y }, b]; };
+const at = ([p0, p1, p2, p3], t) => { const u = 1 - t, f = (c) => u ** 3 * p0[c] + 3 * u * u * t * p1[c] + 3 * u * t * t * p2[c] + t ** 3 * p3[c]; return { x: f('x'), y: f('y') }; };
+const dpath = ([p0, p1, p2, p3]) => `M${p0.x} ${p0.y} C${p1.x} ${p1.y} ${p2.x} ${p2.y} ${p3.x} ${p3.y}`;
+function nodeList() { try { return lastCluster ? JSON.parse(lastCluster).nodes : []; } catch (e) { return []; } }
 function buildFlow() {
-  const g = $('flow'); g.innerHTML = '';
-  for (const src of ['clients', 'injector']) for (const dst of Object.keys(BLOCKS).slice(2)) {
-    const a = BLOCKS[src], b = BLOCKS[dst]; g.append(sv('line', { x1: a.x + a.w, y1: a.y + a.h / 2, x2: b.x, y2: b.y + b.h / 2 }));
+  const g = $('flow'), nodes = nodeList(); g.innerHTML = ''; tiles = {}; svcPos = {};
+  flowNodes = nodes.map(n => n.name).join(',');
+  const COLS = 3, TW = 36, TH = 26, GAP = 4, nx = 276, groups = ['compute', 'gpu'].map(k => [k, nodes.filter(n => n.kind === k)]).filter(([, r]) => r.length);
+  let y = 62; const layout = [];
+  for (const [k, rows] of groups) { layout.push(['label', k, y]); y += 14; rows.forEach((n, i) => layout.push(['node', n, nx + (i % COLS) * (TW + GAP), y + Math.floor(i / COLS) * (TH + GAP)])); y += Math.ceil(rows.length / COLS) * (TH + GAP) + 8; }
+  const H = Math.max(270, y + 8); g.setAttribute('viewBox', `0 0 ${FW} ${H}`); G.cluster.h = H - 8;
+  // frames
+  const fr = (b, rx) => sv('rect', { class: 'frame', x: b.x, y: b.y, width: b.w, height: b.h, rx });
+  g.append(fr(G.clients, 10), fr(G.injector, 10), fr(G.cluster, 12));
+  g.append(sv('text', { class: 'ftitle', x: 12, y: 20 }, 'Clients'), sv('text', { class: 'ftitle', x: 12, y: 208 }, 'Faults'), sv('text', { class: 'ftitle', x: 140, y: 20 }, 'Cluster'));
+  g.append(sv('text', { class: 'sub', id: 'fc-clients', x: 12, y: 176, 'font-size': 10 }, ''), sv('text', { class: 'sub', id: 'fc-injector', x: 12, y: 256, 'font-size': 10 }, ''));
+  // the clients, drawn as small labelled devices inside their frame
+  ['Monitoring app', 'Prometheus', 'curl · scripts'].forEach((t, i) => {
+    g.append(sv('rect', { class: 'chipbg', x: 12, y: 30 + i * 44, width: 88, height: 36, rx: 7 }), sv('text', { class: 'ndt', x: 20, y: 52 + i * 44, 'font-size': 10 }, '▭ ' + t));
+  });
+  g.append(sv('text', { class: 'sub', x: 12, y: 223 }, '◆ scenarios'), sv('text', { class: 'sub', x: 12, y: 237 }, '◆ buttons'));
+  // services and lanes
+  const clientsOut = { x: G.clients.x + G.clients.w, y: G.clients.y + G.clients.h / 2 }, injOut = { x: G.injector.x + G.injector.w, y: G.injector.y + G.injector.h / 2 };
+  const lanes = sv('g', {}); g.append(lanes);
+  SERVICES.forEach(([k, label, sub], i) => {
+    const p = { x: 140, y: 30 + i * 58, w: 120, h: 50 }; svcPos[k] = p;
+    lanes.append(sv('path', { class: 'lane', id: 'ln-' + k, d: dpath(curve(clientsOut, { x: p.x, y: p.y + p.h / 2 })) }), sv('path', { class: 'lane inj', d: dpath(curve(injOut, { x: p.x, y: p.y + p.h / 2 + 6 })) }));
+    g.append(sv('rect', { class: 'blk', id: 'fb-' + k, x: p.x, y: p.y, width: p.w, height: p.h, rx: 8 }), sv('text', { x: p.x + 8, y: p.y + 17 }, label), sv('text', { class: 'sub', id: 'fs-' + k, x: p.x + 8, y: p.y + 31 }, ''), sv('text', { class: 'sub', id: 'fc-' + k, x: p.x + 8, y: p.y + 43 }, sub));
+  });
+  // the nodes, inside the cluster
+  for (const item of layout) {
+    if (item[0] === 'label') { g.append(sv('text', { class: 'ftitle', x: nx, y: item[2] + 6 }, item[1] === 'gpu' ? 'GPU nodes' : 'Compute nodes')); continue; }
+    const [, n, x, ty] = item, glyph = STATE_ICON[n.state] || '?';
+    const tg = sv('g', { id: 'nd-' + n.name }); tg.append(sv('title', {}, `${n.name}: ${n.label}`), sv('rect', { class: 'nd ' + n.state, x, y: ty, width: TW, height: TH, rx: 5 }),
+      sv('text', { class: 'ndt', x: x + 3, y: ty + 11 }, n.name), sv('text', { class: 'ndt', x: x + 3, y: ty + 22 }, glyph));
+    g.append(tg); tiles[n.name] = { x, y: ty, w: TW, h: TH, g: tg };
   }
-  for (const [k, b] of Object.entries(BLOCKS)) {
-    g.append(sv('rect', { class: 'blk', id: 'fb-' + k, x: b.x, y: b.y, width: b.w, height: b.h, rx: 8 }));
-    g.append(sv('text', { x: b.x + 8, y: b.y + 22 }, b.t || k));
-    g.append(sv('text', { class: 'sub', id: 'fs-' + k, x: b.x + 8, y: b.y + 40 }, b.s || ''));
-    g.append(sv('text', { class: 'sub', id: 'fc-' + k, x: b.x + 8, y: b.y + 55 }, ''));
-  }
-  g.append(sv('g', { id: 'dots' }));
+  g.append(sv('g', { id: 'dots' })); paintBlocks();
+}
+function paintTiles() {  // node states change without a rebuild; a different node list does rebuild
+  const nodes = nodeList(), sig = nodes.map(n => n.name).join(',');
+  if (sig !== flowNodes) { buildFlow(); return; }
+  for (const n of nodes) { const t = tiles[n.name]; if (t) { t.g.firstChild.textContent = `${n.name}: ${n.label}`; t.g.children[1].setAttribute('class', 'nd ' + n.state); t.g.children[3].textContent = STATE_ICON[n.state] || '?'; } }
 }
 function paintBlocks() {
-  if (!flowSnap) return;
+  if (!flowSnap || !svcPos['bmc-farm']) return;
   const rate = {}, cut = Date.now() - 60000;
   recent = recent.filter(r => r.t > cut); recent.forEach(r => { rate[r.to] = (rate[r.to] || 0) + r.n; });
-  let sent = 0;
-  for (const k of Object.keys(BLOCKS).slice(2)) {
-    const up = flowSnap.reachable[k], allOff = !Object.values(flowSnap.reachable).some(Boolean); sent += flowSnap.totals[k] || 0;
+  let sent = 0; const allOff = !Object.values(flowSnap.reachable).some(Boolean);
+  for (const [k] of SERVICES) {
+    const up = flowSnap.reachable[k]; sent += flowSnap.totals[k] || 0;
     $('fb-' + k).setAttribute('class', 'blk ' + (up ? 'up' : allOff ? 'off' : 'down'));  // everything off = stack not running: stay calm, not red
     $('fs-' + k).textContent = up ? '✓ up · ' + (rate[k] || 0) + ' req/min' : allOff ? '– offline' : '✗ not reachable';
+    $('ln-' + k).setAttribute('class', 'lane' + (rate[k] ? ' on' : ''));
     $('fc-' + k).textContent = (flowSnap.totals[k] || 0).toLocaleString() + ((flowSnap.totals[k] || 0) === 1 ? ' request seen' : ' requests seen');
   }
   $('fc-clients').textContent = sent.toLocaleString() + ' requests sent';
-  $('fc-injector').textContent = (flowSnap.faults || 0) + ' faults applied';
+  $('fc-injector').textContent = (flowSnap.faults || 0) + (flowSnap.faults === 1 ? ' fault applied' : ' faults applied');
 }
 function flowNote() {
   const why = flowPaused ? 'Animation paused by you.' : reduced.matches ? 'Animation off: your system asks for reduced motion; counts still update.'
@@ -482,21 +522,27 @@ function flowNote() {
 }
 function animating() { return !flowPaused && !reduced.matches && flowLevel < 3 && !document.hidden; }
 function launch(ev) {
-  const a = BLOCKS[ev.from], b = BLOCKS[ev.to];
-  for (let i = 0; i < Math.min(ev.n, 5) && dots.length < 60; i++) {
-    const el = ev.from === 'injector' ? sv('rect', { class: 'dotf', width: 9, height: 9, transform: 'rotate(45)' }) : sv('circle', { class: 'dotc', r: 4.5 });
-    $('dots').append(el);
-    dots.push({ el, diamond: ev.from === 'injector', x1: a.x + a.w, y1: a.y + a.h / 2, x2: b.x, y2: b.y + b.h / 2, t0: performance.now() + i * 130, dur: 1100 });
+  if (!svcPos[ev.to]) return;
+  const sp = svcPos[ev.to], fault = ev.from === 'injector', origin = fault ? { x: G.injector.x + G.injector.w, y: G.injector.y + G.injector.h / 2 } : { x: G.clients.x + G.clients.w, y: G.clients.y + G.clients.h / 2 };
+  const targets = fault && ev.nodes?.some(n => tiles[n]) ? ev.nodes.filter(n => tiles[n]).map(n => ({ pt: { x: tiles[n].x, y: tiles[n].y + tiles[n].h / 2 }, node: n })) : [{ pt: { x: sp.x, y: sp.y + sp.h / 2 + (fault ? 6 : 0) }, node: null }];
+  for (const t of targets) for (let i = 0; i < Math.min(ev.n, 5) && dots.length < 60; i++) {
+    const el = fault ? sv('rect', { class: 'pk', width: 9, height: 9, rx: 1 }) : sv('circle', { class: 'pk', r: 4.5 }), trail = sv('circle', { class: 'pkt', r: 3 });
+    $('dots').append(trail, el);
+    dots.push({ el, trail, fault, bez: curve(origin, t.pt), node: t.node, svc: ev.to, t0: performance.now() + i * 130, dur: fault ? 1500 : 1000 });
   }
   if (!raf) raf = requestAnimationFrame(step);
+}
+function hit(d) {
+  const t = d.node && tiles[d.node]; if (!t) return;
+  const r = sv('rect', { class: 'ring', x: t.x, y: t.y, width: t.w, height: t.h, rx: 5 }); t.g.append(r); setTimeout(() => r.remove(), 1200);
 }
 function step(now) {
   dots = dots.filter(d => {
     const p = (now - d.t0) / d.dur;
-    if (p >= 1) { d.el.remove(); return false; }
-    const q = Math.max(p, 0), x = d.x1 + (d.x2 - d.x1) * q, y = d.y1 + (d.y2 - d.y1) * q;
-    d.el.setAttribute('visibility', p < 0 ? 'hidden' : 'visible');
-    if (d.diamond) d.el.setAttribute('transform', `translate(${x} ${y}) rotate(45) translate(-4.5 -4.5)`); else { d.el.setAttribute('cx', x); d.el.setAttribute('cy', y); }
+    if (p >= 1) { d.el.remove(); d.trail.remove(); if (d.fault) hit(d); return false; }
+    const q = Math.max(p, 0), pt = at(d.bez, q), tr = at(d.bez, Math.max(q - 0.07, 0)), vis = p < 0 ? 'hidden' : 'visible';
+    d.el.setAttribute('visibility', vis); d.trail.setAttribute('visibility', vis); d.trail.setAttribute('cx', tr.x); d.trail.setAttribute('cy', tr.y);
+    if (d.fault) { d.el.setAttribute('transform', `translate(${pt.x} ${pt.y}) rotate(45) translate(-4.5 -4.5)`); } else { d.el.setAttribute('cx', pt.x); d.el.setAttribute('cy', pt.y); }
     return true;
   });
   raf = dots.length ? requestAnimationFrame(step) : 0;
@@ -514,7 +560,7 @@ function openFlow() {
   flowEs = new EventSource('/api/flow?after=' + (flowCursor || ''));
   flowEs.onmessage = e => onFlow(JSON.parse(e.data));
 }
-function closeFlow() { if (flowEs) flowEs.close(); flowEs = null; flowCursor = 0; dots.forEach(d => d.el.remove()); dots = []; }
+function closeFlow() { if (flowEs) flowEs.close(); flowEs = null; flowCursor = 0; dots.forEach(d => { d.el.remove(); d.trail.remove(); }); dots = []; }
 $('flowpause').onclick = () => { flowPaused = !flowPaused; $('flowpause').setAttribute('aria-pressed', flowPaused); $('flowpause').textContent = flowPaused ? 'Resume animation' : 'Pause animation'; flowNote(); };
 
 // scenario chip in the status strip, so a running scenario is visible on every page
@@ -604,11 +650,11 @@ async function poll() {
   if (s.running) pollTimer = setTimeout(poll, 1000);
 }
 // tabs: the live traffic feed runs only while its tab and the page are visible
-const TABS = ['nodes', 'traffic', 'conn', 'plan'];
+const TABS = ['nodes', 'conn', 'plan'];
 function selectTab(t, focus) {
   TABS.forEach(k => { const on = k === t; $('tab-' + k).hidden = !on; $('tb-' + k).setAttribute('aria-selected', on); $('tb-' + k).tabIndex = on ? 0 : -1; });
   if (focus) $('tb-' + t).focus();
-  if (t === 'traffic' && !document.hidden) openFlow(); else closeFlow();
+  if (t === 'nodes' && !document.hidden) openFlow(); else closeFlow();
   if (t === 'conn') paintConnections();
   if (t === 'plan') loadPlan();
   try { sessionStorage.setItem('workbench-tab', t); } catch (e) { /* not remembered */ }
@@ -622,7 +668,7 @@ loadCluster(); runChip(); loadScenarios(); poll();
 let savedTab = 'nodes'; try { savedTab = sessionStorage.getItem('workbench-tab') || 'nodes'; } catch (e) { /* default */ }
 selectTab(TABS.includes(savedTab) ? savedTab : 'nodes');
 // the live feed is only worth its CPU while the page is visible
-document.addEventListener('visibilitychange', () => { if (document.hidden || $('tab-traffic').hidden) closeFlow(); else openFlow(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden || $('tab-nodes').hidden) closeFlow(); else openFlow(); });
 </script>
 </body>
 </html>

@@ -31,16 +31,16 @@ class Flow:
         self.polled = float("-inf")
         self.lock = threading.Lock()
 
-    def _add(self, src: str, dst: str, n: int, label: str) -> None:
+    def _add(self, src: str, dst: str, n: int, label: str, nodes: list[str] | None = None) -> None:
         self.seq += 1
-        self.events.append({"id": self.seq, "from": src, "to": dst, "n": n, "label": label})
+        self.events.append({"id": self.seq, "from": src, "to": dst, "n": n, "label": label, "nodes": nodes or []})
 
-    def note(self, target: str, label: str) -> None:
-        """A scenario step or UI fault action was applied to `target` (a scenario target name)."""
+    def note(self, target: str, label: str, nodes: list[str] | None = None) -> None:
+        """A scenario step or UI fault action was applied to `target` (a scenario target name), to these nodes if any."""
         dst = SCENARIO_TARGETS.get(target)
         if dst:
             with self.lock:
-                self._add("injector", dst, 1, label)
+                self._add("injector", dst, 1, label, [n for n in nodes or [] if isinstance(n, str)][:8])
 
     def poll(self) -> None:
         """Read every mock's request counter; a rise becomes events. Rate-limited, so many tabs cost one pass."""

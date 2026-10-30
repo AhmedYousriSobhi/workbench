@@ -116,7 +116,7 @@ def test_first_poll_only_baselines_then_a_rise_becomes_an_event():
     fm.counts["jira-mock"] = 43
     f.poll()
     snap = f.since(0)
-    assert snap["events"] == [{"id": 1, "from": "clients", "to": "jira-mock", "n": 3, "label": "requests"}]
+    assert snap["events"] == [{"id": 1, "from": "clients", "to": "jira-mock", "n": 3, "label": "requests", "nodes": []}]
     assert snap["totals"]["jira-mock"] == 3 and snap["cursor"] == 1 and all(snap["reachable"].values())
     assert f.since(1)["events"] == []  # a client that has seen id 1 gets nothing new
 
@@ -238,3 +238,11 @@ def test_scenario_steps_and_fault_buttons_become_injector_events(tmp_path, monke
         time.sleep(0.02)
     got = [(e["from"], e["to"]) for e in f.since(0)["events"]]
     assert got == [("injector", "bmc-farm")]  # the skipped slurm step draws nothing
+
+
+def test_fault_events_carry_the_node_names_they_hit():
+    f = make_flow(FakeMocks())
+    f.note("bmc-farm", "power-off on cn002", ["cn002", 7])
+    f.note("jira", "outage")
+    ev = f.since(0)["events"]
+    assert ev[0]["nodes"] == ["cn002"] and ev[1]["nodes"] == []

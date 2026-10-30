@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-10-29. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**78% built** (35 done, 21 in review, 11 partial, 5 to do, 72 items).
+**78% built** (35 done, 22 in review, 11 partial, 5 to do, 73 items).
 
 ## Roadmap
 
@@ -16,7 +16,7 @@ flowchart LR
     p4["People and chaos<br/>0%"]:::partial
     p5["Kubernetes<br/>50%"]:::partial
     p6["Fidelity VM<br/>0%"]:::partial
-    p7["Web UI and profiles<br/>70%"]:::partial
+    p7["Web UI and profiles<br/>73%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
     p0 --> p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7 --> p8
     classDef done fill:#1a7f37,stroke:#1a7f37,color:#fff
@@ -194,7 +194,7 @@ _One real Ubuntu VM with Redfish power control._
 
 0/1 done
 
-### Web UI and profiles (70%)
+### Web UI and profiles (73%)
 
 _One click from cold start to a busy cluster._
 
@@ -208,10 +208,11 @@ _One click from cold start to a busy cluster._
 | App shell and layout | 🔍 In review | One dashboard page: cluster components in the middle (service chips, traffic dots, node cards), governor in the left panel, needs-attention, scenarios and log in the right panel; panels stack on small screens. A status strip on top (governor level, memory, services, nodes, running scenario, theme), a calm palette with a soft level banner and area sparklines, light/dark/auto theme, skip link and landmarks, 4 px spacing scale. Based on dashboard and navigation guidance from Splunk, Zuora, Grafana and SaaS UX guides (issue 46). | `webui/static/index.html` | #91 |
 | Dashboard tabs and connection details | 🔍 In review | Main column has Nodes, Traffic, Connections and Plan tabs; the right rail stays in view and scrolls on its own; scenarios are a compact, filterable list with one speed control. Connections tab lists every part with address, a copyable command and the credential file path (never the secret); node details show the SSH, BMC and IP hints; `benchctl describe node` prints the container IP (issue 115). | `webui/connections.py`, `webui/static/index.html`, `benchctl/describe.py` | #116 |
 | Apply a plan from the page | 🔍 In review | Plan tab Apply button: POST /api/plan/apply asks the governor (apply-plan: bounded ints and known parts only) to run `benchctl up --cpu-nodes ...`; stack.up removes unwanted nodes and recreates slurmctld. Refused above L1 or without --workdir. tests/real/test_apply_real.py shrinks then grows a live stack (issue 117). | `governor/control.py`, `governor/core.py`, `webui/app.py`, `benchctl/stack.py`, `docs/adr/0017-apply-a-plan-through-the-governor.md` | #119 |
+| Traffic beside the nodes | 🔍 In review | The traffic diagram moved from its own tab to the Nodes tab (beside the nodes on wide screens, above them otherwise). It draws clients, the fault injector and the cluster with every node as a state tile; client dots curve to the services, fault diamonds travel to the node they hit (events now carry node names) and flash a ring. ui_shots checks it in light/dark, desktop/phone (issue 118). | `webui/static/index.html`, `webui/flow.py`, `scripts/ui_shots.py` | #120 |
 | Animated workload dots | 🔍 In review | Cluster tab Traffic panel: a dot travels from Clients to a mock each time it serves a real request (the mocks count them at /sim/stats; health checks, /sim calls and the UI's own polls are excluded), a diamond from Fault injector when a fault is applied. SSE at /api/flow opened only while the tab shows; pause button; stops at governor L3+ and for reduced motion. Slurm job dots are not drawn (the UI cannot read the scheduler). ADR 0009. | `webui/flow.py`, `components/*/ (GET /sim/stats)`, `webui/static/index.html` | #89 |
 | Budget manager | ⬜ To do | Profile/budget form (W-7). | - | - |
 
-1/10 done
+1/11 done
 
 ### macOS agent and CI (0%)
 

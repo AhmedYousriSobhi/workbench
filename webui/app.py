@@ -78,7 +78,7 @@ class Runs:
             row = self.state["steps"][done[0]]
             row.update(status=outcome.status, detail=outcome.detail)
             if self.flow and outcome.status == "ok":
-                self.flow.note(step.target, outcome.label)
+                self.flow.note(step.target, outcome.label, step.do.get("nodes") or step.do.get("drain") or step.do.get("resume"))
             done[0] += 1
 
         def on_expect(outcome) -> None:
@@ -223,7 +223,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             raise HTTPException(422, str(e)) from e
         for r in results:
             if r["status"] == "ok":
-                flow.note(r["target"], f"{request.path_params['action']} on {request.path_params['node']}")
+                flow.note(r["target"], f"{request.path_params['action']} on {request.path_params['node']}", [request.path_params["node"]])
         return JSONResponse({"results": results})
 
     async def list_scenarios(request: Request):
