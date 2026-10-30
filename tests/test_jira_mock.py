@@ -94,6 +94,9 @@ def test_jql_subset(server):
     assert q('project = OPS AND status = "In Progress"') == ["OPS-2"]
     assert q("labels = gpu") == ["OPS-1"]
     assert q("status in (Open, Closed) AND project != INFRA") == ["OPS-1"]
+    assert sorted(q("watcher = currentUser()")) == ["INFRA-1", "OPS-1", "OPS-2"]  # the reporter is a watcher
+    assert q("watcher = nobody") == []
+    assert q('updated >= "2000/01/01 00:00"') != [] and q('updated >= "2999/01/01 00:00"') == []  # slashes, as a client writes them
     code, body, _ = call(base, "/rest/api/2/search?jql=" + quote("nosuchfield = x"))
     assert code == 400 and "JQL" in body["errorMessages"][0]
 
@@ -291,3 +294,19 @@ def test_workflow_route_finds_the_shortest_path():
     assert jira.route("Closed", "Resolved") == [("51", []), ("31", ["resolution"])]
     assert jira.route("Open", "Open") == []
     assert jira.duration_seconds("1w 2d") == 144000 + 57600 and jira.duration_seconds("1x") == 0
+
+
+def test_forms_get_field_screens_and_resolution_by_id(server):
+    """A client draws its Resolve and Edit forms from these (#109): schema and allowed values, and a resolution sent as an id."""
+    base, *_ = server
+    new(base)
+    moves = call(base, "/rest/api/2/issue/OPS-1/transitions?expand=transitions.fields")[1]["transitions"]
+    res = next(t for t in moves if t["name"] == "Resolve")["fields"]["resolution"]
+    assert res["required"] and res["schema"]["type"] == "resolution" and {"id": "10000", "name": "Done"} in res["allowedValues"]
+    meta = call(base, "/rest/api/2/issue/OPS-1/editmeta")[1]["fields"]
+    assert set(meta) == {"summary", "priority", "labels", "description"} and meta["priority"]["allowedValues"][0]["name"] == "Highest"
+    assert call(base, "/rest/api/2/issue/NOPE-1/editmeta")[0] == 404
+    code, _, _ = call(base, "/rest/api/2/issue/OPS-1/transitions", {"transition": {"id": "31"}, "fields": {"resolution": {"id": "10001"}}})
+    assert code == 204 and call(base, "/rest/api/2/issue/OPS-1")[1]["fields"]["resolution"] == {"name": "Won't Do"}
+    call(base, "/rest/api/2/issue/OPS-1", {"fields": {"priority": {"id": "1"}}}, method="PUT")
+    assert call(base, "/rest/api/2/issue/OPS-1")[1]["fields"]["priority"]["name"] == "Highest"
