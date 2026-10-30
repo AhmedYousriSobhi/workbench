@@ -1,117 +1,83 @@
-<p align="center"><img src="docs/assets/logo.svg" alt="opti-sim logo" width="96"></p>
+<p align="center"><img src="docs/assets/logo.svg" alt="workbench logo: servers linked in a W on a bench" width="110"></p>
 
 # opti-sim
 
-A memory-governed simulation of an HPC/AI cluster that runs on a **16 GB Ubuntu workstation**. It gives the
-"HPC AI infrastructure app" a realistic cluster to talk to (Slurm, Kubernetes, BMC, BCM, Jira, Grafana) with
-users, jobs, faults and tickets, and keeps the host alive with a governor that stops low-priority parts before
-memory runs out.
+**A pretend HPC cluster for a 16 GB laptop, with a bouncer that keeps it from eating all your RAM.**
 
-**Status:** in active build; see [what works today](docs/PROGRESS.md) ([diagrams](docs/progress.html)).
-Memory budgets for `min` are measured, `std` and `full` are still estimates.
+Real clusters cost a lot and break at 3 a.m. This one costs about 1 GB, breaks when you ask, and fakes everything an
+HPC monitoring app talks to: Slurm, GPUs, Grafana, Jira, BMCs. Built to test a desktop monitoring client, handy for
+anyone who wants a cluster to poke without a data centre.
 
-## The idea
-
-Most of what the app talks to is an **API**, not a real OS. So opti-sim simulates the APIs (one process
-emulates many BMCs or GPU exporters), runs Slurm in containers from one shared image, keeps a single real VM
-for what containers cannot prove, and puts a **governor outside everything** that throttles, freezes and stops
-containers by priority when memory pressure rises.
-
-```mermaid
-flowchart LR
-  APP["App under test"] --> SLURM["Slurm<br/>ctld + restd + N slurmd containers"]
-  APP --> MOCKS["Mocks<br/>BMC farm, BCM, Jira, GPU exporter"]
-  APP --> K8S["Kubernetes<br/>k3d + KWOK fake nodes"]
-  GRAF["Prometheus + Grafana"] --> SLURM
-  GRAF --> MOCKS
-  LOAD["Scenarios, user-sim, ticket-bot"] --> SLURM
-  LOAD --> MOCKS
-  UI["Web UI + simctl CLI"] --> LOAD
-  UI --> GOV
-  GOV["Governor (on the host)<br/>PSI + cgroups, ladder L0-L5"] -. "throttle / freeze / stop" .-> SLURM
-  GOV -.-> MOCKS
-  GOV -.-> K8S
-  GOV -.-> LOAD
-```
-
-Containers by default, declarative topology (`sim.yaml` generates compose, `slurm.conf` and targets), profiles
-with a memory budget that `benchctl up` enforces, and every fault is a named scenario. Details:
-**[docs/architecture/](docs/architecture/README.md)**.
-
-## Quick start
+## 1. Wake it up (2 minutes, no sudo)
 
 ```bash
-./scripts/benchctl start                 # checks the machine, builds and starts everything, prints the link (no sudo)
-./scripts/benchctl stop                  # stops the web page and the cluster (only the hpcsim project)
+./scripts/benchctl start          # checks your machine, builds, starts, prints a link
 ```
 
-No `sudo` anywhere: the memory governor runs as you (it pauses and stops containers through Docker). The only
-prerequisite is Docker usable by your user, which `start` checks first. `./scripts/benchctl status` shows what is running and `./scripts/benchctl open` prints the login link again. The first
-`start` builds images (a few minutes) and creates the Python environment. Prefer the steps one by one? They are in
-the table below.
+The first run builds images, so go and get a coffee. Open the link it prints. You are looking at six nodes, four fake
+services and one very watchful memory governor.
 
-## Try it (about 10 minutes)
+## 2. Poke it
 
-After the quick start above, with the stack up and the web page open:
+```bash
+./scripts/benchctl get nodes                     # who is alive
+./scripts/benchctl describe node gpu001          # everything about one node
+./scripts/benchctl exec gpu001 -u alice          # a shell on it, tab completion included
+./scripts/benchctl scenario run node-down        # now break something, politely
+```
 
-1. **Right and left panels**: the governor (level, memory, pressure) on the left, *Needs attention* on the right. All clear means all is well.
-2. **Middle of the page**: six simulated nodes and four mock services. Open *Fault actions* on `cn002`, press *Power off*: the card turns grey, and a diamond travels from *Fault injector* to the BMC. Press *Clear faults* to undo.
-3. **See traffic**: in a second terminal run `for i in 1 2 3 4 5; do curl -s -o /dev/null "http://127.0.0.1:8080/rest/api/2/search?jql=project%3DOPS"; done`. Round dots travel from *Clients* to *jira-mock* and its counter rises.
-4. **Scenarios** (right panel): pick `node-down`, speed 20x, press *Play*, and watch each step turn green. The strip at the top shows it running.
-5. **Slurm steps** need the CLI: `./scripts/benchctl scenario run node-down --speed 10`.
-6. **Look behind the scenes**: Grafana http://127.0.0.1:3000 (admin / admin), Prometheus :9090, fake BMC `curl http://127.0.0.1:8000/cn001/redfish/v1/Systems/1`.
-7. **Stop**: `./scripts/benchctl stop`.
+In the web page press **Fault actions** on a node and watch it turn grey. **Clear faults** makes it all better.
 
-Something wrong? `./scripts/benchctl diag` writes one masked file to attach to a bug report. More detail: [docs/guides/getting-started.md](docs/guides/getting-started.md); everything about the tool: the [user manual](docs/manual/README.md).
+## 3. Build your own cluster
 
-## Build and run scopes
+Want 2 CPU nodes, 4 GPU nodes and Jira? Ask what it costs first, then build only if it fits:
 
-| I want to | Command | Needs |
-|---|---|---|
-| Start everything in one go | `./scripts/benchctl start` (stop: `./scripts/benchctl stop`, look: `./scripts/benchctl status`) | Docker, python 3.11+ |
-| Check the machine before building | `./scripts/check-machine.sh` | system `python3` only |
-| Install the CLI and test tools | `python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'` | python 3.11+ |
-| Check the setup in depth | `./scripts/benchctl doctor` then `./scripts/benchctl preflight --profile std` | venv, Docker |
-| Run the governor | automatic with `benchctl start` (as you). Optional full protection at boot: `sudo ./scripts/install-governor.sh` | nothing |
-| Build and start a profile | `./scripts/benchctl up --profile min\|std\|full` | Docker; first build takes minutes |
-| Change the node count | `./scripts/benchctl scale 8` | stack running |
-| Look at it | web page `python -m webui`; Grafana http://127.0.0.1:3000; Prometheus :9090 | stack running |
-| Play a fault | `./scripts/benchctl scenario list`, `scenario run node-down --speed 10` | stack running |
-| Run the tests | `./scripts/validate.sh` (fast, no Docker) | venv with dev extras |
-| Run the tests on the live host | `./scripts/verify.sh --full` | Docker, a free ~3 GB |
-| Debug the web page | `pip install -e '.[browser]'`, `python -m playwright install chromium`, `python scripts/ui_shots.py` | venv |
-| Stop and clean up | `./scripts/benchctl down` | none |
+```bash
+./scripts/benchctl plan --cpu-nodes 2 --gpu-nodes 4 --with jira
+./scripts/benchctl up   --cpu-nodes 2 --gpu-nodes 4 --with jira
+```
 
-| Profile | What is on | Memory budget |
-|---|---|---|
-| `min` | core, mocks, 4 slurmd, scenarios | 1 GB (measured 0.17 GB loaded) |
-| `std` | `min` + accounting, 16 slurmd, k3d + KWOK, load sims | ~6 GB (estimate) |
-| `full` | `std` + 32 slurmd, 200 KWOK nodes, fidelity VM | ~8.5 GB (estimate) |
-| `jira-real` | `std` minus k3d, plus Jira Data Center | ~7.5 GB (estimate) |
-| `mac-agent` | `min` + an external macOS agent | ~1 GB local |
+## 4. Point your app at it
 
-`up` refuses a profile that does not fit in the memory free right now and names one that does. Components
-not built yet are skipped with a note. The step-by-step guide is
-[docs/guides/getting-started.md](docs/guides/getting-started.md).
+```bash
+./scripts/benchctl export profile      # writes a file your monitoring client can import
+./scripts/benchctl ssh-key install     # puts the login key where the client looks
+```
 
-## Map of the repository
+Then follow [client setup](docs/guides/client-setup-by-component.md), one component at a time.
 
-| Path | What |
+## 5. Put it back
+
+```bash
+./scripts/benchctl stop                # everything you started, and nothing else
+```
+
+## When it sulks
+
+| Symptom | Try |
 |---|---|
-| `sim.yaml`, `profiles/` | the topology and the memory profiles (single source of truth) |
-| `simctl/` | the CLI: machine check, doctor, up/down/scale, scenarios, measurements |
-| `governor/`, `systemd/` | the memory governor (rootless by default) and its optional root service units |
-| `components/`, `images/` | the mocks (BMC, BCM, Jira, GPU exporter) and the Slurm images |
-| `webui/` | the web page (Starlette + one JS page, under 50 MB) |
-| `scenarios/` | fault scripts in YAML |
-| `docs/` | [user manual](docs/manual/README.md), [architecture](docs/architecture/README.md), [guides](docs/guides/getting-started.md), [decision records](docs/adr/), [progress](docs/PROGRESS.md) |
-| [SPEC.md](SPEC.md) | the normative requirements (wins over any other doc) |
+| Start refuses with `REFUSED` | Your RAM is busy (browsers, IDE). Close a few, run it again. The governor is protecting you |
+| Not sure your machine qualifies | `./scripts/check-machine.sh` |
+| Something odd | `./scripts/benchctl diag` writes one masked file to attach to a bug report |
+| Forgot a command | `./scripts/benchctl --help`, or press Tab: it completes verbs and node names |
 
-## Contributing
+Every command is explained, with its limits, in [the verbs guide](docs/guides/benchctl-verbs.md).
 
-Work by issue, branch and PR into `dev`; read [CLAUDE.md](CLAUDE.md) for the workflow and the hard rules
-(the governor runs on the host, rootless by default; the web UI never gets Docker access; no macOS VMs).
+## How it works, in four lines
 
-## License
+Most of what an HPC app talks to is an API, not a real machine, so opti-sim fakes the APIs (one process plays many BMCs
+and GPU exporters) and runs Slurm in small containers. A **governor** sits outside everything and pauses, then stops,
+low-priority containers before memory runs out. Every fault is a named scenario. Details: [architecture](docs/architecture/README.md).
 
-Dual-licensed under [Apache-2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT), at your option. Slurm is built locally from its pinned upstream source (ADR 0002) and is not redistributed here.
+## Read more
+
+| I want | Go to |
+|---|---|
+| A 10 minute walk-through | [Getting started](docs/guides/getting-started.md) |
+| Everything, in order | [User manual](docs/manual/README.md) |
+| What works today | [Progress](docs/PROGRESS.md) |
+| The rules it must obey | [SPEC.md](SPEC.md) |
+| To contribute | [CLAUDE.md](CLAUDE.md): work by issue and branch, PR into `dev` |
+
+Dual-licensed under [Apache-2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT). Slurm is built locally from its pinned upstream
+source (ADR 0002) and is not redistributed.
