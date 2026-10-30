@@ -119,6 +119,20 @@
   #flow line { stroke:var(--line); stroke-width:1.5; } #flow .dotc { fill:var(--accent); } #flow .dotf { fill:var(--warn); stroke:var(--fg); stroke-width:1; }
   .legend { display:flex; flex-wrap:wrap; gap:4px 18px; margin:4px 0 0; }
   .btn.small { min-height:36px; padding:0 12px; font-weight:500; background:var(--panel); color:var(--fg); border:1px solid var(--line); }
+  .rail.right { position:sticky; top:72px; max-height:calc(100vh - 88px); overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; }
+  .tabs { display:flex; gap:var(--sp2); border-bottom:1px solid var(--line); margin:0 0 var(--sp4); overflow-x:auto; }
+  .tabs button { font:inherit; font-weight:600; background:none; color:var(--dim); border:0; border-bottom:3px solid transparent; min-height:44px; padding:0 var(--sp4); cursor:pointer; white-space:nowrap; }
+  .tabs button:hover { color:var(--fg); } .tabs button[aria-selected=true] { color:var(--fg); border-bottom-color:var(--accent); }
+  .scnbar { display:flex; gap:var(--sp2); margin:0 0 var(--sp2); } .scnbar input[type=search] { flex:1; min-width:0; min-height:40px; font:inherit; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--fg); padding:0 10px; }
+  ul.scns { max-height:min(46vh,420px); overflow-y:auto; border-top:1px solid var(--line); scrollbar-width:thin; }
+  .scn { display:grid; grid-template-columns:1fr auto; gap:0 var(--sp2); align-items:center; padding:8px 0; }
+  .scn p { grid-column:1; margin:0; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .scn .hd { grid-column:1; justify-content:flex-start; } .scn .btn { grid-column:2; grid-row:1 / span 2; }
+  .conn { width:100%; } .conn td, .conn th { vertical-align:top; } .conn code { word-break:break-all; }
+  dl.kv { display:grid; grid-template-columns:auto 1fr; gap:4px 14px; margin:8px 0; font-size:14px; } dl.kv dt { color:var(--dim); } dl.kv dd { margin:0; word-break:break-all; }
+  .copy { margin-left:6px; min-height:32px; padding:0 10px; }
+  @media (max-width:640px) { .conn thead { display:none; } .conn tr { display:block; border:1px solid var(--line); border-radius:10px; padding:8px 12px; margin-bottom:10px; } .conn td { display:block; border:0; padding:4px 0; } .conn td::before { content:attr(data-h) ': '; color:var(--dim); font-weight:600; } }
+  @media (max-width:1200px) { .rail.right { position:static; max-height:none; overflow:visible; } }
   @media (max-width:1200px) { .cols { grid-template-columns:260px minmax(0,1fr); } .rail.right { grid-column:1 / -1; display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); align-items:start; } }
   @media (max-width:860px) {  /* phone and small tablet: one column, status strip scrolls sideways */
     .cols { grid-template-columns:minmax(0,1fr); padding:var(--sp3) var(--sp4) var(--sp5); }
@@ -164,18 +178,40 @@
   <p class="dim small" style="margin:0 var(--sp2)">Local only · 127.0.0.1</p>
 </aside>
 <main id="main" tabindex="-1" aria-label="Cluster components">
+  <div class="tabs" role="tablist" aria-label="Dashboard sections">
+    <button role="tab" id="tb-nodes" aria-controls="tab-nodes" aria-selected="true">Nodes</button>
+    <button role="tab" id="tb-traffic" aria-controls="tab-traffic" aria-selected="false" tabindex="-1">Traffic</button>
+    <button role="tab" id="tb-conn" aria-controls="tab-conn" aria-selected="false" tabindex="-1">Connections</button>
+    <button role="tab" id="tb-plan" aria-controls="tab-plan" aria-selected="false" tabindex="-1">Plan</button>
+  </div>
+  <div id="tab-nodes" role="tabpanel" aria-labelledby="tb-nodes">
   <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/benchctl start</code>.</div>
   <div class="tiles" id="tiles">
     <div class="tile"><h2>Services</h2><div class="big" id="t-svc-v">–</div><div class="sub" id="t-svc-s">checking…</div></div>
     <div class="tile"><h2>Nodes</h2><div class="big" id="t-nodes-v">–</div><div class="sub" id="t-nodes-s">checking…</div></div>
   </div>
   <div class="panel" id="svcpanel"><h2>Services</h2><div id="services" class="chips"></div></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <div id="nodegroups">
+    <h2 class="grouphead">Compute nodes</h2><div id="nodes-compute" class="nodes"></div>
+  <h2 class="grouphead">GPU nodes</h2><div id="nodes-gpu" class="nodes"></div>
+  <p class="dim small">Drain in Slurm and Kubernetes node faults are not available here: the page has no Docker access by design, and Kubernetes is not built yet. Use <code>./scripts/benchctl scenario run node-down</code> for Slurm.</p>
+  </div>
+  </div>
+  <div id="tab-traffic" role="tabpanel" aria-labelledby="tb-traffic" hidden>
   <div class="panel"><div class="row"><h2 style="margin:0">Traffic</h2>
     <button class="btn small" id="flowpause" aria-pressed="false">Pause animation</button></div>
     <svg id="flow" viewBox="0 0 360 330" role="img" aria-label="Traffic from clients and from injected faults to the four mock services"></svg>
     <p class="legend small dim"><span><b style="color:var(--accent)" aria-hidden="true">●</b> round dot: requests from clients (the app, Prometheus, curl)</span>
       <span><b style="color:var(--warn)" aria-hidden="true">◆</b> diamond: a fault applied by a scenario or a button</span></p>
     <p id="flowstate" class="dim small" role="status" style="margin-bottom:0"></p></div>
+  </div>
+  <div id="tab-conn" role="tabpanel" aria-labelledby="tb-conn" hidden>
+    <div class="panel"><h2>How to reach each part</h2>
+      <p class="dim small">Addresses are on this machine only (127.0.0.1). Credentials are never shown here: the last column is the file that holds them. A node's own address is in its details.</p>
+      <div class="tablewrap"><table class="conn"><thead><tr><th>Part</th><th>Address</th><th>Try it</th><th>Credential</th></tr></thead><tbody id="conn-rows"><tr><td colspan="4" class="skel">Loading…</td></tr></tbody></table></div></div>
+  </div>
+  <div id="tab-plan" role="tabpanel" aria-labelledby="tb-plan" hidden>
   <div class="panel" id="planpanel"><details id="plan"><summary><h2 style="display:inline;margin:0">Plan a workbench</h2></summary>
     <p class="dim small">Choose how many nodes and which parts, and see the memory it needs against what is free. This page cannot start containers (no Docker access by design); it shows the command.</p>
     <div class="planform">
@@ -189,13 +225,8 @@
       <label><input type="checkbox" value="accounting"> Accounting</label> <label><input type="checkbox" value="load"> Load</label></fieldset>
     <progress id="pl-bar" max="100" value="0" aria-label="Memory needed as a share of free memory"></progress>
     <p id="pl-msg" role="status" class="small"></p><pre id="pl-cmd" class="small"></pre></details></div>
-  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-  <div id="nodegroups">
-    <h2 class="grouphead">Compute nodes</h2><div id="nodes-compute" class="nodes"></div>
-  <h2 class="grouphead">GPU nodes</h2><div id="nodes-gpu" class="nodes"></div>
-  <p class="dim small">Drain in Slurm and Kubernetes node faults are not available here: the page has no Docker access by design, and Kubernetes is not built yet. Use <code>./scripts/benchctl scenario run node-down</code> for Slurm.</p>
   </div>
-  <dialog id="nodedlg" aria-labelledby="nodetitle"><h2 id="nodetitle"></h2><pre id="nodetext"></pre>
+  <dialog id="nodedlg" aria-labelledby="nodetitle"><h2 id="nodetitle"></h2><h3 class="rh" style="margin:0 0 4px;font-size:14px">Connect</h3><dl class="kv" id="nodeconn"></dl><h3 class="rh" style="margin:12px 0 4px;font-size:14px">Status</h3><pre id="nodetext"></pre>
     <p class="dim small">Same text as <code>benchctl describe node NAME</code>, without the Docker and Slurm lines (this page has no Docker access by design).</p>
     <form method="dialog"><button class="btn">Close</button></form></dialog>
 </main>
@@ -203,6 +234,7 @@
   <div class="panel"><h2 class="rh">Needs attention</h2><ul class="attn" id="attn"><li class="skel">Checking…</li></ul></div>
   <div class="panel"><h2 class="rh">Scenarios</h2>
     <p class="dim small" style="margin-top:0">Timed incidents played against the running stack. Slurm steps are skipped here (no Docker access); <code>./scripts/benchctl scenario run NAME</code> runs those.</p>
+    <div class="scnbar"><input type="search" id="scnq" placeholder="Filter scenarios" aria-label="Filter scenarios"><select id="speed" aria-label="Playback speed for every scenario"><option value="1">1× real time</option><option value="5">5×</option><option value="20">20×</option></select></div>
     <ul class="scns" id="list"><li class="skel">Loading…</li></ul></div>
   <div class="panel" id="runpanel" hidden aria-live="polite"><h2 class="rh" id="runtitle">Run</h2>
     <div class="row"><div id="runresult"></div><div id="runctl"></div></div>
@@ -310,7 +342,7 @@ function node(n, actions) {
     <header><h3>${esc(n.name)}</h3><span class="pill ${n.state}"><span aria-hidden="true">${STATE_ICON[n.state]}</span> ${esc(n.label)}</span></header>
     <dl>${dd('Power', n.power ?? '–')}${dd('CPU temp', n.temp == null ? '–' : n.temp.toFixed(0) + ' °C')}${dd('Fans failed', n.fans_failed)}${dd('BCM', n.bcm ?? '–')}${n.gpus ? dd('GPUs', n.gpus) : ''}</dl>
     <details data-node="${esc(n.name)}" ${openNodes.has(n.name) ? 'open' : ''}><summary>Fault actions</summary><div class="actions">${buttons}</div></details>
-    <button class="btn detailbtn" data-node="${esc(n.name)}">Details</button></article>`;
+    <button class="btn detailbtn" data-node="${esc(n.name)}">Details and how to connect</button></article>`;
 }
 function renderCluster(c) {
   paintHealth(c);
@@ -351,9 +383,27 @@ async function loadPlan() {
 }
 document.querySelectorAll('#plan input').forEach(i => i.oninput = i.onchange = () => { clearTimeout(planTimer); planTimer = setTimeout(loadPlan, 250); });
 $('plan').ontoggle = () => { if ($('plan').open) loadPlan(); };
+let connCache = null;
+async function connections() {
+  if (connCache) return connCache;
+  try { connCache = (await (await fetch('/api/connections')).json()).entities; } catch (e) { return []; }
+  return connCache;
+}
+async function paintConnections() {
+  const rows = await connections();
+  $('conn-rows').innerHTML = rows.map(e => `<tr><td data-h="Part"><b>${esc(e.name)}</b><div class="small dim">${esc(e.how).replace(/`([^`]+)`/g, '<code>$1</code>')}</div></td>
+    <td data-h="Address"><code>${esc(e.address)}</code></td><td data-h="Try it"><code>${esc(e.command)}</code><button class="btn small copy" data-copy="${esc(e.command)}" aria-label="Copy the command for ${esc(e.name)}">Copy</button></td>
+    <td data-h="Credential">${e.credential ? `<code>${esc(e.credential)}</code>` : '<span class="dim">none</span>'}</td></tr>`).join('') || '<tr><td colspan="4">Could not load.</td></tr>';
+  document.querySelectorAll('.copy').forEach(b => b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Copied'; } catch (e) { b.textContent = 'Select and copy'; } setTimeout(() => { b.textContent = 'Copy'; }, 1500); });
+}
 async function showNode(name) {
   const r = await fetch(`/api/nodes/${name}`);
   $('nodetitle').textContent = name;
+  const cx = (await connections()).find(e => e.id === 'nodes'), kv = [];
+  if (cx) kv.push(['SSH', `<code>${esc(cx.command.replace('<node>', name))}</code>`], ['User and key', esc(cx.how.split('.')[0]) + ` · key file <code>${esc(cx.credential)}</code>`]);
+  kv.push(['BMC', `<code>127.0.0.1:8443/redfish/v1</code> (HTTPS) with Host header <code>bmc-${esc(name)}</code>, user admin, password in <code>compose/generated/secrets/bmc_credentials</code>`],
+    ['IP address', `assigned by Docker at start; run <code>./scripts/benchctl describe node ${esc(name)}</code>`]);
+  $('nodeconn').innerHTML = kv.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
   $('nodetext').textContent = r.ok ? (await r.json()).text : `Could not read ${name}: ${(await r.json()).detail}`;
   $('nodedlg').showModal();
 }
@@ -491,13 +541,18 @@ async function loadScenarios() {
   const list = await (await fetch('/api/scenarios')).json();
   $('list').innerHTML = list.map(s =>
     `<li class="scn"><div class="hd"><b>${esc(s.name)}</b><span class="small dim">${s.steps} ${s.steps === 1 ? 'step' : 'steps'}</span></div><p>${esc(s.description)}</p>
-     <div class="ctl"><select id="sp-${s.name}" aria-label="Speed for ${esc(s.name)}"><option value="1">1× real time</option><option value="5">5×</option><option value="20">20×</option></select>
-     <button class="btn" data-name="${esc(s.name)}" aria-label="Play ${esc(s.name)}">▶ Play</button></div></li>`).join('') || '<li class="dim">No scenarios found.</li>';
+     <button class="btn" data-name="${esc(s.name)}" aria-label="Play ${esc(s.name)}">▶ Play</button></li>`).join('') || '<li class="dim">No scenarios found.</li>';
   document.querySelectorAll('#list button').forEach(b => b.onclick = () => play(b.dataset.name));
+  filterScenarios();
   poll();
 }
+function filterScenarios() {
+  const q = $('scnq').value.trim().toLowerCase();
+  document.querySelectorAll('#list .scn').forEach(li => { li.hidden = !!q && !li.textContent.toLowerCase().includes(q); });
+}
+$('scnq').oninput = filterScenarios;
 async function play(name) {
-  const r = await fetch(`/api/scenarios/${name}/run?speed=${$('sp-' + name).value}`, { method: 'POST', headers: H });
+  const r = await fetch(`/api/scenarios/${name}/run?speed=${$('speed').value}`, { method: 'POST', headers: H });
   if (!r.ok) { $('runpanel').hidden = false; $('runnote').innerHTML = `<div class="notice">${esc((await r.json()).detail)}</div>`; return; }
   poll();
 }
@@ -525,10 +580,26 @@ async function poll() {
     `<p class="st st-${x.status}" style="font-weight:500"><span aria-hidden="true">${ICON[x.status]}</span> ${x.status}: ${esc(x.label)} <span class="dim">${esc(x.detail)}</span></p>`).join('') : '';
   if (s.running) pollTimer = setTimeout(poll, 1000);
 }
+// tabs: the live traffic feed runs only while its tab and the page are visible
+const TABS = ['nodes', 'traffic', 'conn', 'plan'];
+function selectTab(t, focus) {
+  TABS.forEach(k => { const on = k === t; $('tab-' + k).hidden = !on; $('tb-' + k).setAttribute('aria-selected', on); $('tb-' + k).tabIndex = on ? 0 : -1; });
+  if (focus) $('tb-' + t).focus();
+  if (t === 'traffic' && !document.hidden) openFlow(); else closeFlow();
+  if (t === 'conn') paintConnections();
+  if (t === 'plan' && $('plan').open) loadPlan();
+  try { sessionStorage.setItem('workbench-tab', t); } catch (e) { /* not remembered */ }
+}
+TABS.forEach((k, i) => {
+  $('tb-' + k).onclick = () => selectTab(k);
+  $('tb-' + k).onkeydown = e => { const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key]; if (d) { e.preventDefault(); selectTab(TABS[(i + d + TABS.length) % TABS.length], true); } };
+});
 // start
-loadCluster(); runChip(); loadScenarios(); poll(); openFlow();
+loadCluster(); runChip(); loadScenarios(); poll();
+let savedTab = 'nodes'; try { savedTab = sessionStorage.getItem('workbench-tab') || 'nodes'; } catch (e) { /* default */ }
+selectTab(TABS.includes(savedTab) ? savedTab : 'nodes');
 // the live feed is only worth its CPU while the page is visible
-document.addEventListener('visibilitychange', () => { if (document.hidden) closeFlow(); else openFlow(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden || $('tab-traffic').hidden) closeFlow(); else openFlow(); });
 </script>
 </body>
 </html>
