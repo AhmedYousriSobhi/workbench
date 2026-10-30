@@ -12,6 +12,7 @@ its limits, so you do not find them by surprise, and what to use in a script.
 | Tables are for people; **`-o json`** is for scripts. Column names, order and widths of a table may change. | `kubectl get -o json` for scripts, `kubectl describe` for people; Slurm's `--json`. |
 | A mistyped verb gets a hint (`Did you mean 'down'?`) and exit 2; it is never run for you, and abbreviations (`benchctl do`) are not accepted. | Guessing could run the wrong command; accepting prefixes blocks future verbs. |
 | `benchctl VERB --help` works anywhere in the line. Old names (`simctl`, `./scripts/opti`) still work as aliases; in a terminal they print one `note:` line on stderr. | Deprecate by warning, not by breaking. |
+| A step that ends shells or removes nodes (`down`, shrinking `scale`) asks first **when you are at a terminal**; `-y/--yes` skips the question and `-n/--dry-run` shows what would happen. A script (no terminal) is never asked, so `benchctl stop` and CI keep working. | Confirm destructive actions for people, stay scriptable; dry run before change. (CLI guidelines, `kubectl --dry-run`) |
 | No secret is ever a flag or printed. Tokens live in `compose/generated/secrets/`. | Secrets in flags leak through `ps` and shell history. |
 
 ## Verbs
@@ -22,9 +23,9 @@ its limits, so you do not find them by surprise, and what to use in a script.
 | `stop` | stops the web page, the cluster and the governor **it started** | does not touch a system governor service, images, or `compose/generated/` | |
 | `open` | prints the web page link, opens a browser if there is a display | the page must be running (`start` first) | prints the link on stdout |
 | `up [--profile P]` | pre-flight, governor admission, ordered start of the cluster alone | safe to repeat (starts only what is missing); default profile `std`, so pass `--profile min` on 16 GB; no web page, no governor | exit 1 when refused or a part fails to start |
-| `down` | stops and removes the `hpcsim` project | open shells on nodes end; your other containers are untouched; secrets and generated files stay | |
-| `scale N` | changes the compute node count of a preset | removes nodes when shrinking (their shells and jobs end); restarts `slurmctld`; growing asks the governor first and is refused at L2 or above | |
-| `get nodes\|services\|profiles\|scenarios` | lists what exists | read-only; `absent` means no container yet, not an error; no filter or watch (pipe `-o json` through `jq`); one Docker call per run, so do not loop it every second | `-o json` |
+| `down [-n] [-y]` | stops and removes the `hpcsim` project | open shells on nodes end; your other containers are untouched; secrets and generated files stay; asks first in a terminal when containers run | `-n` lists what would stop |
+| `scale N [-n] [-y]` | changes the compute node count of a preset | removes nodes when shrinking (their shells and jobs end) and asks first in a terminal; restarts `slurmctld`; growing asks the governor first and is refused at L2 or above | `-n` says which nodes would start or stop |
+| `get nodes\|services\|profiles\|scenarios` | lists what exists | read-only; `absent` means no container yet, not an error; `-l key=value` / `key!=value` filters (repeat or comma = AND), `--sort-by COLUMN`, `-w` redraws every `--interval` seconds (at least 1: each redraw asks Docker); a bad selector or column exits 2 and lists the valid columns; no OR, regex or custom columns | `-o json`, or `-o name` for one name per line (`for n in $(benchctl get nodes -l kind=gpu -o name)`) |
 | `exec NODE [-u USER] [-- CMD]` | a shell, or one command, on a node | the node must be running; no terminal is allocated when a command is given; `-u` must be a simulated user (`alice`, `bob`) | command's own stdout; exit code is Docker's |
 | `logs NODE [-f] [--tail N]` | the container log | service or node names only (`slurmctld`, `login`, `cn001`); no time filter; `-f` runs until Ctrl-C | |
 | `scenario list` / `scenario run NAME [--speed N] [--dry-run]` | lists scenarios; plays one against the running stack | needs the stack up; `--dry-run` only validates and prints the timeline; Kubernetes and ticket-bot steps are skipped; `--speed` compresses waits, not step order | exit 1 when a step or expectation fails |
@@ -41,9 +42,9 @@ its limits, so you do not find them by surprise, and what to use in a script.
 
 | Our verb | Like | Difference to know |
 |---|---|---|
-| `get` | `kubectl get` | no selectors, `--watch` or `--sort-by` yet; `-o` has table and json only |
+| `get` | `kubectl get`, `sinfo -N` | `-l`, `--sort-by`, `-w` and `-o name` like kubectl; `-o` has no wide, jsonpath or custom-columns; the columns are fixed (name, kind, state), unlike `sinfo -o` |
 | `exec` / `logs` | `kubectl exec` / `kubectl logs` | wraps `docker exec` / `docker logs`; no `--previous` or container choice |
-| `up` / `down` | `docker compose up/down` | admission by the governor first; only the `hpcsim` project |
+| `up` / `down` | `docker compose up/down` | admission by the governor first; only the `hpcsim` project; `down` asks in a terminal and has `--dry-run` |
 | `scenario run --dry-run` | `kubectl --dry-run`, `terraform plan` | validates and prints; it does not simulate the outcome |
 | `status`, `check` | `kubectl cluster-info`, `scontrol ping` | local checks, not a cluster API call |
 | `scenario run` steps for Slurm | `scontrol update` | drain/resume only, never a hardware or `slurm.conf` change (scontrol cannot do that either; it needs `reconfigure`) |

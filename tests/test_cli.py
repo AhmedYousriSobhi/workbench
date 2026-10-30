@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import typer
 from typer.testing import CliRunner
 
 from governor import control
@@ -255,3 +256,97 @@ def test_old_name_prints_one_notice_only_in_a_terminal(monkeypatch):
     monkeypatch.setattr("sys.stderr", Tty())
     cli._old_name_notice()
     assert quiet.getvalue() == "" and sys.stderr.getvalue() == ""
+
+
+def _live(monkeypatch, states=None):
+    from simctl import inventory
+
+    states = states if states is not None else {"cn001": "running", "cn002": "running", "gpu001": "paused"}
+    monkeypatch.setattr(inventory, "_containers", lambda runner=None: states)
+
+
+def test_get_selectors_sort_and_names(monkeypatch):
+    _live(monkeypatch)
+    gpu = runner.invoke(cli.app, ["get", "nodes", "-l", "kind=gpu"]).stdout
+    assert "gpu001" in gpu and "cn001" not in gpu
+    names = runner.invoke(cli.app, ["get", "nodes", "-l", "kind!=gpu", "-l", "state=running", "-o", "name"]).stdout
+    assert names.split() == ["cn001", "cn002"]
+    assert runner.invoke(cli.app, ["get", "nodes", "-l", "kind=gpu,state=paused", "-o", "name"]).stdout.split() == ["gpu001"]
+    order = runner.invoke(cli.app, ["get", "nodes", "--sort-by", "state", "-o", "name"]).stdout.split()
+    assert order[:2] == ["cn003", "cn004"]  # "absent" sorts before "paused" and "running"
+    assert runner.invoke(cli.app, ["get", "scenarios", "-o", "name"]).stdout.split()[0] == "fan-failure"
+
+
+def test_get_query_mistakes_are_usage_errors_on_stderr(monkeypatch):
+    _live(monkeypatch)
+    for args in (["-l", "color=red"], ["-l", "kind"], ["--sort-by", "nope"], ["-o", "xml"]):
+        r = runner.invoke(cli.app, ["get", "nodes", *args])
+        assert r.exit_code == 2 and r.stdout == "" and r.stderr, args
+    assert "columns: name, kind, state" in runner.invoke(cli.app, ["get", "nodes", "-l", "x=1"]).stderr
+
+
+def test_get_watch_redraws_until_interrupted_and_refuses_a_busy_loop(monkeypatch):
+    import time
+
+    _live(monkeypatch)
+    ticks = []
+
+    def fake_sleep(s):
+        ticks.append(s)
+        if len(ticks) == 2:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(time, "sleep", fake_sleep)
+    r = runner.invoke(cli.app, ["get", "nodes", "-w", "--interval", "3"])
+    assert r.exit_code == 0 and ticks == [3.0, 3.0] and r.stdout.count("NAME") == 2
+    assert runner.invoke(cli.app, ["get", "nodes", "-w", "--interval", "0.1"]).exit_code == 2
+
+
+def test_confirm_asks_only_a_person_at_a_terminal(monkeypatch):
+    import io
+
+    class Tty(io.StringIO):
+        def isatty(self):
+            return True
+
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))  # a script: never asked
+    cli._confirm("x.", False)
+    monkeypatch.setattr("sys.stdin", Tty("n\n"))
+    with pytest.raises(typer.Exit):
+        cli._confirm("x.", False)
+    monkeypatch.setattr("sys.stdin", Tty("y\n"))
+    cli._confirm("x.", False)
+    monkeypatch.setattr("sys.stdin", Tty(""))
+    cli._confirm("x.", True)  # --yes skips the question
+
+
+def test_down_dry_run_lists_and_changes_nothing(monkeypatch):
+    _live(monkeypatch)
+    monkeypatch.setattr(stack, "down", lambda **k: pytest.fail("dry run must not stop anything"))
+    r = runner.invoke(cli.app, ["down", "--dry-run"])
+    assert r.exit_code == 0 and "would stop and remove 2 containers: cn001, cn002" in r.output
+
+
+def test_down_confirms_when_something_runs_and_honours_the_answer(monkeypatch):
+    _live(monkeypatch)
+    asked = []
+    monkeypatch.setattr(cli, "_confirm", lambda what, yes: asked.append((what, yes)))
+    monkeypatch.setattr(stack, "down", lambda say=print: True)
+    assert runner.invoke(cli.app, ["down", "-y"]).exit_code == 0
+    assert asked[0][0].startswith("This stops 2 containers") and asked[0][1] is True
+    _live(monkeypatch, {})
+    asked.clear()
+    assert runner.invoke(cli.app, ["down"]).exit_code == 0 and asked == []  # nothing running: nothing to ask
+
+
+def test_scale_dry_run_and_confirmation_only_when_shrinking(monkeypatch):
+    monkeypatch.setattr(stack, "running_nodes", lambda runner=None: ["cn001", "cn002", "cn003", "cn004"])
+    monkeypatch.setattr(stack, "scale", lambda *a, **k: pytest.fail("dry run must not scale"))
+    out = runner.invoke(cli.app, ["scale", "2", "--dry-run"]).output
+    assert "would stop and remove: cn003, cn004" in out and "would start: none" in out
+    asked = []
+    monkeypatch.setattr(cli, "_confirm", lambda what, yes: asked.append(what))
+    monkeypatch.setattr(stack, "scale", lambda *a, **k: True)
+    assert runner.invoke(cli.app, ["scale", "2"]).exit_code == 0 and "cn003, cn004" in asked[0]
+    asked.clear()
+    assert runner.invoke(cli.app, ["scale", "4"]).exit_code == 0 and asked == []  # growing: no question
