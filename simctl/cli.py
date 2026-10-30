@@ -1,6 +1,18 @@
 import typer
 
-from . import checks, compose, diag, export, inventory, machine, measure, nodes, scenario, stack
+from . import (
+    checks,
+    compose,
+    describe,
+    diag,
+    export,
+    inventory,
+    machine,
+    measure,
+    nodes,
+    scenario,
+    stack,
+)
 
 app = typer.Typer(help="benchctl: control the simulated cluster. Pattern: benchctl VERB [RESOURCE] [NAME]. "
                        "Start with `benchctl start`, look with `benchctl get nodes`, stop with `benchctl stop`.")
@@ -194,6 +206,23 @@ def logs(node: str = NODE, follow: bool = typer.Option(False, "-f", "--follow"),
 
     os.execvp("docker", ["docker", "logs", *(["-f"] if follow else []), "--tail", str(tail),
                          f"{stack.PROJECT}-{node}-1"])
+
+
+describe_app = typer.Typer(help="Everything known about one thing")
+app.add_typer(describe_app, name="describe")
+
+
+@describe_app.command("node")
+def describe_node(node: str = NODE, output: str = OUTPUT) -> None:
+    """Container, Slurm state and jobs, GPUs (busy/idle), BMC power and temperature, how to ssh in."""
+    import json
+
+    try:
+        info = describe.gather(_sim(), node, describe.http_get, stack._run)
+    except describe.UnknownNode as e:
+        typer.echo(str(e.args[0]))
+        raise typer.Exit(1) from e
+    typer.echo(json.dumps(info, indent=2) if output == "json" else describe.render(info))
 
 
 export_app = typer.Typer(help="Write the workbench in a form another tool can import")

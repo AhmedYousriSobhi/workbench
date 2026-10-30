@@ -74,6 +74,7 @@ def classify(n: dict) -> tuple[str, str]:
 
 class Cluster:
     def __init__(self, sim: dict, fetch=http_json, poster=scenario.post):
+        self.sim = sim
         self.nodes = node_names(sim)
         self.gpus = sim.get("gpu", {}).get("gpus_per_node", 0)
         self.fetch, self.poster = fetch, poster

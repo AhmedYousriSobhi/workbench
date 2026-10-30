@@ -13,6 +13,7 @@ work as aliases.
 | `stop` | stop the web page, the cluster and your own governor |
 | `open` | print the login link, open a browser if there is a display |
 | `get nodes\|services\|profiles\|scenarios [-o json]` | list what exists; `nodes` shows every node `sim.yaml` defines and its state (`absent` = not started) |
+| `describe node NAME [-o json]` | everything known about one node: container, Slurm, jobs, GPUs busy/idle, BMC |
 | `exec NODE [-u USER] [-- CMD]` | shell on a node, or one command: `benchctl exec gpu001 -- nvidia-smi` |
 | `logs NODE [-f] [--tail N]` | container log of a node or service |
 | `up --profile P` | pre-flight, governor admission, ordered start (default profile `std`) |
@@ -30,7 +31,7 @@ work as aliases.
 | `benchctl measure run LABEL [--duration S] [--interval S]` | sample memory to `docs/measurements/` |
 | `benchctl measure report IDLE [LOADED]` | markdown table with suggested budgets |
 
-`benchctl COMMAND --help` shows the exact flags. Planned in the same grammar: `describe node NAME`, `plan` / `apply` (issues 92, 93).
+`benchctl COMMAND --help` shows the exact flags. Planned in the same grammar: `plan` / `apply` (issue 92).
 
 ## Scripts
 
