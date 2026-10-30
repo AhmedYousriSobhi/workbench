@@ -240,8 +240,8 @@ def page(wiki: Wiki, title: str, body: str, current: str = "", query: str = "") 
             f'<a href="/help/{esc(slug)}"{" aria-current=page" if slug == current else ""}>{esc(t)}</a>' for slug, t in items)
         for label, items in wiki.nav())
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{esc(title)} · opti-sim help</title><style>{STYLE}</style></head><body>
+<title>{esc(title)} · workbench help</title><style>{STYLE}</style></head><body>
 <a class="skip" href="#content">Skip to content</a>
-<header class="top"><a class="back" href="/">← Dashboard</a><strong>opti-sim help</strong>
+<header class="top"><a class="back" href="/">← Dashboard</a><strong>workbench help</strong>
 <form class="search" action="/help/search" method="get" role="search"><input type="search" name="q" value="{esc(query)}" aria-label="Search the help" placeholder="Search the help"><button type="submit">Search</button></form></header>
 <div class="wrap"><nav class="side" aria-label="Help pages">{nav}</nav><article id="content" tabindex="-1">{body}</article></div></body></html>"""

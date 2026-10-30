@@ -1,4 +1,4 @@
-# Single source of truth for opti-sim. All generated artifacts derive from this file.
+# Single source of truth for workbench. All generated artifacts derive from this file.
 time_dilation: 1.0        # >1 compresses job durations and arrival intervals
 
 jira:

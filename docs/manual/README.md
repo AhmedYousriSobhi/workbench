@@ -1,12 +1,12 @@
-# opti-sim user manual
+# workbench user manual
 
-The complete guide to using opti-sim. Read it front to back once, then use it as a reference.
+The complete guide to using workbench. Read it front to back once, then use it as a reference.
 [SPEC.md](../../SPEC.md) says what the tool must do, [the architecture](../architecture/README.md) says why, and
 [what works today](../PROGRESS.md) says what is built. If this manual and SPEC.md disagree, SPEC.md wins.
 
 | # | Chapter | You will learn |
 |---|---|---|
-| 1 | [What opti-sim is](01-what-it-is.md) | the idea, the parts, the profiles, the ports |
+| 1 | [What workbench is](01-what-it-is.md) | the idea, the parts, the profiles, the ports |
 | 2 | [Install and start](02-install-and-start.md) | prerequisites, first start, stop, status |
 | 3 | [Using the cluster](03-using-the-cluster.md) | up, scale, down, Slurm jobs, the mock services, Grafana |
 | 4 | [Nodes and shells](04-nodes-and-shells.md) | **how to open a shell on a node** (`ssh` through the login node, or `docker exec`), users, the fidelity VM |

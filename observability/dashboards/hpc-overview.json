@@ -1,6 +1,6 @@
 {
   "uid": "hpc-overview",
-  "title": "HPC Cluster Overview (opti-sim)",
+  "title": "HPC Cluster Overview (workbench)",
   "schemaVersion": 39,
   "timezone": "browser",
   "refresh": "30s",

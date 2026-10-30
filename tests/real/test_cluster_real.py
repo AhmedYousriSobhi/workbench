@@ -30,7 +30,7 @@ def ui():
     port = free_port()
     proc = subprocess.Popen([sys.executable, "-m", "webui", str(port)], cwd=ROOT, stdout=subprocess.PIPE, text=True)
     token = proc.stdout.readline().split("token=")[1].strip()
-    base, h = f"http://127.0.0.1:{port}", {"Authorization": f"Bearer {token}", "X-Requested-With": "opti-sim"}
+    base, h = f"http://127.0.0.1:{port}", {"Authorization": f"Bearer {token}", "X-Requested-With": "workbench"}
 
     def ready() -> bool:
         try:

@@ -99,7 +99,7 @@ class Farm:
                  "UpdateService": {"@odata.id": base + "/UpdateService"},
                  "AccountService": {"@odata.id": base + "/AccountService"},
                  "SessionService": {"@odata.id": base + "/SessionService"}},
-            "Systems/1": {"@odata.id": f"{base}/Systems/1", "Id": "1", "Name": node, "HostName": node, "Manufacturer": "opti-sim", "Model": "SimServer",
+            "Systems/1": {"@odata.id": f"{base}/Systems/1", "Id": "1", "Name": node, "HostName": node, "Manufacturer": "workbench", "Model": "SimServer",
                           "SerialNumber": f"SIM-{node.upper()}", "BiosVersion": "1.0.0",
                           "PowerState": self.power[node], "Status": healthy,
                           "ProcessorSummary": {"Count": info["cpus"], "Status": healthy},
@@ -248,7 +248,7 @@ def make_handler(farm: Farm, sessions: Sessions | None = None, stats: dict | Non
         def _unauthorized(self) -> bool:
             if sessions is None or sessions.allows(self.headers):
                 return False
-            self._send(401, {"error": "authentication required"}, {"WWW-Authenticate": 'Basic realm="opti-sim"'})
+            self._send(401, {"error": "authentication required"}, {"WWW-Authenticate": 'Basic realm="workbench"'})
             return True
 
         def do_GET(self):

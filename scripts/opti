@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One command to start, stop and look at opti-sim.
+# One command to start, stop and look at workbench.
 #   ./scripts/opti start [--profile min|std|full]   check the machine, build/start the cluster, start the web page
 #   ./scripts/opti stop                             stop the web page and the cluster (only the hpcsim project)
 #   ./scripts/opti status                           governor, cluster and web page at a glance
@@ -49,7 +49,7 @@ refresh_governor() {  # the Grafana token only exists after the first `up`: rest
 }
 
 ui_pid() { [ -f "$pidf" ] && kill -0 "$(cat "$pidf")" 2>/dev/null && cat "$pidf"; }
-link() { sed -n 's/.*opti-sim UI: //p' "$logf" 2>/dev/null | tail -1; }
+link() { sed -n 's/.*workbench UI: //p' "$logf" 2>/dev/null | tail -1; }
 ensure_venv() {
   [ -x .venv/bin/python ] && return 0
   echo "== creating the virtualenv (once)"

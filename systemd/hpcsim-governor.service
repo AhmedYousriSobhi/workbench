@@ -1,11 +1,11 @@
 [Unit]
-Description=opti-sim memory governor
+Description=workbench memory governor
 After=local-fs.target
 
 [Service]
 Type=simple
 ExecStart=/usr/bin/python3 -m governor --socket /run/hpcsim/gov.sock --require-lock
-WorkingDirectory=/opt/opti-sim
+WorkingDirectory=/opt/workbench
 Slice=hpcsim-governor.slice
 OOMScoreAdjust=-900
 MemoryLow=64M

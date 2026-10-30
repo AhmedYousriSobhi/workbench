@@ -146,9 +146,9 @@ def render_html(data: dict) -> str:
            "@media(max-width:700px){table{display:block;overflow-x:auto}}")
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>opti-sim progress</title><style>{css}</style></head><body>
+<title>workbench progress</title><style>{css}</style></head><body>
 <!-- GENERATED from docs/progress.yaml by `python -m simctl.progress`; do not edit. -->
-<h1>opti-sim progress</h1>
+<h1>workbench progress</h1>
 <p>Last updated {data['updated']}. <b>{pct(items)}% built</b>: {c['done']} done, {c['review']} in review,
 {c['partial']} partial, {c['todo']} to do ({len(items)} items).</p>
 <h2>Roadmap</h2><pre class="mermaid">{roadmap_mermaid(data)}</pre>

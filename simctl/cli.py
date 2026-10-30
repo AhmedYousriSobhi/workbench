@@ -94,8 +94,8 @@ def _cluster_and_page() -> None:
     running = [r for r in inventory.service_rows() if r["state"] == "running"]
     typer.echo(f"cluster: {len(running)} containers running" if running else "cluster: stopped (benchctl start)")
     log = Path("compose/generated/ui.log")
-    link = next((ln.split("opti-sim UI: ", 1)[1].strip() for ln in reversed(log.read_text().splitlines())
-                 if "opti-sim UI: " in ln), "") if log.is_file() else ""
+    link = next((ln.split("workbench UI: ", 1)[1].strip() for ln in reversed(log.read_text().splitlines())
+                 if "workbench UI: " in ln), "") if log.is_file() else ""
     typer.echo(f"web page: {link}" if link and Path("compose/generated/ui.pid").is_file() else "web page: stopped")
 
 
@@ -280,7 +280,7 @@ app.add_typer(ssh_key_app, name="ssh-key")
 
 @ssh_key_app.command("install")
 def ssh_key_install() -> None:
-    """Copy the login key to ~/.ssh/opti-sim_ed25519 (mode 600) and print the path to give the client."""
+    """Copy the login key to ~/.ssh/workbench_ed25519 (mode 600) and print the path to give the client."""
     try:
         stack.install_client_key()
     except (OSError, FileNotFoundError) as e:
@@ -291,7 +291,7 @@ def ssh_key_install() -> None:
 
 @ssh_key_app.command("remove")
 def ssh_key_remove() -> None:
-    """Delete ~/.ssh/opti-sim_ed25519 (only if it is the opti-sim key)."""
+    """Delete ~/.ssh/workbench_ed25519 (only if it is the workbench key)."""
     typer.echo("removed" if stack.remove_client_key() else "nothing to remove")
 
 

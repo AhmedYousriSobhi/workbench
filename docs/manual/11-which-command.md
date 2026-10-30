@@ -1,6 +1,6 @@
 # 11. Which command do I use?
 
-opti-sim has a launcher, a CLI, a scenario engine, a governor and a few test scripts. This page says which one to reach
+workbench has a launcher, a CLI, a scenario engine, a governor and a few test scripts. This page says which one to reach
 for, and why. Every command runs from the repository root.
 
 ## The short answer
@@ -20,7 +20,7 @@ for, and why. Every command runs from the repository root.
 | click a fault on one node | the web page, Cluster tab | the same steps without the terminal ([chapter 5](05-web-page.md)) |
 | see why a start was refused | `./scripts/benchctl status` and `./scripts/benchctl preflight --profile min` | the governor level and whether the profile fits |
 | check my machine is ready | `./scripts/benchctl check` | OS, RAM, disk, Docker, ports |
-| give a client that only reads `~/.ssh` the login key | `./scripts/benchctl ssh-key install` (and `remove` after) | copies the key to `~/.ssh/opti-sim_ed25519`, mode 600 |
+| give a client that only reads `~/.ssh` the login key | `./scripts/benchctl ssh-key install` (and `remove` after) | copies the key to `~/.ssh/workbench_ed25519`, mode 600 |
 | report a problem | `./scripts/benchctl diag` | one masked tarball to attach |
 
 ## `start` or `up`?

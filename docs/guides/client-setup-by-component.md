@@ -30,7 +30,7 @@ When you are done: `./scripts/benchctl down`.
 Get the key where the client can read it:
 
 ```bash
-./scripts/benchctl ssh-key install       # copies it to ~/.ssh/opti-sim_ed25519 (mode 600); give the client that path
+./scripts/benchctl ssh-key install       # copies it to ~/.ssh/workbench_ed25519 (mode 600); give the client that path
 ./scripts/benchctl ssh-key remove        # when you are done
 ```
 
@@ -69,7 +69,7 @@ afterwards.
 | Client field | Value | Where it comes from |
 |---|---|---|
 | Grafana base URL | `http://127.0.0.1:3000` | fixed |
-| Dashboard UIDs | `hpc-overview` | the provisioned dashboard "HPC Cluster Overview (opti-sim)" |
+| Dashboard UIDs | `hpc-overview` | the provisioned dashboard "HPC Cluster Overview (workbench)" |
 | Service account API token | the Viewer token | `cat compose/generated/secrets/grafana_viewer_token` |
 | GPU datasource UID (advanced) | `prometheus` | fixed |
 | Node label (advanced) | `Hostname` | the DCGM label on the GPU series |

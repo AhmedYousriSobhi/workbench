@@ -1,5 +1,5 @@
 [Unit]
-Description=opti-sim governor slice (protected)
+Description=workbench governor slice (protected)
 
 [Slice]
 MemoryLow=64M

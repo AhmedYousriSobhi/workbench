@@ -1,6 +1,6 @@
-# opti-sim Specification
+# workbench Specification
 
-Normative requirements for opti-sim. [README.md](README.md) gives the overview and [docs/architecture/](docs/architecture/README.md) the rationale and architecture; this file defines what must be built and how it is verified. Key words MUST / SHOULD / MAY follow RFC 2119.
+Normative requirements for workbench. [README.md](README.md) gives the overview and [docs/architecture/](docs/architecture/README.md) the rationale and architecture; this file defines what must be built and how it is verified. Key words MUST / SHOULD / MAY follow RFC 2119.
 
 ## 1. Goals and non-goals
 

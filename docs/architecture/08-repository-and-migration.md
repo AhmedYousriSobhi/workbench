@@ -5,7 +5,7 @@
 ## 9. Repository layout
 
 ```
-opti-sim/
+workbench/
 ├── README.md  SPEC.md  CLAUDE.md
 ├── sim.yaml                  # single source of truth: nodes, GPUs, users, partitions, profile budgets
 ├── profiles/                 # min.yaml std.yaml full.yaml jira-real.yaml mac-agent.yaml

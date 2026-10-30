@@ -25,7 +25,7 @@ def load_token(path: Path | None = None) -> str:
 def main() -> None:
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8088
     token = load_token()
-    print(f"opti-sim UI: http://127.0.0.1:{port}/login?token={token}", flush=True)
+    print(f"workbench UI: http://127.0.0.1:{port}/login?token={token}", flush=True)
     uvicorn.run(create_app(token), host="127.0.0.1", port=port, log_level="warning")
 
 

@@ -4,9 +4,9 @@ Guidance for Claude Code when working in this repository.
 
 ## Project
 
-opti-sim: a memory-governed simulation of an HPC/AI cluster (Slurm, Kubernetes, BMC, BCM, Jira, Grafana) for a 16 GB Ubuntu workstation. Read [README.md](README.md) for the overview, [docs/architecture/](docs/architecture/README.md) for the architecture and rationale, and [SPEC.md](SPEC.md) for the requirements. When they disagree, SPEC.md wins; fix the other.
+workbench: a memory-governed simulation of an HPC/AI cluster (Slurm, Kubernetes, BMC, BCM, Jira, Grafana) for a 16 GB Ubuntu workstation. Read [README.md](README.md) for the overview, [docs/architecture/](docs/architecture/README.md) for the architecture and rationale, and [SPEC.md](SPEC.md) for the requirements. When they disagree, SPEC.md wins; fix the other.
 
-**Main purpose:** opti-sim is the test target for a desktop HPC monitoring client (SPEC G5). To test one against it, read [docs/guides/client-testing.md](docs/guides/client-testing.md) first. Never name that client in this repo.
+**Main purpose:** workbench is the test target for a desktop HPC monitoring client (SPEC G5). To test one against it, read [docs/guides/client-testing.md](docs/guides/client-testing.md) first. Never name that client in this repo.
 
 ## Git workflow (mandatory)
 

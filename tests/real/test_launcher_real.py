@@ -66,7 +66,7 @@ def test_start_serves_the_page_and_stop_cleans_up(tmp_path):
         assert f":{port}/login?token=" in link
         opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor())
         page = opener.open(link, timeout=10).read().decode()  # the login link signs in and serves the page
-        assert "opti-sim" in page
+        assert "workbench" in page
         assert b"services" in opener.open(f"http://127.0.0.1:{port}/api/cluster", timeout=10).read()
         again = opti("start", env=env)  # idempotent
         assert again.returncode == 0 and "already running" in again.stdout, again.stdout

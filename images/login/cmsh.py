@@ -96,7 +96,7 @@ def run(script: str) -> tuple[int, str, str]:
     for p in parts:
         verb = p.split()[0]
         if verb in MUTATING:
-            return 1, "", f"Error: this cmsh is read-only (opti-sim); '{p}' would change the cluster\n"
+            return 1, "", f"Error: this cmsh is read-only (workbench); '{p}' would change the cluster\n"
     fn = SCRIPTS.get(parts)
     if fn is None:
         return 1, "", f"Error: unknown command: {'; '.join(parts)}\n"
@@ -109,7 +109,7 @@ def run(script: str) -> tuple[int, str, str]:
 def main(argv: list[str]) -> int:
     script, args = None, [a for a in argv if a != "--hide-events"]
     if args[:1] in (["-v"], ["--version"]):
-        print("cmsh (opti-sim fake, read-only)")
+        print("cmsh (workbench fake, read-only)")
         return 0
     if args[:1] in (["-c"], ["--command"]) and len(args) >= 2:
         script = args[1]

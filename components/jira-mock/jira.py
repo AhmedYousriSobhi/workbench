@@ -422,7 +422,7 @@ def make_handler(jira: Jira):
                 return 200, self._myself()
             if parts == ["serverInfo"] and method == "GET":
                 return 200, {"baseUrl": f"http://{self.headers.get('Host', 'localhost')}", "version": "9.12.0",
-                             "versionNumbers": [9, 12, 0], "deploymentType": "Server", "serverTitle": "opti-sim jira-mock"}
+                             "versionNumbers": [9, 12, 0], "deploymentType": "Server", "serverTitle": "workbench jira-mock"}
             if parts == ["field"] and method == "GET":
                 return 200, FIELD_LIST
             if parts == ["project"] and method == "GET":
