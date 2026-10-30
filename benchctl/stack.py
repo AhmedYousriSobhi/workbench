@@ -14,7 +14,7 @@ from pathlib import Path
 from . import checks, compose, workbench
 
 COMPOSE_FILE = Path("compose/generated/docker-compose.yml")
-PROJECT = "hpcsim"
+PROJECT = "workbench"
 PROFILE_FILE = Path("compose/generated/profile")  # the profile `up` last started; scale's default
 STAGES = [  # (label, service-name pattern); later stages depend on earlier ones
     ("observability", r"prometheus|grafana|gpu-exporter-farm"),
@@ -59,9 +59,9 @@ def unbuildable(services: dict, base: Path) -> list[str]:
 def governor_admits(need_mb: int, say: Callable[[str], None], ask=None) -> bool:
     """GV-9: ask the governor to approve starting `need_mb` more. No governor reachable: warn, go on.
 
-    The socket is $HPCSIM_GOV_SOCKET when set (tests), else the standard path.
+    The socket is $WORKBENCH_GOV_SOCKET when set (tests), else the standard path.
     """
-    sock = os.environ.get("HPCSIM_GOV_SOCKET", checks.GOV_SOCKET)
+    sock = os.environ.get("WORKBENCH_GOV_SOCKET", checks.GOV_SOCKET)
     ask = ask or (lambda r: checks.governor_request(r, sock))
     try:
         r = ask({"cmd": "admit", "budget_mb": need_mb})
@@ -155,7 +155,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         say(f"WARN no grafana token ({e}); the governor will not publish annotations")
     else:
         try:  # a read-only token for monitoring clients: dashboards and /api/ds/query, no writes
-            say(f"grafana viewer token: {provision_token(path=VIEWER_TOKEN_FILE, account='hpcsim-viewer', role='Viewer')}"
+            say(f"grafana viewer token: {provision_token(path=VIEWER_TOKEN_FILE, account='workbench-viewer', role='Viewer')}"
                 " (datasource uid: prometheus)")
         except OSError as e:
             say(f"WARN no grafana viewer token ({e})")
@@ -234,7 +234,7 @@ def ensure_ssh_keys(path: Path = SSH_DIR, runner: Runner = _run) -> Path:
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
     for name in ("ssh_host_ed25519_key", "ssh_host_node_ed25519_key", "id_ed25519", "id_cluster"):
         if not (path / name).exists():
-            r = runner(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", f"hpcsim-{name}", "-f", str(path / name)])
+            r = runner(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", f"workbench-{name}", "-f", str(path / name)])
             if r.returncode != 0:
                 raise OSError(f"ssh-keygen failed: {r.stderr.strip()[-200:]}")
     (path / "authorized_keys").write_text((path / "id_ed25519.pub").read_text() + (path / "id_cluster.pub").read_text())
@@ -298,7 +298,7 @@ def token_name(account: str) -> str:
     """Grafana keeps token names unique across the whole organisation, so a re-made token needs a new name."""
     import secrets
 
-    return f"{account.removeprefix('hpcsim-')}-{secrets.token_hex(3)}"
+    return f"{account.removeprefix('workbench-')}-{secrets.token_hex(3)}"
 
 
 VIEWER_TOKEN_FILE = Path("compose/generated/secrets/grafana_viewer_token")
@@ -307,7 +307,7 @@ VIEWER_TOKEN_FILE = Path("compose/generated/secrets/grafana_viewer_token")
 def provision_token(url: str = "http://127.0.0.1:3000", auth: str = "admin:admin",
                     path: Path = TOKEN_FILE, http=_grafana, valid=token_valid,
                     retries: int = 30, sleep: Callable[[float], None] = time.sleep,
-                    account: str = "hpcsim-governor", role: str = "Editor") -> Path:
+                    account: str = "workbench-governor", role: str = "Editor") -> Path:
     """Ensure a service-account token exists and works; the 0600 file is the only copy.
 
     The governor's (Editor, annotations) and a read-only one for monitoring clients (Viewer, dashboards and queries).

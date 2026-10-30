@@ -22,7 +22,7 @@ inventories are generated from it, so node names agree everywhere. **Never hand-
 
 `profiles/NAME.yaml` has a `budget_gb`, an `extends` list, the component `groups` and `compute_nodes`. Groups are the union
 across `extends`; other keys come from the most specific profile. The groups are `core`, `accounting`, `mocks`,
-`scenarios` and `load`; the list lives in `CATALOG` in `simctl/compose.py`.
+`scenarios` and `load`; the list lives in `CATALOG` in `benchctl/compose.py`.
 
 ## Common changes
 

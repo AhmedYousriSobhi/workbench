@@ -4,8 +4,7 @@
 
 One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [flags]`**. Run it as `./scripts/benchctl`
 (no activation needed), or as `benchctl` once the venv is active. Tab completion for verbs, resources, node and service names, profiles, scenarios, users, parts, `-o` formats and `-l`/`--sort-by` keys:
-`benchctl completion install` (once, no sudo, then open a new terminal; `benchctl start` offers it too; `completion remove` undoes it; `completion bash|zsh|fish` prints the script). A wrong profile, node or scenario gets one message with `Did you mean` and the valid values. The old names `simctl` and `./scripts/opti` still
-work as aliases. What each verb does not do, exit codes, and what to use in a script: [the verbs guide](../guides/benchctl-verbs.md).
+`benchctl completion install` (once, no sudo, then open a new terminal; `benchctl start` offers it too; `completion remove` undoes it; `completion bash|zsh|fish` prints the script). A wrong profile, node or scenario gets one message with `Did you mean` and the valid values. What each verb does not do, exit codes, and what to use in a script: [the verbs guide](../guides/benchctl-verbs.md).
 
 | Verb | Does |
 |---|---|
@@ -18,7 +17,7 @@ work as aliases. What each verb does not do, exit codes, and what to use in a sc
 | `logs NODE [-f] [--tail N]` | container log of a node or service |
 | `plan [selection]` | estimate the memory a workbench needs against free memory; exit 1 if it does not fit ([guide](../guides/choose-workbench.md)) |
 | `up --profile P` | pre-flight, governor admission, ordered start (default profile `std`) |
-| `down [-n] [-y]` | stop and remove the `hpcsim` project only; asks first in a terminal, `-n` only lists |
+| `down [-n] [-y]` | stop and remove the `workbench` project only; asks first in a terminal, `-n` only lists |
 | `scale N [--profile P] [-n] [-y]` | change the compute node count; asks before removing nodes in a terminal, `-n` only says what would change |
 | `up --cpu-nodes N --gpu-nodes N [--gpus-per-node N] [--with PART] [--without PART] [-f FILE]` | the same by selection: estimate first, build only if it fits |
 | `apply -f FILE` | build the workbench a file describes |
@@ -77,10 +76,10 @@ work as aliases. What each verb does not do, exit codes, and what to use in a sc
 
 | Variable | Used by | Meaning |
 |---|---|---|
-| `OPTI_UI_PORT` | `benchctl start` | web page port (default 8088) |
-| `OPTI_GOVERNOR` | `benchctl start` | `auto`, `user`, `system` or `off` |
-| `HPCSIM_GOV_SOCKET` | `simctl`, web page | governor socket path override |
-| `HPCSIM_GRAFANA_TOKEN` | governor | token for annotations (set by `benchctl start`; never put it in files) |
+| `BENCHCTL_UI_PORT` | `benchctl start` | web page port (default 8088) |
+| `BENCHCTL_GOVERNOR` | `benchctl start` | `auto`, `user`, `system` or `off` |
+| `WORKBENCH_GOV_SOCKET` | `benchctl`, web page | governor socket path override |
+| `WORKBENCH_GRAFANA_TOKEN` | governor | token for annotations (set by `benchctl start`; never put it in files) |
 | `COV_FLOOR`, `PYLIBS` | `validate.sh` | coverage floor, tool directory |
 
 ## Files and directories
@@ -92,11 +91,11 @@ work as aliases. What each verb does not do, exit codes, and what to use in a sc
 | `compose/generated/` | generated compose file, secrets, `ui.pid`, `ui.log`, `governor.log` (not committed) |
 | `docs/measurements/` | memory measurements (not committed) |
 | `docs/adr/` | decision records |
-| `/run/hpcsim/gov.sock` | root governor socket; the rootless one is under `$XDG_RUNTIME_DIR/hpcsim/` |
+| `/run/workbench/gov.sock` | root governor socket; the rootless one is under `$XDG_RUNTIME_DIR/workbench/` |
 
 ## Container names
 
-`hpcsim-<service>-1`: `slurmctld`, `slurmrestd`, `mariadb`, `slurmdbd`, `bmc-farm`, `bcm-mock`, `jira-mock`,
+`workbench-<service>-1`: `slurmctld`, `slurmrestd`, `mariadb`, `slurmdbd`, `bmc-farm`, `bcm-mock`, `jira-mock`,
 `scenario-engine`, and one per node (`cn001`, `gpu001`, ...).
 
 ## Glossary (short; the full list is [chapter 12](12-glossary.md))

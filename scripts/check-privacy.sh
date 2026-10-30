@@ -46,12 +46,12 @@ scan() {
 }
 
 # 1. home-directory paths (placeholders such as /home/user are fine)
-scan home-path '/(user|you|example|username|name|runner|ubuntu|vagrant|hpcsim)$' -E -e '(/home|/Users)/[A-Za-z0-9._-]+'
+scan home-path '/(user|you|example|username|name|runner|ubuntu|vagrant|workbench)$' -E -e '(/home|/Users)/[A-Za-z0-9._-]+'
 
 # 2. the local account name, unless it is a generic one
 me=$(id -un 2>/dev/null || true)
 case "$me" in
-  ''|root|admin|ubuntu|user|runner|vagrant|hpcsim|test|docker) ;;
+  ''|root|admin|ubuntu|user|runner|vagrant|workbench|test|docker) ;;
   *) [ "${#me}" -ge 4 ] && scan local-username '' -F -w -e "$me" ;;
 esac
 

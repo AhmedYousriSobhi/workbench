@@ -20,7 +20,7 @@ The single source is [docs/progress.yaml](../progress.yaml). Nothing in `PROGRES
 written by hand. After a change that moves a status:
 
 1. Edit `docs/progress.yaml` (status, `how`, `where`, `pr`; add or move nodes and edges in `architecture`).
-2. Run `python -m simctl.progress` (set `PYTHONPATH` or `PYLIBS` as for the other tools).
+2. Run `python -m benchctl.progress` (set `PYTHONPATH` or `PYLIBS` as for the other tools).
 3. Commit the yaml and both generated files together.
 
 `./scripts/validate.sh` fails when the generated files are stale, and `tests/test_progress.py` checks that
@@ -35,6 +35,6 @@ Changing a status without regenerating therefore cannot get past the pre-commit 
 - Put honest limits in **Known gaps** instead of leaving them out.
 
 ## Adding a diagram of your own
-Mermaid is plain text. Add a function to `simctl/progress.py` that returns Mermaid source, include it in both
+Mermaid is plain text. Add a function to `benchctl/progress.py` that returns Mermaid source, include it in both
 `render_md` (inside a ```` ```mermaid ```` fence) and `render_html` (inside `<pre class="mermaid">`), and add
 a structural check to `tests/test_progress.py`. Keep labels in double quotes and avoid raw `<` and `&`.

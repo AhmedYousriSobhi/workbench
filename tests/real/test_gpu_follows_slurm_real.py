@@ -9,7 +9,7 @@ import pytest
 import yaml
 from helpers import bring_up, wait_for
 
-from simctl import stack
+from benchctl import stack
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -21,7 +21,7 @@ def utils(node: str) -> dict[int, float]:
 
 
 def slurm(*cmd: str, user: str = "alice") -> subprocess.CompletedProcess:
-    return subprocess.run(["docker", "exec", "-u", user, "hpcsim-login-1", *cmd], capture_output=True, text=True, timeout=30, check=False)
+    return subprocess.run(["docker", "exec", "-u", user, "workbench-login-1", *cmd], capture_output=True, text=True, timeout=30, check=False)
 
 
 @pytest.fixture(scope="module")

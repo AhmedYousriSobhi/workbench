@@ -22,7 +22,7 @@ class UnknownNode(KeyError):
 
 def http_get(url: str, timeout: float = 2.0):
     """GET a localhost URL; JSON when it parses, else text. The probe header keeps the mocks from counting it as client traffic."""
-    req = urllib.request.Request(url, headers={"X-Opti-Probe": "1"})
+    req = urllib.request.Request(url, headers={"X-Workbench-Probe": "1"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         raw = r.read().decode()
     try:
@@ -69,7 +69,7 @@ def gather(sim: dict, name: str, fetch: Callable, runner: Callable | None = None
             mem = d["HostConfig"].get("Memory") or 0
             info["container"] = {"state": d["State"]["Status"], "image": d["Config"]["Image"],
                                  "memory_limit_mb": mem // (1024 * 1024) or None,
-                                 "class": d["Config"]["Labels"].get("hpcsim.class")}
+                                 "class": d["Config"]["Labels"].get("workbench.class")}
         else:
             info["container"] = {"state": "absent"}
             info["notes"].append("container not found: is the stack up? (benchctl up)")

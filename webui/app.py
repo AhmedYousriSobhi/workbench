@@ -1,6 +1,6 @@
 """Web UI backend (SPEC W-1..W-3, W-5, W-6, W-8).
 
-Runs as an ordinary user: it reads the governor over /run/hpcsim/gov.sock and plays scenarios in-process
+Runs as an ordinary user: it reads the governor over /run/workbench/gov.sock and plays scenarios in-process
 (HTTP targets only; Slurm steps need Docker access, which the UI must not have). Everything needs the login token.
 Built on Starlette (FastAPI's base) rather than FastAPI itself: FastAPI's pydantic alone costs ~15 MB of the 50 MB
 budget (ADR 0008).
@@ -24,14 +24,14 @@ from starlette.responses import (
 )
 from starlette.routing import Route
 
-from simctl import checks, scenario
+from benchctl import checks, scenario
 
 from .cluster import ActionError, Cluster
 from .flow import PAUSE_LEVEL, Flow
 from .wiki import Wiki, WikiError, esc, page
 
 STATIC = Path(__file__).parent / "static"
-COOKIE = "hpcsim_ui"
+COOKIE = "workbench_ui"
 DOCS = Path(__file__).resolve().parent.parent / "docs"
 
 
@@ -161,7 +161,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
     async def plan(request: Request):
         """Estimate only, no side effects (W-3): the page cannot start containers, so it shows the command to run."""
-        from simctl import checks, workbench
+        from benchctl import checks, workbench
 
         q = request.query_params
         try:
@@ -181,7 +181,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
                              "text": workbench.render(spec, est), "command": f"benchctl up {flags}"})
 
     async def node_detail(request: Request):
-        from simctl import describe
+        from benchctl import describe
 
         try:
             info = await asyncio.to_thread(describe.gather, cluster.sim, request.path_params["node"], cluster.fetch)

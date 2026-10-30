@@ -16,7 +16,7 @@ privileges. A bad token reaching `slurmrestd` must also never return data.
   with only `slurm` and `slurmrestd` in that group. HS256 verification needs the key, so a `slurmrestd`
   compromise exposes it; acceptable for a closed lab network, never reuse outside it.
 - `slurmdbd` also accepts JWT (`AuthAltTypes`), otherwise `slurmrestd` cannot open its accounting connection.
-- Simulated users (`sim.yaml`) are created on every Slurm container with fixed UIDs (`HPCSIM_USERS`).
+- Simulated users (`sim.yaml`) are created on every Slurm container with fixed UIDs (`WORKBENCH_USERS`).
 - MariaDB keeps its data on a 100 MB tmpfs with a small buffer pool and redo log; its container limit
   (250 MB) covers tmpfs plus server. Secrets live only in `compose/generated/secrets` (gitignored, mode 0600/0700);
   the DB password is generated once and kept across regenerations.

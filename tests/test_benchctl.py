@@ -4,7 +4,7 @@ import tarfile
 
 import pytest
 
-from simctl import checks, diag
+from benchctl import checks, diag
 
 GB = checks.GB
 PROFILES = {"min": 3.0, "std": 6.0, "full": 9.0}
@@ -79,7 +79,7 @@ def test_bundle_has_no_tokens(tmp_path):
 # --- Phase 0 measurement -------------------------------------------------------------------
 
 def test_parse_size_and_docker_stats():
-    from simctl import measure
+    from benchctl import measure
 
     assert measure.parse_size("12.5MiB") == int(12.5 * 1024**2)
     assert measure.parse_size("1GiB") == 1024**3
@@ -90,7 +90,7 @@ def test_parse_size_and_docker_stats():
 
 
 def test_parse_dommemstat_prefers_rss():
-    from simctl import measure
+    from benchctl import measure
 
     assert measure.parse_dommemstat("actual 2097152\nrss 1048576\n") == 1048576 * 1024
     assert measure.parse_dommemstat("actual 2097152\n") == 2097152 * 1024
@@ -98,7 +98,7 @@ def test_parse_dommemstat_prefers_rss():
 
 
 def test_pss_falls_back_to_rss(tmp_path):
-    from simctl import measure
+    from benchctl import measure
 
     (tmp_path / "status").write_text("Name:\tx\nVmRSS:\t  500 kB\n")
     assert measure.pss_kb(tmp_path) == 500
@@ -108,7 +108,7 @@ def test_pss_falls_back_to_rss(tmp_path):
 
 
 def test_processes_sum_by_name(tmp_path):
-    from simctl import measure
+    from benchctl import measure
 
     for pid, comm, kb in ((1, "python", 100), (2, "python", 50), (3, "redis", 10)):
         d = tmp_path / str(pid)
@@ -120,7 +120,7 @@ def test_processes_sum_by_name(tmp_path):
 
 
 def test_aggregate_sample_and_save(tmp_path):
-    from simctl import measure
+    from benchctl import measure
 
     seq = iter([{"docker:a": 100, "vm:x": 50}, {"docker:a": 300}, {"docker:a": 200}])
     snaps = measure.sample(10, 5, take=lambda: next(seq), sleep=lambda s: None)
@@ -133,7 +133,7 @@ def test_aggregate_sample_and_save(tmp_path):
 
 
 def test_report_suggests_headroom():
-    from simctl import measure
+    from benchctl import measure
 
     mib = 1024**2
     idle = {"stats": {"docker:a": {"mean": 100 * mib, "peak": 100 * mib}, "host:used": {"mean": 1, "peak": 1}}}
@@ -144,7 +144,7 @@ def test_report_suggests_headroom():
 
 
 def test_snapshot_is_flat_and_readonly_on_this_host():
-    from simctl import measure
+    from benchctl import measure
 
     s = measure.snapshot()
     assert s["host:available"] > 0

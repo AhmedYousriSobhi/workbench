@@ -119,13 +119,13 @@ def test_metrics_server_is_started_and_shut_down(host, monkeypatch):
 
 def test_grafana_url_without_token_warns_and_disables_annotations(host, monkeypatch, caplog):
     _, sig = host
-    monkeypatch.delenv("HPCSIM_GRAFANA_TOKEN", raising=False)
+    monkeypatch.delenv("WORKBENCH_GRAFANA_TOKEN", raising=False)
     with caplog.at_level(logging.WARNING, logger="governor"):
         gm.main(["--dry-run", "--once", "--no-watchdog", "--signals-file", str(sig), "--grafana-url", "http://x"])
     assert any("annotations disabled" in r.message for r in caplog.records)
 
 
-def test_effector_runs_simctl_in_the_workdir(host, monkeypatch, tmp_path):
+def test_effector_runs_benchctl_in_the_workdir(host, monkeypatch, tmp_path):
     _, sig = host
     ran = {}
 
@@ -144,7 +144,7 @@ def test_effector_runs_simctl_in_the_workdir(host, monkeypatch, tmp_path):
     monkeypatch.setattr(gm, "Governor", spy)
     gm.main(["--dry-run", "--once", "--no-watchdog", "--signals-file", str(sig), "--workdir", str(tmp_path)])
     assert captured["effector"](["scale", "2"]) == 0
-    assert ran["cwd"] == str(tmp_path) and ran["cmd"][-3:] == ["simctl.cli", "scale", "2"]
+    assert ran["cwd"] == str(tmp_path) and ran["cmd"][-3:] == ["benchctl.cli", "scale", "2"]
 
 
 def test_without_workdir_there_is_no_effector(host, monkeypatch):

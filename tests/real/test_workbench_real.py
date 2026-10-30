@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from helpers import wait_for
 
-from simctl import stack, workbench
+from benchctl import stack, workbench
 
 ROOT = Path(__file__).resolve().parents[2]
 

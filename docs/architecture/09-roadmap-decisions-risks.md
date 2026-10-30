@@ -7,7 +7,7 @@
 | Phase | Deliverable | Exit test |
 |---|---|---|
 | 0 Baseline | Measure idle + loaded RAM of each current piece (`docker stats`, `smem`, `virsh dommemstat`); fill real numbers into [section 5](04-memory-and-profiles.md) | Budget table replaced with measured values |
-| 1 Governor | Host tuning script, slices, governor with dry-run and the ladder, `simctl top` | A synthetic memory hog gets throttled, frozen, then stopped in order, and recovers |
+| 1 Governor | Host tuning script, slices, governor with dry-run and the ladder, `benchctl top` | A synthetic memory hog gets throttled, frozen, then stopped in order, and recovers |
 | 2 Slurm | `node-base`, ctld + restd, N slurmd from `sim.yaml`, Prometheus + Grafana | `benchctl scale compute 16` works; app sees the nodes |
 | 3 Mocks | bmc-farm, bcm-mock, gpu-exporter-farm, jira-mock + Toxiproxy | App's BMC/BCM/Jira integrations pass against mocks |
 | 4 People + chaos | user-sim, ticket-bot, scenario engine, 5 starter scenarios | `gpu-xid-storm` produces tickets end to end |

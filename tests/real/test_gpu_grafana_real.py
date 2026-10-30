@@ -10,7 +10,7 @@ import pytest
 import yaml
 from helpers import bring_up, wait_for
 
-from simctl import stack
+from benchctl import stack
 
 ROOT = Path(__file__).resolve().parents[2]
 GRAFANA = "http://127.0.0.1:3000"

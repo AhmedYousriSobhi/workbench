@@ -64,7 +64,7 @@ def test_mock_counts_only_client_requests(name, make, path):
             else:
                 get(base + path)
         get(base + "/healthz")  # health check: not traffic
-        get(base + (path or "/healthz"), headers={"X-Opti-Probe": "1"})  # the UI's own poll: not traffic
+        get(base + (path or "/healthz"), headers={"X-Workbench-Probe": "1"})  # the UI's own poll: not traffic
         get(base + "/sim/inject", data=b"{}")  # control call: not traffic
         assert json.loads(get(base + "/sim/stats")[1])["requests"] == 2
     finally:
@@ -81,7 +81,7 @@ def test_ui_polls_carry_the_probe_header(monkeypatch):
     monkeypatch.setattr(cluster.urllib.request, "urlopen", fake_urlopen)
     with pytest.raises(OSError):
         cluster.http_json("http://127.0.0.1:1/x")
-    assert seen.get("X-opti-probe") == "1"
+    assert seen.get("X-workbench-probe") == "1"
 
 
 class FakeMocks:
@@ -223,7 +223,7 @@ def test_flow_endpoint_streams_and_pauses_at_l3(tmp_path):
 def test_scenario_steps_and_fault_buttons_become_injector_events(tmp_path, monkeypatch):
     import yaml
 
-    from simctl import scenario
+    from benchctl import scenario
     from webui.app import Runs
     (tmp_path / "t.yaml").write_text("name: t\ndescription: d\nsteps:\n  - {at: 0s, target: bmc-farm, do: {nodes: [cn001], temp: 90}}\n"
                                      "  - {at: 0s, target: slurm, do: {drain: [cn001]}}\n")

@@ -9,9 +9,9 @@ workbench/
 ├── README.md  SPEC.md  CLAUDE.md
 ├── sim.yaml                  # single source of truth: nodes, GPUs, users, partitions, profile budgets
 ├── profiles/                 # min.yaml std.yaml full.yaml jira-real.yaml mac-agent.yaml
-├── simctl/                   # Python (Typer): up/down/scale/scenario/doctor/top
+├── benchctl/                   # Python (Typer): up/down/scale/scenario/doctor/top
 ├── governor/                 # Python daemon: signals, ladder, actions, metrics, dry-run
-├── systemd/                  # hpcsim-*.slice, hpcsim-governor.service, oomd drop-ins
+├── systemd/                  # workbench-*.slice, workbench-governor.service, oomd drop-ins
 ├── images/
 │   ├── node-base/            # shared base for all slurmd containers
 │   └── slurm-ctl/ ...

@@ -48,7 +48,7 @@ Normative requirements for workbench. [README.md](README.md) gives the overview 
 
 ## 4a. Component interfaces (summary)
 
-- Governor control socket: `/run/hpcsim/gov.sock`, JSON requests, a fixed allow-list of commands (status, scale, freeze, thaw, stop, start, set-profile). Unknown commands MUST be rejected.
+- Governor control socket: `/run/workbench/gov.sock`, JSON requests, a fixed allow-list of commands (status, scale, freeze, thaw, stop, start, set-profile). Unknown commands MUST be rejected.
 - bmc-farm: Redfish under `/redfish/v1/...` per endpoint (TLS :8443, ADR 0012; plain `/<node>/redfish/v1` on :8000); control API `POST /sim/inject`.
 - Scenario file: YAML, see [architecture section 7](docs/architecture/06-ux-and-scenarios.md).
 
@@ -71,7 +71,7 @@ Normative requirements for workbench. [README.md](README.md) gives the overview 
 
 Profiles: `min`, `std`, `full`, `jira-real`, `mac-agent` ([architecture section 5](docs/architecture/04-memory-and-profiles.md)). `benchctl up --profile X` MUST refuse to start when `MemAvailable - profile budget` is below the safety floor and MUST suggest a smaller profile. Budgets are planning estimates until Phase 0 replaces them with measured values.
 
-## 7. CLI (`simctl`)
+## 7. CLI (`benchctl`)
 
 `doctor`, `up --profile`, `down`, `status`, `top`, `scale <group> <n>`, `jira mode <mock|cloud|dc>`, `scenario list|run`, `workload run`. All state-changing commands go through the governor.
 
@@ -81,7 +81,7 @@ Profiles: `min`, `std`, `full`, `jira-real`, `mac-agent` ([architecture section 
 |---|---|
 | W-1 | Backend Starlette (ADR 0008: importing FastAPI alone costs ~39 MB); frontend one static HTML page with vanilla JS and a hand-written stylesheet, no framework, no CDN, no build step (ADR 0007); total host RAM under 50 MB. |
 | W-2 | Live telemetry via Server-Sent Events at 1 s intervals. |
-| W-3 | Runs as the restricted `hpcsim` user and talks to the governor only through the Unix socket; it MUST NOT have root, Docker-socket or libvirt access of its own. |
+| W-3 | Runs as the restricted `workbench` user and talks to the governor only through the Unix socket; it MUST NOT have root, Docker-socket or libvirt access of its own. |
 | W-4 | Cluster Canvas: topology from `sim.yaml` with per-node fault actions (Set K8s NotReady, Inject GPU XID, Drain slurmd). |
 | W-5 | Governor Dashboard: MemAvailable and PSI sparklines, color-coded level banner, scrolling audit log. |
 | W-6 | Scenario Orchestrator: browse, Play, Stop, Fast-Forward, timeline of upcoming steps. |

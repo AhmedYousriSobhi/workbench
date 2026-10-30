@@ -24,9 +24,9 @@ log = logging.getLogger("governor")
 
 
 def arrivals_flag_path(given: str, user_mode: bool) -> str:
-    """The flag file defaults to /run/hpcsim, which only root can write: rootless mode uses the user's runtime dir."""
+    """The flag file defaults to /run/workbench, which only root can write: rootless mode uses the user's runtime dir."""
     if user_mode and given == ARRIVALS_FLAG:
-        return str(Path(os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/hpcsim-{os.getuid()}") / "hpcsim" / "arrivals.paused")
+        return str(Path(os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/workbench-{os.getuid()}") / "workbench" / "arrivals.paused")
     return given
 
 
@@ -46,10 +46,10 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--no-watchdog", action="store_true", help="disable container security/limit checks")
     ap.add_argument("--watch-interval", type=float, default=15.0, help="seconds between security scans")
     ap.add_argument("--grafana-url", default=None,
-                    help="publish audit events as annotations; token from $HPCSIM_GRAFANA_TOKEN")
+                    help="publish audit events as annotations; token from $WORKBENCH_GRAFANA_TOKEN")
     ap.add_argument("--refresh-interval", type=float, default=30.0, help="seconds between inventory refreshes")
     ap.add_argument("--workdir", default=None,
-                    help="repo root; enables scale/set-profile by running simctl there")
+                    help="repo root; enables scale/set-profile by running benchctl there")
     ap.add_argument("--metrics-addr", default=None, metavar="HOST:PORT",
                     help="serve Prometheus /metrics here (bind the docker bridge gateway, not 0.0.0.0)")
     ap.add_argument("--user-mode", action="store_true",
@@ -71,12 +71,12 @@ def main(argv: list[str] | None = None) -> None:
     ladder = Ladder(Thresholds(**json.loads(args.thresholds or "{}")))
     executor = (UserExecutor if args.user_mode else Executor)(groups, cgroups, path, arrivals_flag=arrivals_flag_path(args.arrivals_flag, args.user_mode))
     watchdog = None if args.no_watchdog else Watchdog()
-    token = os.environ.get("HPCSIM_GRAFANA_TOKEN", "")
+    token = os.environ.get("WORKBENCH_GRAFANA_TOKEN", "")
     annotator = Annotator(args.grafana_url, token) if args.grafana_url and token else None
     if args.grafana_url and not token:
-        log.warning("--grafana-url given but HPCSIM_GRAFANA_TOKEN is empty: annotations disabled")
+        log.warning("--grafana-url given but WORKBENCH_GRAFANA_TOKEN is empty: annotations disabled")
     def effector(a: list[str]) -> int:
-        cmd = [sys.executable, "-m", "simctl.cli", *a]
+        cmd = [sys.executable, "-m", "benchctl.cli", *a]
         owner = Path(args.workdir).stat().st_uid
         if os.geteuid() == 0 and owner != 0:  # run as the checkout's owner so generated files stay theirs
             cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]

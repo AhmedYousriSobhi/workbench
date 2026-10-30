@@ -8,7 +8,7 @@ import pytest
 import yaml
 from helpers import bring_up, wait_for
 
-from simctl import stack
+from benchctl import stack
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -30,7 +30,7 @@ def cluster():
     os.chdir(ROOT)
     bring_up(yaml.safe_load((ROOT / "sim.yaml").read_text()))
     assert wait_for(lambda: "gpu001" in subprocess.run(
-        ["docker", "exec", "-u", "alice", "hpcsim-login-1", "sinfo", "-h", "-N", "-p", "gpu", "-t", "idle", "-o", "%N"],
+        ["docker", "exec", "-u", "alice", "workbench-login-1", "sinfo", "-h", "-N", "-p", "gpu", "-t", "idle", "-o", "%N"],
         capture_output=True, text=True, check=False).stdout, timeout=90)
     assert wait_for(_exporter_up, timeout=120), "the GPU exporter (it installs pyyaml at start) never answered"
     yield
@@ -44,7 +44,7 @@ def test_describe_shows_container_slurm_bmc_and_gpus(cluster):
 
 
 def test_a_running_job_appears_with_its_busy_gpus(cluster):
-    r = subprocess.run(["docker", "exec", "-u", "alice", "hpcsim-login-1", "sbatch", "-D", "/tmp", "--wrap=sleep 120", "-p", "gpu",
+    r = subprocess.run(["docker", "exec", "-u", "alice", "workbench-login-1", "sbatch", "-D", "/tmp", "--wrap=sleep 120", "-p", "gpu",
                         "--nodelist=gpu001", "--gres=gpu:2"], capture_output=True, text=True, check=False)
     assert r.returncode == 0, r.stderr
     assert wait_for(lambda: "(alice, gpu, RUNNING)" in describe("gpu001") and "busy [0, 1]" in describe("gpu001"), timeout=60), describe("gpu001")

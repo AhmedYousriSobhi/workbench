@@ -7,7 +7,7 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
-from simctl import cli, describe
+from benchctl import cli, describe
 
 SIM = yaml.safe_load((Path(__file__).resolve().parent.parent / "sim.yaml").read_text())
 METRICS = """\
@@ -18,7 +18,7 @@ DCGM_FI_DEV_GPU_UTIL{node="gpu002",gpu="0",Hostname="gpu002"} 99
 DCGM_FI_DEV_XID_ERRORS{node="gpu001",gpu="2",Hostname="gpu001"} 79"""
 SCONTROL = ("NodeName=gpu001 Arch=x86_64 CPUTot=8 CPUAlloc=2 RealMemory=4096 Gres=gpu:h200:8 "
             "State=MIXED Partitions=gpu Reason=(null)")
-INSPECT = json.dumps([{"State": {"Status": "running"}, "Config": {"Image": "hpcsim/node:dev", "Labels": {"hpcsim.class": "P4"}},
+INSPECT = json.dumps([{"State": {"Status": "running"}, "Config": {"Image": "workbench/node:dev", "Labels": {"workbench.class": "P4"}},
                        "HostConfig": {"Memory": 60 * 1024 * 1024}}])
 
 
@@ -41,7 +41,7 @@ def runner(cmd):
 
 def test_gpu_node_gathers_every_source():
     info = describe.gather(SIM, "gpu001", fetch, runner)
-    assert info["container"] == {"state": "running", "image": "hpcsim/node:dev", "memory_limit_mb": 60, "class": "P4"}
+    assert info["container"] == {"state": "running", "image": "workbench/node:dev", "memory_limit_mb": 60, "class": "P4"}
     assert info["slurm"]["State"] == "MIXED" and info["slurm"]["Partitions"] == "gpu" and "Reason" not in info["slurm"]
     assert info["jobs"] == [{"id": "42", "user": "alice", "partition": "gpu", "state": "RUNNING"}]
     assert info["gpus"] == {"type": "h200", "count": 8, "busy": [0, 1], "idle": [2], "xid": 79}
@@ -94,7 +94,7 @@ def test_ports_match_the_web_page():
 
 def test_cli_describe_prints_text_json_and_refuses_an_unknown_node(monkeypatch):
     monkeypatch.setattr(describe, "http_get", fetch)
-    monkeypatch.setattr("simctl.stack._run", runner)
+    monkeypatch.setattr("benchctl.stack._run", runner)
     r = CliRunner().invoke(cli.app, ["describe", "node", "gpu001"])
     assert r.exit_code == 0 and "GPUs:" in r.output
     assert json.loads(CliRunner().invoke(cli.app, ["describe", "node", "gpu001", "-o", "json"]).output)["name"] == "gpu001"

@@ -25,7 +25,7 @@ Check all of this before building anything:
 The first `start` builds images (a few minutes) and creates `.venv`. Use `./scripts/benchctl start --profile std` for a
 bigger profile. The login link signs you in once; keep it private, it only works on this machine.
 
-`benchctl start` reads two environment variables: `OPTI_UI_PORT` (web page port, default 8088) and `OPTI_GOVERNOR`
+`benchctl start` reads two environment variables: `BENCHCTL_UI_PORT` (web page port, default 8088) and `BENCHCTL_GOVERNOR`
 (`auto|user|system|off`, default `auto`: the system service if it runs, otherwise a governor started as you).
 `off` disables memory protection; do not use it on a workstation you care about.
 
@@ -41,16 +41,16 @@ python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'   # onc
 .venv/bin/python -m webui                     # prints the login link
 ```
 
-Without activating the venv, prefix commands with `./scripts/benchctl` instead of `python -m simctl.cli`.
+Without activating the venv, prefix commands with `./scripts/benchctl` instead of `python -m benchctl.cli`.
 
 ## Stopping and cleaning up
 
 ```bash
 ./scripts/benchctl stop             # everything `benchctl start` began
-./scripts/benchctl down           # only the cluster; removes the hpcsim compose project and nothing else
+./scripts/benchctl down           # only the cluster; removes the workbench compose project and nothing else
 ```
 
-Both touch only the `hpcsim` project, never your other containers.
+Both touch only the `workbench` project, never your other containers.
 
 ## Optional: the root governor service
 

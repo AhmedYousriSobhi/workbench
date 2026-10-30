@@ -21,7 +21,7 @@ def virsh(*a):
 
 @pytest.fixture
 def vm(tmp_path):
-    name = f"hpcsim-test-{uuid.uuid4().hex[:6]}"
+    name = f"workbench-test-{uuid.uuid4().hex[:6]}"
     f = tmp_path / "vm.xml"
     f.write_text(XML.format(n=name))
     r = virsh("define", str(f))

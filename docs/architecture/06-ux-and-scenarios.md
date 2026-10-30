@@ -8,12 +8,12 @@
 benchctl doctor                       # host checks + tuning suggestions
 benchctl up --profile std             # pre-flight, then bring everything up
 benchctl status                       # profile, per-class memory vs budget, governor level
-simctl top                          # live table: groups, PSI, level, actions taken
+benchctl top                          # live table: groups, PSI, level, actions taken
 benchctl scale compute 24             # change slurmd count (governor-approved)
-simctl jira mode mock|cloud|dc
+benchctl jira mode mock|cloud|dc
 benchctl scenario list
 benchctl scenario run gpu-xid-storm   # trigger an issue
-simctl workload run ml-peak --duration 30m
+benchctl workload run ml-peak --duration 30m
 benchctl down
 ```
 
@@ -33,8 +33,8 @@ Budget: **< 50 MB** host RAM. No heavy JS frameworks.
 
 | Component | Privilege | Communication | Responsibility |
 |---|---|---|---|
-| Governor daemon | `root` | Listens on Unix socket `/run/hpcsim/gov.sock` | Executes scale/freeze/stop actions, monitors PSI |
-| Web UI backend | `hpcsim` (restricted) | JSON over the Unix socket | Serves HTML, auth, translates clicks into socket commands |
+| Governor daemon | `root` | Listens on Unix socket `/run/workbench/gov.sock` | Executes scale/freeze/stop actions, monitors PSI |
+| Web UI backend | `workbench` (restricted) | JSON over the Unix socket | Serves HTML, auth, translates clicks into socket commands |
 
 A compromise of the Web UI can only issue the pre-approved commands the socket accepts; it never gets root.
 

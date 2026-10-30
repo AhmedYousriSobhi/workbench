@@ -8,7 +8,7 @@ Host reserve (OS, desktop, IDE, browser): **about 3 GB**, never governed. Page c
 
 | Component | Est. RAM | Priority |
 |---|---|---|
-| governor + simctl + Web UI (< 50 MB) | 0.15 GB | P0 (protected) |
+| governor + benchctl + Web UI (< 50 MB) | 0.15 GB | P0 (protected) |
 | Prometheus + Alertmanager + Grafana | 0.7 GB | P1 |
 | slurmctld + slurmrestd | 0.2 GB | P1 |
 | slurmdbd + MariaDB (small buffer pool) | 0.2 GB | P2 (profile-gated) |

@@ -14,19 +14,19 @@ from governor.watchdog import accepted_exceptions, container_violations
 
 GB = 1024**3
 SAFETY_FLOOR = int(1.0 * GB)  # MemAvailable must stay above this after the profile starts
-SYSTEM_SOCKET = "/run/hpcsim/gov.sock"
+SYSTEM_SOCKET = "/run/workbench/gov.sock"
 
 
 def user_socket() -> str:
     """Where the rootless governor listens: under the user's runtime dir, no root needed."""
-    return f"{os.environ.get('XDG_RUNTIME_DIR') or f'/tmp/hpcsim-{os.getuid()}'}/hpcsim/gov.sock"
+    return f"{os.environ.get('XDG_RUNTIME_DIR') or f'/tmp/workbench-{os.getuid()}'}/workbench/gov.sock"
 
 
 def default_socket(env: dict | None = None, exists=os.path.exists) -> str:
-    """$HPCSIM_GOV_SOCKET, else the system service's socket, else the rootless governor's if only that one exists."""
+    """$WORKBENCH_GOV_SOCKET, else the system service's socket, else the rootless governor's if only that one exists."""
     env = os.environ if env is None else env
-    if env.get("HPCSIM_GOV_SOCKET"):
-        return env["HPCSIM_GOV_SOCKET"]
+    if env.get("WORKBENCH_GOV_SOCKET"):
+        return env["WORKBENCH_GOV_SOCKET"]
     if not exists(SYSTEM_SOCKET) and exists(user_socket()):
         return user_socket()
     return SYSTEM_SOCKET
@@ -150,7 +150,7 @@ def governor_request(req: dict, path: str = GOV_SOCKET, timeout: float = 3) -> d
 
 
 def check_containers(runner=run) -> Check:
-    ids = runner(["docker", "ps", "-q", "--filter", "label=hpcsim.class"])
+    ids = runner(["docker", "ps", "-q", "--filter", "label=workbench.class"])
     if ids.returncode != 0 or not ids.stdout.split():
         return Check("sim containers", OK, "none running")
     r = runner(["docker", "inspect", *ids.stdout.split()], 30)

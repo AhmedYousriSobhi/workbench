@@ -9,7 +9,7 @@ import pytest
 import yaml
 from helpers import bring_up, wait_for
 
-from simctl import scenario, stack
+from benchctl import scenario, stack
 
 ROOT = Path(__file__).resolve().parents[2]
 BASE = "http://127.0.0.1:8080"

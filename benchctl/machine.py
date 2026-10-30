@@ -1,7 +1,7 @@
 """Initial machine check: can this box build and run workbench at all?
 
 Standard library only, so it runs before the venv or any image exists:
-    ./scripts/check-machine.sh        (or: python3 -m simctl.machine)
+    ./scripts/check-machine.sh        (or: python3 -m benchctl.machine)
 Pure functions over injected readers, so they unit-test without a host.
 `benchctl doctor` is the later, deeper check of a running setup.
 """

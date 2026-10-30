@@ -14,7 +14,7 @@ def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool 
     gpu = [n for n, k in names if k == "gpu"]
     lines = [
         "# GENERATED from sim.yaml by `benchctl compose`; do not edit.",
-        "ClusterName=hpcsim",
+        "ClusterName=workbench",
         f"SlurmctldHost={CTLD}",
         "AuthType=auth/munge",
         "SlurmUser=slurm",
@@ -62,7 +62,7 @@ def gres_conf(sim: dict) -> str:
         return head
     gpu = [n for n, k in node_names(sim) if k == "gpu"]
     last = g["gpus_per_node"] - 1
-    files = f"/dev/hpcsim-gpu[0-{last}]" if last else "/dev/hpcsim-gpu0"
+    files = f"/dev/workbench-gpu[0-{last}]" if last else "/dev/workbench-gpu0"
     return head + f"NodeName={_range(gpu)} Name=gpu Type={g['type']} File={files}\n"
 
 
@@ -90,7 +90,7 @@ def accounting_script(sim: dict) -> str:
     qos = sorted({u["qos"] for u in users if u["qos"] != "normal"})
     lines = ["#!/bin/sh", "# GENERATED from sim.yaml; safe to re-run",
              "until sacctmgr -i show cluster >/dev/null 2>&1; do sleep 2; done",
-             "sacctmgr -i add cluster hpcsim || true", "sacctmgr -i add account sim || true"]
+             "sacctmgr -i add cluster workbench || true", "sacctmgr -i add account sim || true"]
     lines += [f"sacctmgr -i add qos {q} || true" for q in qos]
     lines += [f"sacctmgr -i add user {u['name']} account=sim qos={u['qos']} || true" for u in users]
     return "\n".join(lines) + "\n"

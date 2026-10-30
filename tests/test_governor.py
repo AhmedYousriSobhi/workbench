@@ -244,7 +244,7 @@ def test_annotator_posts_in_order_and_survives_failures():
         time.sleep(0.05)
     an.close()
     assert [p[2] for p in posted] == ["one", "two"]
-    assert posted[0][:2] == ("http://g", "tok") and "hpcsim" in posted[0][3]
+    assert posted[0][:2] == ("http://g", "tok") and "workbench" in posted[0][3]
     assert an.failed is False  # recovered after the successful post
 
 
@@ -392,15 +392,15 @@ def test_metrics_text_and_endpoint(tmp_path):
     g.handle("admit", {"budget_mb": 99999})
     g.step(1)
     text = g.metrics.decode()
-    assert "hpcsim_governor_level 0" in text
-    assert f"hpcsim_host_mem_available_bytes {4 * GB}" in text
-    assert 'hpcsim_governor_admit_total{result="ok"} 1' in text
-    assert 'hpcsim_governor_admit_total{result="refused"} 1' in text
+    assert "workbench_governor_level 0" in text
+    assert f"workbench_host_mem_available_bytes {4 * GB}" in text
+    assert 'workbench_governor_admit_total{result="ok"} 1' in text
+    assert 'workbench_governor_admit_total{result="refused"} 1' in text
     srv = metrics.serve("127.0.0.1:0", g)
     try:
         port = srv.server_address[1]
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/metrics", timeout=5) as r:
-            assert r.status == 200 and b"hpcsim_governor_level" in r.read()
+            assert r.status == 200 and b"workbench_governor_level" in r.read()
         try:
             urllib.request.urlopen(f"http://127.0.0.1:{port}/other", timeout=5)
             raise AssertionError("expected 404")

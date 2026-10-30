@@ -36,8 +36,8 @@ def wait_for(pred, timeout=15):
 
 @pytest.fixture
 def container():
-    name = f"hpcsim-test-{uuid.uuid4().hex[:6]}"
-    r = sh("docker", "run", "-d", "--rm", "--name", name, "--label", "hpcsim.class=P4",
+    name = f"workbench-test-{uuid.uuid4().hex[:6]}"
+    r = sh("docker", "run", "-d", "--rm", "--name", name, "--label", "workbench.class=P4",
            "--memory", "200m", "busybox", "sh", "-c", "head -c 50000000 /dev/zero | tail; sleep 300")
     assert r.returncode == 0, r.stderr
     yield name
@@ -68,7 +68,7 @@ def test_docker_cgroup_freeze_throttle_reclaim(container):
 
 
 def test_governor_as_systemd_service(tmp_path):
-    unit = f"hpcsim-test-gov-{uuid.uuid4().hex[:6]}"
+    unit = f"workbench-test-gov-{uuid.uuid4().hex[:6]}"
     sock = f"/run/{unit}/gov.sock"
     r = sh("systemd-run", f"--unit={unit}", "-p", "OOMScoreAdjust=-900", "-p", "MemoryLow=64M",
            "-p", "LimitMEMLOCK=infinity", "-p", "Restart=always", "-p", f"RuntimeDirectory={unit}",
@@ -97,10 +97,10 @@ def test_nf1_memory_hog_stopped_in_ladder_order_without_oom(tmp_path):
     The hog fills a tmpfs (charged to the container cgroup) at ~30 MB/s under a 200 MB cap. The
     governor watches that cgroup only, so the host is never put under pressure.
     """
-    name = f"hpcsim-test-{uuid.uuid4().hex[:6]}"
+    name = f"workbench-test-{uuid.uuid4().hex[:6]}"
     hog = ("i=0; while true; do dd if=/dev/zero of=/t/f$i bs=1M count=10 2>/dev/null; "
            "i=$((i+1)); sleep 0.3; done")
-    subprocess.run(["docker", "run", "-d", "--name", name, "--label", "hpcsim.class=P4",
+    subprocess.run(["docker", "run", "-d", "--name", name, "--label", "workbench.class=P4",
                     "--memory", "200m", "--memory-swap", "200m", "--tmpfs", "/t:size=400m",
                     "busybox", "sh", "-c", hog], check=True, capture_output=True)
     try:

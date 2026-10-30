@@ -17,7 +17,7 @@ log = logging.getLogger("governor.exec")
 CGROUP_ROOT = Path("/sys/fs/cgroup")
 THROTTLE_FRACTION = 0.8  # memory.high = 80% of current usage
 RECLAIM_FRACTION = 0.5  # ask the kernel to reclaim half of current usage
-ARRIVALS_FLAG = "/run/hpcsim/arrivals.paused"
+ARRIVALS_FLAG = "/run/workbench/arrivals.paused"
 LIBVIRT_URI = "qemu:///system"  # a user-session virsh would not see system domains
 
 
@@ -40,8 +40,8 @@ def cgroup_dir(c: dict) -> Path:
 
 
 def discover_docker(run_cmd: Callable = run) -> tuple[list[Group], dict[str, Path]]:
-    """Containers labelled hpcsim.class=P<n> -> groups and their cgroup directories."""
-    ps = run_cmd(["docker", "ps", "-q", "--filter", "label=hpcsim.class"])
+    """Containers labelled workbench.class=P<n> -> groups and their cgroup directories."""
+    ps = run_cmd(["docker", "ps", "-q", "--filter", "label=workbench.class"])
     ids = ps.stdout.split()
     if not ids:
         return [], {}
@@ -49,7 +49,7 @@ def discover_docker(run_cmd: Callable = run) -> tuple[list[Group], dict[str, Pat
     groups, cgroups = [], {}
     for c in info:
         name = c["Name"].lstrip("/")
-        prio = int(c["Config"]["Labels"]["hpcsim.class"].lstrip("Pp"))
+        prio = int(c["Config"]["Labels"]["workbench.class"].lstrip("Pp"))
         groups.append(Group(name, prio))
         cgroups[name] = cgroup_dir(c)
     return groups, cgroups

@@ -461,10 +461,10 @@ const THEMES = ['auto', 'light', 'dark'], THEME_ICON = { auto: '◐ Auto', light
 function setTheme(t) {
   if (t === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = t;
   $('theme').textContent = THEME_ICON[t]; $('theme').setAttribute('aria-label', `Colour theme: ${t}. Press to change.`); $('theme').dataset.t = t;
-  try { localStorage.setItem('opti-theme', t); } catch (e) { /* private mode: not remembered */ }
+  try { localStorage.setItem('workbench-theme', t); } catch (e) { /* private mode: not remembered */ }
 }
 $('theme').onclick = () => setTheme(THEMES[(THEMES.indexOf($('theme').dataset.t || 'auto') + 1) % 3]);
-let savedTheme = 'auto'; try { savedTheme = localStorage.getItem('opti-theme') || 'auto'; } catch (e) { /* default */ }
+let savedTheme = 'auto'; try { savedTheme = localStorage.getItem('workbench-theme') || 'auto'; } catch (e) { /* default */ }
 setTheme(THEMES.includes(savedTheme) ? savedTheme : 'auto');
 
 

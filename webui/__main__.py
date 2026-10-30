@@ -6,7 +6,7 @@ from pathlib import Path
 
 import uvicorn
 
-from simctl.workbench import live_sim_path
+from benchctl.workbench import live_sim_path
 
 from .app import create_app
 

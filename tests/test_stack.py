@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from simctl import stack
+from benchctl import stack
 
 
 def cp(rc=0, out="", err=""):
@@ -136,7 +136,7 @@ def test_up_on_a_running_stack_is_not_refused_for_low_memory(tmp_path, monkeypat
     for d in ("profiles", "components", "images"):
         shutil.copytree(root / d, tmp_path / d, dirs_exist_ok=True)
     sim = yaml.safe_load((root / "sim.yaml").read_text())
-    from simctl import compose
+    from benchctl import compose
     every = "\n".join([*compose.generate(sim, compose.load_profile("min"))["services"],
                        "prometheus", "grafana", "gpu-exporter-farm"])
     said: list[str] = []
@@ -290,7 +290,7 @@ def test_up_also_makes_a_read_only_grafana_token_for_clients(tmp_path, monkeypat
     monkeypatch.setattr(stack, "wait_running", lambda *a, **k: [])
     assert stack.up(sim, "min", runner=runner, say=msgs.append, available=12 * 1024**3, wait=1)
     viewer = [k for k in made if k.get("role") == "Viewer"]
-    assert viewer and viewer[0]["path"] == stack.VIEWER_TOKEN_FILE and viewer[0]["account"] == "hpcsim-viewer"
+    assert viewer and viewer[0]["path"] == stack.VIEWER_TOKEN_FILE and viewer[0]["account"] == "workbench-viewer"
     assert any("viewer token" in m and "uid: prometheus" in m for m in msgs)
 
 
@@ -318,11 +318,11 @@ def test_token_reuses_an_existing_service_account_after_a_lost_token_file(tmp_pa
         if method == "POST" and path.endswith("serviceaccounts"):
             raise urllib.error.HTTPError(url, 400, "already exists", {}, None)
         if method == "GET":
-            return {"serviceAccounts": [{"id": 3, "name": "other"}, {"id": 9, "name": "hpcsim-viewer"}]}
+            return {"serviceAccounts": [{"id": 3, "name": "other"}, {"id": 9, "name": "workbench-viewer"}]}
         assert path == "/api/serviceaccounts/9/tokens"
         return {"key": "k"}
 
-    stack.provision_token(path=tmp_path / "t", http=http, valid=lambda t, u: False, account="hpcsim-viewer", role="Viewer")
+    stack.provision_token(path=tmp_path / "t", http=http, valid=lambda t, u: False, account="workbench-viewer", role="Viewer")
     assert (tmp_path / "t").read_text() == "k"
 
 
