@@ -45,3 +45,15 @@ def test_exec_runs_a_command_on_the_node_as_a_user(cluster):
 
 def test_logs_prints_the_container_log(cluster):
     assert benchctl("logs", "slurmctld", "--tail", "5").returncode == 0
+
+
+def test_selectors_names_and_dry_run_on_the_live_stack(cluster):
+    gpu = benchctl("get", "nodes", "-l", "kind=gpu", "-o", "name").stdout.split()
+    assert gpu == ["gpu001", "gpu002"]
+    assert benchctl("get", "nodes", "-l", "state=running", "-l", "kind!=gpu", "-o", "name").stdout.split()[0] == "cn001"
+    assert benchctl("get", "nodes", "-l", "nope=1").returncode == 2
+    dry = benchctl("down", "--dry-run")
+    assert dry.returncode == 0 and "would stop and remove" in dry.stdout and "slurmctld" in dry.stdout
+    assert "cn001" in benchctl("get", "nodes", "-l", "state=running", "-o", "name").stdout  # the dry run stopped nothing
+    shrink = benchctl("scale", "2", "--dry-run")
+    assert "would stop and remove: cn003, cn004" in shrink.stdout
