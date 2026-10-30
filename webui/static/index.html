@@ -553,7 +553,7 @@ $('exp-go').onclick = async () => {
     if (!r.ok) { $('exp-msg').textContent = '✗ ' + (await r.json()).detail; return; }
     const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = 'bench-profile.json';
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    $('exp-msg').textContent = '✓ Saved. Import it in the client.';
+    $('exp-msg').textContent = '✓ Saved. Import it in the client, then set the SSH key: run ./scripts/benchctl ssh-key install in a terminal and pick ~/.ssh/workbench_ed25519 in the cluster\'s SSH section.';
   } catch (e) { $('exp-msg').textContent = '✗ Could not reach the page backend.'; }
 };
 let connCache = null;
