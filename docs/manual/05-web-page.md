@@ -37,15 +37,15 @@ reduced motion, and the live feed runs only while the page is visible and the No
 
 ## Node cells and fault actions
 
-Click a node cell to open its details, which hold the *Fault actions*:  **Power off**, **Power on**, **Overheat (92 °C)**, **Fan failure**, **GPU error
+Click a node card to open its panel. It replaces the list in place (it is not a pop-up, so the traffic diagram stays in view and you can watch what your action does). The panel has two cards. **Actions** holds the faults, then the recovery:  **Power off**, **Power on**, **Overheat (92 °C)**, **Fan failure**, **GPU error
 (XID 79)** (GPU nodes only) or **Clear faults**. The card changes state and a diamond shows the injection. Nothing here
 opens a shell on a node; use [`docker exec`](04-nodes-and-shells.md).
 
 ![A node card with its Fault actions expanded: Power off, Power on, Overheat, Fan failure, Clear faults](img/web-fault-actions.png)
 
-*The fault actions (screenshot from before the node cells; they are now in the details dialog).*
+*The fault actions (screenshot from before the node cells; they are now in the node panel).*
 
-The same dialog shows everything known about that node (state of its BMC, GPUs busy and idle, how to `ssh` in): the same text as `benchctl describe node NAME`, minus the Docker and Slurm lines because this page has no Docker access.
+The **Info** card shows everything known about that node (state of its BMC, GPUs busy and idle, how to `ssh` in): the same text as `benchctl describe node NAME`, minus the Docker and Slurm lines because this page has no Docker access.
 
 **⚙ Plan** in the top bar opens a panel on the same page. It takes node counts and parts and shows the memory they need against what is free, with the `benchctl up ...` command to build it. Editing only estimates; **Apply to the running workbench** rebuilds it through the governor (the page itself still has no Docker access); see [choose the workbench](../guides/choose-workbench.md).
 
@@ -88,7 +88,7 @@ type in *Filter scenarios*, pick one speed for all, press **▶ Play**.
 
 **Connections** lists every part (login node, nodes, BMC, BCM, Jira, Slurm REST, GPU exporter, Prometheus, Grafana, this page)
 with its address, a command you can copy, and the **file that holds its credential**. The page shows paths, never secrets.
-A node's details dialog (click its cell) shows its SSH command, key file and BMC login; the container IP needs Docker, so
+A node's panel (click its card, **Info** card) shows its SSH command, key file and BMC login; the container IP needs Docker, so
 run `./scripts/benchctl describe node cn001` (it prints an `IP:` line).
 
 ## Limits
