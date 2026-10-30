@@ -4,10 +4,12 @@ from pathlib import Path as _Path
 
 import click
 import typer
+import typer.completion
 from typer.core import TyperGroup
 
 from . import (
     checks,
+    completion,
     compose,
     describe,
     diag,
@@ -42,7 +44,20 @@ def _old_name_notice() -> None:
         typer.echo("note: `simctl` is now `benchctl` (the old name still works for now).", err=True)
 
 
-app = typer.Typer(cls=SuggestingGroup, epilog="Scripts: use -o json where offered, read data from stdout (messages and errors "
+def _profile_check(value: str | None) -> str | None:
+    return completion.check_value(value, completion.profiles(""), "profile")
+
+
+def _node_check(value: str) -> str:
+    return completion.check_value(value, completion.nodes(""), "node")
+
+
+def _target_check(value: str) -> str:
+    return completion.check_value(value, completion.targets(""), "node or service")
+
+
+typer.completion.completion_init()  # register the shell handlers; the options are ours (`benchctl completion`)
+app = typer.Typer(cls=SuggestingGroup, add_completion=False, epilog="Scripts: use -o json where offered, read data from stdout (messages and errors "
                   "go to stderr). Exit codes: 0 ok, 1 failed or refused, 2 bad usage.", help="benchctl: control the simulated cluster. Pattern: benchctl VERB [RESOURCE] [NAME]. "
                        "Start with `benchctl start`, look with `benchctl get nodes`, stop with `benchctl stop`.")
 @app.callback()
@@ -73,7 +88,7 @@ def doctor() -> None:
 
 
 @app.command()
-def preflight(profile: str = typer.Option("std", "--profile")) -> None:
+def preflight(profile: str = typer.Option("std", "--profile", autocompletion=completion.profiles, callback=_profile_check)) -> None:
     """Would this profile fit in current free memory? (SPEC section 6)"""
     ok, msg = checks.preflight(profile, checks.load_profiles(), checks.mem_available())
     typer.echo(("OK: " if ok else "REFUSED: ") + msg, err=not ok)
@@ -121,7 +136,7 @@ def diag_cmd(out: str = typer.Option(None, "--out")) -> None:
 
 
 @app.command("compose")
-def compose_cmd(profile: str = typer.Option("std", "--profile")) -> None:
+def compose_cmd(profile: str = typer.Option("std", "--profile", autocompletion=completion.profiles, callback=_profile_check)) -> None:
     """Generate compose/generated/docker-compose.yml from sim.yaml and the profile."""
     from pathlib import Path
 
@@ -177,8 +192,8 @@ NAME = typer.Option(None, "--name", help="workbench name")
 CPU = typer.Option(None, "--cpu-nodes", help="compute nodes (default: sim.yaml)")
 GPU = typer.Option(None, "--gpu-nodes", help="GPU nodes (default: sim.yaml)")
 GPUS = typer.Option(None, "--gpus-per-node", help="GPUs on each GPU node, 1 to 8")
-WITH = typer.Option(None, "--with", help=f"add a part: {', '.join(workbench.PARTS)} (repeat)")
-WITHOUT = typer.Option(None, "--without", help="remove a part (repeat)")
+WITH = typer.Option(None, "--with", autocompletion=completion.parts, help=f"add a part: {', '.join(workbench.PARTS)} (repeat)")
+WITHOUT = typer.Option(None, "--without", autocompletion=completion.parts, help="remove a part (repeat)")
 K8S = typer.Option(None, "--k8s-nodes", help="Kubernetes nodes (not built yet)")
 SAVE = typer.Option(None, "--save", help="write the selection to this workbench file")
 
@@ -210,7 +225,7 @@ def _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_
 
 
 @app.command()
-def up(profile: str = typer.Option(None, "--profile", help="a size preset (default std); or choose by counts below"),
+def up(profile: str = typer.Option(None, "--profile", autocompletion=completion.profiles, callback=_profile_check, help="a size preset (default std); or choose by counts below"),
        file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS,
        with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S) -> None:
     """Estimate, then start. By preset (--profile) or by selection (--cpu-nodes 2 --gpu-nodes 4 --with jira ...)."""
@@ -243,9 +258,66 @@ def _launcher(*args: str) -> None:
 
 
 @app.command()
-def start(profile: str = typer.Option("min", "--profile")) -> None:
+def start(profile: str = typer.Option("min", "--profile", autocompletion=completion.profiles, callback=_profile_check)) -> None:
     """Everything in one step: machine check, governor, cluster, web page (the first run builds images)."""
+    _offer_completion()
     _launcher("start", "--profile", profile)
+
+
+def _offer_completion() -> None:
+    """Once, in a terminal: offer Tab completion for the user's shell. Asking is remembered; scripts are never asked."""
+    shell = completion.detect_shell()
+    flag = completion.asked_flag()
+    if not shell or flag.exists() or completion.installed(shell) or not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return
+    try:
+        flag.parent.mkdir(parents=True, exist_ok=True)
+        flag.write_text("asked\n")
+        if typer.confirm(f"Turn on Tab completion for {shell}? (one line in your rc file; undo: benchctl completion remove)",
+                         default=True):
+            _completion_install(shell)
+    except OSError as e:
+        typer.echo(f"could not set up completion: {e}", err=True)
+
+
+completion_app = typer.Typer(cls=SuggestingGroup, help="Tab completion: install, remove, or print the script for bash, zsh, fish")
+app.add_typer(completion_app, name="completion")
+
+
+def _completion_install(shell: str) -> None:
+    for line in completion.install(shell, _Path(__file__).resolve().parent.parent):
+        typer.echo(line)
+
+
+def _shell_arg(shell: str | None) -> str:
+    shell = shell or completion.detect_shell()
+    if shell not in completion.SHELLS:
+        typer.echo(f"which shell? Valid: {', '.join(completion.SHELLS)} (e.g. benchctl completion install bash)", err=True)
+        raise typer.Exit(2)
+    return shell
+
+
+SHELL = typer.Argument(None, help="bash, zsh or fish (default: the one in $SHELL)")
+
+
+@completion_app.command("install")
+def completion_install(shell: str = SHELL) -> None:
+    """Turn on Tab completion for your shell. No sudo; one line in your rc file; undo with `completion remove`."""
+    _completion_install(_shell_arg(shell))
+
+
+@completion_app.command("remove")
+def completion_remove(shell: str = SHELL) -> None:
+    """Undo `completion install`: the script, the rc line and the ~/.local/bin link."""
+    for line in completion.remove(_shell_arg(shell), _Path(__file__).resolve().parent.parent):
+        typer.echo(line)
+
+
+for _sh in completion.SHELLS:
+    def _show(_sh: str = _sh) -> None:
+        typer.echo(completion.script(_sh), nl=False)
+    _show.__doc__ = f"Print the {_sh} completion script (source it yourself, or use `completion install`)."
+    completion_app.command(_sh)(_show)
 
 
 @app.command()
@@ -281,18 +353,12 @@ def down(dry_run: bool = typer.Option(False, "-n", "--dry-run", help="list what 
     raise typer.Exit(0 if stack.down(say=typer.echo) else 1)
 
 
-def _node_names(incomplete: str) -> list[str]:
-    """Tab completion for node arguments: every node sim.yaml defines."""
-    try:
-        return [n for n, _ in nodes.node_names(_sim()) if n.startswith(incomplete)]
-    except (OSError, KeyError):
-        return []
-
-
-NODE = typer.Argument(..., autocompletion=_node_names, help="node name, e.g. cn001 or gpu001")
-OUTPUT = typer.Option("table", "-o", "--output", help="table, json (for scripts) or name (one per line)")
-SELECTOR = typer.Option(None, "-l", "--selector", help="keep rows where key=value or key!=value (repeat or comma-separate)")
-SORT_BY = typer.Option(None, "--sort-by", help="sort by a column name")
+NODE = typer.Argument(..., autocompletion=completion.nodes, callback=_node_check, help="node name, e.g. cn001 or gpu001")
+TARGET = typer.Argument(..., autocompletion=completion.targets, callback=_target_check,
+                        help="node or service, e.g. cn001, gpu001, slurmctld")
+OUTPUT = typer.Option("table", "-o", "--output", autocompletion=completion.outputs, help="table, json (for scripts) or name (one per line)")
+SELECTOR = typer.Option(None, "-l", "--selector", autocompletion=completion.selectors, help="keep rows where key=value or key!=value (repeat or comma-separate)")
+SORT_BY = typer.Option(None, "--sort-by", autocompletion=completion.columns, help="sort by a column name")
 WATCH = typer.Option(False, "-w", "--watch", help="redraw until Ctrl-C")
 INTERVAL = typer.Option(2.0, "--interval", help="seconds between redraws with --watch (at least 1)")
 
@@ -366,8 +432,8 @@ def get_scenarios(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by:
 
 
 @app.command("exec", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
-def exec_cmd(ctx: typer.Context, node: str = NODE,
-             user: str = typer.Option(None, "-u", "--user", help="run as this simulated user, e.g. alice")) -> None:
+def exec_cmd(ctx: typer.Context, node: str = TARGET,
+             user: str = typer.Option(None, "-u", "--user", autocompletion=completion.users, help="run as this simulated user, e.g. alice")) -> None:
     """Run a command on a node, or open a shell: `benchctl exec gpu001 -- nvidia-smi`, `benchctl exec cn001`."""
     import os
     import sys
@@ -378,7 +444,7 @@ def exec_cmd(ctx: typer.Context, node: str = NODE,
 
 
 @app.command()
-def logs(node: str = NODE, follow: bool = typer.Option(False, "-f", "--follow"),
+def logs(node: str = TARGET, follow: bool = typer.Option(False, "-f", "--follow"),
          tail: int = typer.Option(50, "--tail")) -> None:
     """Container log of a node or service."""
     import os
@@ -410,9 +476,9 @@ app.add_typer(export_app, name="export")
 
 @export_app.command("profile")
 def export_profile(out: str = typer.Option("bench-profile.json", "-o", "--output", help="file to write, or - for stdout"),
-                   profile: str = typer.Option(None, "--profile", help="default: the profile `up` last started"),
+                   profile: str = typer.Option(None, "--profile", autocompletion=completion.profiles, callback=_profile_check, help="default: the profile `up` last started"),
                    name: str = typer.Option("workbench", "--name", help="the cluster's name in the client"),
-                   user: str = typer.Option(None, "--user", help="SSH user, default the first user in sim.yaml"),
+                   user: str = typer.Option(None, "--user", autocompletion=completion.users, help="SSH user, default the first user in sim.yaml"),
                    bmc: bool = typer.Option(False, "--bmc", help="also list one BMC target per node"),
                    fmt: str = typer.Option(None, "--format", help="client format ID[:VERSION]; else $BENCH_EXPORT_FORMAT "
                                                                  "or .git/export-format")) -> None:
@@ -462,7 +528,7 @@ def ssh_key_remove() -> None:
 
 @app.command()
 def scale(n: int = typer.Argument(..., min=0, help="compute node count"),
-          profile: str = typer.Option(None, "--profile", help="default: the profile `up` last started"),
+          profile: str = typer.Option(None, "--profile", autocompletion=completion.profiles, callback=_profile_check, help="default: the profile `up` last started"),
           dry_run: bool = typer.Option(False, "-n", "--dry-run", help="say which nodes start or stop; change nothing"),
           yes: bool = typer.Option(False, "-y", "--yes", help="do not ask before removing nodes (a terminal asks)")) -> None:
     """Change the compute-node count: regenerates slurm.conf, restarts slurmctld, starts/stops slurmd."""
@@ -494,7 +560,7 @@ def scenario_list() -> None:
 
 
 @scenario_app.command("run")
-def scenario_run(name: str = typer.Argument(..., help="see `scenario list`"),
+def scenario_run(name: str = typer.Argument(..., autocompletion=completion.scenarios, help="see `scenario list`"),
                  speed: float = typer.Option(1.0, help="fast-forward: 10 plays it ten times faster"),
                  dry_run: bool = typer.Option(False, "--dry-run", help="validate and show the timeline only")) -> None:
     """Play a scenario against the running stack; exit 1 if a step or expectation fails."""
@@ -502,7 +568,7 @@ def scenario_run(name: str = typer.Argument(..., help="see `scenario list`"),
     try:
         sc = scenario.load(name)
     except scenario.ScenarioError as e:
-        typer.echo(str(e), err=True)
+        typer.echo(completion.explain(name, completion.scenarios(""), "scenario") if completion.scenarios("") else str(e), err=True)
         raise typer.Exit(1) from e
     problems = scenario.validate(sc, sim)
     for p in problems:

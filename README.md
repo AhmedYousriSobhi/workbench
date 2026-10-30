@@ -59,7 +59,7 @@ Then follow [client setup](docs/guides/client-setup-by-component.md), one compon
 | Start refuses with `REFUSED` | Your RAM is busy (browsers, IDE). Close a few, run it again. The governor is protecting you |
 | Not sure your machine qualifies | `./scripts/check-machine.sh` |
 | Something odd | `./scripts/benchctl diag` writes one masked file to attach to a bug report |
-| Forgot a command | `./scripts/benchctl --help`, or press Tab: it completes verbs and node names |
+| Forgot a command | `./scripts/benchctl --help`, or press Tab (`./scripts/benchctl completion install` once): it completes verbs, nodes, profiles and more |
 
 Every command is explained, with its limits, in [the verbs guide](docs/guides/benchctl-verbs.md).
 

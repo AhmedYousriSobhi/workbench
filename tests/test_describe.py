@@ -99,4 +99,4 @@ def test_cli_describe_prints_text_json_and_refuses_an_unknown_node(monkeypatch):
     assert r.exit_code == 0 and "GPUs:" in r.output
     assert json.loads(CliRunner().invoke(cli.app, ["describe", "node", "gpu001", "-o", "json"]).output)["name"] == "gpu001"
     bad = CliRunner().invoke(cli.app, ["describe", "node", "zzz"])
-    assert bad.exit_code == 1 and "unknown node" in bad.output
+    assert bad.exit_code == 2 and "unknown node" in bad.output
