@@ -42,6 +42,7 @@ Run `./scripts/simctl COMMAND --help` for the exact flags.
 | `scripts/real-test.sh` | real-host tests |
 | `scripts/ui_shots.py [OUTDIR]` | screenshots and checks of the web page |
 | `scripts/check-privacy.sh` | scan for personal data before publishing |
+| `scripts/check-identity.sh` | refuse a wrong or placeholder git identity before a commit or push |
 
 ## Other entry points
 

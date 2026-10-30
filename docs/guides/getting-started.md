@@ -155,6 +155,6 @@ The [user manual](../manual/README.md) has a chapter for each topic: concepts, t
 
 To look at the web page without a screen: `pip install -e '.[browser]'`, `.venv/bin/python -m playwright install chromium`, then `.venv/bin/python scripts/ui_shots.py` writes screenshots to `/tmp/opti-ui-shots` and reports problems.
 
-Once per clone: `./scripts/install-hooks.sh` (no sudo) installs the git hooks: no commits on `main`/`dev`, an issue reference in every commit message, `validate.sh` before each commit, and a privacy scan (`./scripts/check-privacy.sh`) so no personal path, email or token is published. The repository is public, and the Claude skills under `.claude/` are symlinks into a home directory, so that folder is gitignored.
+Once per clone: `./scripts/install-hooks.sh` (no sudo) installs the git hooks: no commits on `main`/`dev`, an issue reference in every commit message, a check that your git identity is your own GitHub noreply address (`./scripts/check-identity.sh`; GitHub credits a commit by the ID in that address, so a placeholder would credit a stranger), `validate.sh` before each commit, and a privacy scan (`./scripts/check-privacy.sh`) so no personal path, email or token is published. The repository is public, and the Claude skills under `.claude/` are symlinks into a home directory, so that folder is gitignored.
 
 `./scripts/verify.sh` (add `--full` for the live stack) before asking for a merge; see CLAUDE.md.

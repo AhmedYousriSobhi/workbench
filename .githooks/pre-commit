@@ -12,6 +12,7 @@ case "$branch" in
     fi ;;
 esac
 
+./scripts/check-identity.sh || exit 1  # a wrong identity credits the commit to a stranger on GitHub
 ./scripts/check-privacy.sh --staged || exit 1
 
 [ -x .venv/bin/python ] && export PATH="$PWD/.venv/bin:$PATH"  # validate.sh needs pytest and coverage from the venv
