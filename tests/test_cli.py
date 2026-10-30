@@ -1,4 +1,5 @@
 """simctl's commands through Typer's runner: exit codes and what the user is told, with the heavy parts faked."""
+import sys
 from pathlib import Path
 
 import pytest
@@ -208,3 +209,49 @@ def test_status_also_says_where_the_cluster_and_web_page_are(monkeypatch, tmp_pa
     assert "web page: http://127.0.0.1:8088/?t=x" in runner.invoke(cli.app, ["status", "--socket", "/nope"]).output
     monkeypatch.setattr(inventory, "service_rows", lambda runner=None: [])
     assert "cluster: stopped" in runner.invoke(cli.app, ["status", "--socket", "/nope"]).output
+
+
+def test_a_mistyped_verb_gets_a_hint_and_is_never_run(monkeypatch):
+    ran = []
+    monkeypatch.setattr(stack, "down", lambda *a, **k: ran.append("down") or True)
+    r = runner.invoke(cli.app, ["dwon"])
+    assert r.exit_code == 2 and "Did you mean 'down'?" in r.output and ran == []
+    assert "Did you mean 'nodes'?" in runner.invoke(cli.app, ["get", "nodez"]).output
+    nonsense = runner.invoke(cli.app, ["xyzzy"])
+    assert nonsense.exit_code == 2 and "Did you mean" not in nonsense.output
+
+
+def test_refusals_and_errors_go_to_stderr_and_data_to_stdout(monkeypatch):
+    monkeypatch.setattr(checks, "mem_available", lambda *a: 0)
+    r = runner.invoke(cli.app, ["preflight", "--profile", "min"])
+    assert r.exit_code == 1 and "REFUSED" in r.stderr and r.stdout == ""
+    ok = runner.invoke(cli.app, ["get", "profiles", "-o", "json"])
+    assert "min" in ok.stdout and ok.stderr == ""
+    gone = runner.invoke(cli.app, ["status", "--socket", "/nonexistent.sock"])
+    assert "governor not reachable" in gone.stderr and "governor not reachable" not in gone.stdout
+
+
+def test_help_tells_scripts_where_to_look():
+    out = runner.invoke(cli.app, ["--help"]).output
+    assert "-o json" in out and "stderr" in out and "Exit codes" in out
+
+
+def test_old_name_prints_one_notice_only_in_a_terminal(monkeypatch):
+    import io
+
+    class Tty(io.StringIO):
+        def isatty(self):
+            return True
+
+    monkeypatch.setattr("sys.argv", ["/x/simctl", "status"])
+    err = Tty()
+    monkeypatch.setattr("sys.stderr", err)
+    cli._old_name_notice()
+    assert err.getvalue().count("`simctl` is now `benchctl`") == 1
+    quiet = io.StringIO()  # not a terminal: scripts see nothing new
+    monkeypatch.setattr("sys.stderr", quiet)
+    cli._old_name_notice()
+    monkeypatch.setattr("sys.argv", ["/x/benchctl", "status"])
+    monkeypatch.setattr("sys.stderr", Tty())
+    cli._old_name_notice()
+    assert quiet.getvalue() == "" and sys.stderr.getvalue() == ""
