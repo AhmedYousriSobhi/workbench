@@ -32,7 +32,7 @@ services:
     command: sh -c "pip install -q pyyaml && python /app/exporter.py /sim.yaml 9400"
     volumes:
       - ../components/gpu-exporter-farm/exporter.py:/app/exporter.py:ro
-      - ../sim.yaml:/sim.yaml:ro
+      - ./generated/sim.yaml:/sim.yaml:ro
     ports: ["127.0.0.1:9400:9400"]  # scenario engine injects faults here
     mem_limit: 100m
     cgroup_parent: hpcsim-p2.slice

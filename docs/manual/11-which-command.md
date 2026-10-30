@@ -8,6 +8,7 @@ for, and why. Every command runs from the repository root.
 | I want to... | Run | Why this one |
 |---|---|---|
 | start everything, including the web page | `./scripts/benchctl start` | checks the machine, starts the memory governor, the cluster and the web page |
+| choose nodes and parts, see the memory cost first | `./scripts/benchctl plan --cpu-nodes 2 --gpu-nodes 4 --with jira`, then the same with `up` | estimates, and builds only if it fits ([guide](../guides/choose-workbench.md)) |
 | start only the cluster (for example to test SSH) | `./scripts/benchctl up --profile min` | the cluster alone; no web page, no governor |
 | see what is running | `./scripts/benchctl get nodes` and `./scripts/benchctl status` | the nodes and their state; the governor level |
 | open the web page | `./scripts/benchctl open` | prints the login link |

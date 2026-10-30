@@ -6,6 +6,8 @@ from pathlib import Path
 
 import uvicorn
 
+from simctl.workbench import live_sim_path
+
 from .app import create_app
 
 TOKEN_FILE = Path("compose/generated/secrets/ui_token")
@@ -26,7 +28,7 @@ def main() -> None:
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8088
     token = load_token()
     print(f"opti-sim UI: http://127.0.0.1:{port}/login?token={token}", flush=True)
-    uvicorn.run(create_app(token), host="127.0.0.1", port=port, log_level="warning")
+    uvicorn.run(create_app(token, sim_yaml=live_sim_path()), host="127.0.0.1", port=port, log_level="warning")
 
 
 if __name__ == "__main__":

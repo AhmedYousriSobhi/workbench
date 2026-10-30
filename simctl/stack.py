@@ -11,7 +11,7 @@ import urllib.error
 from collections.abc import Callable
 from pathlib import Path
 
-from . import checks, compose
+from . import checks, compose, workbench
 
 COMPOSE_FILE = Path("compose/generated/docker-compose.yml")
 PROJECT = "hpcsim"
@@ -100,15 +100,22 @@ def wait_running(names: list[str], runner: Runner = _run, timeout: float = 120,
 
 
 def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None] = print,
-       available: int | None = None, wait: float = 120) -> bool:
-    prof = compose.load_profile(profile)
+       available: int | None = None, wait: float = 120, prof: dict | None = None) -> bool:
+    """Start the profile. `prof` is a profile built from a workbench selection (benchctl apply): admitted by its own
+    estimate instead of the named profile's budget."""
+    chosen = prof
+    prof = prof if prof is not None else compose.load_profile(profile)
     data = compose.generate(sim, prof)
     path = compose.write(data, sim=sim, compute_nodes=prof.get("compute_nodes"))
     skip = unbuildable(data["services"], path.parent)
     todo = {n: v for n, v in data["services"].items() if n not in skip}
     missing = missing_mb(todo, runner, path)
     if missing:  # a running stack is already in "used" memory: nothing to admit when nothing starts
-        ok, msg = admit(profile, available)
+        if chosen is None:
+            ok, msg = admit(profile, available)
+        else:
+            avail = checks.mem_available() if available is None else available
+            ok, msg = workbench.verdict(workbench.estimate(sim, chosen), avail // (1024 * 1024))
         say(("admitted: " if ok else "REFUSED: ") + msg)
         if not ok or not governor_admits(missing, say):
             return False
