@@ -27,7 +27,7 @@ font:14px/1.45 'DejaVu Sans Mono',Menlo,Consolas,monospace;box-shadow:0 2px 8px 
 
 
 def mask(text: str) -> str:
-    text = ANSI.sub("", text).replace(str(ROOT), "~/opti-sim")
+    text = ANSI.sub("", text).replace(str(ROOT), "~/workbench")
     text = text.replace(str(Path.home()), "/home/user")
     return re.sub(rf"\b{re.escape(getpass.getuser())}\b", "user", text)
 

@@ -95,8 +95,8 @@ def page_html() -> str:
         link = tmpl.split("href=")[0] + f'href="{make()}">'
         text, n = re.subn(pattern, lambda _m, link=link: link, text, count=1)
         assert n == 1, f"icon link not found in the web page: {pattern}"
-    text, n = re.subn(r'<h1>(?:<i aria-hidden="true">◈</i>|<svg class="logo".*?</svg>) opti-sim</h1>',
-                      lambda _m: f"<h1>{page_header_svg()} opti-sim</h1>", text, count=1, flags=re.DOTALL)
+    text, n = re.subn(r'<h1>(?:<i aria-hidden="true">◈</i>|<svg class="logo".*?</svg>) workbench</h1>',
+                      lambda _m: f"<h1>{page_header_svg()} workbench</h1>", text, count=1, flags=re.DOTALL)
     assert n == 1, "page header not found in the web page"
     return text
 

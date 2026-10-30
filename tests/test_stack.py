@@ -389,7 +389,7 @@ def test_client_key_install_remove(tmp_path):
     src = tmp_path / "ssh"
     src.mkdir()
     (src / "id_ed25519").write_text("KEY")
-    dest = tmp_path / "home" / ".ssh" / "opti-sim_ed25519"
+    dest = tmp_path / "home" / ".ssh" / "workbench_ed25519"
     assert stack.install_client_key(dest, src) == dest
     assert dest.read_text() == "KEY" and oct(dest.stat().st_mode & 0o777) == "0o600"
     assert stack.install_client_key(dest, src) == dest  # idempotent

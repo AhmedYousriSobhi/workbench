@@ -1,4 +1,4 @@
-"""Initial machine check: can this box build and run opti-sim at all?
+"""Initial machine check: can this box build and run workbench at all?
 
 Standard library only, so it runs before the venv or any image exists:
     ./scripts/check-machine.sh        (or: python3 -m simctl.machine)
@@ -58,7 +58,7 @@ def check_os(system: str | None = None, release_text: str | None = None) -> Chec
     system = system or platform.system()
     if system == "Darwin":
         return Check("os", FAIL, "macOS cannot host the cluster",
-                     "run opti-sim on Linux; macOS is only an external agent (README, macOS testing)")
+                     "run workbench on Linux; macOS is only an external agent (README, macOS testing)")
     if system != "Linux":
         return Check("os", FAIL, f"{system} is not supported", "use Ubuntu 22.04 or newer")
     try:
@@ -205,7 +205,7 @@ def report(results: list[Check]) -> str:
     if fails:
         lines.append(f"\nNOT READY: {fails} requirement(s) missing. Fix the FAIL lines, then run this again.")
     else:
-        lines.append(f"\nREADY: this machine can build and run opti-sim ({warns} warning(s)). "
+        lines.append(f"\nREADY: this machine can build and run workbench ({warns} warning(s)). "
                      "Next: python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'")
     return "\n".join(lines)
 

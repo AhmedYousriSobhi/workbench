@@ -1,6 +1,6 @@
 # Security policy
 
-opti-sim is a simulation that runs on a developer workstation. It is not a hosted service and holds no real data.
+workbench is a simulation that runs on a developer workstation. It is not a hosted service and holds no real data.
 
 ## Reporting a problem
 

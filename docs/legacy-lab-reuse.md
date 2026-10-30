@@ -1,12 +1,12 @@
 # Reuse assessment: legacy VM labs
 
-Review of two earlier labs (a test lab and a Kubernetes lab, both outside this repo) for what opti-sim can reuse. Based on their READMEs, Vagrantfiles, `bin/` and `provision/` scripts and the Jira lab docs; the Teleport and Azure material was only skimmed.
+Review of two earlier labs (a test lab and a Kubernetes lab, both outside this repo) for what workbench can reuse. Based on their READMEs, Vagrantfiles, `bin/` and `provision/` scripts and the Jira lab docs; the Teleport and Azure material was only skimmed.
 
 ## Summary
 
-Nothing is reused as-is: both labs are VM-based, which is exactly what opti-sim moves away from. Their value is in the **fixtures, metrics ideas and lessons**, which port directly into containers and scenarios.
+Nothing is reused as-is: both labs are VM-based, which is exactly what workbench moves away from. Their value is in the **fixtures, metrics ideas and lessons**, which port directly into containers and scenarios.
 
-| Legacy piece | What it is | Use in opti-sim | Target |
+| Legacy piece | What it is | Use in workbench | Target |
 |---|---|---|---|
 | k8slab `Vagrantfile`, `provision/*` | 2 libvirt VMs (1 GB each) running k3s server + agent | Replace with k3d/kind (1+1) plus KWOK. Keep the node-ip/flannel-iface and DNS notes only if the fidelity VM needs k3s. | `k8s/` |
 | k8slab `bin/fixtures.sh` | Idempotent namespaces and pods: `team-a/gpu-train` (2 GPUs), `team-b/gpu-waiting` (8 GPUs, unschedulable), `badimage`, `crashloop`, `oom`, `web` | Port as k8s fixtures and the `pod-crashloop` / `k8s-*` scenarios. High value, low effort. | `k8s/fixtures/`, `scenarios/` |

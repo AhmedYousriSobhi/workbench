@@ -110,7 +110,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             raise HTTPException(401, "login required: open /login?token=<token>")
 
     def csrf(request: Request) -> None:  # a cross-site form cannot set this header
-        if request.headers.get("x-requested-with") != "opti-sim":
+        if request.headers.get("x-requested-with") != "workbench":
             raise HTTPException(403, "missing X-Requested-With")
 
     def protected(fn, write: bool = False):

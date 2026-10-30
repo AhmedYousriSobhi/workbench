@@ -129,7 +129,7 @@ def test_measure_run_saves_and_report_reads_it_back(monkeypatch, tmp_path):
 
 
 def test_ssh_key_commands(monkeypatch, tmp_path):
-    dest = tmp_path / "opti-sim_ed25519"
+    dest = tmp_path / "workbench_ed25519"
     src = tmp_path / "ssh"
     src.mkdir()
     (src / "id_ed25519").write_text("KEY")
@@ -137,7 +137,7 @@ def test_ssh_key_commands(monkeypatch, tmp_path):
     monkeypatch.setattr(stack, "install_client_key", lambda: real_install(dest, src))
     monkeypatch.setattr(stack, "remove_client_key", lambda: real_remove(dest, src))
     r = invoke("ssh-key", "install")
-    assert r.exit_code == 0 and "~/.ssh/opti-sim_ed25519" in r.output and dest.exists()
+    assert r.exit_code == 0 and "~/.ssh/workbench_ed25519" in r.output and dest.exists()
     assert "removed" in invoke("ssh-key", "remove").output
     assert "nothing to remove" in invoke("ssh-key", "remove").output
     (src / "id_ed25519").unlink()
@@ -206,7 +206,7 @@ def test_status_also_says_where_the_cluster_and_web_page_are(monkeypatch, tmp_pa
     assert r.exit_code == 1 and "cluster: 1 containers running" in r.output and "web page: stopped" in r.output
     (tmp_path / "compose/generated").mkdir(parents=True)
     (tmp_path / "compose/generated/ui.pid").write_text("1")
-    (tmp_path / "compose/generated/ui.log").write_text("opti-sim UI: http://127.0.0.1:8088/?t=x\n")
+    (tmp_path / "compose/generated/ui.log").write_text("workbench UI: http://127.0.0.1:8088/?t=x\n")
     assert "web page: http://127.0.0.1:8088/?t=x" in runner.invoke(cli.app, ["status", "--socket", "/nope"]).output
     monkeypatch.setattr(inventory, "service_rows", lambda runner=None: [])
     assert "cluster: stopped" in runner.invoke(cli.app, ["status", "--socket", "/nope"]).output

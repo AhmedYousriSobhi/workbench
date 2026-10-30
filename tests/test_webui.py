@@ -87,7 +87,7 @@ def test_login_sets_a_strict_cookie_and_rejects_a_wrong_token(ui):
 
 def test_page_is_served_and_has_no_external_resources(ui):
     code, body = req(ui, "/")
-    assert code == 200 and b"opti-sim" in body
+    assert code == 200 and b"workbench" in body
     assert b"http://" not in body and b"https://" not in body  # works offline, loads nothing third-party
 
 
@@ -111,7 +111,7 @@ def test_scenario_list_and_run_skips_slurm_without_docker(ui):
     names = [s["name"] for s in json.loads(req(ui, "/api/scenarios")[1])]
     assert names == ["quick", "slow"]
     assert req(ui, "/api/scenarios/quick/run", "POST")[0] == 403  # no X-Requested-With: CSRF guard
-    code, _ = req(ui, "/api/scenarios/quick/run", "POST", headers={"X-Requested-With": "opti-sim"})
+    code, _ = req(ui, "/api/scenarios/quick/run", "POST", headers={"X-Requested-With": "workbench"})
     assert code == 200
     deadline = time.time() + 5
     state = {}
@@ -125,7 +125,7 @@ def test_scenario_list_and_run_skips_slurm_without_docker(ui):
 
 
 def test_stop_ends_a_running_scenario_and_unknown_is_404(ui):
-    h = {"X-Requested-With": "opti-sim"}
+    h = {"X-Requested-With": "workbench"}
     assert req(ui, "/api/scenarios/nope/run", "POST", headers=h)[0] == 404
     assert req(ui, "/api/scenarios/slow/run", "POST", headers=h)[0] == 200
     assert req(ui, "/api/scenarios/quick/run", "POST", headers=h)[0] == 409  # one at a time
@@ -156,7 +156,7 @@ def test_launcher_prints_a_login_link_and_serves_with_the_token(monkeypatch, tmp
     launcher.main()
     out = capsys.readouterr().out
     token = launcher.load_token(tmp_path / "secrets" / "ui_token")
-    assert out.strip() == f"opti-sim UI: http://127.0.0.1:9123/login?token={token}"
+    assert out.strip() == f"workbench UI: http://127.0.0.1:9123/login?token={token}"
     assert ran["kw"] == {"host": "127.0.0.1", "port": 9123, "log_level": "warning"}  # localhost only (W-8)
 
 
@@ -166,7 +166,7 @@ def test_cluster_endpoints_need_auth_csrf_and_validate(ui):
     snap = json.loads(body)
     assert code == 200 and len(snap["nodes"]) == 6 and {n["state"] for n in snap["nodes"]} == {"unknown"}
     assert req(ui, "/api/nodes/cn001/clear", "POST")[0] == 403  # CSRF header missing
-    h = {"X-Requested-With": "opti-sim"}
+    h = {"X-Requested-With": "workbench"}
     assert req(ui, "/api/nodes/nope/clear", "POST", headers=h)[0] == 422
     assert req(ui, "/api/nodes/cn001/gpu-xid", "POST", headers=h)[0] == 422
     code, body = req(ui, "/api/nodes/cn001/overheat", "POST", headers=h)
