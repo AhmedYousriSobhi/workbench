@@ -53,7 +53,7 @@ def capture(out: Path) -> dict:
                     result["shots"].append(str(path))
                     if page.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth"):
                         result["overflow"].append(f"dashboard {vp} {scheme}")
-                    for sel in ("#banner", "#attn", "#list .btn", "#services .chip", "#flow", ".node"):
+                    for sel in ("#banner", "#attn", "#list .btn", "#services .cell", "#flow", ".node"):
                         if page.locator(sel).count() == 0:
                             result["a11y"].append(f"dashboard is missing {sel}")
                     down = page.locator("#stackdown").is_visible()  # stack down: one notice, nothing repeating it
@@ -94,13 +94,19 @@ def capture(out: Path) -> dict:
                     result["shots"].append(str(tpath))
                     if vp == "desktop" and page.evaluate("getComputedStyle(document.querySelector('.rail.right')).position") != "sticky":
                         result["a11y"].append("right rail must stay in view (sticky) on desktop")
-                    page.click("#tb-plan")
+                    page.click("#planbtn")  # planner sheet: opens, estimates, reacts to a stepper press, shows the command
                     page.wait_for_function("document.querySelector('#pl-msg').textContent.length > 5")
-                    page.fill("#pl-cpu", "2")
-                    page.wait_for_function("document.querySelector('#pl-cmd').textContent.includes('--cpu-nodes 2') || document.querySelector('#pl-cmd').textContent.startsWith('Does not fit')")
+                    page.click("[data-step=pl-cpu][data-d='-1']")
+                    page.wait_for_function("document.querySelector('#pl-cmd').textContent.includes('--cpu-nodes') || document.querySelector('#pl-cmd').textContent.startsWith('Does not fit')")
                     ppath = out / f"plan-{vp}-{scheme}.png"
-                    page.locator("#planpanel").screenshot(path=str(ppath))
+                    page.screenshot(path=str(ppath))
                     result["shots"].append(str(ppath))
+                    box = page.locator("#plandlg").bounding_box()
+                    if box["x"] < -1 or box["x"] + box["width"] > w + 1:
+                        result["overflow"].append(f"plan sheet {vp} {scheme}")
+                    page.click("#plan-close")
+                    if page.locator("#plandlg[open]").count():
+                        result["a11y"].append("plan sheet did not close")
                     page.click("#tb-nodes")
                     page.evaluate("showNode('cn001')")  # node Details dialog (its button is hidden while the stack is down): text, fits, closes
                     page.wait_for_selector("#nodedlg[open]")
@@ -111,7 +117,7 @@ def capture(out: Path) -> dict:
                     box = page.locator("#nodedlg").bounding_box()
                     if box["x"] < 0 or box["x"] + box["width"] > w:
                         result["overflow"].append(f"node details {vp} {scheme}")
-                    page.click("#nodedlg .btn")
+                    page.click("#nodedlg form .btn")
                     if page.locator("#nodedlg[open]").count():
                         result["a11y"].append("node details dialog did not close")
                     page.close()

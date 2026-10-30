@@ -36,19 +36,19 @@ to the **node it hits** and a ring flashes on that tile. Lines light up while a 
 service shows requests per minute. *Pause animation* stops the dots. They stop by themselves at governor L3 and under
 reduced motion, and the live feed runs only while the page is visible and the Nodes tab is open.
 
-## Node cards and fault actions
+## Node cells and fault actions
 
-Open *Fault actions* on a node card to **Power off**, **Power on**, **Overheat (92 °C)**, **Fan failure**, **GPU error
+Click a node cell to open its details, which hold the *Fault actions*:  **Power off**, **Power on**, **Overheat (92 °C)**, **Fan failure**, **GPU error
 (XID 79)** (GPU nodes only) or **Clear faults**. The card changes state and a diamond shows the injection. Nothing here
 opens a shell on a node; use [`docker exec`](04-nodes-and-shells.md).
 
 ![A node card with its Fault actions expanded: Power off, Power on, Overheat, Fan failure, Clear faults](img/web-fault-actions.png)
 
-*A node card with Fault actions open.*
+*The fault actions (screenshot from before the node cells; they are now in the details dialog).*
 
-Press **Details** on a card to see everything known about that node (state of its BMC, GPUs busy and idle, how to `ssh` in): the same text as `benchctl describe node NAME`, minus the Docker and Slurm lines because this page has no Docker access.
+The same dialog shows everything known about that node (state of its BMC, GPUs busy and idle, how to `ssh` in): the same text as `benchctl describe node NAME`, minus the Docker and Slurm lines because this page has no Docker access.
 
-**Plan a workbench** (above the node cards) takes node counts and parts and shows the memory they need against what is free, with the `benchctl up ...` command to build it. Editing only estimates; **Apply to the running workbench** rebuilds it through the governor (the page itself still has no Docker access); see [choose the workbench](../guides/choose-workbench.md).
+**⚙ Plan** in the top bar opens a panel on the same page. It takes node counts and parts and shows the memory they need against what is free, with the `benchctl up ...` command to build it. Editing only estimates; **Apply to the running workbench** rebuilds it through the governor (the page itself still has no Docker access); see [choose the workbench](../guides/choose-workbench.md).
 
 ![cn002 shown as Powered off with BCM DOWN; the top strip says Nodes 5/6 healthy](img/web-node-powered-off.png)
 
@@ -83,13 +83,13 @@ page. Start with [Which command do I use?](11-which-command.md) when the command
 
 ## Tabs, scenarios and how to connect
 
-The middle column has three tabs: **Nodes** (services, traffic and node cards), **Connections** and **Plan**. The right
+The middle column has two tabs: **Nodes** (services, traffic and the node cells) and **Connections**. **⚙ Plan** in the top bar opens the plan panel. The right
 panel stays in view while you scroll and scrolls on its own, so the nodes never move away. **Scenarios** is a short list:
 type in *Filter scenarios*, pick one speed for all, press **▶ Play**.
 
 **Connections** lists every part (login node, nodes, BMC, BCM, Jira, Slurm REST, GPU exporter, Prometheus, Grafana, this page)
 with its address, a command you can copy, and the **file that holds its credential**. The page shows paths, never secrets.
-A node card's **Details and how to connect** shows its SSH command, key file and BMC login; the container IP needs Docker, so
+A node's details dialog (click its cell) shows its SSH command, key file and BMC login; the container IP needs Docker, so
 run `./scripts/benchctl describe node cn001` (it prints an `IP:` line).
 
 ## Limits
