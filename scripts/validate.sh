@@ -19,6 +19,8 @@ if git grep -nE 'gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}' -- . '
   bad "token-like string in tracked files"
 fi
 
+step "git identity"
+./scripts/check-identity.sh || bad "git identity"
 step "privacy"
 # public repo: no personal paths, emails, tokens or local-only tooling in tracked files (scripts/check-privacy.sh)
 ./scripts/check-privacy.sh --all || bad "privacy scan"

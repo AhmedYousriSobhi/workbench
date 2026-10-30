@@ -24,6 +24,8 @@ docker exec hpcsim-slurmctld-1 scontrol show node cn001
 ```
 
 Jobs are synthetic; GPUs are count-based GRES (`gpu:h200:8` per GPU node, fake device files). Partitions are `cpu` and `gpu`.
+
+GPU metrics follow the scheduler: the GPUs a running job holds (for example `sbatch --gres=gpu:2 -p gpu ...`) read busy in Grafana (utilization 70-100%, high memory and power), every other GPU reads idle, and they go idle again when the job ends. The change shows within about 20 seconds (a 3 s feed plus Prometheus's 15 s scrape).
 ![Terminal: sinfo lists six idle nodes in the cpu and gpu partitions, sbatch submits job 2 as alice, squeue shows it pending](img/term-slurm.png)
 
 *Real output from the `min` profile: six idle nodes, a job submitted as `alice`, and the queue.*

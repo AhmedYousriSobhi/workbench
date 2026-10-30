@@ -50,7 +50,7 @@ If port 2222 refuses connections, the checkout is probably on a branch without t
 - **Drain a node** for the node-issues view: `docker exec <slurmctld container> scontrol update nodename=cn004
   state=drain reason="test"`, and `state=resume` afterwards.
 - **GPU panel:** set the datasource uid to `prometheus`, the host label to `Hostname`, and the Viewer token. Per-job
-  GPU usage appears only while the SSH user has a running job.
+  GPU usage appears only while the SSH user has a running job, and the GPUs of that job read busy (the others idle).
 - **Jira:** base URL `http://127.0.0.1:8080` (plain HTTP is accepted for localhost). `POST /sim/failure` injects 401,
   429, 503 or slow responses.
 

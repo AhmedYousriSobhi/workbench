@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# No direct pushes to main or dev (work goes through PRs), and a last full privacy scan of everything tracked.
+# No direct pushes to main or dev (work goes through PRs), a check that no unpushed commit has a wrong identity,
+# and a last full privacy scan of everything tracked.
 set -u
 cd "$(git rev-parse --show-toplevel)" || exit 1
 while read -r _ _ remote_ref _; do
@@ -11,4 +12,5 @@ while read -r _ _ remote_ref _; do
       fi ;;
   esac
 done
+./scripts/check-identity.sh --unpushed || exit 1
 exec ./scripts/check-privacy.sh --all
