@@ -123,6 +123,8 @@ ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1 sinfo
 ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1 ssh cn001 hostname   # a hop to a node
 ```
 
+A client that only accepts keys under `~/.ssh` can use `./scripts/simctl ssh-key install` (copies the key to `~/.ssh/opti-sim_ed25519`) and `./scripts/simctl ssh-key remove` afterwards.
+
 See what the output looks like in [Nodes and shells](../manual/04-nodes-and-shells.md). A shell that hangs may be a node the governor paused under memory pressure (`./scripts/simctl status`). The other machine
 with a real `sshd` is the optional fidelity VM (`cd fidelity-vm && ./bin/up.sh`, then `vagrant ssh fidelity`). Teleport
 access to the simulated nodes is not built yet (issue 77). More in [Nodes and shells](../manual/04-nodes-and-shells.md).

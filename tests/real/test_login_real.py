@@ -87,3 +87,22 @@ def test_unprivileged_and_memory_limited(login):
                         "{{.HostConfig.Privileged}} {{.HostConfig.Memory}} {{.HostConfig.CapAdd}}"],
                        capture_output=True, text=True, check=True).stdout.split()
     assert r[0] == "false" and int(r[1]) > 0 and r[2] == "[]"
+
+
+def test_shell_is_bash_on_login_and_nodes(login):
+    """A terminal session is a real bash: the account's login shell, not dash (#154)."""
+    assert ssh("getent", "passwd", "alice").stdout.strip().endswith(":/bin/bash")
+    assert ssh("ssh", "cn001", "getent", "passwd", "alice").stdout.strip().endswith(":/bin/bash")
+
+
+def test_interactive_shell_has_completion_history_and_prompt(login):
+    out = ssh("bash -ic 'complete -p squeue; complete -p cd; echo HIST=$HISTFILE; echo PS1=$PS1'").stdout
+    assert "squeue" in out  # Slurm tab completion is registered
+    assert "HIST=" in out and ".bash_history" in out
+    assert "PS1=" in out and "\\u@\\h" in out
+
+
+def test_non_interactive_output_is_clean(login):
+    """Shell niceties must not leak into the commands a client runs."""
+    assert ssh("echo", "hi").stdout == "hi\n"
+    assert ssh("sinfo", "-h", "-o", "%P").stdout.split() == ["cpu*", "gpu"]

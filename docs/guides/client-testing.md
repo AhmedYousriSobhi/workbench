@@ -39,9 +39,10 @@ If port 2222 refuses connections, the checkout is probably on a branch without t
 ## Point the client at it
 
 - **Execution target:** set a node such as `cn001` as the scheduler's execution target (the client runs `ssh <node> <command>` from the login node); no keys to set up, the login node already trusts the nodes.
-- **SSH:** host `127.0.0.1`, port `2222`, user `alice`. Many clients only read private keys under `~/.ssh`; either
-  copy the generated key there for the test and delete it afterwards, or load it into a throwaway `ssh-agent`
-  (`eval "$(ssh-agent -s)"; ssh-add compose/generated/secrets/ssh/id_ed25519`) and use agent authentication.
+- **SSH:** host `127.0.0.1`, port `2222`, user `alice`. Many clients only read private keys under `~/.ssh`. Run
+  `./scripts/simctl ssh-key install`: it copies the generated key to `~/.ssh/opti-sim_ed25519` (mode 600) and prints the
+  path to give the client. Run `./scripts/simctl ssh-key remove` when done. Alternatively load the key into a throwaway
+  `ssh-agent` (`eval "$(ssh-agent -s)"; ssh-add compose/generated/secrets/ssh/id_ed25519`) and use agent authentication.
 - **Host key:** the first connection needs the client's trust-on-first-use confirmation. `up` keeps the same host key
   across restarts, so the pin stays valid.
 - **Slurm:** the client's refresh runs fixed `squeue`/`sinfo` commands; submit work as `alice` with
