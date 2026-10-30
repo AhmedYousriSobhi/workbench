@@ -1,6 +1,6 @@
 # 5. The web page
 
-One dashboard over everything: governor, cluster, scenarios.
+One dashboard over everything: governor, cluster, scenarios. It fits one screen (1280 × 800 and up) with no page scrolling.
 
 ```bash
 ./scripts/benchctl start                     # starts it with the cluster; or by hand:
@@ -11,66 +11,115 @@ One dashboard over everything: governor, cluster, scenarios.
 Open the link once: it sets a cookie. The token lives in `compose/generated/secrets/ui_token`; anyone with the link on
 this machine can use the page, so keep it private. The page listens on `127.0.0.1` only.
 
-![The dashboard: traffic and the entity list side by side; the screenshot predates the redesign](img/web-overview.png)
+![The dashboard (screenshot from before the redesign: traffic and the list were arranged differently)](img/web-overview.png)
 
-*The dashboard with a healthy cluster: L0 Normal, 4 of 4 services answering, 6 of 6 nodes healthy, "All clear" under Needs attention.*
+*A healthy cluster: L0 Normal, 4 of 4 services answering, 6 of 6 nodes healthy, "All clear" under Needs attention. The
+screenshots in this chapter predate the redesign described below; regenerate them with `scripts/ui_shots.py`.*
 
 ## Layout
 
 | Area | Shows |
 |---|---|
-| **Top strip** | governor level, free memory, healthy services and nodes, the running scenario, then three buttons that open a panel on the same page: **▶ Scenarios**, **⚙ Plan** and the level or memory chip for the **Governor** panel (level and meaning, memory and pressure trends, the governor's log), plus help and the theme switch |
-| **Needs attention** | one slim bar under the tabs, next to *Nodes* and *Connections*: every item that needs you, or "All clear" |
-| **Stage** | the traffic diagram on the left and a plain list on the right: *Compute nodes*, *GPU nodes* and *Services*, one card per line with its status and quick facts (GPU nodes: utilisation meter, busy GPUs, temperature, BCM state; compute nodes: temperature and BCM state; services: requests per minute and total seen). Healthy cards are quiet; warning, fault and off cards are highlighted. Slurm node states and CPU load are not shown here (the page has no Docker access); use `benchctl describe node`. Both fit one screen at 1280 × 800 with six nodes; a long tree scrolls inside its own panel |
+| **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **▶ Scenarios**, **⚙ Plan**, help and the theme switch. Pressing the level or memory chip opens the **Governor** panel |
+| **Tabs and Needs attention** | the tabs *Nodes* and *Connections*, and one slim bar next to them with every item that needs you, or "All clear" |
+| **Stage** (Nodes tab) | the **traffic diagram** on the left and the **entity list** on the right |
 
-On a phone the panels stack (see the [phone view](img/web-phone.png)). The page has a skip link and landmarks, and honours reduced motion.
+Three panels open on top of the page from the top strip and close with **✕ Close**, Esc or a click outside: **Scenarios**,
+**Plan** and **Governor**. A node is different: it opens *in place of the list* (below), so the traffic diagram stays in view.
+
+On a phone, and under 1100 px, the traffic diagram and the list stack in one column. The page has a skip link and
+landmarks, and honours reduced motion.
+
+![The dashboard on a phone, panels stacked (older layout; today traffic and the list stack in one column)](img/web-phone.png)
+
+## The entity list
+
+A plain list, one card per line, in three groups: *Compute nodes*, *GPU nodes* and *Services*. Each heading counts what
+is healthy ("4 of 4 healthy"). A card shows the status in words and an icon (✓ healthy, ▲ warning, ✗ fault, ⏻ off) and
+the quick facts:
+
+| Card | Quick facts |
+|---|---|
+| GPU node | a utilisation meter, the percent, busy GPUs out of total, temperature, BCM state |
+| Compute node | temperature, BCM state |
+| Service | requests per minute and the total seen |
+
+Healthy cards are quiet; warning, fault and off cards are tinted and bold, so what needs you stands out. Slurm node
+states and CPU load are not shown, because the page has no Docker access by design; use `benchctl describe node NAME`.
 
 ## Traffic diagram
 
-The **Traffic** panel sits with the nodes on the **Nodes** tab (above them on a normal screen, beside them on a wide
-one). It draws the *Clients* (monitoring app, Prometheus, curl), the *Faults* box (scenarios and buttons) and the
-*Cluster*: the four mock services and **every node as a tile** with its state (✓ healthy, ▲ warning, ✗ fault, ⏻ off,
-? unknown). A round dot travels from the clients to a service for each real request; a diamond travels from *Faults*
-to the **node it hits** and a ring flashes on that tile. Lines light up while a service is being used, and each
-service shows requests per minute. *Pause animation* stops the dots. They stop by themselves at governor L3 and under
-reduced motion, and the live feed runs only while the page is visible and the Nodes tab is open.
+The **Traffic** panel draws the *Clients* (monitoring app, Prometheus, curl), the *Faults* box (scenarios and buttons)
+and the *Cluster*: the four mock services and **every node as a tile** with its state. A round dot travels from the
+clients to a service for each real request; a diamond travels from *Faults* to the **node it hits** and a ring flashes on
+that tile. Lines light up while a service is being used, and each service shows requests per minute. *Pause animation*
+stops the dots. They stop by themselves at governor L3 and under reduced motion, and the live feed runs only while the
+page is visible and the Nodes tab is open.
 
-## Node cells and fault actions
+## A node: actions and info
 
-Click a node card to open its panel. It replaces the list in place (it is not a pop-up, so the traffic diagram stays in view and you can watch what your action does). The panel has two cards. **Actions** holds the faults, then the recovery:  **Power off**, **Power on**, **Overheat (92 °C)**, **Fan failure**, **GPU error
-(XID 79)** (GPU nodes only) or **Clear faults**. The card changes state and a diamond shows the injection. Nothing here
-opens a shell on a node; use [`docker exec`](04-nodes-and-shells.md).
+Click a node card. Its panel **replaces the list in place** (it is not a pop-up), so you can watch the traffic diagram
+while you act. The panel has two cards and a header with **← All nodes** (Esc does the same), the node's name and its
+live state.
 
-![A node card with its Fault actions expanded: Power off, Power on, Overheat, Fan failure, Clear faults](img/web-fault-actions.png)
+- **Actions**: the faults first, **Power off**, **Overheat (92 °C)**, **Fan failure** and **GPU error (XID 79)** (GPU
+  nodes only), then **Recover**: **Power on** and **Clear faults**. The result appears under the buttons, the card
+  changes state and a diamond shows the injection. Nothing here opens a shell on a node; use
+  [`docker exec`](04-nodes-and-shells.md).
+- **Info**: how to reach the node (SSH command, key file, BMC login, how to get its IP) and everything known about it
+  (BMC state, GPUs busy and idle): the same text as `benchctl describe node NAME`, minus the Docker and Slurm lines
+  because this page has no Docker access. The container IP needs Docker, so run `./scripts/benchctl describe node cn001`
+  (it prints an `IP:` line).
 
-*The fault actions (screenshot from before the node cells; they are now in the node panel).*
+![The fault actions as they looked on a node card: Power off, Power on, Overheat, Fan failure, Clear faults (older layout; they are now in the node panel's Actions card)](img/web-fault-actions.png)
 
-The **Info** card shows everything known about that node (state of its BMC, GPUs busy and idle, how to `ssh` in): the same text as `benchctl describe node NAME`, minus the Docker and Slurm lines because this page has no Docker access.
+*The same actions, from before the node panel.*
 
-**⚙ Plan** in the top bar opens a panel on the same page. It takes node counts and parts and shows the memory they need against what is free, with the `benchctl up ...` command to build it. Editing only estimates; **Apply to the running workbench** rebuilds it through the governor (the page itself still has no Docker access); see [choose the workbench](../guides/choose-workbench.md).
+![cn002 shown as Powered off with BCM DOWN (older layout)](img/web-node-powered-off.png)
 
-![cn002 shown as Powered off with BCM DOWN; the top strip says Nodes 5/6 healthy](img/web-node-powered-off.png)
+*After Power off on cn002: the node is marked "Powered off" in words as well as colour, BCM shows DOWN, and the strip counts
+5 of 6 nodes healthy. Press Clear faults to undo.*
 
-*After Power off on cn002: the card is marked "Powered off" in words as well as colour, BCM shows DOWN, and the strip counts 5 of 6 nodes healthy. Press Clear faults to undo.*
+## Plan: change the workbench
+
+**⚙ Plan** opens a panel with steppers for CPU nodes, GPU nodes and GPUs per node, toggles for the optional parts, and a
+memory bar ("1.7 GB needed of 4.5 GB free"). It shows the change against what runs now ("GPU nodes 2 → 3 (+1)") and the
+`benchctl up ...` command for a terminal. Editing the numbers only estimates. **Apply to the running workbench** (press
+twice: the second press confirms) asks the governor to rebuild it; new nodes start and nodes you no longer want are
+removed. See [choose the workbench](../guides/choose-workbench.md).
 
 ## Scenarios
 
-Press **▶ Scenarios** in the top strip, pick a scenario and a speed, press **Play**, and watch each step turn ok, skipped or failed. **Stop**
-aborts. Steps that need Docker (the `slurm` target: drain and resume) are **skipped on this page**, because the page has no
-Docker access by design; run those with `./scripts/benchctl scenario run NAME`.
+Press **▶ Scenarios**, type in *Filter scenarios* if the list is long, pick a speed (one setting for all), press
+**▶ Play**, and watch each step turn ok, skipped or failed. **Stop** aborts. While one runs, the top strip shows it and
+pressing that chip reopens the sheet. Steps that need Docker (the `slurm` target: drain and resume) are **skipped on this
+page**, because the page has no Docker access by design; run those with `./scripts/benchctl scenario run NAME`.
 
-![Run panel showing node-down, step 2 of 6, with each step marked ok or pending and a Stop button](img/web-scenario-running.png)
+![Run panel showing node-down, step 2 of 6, with each step marked ok or pending and a Stop button (older layout)](img/web-scenario-running.png)
 
-*A scenario playing (node-down, step 2 of 6). The strip at the top also shows it running; Stop aborts.*
+*A scenario playing (node-down, step 2 of 6). Stop aborts.*
+
+## Governor
+
+Press the level chip (for example **✓ L0 Normal**) or the memory chip. The panel shows the level and what it means, free
+memory and pressure with two-minute trends, and the governor's log (*Governor activity*, newest first). If the governor
+is offline, or memory is tight (L2 and up), the same is also listed under *Needs attention*.
+
+## Connections
+
+The **Connections** tab lists every part (login node, nodes, BMC, BCM, Jira, Slurm REST, GPU exporter, Prometheus,
+Grafana, this page) with its address, a command you can copy, and the **file that holds its credential**. The page shows
+paths, never secrets.
 
 ## One message per condition
 
-If the cluster is down the page shows one notice and one *Needs attention* entry, hides data that cannot exist and names
-the recovery command, which never needs `sudo`. If the governor is down it says so the same way.
+If the cluster is down the page shows one notice and one *Needs attention* entry, hides data that cannot exist (the entity
+list) and names the recovery command, which never needs `sudo`. If the governor is down it says so the same way.
 
-![The dashboard with the stack stopped: one notice in the middle, one entry under Needs attention, services shown offline, no node cards](img/web-stack-down.png)
+![The dashboard with the stack stopped (older layout)](img/web-stack-down.png)
 
-*The cluster is stopped: one notice with the command to start it, services shown offline with dashed outlines, and no node cards. The memory figures are the host's, taken at the time of the screenshot.*
+*The cluster is stopped: one notice with the command to start it, services shown offline with dashed outlines, and no node
+list. The memory figures are the host's, taken at the time of the screenshot.*
 
 ## Help inside the page
 
@@ -79,17 +128,6 @@ the recovery command, which never needs `sudo`. If the governor is down it says 
 page. Start with [Which command do I use?](11-which-command.md) when the commands are new.
 
 ![The help pages: the manual's sidebar on the left and the "Which command do I use?" table on the right](img/web-help.png)
-
-## Tabs, scenarios and how to connect
-
-The middle column has two tabs: **Nodes** (services, traffic and the node cells) and **Connections**. **⚙ Plan** in the top bar opens the plan panel. The right
-panel stays in view while you scroll and scrolls on its own, so the nodes never move away. **Scenarios** is a short list:
-type in *Filter scenarios*, pick one speed for all, press **▶ Play**.
-
-**Connections** lists every part (login node, nodes, BMC, BCM, Jira, Slurm REST, GPU exporter, Prometheus, Grafana, this page)
-with its address, a command you can copy, and the **file that holds its credential**. The page shows paths, never secrets.
-A node's panel (click its card, **Info** card) shows its SSH command, key file and BMC login; the container IP needs Docker, so
-run `./scripts/benchctl describe node cn001` (it prints an `IP:` line).
 
 ## Limits
 
