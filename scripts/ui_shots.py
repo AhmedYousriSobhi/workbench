@@ -53,7 +53,7 @@ def capture(out: Path) -> dict:
                     result["shots"].append(str(path))
                     if page.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth"):
                         result["overflow"].append(f"dashboard {vp} {scheme}")
-                    for sel in ("#banner", "#attn", "#list .btn", "#services .cell", "#flow", ".node"):
+                    for sel in ("#banner", "#attn", "#list .btn", "#services .er", "#flow", ".node"):
                         if page.locator(sel).count() == 0:
                             result["a11y"].append(f"dashboard is missing {sel}")
                     down = page.locator("#stackdown").is_visible()  # stack down: one notice, nothing repeating it

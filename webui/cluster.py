@@ -55,6 +55,17 @@ def xid_by_node(metrics: str) -> dict[str, int]:
     return out
 
 
+def gpu_util_by_node(metrics: str) -> dict[str, list[float]]:
+    """DCGM_FI_DEV_GPU_UTIL per GPU, grouped by node, from a Prometheus text scrape."""
+    out: dict[str, list[float]] = {}
+    for line in metrics.splitlines():
+        if line.startswith("DCGM_FI_DEV_GPU_UTIL"):
+            m = re.search(r'(?:hostname|node|Hostname)="([^"]+)"', line)
+            if m:
+                out.setdefault(m.group(1), []).append(float(line.rsplit(" ", 1)[1]))
+    return out
+
+
 def classify(n: dict) -> tuple[str, str]:
     """(state key, plain label) for a node card; the most serious condition wins."""
     if n["power"] is None:
@@ -104,8 +115,13 @@ class Cluster:
         rows = [self._node(*nk) for nk in self.nodes]
         devices = self._try(f"{BCM}/json", {"service": "cmdevice", "call": "getDevices"})
         bcm = {d["hostname"]: d["status"] for d in (devices or {}).get("result", [])} if isinstance(devices, dict) else {}
-        xids = xid_by_node(self._try(SERVICES["gpu-exporter"]) or "")
+        scrape = self._try(SERVICES["gpu-exporter"]) or ""
+        scrape = scrape if isinstance(scrape, str) else ""
+        xids, utils = xid_by_node(scrape), gpu_util_by_node(scrape)
         for row in rows:
+            if row["name"] in utils:
+                u = utils[row["name"]]
+                row["gpu_util"], row["gpus_busy"] = round(sum(u) / len(u)), sum(1 for x in u if x >= 50)
             row["bcm"] = bcm.get(row["name"])
             row["xid"] = xids.get(row["name"], 0)
             row["state"], row["label"] = classify(row)

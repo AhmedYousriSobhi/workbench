@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-10-29. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**79% built** (35 done, 26 in review, 11 partial, 5 to do, 77 items).
+**79% built** (35 done, 27 in review, 11 partial, 5 to do, 78 items).
 
 ## Roadmap
 
@@ -16,7 +16,7 @@ flowchart LR
     p4["People and chaos<br/>0%"]:::partial
     p5["Kubernetes<br/>50%"]:::partial
     p6["Fidelity VM<br/>0%"]:::partial
-    p7["Web UI and profiles<br/>80%"]:::partial
+    p7["Web UI and profiles<br/>81%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
     p0 --> p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7 --> p8
     classDef done fill:#1a7f37,stroke:#1a7f37,color:#fff
@@ -194,7 +194,7 @@ _One real Ubuntu VM with Redfish power control._
 
 0/1 done
 
-### Web UI and profiles (80%)
+### Web UI and profiles (81%)
 
 _One click from cold start to a busy cluster._
 
@@ -213,10 +213,11 @@ _One click from cold start to a busy cluster._
 | Node cells and plan panel | 🔍 In review | Nodes and services are compact highlight cells (quiet when healthy, tinted and bold when not; a node cell opens the details dialog with the fault actions); the traffic panel gets the freed room. The Plan tab became a modal panel opened from the top bar (steppers, part toggles, memory fit, diff against now, two-press Apply) (issue 123). | `webui/static/index.html` | #124 |
 | Governor panel | 🔍 In review | The left column is gone: the level banner and memory/pressure open as a Governor panel from the top-strip chips, so the page has two columns. Entities are a tree (Cluster, Services, Compute nodes, GPU nodes) of highlight cells. The traffic drawing is wider (760 units) with bigger text, packets and lanes (issue 125). | `webui/static/index.html` | #126 |
 | One-screen dashboard | 🔍 In review | No right column: Scenarios open as a sheet from the top bar (list, filter, speed, run timeline), Governor activity lives in the Governor panel, Needs attention is a slim bar. Traffic and the cluster tree sit side by side and fit 1280x800 with six nodes; ui_shots asserts there is no page scroll (issue 127). | `webui/static/index.html` | #128 |
+| Entity list | 🔍 In review | The cluster tree became a minimalist list: Compute nodes, GPU nodes and Services, one card per line with status and quick facts (GPU utilisation meter and busy count from the exporter, temperature, BCM state, requests per minute for services) (issue 129). | `webui/static/index.html`, `webui/cluster.py` | #130 |
 | Animated workload dots | 🔍 In review | Cluster tab Traffic panel: a dot travels from Clients to a mock each time it serves a real request (the mocks count them at /sim/stats; health checks, /sim calls and the UI's own polls are excluded), a diamond from Fault injector when a fault is applied. SSE at /api/flow opened only while the tab shows; pause button; stops at governor L3+ and for reduced motion. Slurm job dots are not drawn (the UI cannot read the scheduler). ADR 0009. | `webui/flow.py`, `components/*/ (GET /sim/stats)`, `webui/static/index.html` | #89 |
 | Budget manager | ⬜ To do | Profile/budget form (W-7). | - | - |
 
-1/15 done
+1/16 done
 
 ### macOS agent and CI (0%)
 

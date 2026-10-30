@@ -137,3 +137,9 @@ def test_http_json_parses_json_and_returns_text_otherwise(monkeypatch):
     assert cluster.http_json("http://x") == {"a": 1}
     monkeypatch.setattr(cluster.urllib.request, "urlopen", lambda req, timeout: R(b"# metrics\n"))
     assert cluster.http_json("http://x") == "# metrics\n"
+
+
+def test_gpu_util_by_node_groups_every_gpu():
+    text = ('DCGM_FI_DEV_GPU_UTIL{gpu="0",Hostname="gpu001"} 90\nDCGM_FI_DEV_GPU_UTIL{gpu="1",Hostname="gpu001"} 2\n'
+            'DCGM_FI_DEV_GPU_UTIL{gpu="0",Hostname="gpu002"} 0\nDCGM_FI_DEV_XID_ERRORS{Hostname="gpu001"} 0')
+    assert cluster.gpu_util_by_node(text) == {"gpu001": [90.0, 2.0], "gpu002": [0.0]}
