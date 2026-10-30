@@ -11,7 +11,7 @@ original single README, so references such as "section 6.3" still mean the same 
 | [03 Component decisions](03-components.md) | 4 | Slurm, Kubernetes, BMC, BCM, Jira, observability, workload sims, fidelity VM, storage/network/time |
 | [04 Memory contract and profiles](04-memory-and-profiles.md) | 5 | Budgets per component, the `min`/`std`/`full` profiles, the pre-flight |
 | [05 The governor](05-governor.md) | 6 | Placement, signals, escalation ladder L0-L5, behaviour rules, host tuning |
-| [06 Control, Web UI and scenarios](06-ux-and-scenarios.md) | 7 | `simctl` commands, the web page, scenario format and catalog |
+| [06 Control, Web UI and scenarios](06-ux-and-scenarios.md) | 7 | `benchctl` commands, the web page, scenario format and catalog |
 | [07 macOS testing](07-macos.md) | 8 | Why macOS is an external agent only |
 | [08 Repository layout and migration](08-repository-and-migration.md) | 9, 10 | Where things live; how the old Vagrant lab maps over |
 | [09 Roadmap, open decisions, risks](09-roadmap-decisions-risks.md) | 11, 12, 13 | Phases and exit tests; decisions still open; risks |

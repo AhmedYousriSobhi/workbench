@@ -181,7 +181,7 @@ def test_page_has_the_app_shell(ui):
 
 
 def test_page_recovery_hint_needs_no_sudo():
-    """ADR 0010: a dead governor is started with `opti start`; the sudo service is only an optional upgrade."""
+    """ADR 0010: a dead governor is started with `benchctl start`; the sudo service is only an optional upgrade."""
     page = (ROOT / "webui" / "static" / "index.html").read_text()
     offline = next(line for line in page.splitlines() if "Governor not reachable" in line)
     assert "./scripts/benchctl start" in offline and offline.index("benchctl start") < offline.index("sudo")

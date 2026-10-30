@@ -5,11 +5,11 @@ import subprocess
 
 import pytest
 
+from benchctl import checks
 from governor import __main__ as gm
 from governor.core import Governor
 from governor.executors import Executor, UserExecutor
 from governor.planner import Action, Group
-from simctl import checks
 
 
 class Fake:
@@ -112,7 +112,7 @@ def test_main_user_mode_runs_without_root(monkeypatch, tmp_path, caplog):
 
 def test_default_socket_prefers_env_then_system_then_user():
     sysp, usr = checks.SYSTEM_SOCKET, checks.user_socket()
-    assert checks.default_socket({"HPCSIM_GOV_SOCKET": "/x/y.sock"}, lambda p: True) == "/x/y.sock"
+    assert checks.default_socket({"WORKBENCH_GOV_SOCKET": "/x/y.sock"}, lambda p: True) == "/x/y.sock"
     assert checks.default_socket({}, lambda p: True) == sysp  # both exist: the system service wins
     assert checks.default_socket({}, lambda p: p == usr) == usr  # only the rootless governor is there
     assert checks.default_socket({}, lambda p: False) == sysp  # nothing yet: the documented default
@@ -121,16 +121,16 @@ def test_default_socket_prefers_env_then_system_then_user():
 def test_arrivals_flag_moves_to_the_runtime_dir_in_rootless_mode(monkeypatch):
     from governor.executors import ARRIVALS_FLAG
     monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/4242")
-    assert gm.arrivals_flag_path(ARRIVALS_FLAG, True) == "/run/user/4242/hpcsim/arrivals.paused"
-    assert gm.arrivals_flag_path(ARRIVALS_FLAG, False) == ARRIVALS_FLAG  # root keeps /run/hpcsim
+    assert gm.arrivals_flag_path(ARRIVALS_FLAG, True) == "/run/user/4242/workbench/arrivals.paused"
+    assert gm.arrivals_flag_path(ARRIVALS_FLAG, False) == ARRIVALS_FLAG  # root keeps /run/workbench
     assert gm.arrivals_flag_path("/custom/flag", True) == "/custom/flag"  # an explicit choice is respected
 
 
 def test_user_socket_lives_under_the_runtime_dir(monkeypatch):
     monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/4242")
-    assert checks.user_socket() == "/run/user/4242/hpcsim/gov.sock"
+    assert checks.user_socket() == "/run/user/4242/workbench/gov.sock"
     monkeypatch.delenv("XDG_RUNTIME_DIR")
-    assert checks.user_socket().startswith("/tmp/hpcsim-") and checks.user_socket().endswith("/hpcsim/gov.sock")
+    assert checks.user_socket().startswith("/tmp/workbench-") and checks.user_socket().endswith("/workbench/gov.sock")
 
 
 def test_a_container_the_governor_stopped_can_still_be_started_by_name(tmp_path):

@@ -59,7 +59,7 @@ If port 2222 refuses connections, the checkout is probably on a branch without t
 A headless check is faster than driving a window: connect with any SSH library to `127.0.0.1:2222`, run the client's
 fixed Slurm command and parse it with the client's own parser. `tests/real/test_login_real.py`,
 `tests/real/test_gpu_grafana_real.py`, `tests/real/test_bmc_tls_real.py` and `tests/real/test_mocks_real.py` assert
-the same wire behaviour against the live stack (`HPCSIM_REAL=1 pytest tests/real/<file> -q`).
+the same wire behaviour against the live stack (`WORKBENCH_REAL=1 pytest tests/real/<file> -q`).
 
 For the real window, run the client in its dev mode with a throwaway config directory and a remote-debugging port,
 create a synthetic profile through its own API, then read screenshots and page text over that port. Use synthetic

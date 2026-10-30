@@ -9,7 +9,7 @@ Users and monitoring clients reach a compute node from the login node: `ssh cn00
 
 ## Decision
 - `node-base` carries `openssh-server` and the Slurm tools linked into `/usr/local/bin`. Its entrypoint starts `sshd`
-  on a node only when `HPCSIM_SSHD=1` and the keys are mounted (compose sets both for every compute and GPU node), so
+  on a node only when `WORKBENCH_SSHD=1` and the keys are mounted (compose sets both for every compute and GPU node), so
   the controller and other users of the image run none.
 - Same rules as the login node: key login only, no root, no password, `UsePAM no`, only the simulated users;
   TCP forwarding is off on nodes. No published port: nodes are reached through the login node only.

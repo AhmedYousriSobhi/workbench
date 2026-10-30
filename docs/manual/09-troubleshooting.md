@@ -22,17 +22,27 @@ Start with two commands:
 | Web page says the stack is down | the cluster is not running | `./scripts/benchctl start` |
 | Web page says the governor is down | no governor socket | `./scripts/benchctl start` (no sudo) |
 | Lost the login link | it is printed once at start | `./scripts/benchctl open` |
-| Port already in use | another service holds 8088, 8080, 8081, 8000, 9400, 3000 or 9090 | stop it; set `OPTI_UI_PORT` for the web page |
+| Port already in use | another service holds 8088, 8080, 8081, 8000, 9400, 3000 or 9090 | stop it; set `BENCHCTL_UI_PORT` for the web page |
 | Slurm steps skipped in a web scenario | the page has no Docker access by design | run `./scripts/benchctl scenario run NAME` |
-| `ssh cn001` fails from the host | nodes are reachable only through the login node | `ssh` to the login node, then `ssh cn001`; or `docker exec -it hpcsim-cn001-1 bash` ([chapter 4](04-nodes-and-shells.md)) |
+| `ssh cn001` fails from the host | nodes are reachable only through the login node | `ssh` to the login node, then `ssh cn001`; or `docker exec -it workbench-cn001-1 bash` ([chapter 4](04-nodes-and-shells.md)) |
 | `doctor` fails on privileged containers | a container was changed by hand | remove it and run `benchctl up` again |
 | Everything is slow, then things stop | memory pressure; the governor is doing its job | `benchctl status`; free host memory |
+
+## Upgrading from the old names
+
+Earlier versions used `simctl`, `scripts/opti`, `OPTI_*` and, inside, the name `hpcsim` (Docker project, labels, the
+governor socket, the systemd units). All are now `benchctl` and `workbench`. Once, after updating:
+
+1. `./scripts/benchctl down -y` with the old checkout still running, or remove leftovers with `docker ps -a --filter label=hpcsim.class` and `docker rm -f` on them.
+2. If you installed the root governor service: `sudo ./scripts/install-governor.sh` (it removes the old `hpcsim-governor` units and installs `workbench-governor`).
+3. Rename in your own scripts: `simctl` and the `opti` script to `benchctl`, `OPTI_UI_PORT` and `OPTI_GOVERNOR` to `BENCHCTL_UI_PORT` and `BENCHCTL_GOVERNOR`, `HPCSIM_GRAFANA_TOKEN` to `WORKBENCH_GRAFANA_TOKEN`, `/run/hpcsim/gov.sock` to `/run/workbench/gov.sock`.
+4. The Prometheus metrics start with `workbench_` now (`workbench_governor_level`, ...); update any dashboard of your own.
 
 ## Developers: tests that look like failures
 
 If every module in `tests/real` errors at once in the `stack.up` fixtures, the governor probably refused `up` because host
 memory is low. That is not a code failure and not a pass; check `./scripts/benchctl status` and free memory, then rerun.
-Also keep throwaway test containers **unlabelled** (`hpcsim.class`), or the installed root governor freezes or stops them.
+Also keep throwaway test containers **unlabelled** (`workbench.class`), or the installed root governor freezes or stops them.
 
 ## Still stuck
 

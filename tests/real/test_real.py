@@ -78,8 +78,8 @@ def test_real_mlockall_in_subprocess():
 
 @pytest.fixture
 def container():
-    name = f"hpcsim-test-{uuid.uuid4().hex[:6]}"
-    subprocess.run(["docker", "run", "-d", "--rm", "--name", name, "--label", "hpcsim.class=P4",
+    name = f"workbench-test-{uuid.uuid4().hex[:6]}"
+    subprocess.run(["docker", "run", "-d", "--rm", "--name", name, "--label", "workbench.class=P4",
                     "busybox", "sleep", "300"], check=True, capture_output=True)
     yield name
     subprocess.run(["docker", "rm", "-f", name], capture_output=True, check=False)
@@ -137,10 +137,10 @@ def test_real_governor_flags_privileged_container_then_resolves(tmp_path):
     sig = tmp_path / "sig.json"
     sock = tmp_path / "gov.sock"
     sig.write_text(json.dumps({"mem_available": 8 * 1024**3, "psi_some": 0, "psi_full": 0}))
-    clean, bad = (f"hpcsim-test-{uuid.uuid4().hex[:6]}" for _ in range(2))
+    clean, bad = (f"workbench-test-{uuid.uuid4().hex[:6]}" for _ in range(2))
 
     def start(name, *extra):
-        subprocess.run(["docker", "run", "-d", "--rm", "--name", name, "--label", "hpcsim.class=P4",
+        subprocess.run(["docker", "run", "-d", "--rm", "--name", name, "--label", "workbench.class=P4",
                         "--memory", "30m", *extra, "busybox", "sleep", "300"],
                        check=True, capture_output=True)
 
@@ -193,10 +193,10 @@ def _ask(sock, req):
 def test_real_container_started_after_governor_is_governed(tmp_path):
     """Inventory refresh: a container created after start-up is discovered and stopped at L4."""
     gov, sig, sock = _gov(tmp_path, "--refresh-interval", "1", "--no-watchdog")
-    late = f"hpcsim-test-{uuid.uuid4().hex[:6]}"
+    late = f"workbench-test-{uuid.uuid4().hex[:6]}"
     try:
         assert late not in _ask(sock, {"cmd": "status"})["groups"]
-        subprocess.run(["docker", "run", "-d", "--rm", "--name", late, "--label", "hpcsim.class=P4",
+        subprocess.run(["docker", "run", "-d", "--rm", "--name", late, "--label", "workbench.class=P4",
                         "--memory", "30m", "busybox", "sleep", "300"], check=True, capture_output=True)
         assert wait_for(lambda: late in _ask(sock, {"cmd": "status"})["groups"])
         sig.write_text(json.dumps({"mem_available": 4 * 1024**3, "psi_some": 40, "psi_full": 9}))
@@ -231,7 +231,7 @@ def test_real_governor_posts_annotations_with_token(tmp_path):
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     gov, sig, _sock = _gov(tmp_path, "--dry-run", "--no-watchdog",
                           "--grafana-url", f"http://127.0.0.1:{srv.server_port}",
-                          env={"HPCSIM_GRAFANA_TOKEN": "sekret-test-token"})
+                          env={"WORKBENCH_GRAFANA_TOKEN": "sekret-test-token"})
     try:
         sig.write_text(json.dumps({"mem_available": int(1.5 * 1024**3), "psi_some": 0, "psi_full": 0}))
         assert wait_for(lambda: any("L0 -> L1" in g["text"] for g in got))

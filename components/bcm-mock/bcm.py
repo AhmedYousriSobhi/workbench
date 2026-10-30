@@ -79,7 +79,7 @@ class Cluster:
         return None, f"Unknown call: {service}.{call}"
 
 
-PROBE = "x-opti-probe"  # the web UI sets this on its own polls so they are not drawn as client traffic
+PROBE = "x-workbench-probe"  # the web UI sets this on its own polls so they are not drawn as client traffic
 
 
 def counted(path: str, headers) -> bool:

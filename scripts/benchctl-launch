@@ -1,37 +1,37 @@
 #!/usr/bin/env bash
 # One command to start, stop and look at workbench.
-#   ./scripts/opti start [--profile min|std|full]   check the machine, build/start the cluster, start the web page
-#   ./scripts/opti stop                             stop the web page and the cluster (only the hpcsim project)
-#   ./scripts/opti status                           governor, cluster and web page at a glance
-#   ./scripts/opti open                             print the login link (and open it in a browser when possible)
+#   ./scripts/benchctl-launch start [--profile min|std|full]   check the machine, build/start the cluster, start the web page
+#   ./scripts/benchctl-launch stop                             stop the web page and the cluster (only the workbench project)
+#   ./scripts/benchctl-launch status                           governor, cluster and web page at a glance
+#   ./scripts/benchctl-launch open                             print the login link (and open it in a browser when possible)
 # No sudo is needed. The memory governor runs as you (pause/stop through Docker) unless the optional system
-# service is installed. OPTI_GOVERNOR=auto|user|system|off picks it (default auto: system service if running, else yours).
+# service is installed. BENCHCTL_GOVERNOR=auto|user|system|off picks it (default auto: system service if running, else yours).
 set -u
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo" || exit 2
 state=compose/generated; pidf=$state/ui.pid; logf=$state/ui.log
-port="${OPTI_UI_PORT:-8088}"
+port="${BENCHCTL_UI_PORT:-8088}"
 mkdir -p "$state"
 
 govpid=$state/governor.pid; govlog=$state/governor.log; govflag=$state/governor.grafana
-gov_mode="${OPTI_GOVERNOR:-auto}"
-sys_sock=/run/hpcsim/gov.sock
-usock="${XDG_RUNTIME_DIR:-/tmp/hpcsim-$(id -u)}/hpcsim/gov.sock"
+gov_mode="${BENCHCTL_GOVERNOR:-auto}"
+sys_sock=/run/workbench/gov.sock
+usock="${XDG_RUNTIME_DIR:-/tmp/workbench-$(id -u)}/workbench/gov.sock"
 token_file=$state/secrets/grafana_token
 
-gov_alive() { .venv/bin/python -m simctl.cli status --socket "$1" >/dev/null 2>&1; }
+gov_alive() { .venv/bin/python -m benchctl.cli status --socket "$1" >/dev/null 2>&1; }
 gov_pid() { [ -f "$govpid" ] && kill -0 "$(cat "$govpid")" 2>/dev/null && cat "$govpid"; }
 stop_own_governor() {
   if gov_pid >/dev/null; then kill "$(gov_pid)" 2>/dev/null; sleep 0.5; fi
   rm -f "$govpid" "$govflag" "$usock"
 }
-start_governor() {  # prints one status line; exports HPCSIM_GOV_SOCKET for everything started after it
+start_governor() {  # prints one status line; exports WORKBENCH_GOV_SOCKET for everything started after it
   case "$gov_mode" in
-    off) echo "off (OPTI_GOVERNOR=off): memory is not protected"; return 0 ;;
-    auto|system) if gov_alive "$sys_sock"; then export HPCSIM_GOV_SOCKET="$sys_sock"; echo "system service (full protection)"; return 0; fi
+    off) echo "off (BENCHCTL_GOVERNOR=off): memory is not protected"; return 0 ;;
+    auto|system) if gov_alive "$sys_sock"; then export WORKBENCH_GOV_SOCKET="$sys_sock"; echo "system service (full protection)"; return 0; fi
       [ "$gov_mode" = system ] && { echo "the system service is not running" >&2; return 1; } ;;
   esac
-  if gov_pid >/dev/null && gov_alive "$usock"; then export HPCSIM_GOV_SOCKET="$usock"; echo "running as you (pause and stop; no sudo)"; return 0; fi
+  if gov_pid >/dev/null && gov_alive "$usock"; then export WORKBENCH_GOV_SOCKET="$usock"; echo "running as you (pause and stop; no sudo)"; return 0; fi
   stop_own_governor
   mkdir -p "${usock%/*}"; chmod 700 "${usock%/*}"
   args=(--user-mode --refresh-interval 5 --socket "$usock" --arrivals-flag "${usock%/*}/arrivals.paused" --workdir "$repo")
@@ -39,9 +39,9 @@ start_governor() {  # prints one status line; exports HPCSIM_GOV_SOCKET for ever
   [ -n "$bridge" ] && args+=(--metrics-addr "$bridge:9401")
   grafana=0; tok=""
   [ -s "$token_file" ] && { grafana=1; tok="$(cat "$token_file")"; args+=(--grafana-url http://127.0.0.1:3000); }
-  (umask 077; HPCSIM_GRAFANA_TOKEN="$tok" nohup .venv/bin/python -m governor "${args[@]}" >"$govlog" 2>&1 & echo $! >"$govpid")
+  (umask 077; WORKBENCH_GRAFANA_TOKEN="$tok" nohup .venv/bin/python -m governor "${args[@]}" >"$govlog" 2>&1 & echo $! >"$govpid")
   echo "$grafana" >"$govflag"
-  for _ in $(seq 1 40); do gov_alive "$usock" && { export HPCSIM_GOV_SOCKET="$usock"; echo "running as you (pause and stop; no sudo)"; return 0; }; sleep 0.25; done
+  for _ in $(seq 1 40); do gov_alive "$usock" && { export WORKBENCH_GOV_SOCKET="$usock"; echo "running as you (pause and stop; no sudo)"; return 0; }; sleep 0.25; done
   echo "the governor did not start; see $govlog" >&2; return 1
 }
 refresh_governor() {  # the Grafana token only exists after the first `up`: restart our own governor once to use it
@@ -87,7 +87,7 @@ cmd_start() {
   refresh_governor
   start_ui || exit 1
   show_link; open_link
-  echo; echo "Stop everything with: ./scripts/opti stop"
+  echo; echo "Stop everything with: ./scripts/benchctl-launch stop"
 }
 cmd_stop() {
   if ui_pid >/dev/null; then kill "$(ui_pid)" 2>/dev/null; echo "web page stopped"; else echo "web page was not running"; fi
@@ -98,12 +98,12 @@ cmd_stop() {
 cmd_status() {
   if gov_alive "$sys_sock"; then echo "governor : running (system service)"
   elif gov_alive "$usock"; then echo "governor : running (as you, no sudo)"
-  else echo "governor : not running (./scripts/opti start starts it)"; fi
-  n=$(docker ps --filter name=hpcsim --format '{{.Names}}' 2>/dev/null | wc -l)
-  [ "$n" -gt 0 ] && echo "cluster  : $n containers running" || echo "cluster  : stopped (./scripts/opti start)"
+  else echo "governor : not running (./scripts/benchctl-launch start starts it)"; fi
+  n=$(docker ps --filter name=workbench --format '{{.Names}}' 2>/dev/null | wc -l)
+  [ "$n" -gt 0 ] && echo "cluster  : $n containers running" || echo "cluster  : stopped (./scripts/benchctl-launch start)"
   if ui_pid >/dev/null; then echo "web page : running, $(link)"; else echo "web page : stopped"; fi
 }
-cmd_open() { ui_pid >/dev/null || { echo "web page is not running: ./scripts/opti start" >&2; exit 1; }; echo "$(link)"; open_link; }
+cmd_open() { ui_pid >/dev/null || { echo "web page is not running: ./scripts/benchctl-launch start" >&2; exit 1; }; echo "$(link)"; open_link; }
 
 case "${1:-}" in
   start) shift; cmd_start "$@" ;;

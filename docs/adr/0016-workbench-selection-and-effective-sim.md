@@ -9,7 +9,7 @@ Jira), and the mocks, the GPU exporter and `slurm.conf` must agree on the node l
 
 ## Decision
 - A `Spec` (flags or a workbench file) is turned into an effective `sim` dict and a profile dict (`groups` plus `drop`
-  for unselected services); `simctl/workbench.py`. The estimate is the sum of the generated container limits plus the
+  for unselected services); `benchctl/workbench.py`. The estimate is the sum of the generated container limits plus the
   always-on observability stack, an upper bound, the figure the governor already admits against.
 - `compose.write` writes the effective sim to `compose/generated/sim.yaml`; the BMC farm, BCM mock and GPU exporter mount
   that copy. `slurm.conf` and the copy come from the same dict, so they cannot disagree.

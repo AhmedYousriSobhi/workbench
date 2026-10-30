@@ -1,5 +1,5 @@
 # Controller image: same Slurm build as node-base (slurmctld and slurmrestd live in /opt/slurm).
-FROM hpcsim/node-base:dev
+FROM workbench/node-base:dev
 # python3 only for alloc_feed.py, which tells the GPU exporter which GPUs running jobs hold (slurmctld runs it).
 RUN apt-get update && apt-get install -y --no-install-recommends python3 \
  && rm -rf /var/lib/apt/lists/*

@@ -10,7 +10,7 @@ import pytest
 import yaml
 from helpers import bring_up, wait_for
 
-from simctl import compose, stack
+from benchctl import compose, stack
 
 ROOT = Path(__file__).resolve().parents[2]
 KEY = ROOT / stack.SSH_DIR / "id_ed25519"
@@ -78,12 +78,12 @@ def test_forwarding_reaches_another_service(login):
 
 
 def test_ssh_is_published_on_localhost_only(login):
-    out = subprocess.run(["docker", "port", "hpcsim-login-1", "22"], capture_output=True, text=True, check=True).stdout
+    out = subprocess.run(["docker", "port", "workbench-login-1", "22"], capture_output=True, text=True, check=True).stdout
     assert out.strip().startswith("127.0.0.1:") and "0.0.0.0" not in out
 
 
 def test_unprivileged_and_memory_limited(login):
-    r = subprocess.run(["docker", "inspect", "hpcsim-login-1", "-f",
+    r = subprocess.run(["docker", "inspect", "workbench-login-1", "-f",
                         "{{.HostConfig.Privileged}} {{.HostConfig.Memory}} {{.HostConfig.CapAdd}}"],
                        capture_output=True, text=True, check=True).stdout.split()
     assert r[0] == "false" and int(r[1]) > 0 and r[2] == "[]"

@@ -8,7 +8,7 @@ import pytest
 import yaml
 from helpers import bring_up, wait_for
 
-from simctl import compose, scenario, stack
+from benchctl import compose, scenario, stack
 
 ROOT = Path(__file__).resolve().parents[2]
 KEY = ROOT / stack.SSH_DIR / "id_ed25519"

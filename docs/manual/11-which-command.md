@@ -13,7 +13,7 @@ for, and why. Every command runs from the repository root.
 | see what is running | `./scripts/benchctl get nodes` and `./scripts/benchctl status` | the nodes and their state; the governor level |
 | open the web page | `./scripts/benchctl open` | prints the login link |
 | stop everything | `./scripts/benchctl stop` | stops the web page, the cluster and the governor it started |
-| stop only the cluster | `./scripts/benchctl down` | touches only the `hpcsim` project |
+| stop only the cluster | `./scripts/benchctl down` | touches only the `workbench` project |
 | see everything about one node | `./scripts/benchctl describe node gpu001` | container, Slurm state, jobs, which GPUs are busy, BMC readings ([chapter 4](04-nodes-and-shells.md)) |
 | open a shell on a node | `./scripts/benchctl exec cn001` (or `ssh` through the login node) | the login node is the way in, like a real cluster; the exact `ssh` line is in [chapter 4](04-nodes-and-shells.md) |
 | break something on purpose | `./scripts/benchctl scenario run NAME` | plays a scripted fault ([chapter 6](06-scenarios.md)) |
@@ -35,7 +35,7 @@ for, and why. Every command runs from the repository root.
   `std`, so pass `--profile min` on a small machine. Related verbs: `down`, `scale`, `scenario`, `status`, `diag`.
 
 Without `benchctl start` the governor is not started, so nothing protects the host's memory: on a 16 GB machine prefer
-`start`. (The old names `./scripts/opti` and `simctl` still work as aliases of these.)
+`start`.
 
 ## Which profile?
 

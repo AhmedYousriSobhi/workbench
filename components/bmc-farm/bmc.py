@@ -157,7 +157,7 @@ class Farm:
         return table.get(path.strip("/"))
 
 
-PROBE = "x-opti-probe"  # the web UI sets this on its own polls so they are not drawn as client traffic
+PROBE = "x-workbench-probe"  # the web UI sets this on its own polls so they are not drawn as client traffic
 
 
 def counted(path: str, headers) -> bool:
@@ -314,7 +314,7 @@ def main() -> None:
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 8000
     tls_port = int(sys.argv[3]) if len(sys.argv) > 3 else 8443
     farm, stats, lock = Farm(load_nodes(sim)), {"requests": 0}, threading.Lock()
-    creds = read_credentials(Path("/run/hpcsim/bmc_credentials"))
+    creds = read_credentials(Path("/run/workbench/bmc_credentials"))
     if creds:
         farm.account = creds[0]
     cert, key = Path("/app/certs/cert.pem"), Path("/app/certs/key.pem")

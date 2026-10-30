@@ -11,7 +11,7 @@ import pytest
 import yaml
 from helpers import bring_up, wait_for
 
-from simctl import checks, stack
+from benchctl import checks, stack
 
 ROOT = Path(__file__).resolve().parents[2]
 

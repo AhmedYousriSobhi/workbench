@@ -12,7 +12,7 @@ services:
     tmpfs: ["/prometheus:size=200m,uid=65534,gid=65534"]
     mem_limit: 300m
     ports: ["127.0.0.1:9090:9090"]
-    cgroup_parent: hpcsim-p1.slice
+    cgroup_parent: workbench-p1.slice
     extra_hosts: ["host.docker.internal:host-gateway"]
   grafana:
     image: grafana/grafana-oss:11.1.0
@@ -25,7 +25,7 @@ services:
       - ../observability/dashboards:/var/lib/grafana/dashboards:ro
     mem_limit: 300m
     ports: ["127.0.0.1:3000:3000"]
-    cgroup_parent: hpcsim-p1.slice
+    cgroup_parent: workbench-p1.slice
     depends_on: [prometheus]
   gpu-exporter-farm:
     image: python:3.12-slim
@@ -35,4 +35,4 @@ services:
       - ./generated/sim.yaml:/sim.yaml:ro
     ports: ["127.0.0.1:9400:9400"]  # scenario engine injects faults here
     mem_limit: 100m
-    cgroup_parent: hpcsim-p2.slice
+    cgroup_parent: workbench-p2.slice

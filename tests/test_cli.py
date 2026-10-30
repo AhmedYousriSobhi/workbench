@@ -1,13 +1,12 @@
-"""simctl's commands through Typer's runner: exit codes and what the user is told, with the heavy parts faked."""
-import sys
+"""benchctl's commands through Typer's runner: exit codes and what the user is told, with the heavy parts faked."""
 from pathlib import Path
 
 import pytest
 import typer
 from typer.testing import CliRunner
 
+from benchctl import checks, cli, stack
 from governor import control
-from simctl import checks, cli, stack
 
 runner = CliRunner()
 
@@ -103,7 +102,7 @@ def test_scenario_run_rejects_an_invalid_scenario(monkeypatch):
 
 
 def test_scenario_run_reports_pass_and_fail(monkeypatch):
-    from simctl import scenario
+    from benchctl import scenario
 
     sc = {"name": "x", "steps": []}
     monkeypatch.setattr(cli.scenario, "load", lambda name: sc)
@@ -149,7 +148,7 @@ def test_get_resources_and_json(monkeypatch):
     """`benchctl get nodes|profiles|scenarios` print a table, or JSON with -o json."""
     import json
 
-    from simctl import inventory
+    from benchctl import inventory
 
     monkeypatch.setattr(inventory, "_containers", lambda runner=None: {"cn001": "running", "gpu001": "paused"})
     r = runner.invoke(cli.app, ["get", "nodes"])
@@ -161,7 +160,7 @@ def test_get_resources_and_json(monkeypatch):
 
 
 def test_get_services_lists_the_stack(monkeypatch):
-    from simctl import inventory
+    from benchctl import inventory
 
     monkeypatch.setattr(inventory, "_containers", lambda runner=None: {"slurmctld": "running"})
     assert "slurmctld" in runner.invoke(cli.app, ["get", "services"]).output
@@ -170,7 +169,7 @@ def test_get_services_lists_the_stack(monkeypatch):
 
 
 def test_node_completion_offers_sim_yaml_nodes():
-    from simctl.completion import nodes
+    from benchctl.completion import nodes
 
     assert nodes("gpu") == ["gpu001", "gpu002"]
     assert "cn001" in nodes("")
@@ -182,9 +181,9 @@ def test_exec_and_logs_run_docker_in_the_project_container(monkeypatch):
     calls = []
     monkeypatch.setattr(os, "execvp", lambda f, a: calls.append(a))
     runner.invoke(cli.app, ["exec", "gpu001", "-u", "alice", "--", "hostname"])
-    assert calls[-1] == ["docker", "exec", "-u", "alice", "hpcsim-gpu001-1", "hostname"]
+    assert calls[-1] == ["docker", "exec", "-u", "alice", "workbench-gpu001-1", "hostname"]
     runner.invoke(cli.app, ["logs", "cn001", "--tail", "5"])
-    assert calls[-1] == ["docker", "logs", "--tail", "5", "hpcsim-cn001-1"]
+    assert calls[-1] == ["docker", "logs", "--tail", "5", "workbench-cn001-1"]
 
 
 def test_start_stop_open_delegate_to_the_launcher(monkeypatch):
@@ -198,7 +197,7 @@ def test_start_stop_open_delegate_to_the_launcher(monkeypatch):
 
 
 def test_status_also_says_where_the_cluster_and_web_page_are(monkeypatch, tmp_path):
-    from simctl import inventory
+    from benchctl import inventory
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(inventory, "service_rows", lambda runner=None: [{"name": "login", "state": "running"}])
@@ -237,29 +236,8 @@ def test_help_tells_scripts_where_to_look():
     assert "-o json" in out and "stderr" in out and "Exit codes" in out
 
 
-def test_old_name_prints_one_notice_only_in_a_terminal(monkeypatch):
-    import io
-
-    class Tty(io.StringIO):
-        def isatty(self):
-            return True
-
-    monkeypatch.setattr("sys.argv", ["/x/simctl", "status"])
-    err = Tty()
-    monkeypatch.setattr("sys.stderr", err)
-    cli._old_name_notice()
-    assert err.getvalue().count("`simctl` is now `benchctl`") == 1
-    quiet = io.StringIO()  # not a terminal: scripts see nothing new
-    monkeypatch.setattr("sys.stderr", quiet)
-    cli._old_name_notice()
-    monkeypatch.setattr("sys.argv", ["/x/benchctl", "status"])
-    monkeypatch.setattr("sys.stderr", Tty())
-    cli._old_name_notice()
-    assert quiet.getvalue() == "" and sys.stderr.getvalue() == ""
-
-
 def _live(monkeypatch, states=None):
-    from simctl import inventory
+    from benchctl import inventory
 
     states = states if states is not None else {"cn001": "running", "cn002": "running", "gpu001": "paused"}
     monkeypatch.setattr(inventory, "_containers", lambda runner=None: states)

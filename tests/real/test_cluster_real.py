@@ -11,7 +11,7 @@ import pytest
 import yaml
 from helpers import bring_up, wait_for
 
-from simctl import stack
+from benchctl import stack
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -89,7 +89,7 @@ def test_screenshot_of_a_faulted_cluster(ui, tmp_path):
     base, h, token = ui
     for name, action in (("cn002", "power-off"), ("cn003", "fan-fail"), ("gpu001", "gpu-xid"), ("gpu002", "overheat")):
         api(base, h, f"/api/nodes/{name}/{action}", "POST")
-    out = Path(os.environ.get("OPTI_SHOT_DIR", tmp_path))
+    out = Path(os.environ.get("BENCHCTL_SHOT_DIR", tmp_path))
     out.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as p:
         browser = p.chromium.launch()

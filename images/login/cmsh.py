@@ -14,7 +14,7 @@ import sys
 import urllib.error
 import urllib.request
 
-BCM_URL = os.environ.get("HPCSIM_BCM_URL", "http://bcm-mock:8081/json")
+BCM_URL = os.environ.get("WORKBENCH_BCM_URL", "http://bcm-mock:8081/json")
 HEAD_IP = "10.141.255.254"
 HEALTHCHECKS = [("DeviceIsUp", "Checks whether the device is up"), ("ManagedServicesOk", "Checks that the managed services run"),
                 ("failedprejob", "Checks for jobs that failed their prejob health check")]

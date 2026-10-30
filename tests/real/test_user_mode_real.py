@@ -16,8 +16,8 @@ import pytest
 import yaml
 from helpers import ask, bring_up, signals, start_governor, stop_governor, wait_for
 
+from benchctl import stack
 from governor.executors import discover_docker
-from simctl import stack
 
 ROOT = Path(__file__).resolve().parents[2]
 FAST = json.dumps({"sustain_s": 0.5, "calm_s": 1, "min_dwell_s": 0.3, "l5_after_s": 1000})
@@ -30,10 +30,10 @@ def inspect(name: str, field: str) -> str:
 
 
 def test_nf1_memory_hog_is_paused_then_stopped_without_root_and_without_oom(tmp_path):
-    name = f"hpcsim-test-{uuid.uuid4().hex[:6]}"
+    name = f"workbench-test-{uuid.uuid4().hex[:6]}"
     hog = ("i=0; while true; do dd if=/dev/zero of=/t/f$i bs=1M count=10 2>/dev/null; "
            "i=$((i+1)); sleep 0.3; done")
-    subprocess.run(["docker", "run", "-d", "--name", name, "--label", "hpcsim.class=P4", "--memory", "200m",
+    subprocess.run(["docker", "run", "-d", "--name", name, "--label", "workbench.class=P4", "--memory", "200m",
                     "--memory-swap", "200m", "--tmpfs", "/t:size=400m", "busybox", "sh", "-c", hog],
                    check=True, capture_output=True)
     try:
@@ -74,7 +74,7 @@ def sim(monkeypatch):
 def test_ladder_really_pauses_and_stops_live_containers_and_recovers(sim, tmp_path):
     gov, sig, sock = start_governor(tmp_path, "--user-mode", "--no-watchdog", "--thresholds", FAST,
                                     "--refresh-interval", "1")
-    cn, ctl, bmc = "hpcsim-cn001-1", "hpcsim-slurmctld-1", "hpcsim-bmc-farm-1"
+    cn, ctl, bmc = "workbench-cn001-1", "workbench-slurmctld-1", "workbench-bmc-farm-1"
     try:
         assert wait_for(lambda: cn in ask(sock, {"cmd": "status"})["groups"], 30)
         high = lambda n: subprocess.run(["docker", "exec", n, "cat", "/sys/fs/cgroup/memory.high"],
@@ -103,7 +103,7 @@ def test_ladder_really_pauses_and_stops_live_containers_and_recovers(sim, tmp_pa
         signals(sig, avail_gb=8)  # calm again: a stop is destructive and is never undone automatically (by design)
         assert wait_for(lambda: ask(sock, {"cmd": "status"})["level"] == 0, 60)
         assert inspect(cn, "{{.State.Running}}") == "false"
-        assert ask(sock, {"cmd": "start", "target": cn})["ok"]  # an operator (or simctl) brings it back
+        assert ask(sock, {"cmd": "start", "target": cn})["ok"]  # an operator (or benchctl) brings it back
         assert wait_for(lambda: inspect(cn, "{{.State.Running}}") == "true", 30)
         st = ask(sock, {"cmd": "status"})
         assert st["mode"] == "user" and not any("FAILED" in m for m in st["audit"]), st["audit"]

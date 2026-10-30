@@ -36,7 +36,7 @@ it only stops growth. Relief comes from stopping. Thresholds can be overridden w
 ```
 
 The same data is on the web page (left panel and log), in Grafana as annotations on every action, and in Prometheus
-(`hpcsim_governor_level`, `hpcsim_host_mem_available_bytes`). The governor's own metrics come from its own endpoint, so
+(`workbench_governor_level`, `workbench_host_mem_available_bytes`). The governor's own metrics come from its own endpoint, so
 they survive when Prometheus is stopped.
 
 ## Admission

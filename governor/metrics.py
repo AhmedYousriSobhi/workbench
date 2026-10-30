@@ -14,36 +14,36 @@ def render(gov) -> bytes:
     """Prometheus exposition text for the governor's current state (caller holds gov's lock)."""
     s = gov.signals
     out = [
-        "# TYPE hpcsim_governor_level gauge",
-        f"hpcsim_governor_level {gov.ladder.level}",
-        "# TYPE hpcsim_governor_dry_run gauge",
-        f"hpcsim_governor_dry_run {int(gov.dry_run)}",
-        "# TYPE hpcsim_governor_security_findings gauge",
-        f"hpcsim_governor_security_findings {len(gov.violations)}",
-        "# TYPE hpcsim_governor_groups gauge",
+        "# TYPE workbench_governor_level gauge",
+        f"workbench_governor_level {gov.ladder.level}",
+        "# TYPE workbench_governor_dry_run gauge",
+        f"workbench_governor_dry_run {int(gov.dry_run)}",
+        "# TYPE workbench_governor_security_findings gauge",
+        f"workbench_governor_security_findings {len(gov.violations)}",
+        "# TYPE workbench_governor_groups gauge",
     ]
     by_prio = Counter(g.prio for g in gov.groups)
-    out += [f'hpcsim_governor_groups{{prio="P{p}"}} {n}' for p, n in sorted(by_prio.items())]
+    out += [f'workbench_governor_groups{{prio="P{p}"}} {n}' for p, n in sorted(by_prio.items())]
     if s:
         out += [
-            "# TYPE hpcsim_host_mem_available_bytes gauge",
-            f"hpcsim_host_mem_available_bytes {s.mem_available}",
-            "# TYPE hpcsim_host_psi_some_avg10 gauge",
-            f"hpcsim_host_psi_some_avg10 {s.psi_some_avg10}",
-            "# TYPE hpcsim_host_psi_full_avg10 gauge",
-            f"hpcsim_host_psi_full_avg10 {s.psi_full_avg10}",
-            "# TYPE hpcsim_host_swap_out_pages_per_second gauge",
-            f"hpcsim_host_swap_out_pages_per_second {s.swap_out_rate}",
+            "# TYPE workbench_host_mem_available_bytes gauge",
+            f"workbench_host_mem_available_bytes {s.mem_available}",
+            "# TYPE workbench_host_psi_some_avg10 gauge",
+            f"workbench_host_psi_some_avg10 {s.psi_some_avg10}",
+            "# TYPE workbench_host_psi_full_avg10 gauge",
+            f"workbench_host_psi_full_avg10 {s.psi_full_avg10}",
+            "# TYPE workbench_host_swap_out_pages_per_second gauge",
+            f"workbench_host_swap_out_pages_per_second {s.swap_out_rate}",
         ]
     c = gov.counts
     out += [
-        "# TYPE hpcsim_governor_actions_total counter",
-        f"hpcsim_governor_actions_total {c['actions']}",
-        "# TYPE hpcsim_governor_action_failures_total counter",
-        f"hpcsim_governor_action_failures_total {c['action_failures']}",
-        "# TYPE hpcsim_governor_admit_total counter",
-        f'hpcsim_governor_admit_total{{result="ok"}} {c["admit_ok"]}',
-        f'hpcsim_governor_admit_total{{result="refused"}} {c["admit_refused"]}',
+        "# TYPE workbench_governor_actions_total counter",
+        f"workbench_governor_actions_total {c['actions']}",
+        "# TYPE workbench_governor_action_failures_total counter",
+        f"workbench_governor_action_failures_total {c['action_failures']}",
+        "# TYPE workbench_governor_admit_total counter",
+        f'workbench_governor_admit_total{{result="ok"}} {c["admit_ok"]}',
+        f'workbench_governor_admit_total{{result="refused"}} {c["admit_refused"]}',
     ]
     return ("\n".join(out) + "\n").encode()
 

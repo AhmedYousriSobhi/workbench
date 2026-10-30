@@ -13,8 +13,8 @@ scope, which needs a writable cgroup tree. Docker mounts that tree read-only; th
   together). Release 26.05.5 (2026-10-13) was the newest at the time and includes all of the above.
 - `cgroup.conf` sets `CgroupPlugin=disabled`, which 26.05 accepts (23.11 did not). `slurmd` then starts with no
   capabilities, no AppArmor override and a read-only cgroup tree. Jobs are synthetic, so no cgroup control is lost.
-- Fake GPUs are backed by `/dev/hpcsim-gpuN` symlinks to `/dev/null`, created by the entrypoint.
-- `benchctl doctor` runs `check_containers`: every container labelled `hpcsim.class` must be unprivileged, have no
+- Fake GPUs are backed by `/dev/workbench-gpuN` symlinks to `/dev/null`, created by the entrypoint.
+- `benchctl doctor` runs `check_containers`: every container labelled `workbench.class` must be unprivileged, have no
   added capabilities or disabled confinement, no host network/pid, no Docker socket and a memory limit.
 
 ## Consequences

@@ -16,7 +16,7 @@ The complete guide to using workbench. Read it front to back once, then use it a
 | 8 | [Configuration](08-configuration.md) | `sim.yaml`, profiles, changing the topology |
 | 9 | [Troubleshooting](09-troubleshooting.md) | symptoms, causes, fixes, the diagnostics bundle |
 | 10 | [Reference](10-reference.md) | every command, script, port, file and environment variable |
-| 11 | [Which command do I use?](11-which-command.md) | `opti` or `simctl`, which profile, what to run for each goal |
+| 11 | [Which command do I use?](11-which-command.md) | Which command, which profile, what to run for each goal |
 | 12 | [Glossary](12-glossary.md) | the words used in the manual and the web page |
 
 The same pages open inside the web page: click **? Help** in its header (http://127.0.0.1:8088/help/), with a sidebar and search.

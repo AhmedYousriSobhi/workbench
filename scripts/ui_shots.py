@@ -1,6 +1,6 @@
 """Screenshot and sanity-check the Web UI in headless Chromium (needs: pip install -e '.[browser]' && playwright install chromium).
 
-    .venv/bin/python scripts/ui_shots.py [OUTDIR]     # default /tmp/opti-ui-shots
+    .venv/bin/python scripts/ui_shots.py [OUTDIR]     # default /tmp/workbench-ui-shots
 
 Starts `python -m webui` on a free port, captures every tab at desktop and phone width in light and dark, and reports
 console errors and horizontal overflow. Prints the PNG paths; exit 1 if any check fails.
@@ -100,7 +100,7 @@ def capture(out: Path) -> dict:
 
 
 if __name__ == "__main__":
-    res = capture(Path(sys.argv[1] if len(sys.argv) > 1 else "/tmp/opti-ui-shots"))
+    res = capture(Path(sys.argv[1] if len(sys.argv) > 1 else "/tmp/workbench-ui-shots"))
     print("\n".join(res["shots"]))
     for key in ("console_errors", "overflow", "a11y"):
         for item in res[key]:

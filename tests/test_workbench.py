@@ -7,7 +7,7 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
-from simctl import cli, compose, stack, workbench
+from benchctl import cli, compose, stack, workbench
 
 ROOT = Path(__file__).resolve().parent.parent
 SIM = yaml.safe_load((ROOT / "sim.yaml").read_text())
@@ -107,7 +107,7 @@ def cwd(tmp_path, monkeypatch):
     (tmp_path / "scenarios").symlink_to(ROOT / "scenarios")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(workbench, "SAVED", tmp_path / "compose/generated/workbench.yaml")
-    monkeypatch.setattr("simctl.checks.mem_available", lambda *a: 8 * 1024**3)
+    monkeypatch.setattr("benchctl.checks.mem_available", lambda *a: 8 * 1024**3)
     return tmp_path
 
 
@@ -117,7 +117,7 @@ def test_plan_prints_the_estimate_and_exits_0_when_it_fits(cwd):
 
 
 def test_plan_exits_1_and_names_the_fix_when_it_does_not_fit(cwd, monkeypatch):
-    monkeypatch.setattr("simctl.checks.mem_available", lambda *a: 1500 * 1024**2)
+    monkeypatch.setattr("benchctl.checks.mem_available", lambda *a: 1500 * 1024**2)
     r = runner.invoke(cli.app, ["plan", "--cpu-nodes", "20", "--with", "load"])
     assert r.exit_code == 1 and "does not fit" in r.output and "Try:" in r.output
 

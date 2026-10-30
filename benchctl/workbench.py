@@ -104,7 +104,7 @@ def _part_mb(part: str) -> int:
 def estimate(sim: dict, profile: dict) -> dict:
     """Memory limits in MB by what they pay for. An upper bound, like the profile budgets."""
     data = compose.generate(sim, profile)
-    nodes = {n: int(s["mem_limit"].rstrip("m")) for n, s in data["services"].items() if s["labels"].get("hpcsim.node")}
+    nodes = {n: int(s["mem_limit"].rstrip("m")) for n, s in data["services"].items() if s["labels"].get("workbench.node")}
     services = {n: int(s["mem_limit"].rstrip("m")) for n, s in data["services"].items() if n not in nodes}
     total = sum(nodes.values()) + sum(services.values()) + OBSERVABILITY_MB
     return {"nodes_mb": sum(nodes.values()), "node_count": len(nodes), "services_mb": services,
