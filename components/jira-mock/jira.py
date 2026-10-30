@@ -19,6 +19,7 @@ JQL: AND OR NOT ( ), = != ~ !~ in, not in, is [not] EMPTY, < > <= >= (dates, -7d
 POST /rest/webhooks/1.0/webhook                   {"url": "...", "events": ["jira:issue_created", ...]}
 POST /sim/failure  {"mode": "401|429|503|slow", "count": 3, "delay": 2}   (applies to the next /rest requests)
 GET|POST /sim/tickets   {"action": "create|transition|comment|reset", ...}: tickets without a client (scenarios, #107)
+GET  /rest/api/{2,3}/issue/KEY/editmeta            (priority, labels, description, summary: what an edit form draws)
 GET  /healthz
 Workflow: Open -> In Progress -> Resolved (needs "resolution") -> Closed; Reopen from any later state.
 """
@@ -39,7 +40,26 @@ WORKFLOW = {
     "Resolved": [("41", "Close", "Closed", []), ("51", "Reopen", "Open", [])],
     "Closed": [("51", "Reopen", "Open", [])],
 }
+RESOLUTIONS = ("Done", "Won't Do", "Duplicate", "Cannot Reproduce")
+PRIORITIES = ("Highest", "High", "Medium", "Low", "Lowest")
+SCREEN = {  # what a form needs to draw a field: the shape of Jira's own transition and edit screens
+    "resolution": {"name": "Resolution", "schema": {"type": "resolution"},
+                   "allowedValues": [{"id": str(10000 + n), "name": r} for n, r in enumerate(RESOLUTIONS)]},
+    "priority": {"name": "Priority", "schema": {"type": "priority"}, "operations": ["set"],
+                 "allowedValues": [{"id": str(n + 1), "name": p} for n, p in enumerate(PRIORITIES)]},
+    "labels": {"name": "Labels", "schema": {"type": "array", "items": "string"}, "operations": ["add", "set", "remove"]},
+    "description": {"name": "Description", "schema": {"type": "string"}, "operations": ["set"]},
+    "summary": {"name": "Summary", "schema": {"type": "string"}, "operations": ["set"]},
+}
 QUERYABLE = ("project", "status", "assignee", "labels", "issuetype", "key")
+
+
+def resolution_of(value):
+    """A resolution given as a name, {"name": ...} or {"id": ...} (a form sends the id), as the name Jira would store."""
+    if isinstance(value, dict):
+        by_id = {str(10000 + n): r for n, r in enumerate(RESOLUTIONS)}
+        value = value.get("name") or by_id.get(str(value.get("id")), "Done")
+    return {"name": value} if isinstance(value, str) else value
 
 
 class JiraError(Exception):
@@ -203,7 +223,9 @@ class Jira:
                 f[name] = given[name]
                 items.append({"field": name})
         if "priority" in given:
-            f["priority"] = {"name": (given["priority"] or {}).get("name", "Medium")}
+            asked = given["priority"] or {}  # a form sends the id, a script the name
+            by_id = {str(n + 1): name for n, name in enumerate(PRIORITIES)}
+            f["priority"] = {"name": asked.get("name") or by_id.get(str(asked.get("id")), "Medium")}
             items.append({"field": "priority", "toString": f["priority"]["name"]})
         if "labels" in given:
             f["labels"] = list(given["labels"] or [])
@@ -309,7 +331,11 @@ class Jira:
         status = self.get(key)["fields"]["status"]["name"]
         return {"transitions": [
             {"id": i, "name": name, "to": {"name": to},
-             "fields": {f: {"required": True} for f in req}} for i, name, to, req in WORKFLOW[status]]}
+             "fields": {f: {"required": True, **SCREEN.get(f, {})} for f in req}} for i, name, to, req in WORKFLOW[status]]}
+
+    def editmeta(self, key: str) -> dict:
+        self.get(key)
+        return {"fields": {f: {"required": f == "summary", **SCREEN[f]} for f in ("summary", "priority", "labels", "description")}}
 
     def transition(self, key: str, body: dict) -> None:
         issue = self.get(key)
@@ -323,7 +349,7 @@ class Jira:
         if missing:
             raise JiraError(400, errors=missing)
         issue["fields"]["status"] = status_of(target)
-        issue["fields"]["resolution"] = given.get("resolution") if target == "Resolved" else None
+        issue["fields"]["resolution"] = resolution_of(given.get("resolution")) if target == "Resolved" else None
         touch(issue)
         self.fire("jira:issue_updated", issue, {"changelog": {"items": [{"field": "status", "toString": target}]}})
 
@@ -642,6 +668,8 @@ def make_handler(jira: Jira):
                     return 201, jira.log_work(parts[1], self._body())
                 if (parts[2], method) == ("worklog", "GET"):
                     return 200, jira.worklog(parts[1])
+                if (parts[2], method) == ("editmeta", "GET"):
+                    return 200, jira.editmeta(parts[1])
                 if (parts[2], method) == ("assignee", "PUT"):
                     jira.assign(parts[1], self._body())
                     return 204, None

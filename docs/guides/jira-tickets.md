@@ -83,6 +83,10 @@ In Progress and then Resolved, and the client raises its own notification (`OPS-
 The client reads Jira on its own timer and a manual refresh waits at least 30 s between reads, so a change shows up
 within about a minute, not at once.
 
+The client has no "create ticket" call for Slurm; what it does on a ticket works against the mock: read details and
+transitions, comment, assign, watch, log work, edit priority, labels and description (the mock serves `editmeta`), and move
+it with the Resolve form (the mock describes the resolution choices). Create the ticket with a scenario or `POST /sim/tickets`.
+
 ## What is not simulated
 
 Jira Cloud's Teams and Assets fields, attachments, linked tickets, Confluence, and transition screens with extra fields. A
