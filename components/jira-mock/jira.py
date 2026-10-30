@@ -15,7 +15,7 @@ GET|POST /rest/api/{2,3}/issue/KEY/worklog        {"timeSpent": "1h 30m", "comme
 PUT  /rest/api/{2,3}/issue/KEY/assignee           {"name"} or {"accountId"}, null to unassign
 GET  /rest/api/{2,3}/user/search | user/assignable/search   ?query= or ?username=
 GET  /rest/api/{2,3}/{myself,serverInfo,field,project,project/search}
-JQL: AND OR NOT ( ), = != ~ !~ in, not in, is [not] EMPTY, < > <= >= (dates, -7d), currentUser(), ORDER BY created|updated|key
+JQL: AND OR NOT ( ), = != ~ !~ in, not in, is [not] EMPTY, < > <= >= (dates, -7d), currentUser(), ORDER BY created|updated|key; fields incl. watcher (reporter, assignee); dates as 2026-10-30 14:00 or 2026/10/30 14:00
 POST /rest/webhooks/1.0/webhook                   {"url": "...", "events": ["jira:issue_created", ...]}
 POST /sim/failure  {"mode": "401|429|503|slow", "count": 3, "delay": 2}   (applies to the next /rest requests)
 GET|POST /sim/tickets   {"action": "create|transition|comment|reset", ...}: tickets without a client (scenarios, #107)
@@ -354,7 +354,7 @@ class Jira:
 
 
 FIELDS = ("project", "status", "statuscategory", "assignee", "reporter", "labels", "issuetype", "key", "summary",
-          "description", "text", "priority", "resolution", "created", "updated")
+          "description", "text", "priority", "resolution", "created", "updated", "watcher")
 CATEGORY = {"Open": ("new", "To Do"), "In Progress": ("indeterminate", "In Progress"),
             "Resolved": ("done", "Done"), "Closed": ("done", "Done")}
 ME = "alice"  # what currentUser() and a Bearer token mean
@@ -401,7 +401,7 @@ def instant(value: str) -> str:
     """An absolute date, or a relative one such as -7d, as a sortable ISO string."""
     m = RELATIVE.fullmatch(value)
     if not m:
-        return value
+        return value.replace("/", "-") if re.fullmatch(r"\d{4}/\d\d/\d\d.*", value) else value  # Jira reads both
     secs = int(m.group(1)) * {"m": 60, "h": 3600, "d": 86400, "w": 604800}[m.group(2)]
     return time.strftime("%Y-%m-%d %H:%M", time.gmtime(time.time() - secs))
 
@@ -416,9 +416,10 @@ def field_values(issue: dict, field: str) -> list[str]:
         return [f["status"]["statusCategory"]["name"], f["status"]["statusCategory"]["key"]]
     if field in ("status", "issuetype", "priority"):
         return [(f.get(field) or {}).get("name", "")]
-    if field in ("assignee", "reporter"):
-        p = f.get(field)
-        return [p["name"], p["accountId"], p["displayName"], p["emailAddress"]] if p else []
+    if field in ("assignee", "reporter", "watcher"):
+        # Jira makes the reporter and the assignee watchers of a ticket
+        people = [f.get(n) for n in ("assignee", "reporter")] if field == "watcher" else [f.get(field)]
+        return [v for p in people if p for v in (p["name"], p["accountId"], p["displayName"], p["emailAddress"])]
     if field == "labels":
         return list(f["labels"])
     if field == "resolution":

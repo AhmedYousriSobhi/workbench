@@ -94,6 +94,9 @@ def test_jql_subset(server):
     assert q('project = OPS AND status = "In Progress"') == ["OPS-2"]
     assert q("labels = gpu") == ["OPS-1"]
     assert q("status in (Open, Closed) AND project != INFRA") == ["OPS-1"]
+    assert sorted(q("watcher = currentUser()")) == ["INFRA-1", "OPS-1", "OPS-2"]  # the reporter is a watcher
+    assert q("watcher = nobody") == []
+    assert q('updated >= "2000/01/01 00:00"') != [] and q('updated >= "2999/01/01 00:00"') == []  # slashes, as a client writes them
     code, body, _ = call(base, "/rest/api/2/search?jql=" + quote("nosuchfield = x"))
     assert code == 400 and "JQL" in body["errorMessages"][0]
 

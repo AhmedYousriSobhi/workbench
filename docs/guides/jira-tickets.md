@@ -75,6 +75,14 @@ curl -s 127.0.0.1:8080/sim/tickets
 curl -s -X POST 127.0.0.1:8080/sim/tickets -d '{"action":"reset"}'
 ```
 
+## What the client shows
+
+Tested against the real desktop client with `drain-ticket`: give the client the cluster's Jira token (any text; the mock
+accepts it), then run the scenario. The ticket reaches the client's Jira cache with its key, title and priority, moves to
+In Progress and then Resolved, and the client raises its own notification (`OPS-1 on workbench moved to "Resolved"`).
+The client reads Jira on its own timer and a manual refresh waits at least 30 s between reads, so a change shows up
+within about a minute, not at once.
+
 ## What is not simulated
 
 Jira Cloud's Teams and Assets fields, attachments, linked tickets, Confluence, and transition screens with extra fields. A

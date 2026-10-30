@@ -15,7 +15,7 @@ undecided, and says each must be resolved before the component is built. The app
   required-field validation (Resolve needs `resolution`), JQL (`AND`, `OR`, `NOT`, parentheses, `=`, `!=`, `~`, `!~`,
   `in`, `not in`, `is [not] EMPTY`, date comparisons, `currentUser()`, `ORDER BY created|updated|key`; fields project,
   status, statusCategory, assignee, reporter, labels, issuetype, key, summary, description, text, priority, resolution,
-  created, updated), webhooks, and failure modes (401, 429 with Retry-After, 503, slow). For SSH-and-REST monitoring clients (#63) it also serves
+  created, updated, watcher: the reporter and the assignee, as in Jira), webhooks, and failure modes (401, 429 with Retry-After, 503, slow). For SSH-and-REST monitoring clients (#63) it also serves
   `POST /search/jql` (token paging, `isLast`, no total) and `POST /search` (offset paging, total), `myself`
   (Basic `email:token` names the account, anything else is `alice`), `serverInfo`, `field`, `project` and
   `project/search`. Authorization headers are accepted but never validated. Modes `cloud` and `dc` are not built.
