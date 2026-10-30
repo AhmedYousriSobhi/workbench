@@ -19,6 +19,7 @@ work as aliases.
 | `down` | stop and remove the `hpcsim` project only |
 | `scale N [--profile P]` | change the compute node count |
 | `scenario list` / `scenario run NAME [--speed N] [--dry-run]` | list scenarios; play one, exit 1 on failure |
+| `export profile [-o FILE] [--bmc] [--user U] [--name N] [--format ID]` | write the workbench as a client profile file ([guide](../guides/export-profile.md)) |
 | `ssh-key install\|remove` | put the login key under `~/.ssh` for clients that only read there |
 | `status [--socket S]` | governor level, signals, recent actions, then whether the cluster and the web page run |
 | `check` | machine check before building (OS, RAM, disk, Docker, ports); exit 1 if not ready |
@@ -29,8 +30,7 @@ work as aliases.
 | `benchctl measure run LABEL [--duration S] [--interval S]` | sample memory to `docs/measurements/` |
 | `benchctl measure report IDLE [LOADED]` | markdown table with suggested budgets |
 
-`benchctl COMMAND --help` shows the exact flags. Planned in the same grammar: `describe node NAME`, `plan` / `apply`,
-`export profile` (issues 91 to 93).
+`benchctl COMMAND --help` shows the exact flags. Planned in the same grammar: `describe node NAME`, `plan` / `apply` (issues 92, 93).
 
 ## Scripts
 
