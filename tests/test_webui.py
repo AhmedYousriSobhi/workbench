@@ -201,3 +201,12 @@ def test_help_wiki_needs_the_token_and_serves_pages_images_and_search(ui):
 
 def test_dashboard_links_to_the_help(ui):
     assert b'href="/help/"' in req(ui, "/")[1]
+
+
+def test_node_detail_endpoint_returns_the_describe_text(ui):
+    code, body = req(ui, "/api/nodes/gpu001")
+    data = json.loads(body)
+    assert code == 200 and data["info"]["name"] == "gpu001" and "Name:        gpu001" in data["text"]
+    assert req(ui, "/api/nodes/zzz")[0] == 404
+    assert req(ui, "/api/nodes/gpu001", auth=False)[0] == 401
+    assert b"showNode" in req(ui, "/")[1] and b'id="nodedlg"' in req(ui, "/")[1]

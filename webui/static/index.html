@@ -102,6 +102,8 @@
   .node h3 { margin:0; font-size:16px; } .pill { font-size:13px; font-weight:600; white-space:nowrap; }
   .pill.ok { color:var(--ok); } .pill.warn { color:var(--warn); } .pill.fault { color:var(--bad); } .pill.down, .pill.unknown { color:var(--pending); }
   .node dl { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; margin:8px 0; font-size:13px; font-variant-numeric:tabular-nums; }
+  dialog { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:10px; max-width:min(92vw,640px); }
+  dialog pre { white-space:pre-wrap; font-size:13px; margin:0 0 8px; } .detailbtn { margin-top:6px; }
   .node dt { color:var(--dim); } .node dd { margin:0; }
   .node details { margin-top:6px; } .node summary { cursor:pointer; min-height:36px; display:flex; align-items:center; color:var(--accent); font-weight:600; }
   .actions { display:flex; flex-wrap:wrap; gap:8px; padding:6px 0; }
@@ -173,10 +175,13 @@
     <p id="flowstate" class="dim small" role="status" style="margin-bottom:0"></p></div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <div id="nodegroups">
-  <h2 class="grouphead">Compute nodes</h2><div id="nodes-compute" class="nodes"></div>
+    <h2 class="grouphead">Compute nodes</h2><div id="nodes-compute" class="nodes"></div>
   <h2 class="grouphead">GPU nodes</h2><div id="nodes-gpu" class="nodes"></div>
   <p class="dim small">Drain in Slurm and Kubernetes node faults are not available here: the page has no Docker access by design, and Kubernetes is not built yet. Use <code>./scripts/benchctl scenario run node-down</code> for Slurm.</p>
   </div>
+  <dialog id="nodedlg" aria-labelledby="nodetitle"><h2 id="nodetitle"></h2><pre id="nodetext"></pre>
+    <p class="dim small">Same text as <code>benchctl describe node NAME</code>, without the Docker and Slurm lines (this page has no Docker access by design).</p>
+    <form method="dialog"><button class="btn">Close</button></form></dialog>
 </main>
 <aside class="rail right" aria-label="Operate">
   <div class="panel"><h2 class="rh">Needs attention</h2><ul class="attn" id="attn"><li class="skel">Checking…</li></ul></div>
@@ -288,7 +293,8 @@ function node(n, actions) {
   return `<article class="node ${n.state}" aria-label="${esc(n.name)}: ${esc(n.label)}">
     <header><h3>${esc(n.name)}</h3><span class="pill ${n.state}"><span aria-hidden="true">${STATE_ICON[n.state]}</span> ${esc(n.label)}</span></header>
     <dl>${dd('Power', n.power ?? '–')}${dd('CPU temp', n.temp == null ? '–' : n.temp.toFixed(0) + ' °C')}${dd('Fans failed', n.fans_failed)}${dd('BCM', n.bcm ?? '–')}${n.gpus ? dd('GPUs', n.gpus) : ''}</dl>
-    <details data-node="${esc(n.name)}" ${openNodes.has(n.name) ? 'open' : ''}><summary>Fault actions</summary><div class="actions">${buttons}</div></details></article>`;
+    <details data-node="${esc(n.name)}" ${openNodes.has(n.name) ? 'open' : ''}><summary>Fault actions</summary><div class="actions">${buttons}</div></details>
+    <button class="btn detailbtn" data-node="${esc(n.name)}">Details</button></article>`;
 }
 function renderCluster(c) {
   paintHealth(c);
@@ -302,6 +308,7 @@ function renderCluster(c) {
     $('nodes-' + kind).innerHTML = rows.length ? rows.map(n => node(n, c.actions)).join('') : '<p class="dim">None in this profile.</p>';
   }
   document.querySelectorAll('.node details').forEach(d => d.ontoggle = () => { d.open ? openNodes.add(d.dataset.node) : openNodes.delete(d.dataset.node); });
+  document.querySelectorAll('.detailbtn').forEach(b => b.onclick = () => showNode(b.dataset.node));
   document.querySelectorAll('.actions .btn').forEach(b => b.onclick = () => nodeAction(b.dataset.node, b.dataset.action, b.textContent));
 }
 async function loadCluster() {
@@ -314,6 +321,12 @@ async function loadCluster() {
 }
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(flashTimer); flashTimer = setTimeout(() => { t.hidden = true; }, 6000);
+}
+async function showNode(name) {
+  const r = await fetch(`/api/nodes/${name}`);
+  $('nodetitle').textContent = name;
+  $('nodetext').textContent = r.ok ? (await r.json()).text : `Could not read ${name}: ${(await r.json()).detail}`;
+  $('nodedlg').showModal();
 }
 async function nodeAction(name, action, label) {
   const r = await fetch(`/api/nodes/${name}/${action}`, { method: 'POST', headers: H });
