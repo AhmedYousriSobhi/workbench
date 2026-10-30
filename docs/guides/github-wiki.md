@@ -11,7 +11,14 @@ GitHub creates the wiki's git repository only when its first page is saved in th
 1. Open the repository on GitHub, then the **Wiki** tab, then **Create the first page**, and save it with any text.
 2. Run the sync (below). It replaces that page with the generated ones.
 
-## Every time the docs change
+## Automatic publishing
+
+A GitHub Actions workflow (`.github/workflows/wiki.yml`) publishes the wiki after every push to `dev` that changes
+`docs/`, `scripts/sync_wiki.py` or `webui/wiki.py`, using the repository's own `GITHUB_TOKEN`. Check the run in the
+repository's **Actions** tab. To publish from another state, run the workflow by hand (**Run workflow**), or use the
+command below.
+
+## Every time the docs change (by hand, when CI is not an option)
 
 ```bash
 python scripts/sync_wiki.py --push

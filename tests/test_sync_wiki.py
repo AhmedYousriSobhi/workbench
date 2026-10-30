@@ -48,3 +48,13 @@ def test_generated_wiki_of_the_real_docs_is_closed_and_clean(tmp_path):
                 assert target in pages, (p.name, target)
             elif target.startswith("images/"):
                 assert (tmp_path / target).is_file(), (p.name, target)
+
+
+def test_ci_token_goes_in_a_header_only_when_origin_has_no_credentials(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "ci-value")
+    plain = "https://github.com/o/r"
+    args = sw.auth_args(plain, plain)
+    assert args[0] == "-c" and args[1].startswith("http.extraheader=Authorization: Basic ") and "ci-value" not in args[1]
+    assert sw.auth_args(plain, "https://github.com/o/r?with=credentials") == []  # a developer's origin carries its own
+    monkeypatch.delenv("GITHUB_TOKEN")
+    assert sw.auth_args(plain, plain) == []

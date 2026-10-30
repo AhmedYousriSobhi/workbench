@@ -10,6 +10,7 @@ wiki by hand: the next sync overwrites it.
 GitHub creates the wiki repository only when its first page is saved in the web UI; --push says so when it is missing.
 """
 import argparse
+import base64
 import os
 import posixpath
 import re
@@ -104,14 +105,25 @@ def repo_urls() -> tuple[str, str]:
     return re.sub(r"//[^@/]*@", "//", private), private
 
 
+def auth_args(public: str, private: str) -> list[str]:
+    """CI: the checkout keeps no credentials in origin, so send GITHUB_TOKEN as a header (as actions/checkout does)."""
+    token = os.environ.get("GITHUB_TOKEN")
+    if not token or public != private:
+        return []
+    basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+    return ["-c", f"http.extraheader=Authorization: Basic {basic}"]
+
+
 def push(docs: Path, public: str, private: str) -> int:
     blob = public + "/blob/main"
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
     url = private + ".wiki.git"
 
     def git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
-        r = subprocess.run(["git", *args], cwd=cwd, env=env, capture_output=True, text=True, check=False)
+        r = subprocess.run(["git", *auth_args(public, private), *args], cwd=cwd, env=env, capture_output=True, text=True, check=False)
         r.stderr = r.stderr.replace(private, "<repo>")  # never echo the token
+        if (token := os.environ.get("GITHUB_TOKEN")):
+            r.stderr = r.stderr.replace(token, "***").replace(base64.b64encode(f"x-access-token:{token}".encode()).decode(), "***")
         return r
 
     with tempfile.TemporaryDirectory() as tmp:
