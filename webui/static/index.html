@@ -374,7 +374,7 @@
         <div class="stp"><label for="pl-gpus">GPUs per node</label><div class="stpin"><button type="button" class="btn small" data-step="pl-gpus" data-d="-1" aria-label="Fewer GPUs per node">−</button><input type="number" id="pl-gpus" min="1" max="8" value="8"><button type="button" class="btn small" data-step="pl-gpus" data-d="1" aria-label="More GPUs per node">+</button></div><span class="small dim" id="pl-now-gpus"></span></div>
       </div>
       <fieldset class="planparts"><legend class="small dim">Optional parts</legend>
-        <div class="toggles"><label class="tog"><input type="checkbox" value="jira" checked><span>Jira</span></label><label class="tog"><input type="checkbox" value="bmc" checked><span>BMC</span></label><label class="tog"><input type="checkbox" value="bcm" checked><span>BCM</span></label><label class="tog"><input type="checkbox" value="scenarios" checked><span>Scenarios</span></label><label class="tog"><input type="checkbox" value="accounting"><span>Accounting</span></label><label class="tog"><input type="checkbox" value="load"><span>Load</span></label></div>
+        <div class="toggles"><label class="tog"><input type="checkbox" value="jira" checked><span>Jira</span></label><label class="tog"><input type="checkbox" value="bmc" checked><span>BMC</span></label><label class="tog"><input type="checkbox" value="bcm" checked><span>BCM</span></label><label class="tog"><input type="checkbox" value="scenarios" checked><span>Scenarios</span></label><label class="tog"><input type="checkbox" value="accounting" checked><span>Accounting</span></label><label class="tog"><input type="checkbox" value="load"><span>Load</span></label></div>
         <p class="small dim" style="margin:8px 0 0">Slurm, the login node, Prometheus and Grafana are always on.</p></fieldset>
       <section class="fit" aria-label="Does it fit"><div class="fitnum"><b id="pl-need">–</b><span class="dim small" id="pl-free"></span></div>
         <progress id="pl-bar" max="100" value="0" aria-label="Memory needed as a share of free memory"></progress>
@@ -553,7 +553,7 @@ $('exp-go').onclick = async () => {
     if (!r.ok) { $('exp-msg').textContent = '✗ ' + (await r.json()).detail; return; }
     const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = 'bench-profile.json';
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    $('exp-msg').textContent = '✓ Saved. Import it in the client, then set the SSH key: run ./scripts/benchctl ssh-key install in a terminal and pick ~/.ssh/workbench_ed25519 in the cluster\'s SSH section.';
+    $('exp-msg').textContent = '✓ Saved. Import it in the client, then set what a file never holds. SSH key: run ./scripts/benchctl ssh-key install in a terminal and pick ~/.ssh/workbench_ed25519 in the cluster\'s SSH section. Grafana token: cat compose/generated/secrets/grafana_viewer_token (new after every benchctl up).' + ($('exp-bmc').checked ? ' BMC password: the part after admin: in compose/generated/secrets/bmc_credentials.' : '') + ' Jira needs no token: any value is accepted.' + (r.headers.get('X-Warning') ? ' ⚠ ' + r.headers.get('X-Warning') : '');
   } catch (e) { $('exp-msg').textContent = '✗ Could not reach the page backend.'; }
 };
 let connCache = null;

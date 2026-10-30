@@ -494,6 +494,8 @@ def export_profile(out: str = typer.Option("bench-profile.json", "-o", "--output
     except export.ExportError as e:
         typer.echo(f"cannot export: {e}", err=True)
         raise typer.Exit(1) from e
+    for w in export.warnings(services):
+        typer.echo(f"warning: {w}", err=True)
     if out == "-":
         typer.echo(text, nl=False)
         return

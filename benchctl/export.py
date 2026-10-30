@@ -66,6 +66,14 @@ def build(sim: dict, services: set[str], name: str = "workbench", include_bmc: b
     return out
 
 
+def warnings(services: set[str]) -> list[str]:
+    """One line per condition the client will trip over; the file is still written."""
+    if "slurmctld" in services and "slurmdbd" not in services:
+        return [("Slurm accounting is not part of this cluster, so `sacct` says accounting storage is disabled and the "
+                 "client cannot read job history: rebuild with `benchctl up --with accounting`")]
+    return []
+
+
 def to_json(body: dict, fmt: tuple[str, int]) -> str:
     """Wrap the profile in the client's envelope (`format`, `version`) and serialise it."""
     return json.dumps({"format": fmt[0], "version": fmt[1], **body}, indent=2) + "\n"

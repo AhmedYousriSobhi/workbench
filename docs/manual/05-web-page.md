@@ -134,3 +134,11 @@ page. Start with [Which command do I use?](11-which-command.md) when the command
 - The Profile and Budget manager (edit `sim.yaml` in the page) is **not built**; edit the file ([chapter 8](08-configuration.md)).
 - Backend memory stays under 50 MB. Starlette and one static page, no framework, no CDN.
 - Browser debugging for developers: `.venv/bin/python scripts/ui_shots.py` ([reference](10-reference.md)).
+
+## Export: a profile file for the monitoring client
+
+**⇩ Export** in the top strip downloads `bench-profile.json` for the cluster on disk (the workbench last built, else the
+profile `up` started); tick *One BMC target per node* to include the BMC farm. The file never holds secrets, so after a
+successful download the sheet lists what to set by hand: the SSH key (`benchctl ssh-key install`), the Grafana token
+(`compose/generated/secrets/grafana_viewer_token`), the BMC password if asked for, and that Jira needs no token. It also
+warns when Slurm accounting is missing (`sacct` would fail). See [export a profile](../guides/export-profile.md).

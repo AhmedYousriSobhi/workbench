@@ -232,7 +232,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         except export.ExportError as e:
             raise HTTPException(422, str(e)) from e
         return Response(text, media_type="application/json",
-                        headers={"Content-Disposition": 'attachment; filename="bench-profile.json"', "X-Profile": label})
+                        headers={"Content-Disposition": 'attachment; filename="bench-profile.json"', "X-Profile": label,
+                                 "X-Warning": " ".join(export.warnings(services))})
 
     async def node_action(request: Request):
         try:

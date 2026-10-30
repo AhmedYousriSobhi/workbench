@@ -259,4 +259,4 @@ def test_export_button_downloads_the_profile_and_explains_a_missing_format(ui, m
     data = json.loads(body)
     assert code == 200 and data["format"] == "demo" and data["version"] == 2 and len(data["bmc"]) == 6
     assert "token" not in body.decode().lower() and req(ui, "/api/export/profile", auth=False)[0] == 401
-    assert b'id="expdlg"' in req(ui, "/")[1] and b"newer than its backend" in req(ui, "/")[1] and b"ssh-key install in a terminal" in req(ui, "/")[1]
+    assert b'id="expdlg"' in req(ui, "/")[1] and b"newer than its backend" in req(ui, "/")[1] and b"ssh-key install in a terminal" in req(ui, "/")[1] and b"Jira needs no token" in req(ui, "/")[1]

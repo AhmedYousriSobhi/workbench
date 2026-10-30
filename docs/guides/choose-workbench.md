@@ -39,7 +39,7 @@ nothing) when the estimate does not fit. Check: `benchctl get nodes`, `benchctl 
 | `-f FILE` | read the selection from a workbench file; flags override it |
 | `--save FILE` (plan) | write the selection to a file |
 
-Flags you leave out come from `sim.yaml`. Default parts: `jira`, `bmc`, `bcm`, `scenarios`. Always present: Slurm, the
+Flags you leave out come from `sim.yaml`. Default parts: `jira`, `bmc`, `bcm`, `accounting`, `scenarios` (accounting, about 360 MB, is what makes `sacct` work). Always present: Slurm, the
 login node, Prometheus and Grafana.
 
 ## A workbench file

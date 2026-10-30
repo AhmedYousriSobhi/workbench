@@ -20,6 +20,7 @@ Jira and storage already filled in. A file never holds secrets, so set these thr
 |---|---|
 | SSH key | `./scripts/benchctl ssh-key install`, then pick `~/.ssh/workbench_ed25519` in the cluster's SSH section |
 | Grafana token | `cat compose/generated/secrets/grafana_viewer_token`, paste it, save (it is new after every `up`) |
+| Jira | nothing: the mock accepts any token or password |
 | BMC password (with `--bmc`) | the part after `admin:` in `compose/generated/secrets/bmc_credentials` |
 
 ### From the page

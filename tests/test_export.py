@@ -80,7 +80,7 @@ def test_command_writes_a_file_and_says_where_the_secrets_are(tmp_path, monkeypa
     assert data["format"] == "demo" and len(data["bmc"]) == 6
     assert "ssh-key install" in r.output and "grafana_viewer_token" in r.output and "bmc_credentials" in r.output
     to_stdout = runner.invoke(cli.app, ["export", "profile", "--profile", "min", "--format", "demo", "-o", "-"])
-    assert json.loads(to_stdout.output)["clusters"][0]["name"] == "workbench"
+    assert json.loads(to_stdout.stdout)["clusters"][0]["name"] == "workbench"
 
 
 def test_command_without_a_format_refuses_with_the_fix(tmp_path, monkeypatch):
@@ -126,3 +126,10 @@ def test_command_follows_the_running_containers_and_falls_back_with_a_note(tmp_p
     assert r.exit_code == 0 and "no containers are running" in r.output
     r = runner.invoke(cli.app, ["export", "profile", "--format", "demo", "--configured", "-o", "-"])
     assert "no containers" not in r.output
+
+
+def test_warns_when_accounting_is_missing_so_sacct_would_fail():
+    assert "sacct" in export.warnings({"login", "slurmctld"})[0]
+    assert export.warnings({"login", "slurmctld", "slurmdbd"}) == [] and export.warnings({"login"}) == []
+    r = runner.invoke(cli.app, ["export", "profile", "--profile", "min", "--format", "demo", "-o", "-"])
+    assert "warning:" in r.output and "--with accounting" in r.output

@@ -20,7 +20,7 @@ def spec(**kw):
 
 def test_defaults_come_from_sim_yaml_and_flags_override_only_what_they_name():
     d = workbench.defaults(SIM)
-    assert (d.cpu_nodes, d.gpu_nodes, d.gpus_per_node) == (4, 2, 8) and sorted(d.parts) == ["bcm", "bmc", "jira", "scenarios"]
+    assert (d.cpu_nodes, d.gpu_nodes, d.gpus_per_node) == (4, 2, 8) and sorted(d.parts) == ["accounting", "bcm", "bmc", "jira", "scenarios"]
     assert spec(cpu_nodes=2, gpu_nodes=4).gpu_nodes == 4 and spec(cpu_nodes=2).gpus_per_node == 8
 
 
@@ -201,7 +201,7 @@ def test_export_follows_the_built_workbench(cwd, monkeypatch):
     monkeypatch.setattr(stack, "up", lambda *a, **k: True)
     assert runner.invoke(cli.app, ["up", "--cpu-nodes", "1", "--gpu-nodes", "1", "--with", "bmc", "--without", "jira"]).exit_code == 0
     r = runner.invoke(cli.app, ["export", "profile", "--format", "demo", "--bmc", "--configured", "-o", "-"])
-    body = json.loads(r.output)
+    body = json.loads(r.stdout)
     assert body["clusters"][0]["jira"] is None and [t["node"] for t in body["bmc"]] == ["cn001", "gpu001"]
 
 

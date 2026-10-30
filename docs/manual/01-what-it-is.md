@@ -19,7 +19,7 @@ Most of what the app talks to is an API, not an operating system. So:
 |---|---|---|
 | `slurmctld`, `slurmrestd` | the Slurm controller and its REST API | `docker exec workbench-slurmctld-1 ...` |
 | `cn001`... `gpu001`... | simulated compute and GPU nodes, each a `slurmd` container | `docker exec -it workbench-cn001-1 bash` ([chapter 4](04-nodes-and-shells.md)) |
-| `slurmdbd`, `mariadb` | Slurm accounting (profiles with accounting only) | inside the stack |
+| `slurmdbd`, `mariadb` | Slurm accounting (the `accounting` part: on in a default workbench, off in the `min` profile) | inside the stack |
 | `bmc-farm` | fake Redfish BMCs, one endpoint per node | http://127.0.0.1:8000 |
 | `bcm-mock` | fake BCM (CMDaemon JSON); the login node also answers `cmsh -c "device; list"` from its state (ADR 0013) | http://127.0.0.1:8081 |
 | `jira-mock` | fake Jira REST with failure modes | http://127.0.0.1:8080 |

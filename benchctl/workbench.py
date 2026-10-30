@@ -19,7 +19,7 @@ FLOOR_MB = 1024                                   # MemAvailable that must remai
 PARTS: dict[str, tuple[str, list[str] | None]] = {
     "jira": ("mocks", ["jira-mock"]), "bmc": ("mocks", ["bmc-farm"]), "bcm": ("mocks", ["bcm-mock"]),
     "accounting": ("accounting", None), "scenarios": ("scenarios", None), "load": ("load", None)}
-DEFAULT_PARTS = ("jira", "bmc", "bcm", "scenarios")
+DEFAULT_PARTS = ("jira", "bmc", "bcm", "accounting", "scenarios")  # accounting: without slurmdbd, sacct says storage is disabled
 DROP_ORDER = ("load", "accounting", "scenarios", "bcm", "jira", "bmc")  # what to suggest removing first
 LIMITS = {"cpu_nodes": (0, 64), "gpu_nodes": (0, 16), "gpus_per_node": (1, 8)}
 

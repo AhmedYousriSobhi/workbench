@@ -16,7 +16,7 @@ never print or commit them).
 
 | Client feature | Endpoint | Credential | Status |
 |---|---|---|---|
-| SSH terminal, Slurm (`squeue`, `sinfo`; `sacct` needs an accounting profile), port forwarding | `127.0.0.1:2222` | user `alice` or `bob` (from `sim.yaml`), key `secrets/ssh/id_ed25519` | merged (ADR 0011); compute nodes `cn001`... and `gpu001`... have sshd too, reached from the login node (ADR 0014) |
+| SSH terminal, Slurm (`squeue`, `sinfo`; `sacct` needs the `accounting` part: on in a default workbench, `--with accounting` otherwise; without it sacct says accounting storage is disabled), port forwarding | `127.0.0.1:2222` | user `alice` or `bob` (from `sim.yaml`), key `secrets/ssh/id_ed25519` | merged (ADR 0011); compute nodes `cn001`... and `gpu001`... have sshd too, reached from the login node (ADR 0014) |
 | GPU usage through Grafana `/api/ds/query` | Grafana `127.0.0.1:3000`, datasource uid `prometheus`, host label `Hostname` | Viewer token in `secrets/grafana_viewer_token` | merged |
 | Jira search (`/rest/api/3/search/jql`, fallback `/rest/api/2/search`), `/myself`, `/field` | `http://127.0.0.1:8080` | none in mock mode | merged (ADR 0005) |
 | BMC Redfish over TLS, certificate pinning | `127.0.0.1:8443`, one listener for all nodes, node chosen by the `Host: bmc-<node>` header | `admin` and the password in `secrets/bmc_credentials` | merged (ADR 0012); plain HTTP on `:8000` also remains |
