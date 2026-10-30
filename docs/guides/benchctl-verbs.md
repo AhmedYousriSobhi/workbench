@@ -29,6 +29,7 @@ its limits, so you do not find them by surprise, and what to use in a script.
 | `exec NODE [-u USER] [-- CMD]` | a shell, or one command, on a node | the node must be running; no terminal is allocated when a command is given; `-u` must be a simulated user (`alice`, `bob`) | command's own stdout; exit code is Docker's |
 | `logs NODE [-f] [--tail N]` | the container log | service or node names only (`slurmctld`, `login`, `cn001`); no time filter; `-f` runs until Ctrl-C | |
 | `scenario list` / `scenario run NAME [--speed N] [--dry-run]` | lists scenarios; plays one against the running stack | needs the stack up; `--dry-run` only validates and prints the timeline; Kubernetes and ticket-bot steps are skipped; `--speed` compresses waits, not step order | exit 1 when a step or expectation fails |
+| `export profile [-o FILE] [--bmc] [--user U] [--name N] [--format ID]` | writes the workbench as a client profile file | needs the client's format ID once (`.git/export-format`); holds no password, token or key path; Kubernetes and BCM are not exported; writes the file, never sends it | `-o -` prints the JSON on stdout |
 | `ssh-key install\|remove` | copies the login key to `~/.ssh/opti-sim_ed25519` (mode 600) or deletes it | never overwrites a file that is not ours; `remove` deletes only our own key | |
 | `status` | governor level, then whether the cluster and web page run | text for people; exits 1 when the governor is unreachable (it still prints the cluster lines) | use `get services -o json` for the cluster |
 | `check` | machine check before building (OS, RAM, disk, Docker, ports) | read-only; works before the venv exists via `./scripts/check-machine.sh` | exit 1 when not ready |
@@ -46,6 +47,7 @@ its limits, so you do not find them by surprise, and what to use in a script.
 | `exec` / `logs` | `kubectl exec` / `kubectl logs` | wraps `docker exec` / `docker logs`; no `--previous` or container choice |
 | `up` / `down` | `docker compose up/down` | admission by the governor first; only the `hpcsim` project; `down` asks in a terminal and has `--dry-run` |
 | `scenario run --dry-run` | `kubectl --dry-run`, `terraform plan` | validates and prints; it does not simulate the outcome |
+| `export profile` | `kubectl config view` | a settings-only file for another tool to import; secrets are left out on purpose |
 | `status`, `check` | `kubectl cluster-info`, `scontrol ping` | local checks, not a cluster API call |
 | `scenario run` steps for Slurm | `scontrol update` | drain/resume only, never a hardware or `slurm.conf` change (scontrol cannot do that either; it needs `reconfigure`) |
 

@@ -19,6 +19,7 @@ work as aliases. What each verb does not do, exit codes, and what to use in a sc
 | `down [-n] [-y]` | stop and remove the `hpcsim` project only; asks first in a terminal, `-n` only lists |
 | `scale N [--profile P] [-n] [-y]` | change the compute node count; asks before removing nodes in a terminal, `-n` only says what would change |
 | `scenario list` / `scenario run NAME [--speed N] [--dry-run]` | list scenarios; play one, exit 1 on failure |
+| `export profile [-o FILE] [--bmc] [--user U] [--name N] [--format ID]` | write the workbench as a client profile file ([guide](../guides/export-profile.md)) |
 | `ssh-key install\|remove` | put the login key under `~/.ssh` for clients that only read there |
 | `status [--socket S]` | governor level, signals, recent actions, then whether the cluster and the web page run |
 | `check` | machine check before building (OS, RAM, disk, Docker, ports); exit 1 if not ready |
@@ -29,8 +30,7 @@ work as aliases. What each verb does not do, exit codes, and what to use in a sc
 | `benchctl measure run LABEL [--duration S] [--interval S]` | sample memory to `docs/measurements/` |
 | `benchctl measure report IDLE [LOADED]` | markdown table with suggested budgets |
 
-`benchctl COMMAND --help` shows the exact flags. Planned in the same grammar: `describe node NAME`, `plan` / `apply`,
-`export profile` (issues 91 to 93).
+`benchctl COMMAND --help` shows the exact flags. Planned in the same grammar: `describe node NAME`, `plan` / `apply` (issues 92, 93).
 
 ## Scripts
 
