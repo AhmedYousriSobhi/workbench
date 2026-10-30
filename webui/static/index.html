@@ -104,6 +104,9 @@
   .node dl { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; margin:8px 0; font-size:13px; font-variant-numeric:tabular-nums; }
   dialog { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:10px; max-width:min(92vw,640px); }
   dialog pre { white-space:pre-wrap; font-size:13px; margin:0 0 8px; } .detailbtn { margin-top:6px; }
+  .planform { display:flex; flex-wrap:wrap; gap:10px; margin:8px 0; } .planform input[type=number] { width:5em; min-height:40px; }
+  .planparts { border:1px solid var(--line); border-radius:8px; } .planparts label { display:inline-block; min-height:40px; padding:8px 10px 0 0; }
+  #pl-bar { width:100%; height:14px; } #pl-cmd { white-space:pre-wrap; margin:4px 0 0; }
   .node dt { color:var(--dim); } .node dd { margin:0; }
   .node details { margin-top:6px; } .node summary { cursor:pointer; min-height:36px; display:flex; align-items:center; color:var(--accent); font-weight:600; }
   .actions { display:flex; flex-wrap:wrap; gap:8px; padding:6px 0; }
@@ -173,6 +176,19 @@
     <p class="legend small dim"><span><b style="color:var(--accent)" aria-hidden="true">●</b> round dot: requests from clients (the app, Prometheus, curl)</span>
       <span><b style="color:var(--warn)" aria-hidden="true">◆</b> diamond: a fault applied by a scenario or a button</span></p>
     <p id="flowstate" class="dim small" role="status" style="margin-bottom:0"></p></div>
+  <div class="panel" id="planpanel"><details id="plan"><summary><h2 style="display:inline;margin:0">Plan a workbench</h2></summary>
+    <p class="dim small">Choose how many nodes and which parts, and see the memory it needs against what is free. This page cannot start containers (no Docker access by design); it shows the command.</p>
+    <div class="planform">
+      <label>CPU nodes <input type="number" id="pl-cpu" min="0" max="64" value="4"></label>
+      <label>GPU nodes <input type="number" id="pl-gpu" min="0" max="16" value="2"></label>
+      <label>GPUs per node <input type="number" id="pl-gpus" min="1" max="8" value="8"></label>
+    </div>
+    <fieldset class="planparts"><legend class="small dim">Parts (Slurm, login node, Prometheus and Grafana are always on)</legend>
+      <label><input type="checkbox" value="jira" checked> Jira</label> <label><input type="checkbox" value="bmc" checked> BMC</label>
+      <label><input type="checkbox" value="bcm" checked> BCM</label> <label><input type="checkbox" value="scenarios" checked> Scenarios</label>
+      <label><input type="checkbox" value="accounting"> Accounting</label> <label><input type="checkbox" value="load"> Load</label></fieldset>
+    <progress id="pl-bar" max="100" value="0" aria-label="Memory needed as a share of free memory"></progress>
+    <p id="pl-msg" role="status" class="small"></p><pre id="pl-cmd" class="small"></pre></details></div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <div id="nodegroups">
     <h2 class="grouphead">Compute nodes</h2><div id="nodes-compute" class="nodes"></div>
@@ -322,6 +338,19 @@ async function loadCluster() {
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(flashTimer); flashTimer = setTimeout(() => { t.hidden = true; }, 6000);
 }
+let planTimer;
+async function loadPlan() {
+  const parts = [...document.querySelectorAll('.planparts input:checked')].map(i => i.value).join(',');
+  const q = new URLSearchParams({ cpu_nodes: $('pl-cpu').value, gpu_nodes: $('pl-gpu').value, gpus_per_node: $('pl-gpus').value, parts });
+  const r = await fetch('/api/plan?' + q);
+  if (!r.ok) { $('pl-msg').textContent = (await r.json()).detail; $('pl-cmd').textContent = ''; $('pl-bar').value = 0; return; }
+  const p = await r.json();
+  $('pl-bar').value = Math.min(100, Math.round(100 * p.total_mb / Math.max(p.available_mb, 1)));
+  $('pl-msg').textContent = (p.fits ? '✓ ' : '✗ ') + p.message;
+  $('pl-cmd').textContent = p.fits ? 'Build it: ' + p.command : 'Does not fit. Change the selection, or free memory.';
+}
+document.querySelectorAll('#plan input').forEach(i => i.oninput = i.onchange = () => { clearTimeout(planTimer); planTimer = setTimeout(loadPlan, 250); });
+$('plan').ontoggle = () => { if ($('plan').open) loadPlan(); };
 async function showNode(name) {
   const r = await fetch(`/api/nodes/${name}`);
   $('nodetitle').textContent = name;

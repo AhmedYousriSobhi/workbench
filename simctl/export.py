@@ -43,7 +43,7 @@ def build(sim: dict, services: set[str], name: str = "workbench", include_bmc: b
         raise ExportError("this profile has no login node (group 'access'): a client cannot connect by SSH")
     cluster: dict = {
         "name": name,
-        "description": "Simulated cluster (opti-sim). Synthetic data on 127.0.0.1.",
+        "description": "Simulated cluster (workbench). Synthetic data on 127.0.0.1.",
         "tags": ["simulated"],
         "connection": {"host": "127.0.0.1", "port": 2222, "username": ssh_user, "authMethod": "private-key"},
         "grafana": None, "jira": None, "azureTunnel": None, "teleport": None, "scheduler": None, "k8s": None,

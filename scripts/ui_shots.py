@@ -72,6 +72,13 @@ def capture(out: Path) -> dict:
                     page.click("#theme")
                     if page.evaluate("document.documentElement.dataset.theme") != "dark":
                         result["a11y"].append("theme toggle did not switch to dark")
+                    page.click("#plan summary")  # planner: opens, estimates, reacts to a change, shows the command
+                    page.wait_for_function("document.querySelector('#pl-msg').textContent.length > 5")
+                    page.fill("#pl-cpu", "2")
+                    page.wait_for_function("document.querySelector('#pl-cmd').textContent.includes('--cpu-nodes 2') || document.querySelector('#pl-cmd').textContent.startsWith('Does not fit')")
+                    ppath = out / f"plan-{vp}-{scheme}.png"
+                    page.locator("#planpanel").screenshot(path=str(ppath))
+                    result["shots"].append(str(ppath))
                     page.evaluate("showNode('cn001')")  # node Details dialog (its button is hidden while the stack is down): text, fits, closes
                     page.wait_for_selector("#nodedlg[open]")
                     page.wait_for_function("document.querySelector('#nodetext').textContent.includes('Name:')")
