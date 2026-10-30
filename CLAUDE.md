@@ -17,7 +17,7 @@ workbench: a memory-governed simulation of an HPC/AI cluster (Slurm, Kubernetes,
 - After each commit, add a PR comment describing that commit (what and why).
 - **Definition of done for every feature (mandatory, put these as to-dos in the issue before starting):**
   1. Update the related docs (manual, guides, ADR, SPEC, `docs/progress.yaml`; getting-started if a command changed).
-  2. Publish the wiki (`python scripts/sync_wiki.py --push`, [docs/guides/github-wiki.md](docs/guides/github-wiki.md)) and check the in-page help shows the change.
+  2. The wiki is published by CI after the merge to `dev` (`.github/workflows/wiki.yml`); check the run and the in-page help. By hand: `python scripts/sync_wiki.py --push` ([docs/guides/github-wiki.md](docs/guides/github-wiki.md)). Check the in-page help shows the change.
   3. Check it is easy to follow: a new user can do it from the docs alone, commands copy-paste, one message per condition.
   4. Test it against the monitoring client ([docs/guides/client-testing.md](docs/guides/client-testing.md)) and state what was and was not exercised.
 - Commit author must use the repository owner's GitHub noreply address (`<id>+<login>@users.noreply.github.com`); GitHub credits a commit to the account with that **ID**, so a placeholder such as `1+x@...` credits a stranger, permanently (merged PRs keep it; fixing it cost a history rewrite and a new repository). **Before the first commit of a session run `./scripts/check-identity.sh`** (and `git config user.name user.email`); a name like `x`, an unfamiliar ID or an identity you did not set yourself is a stop sign: fix it, do not commit. The pre-commit and pre-push hooks and `validate.sh` run the same check; never bypass it.
