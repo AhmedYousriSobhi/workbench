@@ -66,7 +66,7 @@ def test_dots_move_in_a_real_browser_and_pause(ui, tmp_path):  # noqa: F811
 
         def traffic_until_dot():
             hit_jira(4)
-            if page.locator("#dots circle").count() and not shot["done"]:
+            if page.locator("#dots circle.pk").count() and not shot["done"]:
                 page.screenshot(path=str(out / "traffic-dots.png"))
                 shot["done"] = True
             return shot["done"]
@@ -76,7 +76,7 @@ def test_dots_move_in_a_real_browser_and_pause(ui, tmp_path):  # noqa: F811
         # a fault button draws a diamond
         page.click("details[data-node=cn001] summary")
         page.click("details[data-node=cn001] .btn[data-action=fan-fail]")
-        page.wait_for_selector("#dots rect.dotf", timeout=8000)
+        page.wait_for_selector("#dots rect.pk", timeout=8000)
         page.click("details[data-node=cn001] .btn[data-action=clear]")
         # pause: counters keep counting, no new dots
         page.click("#flowpause")
@@ -85,7 +85,7 @@ def test_dots_move_in_a_real_browser_and_pause(ui, tmp_path):  # noqa: F811
         for _ in range(3):
             hit_jira(5)
             page.wait_for_timeout(1000)
-        assert page.locator("#dots circle").count() == 0
+        assert page.locator("#dots circle.pk").count() == 0
         assert "paused by you" in page.inner_text("#flowstate")
         # leaving the tab closes the feed
         # a hidden page closes the live feed

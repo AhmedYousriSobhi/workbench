@@ -28,9 +28,13 @@ On a phone the panels stack (see the [phone view](img/web-phone.png)). The page 
 
 ## Traffic diagram
 
-A round dot travels from *Clients* to a service for each real request; a diamond travels from *Fault injector* when you
-apply a fault. *Pause animation* stops them. They stop by themselves at governor L3 and under reduced motion, and the
-live feed runs only while the page is visible.
+The **Traffic** panel sits with the nodes on the **Nodes** tab (above them on a normal screen, beside them on a wide
+one). It draws the *Clients* (monitoring app, Prometheus, curl), the *Faults* box (scenarios and buttons) and the
+*Cluster*: the four mock services and **every node as a tile** with its state (✓ healthy, ▲ warning, ✗ fault, ⏻ off,
+? unknown). A round dot travels from the clients to a service for each real request; a diamond travels from *Faults*
+to the **node it hits** and a ring flashes on that tile. Lines light up while a service is being used, and each
+service shows requests per minute. *Pause animation* stops the dots. They stop by themselves at governor L3 and under
+reduced motion, and the live feed runs only while the page is visible and the Nodes tab is open.
 
 ## Node cards and fault actions
 
@@ -79,7 +83,7 @@ page. Start with [Which command do I use?](11-which-command.md) when the command
 
 ## Tabs, scenarios and how to connect
 
-The middle column has four tabs: **Nodes** (services and node cards), **Traffic**, **Connections** and **Plan**. The right
+The middle column has three tabs: **Nodes** (services, traffic and node cards), **Connections** and **Plan**. The right
 panel stays in view while you scroll and scrolls on its own, so the nodes never move away. **Scenarios** is a short list:
 type in *Filter scenarios*, pick one speed for all, press **▶ Play**.
 
