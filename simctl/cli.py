@@ -1,8 +1,42 @@
+import difflib
+import sys
+from pathlib import Path as _Path
+
+import click
 import typer
+from typer.core import TyperGroup
 
-from . import checks, compose, diag, machine, measure, scenario, stack
+from . import checks, compose, diag, inventory, machine, measure, nodes, scenario, stack
 
-app = typer.Typer(help="opti-sim control CLI")
+
+class SuggestingGroup(TyperGroup):
+    """A mistyped verb gets a hint and an error (exit 2). It is never guessed and run: `benchctl dwon` must not
+    run `down` (CLI guidelines: suggest, do not silently correct; no prefix abbreviations that block future verbs)."""
+
+    def resolve_command(self, ctx, args):
+        try:
+            return super().resolve_command(ctx, args)
+        except click.UsageError as e:
+            close = difflib.get_close_matches(args[0], self.list_commands(ctx), n=1) if args else []
+            if close:
+                raise click.UsageError(f"{e.message} Did you mean '{close[0]}'?", ctx=ctx) from e
+            raise
+
+
+def _old_name_notice() -> None:
+    """One line on stderr, only in a terminal, when the pre-0.2 name is used (scripts stay quiet and keep working)."""
+    if _Path(sys.argv[0]).name == "simctl" and sys.stderr.isatty():
+        typer.echo("note: `simctl` is now `benchctl` (the old name still works for now).", err=True)
+
+
+app = typer.Typer(cls=SuggestingGroup, epilog="Scripts: use -o json where offered, read data from stdout (messages and errors "
+                  "go to stderr). Exit codes: 0 ok, 1 failed or refused, 2 bad usage.", help="benchctl: control the simulated cluster. Pattern: benchctl VERB [RESOURCE] [NAME]. "
+                       "Start with `benchctl start`, look with `benchctl get nodes`, stop with `benchctl stop`.")
+@app.callback()
+def _main() -> None:
+    _old_name_notice()
+
+
 ICON = {checks.OK: "ok  ", checks.WARN: "WARN", checks.FAIL: "FAIL"}
 
 
@@ -29,17 +63,18 @@ def doctor() -> None:
 def preflight(profile: str = typer.Option("std", "--profile")) -> None:
     """Would this profile fit in current free memory? (SPEC section 6)"""
     ok, msg = checks.preflight(profile, checks.load_profiles(), checks.mem_available())
-    typer.echo(("OK: " if ok else "REFUSED: ") + msg)
+    typer.echo(("OK: " if ok else "REFUSED: ") + msg, err=not ok)
     raise typer.Exit(0 if ok else 1)
 
 
 @app.command()
 def status(socket: str = checks.GOV_SOCKET) -> None:
-    """Show governor level, signals and recent audit entries."""
+    """Show governor level, signals and recent audit entries, then the cluster and the web page."""
     try:
         st = checks.governor_request({"cmd": "status"}, socket)
     except OSError as e:
-        typer.echo(f"governor not reachable at {socket}: {e}")
+        typer.echo(f"governor not reachable at {socket}: {e}", err=True)
+        _cluster_and_page()
         raise typer.Exit(1) from e
     gb = (st["mem_available"] or 0) / checks.GB
     typer.echo(f"level L{st['level']}{' (dry-run)' if st['dry_run'] else ''}  [{st.get('mode', 'root')} mode]  "
@@ -49,6 +84,19 @@ def status(socket: str = checks.GOV_SOCKET) -> None:
         typer.echo(f"  SECURITY: {v}")
     for line in st["audit"]:
         typer.echo(f"  {line}")
+    _cluster_and_page()
+
+
+def _cluster_and_page() -> None:
+    """The two lines `benchctl start` users look for: how many containers run, and where the web page is."""
+    from pathlib import Path
+
+    running = [r for r in inventory.service_rows() if r["state"] == "running"]
+    typer.echo(f"cluster: {len(running)} containers running" if running else "cluster: stopped (benchctl start)")
+    log = Path("compose/generated/ui.log")
+    link = next((ln.split("opti-sim UI: ", 1)[1].strip() for ln in reversed(log.read_text().splitlines())
+                 if "opti-sim UI: " in ln), "") if log.is_file() else ""
+    typer.echo(f"web page: {link}" if link and Path("compose/generated/ui.pid").is_file() else "web page: stopped")
 
 
 @app.command("diag")
@@ -87,13 +135,146 @@ def up(profile: str = typer.Option("std", "--profile")) -> None:
     raise typer.Exit(0 if stack.up(_sim(), profile, say=typer.echo) else 1)
 
 
+def _launcher(*args: str) -> None:
+    """The one-command launcher (machine check, venv, governor, cluster, web page) lives in scripts/opti."""
+    import subprocess
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parent.parent / "scripts" / "opti"
+    raise typer.Exit(subprocess.run([str(script), *args], check=False).returncode)
+
+
 @app.command()
-def down() -> None:
+def start(profile: str = typer.Option("min", "--profile")) -> None:
+    """Everything in one step: machine check, governor, cluster, web page (the first run builds images)."""
+    _launcher("start", "--profile", profile)
+
+
+@app.command()
+def stop() -> None:
+    """Stop the web page, the cluster and the governor this tool started."""
+    _launcher("stop")
+
+
+@app.command("open")
+def open_ui() -> None:
+    """Print the web page's login link (and open it in a browser when there is one)."""
+    _launcher("open")
+
+
+def _confirm(what: str, yes: bool) -> None:
+    """Ask before a step that ends shells or removes nodes, but only for a person at a terminal: scripts and the
+    launcher (no TTY) are never blocked, and `--yes` skips the question."""
+    if not yes and sys.stdin.isatty() and not typer.confirm(f"{what} Continue?", default=False):
+        typer.echo("cancelled", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def down(dry_run: bool = typer.Option(False, "-n", "--dry-run", help="list what would stop; change nothing"),
+         yes: bool = typer.Option(False, "-y", "--yes", help="do not ask (a terminal asks; scripts are never asked)")) -> None:
     """Stop and remove the hpcsim compose project (nothing else)."""
+    running = [r["name"] for r in inventory.service_rows() if r["state"] == "running"]
+    if dry_run:
+        typer.echo(f"would stop and remove {len(running)} containers: {', '.join(running) or 'none running'}")
+        return
+    if running:
+        _confirm(f"This stops {len(running)} containers and ends open shells on the nodes.", yes)
     raise typer.Exit(0 if stack.down(say=typer.echo) else 1)
 
 
-ssh_key_app = typer.Typer(help="Put the login key where a client that only reads ~/.ssh can use it")
+def _node_names(incomplete: str) -> list[str]:
+    """Tab completion for node arguments: every node sim.yaml defines."""
+    try:
+        return [n for n, _ in nodes.node_names(_sim()) if n.startswith(incomplete)]
+    except (OSError, KeyError):
+        return []
+
+
+NODE = typer.Argument(..., autocompletion=_node_names, help="node name, e.g. cn001 or gpu001")
+OUTPUT = typer.Option("table", "-o", "--output", help="table, json (for scripts) or name (one per line)")
+SELECTOR = typer.Option(None, "-l", "--selector", help="keep rows where key=value or key!=value (repeat or comma-separate)")
+SORT_BY = typer.Option(None, "--sort-by", help="sort by a column name")
+WATCH = typer.Option(False, "-w", "--watch", help="redraw until Ctrl-C")
+INTERVAL = typer.Option(2.0, "--interval", help="seconds between redraws with --watch (at least 1)")
+
+get_app = typer.Typer(cls=SuggestingGroup, help="List what exists: nodes, services, profiles, scenarios")
+app.add_typer(get_app, name="get")
+
+
+def _get(rows_fn, output: str, selector: list[str] | None, sort_by: str | None, watch: bool, interval: float) -> None:
+    """One list command: query, render, and optionally redraw. Query mistakes exit 2 (usage), like an unknown flag."""
+    import time
+
+    def once() -> str:
+        return inventory.render(inventory.sort_rows(inventory.select(rows_fn(), selector or []), sort_by), output)
+
+    try:
+        if not watch:
+            typer.echo(once())
+            return
+        if interval < 1:
+            raise inventory.QueryError("--interval must be at least 1 second (each redraw asks Docker)")
+        while True:
+            text = once()
+            typer.echo(("\033[2J\033[H" if sys.stdout.isatty() else "") + text)
+            time.sleep(interval)
+    except inventory.QueryError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(2) from e
+    except KeyboardInterrupt:
+        raise typer.Exit(0) from None
+
+
+@get_app.command("nodes")
+def get_nodes(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by: str = SORT_BY, watch: bool = WATCH,
+              interval: float = INTERVAL) -> None:
+    """Every node sim.yaml defines, its kind and container state (absent = not started). Example: -l kind=gpu."""
+    _get(lambda: inventory.node_rows(_sim()), output, selector, sort_by, watch, interval)
+
+
+@get_app.command("services")
+def get_services(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by: str = SORT_BY, watch: bool = WATCH,
+                 interval: float = INTERVAL) -> None:
+    """Every container of the running stack with its state."""
+    _get(inventory.service_rows, output, selector, sort_by, watch, interval)
+
+
+@get_app.command("profiles")
+def get_profiles(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
+    """The size presets for `benchctl up --profile`."""
+    _get(inventory.profile_rows, output, selector, sort_by, False, 2.0)
+
+
+@get_app.command("scenarios")
+def get_scenarios(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
+    """The fault and workload scenarios for `benchctl scenario run`."""
+    _get(inventory.scenario_rows, output, selector, sort_by, False, 2.0)
+
+
+@app.command("exec", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def exec_cmd(ctx: typer.Context, node: str = NODE,
+             user: str = typer.Option(None, "-u", "--user", help="run as this simulated user, e.g. alice")) -> None:
+    """Run a command on a node, or open a shell: `benchctl exec gpu001 -- nvidia-smi`, `benchctl exec cn001`."""
+    import os
+    import sys
+
+    cmd = ctx.args or ["bash"]
+    tty = ["-it"] if sys.stdin.isatty() and not ctx.args else []
+    os.execvp("docker", ["docker", "exec", *tty, *(["-u", user] if user else []), f"{stack.PROJECT}-{node}-1", *cmd])
+
+
+@app.command()
+def logs(node: str = NODE, follow: bool = typer.Option(False, "-f", "--follow"),
+         tail: int = typer.Option(50, "--tail")) -> None:
+    """Container log of a node or service."""
+    import os
+
+    os.execvp("docker", ["docker", "logs", *(["-f"] if follow else []), "--tail", str(tail),
+                         f"{stack.PROJECT}-{node}-1"])
+
+
+ssh_key_app = typer.Typer(cls=SuggestingGroup, help="Put the login key where a client that only reads ~/.ssh can use it")
 app.add_typer(ssh_key_app, name="ssh-key")
 
 
@@ -103,9 +284,9 @@ def ssh_key_install() -> None:
     try:
         stack.install_client_key()
     except (OSError, FileNotFoundError) as e:
-        typer.echo(str(e))
+        typer.echo(str(e), err=True)
         raise typer.Exit(1)
-    typer.echo(f"key: ~/.ssh/{stack.CLIENT_KEY}  (host 127.0.0.1, port 2222, user alice)\nremove it when done: simctl ssh-key remove")
+    typer.echo(f"key: ~/.ssh/{stack.CLIENT_KEY}  (host 127.0.0.1, port 2222, user alice)\nremove it when done: benchctl ssh-key remove")
 
 
 @ssh_key_app.command("remove")
@@ -116,12 +297,23 @@ def ssh_key_remove() -> None:
 
 @app.command()
 def scale(n: int = typer.Argument(..., min=0, help="compute node count"),
-          profile: str = typer.Option(None, "--profile", help="default: the profile `up` last started")) -> None:
+          profile: str = typer.Option(None, "--profile", help="default: the profile `up` last started"),
+          dry_run: bool = typer.Option(False, "-n", "--dry-run", help="say which nodes start or stop; change nothing"),
+          yes: bool = typer.Option(False, "-y", "--yes", help="do not ask before removing nodes (a terminal asks)")) -> None:
     """Change the compute-node count: regenerates slurm.conf, restarts slurmctld, starts/stops slurmd."""
+    now = stack.running_nodes()
+    want = [name for name, kind in nodes.node_names(_sim(), n) if kind == "compute"]
+    stop = [x for x in now if x not in want]
+    if dry_run:
+        typer.echo(f"would start: {', '.join(x for x in want if x not in now) or 'none'}; "
+                   f"would stop and remove: {', '.join(stop) or 'none'}")
+        return
+    if stop:
+        _confirm(f"This removes {', '.join(stop)}; shells and jobs on them end.", yes)
     raise typer.Exit(0 if stack.scale(_sim(), profile or stack.current_profile(), n, say=typer.echo) else 1)
 
 
-scenario_app = typer.Typer(help="Run named fault and workload scenarios (scenarios/*.yaml)")
+scenario_app = typer.Typer(cls=SuggestingGroup, help="Run named fault and workload scenarios (scenarios/*.yaml)")
 app.add_typer(scenario_app, name="scenario")
 
 
@@ -141,11 +333,11 @@ def scenario_run(name: str = typer.Argument(..., help="see `scenario list`"),
     try:
         sc = scenario.load(name)
     except scenario.ScenarioError as e:
-        typer.echo(str(e))
+        typer.echo(str(e), err=True)
         raise typer.Exit(1) from e
     problems = scenario.validate(sc, sim)
     for p in problems:
-        typer.echo(f"invalid: {p}")
+        typer.echo(f"invalid: {p}", err=True)
     if problems:
         raise typer.Exit(1)
     if dry_run:
@@ -184,4 +376,4 @@ def measure_report(idle: str = typer.Argument(..., help="label of the idle run")
 
 
 if __name__ == "__main__":
-    app()
+    app(prog_name="benchctl")

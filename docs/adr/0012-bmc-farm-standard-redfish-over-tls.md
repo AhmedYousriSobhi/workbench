@@ -16,7 +16,7 @@ Keep the HTTP surface on `127.0.0.1:8000` unchanged and add a TLS surface on `12
   login node, ADR 0011) dials `bmc-cn001:8443` as it would a real BMC address.
 - Collections for Systems, Chassis, Managers, LogServices, firmware inventory, accounts and sessions; the service root is
   open, everything else needs a session token or Basic auth.
-- One read-only account (`admin`, random password) generated once by `simctl up` into
+- One read-only account (`admin`, random password) generated once by `benchctl up` into
   `compose/generated/secrets/bmc_credentials` (the container runs as `nobody`, so the file is 0644 inside a 0700 folder).
   With no file, auth is off (unit tests, standalone runs).
 - A self-signed EC certificate made at image build (stable for one build, so a pinning client keeps trusting it); the

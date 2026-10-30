@@ -16,16 +16,16 @@ Check all of this before building anything:
 ## The one-command way
 
 ```bash
-./scripts/opti start            # machine check, tools, governor, cluster (min), web page; prints the login link
-./scripts/opti status           # governor, cluster and web page at a glance
-./scripts/opti open             # print the login link again (opens a browser if there is a display)
-./scripts/opti stop             # stop the web page, the cluster and your own governor
+./scripts/benchctl start            # machine check, tools, governor, cluster (min), web page; prints the login link
+./scripts/benchctl status           # governor, cluster and web page at a glance
+./scripts/benchctl open             # print the login link again (opens a browser if there is a display)
+./scripts/benchctl stop             # stop the web page, the cluster and your own governor
 ```
 
-The first `start` builds images (a few minutes) and creates `.venv`. Use `./scripts/opti start --profile std` for a
+The first `start` builds images (a few minutes) and creates `.venv`. Use `./scripts/benchctl start --profile std` for a
 bigger profile. The login link signs you in once; keep it private, it only works on this machine.
 
-`opti` reads two environment variables: `OPTI_UI_PORT` (web page port, default 8088) and `OPTI_GOVERNOR`
+`benchctl start` reads two environment variables: `OPTI_UI_PORT` (web page port, default 8088) and `OPTI_GOVERNOR`
 (`auto|user|system|off`, default `auto`: the system service if it runs, otherwise a governor started as you).
 `off` disables memory protection; do not use it on a workstation you care about.
 
@@ -35,19 +35,19 @@ Same result, one visible step at a time:
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'   # once; venv is per shell
-./scripts/simctl doctor                       # host prerequisites; fix any FAIL first
-./scripts/simctl preflight --profile min      # would this profile fit in free memory right now?
-./scripts/simctl up --profile min             # governor admission, ordered start (about a minute)
+./scripts/benchctl doctor                       # host prerequisites; fix any FAIL first
+./scripts/benchctl preflight --profile min      # would this profile fit in free memory right now?
+./scripts/benchctl up --profile min             # governor admission, ordered start (about a minute)
 .venv/bin/python -m webui                     # prints the login link
 ```
 
-Without activating the venv, prefix commands with `./scripts/simctl` instead of `python -m simctl.cli`.
+Without activating the venv, prefix commands with `./scripts/benchctl` instead of `python -m simctl.cli`.
 
 ## Stopping and cleaning up
 
 ```bash
-./scripts/opti stop             # everything opti start began
-./scripts/simctl down           # only the cluster; removes the hpcsim compose project and nothing else
+./scripts/benchctl stop             # everything `benchctl start` began
+./scripts/benchctl down           # only the cluster; removes the hpcsim compose project and nothing else
 ```
 
 Both touch only the `hpcsim` project, never your other containers.

@@ -27,9 +27,9 @@ across `extends`; other keys come from the most specific profile. The groups are
 ## Common changes
 
 ```bash
-./scripts/simctl compose --profile min       # regenerate compose/generated/docker-compose.yml and look at it
-./scripts/simctl scale 8                      # change the compute node count on a running stack
-./scripts/simctl down && ./scripts/simctl up --profile std      # change profile
+./scripts/benchctl compose --profile min       # regenerate compose/generated/docker-compose.yml and look at it
+./scripts/benchctl scale 8                      # change the compute node count on a running stack
+./scripts/benchctl down && ./scripts/benchctl up --profile std      # change profile
 ```
 
 After editing `sim.yaml` (users, GPUs per node, names), bring the stack down and up again so every container sees the
@@ -37,8 +37,8 @@ same values. Names that do not exist are rejected by `scenario run --dry-run`.
 
 ## Memory budgets
 
-Budgets for `std` and `full` are estimates until measured. To measure: `simctl measure run idle`, start load,
-`simctl measure run loaded --duration 120`, then `simctl measure report idle loaded`. Results go to `docs/measurements/`
+Budgets for `std` and `full` are estimates until measured. To measure: `benchctl measure run idle`, start load,
+`benchctl measure run loaded --duration 120`, then `benchctl measure report idle loaded`. Results go to `docs/measurements/`
 (not committed) with suggested budgets (peak times 1.2). See [the memory contract](../architecture/04-memory-and-profiles.md).
 
 ## Secrets

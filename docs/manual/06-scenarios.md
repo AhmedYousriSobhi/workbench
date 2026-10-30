@@ -5,9 +5,9 @@ A scenario is a named, repeatable timeline of faults. They live in `scenarios/*.
 ## Run one
 
 ```bash
-./scripts/simctl scenario list                          # name, step count, description
-./scripts/simctl scenario run node-down --dry-run       # validate and print the timeline, change nothing
-./scripts/simctl scenario run node-down --speed 10      # play it ten times faster
+./scripts/benchctl scenario list                          # name, step count, description
+./scripts/benchctl scenario run node-down --dry-run       # validate and print the timeline, change nothing
+./scripts/benchctl scenario run node-down --speed 10      # play it ten times faster
 ```
 
 The command exits 1 when a step errors or an `expect` line does not hold. Steps for parts that are not built (Kubernetes,

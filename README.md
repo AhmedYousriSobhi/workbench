@@ -35,18 +35,18 @@ flowchart LR
 ```
 
 Containers by default, declarative topology (`sim.yaml` generates compose, `slurm.conf` and targets), profiles
-with a memory budget that `simctl up` enforces, and every fault is a named scenario. Details:
+with a memory budget that `benchctl up` enforces, and every fault is a named scenario. Details:
 **[docs/architecture/](docs/architecture/README.md)**.
 
 ## Quick start
 
 ```bash
-./scripts/opti start                 # checks the machine, builds and starts everything, prints the link (no sudo)
-./scripts/opti stop                  # stops the web page and the cluster (only the hpcsim project)
+./scripts/benchctl start                 # checks the machine, builds and starts everything, prints the link (no sudo)
+./scripts/benchctl stop                  # stops the web page and the cluster (only the hpcsim project)
 ```
 
 No `sudo` anywhere: the memory governor runs as you (it pauses and stops containers through Docker). The only
-prerequisite is Docker usable by your user, which `start` checks first. `./scripts/opti status` shows what is running and `./scripts/opti open` prints the login link again. The first
+prerequisite is Docker usable by your user, which `start` checks first. `./scripts/benchctl status` shows what is running and `./scripts/benchctl open` prints the login link again. The first
 `start` builds images (a few minutes) and creates the Python environment. Prefer the steps one by one? They are in
 the table below.
 
@@ -58,29 +58,29 @@ After the quick start above, with the stack up and the web page open:
 2. **Middle of the page**: six simulated nodes and four mock services. Open *Fault actions* on `cn002`, press *Power off*: the card turns grey, and a diamond travels from *Fault injector* to the BMC. Press *Clear faults* to undo.
 3. **See traffic**: in a second terminal run `for i in 1 2 3 4 5; do curl -s -o /dev/null "http://127.0.0.1:8080/rest/api/2/search?jql=project%3DOPS"; done`. Round dots travel from *Clients* to *jira-mock* and its counter rises.
 4. **Scenarios** (right panel): pick `node-down`, speed 20x, press *Play*, and watch each step turn green. The strip at the top shows it running.
-5. **Slurm steps** need the CLI: `./scripts/simctl scenario run node-down --speed 10`.
+5. **Slurm steps** need the CLI: `./scripts/benchctl scenario run node-down --speed 10`.
 6. **Look behind the scenes**: Grafana http://127.0.0.1:3000 (admin / admin), Prometheus :9090, fake BMC `curl http://127.0.0.1:8000/cn001/redfish/v1/Systems/1`.
-7. **Stop**: `./scripts/opti stop`.
+7. **Stop**: `./scripts/benchctl stop`.
 
-Something wrong? `./scripts/simctl diag` writes one masked file to attach to a bug report. More detail: [docs/guides/getting-started.md](docs/guides/getting-started.md); everything about the tool: the [user manual](docs/manual/README.md).
+Something wrong? `./scripts/benchctl diag` writes one masked file to attach to a bug report. More detail: [docs/guides/getting-started.md](docs/guides/getting-started.md); everything about the tool: the [user manual](docs/manual/README.md).
 
 ## Build and run scopes
 
 | I want to | Command | Needs |
 |---|---|---|
-| Start everything in one go | `./scripts/opti start` (stop: `./scripts/opti stop`, look: `./scripts/opti status`) | Docker, python 3.11+ |
+| Start everything in one go | `./scripts/benchctl start` (stop: `./scripts/benchctl stop`, look: `./scripts/benchctl status`) | Docker, python 3.11+ |
 | Check the machine before building | `./scripts/check-machine.sh` | system `python3` only |
 | Install the CLI and test tools | `python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'` | python 3.11+ |
-| Check the setup in depth | `./scripts/simctl doctor` then `./scripts/simctl preflight --profile std` | venv, Docker |
-| Run the governor | automatic with `opti start` (as you). Optional full protection at boot: `sudo ./scripts/install-governor.sh` | nothing |
-| Build and start a profile | `./scripts/simctl up --profile min\|std\|full` | Docker; first build takes minutes |
-| Change the node count | `./scripts/simctl scale 8` | stack running |
+| Check the setup in depth | `./scripts/benchctl doctor` then `./scripts/benchctl preflight --profile std` | venv, Docker |
+| Run the governor | automatic with `benchctl start` (as you). Optional full protection at boot: `sudo ./scripts/install-governor.sh` | nothing |
+| Build and start a profile | `./scripts/benchctl up --profile min\|std\|full` | Docker; first build takes minutes |
+| Change the node count | `./scripts/benchctl scale 8` | stack running |
 | Look at it | web page `python -m webui`; Grafana http://127.0.0.1:3000; Prometheus :9090 | stack running |
-| Play a fault | `./scripts/simctl scenario list`, `scenario run node-down --speed 10` | stack running |
+| Play a fault | `./scripts/benchctl scenario list`, `scenario run node-down --speed 10` | stack running |
 | Run the tests | `./scripts/validate.sh` (fast, no Docker) | venv with dev extras |
 | Run the tests on the live host | `./scripts/verify.sh --full` | Docker, a free ~3 GB |
 | Debug the web page | `pip install -e '.[browser]'`, `python -m playwright install chromium`, `python scripts/ui_shots.py` | venv |
-| Stop and clean up | `./scripts/simctl down` | none |
+| Stop and clean up | `./scripts/benchctl down` | none |
 
 | Profile | What is on | Memory budget |
 |---|---|---|

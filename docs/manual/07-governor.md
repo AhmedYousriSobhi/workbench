@@ -7,7 +7,7 @@ through a ladder, acting on the lowest-priority containers first and on reversib
 
 | | Rootless (default) | Root service (optional) |
 |---|---|---|
-| Started by | `./scripts/opti start`, as you | `sudo ./scripts/install-governor.sh`, at boot |
+| Started by | `./scripts/benchctl start`, as you | `sudo ./scripts/install-governor.sh`, at boot |
 | Needs sudo | no | once, to install |
 | Acts by | `docker pause`, `docker kill`/`stop` | cgroup files |
 | Throttle (`memory.high`) and reclaim | no (skipped, logged once) | yes |
@@ -32,7 +32,7 @@ it only stops growth. Relief comes from stopping. Thresholds can be overridden w
 ## Look at it
 
 ```bash
-./scripts/simctl status          # level, mode (user or root), memory, groups, security findings, recent actions
+./scripts/benchctl status          # level, mode (user or root), memory, groups, security findings, recent actions
 ```
 
 The same data is on the web page (left panel and log), in Grafana as annotations on every action, and in Prometheus
@@ -41,14 +41,14 @@ they survive when Prometheus is stopped.
 
 ## Admission
 
-`simctl up` and `scale` ask the governor first. At L2 and above, or if the start would breach the safety floor, it refuses
-and says why. **That is a decision, not a bug.** Close a browser or the IDE, check `simctl status`, and retry.
+`benchctl up` and `scale` ask the governor first. At L2 and above, or if the start would breach the safety floor, it refuses
+and says why. **That is a decision, not a bug.** Close a browser or the IDE, check `benchctl status`, and retry.
 
 ## Security watchdog
 
 Every 15 s the governor flags containers that are privileged, have added capabilities, run unconfined, share host
 namespaces or mount the Docker socket, plus missing memory limits and limit drift. It reports; it does not fix. Findings
-appear in `simctl status` and the audit log. The one accepted exception is `slurmrestd`'s two disabled unshare steps
+appear in `benchctl status` and the audit log. The one accepted exception is `slurmrestd`'s two disabled unshare steps
 ([ADR 0004](../adr/0004-slurmrestd-unshare-stays-disabled.md)).
 
 ## Dry run

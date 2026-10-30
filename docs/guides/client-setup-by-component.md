@@ -10,13 +10,13 @@ Every section uses synthetic data on `127.0.0.1`. Field names are the client's o
 ## 0. Start the cluster once
 
 ```bash
-./scripts/simctl up --profile min      # REFUSED means the host is short of memory: free some and run it again
-./scripts/simctl status                # governor level L0 or L1 is fine
+./scripts/benchctl up --profile min      # REFUSED means the host is short of memory: free some and run it again
+./scripts/benchctl status                # governor level L0 or L1 is fine
 ```
 
 `up` prints the values you need and writes the secrets into `compose/generated/secrets/` (never copy them into tracked
 files). **Every `up` creates new Grafana tokens**; after a restart, paste the new one (section 3).
-When you are done: `./scripts/simctl down`.
+When you are done: `./scripts/benchctl down`.
 
 ## 1. SSH and the terminal
 
@@ -30,8 +30,8 @@ When you are done: `./scripts/simctl down`.
 Get the key where the client can read it:
 
 ```bash
-./scripts/simctl ssh-key install       # copies it to ~/.ssh/opti-sim_ed25519 (mode 600); give the client that path
-./scripts/simctl ssh-key remove        # when you are done
+./scripts/benchctl ssh-key install       # copies it to ~/.ssh/opti-sim_ed25519 (mode 600); give the client that path
+./scripts/benchctl ssh-key remove        # when you are done
 ```
 
 **You should see:** the first connection asks you to trust the host key (accept it; it stays the same across restarts),
@@ -126,15 +126,15 @@ Press **Test BCM Connection** (save the cluster first). You can check by hand wh
 | Certificate | self-signed; the client must be told to trust or pin it |
 
 Check by hand: `curl -sk -H "Host: bmc-gpu001" -u "admin:<password>" https://127.0.0.1:8443/redfish/v1/` (it answers "gpu001 service root"). Break something with
-`./scripts/simctl scenario run fan-failure`.
+`./scripts/benchctl scenario run fan-failure`.
 
 ## 8. Try a fault
 
 With the client open on the cluster, play one scenario and compare what the client shows with what the scenario did:
 
 ```bash
-./scripts/simctl scenario list
-./scripts/simctl scenario run node-down --speed 4
+./scripts/benchctl scenario list
+./scripts/benchctl scenario run node-down --speed 4
 ```
 
 More in [scenarios and faults](../manual/06-scenarios.md).

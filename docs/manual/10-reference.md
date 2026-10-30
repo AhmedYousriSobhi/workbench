@@ -1,33 +1,36 @@
 # 10. Reference
 
-## Launcher: `./scripts/opti`
+## The command: `benchctl`
 
-| Command | Does |
+One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [flags]`**. Run it as `./scripts/benchctl`
+(no activation needed), or as `benchctl` once the venv is active. Tab completion for verbs and node names:
+`benchctl --install-completion` (once, then open a new terminal). The old names `simctl` and `./scripts/opti` still
+work as aliases. What each verb does not do, exit codes, and what to use in a script: [the verbs guide](../guides/benchctl-verbs.md).
+
+| Verb | Does |
 |---|---|
 | `start [--profile P]` | machine check, venv, governor (as you), cluster, web page; default profile `min` |
 | `stop` | stop the web page, the cluster and your own governor |
-| `status` | governor, cluster and web page at a glance |
 | `open` | print the login link, open a browser if there is a display |
-
-## CLI: `./scripts/simctl` (same as `python -m simctl.cli`)
-
-| Command | Does |
-|---|---|
+| `get nodes\|services\|profiles\|scenarios [-o json\|name] [-l SEL] [--sort-by COL] [-w]` | list what exists, filter (`-l kind=gpu`), sort, redraw; `nodes` shows every node `sim.yaml` defines and its state (`absent` = not started) |
+| `exec NODE [-u USER] [-- CMD]` | shell on a node, or one command: `benchctl exec gpu001 -- nvidia-smi` |
+| `logs NODE [-f] [--tail N]` | container log of a node or service |
+| `up --profile P` | pre-flight, governor admission, ordered start (default profile `std`) |
+| `down [-n] [-y]` | stop and remove the `hpcsim` project only; asks first in a terminal, `-n` only lists |
+| `scale N [--profile P] [-n] [-y]` | change the compute node count; asks before removing nodes in a terminal, `-n` only says what would change |
+| `scenario list` / `scenario run NAME [--speed N] [--dry-run]` | list scenarios; play one, exit 1 on failure |
+| `ssh-key install\|remove` | put the login key under `~/.ssh` for clients that only read there |
+| `status [--socket S]` | governor level, signals, recent actions, then whether the cluster and the web page run |
 | `check` | machine check before building (OS, RAM, disk, Docker, ports); exit 1 if not ready |
 | `doctor` | host prerequisites and container safety; exit 1 on any failure |
 | `preflight --profile P` | would this profile fit in free memory now |
-| `status [--socket S]` | governor level, signals, recent actions |
 | `diag [--out F]` | masked diagnostics tarball |
 | `compose --profile P` | generate `compose/generated/docker-compose.yml` |
-| `up --profile P` | pre-flight, governor admission, ordered start (default profile `std`) |
-| `down` | stop and remove the `hpcsim` project only |
-| `scale N [--profile P]` | change the compute node count |
-| `scenario list` | name, step count, description |
-| `scenario run NAME [--speed N] [--dry-run]` | play a scenario; exit 1 on failure |
-| `measure run LABEL [--duration S] [--interval S]` | sample memory to `docs/measurements/` |
-| `measure report IDLE [LOADED]` | markdown table with suggested budgets |
+| `benchctl measure run LABEL [--duration S] [--interval S]` | sample memory to `docs/measurements/` |
+| `benchctl measure report IDLE [LOADED]` | markdown table with suggested budgets |
 
-Run `./scripts/simctl COMMAND --help` for the exact flags.
+`benchctl COMMAND --help` shows the exact flags. Planned in the same grammar: `describe node NAME`, `plan` / `apply`,
+`export profile` (issues 91 to 93).
 
 ## Scripts
 
@@ -70,10 +73,10 @@ Run `./scripts/simctl COMMAND --help` for the exact flags.
 
 | Variable | Used by | Meaning |
 |---|---|---|
-| `OPTI_UI_PORT` | `opti` | web page port (default 8088) |
-| `OPTI_GOVERNOR` | `opti` | `auto`, `user`, `system` or `off` |
+| `OPTI_UI_PORT` | `benchctl start` | web page port (default 8088) |
+| `OPTI_GOVERNOR` | `benchctl start` | `auto`, `user`, `system` or `off` |
 | `HPCSIM_GOV_SOCKET` | `simctl`, web page | governor socket path override |
-| `HPCSIM_GRAFANA_TOKEN` | governor | token for annotations (set by `opti`; never put it in files) |
+| `HPCSIM_GRAFANA_TOKEN` | governor | token for annotations (set by `benchctl start`; never put it in files) |
 | `COV_FLOOR`, `PYLIBS` | `validate.sh` | coverage floor, tool directory |
 
 ## Files and directories

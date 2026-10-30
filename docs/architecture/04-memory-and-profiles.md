@@ -30,4 +30,4 @@ Host reserve (OS, desktop, IDE, browser): **about 3 GB**, never governed. Page c
 | `jira-real` | `std` minus k3d, plus Jira DC | ~7.5 GB |
 | `mac-agent` | `min` + remote macOS agent (external) | ~1 GB local |
 
-`simctl up --profile X` runs a **pre-flight**: `MemAvailable` minus the profile's declared budget must stay above the safety floor, otherwise it refuses and suggests a smaller profile.
+`benchctl up --profile X` runs a **pre-flight**: `MemAvailable` minus the profile's declared budget must stay above the safety floor, otherwise it refuses and suggests a smaller profile.

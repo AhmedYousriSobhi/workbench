@@ -83,7 +83,7 @@ cmd_start() {
   echo "== 3/4 governor"
   start_governor || exit 1
   echo "== 4/4 starting the cluster (profile $profile; the first run builds images and takes a few minutes)"
-  ./scripts/simctl up --profile "$profile" || { echo "cluster did not start; ./scripts/simctl diag collects details" >&2; exit 1; }
+  ./scripts/benchctl up --profile "$profile" || { echo "cluster did not start; ./scripts/benchctl diag collects details" >&2; exit 1; }
   refresh_governor
   start_ui || exit 1
   show_link; open_link
@@ -92,7 +92,7 @@ cmd_start() {
 cmd_stop() {
   if ui_pid >/dev/null; then kill "$(ui_pid)" 2>/dev/null; echo "web page stopped"; else echo "web page was not running"; fi
   rm -f "$pidf"
-  ./scripts/simctl down
+  ./scripts/benchctl down
   stop_own_governor
 }
 cmd_status() {

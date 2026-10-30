@@ -5,19 +5,19 @@
 ## 7. One-click UX and control
 
 ```bash
-simctl doctor                       # host checks + tuning suggestions
-simctl up --profile std             # pre-flight, then bring everything up
-simctl status                       # profile, per-class memory vs budget, governor level
+benchctl doctor                       # host checks + tuning suggestions
+benchctl up --profile std             # pre-flight, then bring everything up
+benchctl status                       # profile, per-class memory vs budget, governor level
 simctl top                          # live table: groups, PSI, level, actions taken
-simctl scale compute 24             # change slurmd count (governor-approved)
+benchctl scale compute 24             # change slurmd count (governor-approved)
 simctl jira mode mock|cloud|dc
-simctl scenario list
-simctl scenario run gpu-xid-storm   # trigger an issue
+benchctl scenario list
+benchctl scenario run gpu-xid-storm   # trigger an issue
 simctl workload run ml-peak --duration 30m
-simctl down
+benchctl down
 ```
 
-The **Web UI** (section 7.1) mirrors the CLI. Desktop launcher / `make demo` runs `simctl up --profile std`.
+The **Web UI** (section 7.1) mirrors the CLI. Desktop launcher / `make demo` runs `benchctl up --profile std`.
 
 ### 7.1 Web UI
 

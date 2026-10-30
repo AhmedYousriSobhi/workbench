@@ -152,7 +152,7 @@
   <p class="dim small" style="margin:0 var(--sp2)">Local only · 127.0.0.1</p>
 </aside>
 <main id="main" tabindex="-1" aria-label="Cluster components">
-  <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/opti start</code>.</div>
+  <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/benchctl start</code>.</div>
   <div class="tiles" id="tiles">
     <div class="tile"><h2>Services</h2><div class="big" id="t-svc-v">–</div><div class="sub" id="t-svc-s">checking…</div></div>
     <div class="tile"><h2>Nodes</h2><div class="big" id="t-nodes-v">–</div><div class="sub" id="t-nodes-s">checking…</div></div>
@@ -168,13 +168,13 @@
   <div id="nodegroups">
   <h2 class="grouphead">Compute nodes</h2><div id="nodes-compute" class="nodes"></div>
   <h2 class="grouphead">GPU nodes</h2><div id="nodes-gpu" class="nodes"></div>
-  <p class="dim small">Drain in Slurm and Kubernetes node faults are not available here: the page has no Docker access by design, and Kubernetes is not built yet. Use <code>./scripts/simctl scenario run node-down</code> for Slurm.</p>
+  <p class="dim small">Drain in Slurm and Kubernetes node faults are not available here: the page has no Docker access by design, and Kubernetes is not built yet. Use <code>./scripts/benchctl scenario run node-down</code> for Slurm.</p>
   </div>
 </main>
 <aside class="rail right" aria-label="Operate">
   <div class="panel"><h2 class="rh">Needs attention</h2><ul class="attn" id="attn"><li class="skel">Checking…</li></ul></div>
   <div class="panel"><h2 class="rh">Scenarios</h2>
-    <p class="dim small" style="margin-top:0">Timed incidents played against the running stack. Slurm steps are skipped here (no Docker access); <code>./scripts/simctl scenario run NAME</code> runs those.</p>
+    <p class="dim small" style="margin-top:0">Timed incidents played against the running stack. Slurm steps are skipped here (no Docker access); <code>./scripts/benchctl scenario run NAME</code> runs those.</p>
     <ul class="scns" id="list"><li class="skel">Loading…</li></ul></div>
   <div class="panel" id="runpanel" hidden aria-live="polite"><h2 class="rh" id="runtitle">Run</h2>
     <div class="row"><div id="runresult"></div><div id="runctl"></div></div>
@@ -214,7 +214,7 @@ function paintAttention() {
   }
   if (lastCl) {
     const down = Object.entries(lastCl.services).filter(([, up]) => !up).map(([k]) => k);
-    if (down.length === Object.keys(lastCl.services).length) items.push(['warn', '▲', 'The simulation stack is not running. Start it with ./scripts/opti start']);
+    if (down.length === Object.keys(lastCl.services).length) items.push(['warn', '▲', 'The simulation stack is not running. Start it with ./scripts/benchctl start']);
     else down.forEach(k => items.push(['bad', '✗', `Service ${k} is not answering.`]));
     lastCl.nodes.filter(n => n.state !== 'ok' && !(down.length === Object.keys(lastCl.services).length)).forEach(n =>
       items.push([n.state === 'fault' ? 'bad' : 'warn', n.state === 'fault' ? '✗' : '▲', `${n.name}: ${n.label}`]));
@@ -248,7 +248,7 @@ function render(st) {
   const banner = $('banner');
   if (!st.ok) {
     banner.style.setProperty('--lv', 'var(--bad)'); banner.className = 'banner';
-    banner.innerHTML = '<i class="orb" aria-hidden="true"></i><div><b>Governor not reachable</b><span class="m">Start it with <code>./scripts/opti start</code> (no sudo). Optional boot service: <code>sudo ./scripts/install-governor.sh</code>.</span></div>';
+    banner.innerHTML = '<i class="orb" aria-hidden="true"></i><div><b>Governor not reachable</b><span class="m">Start it with <code>./scripts/benchctl start</code> (no sudo). Optional boot service: <code>sudo ./scripts/install-governor.sh</code>.</span></div>';
     lastGov = null; setChip('c-level', 'bad', '✗', 'Governor offline'); paintAttention();
     return;
   }
@@ -468,7 +468,7 @@ async function poll() {
   if ($('stopbtn')) $('stopbtn').onclick = stopRun;
   $('bar').style.width = (s.steps.length ? (done / s.steps.length) * 100 : 0) + '%';
   const failed = s.steps.filter(x => x.status === 'failed').length;
-  $('runnote').innerHTML = !s.running && failed ? `<div class="notice">${failed} of ${s.steps.length} steps failed. If the messages say a service is unreachable, the stack is probably not running: <code>./scripts/simctl up --profile min</code></div>` : '';
+  $('runnote').innerHTML = !s.running && failed ? `<div class="notice">${failed} of ${s.steps.length} steps failed. If the messages say a service is unreachable, the stack is probably not running: <code>./scripts/benchctl up --profile min</code></div>` : '';
   $('timeline').innerHTML = s.steps.map(x =>
     `<li><span class="stt st-${x.status}"><span aria-hidden="true">${ICON[x.status]}</span> ${x.status}</span>
      <div>${x.at.toFixed(0)} s · ${esc(describe(x))}${x.detail ? `<div class="small dim">${esc(plain(x))}</div>` : ''}</div></li>`).join('');
