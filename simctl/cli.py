@@ -1,9 +1,42 @@
+import difflib
+import sys
+from pathlib import Path as _Path
+
+import click
 import typer
+from typer.core import TyperGroup
 
 from . import checks, compose, diag, export, inventory, machine, measure, nodes, scenario, stack
 
-app = typer.Typer(help="benchctl: control the simulated cluster. Pattern: benchctl VERB [RESOURCE] [NAME]. "
+
+class SuggestingGroup(TyperGroup):
+    """A mistyped verb gets a hint and an error (exit 2). It is never guessed and run: `benchctl dwon` must not
+    run `down` (CLI guidelines: suggest, do not silently correct; no prefix abbreviations that block future verbs)."""
+
+    def resolve_command(self, ctx, args):
+        try:
+            return super().resolve_command(ctx, args)
+        except click.UsageError as e:
+            close = difflib.get_close_matches(args[0], self.list_commands(ctx), n=1) if args else []
+            if close:
+                raise click.UsageError(f"{e.message} Did you mean '{close[0]}'?", ctx=ctx) from e
+            raise
+
+
+def _old_name_notice() -> None:
+    """One line on stderr, only in a terminal, when the pre-0.2 name is used (scripts stay quiet and keep working)."""
+    if _Path(sys.argv[0]).name == "simctl" and sys.stderr.isatty():
+        typer.echo("note: `simctl` is now `benchctl` (the old name still works for now).", err=True)
+
+
+app = typer.Typer(cls=SuggestingGroup, epilog="Scripts: use -o json where offered, read data from stdout (messages and errors "
+                  "go to stderr). Exit codes: 0 ok, 1 failed or refused, 2 bad usage.", help="benchctl: control the simulated cluster. Pattern: benchctl VERB [RESOURCE] [NAME]. "
                        "Start with `benchctl start`, look with `benchctl get nodes`, stop with `benchctl stop`.")
+@app.callback()
+def _main() -> None:
+    _old_name_notice()
+
+
 ICON = {checks.OK: "ok  ", checks.WARN: "WARN", checks.FAIL: "FAIL"}
 
 
@@ -30,7 +63,7 @@ def doctor() -> None:
 def preflight(profile: str = typer.Option("std", "--profile")) -> None:
     """Would this profile fit in current free memory? (SPEC section 6)"""
     ok, msg = checks.preflight(profile, checks.load_profiles(), checks.mem_available())
-    typer.echo(("OK: " if ok else "REFUSED: ") + msg)
+    typer.echo(("OK: " if ok else "REFUSED: ") + msg, err=not ok)
     raise typer.Exit(0 if ok else 1)
 
 
@@ -40,7 +73,7 @@ def status(socket: str = checks.GOV_SOCKET) -> None:
     try:
         st = checks.governor_request({"cmd": "status"}, socket)
     except OSError as e:
-        typer.echo(f"governor not reachable at {socket}: {e}")
+        typer.echo(f"governor not reachable at {socket}: {e}", err=True)
         _cluster_and_page()
         raise typer.Exit(1) from e
     gb = (st["mem_available"] or 0) / checks.GB
@@ -146,7 +179,7 @@ def _node_names(incomplete: str) -> list[str]:
 NODE = typer.Argument(..., autocompletion=_node_names, help="node name, e.g. cn001 or gpu001")
 OUTPUT = typer.Option("table", "-o", "--output", help="table or json")
 
-get_app = typer.Typer(help="List what exists: nodes, services, profiles, scenarios")
+get_app = typer.Typer(cls=SuggestingGroup, help="List what exists: nodes, services, profiles, scenarios")
 app.add_typer(get_app, name="get")
 
 
@@ -196,7 +229,7 @@ def logs(node: str = NODE, follow: bool = typer.Option(False, "-f", "--follow"),
                          f"{stack.PROJECT}-{node}-1"])
 
 
-export_app = typer.Typer(help="Write the workbench in a form another tool can import")
+export_app = typer.Typer(cls=SuggestingGroup, help="Write the workbench in a form another tool can import")
 app.add_typer(export_app, name="export")
 
 
@@ -216,7 +249,7 @@ def export_profile(out: str = typer.Option("bench-profile.json", "-o", "--output
     try:
         text = export.to_json(export.build(sim, export.services_for(sim, prof), name, bmc, user), export.format_id(fmt))
     except export.ExportError as e:
-        typer.echo(f"cannot export: {e}")
+        typer.echo(f"cannot export: {e}", err=True)
         raise typer.Exit(1) from e
     if out == "-":
         typer.echo(text, nl=False)
@@ -228,7 +261,7 @@ def export_profile(out: str = typer.Option("bench-profile.json", "-o", "--output
                + ("\n  BMC password: the part after 'admin:' in compose/generated/secrets/bmc_credentials" if bmc else ""))
 
 
-ssh_key_app = typer.Typer(help="Put the login key where a client that only reads ~/.ssh can use it")
+ssh_key_app = typer.Typer(cls=SuggestingGroup, help="Put the login key where a client that only reads ~/.ssh can use it")
 app.add_typer(ssh_key_app, name="ssh-key")
 
 
@@ -238,7 +271,7 @@ def ssh_key_install() -> None:
     try:
         stack.install_client_key()
     except (OSError, FileNotFoundError) as e:
-        typer.echo(str(e))
+        typer.echo(str(e), err=True)
         raise typer.Exit(1)
     typer.echo(f"key: ~/.ssh/{stack.CLIENT_KEY}  (host 127.0.0.1, port 2222, user alice)\nremove it when done: benchctl ssh-key remove")
 
@@ -256,7 +289,7 @@ def scale(n: int = typer.Argument(..., min=0, help="compute node count"),
     raise typer.Exit(0 if stack.scale(_sim(), profile or stack.current_profile(), n, say=typer.echo) else 1)
 
 
-scenario_app = typer.Typer(help="Run named fault and workload scenarios (scenarios/*.yaml)")
+scenario_app = typer.Typer(cls=SuggestingGroup, help="Run named fault and workload scenarios (scenarios/*.yaml)")
 app.add_typer(scenario_app, name="scenario")
 
 
@@ -276,11 +309,11 @@ def scenario_run(name: str = typer.Argument(..., help="see `scenario list`"),
     try:
         sc = scenario.load(name)
     except scenario.ScenarioError as e:
-        typer.echo(str(e))
+        typer.echo(str(e), err=True)
         raise typer.Exit(1) from e
     problems = scenario.validate(sc, sim)
     for p in problems:
-        typer.echo(f"invalid: {p}")
+        typer.echo(f"invalid: {p}", err=True)
     if problems:
         raise typer.Exit(1)
     if dry_run:
@@ -319,4 +352,4 @@ def measure_report(idle: str = typer.Argument(..., help="label of the idle run")
 
 
 if __name__ == "__main__":
-    app()
+    app(prog_name="benchctl")

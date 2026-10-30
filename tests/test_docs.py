@@ -149,3 +149,13 @@ def test_docs_name_only_the_new_command():
             if re.search(r"\./scripts/(simctl|opti)\b", para) and "alias" not in para.lower():
                 bad.append(f"{f.relative_to(ROOT)}: {para[:50]!r}")
     assert not bad, bad
+
+
+def test_verbs_guide_covers_every_command():
+    """A new verb must come with its limits: the guide names every command the CLI registers."""
+    import typer.main
+
+    text = (ROOT / "docs/guides/benchctl-verbs.md").read_text()
+    group = typer.main.get_command(app)
+    missing = [name for name in group.commands if f"`{name}" not in text]
+    assert not missing, f"add these verbs to docs/guides/benchctl-verbs.md: {missing}"
