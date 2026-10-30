@@ -57,7 +57,7 @@ def capture(out: Path) -> dict:
                         if page.locator(sel).count() == 0:
                             result["a11y"].append(f"dashboard is missing {sel}")
                     down = page.locator("#stackdown").is_visible()  # stack down: one notice, nothing repeating it
-                    for sel in ("#tiles", "#svcpanel", "#nodegroups"):
+                    for sel in ("#svcpanel", "#nodegroups"):
                         if page.locator(sel).is_visible() == down:
                             result["a11y"].append(f"{sel} must be {'hidden' if down else 'shown'} when the stack is {'down' if down else 'up'}")
                     page.keyboard.press("Tab")  # the skip link is the first stop

@@ -149,6 +149,32 @@
     .status { flex-wrap:nowrap; overflow-x:auto; width:100%; padding-bottom:2px; scrollbar-width:thin; }
   }
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
+  /* calm pass (#121): more space, fewer boxes, one primary action per area */
+  :root { --sp3:14px; --sp4:20px; --sp5:32px; --shadow:none; --line:color-mix(in srgb,var(--fg) 12%,var(--panel)); }
+  body { font-size:15px; line-height:1.6; }
+  .cols { gap:var(--sp5); padding-top:var(--sp5); }
+  .rail { gap:var(--sp5); }
+  .panel { padding:var(--sp5) var(--sp5) var(--sp4); border-color:transparent; background:var(--panel); border-radius:14px; margin-bottom:0; }
+  .panel > h2:first-child, h2.rh, h2 { text-transform:none; letter-spacing:0; font-size:14px; color:var(--fg); font-weight:650; margin:0 0 var(--sp3); }
+  .grouphead { margin:var(--sp5) 0 var(--sp3); color:var(--dim); font-weight:600; }
+  .top { padding:var(--sp3) var(--sp5); border-bottom-color:var(--line); } .pillchip { background:transparent; border-color:transparent; } .pillchip:hover { border-color:var(--line); }
+  .svcline { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp2) var(--sp4); margin:0 0 var(--sp5); } .svcline .chip { border-color:transparent; padding:2px 0; font-size:13px; }
+  .tabs { border-bottom-color:var(--line); margin-bottom:var(--sp5); gap:var(--sp4); } .tabs button { padding:0 var(--sp2); }
+  .panel.duo { display:grid; grid-template-columns:1fr 1fr; gap:var(--sp4); } .duo .big { font-size:24px; } .duo svg.spark { height:44px; }
+  .banner { padding:var(--sp4); border-color:transparent; } .banner b { font-size:17px; }
+  .nodes { gap:var(--sp4); grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr)); }
+  .node { padding:var(--sp4); border:1px solid var(--line); border-left-width:4px; border-radius:12px; } .node h3 { font-size:15px; }
+  .node .facts { margin:var(--sp2) 0 var(--sp3); font-size:13px; color:var(--dim); } .node details { margin-top:var(--sp2); }
+  .node .actions .btn, .detailbtn { background:transparent; color:var(--fg); border:1px solid var(--line); font-weight:500; } .detailbtn { margin-top:var(--sp2); min-height:36px; }
+  .scn .btn { background:transparent; color:var(--accent); border:1px solid var(--line); min-width:76px; } .scn .btn:hover:not(:disabled) { border-color:var(--accent); }
+  .scn { border-bottom-color:transparent; padding:var(--sp3) 0; } ul.scns { border-top:0; }
+  ul.attn li { border-bottom-color:transparent; padding:var(--sp2) 0; }
+  details.quiet > summary { cursor:pointer; min-height:36px; display:flex; align-items:center; list-style:none; } details.quiet[open] > summary { margin-bottom:var(--sp3); }
+  .legend { flex-direction:column; gap:var(--sp2); margin-top:var(--sp3); }
+  #flow .frame { stroke:var(--line); fill:none; }
+  .trafficpanel { padding:var(--sp5); }
+  .node { display:flex; flex-wrap:wrap; align-items:center; gap:0 var(--sp3); } .node header, .node .facts { flex:1 0 100%; } .node details { flex:1 1 auto; margin:0; } .node details[open] { flex:1 0 100%; order:3; } .node .detailbtn { margin:0; }
+  .legend span:last-child { display:none; }
 </style>
 </head>
 <body>
@@ -175,14 +201,14 @@
 <div class="cols">
 <aside class="rail left" aria-label="Governor">
   <div id="banner" class="banner" role="status"><i class="orb" aria-hidden="true"></i><div><b>Connecting…</b><span class="m">Waiting for the governor.</span></div></div>
-  <div class="panel"><h2 class="rh">Memory</h2>
-    <div class="big" id="mem">–</div><div class="sub small dim">available for the simulation</div>
+  <div class="panel duo"><div><h2 class="rh">Memory</h2>
+    <div class="big" id="mem">–</div><div class="sub small dim">available</div>
     <svg class="spark" id="sp-mem" viewBox="0 0 120 40" preserveAspectRatio="none" role="img" aria-label="Free memory over the last two minutes"><polygon points=""/><polyline points=""/></svg>
-    <div class="axis"><span id="mem-lo"></span><span>last 2 min</span><span id="mem-hi"></span></div></div>
-  <div class="panel"><h2 class="rh">Pressure</h2>
-    <div class="big" id="psi">–</div><div class="sub small dim">PSI, 10 s average</div>
+    <div class="axis"><span id="mem-lo"></span><span id="mem-hi"></span></div></div>
+  <div><h2 class="rh">Pressure</h2>
+    <div class="big" id="psi">–</div><div class="sub small dim">PSI, 10 s</div>
     <svg class="spark" id="sp-psi" viewBox="0 0 120 40" preserveAspectRatio="none" role="img" aria-label="Memory pressure over the last two minutes"><polygon points=""/><polyline points=""/></svg>
-    <div class="axis"><span>0 %</span><span>last 2 min</span><span id="psi-hi"></span></div></div>
+    <div class="axis"><span>0 %</span><span id="psi-hi"></span></div></div></div>
   <p class="dim small" style="margin:0 var(--sp2)">Local only · 127.0.0.1</p>
 </aside>
 <main id="main" tabindex="-1" aria-label="Cluster components">
@@ -193,11 +219,7 @@
   </div>
   <div id="tab-nodes" role="tabpanel" aria-labelledby="tb-nodes">
   <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/benchctl start</code>.</div>
-  <div class="tiles" id="tiles">
-    <div class="tile"><h2>Services</h2><div class="big" id="t-svc-v">–</div><div class="sub" id="t-svc-s">checking…</div></div>
-    <div class="tile"><h2>Nodes</h2><div class="big" id="t-nodes-v">–</div><div class="sub" id="t-nodes-s">checking…</div></div>
-  </div>
-  <div class="panel" id="svcpanel"><h2>Services</h2><div id="services" class="chips"></div></div>
+  <div id="svcpanel" class="svcline"><span class="dim small">Services</span><div id="services" class="chips"></div></div>
   <div class="nodeswrap">
   <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 id="traffic-h" style="margin:0">Traffic</h2>
     <button class="btn small" id="flowpause" aria-pressed="false">Pause animation</button></div>
@@ -243,18 +265,17 @@
 <aside class="rail right" aria-label="Operate">
   <div class="panel"><h2 class="rh">Needs attention</h2><ul class="attn" id="attn"><li class="skel">Checking…</li></ul></div>
   <div class="panel"><h2 class="rh">Scenarios</h2>
-    <p class="dim small" style="margin-top:0">Timed incidents played against the running stack. Slurm steps are skipped here (no Docker access); <code>./scripts/benchctl scenario run NAME</code> runs those.</p>
+    <p class="dim small" style="margin-top:0">Timed incidents against the running stack. Slurm steps need <code>./scripts/benchctl scenario run NAME</code>.</p>
     <div class="scnbar"><input type="search" id="scnq" placeholder="Filter scenarios" aria-label="Filter scenarios"><select id="speed" aria-label="Playback speed for every scenario"><option value="1">1× real time</option><option value="5">5×</option><option value="20">20×</option></select></div>
     <ul class="scns" id="list"><li class="skel">Loading…</li></ul></div>
   <div class="panel" id="runpanel" hidden aria-live="polite"><h2 class="rh" id="runtitle">Run</h2>
     <div class="row"><div id="runresult"></div><div id="runctl"></div></div>
     <div class="progress" aria-hidden="true"><div id="bar" style="width:0"></div></div>
     <div id="runnote"></div><ul class="steps" id="timeline"></ul><div id="expects"></div></div>
-  <div class="panel">
-    <h2 class="rh">Governor activity <span id="logcount" class="dim"></span></h2>
+  <details class="panel quiet"><summary><h2 class="rh" style="display:inline">Governor activity <span id="logcount" class="dim"></span></h2></summary>
     <label class="chk" style="margin-bottom:8px"><input type="checkbox" id="onlyactions" checked> Hide container inventory lines</label>
     <pre id="audit" tabindex="0" aria-label="Governor log, newest first">–</pre>
-  </div>
+  </details>
 </aside>
 </div>
 <script>
@@ -298,8 +319,6 @@ function paintHealth(c) {
   const bad = c.nodes.filter(n => n.state !== 'ok').length, nn = c.nodes.length, stackDown = up === 0;
   setChip('c-svc', stackDown ? 'bad' : up < all ? 'warn' : 'good', stackDown ? '✗' : up < all ? '▲' : '✓', stackDown ? 'Stack not running' : `Services ${up}/${all}`);
   setChip('c-nodes', stackDown ? 'warn' : bad ? 'warn' : 'good', stackDown ? '–' : bad ? '▲' : '✓', stackDown ? 'Nodes unknown' : `Nodes ${nn - bad}/${nn} healthy`);
-  $('t-svc-v').textContent = `${up} / ${all}`; $('t-svc-s').textContent = stackDown ? 'stack is not running' : up < all ? 'some services are down' : 'all answering';
-  $('t-nodes-v').textContent = stackDown ? '–' : `${nn - bad} / ${nn}`; $('t-nodes-s').textContent = stackDown ? 'no data' : bad ? `${bad} need attention` : 'all healthy';
   paintAttention();
 }
 function spark(id, arr, lo, hi) {
@@ -350,16 +369,16 @@ function node(n, actions) {
     `<button class="btn" data-node="${esc(n.name)}" data-action="${a.id}">${esc(a.label)}</button>`).join('');
   return `<article class="node ${n.state}" aria-label="${esc(n.name)}: ${esc(n.label)}">
     <header><h3>${esc(n.name)}</h3><span class="pill ${n.state}"><span aria-hidden="true">${STATE_ICON[n.state]}</span> ${esc(n.label)}</span></header>
-    <dl>${dd('Power', n.power ?? '–')}${dd('CPU temp', n.temp == null ? '–' : n.temp.toFixed(0) + ' °C')}${dd('Fans failed', n.fans_failed)}${dd('BCM', n.bcm ?? '–')}${n.gpus ? dd('GPUs', n.gpus) : ''}</dl>
+    <p class="facts">${[n.power ?? '–', n.temp == null ? null : n.temp.toFixed(0) + ' °C', n.fans_failed ? n.fans_failed + ' fan(s) failed' : null, n.bcm ? 'BCM ' + n.bcm : null, n.gpus ? n.gpus + ' GPUs' : null].filter(Boolean).join(' · ')}</p>
     <details data-node="${esc(n.name)}" ${openNodes.has(n.name) ? 'open' : ''}><summary>Fault actions</summary><div class="actions">${buttons}</div></details>
-    <button class="btn detailbtn" data-node="${esc(n.name)}">Details and how to connect</button></article>`;
+    <button class="btn detailbtn" data-node="${esc(n.name)}">Details</button></article>`;
 }
 function renderCluster(c) {
   paintHealth(c);
   if ($('flow').firstChild) paintTiles();
   const stackUp = Object.values(c.services).some(Boolean);
   $('stackdown').hidden = stackUp;
-  for (const id of ['tiles', 'svcpanel', 'nodegroups']) $(id).hidden = !stackUp;  // one message when down, not five
+  for (const id of ['svcpanel', 'nodegroups']) $(id).hidden = !stackUp;  // one message when down, not five
   $('services').innerHTML = Object.entries(c.services).map(([k, up]) =>
     `<span class="chip ${up ? 'up' : 'down'}"><b aria-hidden="true">${up ? '✓' : '✗'}</b> ${esc(k)} <span class="dim">${up ? 'answering' : 'not answering'}</span></span>`).join('');
   for (const kind of ['compute', 'gpu']) {
@@ -482,7 +501,7 @@ function buildFlow() {
   const lanes = sv('g', {}); g.append(lanes);
   SERVICES.forEach(([k, label, sub], i) => {
     const p = { x: 140, y: 30 + i * 58, w: 120, h: 50 }; svcPos[k] = p;
-    lanes.append(sv('path', { class: 'lane', id: 'ln-' + k, d: dpath(curve(clientsOut, { x: p.x, y: p.y + p.h / 2 })) }), sv('path', { class: 'lane inj', d: dpath(curve(injOut, { x: p.x, y: p.y + p.h / 2 + 6 })) }));
+    lanes.append(sv('path', { class: 'lane', id: 'ln-' + k, d: dpath(curve(clientsOut, { x: p.x, y: p.y + p.h / 2 })) }), sv('path', { class: 'lane inj', d: dpath(curve(injOut, { x: p.x, y: p.y + p.h / 2 + 6 })), opacity: 0.45 }));
     g.append(sv('rect', { class: 'blk', id: 'fb-' + k, x: p.x, y: p.y, width: p.w, height: p.h, rx: 8 }), sv('text', { x: p.x + 8, y: p.y + 17 }, label), sv('text', { class: 'sub', id: 'fs-' + k, x: p.x + 8, y: p.y + 31 }, ''), sv('text', { class: 'sub', id: 'fc-' + k, x: p.x + 8, y: p.y + 43 }, sub));
   });
   // the nodes, inside the cluster
@@ -510,7 +529,7 @@ function paintBlocks() {
     $('fb-' + k).setAttribute('class', 'blk ' + (up ? 'up' : allOff ? 'off' : 'down'));  // everything off = stack not running: stay calm, not red
     $('fs-' + k).textContent = up ? '✓ up · ' + (rate[k] || 0) + ' req/min' : allOff ? '– offline' : '✗ not reachable';
     $('ln-' + k).setAttribute('class', 'lane' + (rate[k] ? ' on' : ''));
-    $('fc-' + k).textContent = (flowSnap.totals[k] || 0).toLocaleString() + ((flowSnap.totals[k] || 0) === 1 ? ' request seen' : ' requests seen');
+    $('fc-' + k).textContent = (flowSnap.totals[k] || 0) ? (flowSnap.totals[k]).toLocaleString() + ((flowSnap.totals[k]) === 1 ? ' request seen' : ' requests seen') : SERVICES.find(x => x[0] === k)[2];
   }
   $('fc-clients').textContent = sent.toLocaleString() + ' requests sent';
   $('fc-injector').textContent = (flowSnap.faults || 0) + (flowSnap.faults === 1 ? ' fault applied' : ' faults applied');
