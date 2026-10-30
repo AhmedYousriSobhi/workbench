@@ -252,10 +252,17 @@ def _launcher(*args: str) -> None:
 
 
 @app.command()
-def start(profile: str = typer.Option("min", "--profile", autocompletion=completion.profiles, callback=_profile_check)) -> None:
-    """Everything in one step: machine check, governor, cluster, web page (the first run builds images)."""
+def start(profile: str = typer.Option(None, "--profile", autocompletion=completion.profiles, callback=_profile_check,
+                                      help="a size preset (default min)"),
+          with_: list[str] = WITH, without: list[str] = WITHOUT) -> None:
+    """Everything in one step: machine check, governor, cluster, web page (the first run builds images). Add parts
+    with --with (for example `--with accounting`); on a running cluster it adds them and leaves the page up."""
+    if profile and (with_ or without):
+        typer.echo("choose one: --profile PRESET, or parts (--with, --without)", err=True)
+        raise typer.Exit(1)
     _offer_completion()
-    _launcher("start", "--profile", profile)
+    parts = [x for p in (with_ or []) for x in ("--with", p)] + [x for p in (without or []) for x in ("--without", p)]
+    _launcher("start", *(parts or ["--profile", profile or "min"]))
 
 
 def _offer_completion() -> None:

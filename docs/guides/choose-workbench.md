@@ -89,9 +89,11 @@ in one line. You can always copy the command shown and run it in a terminal inst
 ## Add accounting to a cluster that is already running
 
 `benchctl start` uses the `min` profile, which has no accounting, so `sacct` says accounting storage is disabled. You do
-not need to stop anything:
+not need to stop anything. `start --with accounting` does it and leaves the page running (or starts the page if it is
+not up); `up` alone only builds the cluster and never starts the page:
 
 ```bash
+./scripts/benchctl start --with accounting   # same as the next line, plus the page and the governor
 ./scripts/benchctl up --with accounting      # starts mariadb and slurmdbd, then restarts slurmctld (about a minute)
 ./scripts/benchctl exec login -- sacct       # no longer "accounting storage is disabled"
 ```

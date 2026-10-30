@@ -8,7 +8,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 
 | Verb | Does |
 |---|---|
-| `start [--profile P]` | machine check, venv, governor (as you), cluster, web page; default profile `min` |
+| `start [--profile P | --with PART ...]` | machine check, venv, governor (as you), cluster, web page; default profile `min` |
 | `stop` | stop the web page, the cluster and your own governor |
 | `open` | print the login link, open a browser if there is a display |
 | `get nodes\|services\|profiles\|scenarios\|workbench [-o json\|name] [-l SEL] [--sort-by COL] [-w]` | list what exists, filter (`-l kind=gpu`), sort, redraw; `nodes` shows every node `sim.yaml` defines and its state (`absent` = not started) |

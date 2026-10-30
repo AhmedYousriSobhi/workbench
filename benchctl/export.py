@@ -92,7 +92,11 @@ def configured(base: dict, profile: str | None = None, saved=None) -> tuple[dict
     if spec and not profile:
         return sim, set(compose.generate(*workbench.effective(base, spec))["services"]) | {"grafana"}, "workbench"
     prof = profile or stack.current_profile()
-    return sim, services_for(sim, prof), prof
+    try:
+        return sim, services_for(sim, prof), prof
+    except FileNotFoundError as e:
+        raise ExportError(f"no profile {prof!r} and no saved workbench to describe: start the cluster, or pass "
+                          "--profile min|std|full") from e
 
 
 def running(base: dict, runner=stack._run, saved=None) -> tuple[dict, set[str]] | None:

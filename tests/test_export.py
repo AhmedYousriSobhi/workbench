@@ -122,8 +122,12 @@ def test_command_follows_the_running_containers_and_falls_back_with_a_note(tmp_p
     assert r.exit_code == 0 and cluster["jira"] is None and cluster["scheduler"]["kind"] == "slurm"
     monkeypatch.setattr(export.stack, "_project_services", lambda runner: [])
     monkeypatch.setattr(export.workbench, "SAVED", tmp_path / "none.yaml")
+    monkeypatch.setattr(export.stack, "current_profile", lambda: "min")
     r = runner.invoke(cli.app, ["export", "profile", "--format", "demo", "-o", "-"])
     assert r.exit_code == 0 and "no containers are running" in r.output
+    monkeypatch.setattr(export.stack, "current_profile", lambda: "workbench")  # a selection was built, its file is gone
+    r = runner.invoke(cli.app, ["export", "profile", "--format", "demo", "-o", "-"])
+    assert r.exit_code == 1 and "no saved workbench" in r.output
     r = runner.invoke(cli.app, ["export", "profile", "--format", "demo", "--configured", "-o", "-"])
     assert "no containers" not in r.output
 
@@ -133,3 +137,13 @@ def test_warns_when_accounting_is_missing_so_sacct_would_fail():
     assert export.warnings({"login", "slurmctld", "slurmdbd"}) == [] and export.warnings({"login"}) == []
     r = runner.invoke(cli.app, ["export", "profile", "--profile", "min", "--format", "demo", "-o", "-"])
     assert "warning:" in r.output and "--with accounting" in r.output
+
+
+def test_start_passes_parts_to_the_launcher_and_refuses_a_mix(monkeypatch):
+    seen = []
+    monkeypatch.setattr(cli, "_launcher", lambda *a: seen.append(a))
+    monkeypatch.setattr(cli, "_offer_completion", lambda: None)
+    assert runner.invoke(cli.app, ["start", "--with", "accounting", "--without", "jira"]).exit_code == 0
+    assert seen[-1] == ("start", "--with", "accounting", "--without", "jira")
+    assert runner.invoke(cli.app, ["start"]).exit_code == 0 and seen[-1] == ("start", "--profile", "min")
+    assert runner.invoke(cli.app, ["start", "--profile", "std", "--with", "load"]).exit_code == 1

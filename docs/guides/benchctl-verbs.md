@@ -19,7 +19,7 @@ its limits, so you do not find them by surprise, and what to use in a script.
 
 | Verb | Does | Limits and cautions | For scripts |
 |---|---|---|---|
-| `start [--profile P]` | machine check, venv, governor (as you), cluster, web page; prints the login link | first run builds images (minutes); refuses when the governor says memory is low; default profile `min` | exit 1 when anything fails |
+| `start [--profile P | --with PART ...]` | machine check, venv, governor (as you), cluster, web page; prints the login link | first run builds images (minutes); refuses when the governor says memory is low; default profile `min`; `--with accounting` builds a selection instead and, on a running cluster, adds the part and leaves the page up | exit 1 when anything fails |
 | `stop` | stops the web page, the cluster and the governor **it started** | does not touch a system governor service, images, or `compose/generated/` | |
 | `open` | prints the web page link, opens a browser if there is a display | the page must be running (`start` first) | prints the link on stdout |
 | `up [--profile P]` | pre-flight, governor admission, ordered start of the cluster alone | safe to repeat (starts only what is missing); default profile `std`, so pass `--profile min` on 16 GB; no web page, no governor | exit 1 when refused or a part fails to start |
