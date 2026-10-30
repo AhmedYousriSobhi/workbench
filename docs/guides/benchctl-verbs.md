@@ -26,6 +26,7 @@ its limits, so you do not find them by surprise, and what to use in a script.
 | `down [-n] [-y]` | stops and removes the `hpcsim` project | open shells on nodes end; your other containers are untouched; secrets and generated files stay; asks first in a terminal when containers run | `-n` lists what would stop |
 | `scale N [-n] [-y]` | changes the compute node count of a preset | removes nodes when shrinking (their shells and jobs end) and asks first in a terminal; restarts `slurmctld`; growing asks the governor first and is refused at L2 or above | `-n` says which nodes would start or stop |
 | `get nodes\|services\|profiles\|scenarios` | lists what exists | read-only; `absent` means no container yet, not an error; `-l key=value` / `key!=value` filters (repeat or comma = AND), `--sort-by COLUMN`, `-w` redraws every `--interval` seconds (at least 1: each redraw asks Docker); a bad selector or column exits 2 and lists the valid columns; no OR, regex or custom columns | `-o json`, or `-o name` for one name per line (`for n in $(benchctl get nodes -l kind=gpu -o name)`) |
+| `describe node NAME [-o json]` | everything known about one node: container, Slurm state and jobs, GPUs busy/idle, BMC readings, ssh hint | text is for people (like `kubectl describe`): its lines may change, so scripts use `-o json`; a source that is down is one `Note:` line, not an error; the web page's Details shows the same without the Docker and Slurm lines; unknown node exits 1 | `-o json` |
 | `exec NODE [-u USER] [-- CMD]` | a shell, or one command, on a node | the node must be running; no terminal is allocated when a command is given; `-u` must be a simulated user (`alice`, `bob`) | command's own stdout; exit code is Docker's |
 | `logs NODE [-f] [--tail N]` | the container log | service or node names only (`slurmctld`, `login`, `cn001`); no time filter; `-f` runs until Ctrl-C | |
 | `scenario list` / `scenario run NAME [--speed N] [--dry-run]` | lists scenarios; plays one against the running stack | needs the stack up; `--dry-run` only validates and prints the timeline; Kubernetes and ticket-bot steps are skipped; `--speed` compresses waits, not step order | exit 1 when a step or expectation fails |
@@ -44,6 +45,7 @@ its limits, so you do not find them by surprise, and what to use in a script.
 | Our verb | Like | Difference to know |
 |---|---|---|
 | `get` | `kubectl get`, `sinfo -N` | `-l`, `--sort-by`, `-w` and `-o name` like kubectl; `-o` has no wide, jsonpath or custom-columns; the columns are fixed (name, kind, state), unlike `sinfo -o` |
+| `describe node` | `kubectl describe node`, `scontrol show node` | merges container, Slurm, GPU and BMC views in one place; Slurm's own `--json` covers only Slurm |
 | `exec` / `logs` | `kubectl exec` / `kubectl logs` | wraps `docker exec` / `docker logs`; no `--previous` or container choice |
 | `up` / `down` | `docker compose up/down` | admission by the governor first; only the `hpcsim` project; `down` asks in a terminal and has `--dry-run` |
 | `scenario run --dry-run` | `kubectl --dry-run`, `terraform plan` | validates and prints; it does not simulate the outcome |

@@ -72,6 +72,18 @@ def capture(out: Path) -> dict:
                     page.click("#theme")
                     if page.evaluate("document.documentElement.dataset.theme") != "dark":
                         result["a11y"].append("theme toggle did not switch to dark")
+                    page.evaluate("showNode('cn001')")  # node Details dialog (its button is hidden while the stack is down): text, fits, closes
+                    page.wait_for_selector("#nodedlg[open]")
+                    page.wait_for_function("document.querySelector('#nodetext').textContent.includes('Name:')")
+                    dpath = out / f"node-details-{vp}-{scheme}.png"
+                    page.screenshot(path=str(dpath))
+                    result["shots"].append(str(dpath))
+                    box = page.locator("#nodedlg").bounding_box()
+                    if box["x"] < 0 or box["x"] + box["width"] > w:
+                        result["overflow"].append(f"node details {vp} {scheme}")
+                    page.click("#nodedlg .btn")
+                    if page.locator("#nodedlg[open]").count():
+                        result["a11y"].append("node details dialog did not close")
                     page.close()
             browser.close()
     finally:

@@ -6,7 +6,19 @@ import click
 import typer
 from typer.core import TyperGroup
 
-from . import checks, compose, diag, export, inventory, machine, measure, nodes, scenario, stack
+from . import (
+    checks,
+    compose,
+    describe,
+    diag,
+    export,
+    inventory,
+    machine,
+    measure,
+    nodes,
+    scenario,
+    stack,
+)
 
 
 class SuggestingGroup(TyperGroup):
@@ -272,6 +284,23 @@ def logs(node: str = NODE, follow: bool = typer.Option(False, "-f", "--follow"),
 
     os.execvp("docker", ["docker", "logs", *(["-f"] if follow else []), "--tail", str(tail),
                          f"{stack.PROJECT}-{node}-1"])
+
+
+describe_app = typer.Typer(cls=SuggestingGroup, help="Everything known about one thing")
+app.add_typer(describe_app, name="describe")
+
+
+@describe_app.command("node")
+def describe_node(node: str = NODE, output: str = OUTPUT) -> None:
+    """Container, Slurm state and jobs, GPUs (busy/idle), BMC power and temperature, how to ssh in."""
+    import json
+
+    try:
+        info = describe.gather(_sim(), node, describe.http_get, stack._run)
+    except describe.UnknownNode as e:
+        typer.echo(str(e.args[0]), err=True)
+        raise typer.Exit(1) from e
+    typer.echo(json.dumps(info, indent=2) if output == "json" else describe.render(info))
 
 
 export_app = typer.Typer(cls=SuggestingGroup, help="Write the workbench in a form another tool can import")

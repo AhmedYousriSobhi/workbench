@@ -20,6 +20,19 @@ docker exec hpcsim-slurmctld-1 sinfo -N -l                       # Slurm's view 
 
 *Real output from the `min` profile: the six node containers, a command run inside `cn001`, and the simulated user `alice` on `gpu001` with its eight fake GPU device files.*
 
+## Look at one node
+
+```bash
+./scripts/benchctl describe node gpu001          # add -o json for scripts
+```
+
+It prints, like `kubectl describe`: the container (state, image, memory limit, priority class), Slurm's view (state,
+partitions, CPUs, memory, reason when drained), the jobs running on it, the GPUs (how many, which are busy and which
+idle, any XID error), the BMC (power, CPU temperature, fans) and how to `ssh` to it. A source that does not answer
+becomes one `Note:` line (for example `container not found: is the stack up?`), never an error. The web page shows the
+same text under **Details** on each node card, without the Docker and Slurm lines (the page has no Docker access by
+design).
+
 ## Open a shell
 
 ```bash
