@@ -198,3 +198,96 @@ def test_401_failure_mode_and_bad_search_numbers(server):
     assert call(base, "/rest/api/2/myself")[0] == 200  # count spent
     assert call(base, "/rest/api/3/search/jql", {"jql": "project = OPS", "maxResults": "x"})[0] == 400
     assert call(base, "/rest/api/3/search/jql?jql=" + quote("project = OPS") + "&fields=summary,status")[0] == 200
+
+
+def test_edit_an_issue_and_its_labels_and_assignee(server):
+    base, delivered, _ = server
+    key = new(base, labels=["a"])[1]["key"]
+    call(base, "/rest/webhooks/1.0/webhook", {"url": "http://hook", "events": ["jira:issue_updated"]})
+    code, _, _ = call(base, f"/rest/api/2/issue/{key}", {"fields": {"summary": "New", "priority": {"name": "High"},
+                      "description": "d"}, "update": {"labels": [{"add": "b"}, {"remove": "a"}]}}, "PUT")
+    assert code == 204
+    f = call(base, f"/rest/api/2/issue/{key}")[1]["fields"]
+    assert (f["summary"], f["priority"]["name"], f["description"], f["labels"]) == ("New", "High", "d", ["b"])
+    assert call(base, f"/rest/api/2/issue/{key}", {"fields": {"summary": ""}}, "PUT")[0] == 400
+    assert call(base, f"/rest/api/2/issue/{key}/assignee", {"name": "bob"}, "PUT")[0] == 204
+    assert call(base, f"/rest/api/2/issue/{key}")[1]["fields"]["assignee"]["name"] == "bob"
+    assert call(base, f"/rest/api/2/issue/{key}/assignee", None, "PUT")[0] == 204
+    assert call(base, f"/rest/api/2/issue/{key}")[1]["fields"]["assignee"] is None
+    time.sleep(0.2)
+    assert delivered and delivered[0][1]["webhookEvent"] == "jira:issue_updated"
+
+
+def test_comments_can_be_read_edited_and_deleted(server):
+    base, *_ = server
+    key = new(base)[1]["key"]
+    a = call(base, f"/rest/api/2/issue/{key}/comment", {"body": "one", "visibility": {"type": "role", "value": "Administrators"}})[1]
+    b = call(base, f"/rest/api/2/issue/{key}/comment", {"body": "two"})[1]
+    assert (a["id"], b["id"]) == ("1", "2") and a["author"]["name"] == "alice" and a["visibility"]["type"] == "role"
+    assert call(base, f"/rest/api/2/issue/{key}/comment")[1]["total"] == 2
+    assert call(base, f"/rest/api/2/issue/{key}/comment/1", {"body": "edited"}, "PUT")[1]["body"] == "edited"
+    assert call(base, f"/rest/api/2/issue/{key}/comment/1", {"body": ""}, "PUT")[0] == 400
+    assert call(base, f"/rest/api/2/issue/{key}/comment/1", None, "DELETE")[0] == 204
+    assert call(base, f"/rest/api/2/issue/{key}/comment/1", None, "DELETE")[0] == 404
+    assert call(base, f"/rest/api/2/issue/{key}/comment", {"body": "three"})[1]["id"] == "3"  # ids never repeat
+
+
+def test_watchers_and_worklog_and_user_search(server):
+    base, *_ = server
+    key = new(base)[1]["key"]
+    assert call(base, f"/rest/api/2/issue/{key}/watchers", "alice")[0] == 204
+    w = call(base, f"/rest/api/2/issue/{key}/watchers")[1]
+    assert w["watchCount"] == 1 and w["isWatching"] is True
+    assert call(base, f"/rest/api/2/issue/{key}")[1]["fields"]["watches"]["watchCount"] == 1
+    assert call(base, f"/rest/api/2/issue/{key}/watchers?username=alice", None, "DELETE")[0] == 204
+    assert call(base, f"/rest/api/2/issue/{key}/watchers")[1]["watchCount"] == 0
+    log = call(base, f"/rest/api/2/issue/{key}/worklog", {"timeSpent": "1h 30m", "comment": "ssh"})
+    assert log[0] == 201 and log[1]["timeSpentSeconds"] == 5400
+    assert call(base, f"/rest/api/2/issue/{key}/worklog", {"timeSpent": "soon"})[0] == 400
+    assert call(base, f"/rest/api/2/issue/{key}/worklog")[1]["total"] == 1
+    assert call(base, f"/rest/api/2/issue/{key}")[1]["fields"]["timespent"] == 5400
+    names = {u["name"] for u in call(base, "/rest/api/2/user/search?query=")[1]}
+    assert {"alice", "bob"} <= names
+    assert [u["name"] for u in call(base, "/rest/api/2/user/assignable/search?username=bo&issueKey=" + key)[1]] == ["bob"]
+
+
+def test_sim_tickets_creates_moves_comments_and_resets(server):
+    base, *_ = server
+    made = call(base, "/sim/tickets", {"action": "create", "count": 3, "summary": "Job {n} failed", "labels": ["wave"],
+                                        "status": "Resolved", "priority": "High"})[1]["created"]
+    assert made == ["OPS-1", "OPS-2", "OPS-3"]
+    f = call(base, "/rest/api/2/issue/OPS-2")[1]["fields"]
+    assert f["summary"] == "Job 2 failed" and f["status"]["name"] == "Resolved" and f["priority"]["name"] == "High"
+    assert f["resolution"] == {"name": "Done"}
+    assert call(base, "/rest/api/2/search?jql=" + quote("resolution = Done"))[1]["total"] == 3
+    new(base, labels=["x"])
+    moved = call(base, "/sim/tickets", {"action": "transition", "jql": "labels = x", "to": "Closed"})[1]["matched"]
+    assert moved == ["OPS-4"] and call(base, "/rest/api/2/issue/OPS-4")[1]["fields"]["status"]["name"] == "Closed"
+    call(base, "/sim/tickets", {"action": "comment", "jql": "labels = x", "body": "bye"})
+    assert call(base, "/rest/api/2/issue/OPS-4")[1]["fields"]["comment"]["comments"][0]["body"] == "bye"
+    over = call(base, "/sim/tickets")[1]
+    assert over["total"] == 4 and over["by_status"] == {"Resolved": 3, "Closed": 1}
+    assert call(base, "/sim/tickets", {"action": "reset"})[1] == {"reset": True}
+    assert call(base, "/sim/tickets")[1]["total"] == 0
+    assert new(base)[1]["key"] == "OPS-1"  # numbering starts again
+
+
+def test_sim_tickets_rejects_bad_requests(server):
+    base, *_ = server
+    assert call(base, "/sim/tickets", {"action": "nope"})[0] == 400
+    new(base)
+    assert call(base, "/sim/tickets", {"action": "transition", "jql": "project = OPS", "to": "Done"})[0] == 400
+    assert call(base, "/sim/tickets", {"action": "create"})[0] == 400  # no summary
+
+
+def test_sim_tickets_are_not_counted_as_client_requests(server):
+    base, *_ = server
+    call(base, "/sim/tickets", {"action": "create", "summary": "x"})
+    assert call(base, "/sim/stats")[1]["requests"] == 0
+
+
+def test_workflow_route_finds_the_shortest_path():
+    assert jira.route("Open", "Closed") == [("31", ["resolution"]), ("41", [])]
+    assert jira.route("Closed", "Resolved") == [("51", []), ("31", ["resolution"])]
+    assert jira.route("Open", "Open") == []
+    assert jira.duration_seconds("1w 2d") == 144000 + 57600 and jira.duration_seconds("1x") == 0

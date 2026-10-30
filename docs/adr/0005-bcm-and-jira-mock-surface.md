@@ -21,6 +21,16 @@ undecided, and says each must be resolved before the component is built. The app
   `project/search`. Authorization headers are accepted but never validated. Modes `cloud` and `dc` are not built.
 - Both publish on `127.0.0.1` only (8081, 8080), run unprivileged and stay in the P2 class.
 
+## Update (#107): the ticket lifecycle
+The client's own Jira guide lists what it does with tickets: search, open, change status (with fields), internal notes
+(add, edit, delete), edit priority, labels and description, watch, log work, pick a person. jira-mock now serves each
+call (issue PUT, comment GET/PUT/DELETE, watchers, worklog, assignee, user search) and `fields.watches`. Scenarios drive
+tickets through `POST /sim/tickets` (create, transition by JQL walking the workflow, comment, reset; `GET` counts per
+status), which is not client traffic. A `jira` scenario step with `tickets:` calls it; `failure:` still switches Jira off
+and on. Expectations `jira.issue_status` and `jira.issue_count` query the real search. A ticket-bot daemon that files
+tickets by itself stays unbuilt: scenario steps do it deterministically next to the Slurm drain. Not simulated: Teams and
+Assets fields, attachments, links, transition screens with extra fields.
+
 ## Revisit when
 The app's real BCM or Jira calls are known: replace the call list or surface, and record real responses as
 fixtures (architecture section 13, contract tests).

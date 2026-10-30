@@ -183,3 +183,40 @@ def test_ssh_steps_are_skipped_without_docker_and_validated():
     assert scenario.validate(sc({"node_sshd": "down", "nodes": ["nope"]}), SIM)
     for bad in ({"state": "slow"}, {"max_sessions": 0}, {"max_sessions": True}, {"bogus": 1}, {}):
         assert scenario.validate(sc(bad), SIM), bad
+
+
+def test_jira_ticket_steps_post_to_the_ticket_endpoint_and_failure_steps_keep_theirs():
+    sent = []
+    poster = lambda url, body: sent.append((url, body))
+    do = {"tickets": {"action": "create", "summary": "x"}}
+    assert scenario.execute(scenario.Step(0, "jira", do), poster=poster).status == "ok"
+    assert scenario.execute(scenario.Step(0, "jira", {"failure": {"mode": "503"}}), poster=poster).status == "ok"
+    assert sent == [("http://127.0.0.1:8080/sim/tickets", {"action": "create", "summary": "x"}),
+                    ("http://127.0.0.1:8080/sim/failure", {"mode": "503"})]
+
+
+def test_validate_checks_ticket_steps():
+    sim = yaml.safe_load(Path("sim.yaml").read_text())
+    sc = {"steps": [{"at": "0s", "target": "jira", "do": {"tickets": {"action": "create"}}},
+                    {"at": "0s", "target": "jira", "do": {"tickets": {"action": "transition", "jql": "x"}}},
+                    {"at": "0s", "target": "jira", "do": {"tickets": {"action": "fly"}}},
+                    {"at": "0s", "target": "jira-tickets", "do": {}},
+                    {"at": "0s", "target": "jira", "do": {"tickets": {"action": "reset"}}}]}
+    problems = scenario.validate(sc, sim)
+    assert any("create needs summary" in p for p in problems) and any("transition needs to" in p for p in problems)
+    assert any("action: one of" in p for p in problems) and any("unknown target 'jira-tickets'" in p for p in problems)
+    assert not any(p.startswith("step 5") for p in problems)
+
+
+def test_jira_expectations_check_labels_status_and_count(monkeypatch):
+    issues = [{"fields": {"status": {"name": "Resolved"}}}, {"fields": {"status": {"name": "Resolved"}}}]
+    monkeypatch.setattr(scenario, "jira_search", lambda jql: issues)
+    _, holds, _ = scenario.expectation({"jira.issue_status": {"jql": "x", "status": "Resolved", "count": 2, "within": "5s"}})
+    assert holds()
+    _, holds, _ = scenario.expectation({"jira.issue_status": {"jql": "x", "status": "Closed", "within": "5s"}})
+    assert not holds()
+    _, holds, _ = scenario.expectation({"jira.issue_count": {"jql": "x", "count": 2}})
+    assert holds()
+    monkeypatch.setattr(scenario, "jira_search", lambda jql: [])
+    _, holds, _ = scenario.expectation({"jira.issue_status": {"jql": "x", "status": "Resolved"}})
+    assert not holds()  # nothing matched is not "all resolved"

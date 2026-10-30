@@ -1,0 +1,10 @@
+name: ticket-wave
+description: A dozen tickets at once, in every status and priority, across the nodes and the cluster, so lists, filters and counts have something to show
+steps:
+  - {at: 0s,  target: jira, do: {tickets: {action: create, project: OPS, count: 4, summary: "Wave {n}: job failed on cn002", labels: [workbench, cn002, wave], priority: Medium}}}
+  - {at: 0s,  target: jira, do: {tickets: {action: create, project: OPS, count: 3, summary: "Wave {n}: GPU xid on gpu001", labels: [workbench, gpu001, wave, gpu], priority: High, status: In Progress}}}
+  - {at: 0s,  target: jira, do: {tickets: {action: create, project: OPS, count: 3, summary: "Wave {n}: fan alarm on cn004", labels: [workbench, cn004, wave], priority: Low, status: Resolved, resolution: Done}}}
+  - {at: 0s,  target: jira, do: {tickets: {action: create, project: OPS, count: 2, summary: "Wave {n}: quota request", labels: [workbench, wave, request], priority: Low, status: Closed}}}
+  - {at: 30s, target: jira, do: {tickets: {action: transition, jql: 'labels = cn002 AND labels = wave AND text ~ "Wave 1:"', to: In Progress}}}
+expect:
+  - jira.issue_count: {jql: 'labels = wave', count: 12, within: 10s}

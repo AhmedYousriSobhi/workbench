@@ -22,6 +22,10 @@ ticket-bot) are reported as **skipped**, not failed. From the web page ([chapter
 | `gpu-xid-storm` | GPU errors on both GPU nodes, thermal rise, Slurm drain; the app should open tickets |
 | `jira-429` | Jira rate-limits the next 5 calls (429 with Retry-After); the app must back off |
 | `jira-outage` | Jira answers 503 to the next 20 calls, then recovers |
+| `jira-flap` | Jira is refused, rate limited and unavailable in turn, each time healthy again, with tickets before and after |
+| `ticket-lifecycle` | one ticket: Open, In Progress, a note, Resolved, Closed |
+| `drain-ticket` | Slurm drains `cn003`; a ticket naming the cluster and the node is filed, worked, and resolved when the node resumes |
+| `ticket-wave` | twelve tickets at once in every status and priority (see the [tickets guide](../guides/jira-tickets.md)) |
 | `ssh-host-key-changed` | the login node presents a different host key for 60 s; a client that pinned the old one must refuse it |
 | `login-node-down` | the login node refuses connections for 30 s, then returns with the same host key |
 | `login-node-hung` | the login node freezes (connections time out, nothing refuses) for 30 s |
