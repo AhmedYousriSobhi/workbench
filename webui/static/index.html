@@ -549,6 +549,7 @@ $('exp-go').onclick = async () => {
   $('exp-msg').textContent = 'Preparing…';
   try {
     const r = await fetch('/api/export/profile' + ($('exp-bmc').checked ? '?bmc=1' : ''));
+    if (r.status === 404) { $('exp-msg').textContent = '✗ This page is newer than its backend. Restart it: ./scripts/benchctl stop && ./scripts/benchctl start'; return; }
     if (!r.ok) { $('exp-msg').textContent = '✗ ' + (await r.json()).detail; return; }
     const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = 'bench-profile.json';
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
