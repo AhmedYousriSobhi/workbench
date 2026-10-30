@@ -214,6 +214,25 @@
   .tree .br::after { content:''; position:absolute; left:0; top:0; bottom:0; border-left:2px solid var(--line); } .tree .br:last-child::after { bottom:auto; height:28px; }
   .tree .br::before { content:''; position:absolute; left:0; top:28px; width:26px; border-top:2px solid var(--line); }
   .legend { flex-direction:row; flex-wrap:wrap; gap:var(--sp2) var(--sp5); } #flow rect.pk { fill:var(--warn); }
+  /* one-screen layout (#127): no right column; traffic and tree side by side */
+  .cols { display:block; max-width:1560px; margin:0 auto; padding:var(--sp4) var(--sp5) var(--sp4); }
+  .attnbar { display:flex; align-items:center; gap:var(--sp4); margin:0 0 var(--sp4); padding:var(--sp2) var(--sp4); border:1px solid var(--line); border-radius:12px; min-height:48px; } .attnbar h2 { margin:0; white-space:nowrap; }
+  .attnbar ul.attn { display:flex; flex-wrap:wrap; gap:var(--sp1) var(--sp5); } .attnbar ul.attn li { padding:2px 0; border:0; }
+  .nodeswrap { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:var(--sp4); align-items:start; } .trafficpanel { order:1; margin:0; padding:var(--sp4) var(--sp5); position:static; }
+  .nodesmain { order:2; background:var(--panel); border-radius:14px; padding:var(--sp4) var(--sp5); max-height:calc(100vh - 210px); overflow-y:auto; min-width:0; }
+  .nodesmain .tree .br { padding-top:var(--sp2); padding-bottom:var(--sp2); }
+  .runbox { margin-top:var(--sp4); padding-top:var(--sp4); border-top:1px solid var(--line); }
+  @media (max-width:1100px) { .nodeswrap { grid-template-columns:minmax(0,1fr); } .nodesmain { order:2; max-height:none; } .attnbar { flex-direction:column; align-items:flex-start; } }
+  @media (max-width:860px) { .cols { padding:var(--sp3) var(--sp4) var(--sp5); } }
+  .subbar { display:flex; align-items:center; gap:var(--sp5); margin:0 0 var(--sp3); } .subbar .tabs { margin:0; border-bottom:0; flex:none; } .subbar .attnbar { flex:1; margin:0; min-width:0; }
+  .attnbar { padding:var(--sp1) var(--sp4); min-height:44px; } .attnbar h2 { font-size:13px; }
+  .nodeswrap { grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); gap:var(--sp3); } .trafficpanel { padding:var(--sp3) var(--sp4); }
+  .trafficpanel .legend { font-size:12px; margin-top:var(--sp2); gap:2px var(--sp4); } .trafficpanel .legend span:nth-child(3) { flex-basis:100%; } #flowstate { font-size:12px; margin-top:var(--sp1); }
+  #flow { margin:var(--sp2) 0; } .cells { grid-template-columns:repeat(auto-fill,minmax(128px,1fr)); } .cells.small { grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); }
+  .nodesmain { max-height:calc(100vh - 150px); padding:var(--sp3) var(--sp4); } .tree .tl { margin-bottom:0; }
+  @media (max-width:1100px) { .subbar { flex-direction:column; align-items:stretch; gap:var(--sp2); } }
+  #flow text { font-size:17px; } #flow text.sub { font-size:14px; } #flow .ftitle { font-size:14px; } #flow .ndt { font-size:12.5px; } #flow .ndt.cl { font-size:15.5px; }
+  .nodeswrap.solo { grid-template-columns:minmax(0,760px); }
 </style>
 </head>
 <body>
@@ -233,6 +252,7 @@
     <span class="pillchip" id="c-nodes">Nodes …</span>
     <button class="pillchip" id="c-run" hidden></button>
     <span id="conn" role="status"><i></i><span>connecting…</span></span>
+    <button class="pillchip" id="scnbtn" aria-haspopup="dialog">▶ Scenarios</button>
     <button class="pillchip" id="planbtn" aria-haspopup="dialog">⚙ Plan</button>
     <a class="pillchip" id="helplink" href="/help/" aria-label="Help: the manual, guides and command reference">? Help</a>
     <button class="pillchip" id="theme" aria-label="Colour theme: automatic. Press to change.">◐ Auto</button>
@@ -240,13 +260,16 @@
 </header>
 <div class="cols">
 <main id="main" tabindex="-1" aria-label="Cluster components">
+  <div class="subbar">
   <div class="tabs" role="tablist" aria-label="Dashboard sections">
     <button role="tab" id="tb-nodes" aria-controls="tab-nodes" aria-selected="true">Nodes</button>
     <button role="tab" id="tb-conn" aria-controls="tab-conn" aria-selected="false" tabindex="-1">Connections</button>
   </div>
+  <section class="attnbar" aria-label="Needs attention"><h2 class="rh">Needs attention</h2><ul class="attn" id="attn"><li class="skel">Checking…</li></ul></section>
+  </div>
   <div id="tab-nodes" role="tabpanel" aria-labelledby="tb-nodes">
   <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/benchctl start</code>.</div>
-    <div class="nodeswrap">
+    <div class="nodeswrap" id="nodeswrap">
   <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 id="traffic-h" style="margin:0">Traffic</h2>
     <button class="btn small" id="flowpause" aria-pressed="false">Pause animation</button></div>
     <svg id="flow" viewBox="0 0 420 270" role="img" aria-label="Traffic from clients and from injected faults to the mock services and the nodes of the cluster"></svg>
@@ -254,7 +277,7 @@
       <span><b style="color:var(--warn)" aria-hidden="true">◆</b> diamond: a fault from a scenario or a button, travelling to the node it hits</span>
       <span>Node tiles: ✓ healthy · ▲ warning · ✗ fault · ⏻ off · ? unknown</span></p>
     <p id="flowstate" class="dim small" role="status" style="margin-bottom:0"></p></section>
-  <div class="nodesmain">
+  <div class="nodesmain" id="nodesmain">
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <ul class="tree" id="tree" aria-label="Cluster entities"><li class="troot"><span class="tl">Cluster</span>
     <ul>
@@ -273,6 +296,19 @@
   <dialog id="nodedlg" aria-labelledby="nodetitle"><h2 id="nodetitle"></h2><h3 class="rh" style="margin:0 0 4px;font-size:14px">Connect</h3><dl class="kv" id="nodeconn"></dl><h3 class="rh" style="margin:12px 0 4px;font-size:14px">Fault actions</h3><div class="actions" id="nodeacts"></div><p id="nodeactmsg" role="status" class="small dim"></p><h3 class="rh" style="margin:12px 0 4px;font-size:14px">Status</h3><pre id="nodetext"></pre>
     <p class="dim small">Same text as <code>benchctl describe node NAME</code>, without the Docker and Slurm lines (this page has no Docker access by design).</p>
     <form method="dialog"><button class="btn">Close</button></form></dialog>
+  <dialog id="scndlg" class="sheet" aria-labelledby="scn-h">
+    <div class="sheet-h"><div><h2 id="scn-h">Scenarios</h2><p class="dim small">Timed incidents against the running stack.</p></div>
+      <button class="btn small" id="scn-close" aria-label="Close the scenarios">✕ Close</button></div>
+    <div class="sheet-b">
+    <p class="dim small" style="margin-top:0">Slurm steps need <code>./scripts/benchctl scenario run NAME</code>.</p>
+    <div class="scnbar"><input type="search" id="scnq" placeholder="Filter scenarios" aria-label="Filter scenarios"><select id="speed" aria-label="Playback speed for every scenario"><option value="1">1× real time</option><option value="5">5×</option><option value="20">20×</option></select></div>
+    <ul class="scns" id="list"><li class="skel">Loading…</li></ul>
+  <div class="runbox" id="runpanel" hidden aria-live="polite"><h2 class="rh" id="runtitle">Run</h2>
+    <div class="row"><div id="runresult"></div><div id="runctl"></div></div>
+    <div class="progress" aria-hidden="true"><div id="bar" style="width:0"></div></div>
+    <div id="runnote"></div><ul class="steps" id="timeline"></ul><div id="expects"></div></div>
+    </div>
+  </dialog>
   <dialog id="govdlg" class="sheet" aria-labelledby="gov-h">
     <div class="sheet-h"><div><h2 id="gov-h">Governor</h2><p class="dim small">Protects the host's memory. Local only, 127.0.0.1.</p></div>
       <button class="btn small" id="gov-close" aria-label="Close the governor panel">✕ Close</button></div>
@@ -286,6 +322,10 @@
     <div class="big" id="psi">–</div><div class="sub small dim">PSI, 10 s</div>
     <svg class="spark" id="sp-psi" viewBox="0 0 120 40" preserveAspectRatio="none" role="img" aria-label="Memory pressure over the last two minutes"><polygon points=""/><polyline points=""/></svg>
     <div class="axis"><span>0 %</span><span id="psi-hi"></span></div></div></div>
+    <details class="quiet" style="margin-top:var(--sp4)"><summary><h2 class="rh" style="display:inline">Governor activity <span id="logcount" class="dim"></span></h2></summary>
+    <label class="chk" style="margin-bottom:8px"><input type="checkbox" id="onlyactions" checked> Hide container inventory lines</label>
+    <pre id="audit" tabindex="0" aria-label="Governor log, newest first">–</pre>
+    </details>
     </div>
   </dialog>
   <dialog id="plandlg" class="sheet" aria-labelledby="plan-h">
@@ -308,21 +348,6 @@
     <div class="sheet-f"><p id="pl-apply-msg" role="status" class="small"></p><button class="btn small" id="plan-cancel">Cancel</button><button class="btn" id="pl-apply" hidden>Apply to the running workbench</button></div>
   </dialog>
 </main>
-<aside class="rail right" aria-label="Operate">
-  <div class="panel"><h2 class="rh">Needs attention</h2><ul class="attn" id="attn"><li class="skel">Checking…</li></ul></div>
-  <div class="panel"><h2 class="rh">Scenarios</h2>
-    <p class="dim small" style="margin-top:0">Timed incidents against the running stack. Slurm steps need <code>./scripts/benchctl scenario run NAME</code>.</p>
-    <div class="scnbar"><input type="search" id="scnq" placeholder="Filter scenarios" aria-label="Filter scenarios"><select id="speed" aria-label="Playback speed for every scenario"><option value="1">1× real time</option><option value="5">5×</option><option value="20">20×</option></select></div>
-    <ul class="scns" id="list"><li class="skel">Loading…</li></ul></div>
-  <div class="panel" id="runpanel" hidden aria-live="polite"><h2 class="rh" id="runtitle">Run</h2>
-    <div class="row"><div id="runresult"></div><div id="runctl"></div></div>
-    <div class="progress" aria-hidden="true"><div id="bar" style="width:0"></div></div>
-    <div id="runnote"></div><ul class="steps" id="timeline"></ul><div id="expects"></div></div>
-  <details class="panel quiet"><summary><h2 class="rh" style="display:inline">Governor activity <span id="logcount" class="dim"></span></h2></summary>
-    <label class="chk" style="margin-bottom:8px"><input type="checkbox" id="onlyactions" checked> Hide container inventory lines</label>
-    <pre id="audit" tabindex="0" aria-label="Governor log, newest first">–</pre>
-  </details>
-</aside>
 </div>
 <script>
 const $ = id => document.getElementById(id);
@@ -418,7 +443,8 @@ function renderCluster(c) {
   if ($('flow').firstChild) paintTiles();
   const stackUp = Object.values(c.services).some(Boolean);
   $('stackdown').hidden = stackUp;
-  for (const id of ['tree']) $(id).hidden = !stackUp;  // one message when down, not five
+  $('nodeswrap').classList.toggle('solo', !stackUp);
+  for (const id of ['nodesmain']) $(id).hidden = !stackUp;  // one message when down, not five
   $('services').innerHTML = Object.entries(c.services).map(([k, up]) =>
     `<span class="cell svc ${up ? 'ok' : 'fault'}"><span class="nm">${esc(k)}</span><span class="st"><b aria-hidden="true">${up ? '✓' : '✗'}</b> ${up ? 'answering' : 'not answering'}</span></span>`).join('');
   for (const kind of ['compute', 'gpu']) {
@@ -470,6 +496,8 @@ function openPlan() {
 }
 $('c-level').onclick = $('c-mem').onclick = () => $('govdlg').showModal(); $('gov-close').onclick = () => $('govdlg').close();
 $('govdlg').addEventListener('click', e => { if (e.target === $('govdlg')) $('govdlg').close(); });
+$('scnbtn').onclick = () => $('scndlg').showModal(); $('scn-close').onclick = () => $('scndlg').close();
+$('scndlg').addEventListener('click', e => { if (e.target === $('scndlg')) $('scndlg').close(); });
 $('planbtn').onclick = openPlan; $('plan-close').onclick = $('plan-cancel').onclick = () => $('plandlg').close();
 $('plandlg').addEventListener('click', e => { if (e.target === $('plandlg')) $('plandlg').close(); });  // a click on the dim backdrop closes it
 let connCache = null;
@@ -653,7 +681,7 @@ async function runChip() {
   try {
     const s = await (await fetch('/api/scenarios/run')).json(), c = $('c-run');
     c.hidden = !s.running;
-    if (s.running) { const done = s.steps.filter(x => x.status !== 'pending').length; setChip('c-run', 'warn', '▶', `${s.name} running ${done}/${s.steps.length}`); c.onclick = () => $('runpanel').scrollIntoView({ behavior: reduced.matches ? 'auto' : 'smooth', block: 'start' }); }
+    if (s.running) { const done = s.steps.filter(x => x.status !== 'pending').length; setChip('c-run', 'warn', '▶', `${s.name} running ${done}/${s.steps.length}`); c.onclick = () => $('scndlg').showModal(); }
   } catch (e) { /* offline: the connection chip already says so */ }
   chipTimer = setTimeout(runChip, document.hidden ? 15000 : 3000);
 }

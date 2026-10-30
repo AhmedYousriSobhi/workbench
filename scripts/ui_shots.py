@@ -64,7 +64,7 @@ def capture(out: Path) -> dict:
                     if not page.evaluate("document.activeElement.className === 'skip'"):
                         result["a11y"].append("skip link is not the first tab stop")
                     # landmarks and heading, theme toggle
-                    if page.locator("main#main").count() != 1 or page.locator("header.top h1").count() != 1 or page.locator("aside").count() != 1:
+                    if page.locator("main#main").count() != 1 or page.locator("header.top h1").count() != 1 or page.locator("aside").count() != 0:
                         result["a11y"].append("missing main landmark or page heading")
                     page.click("#theme")
                     if page.evaluate("document.documentElement.dataset.theme") != "light":
@@ -92,8 +92,21 @@ def capture(out: Path) -> dict:
                     tpath = out / f"traffic-{vp}-{scheme}.png"
                     page.locator("#trafficpanel").screenshot(path=str(tpath))
                     result["shots"].append(str(tpath))
-                    if vp == "desktop" and page.evaluate("getComputedStyle(document.querySelector('.rail.right')).position") != "sticky":
-                        result["a11y"].append("right rail must stay in view (sticky) on desktop")
+                    if vp == "desktop":  # one screen: with six nodes drawn, traffic and tree both fit without page scrolling
+                        page.evaluate("""lastCluster = JSON.stringify({services: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'gpu-exporter': true}, actions: [],
+                            nodes: ['cn001', 'cn002', 'cn003', 'cn004'].map(n => ({name: n, kind: 'compute', state: 'ok', label: 'Healthy', temp: 45, power: 'On', gpus: 0}))
+                              .concat(['gpu001', 'gpu002'].map(n => ({name: n, kind: 'gpu', state: 'ok', label: 'Healthy', temp: 44, power: 'On', gpus: 8})))}); renderCluster(JSON.parse(lastCluster));""")
+                        page.wait_for_timeout(300)
+                        if page.evaluate("document.documentElement.scrollHeight > window.innerHeight + 2"):
+                            result["a11y"].append("dashboard needs page scrolling at desktop size")
+                    page.click("#scnbtn")  # scenarios sheet: list, filter, play buttons
+                    page.wait_for_selector("#list .btn")
+                    spath = out / f"scenarios-{vp}-{scheme}.png"
+                    page.screenshot(path=str(spath))
+                    result["shots"].append(str(spath))
+                    page.click("#scn-close")
+                    if page.locator("#scndlg[open]").count():
+                        result["a11y"].append("scenarios sheet did not close")
                     page.click("#planbtn")  # planner sheet: opens, estimates, reacts to a stepper press, shows the command
                     page.wait_for_function("document.querySelector('#pl-msg').textContent.length > 5")
                     page.click("[data-step=pl-cpu][data-d='-1']")
