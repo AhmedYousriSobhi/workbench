@@ -65,6 +65,8 @@ For the real window, run the client in its dev mode with a throwaway config dire
 create a synthetic profile through its own API, then read screenshots and page text over that port. Use synthetic
 data only, stop every process you start, and never commit screenshots that show real data.
 
+Setting up each part of the client one at a time (SSH, Slurm, Grafana, storage, Jira, BCM, BMC): [client-setup-by-component.md](client-setup-by-component.md).
+
 SSH connection handling (hung, down, changed host key, session limit), step by step with screenshots: [ssh-connection-testing.md](ssh-connection-testing.md).
 
 ## Write a scenario and watch the client
