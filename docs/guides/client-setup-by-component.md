@@ -1,7 +1,7 @@
 # Setting up the monitoring client, one component at a time
 
 [client-testing.md](client-testing.md) lists every endpoint; the [manual](../manual/README.md) shows the tool from
-scratch. This page is for the other case: the cluster is running and you want to connect **one** part of your client
+scratch. Quickest alternative: [import everything from a file](export-profile.md) and set only the key and token by hand. This page is for the other case: the cluster is running and you want to connect **one** part of your client
 (SSH, Slurm, Grafana, storage, Jira, BCM, BMC) without reading the rest. Each section says what to start, where to find
 each value, what to type, what you should see, and the usual failure.
 

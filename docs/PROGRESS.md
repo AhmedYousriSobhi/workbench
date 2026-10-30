@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m simctl.progress`; do not edit. -->
 Last updated 2026-10-29. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**76% built** (35 done, 15 in review, 11 partial, 5 to do, 66 items).
+**77% built** (35 done, 18 in review, 11 partial, 5 to do, 69 items).
 
 ## Roadmap
 
@@ -234,6 +234,9 @@ _What keeps every change safe and debuggable._
 | Rootless governor (no sudo) | 🔍 In review | `python -m governor --user-mode` pauses/stops containers through the Docker API, skips memory.high throttle and reclaim, keeps the ladder, admission, watchdog and metrics, listens under $XDG_RUNTIME_DIR. `opti start` runs it when no system service is up. Live-tested: freeze/thaw of a real container, no sudo called. ADR 0010. | `governor/executors.py`, `scripts/opti`, `simctl/checks.py` | #98 |
 | One controller command (benchctl) | 🔍 In review | `benchctl VERB [RESOURCE] [NAME]` like kubectl: get nodes|services|profiles|scenarios (-o json), exec NODE, logs NODE, start/stop/open (launcher), plus every older command; node-name tab completion; simctl and scripts/opti kept as aliases; docs and tests name only benchctl (ADR 0015). Typos get a Did-you-mean hint and are never run; errors go to stderr; the old names print one notice in a terminal; docs/guides/benchctl-verbs.md lists each verb's limits (issues 90, 98). | `simctl/cli.py`, `simctl/inventory.py`, `scripts/benchctl` | - |
 | Logo and README | 🔍 In review | A W of servers on a bench (teal nodes, a dashed amber governed node), as logo.svg, a small cut for 16 to 32 px, favicons and touch icon, all built from one script and checked by validate.sh; the web page header and tab icons use it. The README is now a short five-step guide: wake it up, poke it, build your own, point your app at it, put it back. Issue 89 (logo part; the name decision is still open). | `scripts/make_logo_assets.py`, `docs/assets/`, `docs/guides/brand-assets.md`, `README.md` | - |
+| Export workbench as client profile | 🔍 In review | `benchctl export profile [--bmc] [--user] [--name] [--format]` writes the running workbench as a profile file the client imports (SSH, Slurm, Grafana, Jira, storage, optional BMC targets; parts not built are left out; no secrets). The client's format ID is read locally (.git/export-format, env or flag), never written in the repo. Verified: the client's own parser accepts the output (1 cluster, 6 BMC targets). Issue 91. | `simctl/export.py`, `simctl/cli.py`, `docs/guides/export-profile.md` | - |
+| Describe a node (CLI and page) | 🔍 In review | `benchctl describe node NAME [-o json]` and a Details dialog on each node card show the same text from one gatherer: container (state, image, memory limit, class), Slurm state and jobs, GPUs busy/idle and XID, BMC power/temperature/fans, ssh hint. A source that is down is one note. The page omits Docker and Slurm lines (no Docker access by design). Issue 93. | `simctl/describe.py`, `simctl/cli.py`, `webui/app.py`, `webui/static/index.html` | - |
+| Choose the workbench (plan and apply) | 🔍 In review | `benchctl plan --cpu-nodes 2 --gpu-nodes 4 --with jira` prints the memory the selection needs against free memory (exit 1 and a hint when it does not fit); `up` with the same flags, or `apply -f FILE`, admits by that estimate and builds it. Parts: jira, bmc, bcm, accounting, scenarios, load; Kubernetes refused until built. The effective sim is written to compose/generated/sim.yaml so slurm.conf, the BMC farm, the GPU exporter, get, describe and export agree. The page has a Plan form (estimate only, W-3). Verified live: 2 cpu + 3 gpu nodes x 4 GPUs. ADR 0016. Issue 92. | `simctl/workbench.py`, `simctl/cli.py`, `simctl/stack.py`, `simctl/compose.py`, `webui/app.py` | - |
 | One-command launcher | 🔍 In review | `./scripts/benchctl start` runs the machine check, creates the venv if missing, notes whether the governor is installed, brings the cluster up and starts the web page in the background, then prints the login link; `stop`, `status`, `open`. Idempotent. Live-tested start, second start, stop. | `scripts/opti` | #95 |
 | Initial machine check | 🔍 In review | `./scripts/check-machine.sh` (system python3 only, runs before any build) checks OS, cores, RAM, disk, cgroup v2, Docker daemon and compose, free ports, optional tools, and which profiles fit; READY or NOT READY with a fix per problem. Also `benchctl check`. | `simctl/machine.py`, `scripts/check-machine.sh` | #87 |
 | benchctl doctor / status / diag | ✅ Done | Environment checks with fixes, governor state, a masked diagnostics tarball, and the container security check. | `simctl/checks.py`, `simctl/diag.py` | #26 |
@@ -244,7 +247,7 @@ _What keeps every change safe and debuggable._
 | Verification helpers | ✅ Done | verify.sh runs validate.sh plus real tests (--full adds the live stack lifecycle); tests/real/helpers.py starts a live governor and talks to its socket. | `scripts/verify.sh` | #48 |
 | Progress tracker | ✅ Done | This page, generated from docs/progress.yaml (issue 19). | `simctl/progress.py` | #42 |
 
-9/16 done
+9/19 done
 
 ## Next up
 

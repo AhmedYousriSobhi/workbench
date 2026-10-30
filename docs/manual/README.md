@@ -23,7 +23,7 @@ The same pages open inside the web page: click **? Help** in its header (http://
 
 Screenshots of the web page and of real terminal output are in chapters 3, 4 and 5 (`img/`).
 
-Short on time? [Getting started](../guides/getting-started.md) is the 10-minute version. Connecting a monitoring client one component at a time (Grafana, Jira, SSH...)? See [client setup by component](../guides/client-setup-by-component.md). Testing a client's SSH handling? Follow [SSH connection testing](../guides/ssh-connection-testing.md) (with screenshots).
+Short on time? [Getting started](../guides/getting-started.md) is the 10-minute version. Want 2 CPU and 4 GPU nodes with Jira, and to see the cost first? See [choose the workbench](../guides/choose-workbench.md). Importing the whole cluster into a monitoring client? See [export a profile](../guides/export-profile.md). Connecting one component at a time (Grafana, Jira, SSH...)? See [client setup by component](../guides/client-setup-by-component.md). Testing a client's SSH handling? Follow [SSH connection testing](../guides/ssh-connection-testing.md) (with screenshots).
 
 ## Conventions
 

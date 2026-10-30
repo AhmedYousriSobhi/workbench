@@ -8,11 +8,13 @@ for, and why. Every command runs from the repository root.
 | I want to... | Run | Why this one |
 |---|---|---|
 | start everything, including the web page | `./scripts/benchctl start` | checks the machine, starts the memory governor, the cluster and the web page |
+| choose nodes and parts, see the memory cost first | `./scripts/benchctl plan --cpu-nodes 2 --gpu-nodes 4 --with jira`, then the same with `up` | estimates, and builds only if it fits ([guide](../guides/choose-workbench.md)) |
 | start only the cluster (for example to test SSH) | `./scripts/benchctl up --profile min` | the cluster alone; no web page, no governor |
 | see what is running | `./scripts/benchctl get nodes` and `./scripts/benchctl status` | the nodes and their state; the governor level |
 | open the web page | `./scripts/benchctl open` | prints the login link |
 | stop everything | `./scripts/benchctl stop` | stops the web page, the cluster and the governor it started |
 | stop only the cluster | `./scripts/benchctl down` | touches only the `hpcsim` project |
+| see everything about one node | `./scripts/benchctl describe node gpu001` | container, Slurm state, jobs, which GPUs are busy, BMC readings ([chapter 4](04-nodes-and-shells.md)) |
 | open a shell on a node | `./scripts/benchctl exec cn001` (or `ssh` through the login node) | the login node is the way in, like a real cluster; the exact `ssh` line is in [chapter 4](04-nodes-and-shells.md) |
 | break something on purpose | `./scripts/benchctl scenario run NAME` | plays a scripted fault ([chapter 6](06-scenarios.md)) |
 | see what a scenario would do first | `./scripts/benchctl scenario run NAME --dry-run` | prints the steps, touches nothing |
@@ -21,6 +23,7 @@ for, and why. Every command runs from the repository root.
 | see why a start was refused | `./scripts/benchctl status` and `./scripts/benchctl preflight --profile min` | the governor level and whether the profile fits |
 | check my machine is ready | `./scripts/benchctl check` | OS, RAM, disk, Docker, ports |
 | give a client that only reads `~/.ssh` the login key | `./scripts/benchctl ssh-key install` (and `remove` after) | copies the key to `~/.ssh/workbench_ed25519`, mode 600 |
+| import the cluster into the client in one step | `./scripts/benchctl export profile` | writes a profile file; only the key and token are set by hand ([guide](../guides/export-profile.md)) |
 | report a problem | `./scripts/benchctl diag` | one masked tarball to attach |
 
 ## `start` or `up`?

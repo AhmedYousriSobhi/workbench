@@ -201,3 +201,22 @@ def test_help_wiki_needs_the_token_and_serves_pages_images_and_search(ui):
 
 def test_dashboard_links_to_the_help(ui):
     assert b'href="/help/"' in req(ui, "/")[1]
+
+
+def test_node_detail_endpoint_returns_the_describe_text(ui):
+    code, body = req(ui, "/api/nodes/gpu001")
+    data = json.loads(body)
+    assert code == 200 and data["info"]["name"] == "gpu001" and "Name:        gpu001" in data["text"]
+    assert req(ui, "/api/nodes/zzz")[0] == 404
+    assert req(ui, "/api/nodes/gpu001", auth=False)[0] == 401
+    assert b"showNode" in req(ui, "/")[1] and b'id="nodedlg"' in req(ui, "/")[1]
+
+
+def test_plan_endpoint_estimates_without_side_effects(ui):
+    code, body = req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=4&gpus_per_node=8&parts=jira")
+    data = json.loads(body)
+    assert code == 200 and "2 cpu, 4 gpu" in data["text"] and data["total_mb"] > 700
+    assert data["command"].startswith("benchctl up --cpu-nodes 2 --gpu-nodes 4") and "--without bmc" in data["command"]
+    assert req(ui, "/api/plan?cpu_nodes=999")[0] == 422 and req(ui, "/api/plan?cpu_nodes=x")[0] == 422
+    assert req(ui, "/api/plan", auth=False)[0] == 401
+    assert b'id="plan"' in req(ui, "/")[1] and b"loadPlan" in req(ui, "/")[1]

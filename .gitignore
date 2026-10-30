@@ -37,3 +37,4 @@ htmlcov/
 *.kdbx
 id_rsa*
 id_ed25519*
+bench-profile*.json
