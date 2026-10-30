@@ -1,6 +1,6 @@
-# 1. What opti-sim is
+# 1. What workbench is
 
-opti-sim simulates an HPC/AI cluster on one **16 GB Ubuntu workstation** so the application under test has a
+workbench simulates an HPC/AI cluster on one **16 GB Ubuntu workstation** so the application under test has a
 realistic cluster to talk to: Slurm, BMCs, BCM, Jira, Grafana, with users, jobs, faults and tickets. A **governor**
 runs outside everything and stops low-priority parts before memory runs out.
 

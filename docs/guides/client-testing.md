@@ -1,12 +1,12 @@
-# Testing a monitoring client against opti-sim
+# Testing a monitoring client against workbench
 
-opti-sim simulates a real cluster so that a general-purpose HPC and AI-infrastructure client, one that lets its user
+workbench simulates a real cluster so that a general-purpose HPC and AI-infrastructure client, one that lets its user
 define any cluster and handles every connection type and HPC feature, can be tested without real hardware. The client
-connects to opti-sim exactly as it would to a production site (SSH to a login node, Slurm commands, Grafana GPU
+connects to workbench exactly as it would to a production site (SSH to a login node, Slurm commands, Grafana GPU
 metrics, Jira search, Redfish BMCs); the user then writes scenarios (faults, outages, workloads) and watches how the
 client reacts. This page is the checklist for a fresh session: bring the stack up, point the client at it, run a
 scenario, and know what is real and what is not. The client's own repository is separate and is never named or copied
-here. Because the client is general, never fit opti-sim to one client's quirks: make the simulated service behave
+here. Because the client is general, never fit workbench to one client's quirks: make the simulated service behave
 like the real one.
 
 ## What a client needs, and where it is
@@ -40,7 +40,7 @@ If port 2222 refuses connections, the checkout is probably on a branch without t
 
 - **Execution target:** set a node such as `cn001` as the scheduler's execution target (the client runs `ssh <node> <command>` from the login node); no keys to set up, the login node already trusts the nodes.
 - **SSH:** host `127.0.0.1`, port `2222`, user `alice`. Many clients only read private keys under `~/.ssh`. Run
-  `./scripts/benchctl ssh-key install`: it copies the generated key to `~/.ssh/opti-sim_ed25519` (mode 600) and prints the
+  `./scripts/benchctl ssh-key install`: it copies the generated key to `~/.ssh/workbench_ed25519` (mode 600) and prints the
   path to give the client. Run `./scripts/benchctl ssh-key remove` when done. Alternatively load the key into a throwaway
   `ssh-agent` (`eval "$(ssh-agent -s)"; ssh-add compose/generated/secrets/ssh/id_ed25519`) and use agent authentication.
 - **Host key:** the first connection needs the client's trust-on-first-use confirmation. `up` keeps the same host key

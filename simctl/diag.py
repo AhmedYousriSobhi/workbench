@@ -52,7 +52,7 @@ def collect() -> dict[str, str]:
 
 
 def write_bundle(out: Path | None = None) -> Path:
-    out = out or Path(f"opti-sim-diag-{time.strftime('%Y%m%d-%H%M%S')}.tar.gz")
+    out = out or Path(f"workbench-diag-{time.strftime('%Y%m%d-%H%M%S')}.tar.gz")
     with tarfile.open(out, "w:gz") as tar:
         for name, text in collect().items():
             data = text.encode()

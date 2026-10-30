@@ -24,5 +24,5 @@ Words used across the manual and the web page.
 | **Hop** | `ssh cn001` from the login node to a node |
 | **Web page** | the dashboard on 127.0.0.1:8088; it talks only to the governor socket, never to Docker |
 | **Token** | the login secret for the web page, in `compose/generated/secrets/ui_token` (printed by `opti open`) |
-| **Client** | the desktop monitoring application you are testing against opti-sim |
+| **Client** | the desktop monitoring application you are testing against workbench |
 | **ADR** | architecture decision record in `docs/adr/`: why a design choice was made |

@@ -11,7 +11,7 @@ from cryptography.x509.oid import NameOID
 out = Path(sys.argv[1])
 out.mkdir(parents=True, exist_ok=True)
 key = ec.generate_private_key(ec.SECP256R1())
-name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "opti-sim bmc-farm")])
+name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "workbench bmc-farm")])
 now = datetime.datetime.now(datetime.UTC)
 cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
         .serial_number(x509.random_serial_number()).not_valid_before(now - datetime.timedelta(days=1))

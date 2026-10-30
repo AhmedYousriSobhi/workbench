@@ -1,6 +1,6 @@
 # Architecture
 
-The deep design of opti-sim. The [project README](../../README.md) has the one-page overview; [SPEC.md](../../SPEC.md)
+The deep design of workbench. The [project README](../../README.md) has the one-page overview; [SPEC.md](../../SPEC.md)
 is the normative requirement list and wins over these pages if they disagree. Section numbers are kept from the
 original single README, so references such as "section 6.3" still mean the same thing.
 

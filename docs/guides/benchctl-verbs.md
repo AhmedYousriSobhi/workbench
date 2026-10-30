@@ -29,7 +29,7 @@ its limits, so you do not find them by surprise, and what to use in a script.
 | `exec NODE [-u USER] [-- CMD]` | a shell, or one command, on a node | the node must be running; no terminal is allocated when a command is given; `-u` must be a simulated user (`alice`, `bob`) | command's own stdout; exit code is Docker's |
 | `logs NODE [-f] [--tail N]` | the container log | service or node names only (`slurmctld`, `login`, `cn001`); no time filter; `-f` runs until Ctrl-C | |
 | `scenario list` / `scenario run NAME [--speed N] [--dry-run]` | lists scenarios; plays one against the running stack | needs the stack up; `--dry-run` only validates and prints the timeline; Kubernetes and ticket-bot steps are skipped; `--speed` compresses waits, not step order | exit 1 when a step or expectation fails |
-| `ssh-key install\|remove` | copies the login key to `~/.ssh/opti-sim_ed25519` (mode 600) or deletes it | never overwrites a file that is not ours; `remove` deletes only our own key | |
+| `ssh-key install\|remove` | copies the login key to `~/.ssh/workbench_ed25519` (mode 600) or deletes it | never overwrites a file that is not ours; `remove` deletes only our own key | |
 | `status` | governor level, then whether the cluster and web page run | text for people; exits 1 when the governor is unreachable (it still prints the cluster lines) | use `get services -o json` for the cluster |
 | `check` | machine check before building (OS, RAM, disk, Docker, ports) | read-only; works before the venv exists via `./scripts/check-machine.sh` | exit 1 when not ready |
 | `doctor` | host prerequisites and container safety | read-only; exit 1 on any failure | exit code |

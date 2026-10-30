@@ -1,6 +1,6 @@
 <p align="center"><img src="docs/assets/logo.svg" alt="workbench logo: servers linked in a W on a bench" width="110"></p>
 
-# opti-sim
+# workbench
 
 **A pretend HPC cluster for a 16 GB laptop, with a bouncer that keeps it from eating all your RAM.**
 
@@ -65,7 +65,7 @@ Every command is explained, with its limits, in [the verbs guide](docs/guides/be
 
 ## How it works, in four lines
 
-Most of what an HPC app talks to is an API, not a real machine, so opti-sim fakes the APIs (one process plays many BMCs
+Most of what an HPC app talks to is an API, not a real machine, so workbench fakes the APIs (one process plays many BMCs
 and GPU exporters) and runs Slurm in small containers. A **governor** sits outside everything and pauses, then stops,
 low-priority containers before memory runs out. Every fault is a named scenario. Details: [architecture](docs/architecture/README.md).
 
