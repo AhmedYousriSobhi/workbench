@@ -44,7 +44,7 @@ opens a shell on a node; use [`docker exec`](04-nodes-and-shells.md).
 
 Press **Details** on a card to see everything known about that node (state of its BMC, GPUs busy and idle, how to `ssh` in): the same text as `benchctl describe node NAME`, minus the Docker and Slurm lines because this page has no Docker access.
 
-**Plan a workbench** (above the node cards) takes node counts and parts and shows the memory they need against what is free, with the `benchctl up ...` command to build it. It only estimates; see [choose the workbench](../guides/choose-workbench.md).
+**Plan a workbench** (above the node cards) takes node counts and parts and shows the memory they need against what is free, with the `benchctl up ...` command to build it. Editing only estimates; **Apply to the running workbench** rebuilds it through the governor (the page itself still has no Docker access); see [choose the workbench](../guides/choose-workbench.md).
 
 ![cn002 shown as Powered off with BCM DOWN; the top strip says Nodes 5/6 healthy](img/web-node-powered-off.png)
 

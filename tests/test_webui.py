@@ -231,3 +231,12 @@ def test_connections_endpoint_lists_every_entity_with_credential_paths_only(ui):
     assert req(ui, "/api/connections", auth=False)[0] == 401
     page = req(ui, "/")[1]
     assert b'role="tablist"' in page and b'id="tab-conn"' in page and b"paintConnections" in page
+
+
+def test_plan_apply_needs_csrf_validates_and_asks_the_governor(ui):
+    q = "/api/plan/apply?cpu_nodes=2&gpu_nodes=3&gpus_per_node=4&parts=jira"
+    assert req(ui, q, "POST")[0] == 403  # CSRF header missing
+    assert req(ui, "/api/plan/apply?cpu_nodes=999", "POST", headers={"X-Requested-With": "workbench"})[0] == 422
+    code, body = req(ui, q, "POST", headers={"X-Requested-With": "workbench"})
+    assert code == 200 and json.loads(body)["started"] is True
+    assert b"pl-apply" in req(ui, "/")[1]

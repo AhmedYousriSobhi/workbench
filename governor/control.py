@@ -9,11 +9,26 @@ from pathlib import Path
 
 log = logging.getLogger("governor.control")
 
-ALLOWED = {"status", "scale", "freeze", "thaw", "stop", "start", "set-profile", "admit"}
+ALLOWED = {"status", "scale", "freeze", "thaw", "stop", "start", "set-profile", "admit", "apply-plan"}
 MAX_REQUEST = 4096
 TARGETED = {"freeze", "thaw", "stop", "start"}  # require a known group name
 
 Handler = Callable[[str, dict], dict]
+
+
+PLAN_PARTS = {"jira", "bmc", "bcm", "scenarios", "accounting", "load"}  # mirrors benchctl.workbench.PARTS
+
+
+def plan_error(req: dict) -> str | None:
+    """Only small integers and known part names reach the command line; nothing free-form."""
+    for key, lo, hi in (("cpu_nodes", 0, 64), ("gpu_nodes", 0, 16), ("gpus_per_node", 1, 8)):
+        v = req.get(key)
+        if not (isinstance(v, int) and not isinstance(v, bool) and lo <= v <= hi):
+            return f"apply-plan needs {key}: int {lo}..{hi}"
+    parts = req.get("parts")
+    if not (isinstance(parts, list) and all(isinstance(p, str) and p in PLAN_PARTS for p in parts)):
+        return f"apply-plan parts must be a list of: {', '.join(sorted(PLAN_PARTS))}"
+    return None
 
 
 def dispatch(line: bytes, handle: Handler, groups: Callable[[], set[str]]) -> dict:
@@ -35,6 +50,8 @@ def dispatch(line: bytes, handle: Handler, groups: Callable[[], set[str]]) -> di
             return {"ok": False, "error": "scale needs group:str and n:int>=0"}
         if cmd == "set-profile" and not isinstance(req.get("profile"), str):
             return {"ok": False, "error": "set-profile needs profile:str"}
+        if cmd == "apply-plan" and (err := plan_error(req)):
+            return {"ok": False, "error": err}
         if cmd == "admit" and not (isinstance(req.get("budget_mb"), int) and req["budget_mb"] >= 0):
             return {"ok": False, "error": "admit needs budget_mb:int>=0"}
         return handle(cmd, req)

@@ -5,6 +5,7 @@ from collections.abc import Callable
 
 from . import metrics
 from .annotate import Annotator
+from .control import PLAN_PARTS
 from .executors import UserExecutor
 from .ladder import Ladder
 from .planner import Action, Group, plan, reversible_first, undo
@@ -206,4 +207,10 @@ class Governor:
                 return self._change(f"scale={req['n']}", ["scale", str(req["n"])])
             if cmd == "set-profile":
                 return self._change(f"set-profile={req['profile']}", ["up", "--profile", req["profile"]])
+            if cmd == "apply-plan":
+                args = ["up", "--cpu-nodes", str(req["cpu_nodes"]), "--gpu-nodes", str(req["gpu_nodes"]),
+                        "--gpus-per-node", str(req["gpus_per_node"])]
+                for part in sorted(PLAN_PARTS):
+                    args += ["--with" if part in req["parts"] else "--without", part]
+                return self._change(f"apply-plan={req['cpu_nodes']}cpu+{req['gpu_nodes']}gpu", args)
         return {"ok": False, "error": "unhandled"}
