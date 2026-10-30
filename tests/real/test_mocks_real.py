@@ -15,7 +15,7 @@ import pytest
 import yaml
 from helpers import bring_up, wait_for
 
-from simctl import stack
+from benchctl import stack
 
 ROOT = Path(__file__).resolve().parents[2]
 JIRA, BCM = "http://127.0.0.1:8080", "http://127.0.0.1:8081"
@@ -41,7 +41,7 @@ def ready(url: str) -> bool:
 
 def gateway() -> str:
     """The host's address on the compose network: where containers can reach a receiver on the host."""
-    out = subprocess.run(["docker", "network", "inspect", "hpcsim_default", "-f", "{{(index .IPAM.Config 0).Gateway}}"],
+    out = subprocess.run(["docker", "network", "inspect", "workbench_default", "-f", "{{(index .IPAM.Config 0).Gateway}}"],
                          capture_output=True, text=True, check=True)
     return out.stdout.strip()
 

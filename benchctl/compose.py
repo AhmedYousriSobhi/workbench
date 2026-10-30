@@ -10,18 +10,18 @@ OBSERVABILITY = "../observability.yml"  # static; hosts prometheus, grafana, gpu
 
 # group -> service -> (image, mem_mb, priority class). Images are built from images/ and components/.
 CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {
-    "core": {"slurmctld": ("hpcsim/slurm-ctl:dev", 200, 1), "slurmrestd": ("hpcsim/slurm-ctl:dev", 60, 1)},
+    "core": {"slurmctld": ("workbench/slurm-ctl:dev", 200, 1), "slurmrestd": ("workbench/slurm-ctl:dev", 60, 1)},
     # mariadb's 100m tmpfs data dir counts against its cgroup, so the limit covers tmpfs + server.
-    "accounting": {"mariadb": ("mariadb:11", 250, 2), "slurmdbd": ("hpcsim/slurm-ctl:dev", 80, 2),
-                   "accounting-init": ("hpcsim/slurm-ctl:dev", 30, 2)},
+    "accounting": {"mariadb": ("mariadb:11", 250, 2), "slurmdbd": ("workbench/slurm-ctl:dev", 80, 2),
+                   "accounting-init": ("workbench/slurm-ctl:dev", 30, 2)},
     "mocks": {
-        "bmc-farm": ("hpcsim/bmc-farm:dev", 100, 2),
-        "bcm-mock": ("hpcsim/bcm-mock:dev", 100, 2),
-        "jira-mock": ("hpcsim/jira-mock:dev", 100, 2),
+        "bmc-farm": ("workbench/bmc-farm:dev", 100, 2),
+        "bcm-mock": ("workbench/bcm-mock:dev", 100, 2),
+        "jira-mock": ("workbench/jira-mock:dev", 100, 2),
     },
-    "access": {"login": ("hpcsim/login:dev", 40, 2)},
-    "scenarios": {"scenario-engine": ("hpcsim/scenario-engine:dev", 60, 5)},
-    "load": {"user-sim": ("hpcsim/user-sim:dev", 60, 5), "ticket-bot": ("hpcsim/ticket-bot:dev", 40, 5)},
+    "access": {"login": ("workbench/login:dev", 40, 2)},
+    "scenarios": {"scenario-engine": ("workbench/scenario-engine:dev", 60, 5)},
+    "load": {"user-sim": ("workbench/user-sim:dev", 60, 5), "ticket-bot": ("workbench/ticket-bot:dev", 40, 5)},
 }
 SSH_PORT = 2222
 SLURMD_MB = 60
@@ -42,8 +42,8 @@ def load_profile(name: str, root: Path = Path("profiles")) -> dict:
 
 
 def _service(image: str, mem_mb: int, prio: int, build: str | None = None) -> dict:
-    svc: dict = {"image": image, "mem_limit": f"{mem_mb}m", "cgroup_parent": f"hpcsim-p{prio}.slice",
-                 "labels": {"hpcsim.class": f"P{prio}"}, "restart": "unless-stopped"}
+    svc: dict = {"image": image, "mem_limit": f"{mem_mb}m", "cgroup_parent": f"workbench-p{prio}.slice",
+                 "labels": {"workbench.class": f"P{prio}"}, "restart": "unless-stopped"}
     if build:
         svc["build"] = build
     return svc
@@ -60,32 +60,32 @@ def generate(sim: dict, profile: dict) -> dict:
             build = next((f"../../{d}/{n}" for n in (name, img) for d in ("components", "images") if (Path(d) / n).is_dir()), None)
             services[name] = _service(image, mem, prio, build)
     for name, kind in node_names(sim, profile.get("compute_nodes")):
-        svc = _service("hpcsim/node-base:dev", SLURMD_MB, SLURMD_PRIO, "../../images/node-base")
+        svc = _service("workbench/node-base:dev", SLURMD_MB, SLURMD_PRIO, "../../images/node-base")
         svc["hostname"] = name
-        svc["labels"]["hpcsim.node"] = kind
+        svc["labels"]["workbench.node"] = kind
         if kind == "gpu":
-            svc["environment"] = {"HPCSIM_GPUS": str(sim["gpu"]["gpus_per_node"])}
+            svc["environment"] = {"WORKBENCH_GPUS": str(sim["gpu"]["gpus_per_node"])}
         if "slurmctld" in services:
             svc["depends_on"] = ["slurmctld"]
         services[name] = svc
     slurm_mount = "./slurm:/etc/slurm:ro"
     for name, svc in services.items():
-        if name in ("slurmctld", "slurmrestd", "login") or svc["labels"].get("hpcsim.node"):
+        if name in ("slurmctld", "slurmrestd", "login") or svc["labels"].get("workbench.node"):
             svc["volumes"] = [slurm_mount]
-            if svc["labels"].get("hpcsim.node"):  # sshd on every compute node (ADR 0014)
-                svc["volumes"].append("./secrets/ssh:/run/hpcsim/ssh:ro")
-                svc.setdefault("environment", {})["HPCSIM_SSHD"] = "1"
+            if svc["labels"].get("workbench.node"):  # sshd on every compute node (ADR 0014)
+                svc["volumes"].append("./secrets/ssh:/run/workbench/ssh:ro")
+                svc.setdefault("environment", {})["WORKBENCH_SSHD"] = "1"
             svc["hostname"] = name
-            svc.setdefault("environment", {})["HPCSIM_USERS"] = users_env(sim)
+            svc.setdefault("environment", {})["WORKBENCH_USERS"] = users_env(sim)
     if "login" in services:  # SSH for clients such as a monitoring app: localhost only, keys from ./secrets/ssh
-        services["login"]["volumes"].append("./secrets/ssh:/run/hpcsim/ssh:ro")
+        services["login"]["volumes"].append("./secrets/ssh:/run/workbench/ssh:ro")
         services["login"].update({"ports": [f"127.0.0.1:{SSH_PORT}:22"],
                                   "depends_on": ["slurmctld"] if "slurmctld" in services else []})
     if "bmc-farm" in services:  # Redfish endpoints for every node in sim.yaml, localhost only
         # :8443 is TLS at the standard /redfish/v1, the node chosen by Host: clients reach it as bmc-<node>
         names = [n for n, _ in node_names(sim)]
         services["bmc-farm"].update({
-            "volumes": ["./sim.yaml:/sim.yaml:ro", "./secrets/bmc_credentials:/run/hpcsim/bmc_credentials:ro"],
+            "volumes": ["./sim.yaml:/sim.yaml:ro", "./secrets/bmc_credentials:/run/workbench/bmc_credentials:ro"],
             "ports": ["127.0.0.1:8000:8000", "127.0.0.1:8443:8443"],
             "networks": {"default": {"aliases": [f"bmc-{n}" for n in names]}}})
     if "bcm-mock" in services:  # CMDaemon JSON API on the same node inventory, localhost only
@@ -93,7 +93,7 @@ def generate(sim: dict, profile: dict) -> dict:
     if "jira-mock" in services:
         services["jira-mock"].update({"ports": ["127.0.0.1:8080:8080"]})
     _wire_slurm_services(services)
-    return {"name": "hpcsim", "include": [OBSERVABILITY], "services": services}
+    return {"name": "workbench", "include": [OBSERVABILITY], "services": services}
 
 
 def users_env(sim: dict) -> str:
@@ -124,9 +124,9 @@ def _wire_slurm_services(services: dict) -> None:
     })
     db = services["slurmdbd"]
     db["hostname"] = "slurmdbd"
-    db["volumes"] = ["./secrets/slurmdbd:/run/hpcsim/etc:ro"]
+    db["volumes"] = ["./secrets/slurmdbd:/run/workbench/etc:ro"]
     # slurmdbd insists its config is owned by SlurmUser and mode 0600, so install a copy at start.
-    install = ("cp /run/hpcsim/etc/* /etc/slurm/ && chown slurm:slurm /etc/slurm/slurmdbd.conf"
+    install = ("cp /run/workbench/etc/* /etc/slurm/ && chown slurm:slurm /etc/slurm/slurmdbd.conf"
                " && chmod 600 /etc/slurm/slurmdbd.conf && exec slurmdbd -D")
     db["command"] = ["sh", "-c", install]
     db["depends_on"] = {"mariadb": {"condition": "service_healthy"}}

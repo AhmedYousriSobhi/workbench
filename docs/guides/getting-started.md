@@ -16,8 +16,7 @@ To pick your own mix (for example 2 CPU and 4 GPU nodes with Jira) and see what 
 
 Every command has the same shape, like `kubectl`: `benchctl VERB [RESOURCE] [NAME]`, for example `benchctl get nodes`,
 `benchctl exec gpu001 -- nvidia-smi`, `benchctl scenario run node-down`. `benchctl --help` lists the verbs;
-`benchctl start` offers Tab completion once in a terminal (or run `./scripts/benchctl completion install`, then open a new terminal; `completion remove` undoes it). The old names `simctl` and
-`./scripts/opti` still work as aliases. A mistyped verb gets a `Did you mean` hint and is never run; the limits of every verb are in [the verbs guide](benchctl-verbs.md).
+`benchctl start` offers Tab completion once in a terminal (or run `./scripts/benchctl completion install`, then open a new terminal; `completion remove` undoes it). A mistyped verb gets a `Did you mean` hint and is never run; the limits of every verb are in [the verbs guide](benchctl-verbs.md).
 
 The numbered sections below are the same steps one at a time, for when you want to see or change each.
 
@@ -40,7 +39,7 @@ Ubuntu has `python3`, not `python`, and `benchctl` needs a few packages. Use a v
 python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'
 ```
 
-The venv is per shell: activate it again in every new terminal (`. .venv/bin/activate`), or skip activation with `./scripts/benchctl <command>`, which uses `.venv` directly (`./scripts/benchctl status`). With the venv active you can type just `benchctl ...` instead of `./scripts/benchctl ...`; every command below works both ways. The old names `simctl` and `./scripts/opti` still work as aliases. The
+The venv is per shell: activate it again in every new terminal (`. .venv/bin/activate`), or skip activation with `./scripts/benchctl <command>`, which uses `.venv` directly (`./scripts/benchctl status`). With the venv active you can type just `benchctl ...` instead of `./scripts/benchctl ...`; every command below works both ways. The
 governor service needs no packages; it runs on the system `python3`.
 
 ## 1. Check the setup (doctor)
@@ -65,7 +64,7 @@ throttle with `memory.high`, reclaim, or guarantee its own memory is never swapp
 For full protection, an optional root service that starts at boot and uses cgroup files:
 
 ```bash
-sudo ./scripts/install-governor.sh        # optional; opti start then uses it instead of its own
+sudo ./scripts/install-governor.sh        # optional; benchctl start then uses it instead of its own
 sudo ./scripts/install-governor.sh --uninstall
 ```
 
@@ -74,7 +73,7 @@ sudo ./scripts/install-governor.sh --uninstall
 ```bash
 ./scripts/benchctl up --profile min     # pre-flight, governor admission, ordered start (~1 min)
 ./scripts/benchctl scale 2              # compute nodes (slurm.conf regenerated, slurmd started/stopped)
-./scripts/benchctl down                 # stops only the hpcsim project; your other containers are untouched
+./scripts/benchctl down                 # stops only the workbench project; your other containers are untouched
 ```
 
 Profiles are in `profiles/` (`min`, `std`, `full`); `up` refuses a profile that does not fit and names one
@@ -85,12 +84,12 @@ that does. Components not built yet are skipped with a note.
 | What | Where |
 |---|---|
 | Grafana dashboards and governor annotations | http://127.0.0.1:3000 (user `admin`, password `admin`). For a monitoring client: datasource uid `prometheus`, GPU host label `Hostname`, and a read-only service-account token in `compose/generated/secrets/grafana_viewer_token` |
-| Prometheus | http://127.0.0.1:9090 (the `governor` job scrapes the governor's `/metrics`: `hpcsim_governor_level`, `hpcsim_host_mem_available_bytes`, ...) |
+| Prometheus | http://127.0.0.1:9090 (the `governor` job scrapes the governor's `/metrics`: `workbench_governor_level`, `workbench_host_mem_available_bytes`, ...) |
 | Fake BMCs (Redfish) | `curl http://127.0.0.1:8000/cn001/redfish/v1/Systems/1`; standard TLS surface for real clients: `curl -k --resolve bmc-cn001:8443:127.0.0.1 https://bmc-cn001:8443/redfish/v1` (login with the account in `compose/generated/secrets/bmc_credentials`, ADR 0012) |
 | Fake BCM (CMDaemon JSON) | `curl -X POST http://127.0.0.1:8081/json -d '{"service": "cmdevice", "call": "getDevices"}'` |
 | Fake Jira | `curl -X POST http://127.0.0.1:8080/rest/api/2/issue -d '{"fields": {"project": {"key": "OPS"}, "summary": "hi"}}'`; failures: `curl -X POST http://127.0.0.1:8080/sim/failure -d '{"mode": "429", "count": 3}'` |
-| Slurm jobs | `docker exec hpcsim-slurmctld-1 sinfo` / `squeue` / `sbatch` |
-| Slurm REST | token: `docker exec hpcsim-slurmctld-1 scontrol token username=alice`; see ADR 0003 |
+| Slurm jobs | `docker exec workbench-slurmctld-1 sinfo` / `squeue` / `sbatch` |
+| Slurm REST | token: `docker exec workbench-slurmctld-1 scontrol token username=alice`; see ADR 0003 |
 | Build progress and diagrams | `docs/progress.html` |
 
 Inject a fault and watch it show up:
@@ -115,12 +114,12 @@ built yet (Kubernetes, ticket-bot) are reported as skipped.
 ## 4a. Get a shell on a node
 
 The compute nodes run `sshd` but publish no port, so the **login node** is the SSH entry point (below); from it `ssh cn001` works. You can also open a shell on a node with `docker exec` (nodes are named
-`cn001`, `gpu001`, ... and their containers `hpcsim-<name>-1`):
+`cn001`, `gpu001`, ... and their containers `workbench-<name>-1`):
 
 ```bash
-docker ps --format '{{.Names}}' --filter label=hpcsim.node     # list the compute and GPU nodes
-docker exec -it hpcsim-cn001-1 bash                            # a shell on a compute node (exit to leave)
-docker exec -u alice -it hpcsim-gpu001-1 bash                  # the same, as a simulated user
+docker ps --format '{{.Names}}' --filter label=workbench.node     # list the compute and GPU nodes
+docker exec -it workbench-cn001-1 bash                            # a shell on a compute node (exit to leave)
+docker exec -u alice -it workbench-gpu001-1 bash                  # the same, as a simulated user
 ```
 
 For tools that connect over SSH (a desktop monitoring client), `benchctl up` starts a `login` container on `127.0.0.1:2222` with key login only and the Slurm client tools on PATH; the key is `compose/generated/secrets/ssh/id_ed25519` (ADR 0011):
@@ -160,7 +159,7 @@ The [user manual](../manual/README.md) has a chapter for each topic: concepts, t
 
 ## 7. For developers
 
-To look at the web page without a screen: `pip install -e '.[browser]'`, `.venv/bin/python -m playwright install chromium`, then `.venv/bin/python scripts/ui_shots.py` writes screenshots to `/tmp/opti-ui-shots` and reports problems.
+To look at the web page without a screen: `pip install -e '.[browser]'`, `.venv/bin/python -m playwright install chromium`, then `.venv/bin/python scripts/ui_shots.py` writes screenshots to `/tmp/workbench-ui-shots` and reports problems.
 
 Once per clone: `./scripts/install-hooks.sh` (no sudo) installs the git hooks: no commits on `main`/`dev`, an issue reference in every commit message, a check that your git identity is your own GitHub noreply address (`./scripts/check-identity.sh`; GitHub credits a commit by the ID in that address, so a placeholder would credit a stranger), `validate.sh` before each commit, and a privacy scan (`./scripts/check-privacy.sh`) so no personal path, email or token is published. The repository is public, and the Claude skills under `.claude/` are symlinks into a home directory, so that folder is gitignored.
 

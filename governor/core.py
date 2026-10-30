@@ -14,7 +14,7 @@ from .watchdog import Watchdog
 log = logging.getLogger("governor")
 
 Executor = Callable[[Action], None]
-Effector = Callable[[list[str]], int]  # runs `simctl <args>`; returns the exit code
+Effector = Callable[[list[str]], int]  # runs `benchctl <args>`; returns the exit code
 
 ADMIT_FLOOR = int(1.0 * 1024**3)  # MemAvailable that must remain after a start (matches benchctl preflight)
 CHANGE_MAX_LEVEL = 1  # scale/set-profile fork docker; GV-8 forbids that under pressure (L2+)
@@ -165,7 +165,7 @@ class Governor:
         return {"ok": False, "error": why}
 
     def _change(self, label: str, args: list[str]) -> dict:
-        """Run a stack change (`simctl ...`) in the background; only calm (L0-L1) and with an effector."""
+        """Run a stack change (`benchctl ...`) in the background; only calm (L0-L1) and with an effector."""
         if self.ladder.level > CHANGE_MAX_LEVEL:
             return {"ok": False, "error": f"refused at L{self.ladder.level}: stack changes are paused (GV-8)"}
         self._record(f"{'dry-run: would ' if self.dry_run else ''}{label}")

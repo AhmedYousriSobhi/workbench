@@ -90,7 +90,7 @@ def test_allowlist_accepts_an_exact_public_string(repo):
 
 def test_local_username_is_blocked_unless_generic(repo):
     me = getpass.getuser()
-    if len(me) < 4 or me in {"root", "admin", "ubuntu", "user", "runner", "vagrant", "hpcsim", "test", "docker"}:
+    if len(me) < 4 or me in {"root", "admin", "ubuntu", "user", "runner", "vagrant", "workbench", "test", "docker"}:
         pytest.skip("generic account name")
     stage(repo, "doc.md", f"written by {me} on this box\n")
     out = staged(repo)

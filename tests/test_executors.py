@@ -57,8 +57,8 @@ def test_stop_save_use_cli():
 
 
 def test_discover_docker_parses_inspect():
-    insp = [{"Name": "/cn1", "Id": "abc", "Config": {"Labels": {"hpcsim.class": "P4"}},
-             "HostConfig": {"CgroupParent": "hpcsim-p4.slice"}}]
+    insp = [{"Name": "/cn1", "Id": "abc", "Config": {"Labels": {"workbench.class": "P4"}},
+             "HostConfig": {"CgroupParent": "workbench-p4.slice"}}]
 
     def fake(cmd, timeout=15):
         out = "abc\n" if cmd[1] == "ps" else json.dumps(insp)
@@ -66,7 +66,7 @@ def test_discover_docker_parses_inspect():
 
     groups, cgs = discover_docker(fake)
     assert groups == [Group("cn1", 4)]
-    assert cgs["cn1"] == Path("/sys/fs/cgroup/hpcsim.slice/hpcsim-p4.slice/docker-abc.scope")  # systemd nests dashed slices
+    assert cgs["cn1"] == Path("/sys/fs/cgroup/workbench.slice/workbench-p4.slice/docker-abc.scope")  # systemd nests dashed slices
 
 
 def test_undo_reverses_in_reverse_order():
@@ -124,7 +124,7 @@ def test_reclaim_eagain_is_partial_not_failure(tmp_path):
 
 def test_slice_path_nests_dashed_names_like_systemd():
     from governor.executors import slice_path
-    assert slice_path("hpcsim-p4.slice") == Path("hpcsim.slice/hpcsim-p4.slice")
+    assert slice_path("workbench-p4.slice") == Path("workbench.slice/workbench-p4.slice")
     assert slice_path("a-b-c.slice") == Path("a.slice/a-b.slice/a-b-c.slice")
     assert slice_path("system.slice") == Path("system.slice")
     assert slice_path("-.slice") == Path("-.slice")

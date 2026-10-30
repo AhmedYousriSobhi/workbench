@@ -1,5 +1,5 @@
 # Login node for SSH-based clients (SPEC C-14): sshd plus the Slurm client tools, on the shared node-base.
-FROM hpcsim/node-base:dev
+FROM workbench/node-base:dev
 RUN apt-get update && apt-get install -y --no-install-recommends openssh-server python3 \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /run/sshd \

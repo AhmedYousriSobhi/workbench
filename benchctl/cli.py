@@ -38,12 +38,6 @@ class SuggestingGroup(TyperGroup):
             raise
 
 
-def _old_name_notice() -> None:
-    """One line on stderr, only in a terminal, when the pre-0.2 name is used (scripts stay quiet and keep working)."""
-    if _Path(sys.argv[0]).name == "simctl" and sys.stderr.isatty():
-        typer.echo("note: `simctl` is now `benchctl` (the old name still works for now).", err=True)
-
-
 def _profile_check(value: str | None) -> str | None:
     return completion.check_value(value, completion.profiles(""), "profile")
 
@@ -62,7 +56,7 @@ app = typer.Typer(cls=SuggestingGroup, add_completion=False, epilog="Scripts: us
                        "Start with `benchctl start`, look with `benchctl get nodes`, stop with `benchctl stop`.")
 @app.callback()
 def _main() -> None:
-    _old_name_notice()
+    pass
 
 
 ICON = {checks.OK: "ok  ", checks.WARN: "WARN", checks.FAIL: "FAIL"}
@@ -249,11 +243,11 @@ def apply(file: str = typer.Option(..., "-f", "--file", help="workbench file to 
 
 
 def _launcher(*args: str) -> None:
-    """The one-command launcher (machine check, venv, governor, cluster, web page) lives in scripts/opti."""
+    """The one-command launcher (machine check, venv, governor, cluster, web page) lives in scripts/benchctl-launch."""
     import subprocess
     from pathlib import Path
 
-    script = Path(__file__).resolve().parent.parent / "scripts" / "opti"
+    script = Path(__file__).resolve().parent.parent / "scripts" / "benchctl-launch"
     raise typer.Exit(subprocess.run([str(script), *args], check=False).returncode)
 
 
@@ -343,7 +337,7 @@ def _confirm(what: str, yes: bool) -> None:
 @app.command()
 def down(dry_run: bool = typer.Option(False, "-n", "--dry-run", help="list what would stop; change nothing"),
          yes: bool = typer.Option(False, "-y", "--yes", help="do not ask (a terminal asks; scripts are never asked)")) -> None:
-    """Stop and remove the hpcsim compose project (nothing else)."""
+    """Stop and remove the workbench compose project (nothing else)."""
     running = [r["name"] for r in inventory.service_rows() if r["state"] == "running"]
     if dry_run:
         typer.echo(f"would stop and remove {len(running)} containers: {', '.join(running) or 'none running'}")

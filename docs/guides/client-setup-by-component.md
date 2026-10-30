@@ -58,7 +58,7 @@ squeue --me
 ```
 
 **You should see:** partitions `cpu` (4 nodes) and `gpu` (2 nodes), and your jobs as running. To fill the node-issues
-view: `docker exec hpcsim-slurmctld-1 scontrol update nodename=cn004 state=drain reason="test"`, and `state=resume`
+view: `docker exec workbench-slurmctld-1 scontrol update nodename=cn004 state=drain reason="test"`, and `state=resume`
 afterwards.
 
 **If it fails:** an empty job list usually means no job is running yet. `sacct` history needs an accounting profile

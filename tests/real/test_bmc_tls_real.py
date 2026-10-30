@@ -13,7 +13,7 @@ import pytest
 import yaml
 from helpers import bring_up, wait_for
 
-from simctl import stack
+from benchctl import stack
 
 ROOT = Path(__file__).resolve().parents[2]
 PORT = 8443
@@ -83,7 +83,7 @@ def test_wrong_password_is_refused(farm):
 
 def test_every_node_resolves_by_its_network_alias(farm):
     import subprocess
-    out = subprocess.run(["docker", "exec", "hpcsim-jira-mock-1", "python", "-c",
+    out = subprocess.run(["docker", "exec", "workbench-jira-mock-1", "python", "-c",
                           "import socket;print(socket.gethostbyname('bmc-cn001'))"],
                          capture_output=True, text=True, check=False)
     assert out.returncode == 0 and out.stdout.strip().startswith("172.")
@@ -100,7 +100,7 @@ def test_bmc_is_reachable_through_the_login_node_with_the_same_pinned_certificat
     import socket
     import subprocess
 
-    from simctl import compose
+    from benchctl import compose
 
     user, pw = farm
     key = ROOT / stack.SSH_DIR / "id_ed25519"

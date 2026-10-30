@@ -1,7 +1,7 @@
 import subprocess
 from pathlib import Path
 
-from simctl import machine as m
+from benchctl import machine as m
 
 
 def cp(rc=0, out="", err=""):
@@ -133,7 +133,7 @@ def test_run_all_off_linux(monkeypatch):
 def test_cli_check(monkeypatch):
     from typer.testing import CliRunner
 
-    from simctl import cli
+    from benchctl import cli
     monkeypatch.setattr(m, "run_all", lambda: [m.Check("a", m.OK, "fine")])
     r = CliRunner().invoke(cli.app, ["check"])
     assert r.exit_code == 0 and "READY" in r.stdout

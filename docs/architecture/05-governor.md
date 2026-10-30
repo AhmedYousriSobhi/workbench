@@ -6,13 +6,13 @@
 
 ### 6.1 Placement and protection
 - Runs **on the host**, not in a container or VM: a systemd service with `OOMScoreAdjust=-900`, a `MemoryLow=` reservation, `Restart=always`, and its own slice. It talks to Docker (API), libvirt (`virsh`), systemd and cgroupfs.
-- Compose services join per-priority slices with `cgroup_parent: hpcsim-<class>.slice` (needs Docker's systemd cgroup driver on cgroup v2). Resources it can't parent (kind/k3d nodes, the VM) are addressed by name through the Docker API or libvirt `memtune`.
+- Compose services join per-priority slices with `cgroup_parent: workbench-<class>.slice` (needs Docker's systemd cgroup driver on cgroup v2). Resources it can't parent (kind/k3d nodes, the VM) are addressed by name through the Docker API or libvirt `memtune`.
 
 ### 6.1a Race-condition safeguards
 Above roughly 30% PSI the kernel struggles to hand out new memory, so the governor must not need any:
 - Lock all pages at startup (`mlockall(MCL_CURRENT | MCL_FUTURE)`, e.g. `os.mlockall()`), so it is never swapped out.
 - Pre-allocate the L3/L4 execution path (open cgroup file handles, Docker/libvirt clients, command buffers) at startup; mitigations then perform no dynamic allocation.
-- Listen on a Unix socket (`/run/hpcsim/gov.sock`) for commands from the unprivileged Web UI backend ([Web UI](06-ux-and-scenarios.md#71-web-ui)).
+- Listen on a Unix socket (`/run/workbench/gov.sock`) for commands from the unprivileged Web UI backend ([Web UI](06-ux-and-scenarios.md#71-web-ui)).
 
 ### 6.2 Signals
 - `MemAvailable`, swap-in/out rate, and **PSI** (`/proc/pressure/memory`, per-cgroup `memory.pressure`): PSI measures time lost to memory stalls, which is a better "about to hurt" signal than raw usage.

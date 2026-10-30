@@ -3,7 +3,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from simctl.cli import app
+from benchctl.cli import app
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -28,7 +28,7 @@ def test_install_script_prints_a_unit_pointing_at_this_checkout():
     out = subprocess.run([str(ROOT / "scripts/install-governor.sh"), "--print"], capture_output=True,
                          text=True, check=True).stdout
     assert f"WorkingDirectory={ROOT}" in out and f"--workdir {ROOT}" in out and "--require-lock" in out
-    assert "HPCSIM_GRAFANA_TOKEN" in out and "$$(cat" in out and "sekret" not in out
+    assert "WORKBENCH_GRAFANA_TOKEN" in out and "$$(cat" in out and "sekret" not in out
 
 
 def test_pyproject_declares_installable_packages():
@@ -37,7 +37,7 @@ def test_pyproject_declares_installable_packages():
 
     cfg = tomllib.loads((Path(__file__).parent.parent / "pyproject.toml").read_text())
     # flat layout with many top-level dirs: setuptools refuses to guess
-    assert cfg["tool"]["setuptools"]["packages"] == ["simctl", "governor", "webui"]
+    assert cfg["tool"]["setuptools"]["packages"] == ["benchctl", "governor", "webui"]
 
 
 def test_benchctl_wrapper_explains_a_missing_venv(tmp_path):
@@ -97,7 +97,7 @@ def test_manual_has_an_index_that_lists_every_chapter():
 def test_manual_commands_and_scripts_exist():
     text = "\n".join(p.read_text() for p in MANUAL.glob("*.md"))
     runner = CliRunner()
-    cmds = set(re.findall(r"(?:simctl\.cli|\./scripts/benchctl|benchctl) (check|doctor|preflight|status|diag|compose|up|down|"
+    cmds = set(re.findall(r"(?:benchctl\.cli|\./scripts/benchctl|benchctl) (check|doctor|preflight|status|diag|compose|up|down|"
                           r"scale|scenario|measure|get|exec|logs|start|stop|open|ssh-key)\b", text))
     assert {"up", "down", "scale", "scenario", "status", "diag", "measure"} <= cmds
     for c in cmds:
@@ -107,20 +107,20 @@ def test_manual_commands_and_scripts_exist():
 
 
 def test_manual_node_names_match_the_nodes_sim_yaml_generates():
-    """The shell examples use hpcsim-cn001-1 and hpcsim-gpu001-1: they must be real node names."""
+    """The shell examples use workbench-cn001-1 and workbench-gpu001-1: they must be real node names."""
     import yaml
 
-    from simctl.nodes import node_names
+    from benchctl.nodes import node_names
 
     names = {n for n, _ in node_names(yaml.safe_load((ROOT / "sim.yaml").read_text()))}
     text = (MANUAL / "04-nodes-and-shells.md").read_text()
-    for used in set(re.findall(r"hpcsim-((?:cn|gpu)\d+)-1", text)):
+    for used in set(re.findall(r"workbench-((?:cn|gpu)\d+)-1", text)):
         assert used in names, used
 
 
 def test_getting_started_explains_how_to_get_a_shell_on_a_node():
     text = (ROOT / "docs/guides/getting-started.md").read_text()
-    assert "docker exec -it hpcsim-cn001-1 bash" in text and "ssh cn001 hostname" in text  # docker exec, and a hop through the login node
+    assert "docker exec -it workbench-cn001-1 bash" in text and "ssh cn001 hostname" in text  # docker exec, and a hop through the login node
 
 
 def test_manual_images_are_all_used_and_have_alt_text():
@@ -130,24 +130,20 @@ def test_manual_images_are_all_used_and_have_alt_text():
     assert not re.findall(r"!\[\]\(", text)
 
 
-def test_old_command_names_still_work(tmp_path):
-    """`./scripts/simctl` is an alias of `./scripts/benchctl`, and both are installed as entry points."""
+def test_no_old_names_left():
+    """simctl, opti and hpcsim were removed (#111): a tracked file may name them only to explain the migration."""
     import subprocess
-    import tomllib
 
-    scripts = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["scripts"]
-    assert scripts["benchctl"] == scripts["simctl"] == "simctl.cli:app"
-    out = subprocess.run([str(ROOT / "scripts/simctl"), "--help"], capture_output=True, text=True, check=False)
-    assert out.returncode == 0 and "benchctl" in out.stdout
-
-
-def test_docs_name_only_the_new_command():
-    """No page tells a new user to type the old names; only a paragraph that calls them aliases may mention them."""
+    allowed = {"docs/manual/09-troubleshooting.md", "docs/adr/0015-one-controller-command-benchctl.md",
+               "scripts/install-governor.sh", "tests/test_docs.py",}
+    files = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.split()
     bad = []
-    for f in [ROOT / "README.md", *sorted((ROOT / "docs/manual").glob("*.md")), *sorted((ROOT / "docs/guides").glob("*.md"))]:
-        for para in f.read_text().split("\n\n"):
-            if re.search(r"\./scripts/(simctl|opti)\b", para) and "alias" not in para.lower():
-                bad.append(f"{f.relative_to(ROOT)}: {para[:50]!r}")
+    for f in files:
+        if f in allowed or f.endswith((".png", ".svg", ".ico", ".gz", ".pdf")):
+            continue
+        text = (ROOT / f).read_text(errors="ignore")
+        if re.search(r"simctl|hpcsim|OPTI_|\bopti\b", text, re.IGNORECASE):
+            bad.append(f)
     assert not bad, bad
 
 

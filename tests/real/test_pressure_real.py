@@ -14,8 +14,8 @@ import pytest
 import yaml
 from helpers import ask, bring_up, signals, start_governor, stop_governor, wait_for
 
+from benchctl import stack
 from governor.executors import cgroup_dir, discover_docker
-from simctl import stack
 
 ROOT = Path(__file__).resolve().parents[2]
 FAST = json.dumps({"sustain_s": 0.5, "calm_s": 1, "min_dwell_s": 0.3, "l5_after_s": 1000})
@@ -32,7 +32,7 @@ def sim(monkeypatch):
 
 
 def containers() -> list[str]:
-    r = subprocess.run(["docker", "ps", "-q", "--filter", "label=com.docker.compose.project=hpcsim"],
+    r = subprocess.run(["docker", "ps", "-q", "--filter", "label=com.docker.compose.project=workbench"],
                        capture_output=True, text=True, check=True)
     return sorted(r.stdout.split())
 
@@ -68,7 +68,7 @@ def grafana_annotations(token: str) -> list[str]:
 def climb(sig: Path, sock: Path, port: int, want: int, **sig_kw) -> None:
     signals(sig, **sig_kw)
     assert wait_for(lambda: ask(sock, {"cmd": "status"})["level"] == want, timeout=30), f"never reached L{want}"
-    assert wait_for(lambda: scrape(port)["hpcsim_governor_level"] == want, timeout=10)
+    assert wait_for(lambda: scrape(port)["workbench_governor_level"] == want, timeout=10)
 
 
 def test_ladder_climbs_and_recovers_on_the_live_stack(sim, tmp_path):
@@ -78,27 +78,27 @@ def test_ladder_climbs_and_recovers_on_the_live_stack(sim, tmp_path):
     gov, sig, sock = start_governor(
         tmp_path, "--dry-run", "--no-watchdog", "--thresholds", FAST, "--refresh-interval", "1",
         "--metrics-addr", f"127.0.0.1:{port}", "--grafana-url", "http://127.0.0.1:3000",
-        env={"HPCSIM_GRAFANA_TOKEN": token})
+        env={"WORKBENCH_GRAFANA_TOKEN": token})
     try:
-        assert wait_for(lambda: scrape(port)["hpcsim_governor_level"] == 0)
-        assert wait_for(lambda: "hpcsim-cn001-1" in ask(sock, {"cmd": "status"})["groups"])
+        assert wait_for(lambda: scrape(port)["workbench_governor_level"] == 0)
+        assert wait_for(lambda: "workbench-cn001-1" in ask(sock, {"cmd": "status"})["groups"])
         m = scrape(port)
-        assert m['hpcsim_governor_groups{prio="P4"}'] >= 6  # the six nodes, discovered from Docker
-        assert m["hpcsim_host_mem_available_bytes"] > 0
+        assert m['workbench_governor_groups{prio="P4"}'] >= 6  # the six nodes, discovered from Docker
+        assert m["workbench_host_mem_available_bytes"] > 0
 
         climb(sig, sock, port, 1, avail_gb=1.8)
         climb(sig, sock, port, 2, avail_gb=4, some=25)
         climb(sig, sock, port, 3, avail_gb=4, some=35)
         audit = " ".join(ask(sock, {"cmd": "status"})["audit"])
-        assert "throttle hpcsim-cn001-1" in audit and "freeze hpcsim-cn001-1" in audit
-        assert scrape(port)["hpcsim_governor_actions_total"] > 0
+        assert "throttle workbench-cn001-1" in audit and "freeze workbench-cn001-1" in audit
+        assert scrape(port)["workbench_governor_actions_total"] > 0
 
         assert not ask(sock, {"cmd": "admit", "budget_mb": 10})["ok"]
         # /metrics is rendered once per control step, so counters lag by at most one interval
-        assert wait_for(lambda: scrape(port)['hpcsim_governor_admit_total{result="refused"}'] == 1)
+        assert wait_for(lambda: scrape(port)['workbench_governor_admit_total{result="refused"}'] == 1)
 
         climb(sig, sock, port, 0, avail_gb=8)  # calm: steps down, thaws
-        assert "thaw hpcsim-cn001-1" in " ".join(ask(sock, {"cmd": "status"})["audit"])
+        assert "thaw workbench-cn001-1" in " ".join(ask(sock, {"cmd": "status"})["audit"])
         assert ask(sock, {"cmd": "admit", "budget_mb": 10})["ok"]
 
         assert wait_for(lambda: any("L2 -> L3" in t for t in grafana_annotations(token)), timeout=20)
@@ -119,11 +119,11 @@ def test_real_freeze_and_thaw_of_live_containers(sim, tmp_path):
     gov, sig, sock = start_governor(tmp_path, "--no-watchdog", "--thresholds", FAST,
                                     "--refresh-interval", "1")
     try:
-        assert wait_for(lambda: "hpcsim-cn001-1" in ask(sock, {"cmd": "status"})["groups"])
+        assert wait_for(lambda: "workbench-cn001-1" in ask(sock, {"cmd": "status"})["groups"])
         signals(sig, avail_gb=4, some=35)
-        assert wait_for(lambda: frozen("hpcsim-cn001-1"), timeout=30)
-        assert not frozen("hpcsim-slurmctld-1")  # P1 is never frozen at L3
+        assert wait_for(lambda: frozen("workbench-cn001-1"), timeout=30)
+        assert not frozen("workbench-slurmctld-1")  # P1 is never frozen at L3
         signals(sig, avail_gb=8)
-        assert wait_for(lambda: not frozen("hpcsim-cn001-1"), timeout=30)
+        assert wait_for(lambda: not frozen("workbench-cn001-1"), timeout=30)
     finally:
         stop_governor(gov)

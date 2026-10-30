@@ -5,7 +5,7 @@ Words used across the manual and the web page.
 | Term | Meaning |
 |---|---|
 | **Profile** | a named size of the cluster (`min`, `std`, `full`) in `profiles/`; sets which parts run and how many nodes |
-| **Stack** | everything `up` starts: the Slurm cluster, the mocks, observability, the login node. Docker project name `hpcsim` |
+| **Stack** | everything `up` starts: the Slurm cluster, the mocks, observability, the login node. Docker project name `workbench` |
 | **Node** | a simulated compute or GPU node: a container running `slurmd` (and `sshd`), not a machine |
 | **Login node** | the container you ssh into (127.0.0.1:2222), like a real cluster's front door; from it you reach the nodes |
 | **Mock** | a stand-in service with the real one's API: `bcm-mock` (BCM), `jira-mock` (Jira), `bmc-farm` (Redfish BMCs), `gpu-exporter-farm` (DCGM metrics) |
@@ -23,6 +23,6 @@ Words used across the manual and the web page.
 | **Host key** | the login node's SSH identity; a client pins it on first use and must refuse a changed one |
 | **Hop** | `ssh cn001` from the login node to a node |
 | **Web page** | the dashboard on 127.0.0.1:8088; it talks only to the governor socket, never to Docker |
-| **Token** | the login secret for the web page, in `compose/generated/secrets/ui_token` (printed by `opti open`) |
+| **Token** | the login secret for the web page, in `compose/generated/secrets/ui_token` (printed by `benchctl open`) |
 | **Client** | the desktop monitoring application you are testing against workbench |
 | **ADR** | architecture decision record in `docs/adr/`: why a design choice was made |

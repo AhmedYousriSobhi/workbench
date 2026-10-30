@@ -3,7 +3,7 @@ from pathlib import Path
 
 import yaml
 
-from simctl import compose, slurmconf
+from benchctl import compose, slurmconf
 
 SIM = yaml.safe_load(Path("sim.yaml").read_text())
 
@@ -24,7 +24,7 @@ def test_single_node_range_and_no_gpu():
 
 
 def test_gres_only_names_gpu_nodes():
-    assert "NodeName=gpu[001-002] Name=gpu Type=h200 File=/dev/hpcsim-gpu[0-7]" in slurmconf.gres_conf(SIM)
+    assert "NodeName=gpu[001-002] Name=gpu Type=h200 File=/dev/workbench-gpu[0-7]" in slurmconf.gres_conf(SIM)
     assert "NodeName=ALL" not in slurmconf.gres_conf(SIM)
 
 
@@ -79,7 +79,7 @@ def test_users_have_stable_uids_on_every_slurm_container():
     s = _std()
     assert compose.users_env(SIM) == "alice:1001 bob:1002"
     for name in ("slurmctld", "slurmrestd", "cn001", "gpu001"):
-        assert s[name]["environment"]["HPCSIM_USERS"] == "alice:1001 bob:1002"
+        assert s[name]["environment"]["WORKBENCH_USERS"] == "alice:1001 bob:1002"
 
 
 def test_accounting_script_is_idempotent_and_from_sim_yaml():

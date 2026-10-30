@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from simctl import progress
+from benchctl import progress
 
 DATA = progress.load()
 
@@ -63,7 +63,7 @@ def test_pr_links_support_single_list_and_none():
 
 
 def test_generated_files_are_up_to_date():
-    assert progress.stale() == [], "run: python -m simctl.progress"
+    assert progress.stale() == [], "run: python -m benchctl.progress"
 
 
 def test_html_is_self_contained_and_escapes():

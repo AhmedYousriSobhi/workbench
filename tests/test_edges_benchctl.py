@@ -1,10 +1,10 @@
-"""Remaining behaviour of simctl helpers: scenario expectations and jira checks, progress --check, checks.run, diag, UI launcher."""
+"""Remaining behaviour of benchctl helpers: scenario expectations and jira checks, progress --check, checks.run, diag, UI launcher."""
 import json
 import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from simctl import checks, diag, progress, scenario
+from benchctl import checks, diag, progress, scenario
 
 
 class CP:

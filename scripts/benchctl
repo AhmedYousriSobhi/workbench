@@ -9,4 +9,4 @@ if [ ! -x "$py" ]; then
   exit 1
 fi
 cd "$repo"
-exec "$py" -m simctl.cli "$@"
+exec "$py" -m benchctl.cli "$@"

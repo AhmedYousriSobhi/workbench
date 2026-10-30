@@ -575,7 +575,7 @@ FIELD_LIST = [{"id": i, "name": n, "custom": False, "navigable": True, "orderabl
 API = re.compile(r"^/rest/api/[23]/(.*)$")
 
 
-PROBE = "x-opti-probe"  # the web UI sets this on its own polls so they are not drawn as client traffic
+PROBE = "x-workbench-probe"  # the web UI sets this on its own polls so they are not drawn as client traffic
 
 
 def counted(path: str, headers) -> bool:

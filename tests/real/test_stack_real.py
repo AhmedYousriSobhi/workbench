@@ -1,6 +1,6 @@
 """Live lifecycle of the compose stack (min profile): up, token works, scale, idempotent up, down.
 
-Slow (about two minutes) and heavy (~3 GB); needs Docker and the built hpcsim images.
+Slow (about two minutes) and heavy (~3 GB); needs Docker and the built workbench images.
 """
 import json
 import subprocess
@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from simctl import stack
+from benchctl import stack
 
 ROOT = Path(__file__).resolve().parents[2]
 # These tests exercise the lifecycle, not the budget pre-flight (its estimate is pessimistic and
@@ -19,13 +19,13 @@ ROOMY = 64 * 1024**3
 
 
 def sinfo() -> str:
-    r = subprocess.run(["docker", "exec", "hpcsim-slurmctld-1", "sinfo", "-h", "-o", "%N"],
+    r = subprocess.run(["docker", "exec", "workbench-slurmctld-1", "sinfo", "-h", "-o", "%N"],
                        capture_output=True, text=True, check=False)
     return r.stdout.strip()
 
 
 def running_services() -> list[str]:
-    r = subprocess.run(["docker", "ps", "--filter", "label=com.docker.compose.project=hpcsim",
+    r = subprocess.run(["docker", "ps", "--filter", "label=com.docker.compose.project=workbench",
                         "--format", '{{.Label "com.docker.compose.service"}}'],
                        capture_output=True, text=True, check=True)
     return sorted(r.stdout.split())
@@ -36,7 +36,7 @@ def cn_running() -> list[str]:
 
 
 def project_containers() -> list[str]:
-    r = subprocess.run(["docker", "ps", "-q", "--filter", "label=com.docker.compose.project=hpcsim"],
+    r = subprocess.run(["docker", "ps", "-q", "--filter", "label=com.docker.compose.project=workbench"],
                        capture_output=True, text=True, check=True)
     return r.stdout.split()
 
@@ -126,7 +126,7 @@ def test_governor_admission_and_scale_via_socket(sim, tmp_path, monkeypatch):
     """GV-9 end to end: a live governor refuses under pressure and scales the stack via its socket."""
     from helpers import ask, signals, start_governor, stop_governor, wait_for
     gov, sig, sock = start_governor(tmp_path, "--no-watchdog", "--workdir", str(ROOT))
-    monkeypatch.setenv("HPCSIM_GOV_SOCKET", str(sock))
+    monkeypatch.setenv("WORKBENCH_GOV_SOCKET", str(sock))
     say = lambda m: None
     try:
         assert stack.up(sim, "min", say=say, available=ROOMY)  # admitted by the live governor
@@ -140,7 +140,7 @@ def test_governor_admission_and_scale_via_socket(sim, tmp_path, monkeypatch):
         assert not ask(sock, {"cmd": "scale", "group": "compute", "n": 4})["ok"]
         assert not ask(sock, {"cmd": "admit", "budget_mb": 100})["ok"]
         said: list[str] = []
-        assert not stack.scale(sim, "min", 4, say=said.append), said  # simctl honours the refusal
+        assert not stack.scale(sim, "min", 4, say=said.append), said  # benchctl honours the refusal
         assert sinfo() == "cn[001-002],gpu[001-002]" and cn_running() == ["cn001", "cn002"]
     finally:
         stop_governor(gov)

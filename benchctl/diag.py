@@ -33,7 +33,7 @@ def collect() -> dict[str, str]:
     files["free.txt"] = r(["free", "-m"]).stdout
     files["swapon.txt"] = r(["swapon", "--show"]).stdout
     files["docker_ps.txt"] = r(["docker", "ps", "-a", "--format",
-                                "{{.Names}}\t{{.Status}}\t{{.Label \"hpcsim.class\"}}"]).stdout
+                                "{{.Names}}\t{{.Status}}\t{{.Label \"workbench.class\"}}"]).stdout
     files["docker_stats.txt"] = r(["docker", "stats", "--no-stream", "--format",
                                    "{{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}"], timeout=20).stdout
     files["virsh_list.txt"] = r(["virsh", "-c", "qemu:///system", "list", "--all"]).stdout
@@ -42,7 +42,7 @@ def collect() -> dict[str, str]:
         files["governor_status.json"] = str(checks.governor_request({"cmd": "status"}))
     except OSError as e:
         files["governor_status.json"] = f"unreachable: {e}"
-    files["governor_journal.txt"] = r(["journalctl", "-u", "hpcsim-governor", "-n", "200",
+    files["governor_journal.txt"] = r(["journalctl", "-u", "workbench-governor", "-n", "200",
                                        "--no-pager"]).stdout
     files["git_rev.txt"] = r(["git", "rev-parse", "HEAD"]).stdout + r(["git", "status", "-sb"]).stdout
     sim = Path("sim.yaml")

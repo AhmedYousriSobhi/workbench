@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from typer.testing import CliRunner
 
-from simctl import cli, completion
+from benchctl import cli, completion
 
 runner = CliRunner()
 ROOT = Path(__file__).resolve().parent.parent

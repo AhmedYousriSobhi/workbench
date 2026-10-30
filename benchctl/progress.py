@@ -1,6 +1,6 @@
 """Render docs/progress.yaml into docs/PROGRESS.md (GitHub Mermaid) and docs/progress.html (any browser).
 
-Run `python -m simctl.progress` to regenerate, `--check` to fail when the outputs are stale.
+Run `python -m benchctl.progress` to regenerate, `--check` to fail when the outputs are stale.
 """
 import html
 import sys
@@ -97,7 +97,7 @@ def render_md(data: dict) -> str:
               "amber is partial, grey is not started.")
     out = [
         "# Progress", "",
-        "<!-- GENERATED from docs/progress.yaml by `python -m simctl.progress`; do not edit. -->",
+        "<!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->",
         intro, "", summary, "",
         "## Roadmap", "", "```mermaid", roadmap_mermaid(data), "```", "",
         "## As built", "", legend, "",
@@ -147,7 +147,7 @@ def render_html(data: dict) -> str:
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>workbench progress</title><style>{css}</style></head><body>
-<!-- GENERATED from docs/progress.yaml by `python -m simctl.progress`; do not edit. -->
+<!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 <h1>workbench progress</h1>
 <p>Last updated {data['updated']}. <b>{pct(items)}% built</b>: {c['done']} done, {c['review']} in review,
 {c['partial']} partial, {c['todo']} to do ({len(items)} items).</p>
@@ -181,7 +181,7 @@ def main(argv: list[str]) -> int:
     if "--check" in argv:
         bad = stale()
         for p in bad:
-            print(f"STALE: {p} (run: python -m simctl.progress)")
+            print(f"STALE: {p} (run: python -m benchctl.progress)")
         return 1 if bad else 0
     for p in write():
         print(p)

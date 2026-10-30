@@ -12,10 +12,10 @@ they differ, SPEC.md wins and the code or this page gets fixed.
 shows it bridging the socket, executors, ladder and core.
 
 1. `MitigationPath()` is pre-allocated before memory is locked, so its pages are included (GV-8).
-2. `discover_docker()` lists containers labelled `hpcsim.class=P<n>` into groups and cgroup paths.
+2. `discover_docker()` lists containers labelled `workbench.class=P<n>` into groups and cgroup paths.
 3. A sampler (`/proc`, or a signals file or one cgroup in tests), then `Ladder(Thresholds)`.
 4. `UserExecutor` (`--user-mode`, rootless) or `Executor` (root, cgroup files).
-5. Optional: `Watchdog`, `Annotator` (Grafana), `effector` (runs `simctl` for `scale`/`set-profile`).
+5. Optional: `Watchdog`, `Annotator` (Grafana), `effector` (runs `benchctl` for `scale`/`set-profile`).
 6. `Governor(...)`, then the control socket server and the `/metrics` server, then `mlockall` (best effort without root).
 7. Loop: `gov.step(now)`, sleep `--interval`.
 

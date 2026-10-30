@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from simctl import scenario
+from benchctl import scenario
 
 SIM = yaml.safe_load(Path("sim.yaml").read_text())
 
@@ -137,24 +137,24 @@ def test_a_failed_step_fails_the_report_but_a_skip_does_not():
 
 def test_ssh_step_commands_per_fault():
     cmds = scenario.ssh_commands({"state": "down"})
-    assert cmds == [["docker", "stop", "-t", "1", "hpcsim-login-1"]]
-    assert scenario.ssh_commands({"state": "hung"}) == [["docker", "pause", "hpcsim-login-1"]]
-    assert scenario.ssh_commands({"state": "up"}) == [["docker", "unpause", "hpcsim-login-1"], ["docker", "start", "hpcsim-login-1"]]
+    assert cmds == [["docker", "stop", "-t", "1", "workbench-login-1"]]
+    assert scenario.ssh_commands({"state": "hung"}) == [["docker", "pause", "workbench-login-1"]]
+    assert scenario.ssh_commands({"state": "up"}) == [["docker", "unpause", "workbench-login-1"], ["docker", "start", "workbench-login-1"]]
     rot = scenario.ssh_commands({"rotate_host_key": True})
     assert len(rot) == 1 and "ssh-keygen" in rot[0][-1] and "kill -HUP" in rot[0][-1]
     lim = scenario.ssh_commands({"max_sessions": 2})[0][-1]
     assert "MaxSessions 2" in lim and "kill -HUP" in lim
     reset = scenario.ssh_commands({"reset": True})
-    assert reset[0][1] == "unpause" and "/run/hpcsim/ssh/ssh_host_ed25519_key" in reset[-1][-1] and "MaxSessions" in reset[-1][-1]
+    assert reset[0][1] == "unpause" and "/run/workbench/ssh/ssh_host_ed25519_key" in reset[-1][-1] and "MaxSessions" in reset[-1][-1]
 
 
 def test_ssh_refused_key_and_single_node_sshd_commands():
     rej = scenario.ssh_commands({"reject_auth": True})
-    assert len(rej) == 1 and rej[0][2] == "hpcsim-login-1" and "grep -v hpcsim-id_ed25519" in rej[0][-1]
+    assert len(rej) == 1 and rej[0][2] == "workbench-login-1" and "grep -v -e -id_ed25519" in rej[0][-1]
     assert "kill -HUP" not in rej[0][-1]  # authorized_keys is read at every login
     assert "authorized_keys" in scenario.ssh_commands({"reset": True})[-1][-1]  # reset gives the key back
     down = scenario.ssh_commands({"node_sshd": "down", "nodes": ["cn001", "cn002"]})
-    assert [c[2] for c in down] == ["hpcsim-cn001-1", "hpcsim-cn002-1"] and "kill $(cat /run/sshd.pid)" in down[0][-1]
+    assert [c[2] for c in down] == ["workbench-cn001-1", "workbench-cn002-1"] and "kill $(cat /run/sshd.pid)" in down[0][-1]
     assert "/usr/sbin/sshd" in scenario.ssh_commands({"node_sshd": "up", "nodes": ["cn001"]})[0][-1]
 
 

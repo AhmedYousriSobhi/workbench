@@ -53,7 +53,7 @@ def test_dots_move_in_a_real_browser_and_pause(ui, tmp_path):  # noqa: F811
     pytest.importorskip("playwright")
     from playwright.sync_api import sync_playwright
     base, _h, token = ui
-    out = Path(os.environ.get("OPTI_SHOT_DIR", tmp_path))
+    out = Path(os.environ.get("BENCHCTL_SHOT_DIR", tmp_path))
     out.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as p:
         browser = p.chromium.launch()

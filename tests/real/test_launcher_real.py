@@ -1,4 +1,4 @@
-"""./scripts/opti on the live host: start -> the page answers -> start again is harmless -> stop leaves nothing."""
+"""./scripts/benchctl-launch on the live host: start -> the page answers -> start again is harmless -> stop leaves nothing."""
 import os
 import re
 import socket
@@ -8,7 +8,7 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-OPTI = str(ROOT / "scripts" / "opti")
+LAUNCHER = str(ROOT / "scripts" / "benchctl-launch")
 
 
 def free_port() -> int:
@@ -17,15 +17,15 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
-def opti(*args, env=None, timeout=600):
-    return subprocess.run([OPTI, *args], cwd=ROOT, capture_output=True, text=True, timeout=timeout, check=False,
+def launch(*args, env=None, timeout=600):
+    return subprocess.run([LAUNCHER, *args], cwd=ROOT, capture_output=True, text=True, timeout=timeout, check=False,
                           env={**os.environ, **(env or {})})
 
 
 def _freeze_and_thaw_a_real_container(checks, usock):
     """The rootless governor really pauses and unpauses a running simulation container through Docker."""
     import time
-    name = "hpcsim-bmc-farm-1"
+    name = "workbench-bmc-farm-1"
     deadline = time.time() + 20
     while time.time() < deadline and name not in checks.governor_request({"cmd": "status"}, usock)["groups"]:
         time.sleep(0.5)  # the inventory refresh picks up containers started after the governor
@@ -38,9 +38,9 @@ def _freeze_and_thaw_a_real_container(checks, usock):
 
 
 def test_usage_and_status_need_no_stack():
-    r = opti()
+    r = launch()
     assert r.returncode == 2 and "start" in r.stdout and "stop" in r.stdout
-    s = opti("status")
+    s = launch("status")
     assert s.returncode == 0 and "governor" in s.stdout and "web page" in s.stdout
 
 
@@ -51,14 +51,14 @@ def test_start_serves_the_page_and_stop_cleans_up(tmp_path):
     shim.mkdir()
     (shim / "sudo").write_text(f"#!/bin/sh\necho \"$@\" >> {tmp_path}/sudo-called\nexit 1\n")
     (shim / "sudo").chmod(0o755)
-    usock = f"{os.environ.get('XDG_RUNTIME_DIR') or '/tmp/hpcsim-' + str(os.getuid())}/hpcsim/gov.sock"
-    env = {"OPTI_UI_PORT": port, "OPTI_GOVERNOR": "user", "PATH": f"{shim}:{os.environ['PATH']}"}
+    usock = f"{os.environ.get('XDG_RUNTIME_DIR') or '/tmp/workbench-' + str(os.getuid())}/workbench/gov.sock"
+    env = {"BENCHCTL_UI_PORT": port, "BENCHCTL_GOVERNOR": "user", "PATH": f"{shim}:{os.environ['PATH']}"}
     try:
-        r = opti("start", env=env)
+        r = launch("start", env=env)
         assert r.returncode == 0, r.stdout + r.stderr
         assert "READY" in r.stdout and "Web page: http://127.0.0.1:" in r.stdout
         assert "running as you" in r.stdout and "not reachable" not in r.stdout, r.stdout
-        from simctl import checks
+        from benchctl import checks
         st = checks.governor_request({"cmd": "status"}, usock)  # the rootless governor answers on the user socket
         assert st["ok"] and st["mode"] == "user"
         _freeze_and_thaw_a_real_container(checks, usock)
@@ -68,13 +68,13 @@ def test_start_serves_the_page_and_stop_cleans_up(tmp_path):
         page = opener.open(link, timeout=10).read().decode()  # the login link signs in and serves the page
         assert "workbench" in page
         assert b"services" in opener.open(f"http://127.0.0.1:{port}/api/cluster", timeout=10).read()
-        again = opti("start", env=env)  # idempotent
+        again = launch("start", env=env)  # idempotent
         assert again.returncode == 0 and "already running" in again.stdout, again.stdout
-        st = opti("status", env=env)
+        st = launch("status", env=env)
         assert "containers running" in st.stdout and "web page : running" in st.stdout
-        assert opti("open", env=env).stdout.strip().startswith("http://127.0.0.1:")
+        assert launch("open", env=env).stdout.strip().startswith("http://127.0.0.1:")
     finally:
-        s = opti("stop", env=env)
+        s = launch("stop", env=env)
     assert s.returncode == 0
     assert not (tmp_path / "sudo-called").exists(), "start/stop called sudo"
     assert not os.path.exists(usock), "the rootless governor was left running"
@@ -83,6 +83,6 @@ def test_start_serves_the_page_and_stop_cleans_up(tmp_path):
         raise AssertionError("the web page is still answering after stop")
     except (urllib.error.URLError, OSError):
         pass
-    ps = subprocess.run(["docker", "ps", "--filter", "name=hpcsim", "--format", "{{.Names}}"],
+    ps = subprocess.run(["docker", "ps", "--filter", "name=workbench", "--format", "{{.Names}}"],
                         capture_output=True, text=True, check=False)
     assert ps.stdout.strip() == ""

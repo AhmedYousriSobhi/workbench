@@ -6,17 +6,17 @@ with `benchctl exec` (a thin wrapper over `docker exec`). The only machine with 
 ## Find the nodes
 
 Node names come from [sim.yaml](../../sim.yaml): compute nodes `cn001`, `cn002`, ... and GPU nodes `gpu001`, `gpu002`, ...
-Each container is named `hpcsim-<name>-1`.
+Each container is named `workbench-<name>-1`.
 
 ```bash
 ./scripts/benchctl get nodes                                     # the nodes and their state (add -o json for scripts)
 ./scripts/benchctl get services                                  # every container of the stack
-docker ps --format '{{.Names}}' --filter label=hpcsim.class      # the same with docker
-docker ps --format '{{.Names}}' --filter label=hpcsim.node       # only compute and GPU nodes
-docker exec hpcsim-slurmctld-1 sinfo -N -l                       # Slurm's view of the nodes
+docker ps --format '{{.Names}}' --filter label=workbench.class      # the same with docker
+docker ps --format '{{.Names}}' --filter label=workbench.node       # only compute and GPU nodes
+docker exec workbench-slurmctld-1 sinfo -N -l                       # Slurm's view of the nodes
 ```
 
-![Terminal: docker ps lists hpcsim-cn001-1 through hpcsim-gpu002-1, then a command run in cn001 and one as alice in gpu001](img/term-find-and-shell.png)
+![Terminal: docker ps lists workbench-cn001-1 through workbench-gpu002-1, then a command run in cn001 and one as alice in gpu001](img/term-find-and-shell.png)
 
 *Real output from the `min` profile: the six node containers, a command run inside `cn001`, and the simulated user `alice` on `gpu001` with its eight fake GPU device files.*
 
@@ -38,10 +38,10 @@ design).
 ```bash
 ./scripts/benchctl exec slurmctld              # the controller
 ./scripts/benchctl exec cn001                  # a compute node
-./scripts/benchctl exec gpu001                 # a GPU node (fake GPU device files /dev/hpcsim-gpu0..7)
+./scripts/benchctl exec gpu001                 # a GPU node (fake GPU device files /dev/workbench-gpu0..7)
 ./scripts/benchctl exec cn001 -u alice         # the same node as a simulated user
 ./scripts/benchctl exec cn001 -- hostname      # one command, no shell
-# the long form, same result: docker exec -it hpcsim-cn001-1 bash
+# the long form, same result: docker exec -it workbench-cn001-1 bash
 ```
 
 The shell starts as root *inside the container*; that is not root on your host. Simulated users (`alice`, `bob`, from
@@ -56,7 +56,7 @@ Useful things to run inside:
 ```bash
 scontrol show node $(hostname)     # this node as Slurm sees it
 sbatch --wrap "sleep 60"           # from the controller, as a user: docker exec -u alice ...
-ls /dev/hpcsim-gpu*                # the fake GPUs (GPU nodes only)
+ls /dev/workbench-gpu*                # the fake GPUs (GPU nodes only)
 ```
 
 ## Limits to know

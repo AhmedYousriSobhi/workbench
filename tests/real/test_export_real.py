@@ -10,7 +10,7 @@ import pytest
 import yaml
 from helpers import bring_up, wait_for
 
-from simctl import stack
+from benchctl import stack
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def exported(tmp_path_factory):
     os.chdir(ROOT)
     bring_up(yaml.safe_load((ROOT / "sim.yaml").read_text()))
-    assert wait_for(lambda: subprocess.run(["docker", "exec", "hpcsim-login-1", "sinfo", "-h"], capture_output=True, check=False).returncode == 0, timeout=90)
+    assert wait_for(lambda: subprocess.run(["docker", "exec", "workbench-login-1", "sinfo", "-h"], capture_output=True, check=False).returncode == 0, timeout=90)
     out = tmp_path_factory.mktemp("p") / "p.json"
     r = subprocess.run([str(ROOT / "scripts/benchctl"), "export", "profile", "--profile", "min", "--bmc", "--format", "demo:1", "-o", str(out)],
                        capture_output=True, text=True, check=False)

@@ -27,7 +27,7 @@ def test_governor_refusal_is_labelled_environment(monkeypatch):
         helpers.bring_up({})
 
 
-def test_other_failures_keep_simctl_output(monkeypatch):
+def test_other_failures_keep_benchctl_output(monkeypatch):
     monkeypatch.setattr(helpers.stack, "up", fake_up(["compose failed: port 8080 in use"], False))
     with pytest.raises(AssertionError, match=r"stack.up failed: compose failed: port 8080 in use") as e:
         helpers.bring_up({})

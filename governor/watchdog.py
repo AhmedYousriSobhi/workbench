@@ -1,6 +1,6 @@
 """Security and limit-drift monitoring for sim containers (report only; ADR 0002).
 
-Pure stdlib: the governor is a root service and must not import simctl's dependencies.
+Pure stdlib: the governor is a root service and must not import benchctl's dependencies.
 """
 import json
 import logging
@@ -73,7 +73,7 @@ class Watchdog:
         self.run_cmd, self.cg_dir = run_cmd, cg_dir
 
     def scan(self) -> list[str]:
-        ps = self.run_cmd(["docker", "ps", "-q", "--filter", "label=hpcsim.class"])
+        ps = self.run_cmd(["docker", "ps", "-q", "--filter", "label=workbench.class"])
         ids = ps.stdout.split() if ps.returncode == 0 else []
         if not ids:
             return []

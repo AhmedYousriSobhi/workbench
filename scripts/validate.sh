@@ -63,7 +63,7 @@ sys.exit(rc)
 PY
 
 step "progress docs"
-python3 -m simctl.progress --check || bad "docs/PROGRESS.md or progress.html is stale"
+python3 -m benchctl.progress --check || bad "docs/PROGRESS.md or progress.html is stale"
 python3 scripts/make_logo_assets.py --check || bad "logo files or web page icons are stale (python scripts/make_logo_assets.py)"
 
 step "json"
@@ -79,7 +79,7 @@ fi
 step "pytest"
 if python3 -c "import coverage" 2>/dev/null; then
   # coverage floor: the unit tests must keep covering the code (what needs root or a live host is in tests/real)
-  python3 -m coverage run --source=simctl,governor,webui,components -m pytest -q tests || bad "pytest"
+  python3 -m coverage run --source=benchctl,governor,webui,components -m pytest -q tests || bad "pytest"
   COV_FLOOR="${COV_FLOOR:-90}"
   python3 -m coverage report --skip-empty --fail-under="$COV_FLOOR" > cov-report.txt || bad "coverage below ${COV_FLOOR}%"
   tail -3 cov-report.txt

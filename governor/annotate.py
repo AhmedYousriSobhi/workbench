@@ -24,7 +24,7 @@ def http_post(url: str, token: str, body: dict, timeout: float = 2.0) -> None:
 class Annotator:
     MAX_QUEUE = 500
 
-    def __init__(self, url: str, token: str, post=http_post, tags: tuple[str, ...] = ("hpcsim", "governor")):
+    def __init__(self, url: str, token: str, post=http_post, tags: tuple[str, ...] = ("workbench", "governor")):
         self.url, self.token, self.post, self.tags = url, token, post, list(tags)
         self.q: queue.Queue = queue.Queue(self.MAX_QUEUE)
         self.paused = threading.Event()

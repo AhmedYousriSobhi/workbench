@@ -11,8 +11,8 @@ the governor, which was a root systemd service because it writes cgroup files (f
 `python -m governor --user-mode` runs as the user. `UserExecutor` replaces the cgroup files with the Docker API
 (the user is in the `docker` group): freeze/thaw become `docker pause/unpause`, stop becomes `docker kill` then `docker stop`. Admission
 (GV-9), the escalation ladder, the security watchdog, Grafana annotations, `/metrics` and the control socket all work
-unchanged; the socket lives under `$XDG_RUNTIME_DIR/hpcsim/` and `simctl`/the web page find it automatically when no
-system socket exists. `./scripts/benchctl start` starts it (`OPTI_GOVERNOR=auto|user|system|off`) and `stop` ends it.
+unchanged; the socket lives under `$XDG_RUNTIME_DIR/workbench/` and `benchctl`/the web page find it automatically when no
+system socket exists. `./scripts/benchctl start` starts it (`BENCHCTL_GOVERNOR=auto|user|system|off`) and `stop` ends it.
 The root service stays available as an optional upgrade and wins when it is running.
 
 ## What rootless mode does not give
@@ -36,7 +36,7 @@ before the kernel OOM killer; on the live stack real containers are paused at L3
 and a stopped one comes back with the `start` command. Running them found four defects, now fixed:
 - `docker stop -t 2` loses the race to the OOM killer: a runaway PID 1 ignores SIGTERM for the 2 s grace. Rootless stop
   is now `docker kill` (SIGKILL, like `cgroup.kill` in the root path) followed by `docker stop`.
-- The arrivals flag defaulted to `/run/hpcsim/` (root-only), so every L1 action failed; it now defaults to the user's
+- The arrivals flag defaulted to `/run/workbench/` (root-only), so every L1 action failed; it now defaults to the user's
   runtime directory in rootless mode.
 - The one-cgroup test sampler crashed the governor when the watched container's cgroup vanished.
 - Containers the governor stopped dropped out of the inventory, so `start NAME` was refused as an unknown group in both

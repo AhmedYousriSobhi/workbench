@@ -8,7 +8,7 @@ SPEC W-3), and user-sim does not exist yet, so Slurm job events are not availabl
 
 ## Decision
 - Each mock counts the client requests it serves at `GET /sim/stats`. Health checks, `/sim/*` control calls and
-  requests carrying `X-Opti-Probe` (the UI's own polling) are not counted, so drawn traffic is traffic from the app,
+  requests carrying `X-Workbench-Probe` (the UI's own polling) are not counted, so drawn traffic is traffic from the app,
   Prometheus, or `curl`, not the page watching itself.
 - `webui/flow.py` polls the counters (rate-limited, shared by all open tabs) and turns a rise into an event
   `clients -> service`. Scenario steps and fault buttons add `injector -> service` events. Nothing is invented.

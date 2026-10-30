@@ -2,7 +2,7 @@
 
 Two real sources, no invented traffic:
 - client traffic: every mock counts the requests it serves (`GET /sim/stats`), ignoring health checks, `/sim`
-  control calls and requests that carry the X-Opti-Probe header (this UI's own polling). A rise in a counter is
+  control calls and requests that carry the X-Workbench-Probe header (this UI's own polling). A rise in a counter is
   traffic from "clients" (the app, Prometheus scrapes, curl) to that service.
 - injections: scenario steps and fault buttons, noted by the code that applies them.
 Slurm jobs are not here: the page has no Docker access (SPEC W-3), so it cannot read the scheduler.

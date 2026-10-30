@@ -7,8 +7,8 @@
 ```mermaid
 flowchart TB
   subgraph HOST["Ubuntu host, 16 GB (control plane lives here)"]
-    GOV["hpcsim-governor<br/>systemd service, protected slice<br/>PSI + cgroup + MemAvailable"]
-    CTL["simctl CLI + Web UI (hpcsim user)"]
+    GOV["workbench-governor<br/>systemd service, protected slice<br/>PSI + cgroup + MemAvailable"]
+    CTL["benchctl CLI + Web UI (workbench user)"]
     SD["systemd-oomd (backstop)"]
   end
 

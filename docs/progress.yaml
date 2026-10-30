@@ -1,5 +1,5 @@
 # Single source of truth for docs/PROGRESS.md and docs/progress.html.
-# Regenerate with: python -m simctl.progress   (validate.sh fails if the outputs are stale)
+# Regenerate with: python -m benchctl.progress   (validate.sh fails if the outputs are stale)
 # status: done = merged and verified | review = in an open PR | partial = some of it works | todo = not started
 # `where` paths are checked to exist for done/partial items.
 updated: 2026-10-29
@@ -12,7 +12,7 @@ phases:
     title: Baseline
     goal: Measure real memory so budgets stop being guesses
     items:
-      - {name: Measurement tooling, status: done, pr: 28, where: simctl/measure.py,
+      - {name: Measurement tooling, status: done, pr: 28, where: benchctl/measure.py,
          how: "`benchctl measure run/report` samples host, Docker containers, PSS per process and libvirt domains (read-only), saves JSON, suggests budgets = peak x 1.2."}
       - {name: Host baseline, status: partial,
          how: "Idle host and a small Slurm stack were measured (slurmd 5 MiB, slurmctld 13, MariaDB 171). No loaded run with mocks yet."}
@@ -32,7 +32,7 @@ phases:
       - {name: mlockall and pre-allocated mitigation path, status: done, pr: 19, where: governor/memlock.py,
          how: "Locks its own pages and pre-opens handles and buffers so L3/L4 performs no allocation (SPEC GV-8)."}
       - {name: Control socket, status: done, pr: 19, where: governor/control.py,
-         how: "JSON lines on /run/hpcsim/gov.sock with a fixed allow-list; unknown commands are rejected."}
+         how: "JSON lines on /run/workbench/gov.sock with a fixed allow-list; unknown commands are rejected."}
       - {name: NF-1 memory-hog test, status: done, pr: 24, where: tests/real/test_root.py,
          how: "A real container hog is throttled, frozen then stopped in order; no host OOM. Runs as root via scripts/real-test-root.sh."}
       - {name: Security watchdog, status: done, pr: 34, where: governor/watchdog.py,
@@ -44,12 +44,12 @@ phases:
       - {name: systemd unit installed permanently, status: partial, where: systemd,
          how: "Unit and slice pass systemd-analyze and ran as a transient service in tests; scripts/install-governor.sh installs it as the standing service (printed unit tested; the sudo install itself is run by the user)."}
       - {name: Admission and real scale / set-profile, status: done, pr: 48, where: governor/core.py,
-         how: "admit command (GV-9): refused at L2+ or if it would breach the floor; scale and set-profile run simctl in the background at L0-L1 only (GV-8). benchctl up/scale ask first. Verified live through the socket."}
+         how: "admit command (GV-9): refused at L2+ or if it would breach the floor; scale and set-profile run benchctl in the background at L0-L1 only (GV-8). benchctl up/scale ask first. Verified live through the socket."}
       - {name: Governor /metrics endpoint, status: done, pr: 60, where: governor/metrics.py,
          how: "Prometheus text (level, MemAvailable, PSI, swap, groups per priority, actions, admissions) bound to the docker bridge address, rendered once per step so a scrape does no work (GV-8). The Prometheus 'governor' target is up on the live stack."}
       - {name: Live ladder test on the real stack, status: done, pr: 60, where: tests/real/test_pressure_real.py,
          how: "Dry-run governor against the running containers: L0 to L3 and back, /metrics, Grafana annotations and the planned throttle/freeze/thaw actions. The root variant passes on the dev machine: L3 really freezes a live container's cgroup (cgroup.events frozen 1), keeps P1 services running, and thaws on recovery; it also exposed and fixed the nested-slice cgroup path bug (PR 64)."}
-      - {name: Host tuning script and simctl top, status: todo,
+      - {name: Host tuning script and benchctl top, status: todo,
          how: "zram, swappiness and THP tuning with confirmation, and a live view of the governor."}
 
   - id: p2
@@ -58,15 +58,15 @@ phases:
     items:
       - {name: Slurm 26.05.5 images, status: done, pr: 32, where: images/node-base/Dockerfile,
          how: "Built from the SchedMD tarball (pinned and SHA256-checked) because Ubuntu's 23.11 lacks the 2026 security fixes; no extra container privileges (ADR 0002)."}
-      - {name: Generated Slurm config, status: done, pr: 32, where: simctl/slurmconf.py,
+      - {name: Generated Slurm config, status: done, pr: 32, where: benchctl/slurmconf.py,
          how: "slurm.conf, gres.conf and cgroup.conf derive from sim.yaml so node names match everywhere; fake GPUs use /dev/null-backed device files."}
-      - {name: Compose generation, status: done, pr: 30, where: simctl/compose.py,
-         how: "`benchctl compose --profile X` renders services with mem_limit, cgroup_parent and the hpcsim.class label from sim.yaml and profiles."}
-      - {name: slurmrestd with JWT, status: done, pr: 38, where: simctl/compose.py,
+      - {name: Compose generation, status: done, pr: 30, where: benchctl/compose.py,
+         how: "`benchctl compose --profile X` renders services with mem_limit, cgroup_parent and the workbench.class label from sim.yaml and profiles."}
+      - {name: slurmrestd with JWT, status: done, pr: 38, where: benchctl/compose.py,
          how: "JWT-only REST on the internal network, own user, no privileges; skips two unshare steps instead of loosening seccomp (ADR 0003, ADR 0004). Verified live: no token 401, bad tokens get no data."}
-      - {name: Accounting, status: done, pr: 38, where: simctl/slurmconf.py,
+      - {name: Accounting, status: done, pr: 38, where: benchctl/slurmconf.py,
          how: "MariaDB on a capped tmpfs plus slurmdbd; sacctmgr bootstrap creates cluster, QOS and users from sim.yaml; secrets stay in a gitignored folder. Verified live: a job as alice appears in sacct and the REST slurmdb endpoint."}
-      - {name: benchctl up / down / scale, status: done, pr: 45, where: simctl/stack.py,
+      - {name: benchctl up / down / scale, status: done, pr: 45, where: benchctl/stack.py,
          how: "Pre-flight, staged start (observability, slurm, nodes), skips unbuilt mocks, scale regenerates slurm.conf, Grafana token created once (0600). Verified live with min; scale really stops containers."}
 
   - id: p3
@@ -83,10 +83,10 @@ phases:
       - {name: jira-mock, status: partial, pr: 71, where: components/jira-mock/jira.py,
          how: "Mode mock only: REST v2/v3 issues, POST search (/search/jql token paging, /search offset paging), myself, serverInfo, field, project, JQL with OR/NOT/parentheses/text search, comments (read, edit, delete), issue edit, watchers, worklog, assign, user search, workflow transitions with required-field errors, JQL subset, webhooks, 429/503/slow failures, and /sim/tickets for scenarios (ADR 0005, issue 107). Verified live in the container (transitions, JQL, webhook to an outside receiver, 429/503), 15 MiB. cloud/dc modes not built."}
       - {name: SSH login node, status: done, where: images/login, how: "sshd + Slurm client tools on 127.0.0.1:2222, key login only, forwarding on, keys generated by benchctl up (ADR 0011). Verified live: sinfo over SSH, root and password refused, port forward to a mock."}
-      - {name: sshd on compute nodes, status: done, where: images/node-base, how: "sshd in node-base, started on nodes only (HPCSIM_SSHD): ssh cn001 from the login node with no prompt (cluster key, shared node host key), a client ProxyJump or execution target to a node, srun and srun --pty. Reached through the login node only (ADR 0014). up builds node-base first. Verified live: tests/real/test_node_ssh_real.py."}
+      - {name: sshd on compute nodes, status: done, where: images/node-base, how: "sshd in node-base, started on nodes only (WORKBENCH_SSHD): ssh cn001 from the login node with no prompt (cluster key, shared node host key), a client ProxyJump or execution target to a node, srun and srun --pty. Reached through the login node only (ADR 0014). up builds node-base first. Verified live: tests/real/test_node_ssh_real.py."}
       - {name: Client setup by component, status: review, where: docs/guides/client-setup-by-component.md, how: "One section per client component (SSH, Slurm, Grafana, storage, Jira, BCM, BMC): values, where to get them, what to expect, common failure. Values checked against the live stack; not walked in the client window. Issue 82."}
       - {name: Normal shell on nodes, status: review, where: images/node-base/Dockerfile, how: "Simulated users get bash (useradd default), bash-completion, Slurm tab completion from the Slurm source tree, history, a user@node prompt and Slurm on the login-shell PATH. Verified live: tests/real/test_login_real.py. Issue 81."}
-      - {name: Client key helper, status: review, where: "simctl/stack.py, simctl/cli.py", how: "benchctl ssh-key install|remove: copies the login key to ~/.ssh/workbench_ed25519 (mode 600) for clients that only read keys under ~/.ssh; refuses to overwrite a foreign file. Issue 80."}
+      - {name: Client key helper, status: review, where: "benchctl/stack.py, benchctl/cli.py", how: "benchctl ssh-key install|remove: copies the login key to ~/.ssh/workbench_ed25519 (mode 600) for clients that only read keys under ~/.ssh; refuses to overwrite a foreign file. Issue 80."}
       - {name: GPU metrics follow Slurm jobs, status: review, where: "components/gpu-exporter-farm/exporter.py, images/slurm-ctl/alloc_feed.py", how: "slurmctld serves the GPU indexes running jobs hold (internal :9401); the exporter polls it every 3 s and shows those GPUs busy, the rest idle (last answer kept 30 s if the feed is down). Verified live: tests/real/test_gpu_follows_slurm_real.py. Issue 83."}
       - {name: Teleport access, status: todo, how: "Issue 39: the app reaches nodes through Teleport (auth + proxy, node access, outage and cert-expiry scenarios). Needs open decisions 6 first; will need sshd in node-base and a Phase 0 budget."}
 
@@ -97,7 +97,7 @@ phases:
       - {name: Scenario files, status: partial, where: scenarios, pr: 73,
          how: "Eleven scenarios: gpu-xid-storm, node-down, fan-failure, jira-429, jira-outage, jira-flap, ticket-lifecycle, drain-ticket and ticket-wave run now; pod-crashloop and k8s-node-notready need k3d/KWOK."}
       - {name: user-sim and ticket-bot, status: todo, how: "Personas with Poisson arrivals and engineers working tickets."}
-      - {name: scenario-engine, status: partial, pr: 73, where: simctl/scenario.py,
+      - {name: scenario-engine, status: partial, pr: 73, where: benchctl/scenario.py,
          how: "`benchctl scenario list|run NAME [--speed N] [--dry-run]`: steps drive bmc-farm, bcm-mock, gpu-exporter, jira-mock, Slurm (scontrol) and the login node's sshd (ssh target: down, hung, up, rotate_host_key, max_sessions, reject_auth, node_sshd + nodes, reset; scenarios ssh-host-key-changed, login-node-down, login-node-hung, ssh-session-limit, ssh-key-refused, ssh-node-sshd-down; tests/real/test_ssh_faults_real.py); ramps; expect (slurm.node_state, jira.issue_created) watched from the start; k8s and ticket-bot steps skipped. Runs in the host CLI, not a container (ADR 0006). Verified live."}
 
   - id: p5
@@ -120,7 +120,7 @@ phases:
     title: Web UI and profiles
     goal: One click from cold start to a busy cluster
     items:
-      - {name: Profile pre-flight (CLI), status: done, pr: 26, where: simctl/checks.py,
+      - {name: Profile pre-flight (CLI), status: done, pr: 26, where: benchctl/checks.py,
          how: "`benchctl preflight` refuses a profile when free memory minus its budget is under the safety floor and suggests a smaller one."}
       - {name: Web UI base, status: partial, pr: 76, where: webui/,
          how: "`python -m webui` on 127.0.0.1:8088 with a login token: Governor dashboard (level banner, MemAvailable/PSI sparklines, audit log over SSE) and Scenario Orchestrator (list, Play with speed, Stop, per-step timeline). Reads the governor socket only; Slurm steps are skipped in the UI. ~32 MB RSS on Starlette (ADR 0008). Reviewed in headless Chromium (desktop/phone, light/dark; no console errors or overflow; ARIA tabs, keyboard, status not by colour alone)."}
@@ -151,28 +151,28 @@ phases:
       - {name: Public-repo privacy guard and git hooks, status: review, pr: 105, where: "scripts/check-privacy.sh, .githooks/, scripts/install-hooks.sh, SECURITY.md",
          how: "check-privacy.sh blocks home paths, the local username, personal emails, tokens and keys, local-only paths (.claude/, graphify-out/) and symlinks that leave the repo, and prints only file:line and the rule. Tracked hooks: pre-commit (no commits on main/dev, privacy, validate.sh), commit-msg (issue reference), pre-push (no push to main/dev, full scan); installed by install-hooks.sh. validate.sh runs the scan too. Issue 54."}
       - {name: Unit-test coverage gate, status: done, pr: 81, where: "tests/, scripts/validate.sh",
-         how: "validate.sh runs the unit tests under coverage and fails below 90% (override COV_FLOOR). 226 tests, 98% of simctl, governor, webui and components. Not covered by unit tests, by design: code that needs root, a live Docker stack or a browser (tests/real)."}
+         how: "validate.sh runs the unit tests under coverage and fails below 90% (override COV_FLOOR). 226 tests, 98% of benchctl, governor, webui and components. Not covered by unit tests, by design: code that needs root, a live Docker stack or a browser (tests/real)."}
       - {name: Real-host tests, status: done, pr: [20, 22], where: "scripts/real-test.sh, scripts/real-test-root.sh",
          how: "User-level tests with cgroups, Docker, libvirt and a live governor; a sudo suite for root-only paths."}
-      - {name: Rootless governor (no sudo), status: review, pr: 98, where: "governor/executors.py, scripts/opti, simctl/checks.py",
-         how: "`python -m governor --user-mode` pauses/stops containers through the Docker API, skips memory.high throttle and reclaim, keeps the ladder, admission, watchdog and metrics, listens under $XDG_RUNTIME_DIR. `opti start` runs it when no system service is up. Live-tested: freeze/thaw of a real container, no sudo called. ADR 0010."}
-      - {name: One controller command (benchctl), status: review, where: "simctl/cli.py, simctl/inventory.py, scripts/benchctl",
-         how: "`benchctl VERB [RESOURCE] [NAME]` like kubectl: get nodes|services|profiles|scenarios (-o json), exec NODE, logs NODE, start/stop/open (launcher), plus every older command; node-name tab completion; simctl and scripts/opti kept as aliases; docs and tests name only benchctl (ADR 0015). Typos get a Did-you-mean hint and are never run; errors go to stderr; the old names print one notice in a terminal; docs/guides/benchctl-verbs.md lists each verb's limits (issues 90, 98)."}
+      - {name: Rootless governor (no sudo), status: review, pr: 98, where: "governor/executors.py, scripts/benchctl-launch, benchctl/checks.py",
+         how: "`python -m governor --user-mode` pauses/stops containers through the Docker API, skips memory.high throttle and reclaim, keeps the ladder, admission, watchdog and metrics, listens under $XDG_RUNTIME_DIR. `benchctl start` runs it when no system service is up. Live-tested: freeze/thaw of a real container, no sudo called. ADR 0010."}
+      - {name: One controller command (benchctl), status: review, where: "benchctl/cli.py, benchctl/inventory.py, scripts/benchctl",
+         how: "`benchctl VERB [RESOURCE] [NAME]` like kubectl: get nodes|services|profiles|scenarios (-o json), exec NODE, logs NODE, start/stop/open (launcher), plus every older command; node-name tab completion; the old command and project names were removed in #111; docs and tests name only benchctl (ADR 0015). Typos get a Did-you-mean hint and are never run; errors go to stderr; docs/guides/benchctl-verbs.md lists each verb's limits (issues 90, 98)."}
       - {name: Logo and README, status: review, where: "scripts/make_logo_assets.py, docs/assets/, docs/guides/brand-assets.md, README.md",
          how: "A W of servers on a bench (teal nodes, a dashed amber governed node), as logo.svg, a small cut for 16 to 32 px, favicons and touch icon, all built from one script and checked by validate.sh; the web page header and tab icons use it. The README is now a short five-step guide: wake it up, poke it, build your own, point your app at it, put it back. Issue 89 (logo part; the name decision is still open)."}
-      - {name: Export workbench as client profile, status: review, where: "simctl/export.py, simctl/cli.py, docs/guides/export-profile.md",
+      - {name: Export workbench as client profile, status: review, where: "benchctl/export.py, benchctl/cli.py, docs/guides/export-profile.md",
          how: "`benchctl export profile [--bmc] [--user] [--name] [--format]` writes the running workbench as a profile file the client imports (SSH, Slurm, Grafana, Jira, storage, optional BMC targets; parts not built are left out; no secrets). The client's format ID is read locally (.git/export-format, env or flag), never written in the repo. Verified: the client's own parser accepts the output (1 cluster, 6 BMC targets). Issue 91."}
-      - {name: Describe a node (CLI and page), status: review, where: "simctl/describe.py, simctl/cli.py, webui/app.py, webui/static/index.html",
+      - {name: Describe a node (CLI and page), status: review, where: "benchctl/describe.py, benchctl/cli.py, webui/app.py, webui/static/index.html",
          how: "`benchctl describe node NAME [-o json]` and a Details dialog on each node card show the same text from one gatherer: container (state, image, memory limit, class), Slurm state and jobs, GPUs busy/idle and XID, BMC power/temperature/fans, ssh hint. A source that is down is one note. The page omits Docker and Slurm lines (no Docker access by design). Issue 93."}
-      - {name: Choose the workbench (plan and apply), status: review, where: "simctl/workbench.py, simctl/cli.py, simctl/stack.py, simctl/compose.py, webui/app.py",
+      - {name: Choose the workbench (plan and apply), status: review, where: "benchctl/workbench.py, benchctl/cli.py, benchctl/stack.py, benchctl/compose.py, webui/app.py",
          how: "`benchctl plan --cpu-nodes 2 --gpu-nodes 4 --with jira` prints the memory the selection needs against free memory (exit 1 and a hint when it does not fit); `up` with the same flags, or `apply -f FILE`, admits by that estimate and builds it. Parts: jira, bmc, bcm, accounting, scenarios, load; Kubernetes refused until built. The effective sim is written to compose/generated/sim.yaml so slurm.conf, the BMC farm, the GPU exporter, get, describe and export agree. The page has a Plan form (estimate only, W-3). Verified live: 2 cpu + 3 gpu nodes x 4 GPUs. ADR 0016. Issue 92."}
-      - {name: Tab completion, status: review, where: "simctl/completion.py, simctl/cli.py, scripts/benchctl, tests/test_completion.py, tests/real/test_completion_real.py",
+      - {name: Tab completion, status: review, where: "benchctl/completion.py, benchctl/cli.py, scripts/benchctl, tests/test_completion.py, tests/real/test_completion_real.py",
          how: "`benchctl completion install|remove|bash|zsh|fish`: no sudo, one rc line, a ~/.local/bin/benchctl link; `start` offers it once in a terminal. Completes resources, nodes and services, --profile, scenario names, --user, --with/--without, -o, -l and --sort-by from files only (no Docker). A wrong profile, node or scenario gets Did you mean plus the valid list, exit 2."}
-      - {name: One-command launcher, status: review, pr: 95, where: scripts/opti,
+      - {name: One-command launcher, status: review, pr: 95, where: scripts/benchctl-launch,
          how: "`./scripts/benchctl start` runs the machine check, creates the venv if missing, notes whether the governor is installed, brings the cluster up and starts the web page in the background, then prints the login link; `stop`, `status`, `open`. Idempotent. Live-tested start, second start, stop."}
-      - {name: Initial machine check, status: review, pr: 87, where: "simctl/machine.py, scripts/check-machine.sh",
+      - {name: Initial machine check, status: review, pr: 87, where: "benchctl/machine.py, scripts/check-machine.sh",
          how: "`./scripts/check-machine.sh` (system python3 only, runs before any build) checks OS, cores, RAM, disk, cgroup v2, Docker daemon and compose, free ports, optional tools, and which profiles fit; READY or NOT READY with a fix per problem. Also `benchctl check`."}
-      - {name: benchctl doctor / status / diag, status: done, pr: 26, where: "simctl/checks.py, simctl/diag.py",
+      - {name: benchctl doctor / status / diag, status: done, pr: 26, where: "benchctl/checks.py, benchctl/diag.py",
          how: "Environment checks with fixes, governor state, a masked diagnostics tarball, and the container security check."}
       - {name: Observability stack, status: done, where: compose/observability.yml,
          how: "Prometheus (2 d, tmpfs), Grafana with provisioned dashboard, fake GPU exporter."}
@@ -184,7 +184,7 @@ phases:
          how: "Ten chapters with screenshots of the web page and real terminal output (concepts, install, using the cluster, nodes and shells, web page, scenarios, governor, configuration, troubleshooting, reference). Commands were run against a live min stack; tests/test_docs.py checks that every command, script and node name it uses exists. The guide gained a step for getting a shell on a node (docker exec; nodes have no sshd)."}
       - {name: Verification helpers, status: done, pr: 48, where: scripts/verify.sh,
          how: "verify.sh runs validate.sh plus real tests (--full adds the live stack lifecycle); tests/real/helpers.py starts a live governor and talks to its socket."}
-      - {name: Progress tracker, status: done, pr: 42, where: simctl/progress.py,
+      - {name: Progress tracker, status: done, pr: 42, where: benchctl/progress.py,
          how: "This page, generated from docs/progress.yaml (issue 19)."}
 
 architecture:
@@ -193,7 +193,7 @@ architecture:
     - {id: net, title: "Docker network (sim containers, no privileges)"}
     - {id: ext, title: "Outside the 16 GB budget"}
   nodes:
-    - {id: simctl, group: host, label: "simctl CLI", status: partial}
+    - {id: benchctl, group: host, label: "benchctl CLI", status: partial}
     - {id: gov, group: host, label: "Governor (ladder + watchdog)", status: done}
     - {id: sock, group: host, label: "gov.sock", status: done}
     - {id: docker, group: host, label: "Docker + cgroups", status: done}
@@ -211,14 +211,14 @@ architecture:
     - {id: jira, group: net, label: "jira-mock", status: partial}
     - {id: login, group: net, label: "login node (sshd)", status: done}
     - {id: tele, group: net, label: "Teleport access", status: todo}
-    - {id: chaos, group: net, label: "scenario engine (simctl)", status: partial}
+    - {id: chaos, group: net, label: "scenario engine (benchctl)", status: partial}
     - {id: users, group: net, label: "user-sim / ticket-bot", status: todo}
     - {id: k8s, group: net, label: "k3d + KWOK", status: partial}
     - {id: webui, group: net, label: "Web UI", status: partial}
     - {id: app, group: ext, label: "App under test", status: partial}
     - {id: mac, group: ext, label: "macOS agent", status: todo}
   edges:
-    - [simctl, sock, commands]
+    - [benchctl, sock, commands]
     - [sock, gov, ""]
     - [gov, docker, "freeze / throttle / stop"]
     - [gov, libvirt, "managedsave"]

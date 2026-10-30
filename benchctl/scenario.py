@@ -22,8 +22,8 @@ ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "ht
              "bcm-mock": "http://127.0.0.1:8081/sim/inject", "jira": "http://127.0.0.1:8080/sim/failure",
              "jira-tickets": "http://127.0.0.1:8080/sim/tickets"}
 JIRA_ACTIONS = ("create", "transition", "comment", "reset")
-SLURMCTLD = "hpcsim-slurmctld-1"
-LOGIN = "hpcsim-login-1"
+SLURMCTLD = "workbench-slurmctld-1"
+LOGIN = "workbench-login-1"
 HOST_TARGETS = ("slurm", "ssh")  # steps that need Docker on the host
 SSH_STATES = ("down", "up", "hung")
 NODE_SSHD_STATES = ("down", "up")
@@ -154,11 +154,11 @@ SSHD_HUP = "kill -HUP $(cat /run/sshd.pid)"  # sshd re-executes and re-reads its
 SSH_SCRIPTS = {
     "rotate_host_key": "rm -f /etc/ssh/ssh_host_ed25519_key /etc/ssh/ssh_host_ed25519_key.pub && "
                        "ssh-keygen -q -t ed25519 -N '' -f /etc/ssh/ssh_host_ed25519_key && " + SSHD_HUP,
-    "reset": "install -m 600 /run/hpcsim/ssh/ssh_host_ed25519_key /etc/ssh/ssh_host_ed25519_key && "
+    "reset": "install -m 600 /run/workbench/ssh/ssh_host_ed25519_key /etc/ssh/ssh_host_ed25519_key && "
              "rm -f /etc/ssh/ssh_host_ed25519_key.pub && sed -i '/^MaxSessions/d' /etc/ssh/sshd_config && "
-             "install -m 644 /run/hpcsim/ssh/authorized_keys /etc/ssh/authorized_keys && " + SSHD_HUP,
+             "install -m 644 /run/workbench/ssh/authorized_keys /etc/ssh/authorized_keys && " + SSHD_HUP,
     # sshd reads authorized_keys on every login, so no HUP: only the client's key goes, the login -> node key stays
-    "reject_auth": "grep -v hpcsim-id_ed25519 /run/hpcsim/ssh/authorized_keys > /etc/ssh/authorized_keys",
+    "reject_auth": "grep -v -e -id_ed25519 /run/workbench/ssh/authorized_keys > /etc/ssh/authorized_keys",
     "node_sshd_down": "kill $(cat /run/sshd.pid)",
     "node_sshd_up": "[ -f /run/sshd.pid ] && kill -0 $(cat /run/sshd.pid) 2>/dev/null || /usr/sbin/sshd -e",
 }
@@ -180,7 +180,7 @@ def ssh_commands(do: dict) -> list[list[str]]:
     if do.get("reject_auth"):
         cmds.append([*exec_, SSH_SCRIPTS["reject_auth"]])
     if "node_sshd" in do:  # one node's sshd only; the container, and the login node's own sshd, stay up
-        cmds += [["docker", "exec", f"hpcsim-{n}-1", "sh", "-c", SSH_SCRIPTS[f"node_sshd_{do['node_sshd']}"]] for n in do["nodes"]]
+        cmds += [["docker", "exec", f"workbench-{n}-1", "sh", "-c", SSH_SCRIPTS[f"node_sshd_{do['node_sshd']}"]] for n in do["nodes"]]
     if "max_sessions" in do:
         n = int(do["max_sessions"])
         cmds.append([*exec_, f"sed -i '/^MaxSessions/d' /etc/ssh/sshd_config && echo 'MaxSessions {n}' >> /etc/ssh/sshd_config && {SSHD_HUP}"])

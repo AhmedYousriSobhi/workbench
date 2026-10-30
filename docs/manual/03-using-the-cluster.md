@@ -5,7 +5,7 @@
 ```bash
 ./scripts/benchctl up --profile min      # pre-flight, governor admission, ordered start
 ./scripts/benchctl scale 8               # compute nodes: slurm.conf regenerated, slurmd started or stopped
-./scripts/benchctl down                  # stop and remove the hpcsim project
+./scripts/benchctl down                  # stop and remove the workbench project
 ```
 
 `up` and `scale` ask the governor first and are **refused from level L2 up** (memory pressure); the message says why.
@@ -17,10 +17,10 @@ That is the design, not a fault: free memory and retry. `scale` keeps the profil
 The nodes have Slurm's commands on the `PATH`. Run them on the controller:
 
 ```bash
-docker exec hpcsim-slurmctld-1 sinfo
-docker exec hpcsim-slurmctld-1 squeue
-docker exec -u alice hpcsim-slurmctld-1 sbatch --wrap "sleep 60"     # submit as a simulated user
-docker exec hpcsim-slurmctld-1 scontrol show node cn001
+docker exec workbench-slurmctld-1 sinfo
+docker exec workbench-slurmctld-1 squeue
+docker exec -u alice workbench-slurmctld-1 sbatch --wrap "sleep 60"     # submit as a simulated user
+docker exec workbench-slurmctld-1 scontrol show node cn001
 ```
 
 Jobs are synthetic; GPUs are count-based GRES (`gpu:h200:8` per GPU node, fake device files). Partitions are `cpu` and `gpu`.
@@ -35,7 +35,7 @@ For an interactive session see [chapter 4](04-nodes-and-shells.md).
 **Slurm REST** goes through `slurmrestd` with a JWT, not root:
 
 ```bash
-docker exec hpcsim-slurmctld-1 scontrol token username=alice     # prints SLURM_JWT=...
+docker exec workbench-slurmctld-1 scontrol token username=alice     # prints SLURM_JWT=...
 ```
 
 Details and the accounting setup: [ADR 0003](../adr/0003-slurmrestd-jwt-and-accounting.md).
@@ -68,7 +68,7 @@ Timed, repeatable faults are [scenarios](06-scenarios.md).
 - **Grafana** http://127.0.0.1:3000, user `admin`, password `admin` (a closed local lab). Dashboards are
   file-provisioned; the governor posts an annotation for every action it takes.
 - **Prometheus** http://127.0.0.1:9090, about two days of retention. The `governor` job scrapes the governor's
-  `/metrics` (`hpcsim_governor_level`, `hpcsim_host_mem_available_bytes`, and more).
+  `/metrics` (`workbench_governor_level`, `workbench_host_mem_available_bytes`, and more).
 
 ## Progress and diagrams
 
