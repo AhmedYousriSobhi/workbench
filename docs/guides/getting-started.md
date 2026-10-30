@@ -127,7 +127,7 @@ A client that only accepts keys under `~/.ssh` can use `./scripts/simctl ssh-key
 
 See what the output looks like in [Nodes and shells](../manual/04-nodes-and-shells.md). A shell that hangs may be a node the governor paused under memory pressure (`./scripts/simctl status`). The other machine
 with a real `sshd` is the optional fidelity VM (`cd fidelity-vm && ./bin/up.sh`, then `vagrant ssh fidelity`). Teleport
-access to the simulated nodes is not built yet (issue 77). More in [Nodes and shells](../manual/04-nodes-and-shells.md).
+access to the simulated nodes is not built yet (issue 39). More in [Nodes and shells](../manual/04-nodes-and-shells.md).
 
 ## 4b. The web page
 

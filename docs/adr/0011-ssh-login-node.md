@@ -21,4 +21,4 @@ A `login` service (group `access`, in `min` and so every profile) built from `im
 ## Consequences
 - `ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1 sinfo` works after `simctl up`.
 - Compute nodes still have no `sshd`; Slurm's `srun` and a client's `ssh <node>` hops are not covered (follow-up).
-- Teleport (issue 77) can build on this component.
+- Teleport (issue 39) can build on this component.

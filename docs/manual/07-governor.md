@@ -64,4 +64,4 @@ The design is in [the architecture](../architecture/05-governor.md) and what the
 ## Known limit
 
 While the governor executes a plan, `status` waits for the plan (about 28 ms per pause and 175 ms per stop per container,
-measured). With few containers this is invisible; tracked in issue #102.
+measured). With few containers this is invisible; tracked in issue #53.

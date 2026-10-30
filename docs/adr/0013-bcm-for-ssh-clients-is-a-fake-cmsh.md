@@ -1,6 +1,6 @@
 # 0013. BCM for SSH-based clients is a fake `cmsh` on the login node
 
-Status: accepted; built in issue 127
+Status: accepted; built in issue 66
 
 ## Context
 ADR 0005 gave bcm-mock a CMDaemon-style `POST /json` surface on an assumed call list. The one client we now know (a desktop monitoring app),
@@ -11,7 +11,7 @@ CMDaemon events log. Nothing in that path is HTTP.
 
 ## Decision
 - **Keep** bcm-mock's JSON API for any client that does use CMDaemon's JSON interface; it stays `partial` (ADR 0005).
-- **Add** a fake `cmsh` to the login node (ADR 0011), implemented as a follow-up (issue 127): the login node doubles as
+- **Add** a fake `cmsh` to the login node (ADR 0011), implemented as a follow-up (issue 66): the login node doubles as
   the BCM head node. It answers the read-only queries above from `sim.yaml` and bcm-mock's node state, so a node taken
   down by a scenario shows as down in `device; status`. It refuses everything that would change state.
 - Output follows real `cmsh` table formatting closely enough for a client's parser; the formats are an assumed subset

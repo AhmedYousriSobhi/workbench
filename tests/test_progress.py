@@ -79,3 +79,8 @@ def test_unknown_status_is_rejected(tmp_path):
     bad.write_text("phases:\n  - {id: a, title: A, goal: g, items: [{name: n, status: wip, how: h}]}\n")
     with pytest.raises(ValueError):
         progress.load(bad)
+
+
+def test_legacy_pr_numbers_are_plain_text():
+    repo = "https://x/r"
+    assert progress._pr_links({"pr": [3, 200]}, repo, legacy=160) == "#3, [#200](https://x/r/pull/200)"

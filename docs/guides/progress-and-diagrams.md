@@ -30,6 +30,7 @@ Changing a status without regenerating therefore cannot get past the pre-commit 
 ## Rules of thumb
 - Mark something **done** only after it was run for real (a test against the real thing, not only unit tests).
 - Use **review** while its PR is open; flip to **done** when it merges.
+- `legacy_pr_max` in `docs/progress.yaml` is the last PR number of the previous repository (before the move). Those numbers are shown as plain text; newer ones link to this repository.
 - Write `how` for a reader who has not seen the code: the mechanism, not the file list.
 - Put honest limits in **Known gaps** instead of leaving them out.
 

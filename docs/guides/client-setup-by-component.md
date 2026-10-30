@@ -84,12 +84,12 @@ lines, `gpu001` and `gpu002`.
 - **HTTP 401 next to "Grafana reachable"**: the token is wrong or stale. The health check needs no login, so
   "reachable" does not prove the token. Copy the current file again (it changes on every `up`).
 - **Panel empty for the first minute after `up`**: the GPU exporter is still starting. Wait and refresh.
-- The GPU lines are synthetic and do not follow your Slurm jobs yet (issue #158).
+- The GPU lines are synthetic and do not follow your Slurm jobs yet (issue #83).
 
 ## 4. Storage
 
 In the cluster's storage settings, paths such as `~` work over SSH (it runs `df` as `alice`, and reads the container's filesystem). Lustre-style quota
-commands are not simulated yet (roadmap, issue #134). The dashboard's `/mnt/lustre free` panel is static data.
+commands are not simulated yet (roadmap, issue #69). The dashboard's `/mnt/lustre free` panel is static data.
 
 ## 5. Jira
 
