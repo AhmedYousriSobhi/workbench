@@ -3,9 +3,9 @@
 One dashboard over everything: governor, cluster, scenarios.
 
 ```bash
-./scripts/opti start                     # starts it with the cluster; or by hand:
+./scripts/benchctl start                     # starts it with the cluster; or by hand:
 .venv/bin/python -m webui [port]         # default 127.0.0.1:8088; prints http://127.0.0.1:8088/login?token=...
-./scripts/opti open                      # print the login link again
+./scripts/benchctl open                      # print the login link again
 ```
 
 Open the link once: it sets a cookie. The token lives in `compose/generated/secrets/ui_token`; anyone with the link on
@@ -50,7 +50,7 @@ opens a shell on a node; use [`docker exec`](04-nodes-and-shells.md).
 
 In the right panel pick a scenario and a speed, press **Play**, and watch each step turn ok, skipped or failed. **Stop**
 aborts. Steps that need Docker (the `slurm` target: drain and resume) are **skipped on this page**, because the page has no
-Docker access by design; run those with `./scripts/simctl scenario run NAME`.
+Docker access by design; run those with `./scripts/benchctl scenario run NAME`.
 
 ![Run panel showing node-down, step 2 of 6, with each step marked ok or pending and a Stop button](img/web-scenario-running.png)
 

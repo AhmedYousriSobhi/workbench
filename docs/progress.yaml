@@ -13,7 +13,7 @@ phases:
     goal: Measure real memory so budgets stop being guesses
     items:
       - {name: Measurement tooling, status: done, pr: 28, where: simctl/measure.py,
-         how: "`simctl measure run/report` samples host, Docker containers, PSS per process and libvirt domains (read-only), saves JSON, suggests budgets = peak x 1.2."}
+         how: "`benchctl measure run/report` samples host, Docker containers, PSS per process and libvirt domains (read-only), saves JSON, suggests budgets = peak x 1.2."}
       - {name: Host baseline, status: partial,
          how: "Idle host and a small Slurm stack were measured (slurmd 5 MiB, slurmctld 13, MariaDB 171). No loaded run with mocks yet."}
       - {name: Budgets replaced by measured values, status: partial, pr: 68, where: profiles/min.yaml,
@@ -44,7 +44,7 @@ phases:
       - {name: systemd unit installed permanently, status: partial, where: systemd,
          how: "Unit and slice pass systemd-analyze and ran as a transient service in tests; scripts/install-governor.sh installs it as the standing service (printed unit tested; the sudo install itself is run by the user)."}
       - {name: Admission and real scale / set-profile, status: done, pr: 48, where: governor/core.py,
-         how: "admit command (GV-9): refused at L2+ or if it would breach the floor; scale and set-profile run simctl in the background at L0-L1 only (GV-8). simctl up/scale ask first. Verified live through the socket."}
+         how: "admit command (GV-9): refused at L2+ or if it would breach the floor; scale and set-profile run simctl in the background at L0-L1 only (GV-8). benchctl up/scale ask first. Verified live through the socket."}
       - {name: Governor /metrics endpoint, status: done, pr: 60, where: governor/metrics.py,
          how: "Prometheus text (level, MemAvailable, PSI, swap, groups per priority, actions, admissions) bound to the docker bridge address, rendered once per step so a scrape does no work (GV-8). The Prometheus 'governor' target is up on the live stack."}
       - {name: Live ladder test on the real stack, status: done, pr: 60, where: tests/real/test_pressure_real.py,
@@ -61,12 +61,12 @@ phases:
       - {name: Generated Slurm config, status: done, pr: 32, where: simctl/slurmconf.py,
          how: "slurm.conf, gres.conf and cgroup.conf derive from sim.yaml so node names match everywhere; fake GPUs use /dev/null-backed device files."}
       - {name: Compose generation, status: done, pr: 30, where: simctl/compose.py,
-         how: "`simctl compose --profile X` renders services with mem_limit, cgroup_parent and the hpcsim.class label from sim.yaml and profiles."}
+         how: "`benchctl compose --profile X` renders services with mem_limit, cgroup_parent and the hpcsim.class label from sim.yaml and profiles."}
       - {name: slurmrestd with JWT, status: done, pr: 38, where: simctl/compose.py,
          how: "JWT-only REST on the internal network, own user, no privileges; skips two unshare steps instead of loosening seccomp (ADR 0003, ADR 0004). Verified live: no token 401, bad tokens get no data."}
       - {name: Accounting, status: done, pr: 38, where: simctl/slurmconf.py,
          how: "MariaDB on a capped tmpfs plus slurmdbd; sacctmgr bootstrap creates cluster, QOS and users from sim.yaml; secrets stay in a gitignored folder. Verified live: a job as alice appears in sacct and the REST slurmdb endpoint."}
-      - {name: simctl up / down / scale, status: done, pr: 45, where: simctl/stack.py,
+      - {name: benchctl up / down / scale, status: done, pr: 45, where: simctl/stack.py,
          how: "Pre-flight, staged start (observability, slurm, nodes), skips unbuilt mocks, scale regenerates slurm.conf, Grafana token created once (0600). Verified live with min; scale really stops containers."}
 
   - id: p3
@@ -74,7 +74,7 @@ phases:
     goal: Fake BMC, BCM and Jira so the app's integrations can be exercised
     items:
       - {name: gpu-exporter-farm, status: done, where: components/gpu-exporter-farm/exporter.py,
-         how: "One process serving fake DCGM metrics for every simulated GPU (util, FB used and free, temp, power, XID) with the real exporter labels (Hostname, UUID, modelName), fault injection over /sim/inject. A read-only Grafana token for clients is made by simctl up. Verified live through Grafana /api/ds/query."}
+         how: "One process serving fake DCGM metrics for every simulated GPU (util, FB used and free, temp, power, XID) with the real exporter labels (Hostname, UUID, modelName), fault injection over /sim/inject. A read-only Grafana token for clients is made by benchctl up. Verified live through Grafana /api/ds/query."}
       - {name: bmc-farm, status: done, pr: 52, where: components/bmc-farm/bmc.py,
          how: "One process serves /<node>/redfish/v1 for every node: Systems, Chassis Thermal/Power, Managers, event log, Reset action, POST /sim/inject (temp, fans, power, events). Also standard Redfish over TLS on 127.0.0.1:8443 (Host picks the node, session login, collections, firmware, accounts; ADR 0012). Verified live in the stack."}
       - {name: bcm-mock, status: partial, pr: 71, where: components/bcm-mock/bcm.py,
@@ -82,11 +82,11 @@ phases:
       - {name: Fake cmsh on the login node, status: done, where: images/login/cmsh.py, how: "cmsh -c \"device; list\" / \"device; status\" / category, jobqueue and healthchecks lists on the login node (the BCM head node), state read from bcm-mock so a scenario that takes a node down shows DOWN; mutating commands refused; no interactive console (ADR 0013). Verified live: tests/real/test_cmsh_real.py."}
       - {name: jira-mock, status: partial, pr: 71, where: components/jira-mock/jira.py,
          how: "Mode mock only: REST v2/v3 issues, POST search (/search/jql token paging, /search offset paging), myself, serverInfo, field, project, JQL with OR/NOT/parentheses/text search, comments, workflow transitions with required-field errors, JQL subset, webhooks, 429/503/slow failures (ADR 0005). Verified live in the container (transitions, JQL, webhook to an outside receiver, 429/503), 15 MiB. cloud/dc modes not built."}
-      - {name: SSH login node, status: done, where: images/login, how: "sshd + Slurm client tools on 127.0.0.1:2222, key login only, forwarding on, keys generated by simctl up (ADR 0011). Verified live: sinfo over SSH, root and password refused, port forward to a mock."}
+      - {name: SSH login node, status: done, where: images/login, how: "sshd + Slurm client tools on 127.0.0.1:2222, key login only, forwarding on, keys generated by benchctl up (ADR 0011). Verified live: sinfo over SSH, root and password refused, port forward to a mock."}
       - {name: sshd on compute nodes, status: done, where: images/node-base, how: "sshd in node-base, started on nodes only (HPCSIM_SSHD): ssh cn001 from the login node with no prompt (cluster key, shared node host key), a client ProxyJump or execution target to a node, srun and srun --pty. Reached through the login node only (ADR 0014). up builds node-base first. Verified live: tests/real/test_node_ssh_real.py."}
       - {name: Client setup by component, status: review, where: docs/guides/client-setup-by-component.md, how: "One section per client component (SSH, Slurm, Grafana, storage, Jira, BCM, BMC): values, where to get them, what to expect, common failure. Values checked against the live stack; not walked in the client window. Issue 82."}
       - {name: Normal shell on nodes, status: review, where: images/node-base/Dockerfile, how: "Simulated users get bash (useradd default), bash-completion, Slurm tab completion from the Slurm source tree, history, a user@node prompt and Slurm on the login-shell PATH. Verified live: tests/real/test_login_real.py. Issue 81."}
-      - {name: Client key helper, status: review, where: "simctl/stack.py, simctl/cli.py", how: "simctl ssh-key install|remove: copies the login key to ~/.ssh/opti-sim_ed25519 (mode 600) for clients that only read keys under ~/.ssh; refuses to overwrite a foreign file. Issue 80."}
+      - {name: Client key helper, status: review, where: "simctl/stack.py, simctl/cli.py", how: "benchctl ssh-key install|remove: copies the login key to ~/.ssh/opti-sim_ed25519 (mode 600) for clients that only read keys under ~/.ssh; refuses to overwrite a foreign file. Issue 80."}
       - {name: GPU metrics follow Slurm jobs, status: review, where: "components/gpu-exporter-farm/exporter.py, images/slurm-ctl/alloc_feed.py", how: "slurmctld serves the GPU indexes running jobs hold (internal :9401); the exporter polls it every 3 s and shows those GPUs busy, the rest idle (last answer kept 30 s if the feed is down). Verified live: tests/real/test_gpu_follows_slurm_real.py. Issue 83."}
       - {name: Teleport access, status: todo, how: "Issue 39: the app reaches nodes through Teleport (auth + proxy, node access, outage and cert-expiry scenarios). Needs open decisions 6 first; will need sshd in node-base and a Phase 0 budget."}
 
@@ -98,7 +98,7 @@ phases:
          how: "Seven scenarios: gpu-xid-storm, node-down, fan-failure, jira-429, jira-outage run now; pod-crashloop and k8s-node-notready need k3d/KWOK."}
       - {name: user-sim and ticket-bot, status: todo, how: "Personas with Poisson arrivals and engineers working tickets."}
       - {name: scenario-engine, status: partial, pr: 73, where: simctl/scenario.py,
-         how: "`simctl scenario list|run NAME [--speed N] [--dry-run]`: steps drive bmc-farm, bcm-mock, gpu-exporter, jira-mock, Slurm (scontrol) and the login node's sshd (ssh target: down, hung, up, rotate_host_key, max_sessions, reject_auth, node_sshd + nodes, reset; scenarios ssh-host-key-changed, login-node-down, login-node-hung, ssh-session-limit, ssh-key-refused, ssh-node-sshd-down; tests/real/test_ssh_faults_real.py); ramps; expect (slurm.node_state, jira.issue_created) watched from the start; k8s and ticket-bot steps skipped. Runs in the host CLI, not a container (ADR 0006). Verified live."}
+         how: "`benchctl scenario list|run NAME [--speed N] [--dry-run]`: steps drive bmc-farm, bcm-mock, gpu-exporter, jira-mock, Slurm (scontrol) and the login node's sshd (ssh target: down, hung, up, rotate_host_key, max_sessions, reject_auth, node_sshd + nodes, reset; scenarios ssh-host-key-changed, login-node-down, login-node-hung, ssh-session-limit, ssh-key-refused, ssh-node-sshd-down; tests/real/test_ssh_faults_real.py); ramps; expect (slurm.node_state, jira.issue_created) watched from the start; k8s and ticket-bot steps skipped. Runs in the host CLI, not a container (ADR 0006). Verified live."}
 
   - id: p5
     title: Kubernetes
@@ -121,7 +121,7 @@ phases:
     goal: One click from cold start to a busy cluster
     items:
       - {name: Profile pre-flight (CLI), status: done, pr: 26, where: simctl/checks.py,
-         how: "`simctl preflight` refuses a profile when free memory minus its budget is under the safety floor and suggests a smaller one."}
+         how: "`benchctl preflight` refuses a profile when free memory minus its budget is under the safety floor and suggests a smaller one."}
       - {name: Web UI base, status: partial, pr: 76, where: webui/,
          how: "`python -m webui` on 127.0.0.1:8088 with a login token: Governor dashboard (level banner, MemAvailable/PSI sparklines, audit log over SSE) and Scenario Orchestrator (list, Play with speed, Stop, per-step timeline). Reads the governor socket only; Slurm steps are skipped in the UI. ~32 MB RSS on Starlette (ADR 0008). Reviewed in headless Chromium (desktop/phone, light/dark; no console errors or overflow; ARIA tabs, keyboard, status not by colour alone)."}
       - {name: Help wiki in the web page, status: review, pr: 146, where: "webui/wiki.py, docs/manual/11-which-command.md, docs/manual/12-glossary.md",
@@ -156,11 +156,13 @@ phases:
          how: "User-level tests with cgroups, Docker, libvirt and a live governor; a sudo suite for root-only paths."}
       - {name: Rootless governor (no sudo), status: review, pr: 98, where: "governor/executors.py, scripts/opti, simctl/checks.py",
          how: "`python -m governor --user-mode` pauses/stops containers through the Docker API, skips memory.high throttle and reclaim, keeps the ladder, admission, watchdog and metrics, listens under $XDG_RUNTIME_DIR. `opti start` runs it when no system service is up. Live-tested: freeze/thaw of a real container, no sudo called. ADR 0010."}
+      - {name: One controller command (benchctl), status: review, where: "simctl/cli.py, simctl/inventory.py, scripts/benchctl",
+         how: "`benchctl VERB [RESOURCE] [NAME]` like kubectl: get nodes|services|profiles|scenarios (-o json), exec NODE, logs NODE, start/stop/open (launcher), plus every older command; node-name tab completion; simctl and scripts/opti kept as aliases; docs and tests name only benchctl (ADR 0015). Issue 90."}
       - {name: One-command launcher, status: review, pr: 95, where: scripts/opti,
-         how: "`./scripts/opti start` runs the machine check, creates the venv if missing, notes whether the governor is installed, brings the cluster up and starts the web page in the background, then prints the login link; `stop`, `status`, `open`. Idempotent. Live-tested start, second start, stop."}
+         how: "`./scripts/benchctl start` runs the machine check, creates the venv if missing, notes whether the governor is installed, brings the cluster up and starts the web page in the background, then prints the login link; `stop`, `status`, `open`. Idempotent. Live-tested start, second start, stop."}
       - {name: Initial machine check, status: review, pr: 87, where: "simctl/machine.py, scripts/check-machine.sh",
-         how: "`./scripts/check-machine.sh` (system python3 only, runs before any build) checks OS, cores, RAM, disk, cgroup v2, Docker daemon and compose, free ports, optional tools, and which profiles fit; READY or NOT READY with a fix per problem. Also `simctl check`."}
-      - {name: simctl doctor / status / diag, status: done, pr: 26, where: "simctl/checks.py, simctl/diag.py",
+         how: "`./scripts/check-machine.sh` (system python3 only, runs before any build) checks OS, cores, RAM, disk, cgroup v2, Docker daemon and compose, free ports, optional tools, and which profiles fit; READY or NOT READY with a fix per problem. Also `benchctl check`."}
+      - {name: benchctl doctor / status / diag, status: done, pr: 26, where: "simctl/checks.py, simctl/diag.py",
          how: "Environment checks with fixes, governor state, a masked diagnostics tarball, and the container security check."}
       - {name: Observability stack, status: done, where: compose/observability.yml,
          how: "Prometheus (2 d, tmpfs), Grafana with provisioned dashboard, fake GPU exporter."}

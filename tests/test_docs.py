@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def test_getting_started_commands_exist():
     text = (ROOT / "docs/guides/getting-started.md").read_text()
     runner = CliRunner()
-    cmds = set(re.findall(r"python -m simctl\.cli (\w+)", text))
+    cmds = set(re.findall(r"(?:\./scripts/benchctl|benchctl) ([a-z][\w-]*)", text))
     assert {"check", "doctor", "up", "scale", "down", "status", "diag", "preflight"} <= cmds
     for c in cmds:
         assert runner.invoke(app, [c, "--help"]).exit_code == 0, c
@@ -40,13 +40,13 @@ def test_pyproject_declares_installable_packages():
     assert cfg["tool"]["setuptools"]["packages"] == ["simctl", "governor", "webui"]
 
 
-def test_simctl_wrapper_explains_a_missing_venv(tmp_path):
+def test_benchctl_wrapper_explains_a_missing_venv(tmp_path):
     import shutil
     import subprocess
 
     (tmp_path / "scripts").mkdir()
-    shutil.copy(Path(__file__).parent.parent / "scripts" / "simctl", tmp_path / "scripts" / "simctl")
-    r = subprocess.run([str(tmp_path / "scripts" / "simctl"), "status"], capture_output=True, text=True,
+    shutil.copy(Path(__file__).parent.parent / "scripts" / "benchctl", tmp_path / "scripts" / "benchctl")
+    r = subprocess.run([str(tmp_path / "scripts" / "benchctl"), "status"], capture_output=True, text=True,
                        check=False)
     assert r.returncode == 1 and "python3 -m venv .venv" in r.stderr
 
@@ -77,7 +77,7 @@ def test_readme_stays_short_and_architecture_is_split():
 def test_readme_build_scopes_use_real_commands():
     text = (ROOT / "README.md").read_text()
     runner = CliRunner()
-    for c in set(re.findall(r"simctl (check|doctor|preflight|up|down|scale|scenario)\b", text)):
+    for c in set(re.findall(r"benchctl (check|doctor|preflight|up|down|scale|scenario)\b", text)):
         assert runner.invoke(app, [c, "--help"]).exit_code == 0, c
     for s in set(re.findall(r"\./(scripts/[\w.-]+)", text)):
         assert (ROOT / s).is_file(), s
@@ -97,8 +97,8 @@ def test_manual_has_an_index_that_lists_every_chapter():
 def test_manual_commands_and_scripts_exist():
     text = "\n".join(p.read_text() for p in MANUAL.glob("*.md"))
     runner = CliRunner()
-    cmds = set(re.findall(r"(?:simctl\.cli|\./scripts/simctl|simctl) (check|doctor|preflight|status|diag|compose|up|down|"
-                          r"scale|scenario|measure)\b", text))
+    cmds = set(re.findall(r"(?:simctl\.cli|\./scripts/benchctl|benchctl) (check|doctor|preflight|status|diag|compose|up|down|"
+                          r"scale|scenario|measure|get|exec|logs|start|stop|open|ssh-key)\b", text))
     assert {"up", "down", "scale", "scenario", "status", "diag", "measure"} <= cmds
     for c in cmds:
         assert runner.invoke(app, [c, "--help"]).exit_code == 0, c
@@ -128,3 +128,24 @@ def test_manual_images_are_all_used_and_have_alt_text():
     used = set(re.findall(r"\]\(img/([\w.-]+\.png)\)", text))
     assert used == {p.name for p in (MANUAL / "img").glob("*.png")}
     assert not re.findall(r"!\[\]\(", text)
+
+
+def test_old_command_names_still_work(tmp_path):
+    """`./scripts/simctl` is an alias of `./scripts/benchctl`, and both are installed as entry points."""
+    import subprocess
+    import tomllib
+
+    scripts = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["scripts"]
+    assert scripts["benchctl"] == scripts["simctl"] == "simctl.cli:app"
+    out = subprocess.run([str(ROOT / "scripts/simctl"), "--help"], capture_output=True, text=True, check=False)
+    assert out.returncode == 0 and "benchctl" in out.stdout
+
+
+def test_docs_name_only_the_new_command():
+    """No page tells a new user to type the old names; only a paragraph that calls them aliases may mention them."""
+    bad = []
+    for f in [ROOT / "README.md", *sorted((ROOT / "docs/manual").glob("*.md")), *sorted((ROOT / "docs/guides").glob("*.md"))]:
+        for para in f.read_text().split("\n\n"):
+            if re.search(r"\./scripts/(simctl|opti)\b", para) and "alias" not in para.lower():
+                bad.append(f"{f.relative_to(ROOT)}: {para[:50]!r}")
+    assert not bad, bad

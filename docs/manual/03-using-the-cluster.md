@@ -3,9 +3,9 @@
 ## Start, resize, stop
 
 ```bash
-./scripts/simctl up --profile min      # pre-flight, governor admission, ordered start
-./scripts/simctl scale 8               # compute nodes: slurm.conf regenerated, slurmd started or stopped
-./scripts/simctl down                  # stop and remove the hpcsim project
+./scripts/benchctl up --profile min      # pre-flight, governor admission, ordered start
+./scripts/benchctl scale 8               # compute nodes: slurm.conf regenerated, slurmd started or stopped
+./scripts/benchctl down                  # stop and remove the hpcsim project
 ```
 
 `up` and `scale` ask the governor first and are **refused from level L2 up** (memory pressure); the message says why.

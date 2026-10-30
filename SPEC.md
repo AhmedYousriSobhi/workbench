@@ -8,7 +8,7 @@ Normative requirements for opti-sim. [README.md](README.md) gives the overview a
 - G1. Simulate an HPC/AI cluster (Slurm, Kubernetes, BMC, BCM, Jira, Grafana) on a 16 GB Ubuntu host so the app under test can be exercised end to end.
 - G2. Keep the whole simulation within a declared memory budget per profile and never let the host swap-thrash.
 - G3. Make every fault and workload a named, repeatable scenario.
-- G4. One-command start (`simctl up`) and a Web UI mirroring the CLI.
+- G4. One-command start (`benchctl up`) and a Web UI mirroring the CLI.
 - G5. Be the primary test target for a desktop HPC monitoring client: every endpoint such a client uses (SSH login node, Slurm, Grafana GPU metrics, Jira search, Redfish BMC) MUST behave like the real service, and [docs/guides/client-testing.md](docs/guides/client-testing.md) MUST list where each is and what is not built.
 
 **Non-goals**
@@ -21,7 +21,7 @@ Normative requirements for opti-sim. [README.md](README.md) gives the overview a
 |---|---|
 | P-1 | Host: Ubuntu, cgroup v2, PSI enabled (`/proc/pressure/memory`), kernel 5.19+ for `memory.reclaim`. |
 | P-2 | Docker with the systemd cgroup driver; libvirt/KVM for the fidelity VM. |
-| P-3 | `simctl doctor` MUST verify P-1/P-2 and report fixes; it MAY apply host tuning (zram, swappiness, THP) with confirmation. |
+| P-3 | `benchctl doctor` MUST verify P-1/P-2 and report fixes; it MAY apply host tuning (zram, swappiness, THP) with confirmation. |
 
 ## 3. Configuration: `sim.yaml`
 
@@ -64,12 +64,12 @@ Normative requirements for opti-sim. [README.md](README.md) gives the overview a
 | GV-6 | Every action is logged and published as a Grafana annotation and to the Web UI audit log. |
 | GV-7 | `--dry-run` logs intended actions without executing them. |
 | GV-8 | The governor MUST lock its memory (`mlockall`) at startup and MUST pre-allocate the L3/L4 execution path so mitigations perform no dynamic allocation. The rootless mode (`--user-mode`, ADR 0010, used when no system service runs) is best effort and cannot meet the lock guarantee. |
-| GV-9 | Admission control: `simctl up` and any scenario that starts workloads MUST be approved by the governor first. |
+| GV-9 | Admission control: `benchctl up` and any scenario that starts workloads MUST be approved by the governor first. |
 | GV-10 | Backstops: per-container `memory.max`; `systemd-oomd` on a sacrificial slice. |
 
 ## 6. Profiles and pre-flight
 
-Profiles: `min`, `std`, `full`, `jira-real`, `mac-agent` ([architecture section 5](docs/architecture/04-memory-and-profiles.md)). `simctl up --profile X` MUST refuse to start when `MemAvailable - profile budget` is below the safety floor and MUST suggest a smaller profile. Budgets are planning estimates until Phase 0 replaces them with measured values.
+Profiles: `min`, `std`, `full`, `jira-real`, `mac-agent` ([architecture section 5](docs/architecture/04-memory-and-profiles.md)). `benchctl up --profile X` MUST refuse to start when `MemAvailable - profile budget` is below the safety floor and MUST suggest a smaller profile. Budgets are planning estimates until Phase 0 replaces them with measured values.
 
 ## 7. CLI (`simctl`)
 

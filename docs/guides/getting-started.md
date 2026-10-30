@@ -1,16 +1,21 @@
 # Getting started
 
 How to run opti-sim on your workstation and see it working. Keep this page in step with the commands:
-`tests/test_docs.py` fails if a `simctl` command named here no longer exists. For everything about the tool, read the
+`tests/test_docs.py` fails if a `benchctl` command named here no longer exists. For everything about the tool, read the
 [user manual](../manual/README.md).
 
 ## Quickest way
 
 ```bash
-./scripts/opti start      # machine check, tools, cluster, web page; prints the login link
-./scripts/opti status     # what is running
-./scripts/opti stop       # stop the web page and the cluster
+./scripts/benchctl start      # machine check, tools, cluster, web page; prints the login link
+./scripts/benchctl get nodes  # every node and its state
+./scripts/benchctl stop       # stop the web page and the cluster
 ```
+
+Every command has the same shape, like `kubectl`: `benchctl VERB [RESOURCE] [NAME]`, for example `benchctl get nodes`,
+`benchctl exec gpu001 -- nvidia-smi`, `benchctl scenario run node-down`. `benchctl --help` lists the verbs;
+`benchctl --install-completion` adds Tab completion (once, then open a new terminal). The old names `simctl` and
+`./scripts/opti` still work as aliases.
 
 The numbered sections below are the same steps one at a time, for when you want to see or change each.
 
@@ -23,36 +28,36 @@ The numbered sections below are the same steps one at a time, for when you want 
 Needs only the system `python3`. It checks the OS, CPU cores, RAM, free disk, cgroup v2, Docker (daemon and
 compose), free ports, optional tools (KVM, k3d, kubectl) and says which profiles fit in the memory available
 right now. It ends with `READY` or `NOT READY` and a fix line for each problem. Do not build until it says
-`READY`. The same check runs as `python -m simctl.cli check` once the venv exists.
+`READY`. The same check runs as `./scripts/benchctl check` once the venv exists.
 
 ## 0b. Install the tools (once)
 
-Ubuntu has `python3`, not `python`, and `simctl` needs a few packages. Use a virtualenv in the repo:
+Ubuntu has `python3`, not `python`, and `benchctl` needs a few packages. Use a virtualenv in the repo:
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'
 ```
 
-The venv is per shell: activate it again in every new terminal (`. .venv/bin/activate`), or skip activation with `./scripts/simctl <command>`, which uses `.venv` directly (`./scripts/simctl status`). With the venv active, `python -m simctl.cli ...` works as written below (or just `simctl ...`). The
+The venv is per shell: activate it again in every new terminal (`. .venv/bin/activate`), or skip activation with `./scripts/benchctl <command>`, which uses `.venv` directly (`./scripts/benchctl status`). With the venv active you can type just `benchctl ...` instead of `./scripts/benchctl ...`; every command below works both ways. The old names `simctl` and `./scripts/opti` still work as aliases. The
 governor service needs no packages; it runs on the system `python3`.
 
 ## 1. Check the setup (doctor)
 
 ```bash
-python -m simctl.cli doctor        # cgroup v2, PSI, Docker, swap, memlock, containers stay unprivileged
-python -m simctl.cli preflight --profile min    # would this profile fit in free memory right now?
+./scripts/benchctl doctor        # cgroup v2, PSI, Docker, swap, memlock, containers stay unprivileged
+./scripts/benchctl preflight --profile min    # would this profile fit in free memory right now?
 ```
 
 `WARN kubectl/k3d missing` is fine until Kubernetes profiles exist. Fix any `FAIL` first.
 
 ## 2. Start the governor (outside monitoring and control)
 
-The governor watches memory and security and may stop low-priority containers under pressure. `./scripts/opti start`
+The governor watches memory and security and may stop low-priority containers under pressure. `./scripts/benchctl start`
 starts it for you, **as your own user, no sudo**: it pauses and stops containers through Docker. (Rootless mode cannot
 throttle with `memory.high`, reclaim, or guarantee its own memory is never swapped; ADR 0010.) Look at it with:
 
 ```bash
-python -m simctl.cli status               # level, mode (user or root), memory, groups, security findings
+./scripts/benchctl status               # level, mode (user or root), memory, groups, security findings
 ```
 
 For full protection, an optional root service that starts at boot and uses cgroup files:
@@ -65,9 +70,9 @@ sudo ./scripts/install-governor.sh --uninstall
 ## 3. Start, scale and stop the cluster
 
 ```bash
-python -m simctl.cli up --profile min     # pre-flight, governor admission, ordered start (~1 min)
-python -m simctl.cli scale 2              # compute nodes (slurm.conf regenerated, slurmd started/stopped)
-python -m simctl.cli down                 # stops only the hpcsim project; your other containers are untouched
+./scripts/benchctl up --profile min     # pre-flight, governor admission, ordered start (~1 min)
+./scripts/benchctl scale 2              # compute nodes (slurm.conf regenerated, slurmd started/stopped)
+./scripts/benchctl down                 # stops only the hpcsim project; your other containers are untouched
 ```
 
 Profiles are in `profiles/` (`min`, `std`, `full`); `up` refuses a profile that does not fit and names one
@@ -97,9 +102,9 @@ curl -X POST http://127.0.0.1:8000/sim/inject -d '{"node": "gpu001", "clear": tr
 Or run a named scenario (a timed list of faults) instead of injecting by hand:
 
 ```bash
-./scripts/simctl scenario list
-./scripts/simctl scenario run node-down --dry-run   # show the timeline, change nothing
-./scripts/simctl scenario run node-down --speed 10  # play it ten times faster
+./scripts/benchctl scenario list
+./scripts/benchctl scenario run node-down --dry-run   # show the timeline, change nothing
+./scripts/benchctl scenario run node-down --speed 10  # play it ten times faster
 ```
 
 A scenario fails (exit 1) when a step errors or an `expect` line does not hold. Steps for parts that are not
@@ -116,16 +121,16 @@ docker exec -it hpcsim-cn001-1 bash                            # a shell on a co
 docker exec -u alice -it hpcsim-gpu001-1 bash                  # the same, as a simulated user
 ```
 
-For tools that connect over SSH (a desktop monitoring client), `simctl up` starts a `login` container on `127.0.0.1:2222` with key login only and the Slurm client tools on PATH; the key is `compose/generated/secrets/ssh/id_ed25519` (ADR 0011):
+For tools that connect over SSH (a desktop monitoring client), `benchctl up` starts a `login` container on `127.0.0.1:2222` with key login only and the Slurm client tools on PATH; the key is `compose/generated/secrets/ssh/id_ed25519` (ADR 0011):
 
 ```bash
 ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1 sinfo
 ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1 ssh cn001 hostname   # a hop to a node
 ```
 
-A client that only accepts keys under `~/.ssh` can use `./scripts/simctl ssh-key install` (copies the key to `~/.ssh/opti-sim_ed25519`) and `./scripts/simctl ssh-key remove` afterwards.
+A client that only accepts keys under `~/.ssh` can use `./scripts/benchctl ssh-key install` (copies the key to `~/.ssh/opti-sim_ed25519`) and `./scripts/benchctl ssh-key remove` afterwards.
 
-See what the output looks like in [Nodes and shells](../manual/04-nodes-and-shells.md). A shell that hangs may be a node the governor paused under memory pressure (`./scripts/simctl status`). The other machine
+See what the output looks like in [Nodes and shells](../manual/04-nodes-and-shells.md). A shell that hangs may be a node the governor paused under memory pressure (`./scripts/benchctl status`). The other machine
 with a real `sshd` is the optional fidelity VM (`cd fidelity-vm && ./bin/up.sh`, then `vagrant ssh fidelity`). Teleport
 access to the simulated nodes is not built yet (issue 39). More in [Nodes and shells](../manual/04-nodes-and-shells.md).
 
@@ -135,13 +140,13 @@ access to the simulated nodes is not built yet (issue 39). More in [Nodes and sh
 .venv/bin/python -m webui        # prints a login link such as http://127.0.0.1:8088/login?token=...
 ```
 
-Open that link once (it sets a cookie; the token is kept in `compose/generated/secrets/ui_token`). Everything is on one page. The strip at the top shows the governor level, free memory, how many services and nodes are healthy, any running scenario, and a theme switch (auto, light, dark). The **left panel** is the governor: level, memory and pressure with two-minute trends. The **middle** is the cluster: service chips, the traffic diagram (a round dot travels from *Clients* to a service for each real request; a diamond from *Fault injector* when a fault is applied; *Pause animation* stops them, and they stop by themselves at governor L3 or for reduced motion) and a card per node. Open *Fault actions* on a node to power it off, overheat it, fail its fans or inject a GPU error, then *Clear faults*. The **right panel** has *Needs attention*, the scenarios (pick a speed, press Play, watch each step turn ok/skipped/failed, press Stop to abort) and the governor's log. Slurm steps are skipped on this page (it has no Docker access by design); use `./scripts/simctl scenario run` for those. On a phone the panels stack under each other.
+Open that link once (it sets a cookie; the token is kept in `compose/generated/secrets/ui_token`). Everything is on one page. The strip at the top shows the governor level, free memory, how many services and nodes are healthy, any running scenario, and a theme switch (auto, light, dark). The **left panel** is the governor: level, memory and pressure with two-minute trends. The **middle** is the cluster: service chips, the traffic diagram (a round dot travels from *Clients* to a service for each real request; a diamond from *Fault injector* when a fault is applied; *Pause animation* stops them, and they stop by themselves at governor L3 or for reduced motion) and a card per node. Open *Fault actions* on a node to power it off, overheat it, fail its fans or inject a GPU error, then *Clear faults*. The **right panel** has *Needs attention*, the scenarios (pick a speed, press Play, watch each step turn ok/skipped/failed, press Stop to abort) and the governor's log. Slurm steps are skipped on this page (it has no Docker access by design); use `./scripts/benchctl scenario run` for those. On a phone the panels stack under each other.
 
 ## 5. When something is wrong
 
 ```bash
-python -m simctl.cli status         # governor level and SECURITY findings
-python -m simctl.cli diag           # one masked tarball: attach it to bug reports
+./scripts/benchctl status         # governor level and SECURITY findings
+./scripts/benchctl diag           # one masked tarball: attach it to bug reports
 ```
 
 If memory is tight the governor pauses then stops containers lowest priority first (P6 down to P2); that

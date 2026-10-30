@@ -36,11 +36,11 @@ Key nuance: **pausing/freezing does not release RAM**, it only stops CPU use. Fr
 - **Hysteresis:** escalate fast, de-escalate slowly (calm for 60 s before each step down), minimum dwell time per level.
 - **Priority classes:** P0 governor/panel, P1 core + app, P2 mocks, P3 K8s, P4 compute, P5 load, P6 VM/Jira DC. Lowest priority goes first.
 - **Reversible first, destructive last,** and every action is logged and visible in Grafana as an annotation.
-- **Admission control:** `simctl up` and scenarios that start things must ask the governor first.
+- **Admission control:** `benchctl up` and scenarios that start things must ask the governor first.
 - **Backstops:** kernel `memory.max` per container as the hard cap; **systemd-oomd** on a sacrificial slice (`ManagedOOMMemoryPressure=kill`) so the kernel OOM killer is the last resort, not the first. oomd needs cgroup v2 and PSI.
 - **Dry-run mode** (`governor --dry-run`) logs what it would do, for threshold tuning.
 
-### 6.5 Host tuning (one-time, scripted by `simctl doctor`)
+### 6.5 Host tuning (one-time, scripted by `benchctl doctor`)
 - Confirm cgroup v2 and PSI (`cat /proc/pressure/memory`).
 - **zram** swap (zstd, about 25-50% of RAM), low-ish `vm.swappiness`, THP set to `madvise`.
 - Docker: `max-size` log rotation, `--pids-limit`, per-container `--memory` and `--memory-reservation`.

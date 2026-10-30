@@ -16,9 +16,9 @@ nothing to do (an inference; the Slurm source gives no rationale). Option B woul
 Docker's sandbox, which can go stale and miss a Docker security fix; that risk outweighs the benefit.
 
 The exception is monitored, not silent:
-- the governor watchdog and `simctl doctor` report any container whose `SLURMRESTD_SECURITY` contains an option
+- the governor watchdog and `benchctl doctor` report any container whose `SLURMRESTD_SECURITY` contains an option
   other than those two (for example `disable_user_check` or `become_user`);
-- `simctl doctor` lists the accepted exception by name;
+- `benchctl doctor` lists the accepted exception by name;
 - the existing check still flags privileged mode, added capabilities and unconfined seccomp/AppArmor.
 
 ## Revisit when

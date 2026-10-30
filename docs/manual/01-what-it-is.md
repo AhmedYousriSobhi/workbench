@@ -26,7 +26,7 @@ Most of what the app talks to is an API, not an operating system. So:
 | `gpu-exporter-farm` | fake DCGM GPU metrics | http://127.0.0.1:9400 |
 | Prometheus, Grafana | metrics and dashboards | :9090, :3000 |
 | Web page | one dashboard over everything | http://127.0.0.1:8088 |
-| Governor | memory protection on the host | `simctl status` |
+| Governor | memory protection on the host | `benchctl status` |
 | `scenario-engine`, `user-sim`, `ticket-bot` | timed faults, simulated users and engineers | see [chapter 6](06-scenarios.md) |
 
 Everything listens on `127.0.0.1` only, except the governor's metrics, which bind the Docker bridge address. **Not built yet:** Kubernetes (k3d and KWOK), the Profile and Budget manager
@@ -34,7 +34,7 @@ page, the user simulator and ticket bot, Teleport/SSH access. See [PROGRESS.md](
 
 ## Profiles
 
-A profile chooses which parts run and carries a memory budget that `simctl up` enforces.
+A profile chooses which parts run and carries a memory budget that `benchctl up` enforces.
 
 | Profile | What is on | Budget |
 |---|---|---|

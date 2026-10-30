@@ -6,7 +6,7 @@ opti-sim is a simulation that runs on a developer workstation. It is not a hoste
 
 Please report a vulnerability privately through GitHub: **Security** tab, **Report a vulnerability**
 (a private advisory). Do not open a public issue for it. Include what you saw, the commit or version, and the steps to
-reproduce; a masked `./scripts/simctl diag` bundle helps for environment problems.
+reproduce; a masked `./scripts/benchctl diag` bundle helps for environment problems.
 
 ## What is in scope
 

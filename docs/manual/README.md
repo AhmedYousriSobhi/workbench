@@ -27,7 +27,7 @@ Short on time? [Getting started](../guides/getting-started.md) is the 10-minute 
 
 ## Conventions
 
-- Commands run from the repository root. `./scripts/simctl <cmd>` is `python -m simctl.cli <cmd>` without
+- Commands run from the repository root. `./scripts/benchctl <cmd>` is `./scripts/benchctl <cmd>` without
   activating the virtualenv.
 - Nothing in the normal start, use and stop path needs `sudo` (ADR 0010).
 - "Node" means a simulated node: a container (a compute or GPU node running `slurmd`), not a machine.

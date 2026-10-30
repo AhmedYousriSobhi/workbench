@@ -140,4 +140,56 @@ def test_ssh_key_commands(monkeypatch, tmp_path):
     assert "nothing to remove" in invoke("ssh-key", "remove").output
     (src / "id_ed25519").unlink()
     r = invoke("ssh-key", "install")
-    assert r.exit_code == 1 and "simctl up" in r.output
+    assert r.exit_code == 1 and "benchctl up" in r.output
+
+
+def test_get_resources_and_json(monkeypatch):
+    """`benchctl get nodes|profiles|scenarios` print a table, or JSON with -o json."""
+    import json
+
+    from simctl import inventory
+
+    monkeypatch.setattr(inventory, "_containers", lambda runner=None: {"cn001": "running", "gpu001": "paused"})
+    r = runner.invoke(cli.app, ["get", "nodes"])
+    assert r.exit_code == 0 and "cn001" in r.output and "running" in r.output and "absent" in r.output
+    rows = json.loads(runner.invoke(cli.app, ["get", "nodes", "-o", "json"]).output)
+    assert {"name": "gpu001", "kind": "gpu", "state": "paused"} in rows
+    assert "min" in runner.invoke(cli.app, ["get", "profiles"]).output
+    assert "node-down" in runner.invoke(cli.app, ["get", "scenarios"]).output
+
+
+def test_get_services_lists_the_stack(monkeypatch):
+    from simctl import inventory
+
+    monkeypatch.setattr(inventory, "_containers", lambda runner=None: {"slurmctld": "running"})
+    assert "slurmctld" in runner.invoke(cli.app, ["get", "services"]).output
+    monkeypatch.setattr(inventory, "_containers", lambda runner=None: {})
+    assert runner.invoke(cli.app, ["get", "services"]).output.strip() == "none"
+
+
+def test_node_completion_offers_sim_yaml_nodes():
+    from simctl.cli import _node_names
+
+    assert _node_names("gpu") == ["gpu001", "gpu002"]
+    assert "cn001" in _node_names("")
+
+
+def test_exec_and_logs_run_docker_in_the_project_container(monkeypatch):
+    import os
+
+    calls = []
+    monkeypatch.setattr(os, "execvp", lambda f, a: calls.append(a))
+    runner.invoke(cli.app, ["exec", "gpu001", "-u", "alice", "--", "hostname"])
+    assert calls[-1] == ["docker", "exec", "-u", "alice", "hpcsim-gpu001-1", "hostname"]
+    runner.invoke(cli.app, ["logs", "cn001", "--tail", "5"])
+    assert calls[-1] == ["docker", "logs", "--tail", "5", "hpcsim-cn001-1"]
+
+
+def test_start_stop_open_delegate_to_the_launcher(monkeypatch):
+    import subprocess
+
+    seen = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd, check=False: seen.append(cmd[1:]) or subprocess.CompletedProcess(cmd, 0))
+    for args in (["start", "--profile", "min"], ["stop"], ["open"]):
+        assert runner.invoke(cli.app, args).exit_code == 0
+    assert seen == [["start", "--profile", "min"], ["stop"], ["open"]]

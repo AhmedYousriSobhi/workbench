@@ -1,8 +1,9 @@
 import typer
 
-from . import checks, compose, diag, machine, measure, scenario, stack
+from . import checks, compose, diag, inventory, machine, measure, nodes, scenario, stack
 
-app = typer.Typer(help="opti-sim control CLI")
+app = typer.Typer(help="benchctl: control the simulated cluster. Pattern: benchctl VERB [RESOURCE] [NAME]. "
+                       "Start with `benchctl start`, look with `benchctl get nodes`, stop with `benchctl stop`.")
 ICON = {checks.OK: "ok  ", checks.WARN: "WARN", checks.FAIL: "FAIL"}
 
 
@@ -87,10 +88,98 @@ def up(profile: str = typer.Option("std", "--profile")) -> None:
     raise typer.Exit(0 if stack.up(_sim(), profile, say=typer.echo) else 1)
 
 
+def _launcher(*args: str) -> None:
+    """The one-command launcher (machine check, venv, governor, cluster, web page) lives in scripts/opti."""
+    import subprocess
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parent.parent / "scripts" / "opti"
+    raise typer.Exit(subprocess.run([str(script), *args], check=False).returncode)
+
+
+@app.command()
+def start(profile: str = typer.Option("min", "--profile")) -> None:
+    """Everything in one step: machine check, governor, cluster, web page (the first run builds images)."""
+    _launcher("start", "--profile", profile)
+
+
+@app.command()
+def stop() -> None:
+    """Stop the web page, the cluster and the governor this tool started."""
+    _launcher("stop")
+
+
+@app.command("open")
+def open_ui() -> None:
+    """Print the web page's login link (and open it in a browser when there is one)."""
+    _launcher("open")
+
+
 @app.command()
 def down() -> None:
     """Stop and remove the hpcsim compose project (nothing else)."""
     raise typer.Exit(0 if stack.down(say=typer.echo) else 1)
+
+
+def _node_names(incomplete: str) -> list[str]:
+    """Tab completion for node arguments: every node sim.yaml defines."""
+    try:
+        return [n for n, _ in nodes.node_names(_sim()) if n.startswith(incomplete)]
+    except (OSError, KeyError):
+        return []
+
+
+NODE = typer.Argument(..., autocompletion=_node_names, help="node name, e.g. cn001 or gpu001")
+OUTPUT = typer.Option("table", "-o", "--output", help="table or json")
+
+get_app = typer.Typer(help="List what exists: nodes, services, profiles, scenarios")
+app.add_typer(get_app, name="get")
+
+
+@get_app.command("nodes")
+def get_nodes(output: str = OUTPUT) -> None:
+    """Every node sim.yaml defines, its kind and container state (absent = not started)."""
+    typer.echo(inventory.render(inventory.node_rows(_sim()), output))
+
+
+@get_app.command("services")
+def get_services(output: str = OUTPUT) -> None:
+    """Every container of the running stack with its state."""
+    typer.echo(inventory.render(inventory.service_rows(), output))
+
+
+@get_app.command("profiles")
+def get_profiles(output: str = OUTPUT) -> None:
+    """The size presets for `benchctl up --profile`."""
+    typer.echo(inventory.render(inventory.profile_rows(), output))
+
+
+@get_app.command("scenarios")
+def get_scenarios(output: str = OUTPUT) -> None:
+    """The fault and workload scenarios for `benchctl scenario run`."""
+    typer.echo(inventory.render(inventory.scenario_rows(), output))
+
+
+@app.command("exec", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def exec_cmd(ctx: typer.Context, node: str = NODE,
+             user: str = typer.Option(None, "-u", "--user", help="run as this simulated user, e.g. alice")) -> None:
+    """Run a command on a node, or open a shell: `benchctl exec gpu001 -- nvidia-smi`, `benchctl exec cn001`."""
+    import os
+    import sys
+
+    cmd = ctx.args or ["bash"]
+    tty = ["-it"] if sys.stdin.isatty() and not ctx.args else []
+    os.execvp("docker", ["docker", "exec", *tty, *(["-u", user] if user else []), f"{stack.PROJECT}-{node}-1", *cmd])
+
+
+@app.command()
+def logs(node: str = NODE, follow: bool = typer.Option(False, "-f", "--follow"),
+         tail: int = typer.Option(50, "--tail")) -> None:
+    """Container log of a node or service."""
+    import os
+
+    os.execvp("docker", ["docker", "logs", *(["-f"] if follow else []), "--tail", str(tail),
+                         f"{stack.PROJECT}-{node}-1"])
 
 
 ssh_key_app = typer.Typer(help="Put the login key where a client that only reads ~/.ssh can use it")
@@ -105,7 +194,7 @@ def ssh_key_install() -> None:
     except (OSError, FileNotFoundError) as e:
         typer.echo(str(e))
         raise typer.Exit(1)
-    typer.echo(f"key: ~/.ssh/{stack.CLIENT_KEY}  (host 127.0.0.1, port 2222, user alice)\nremove it when done: simctl ssh-key remove")
+    typer.echo(f"key: ~/.ssh/{stack.CLIENT_KEY}  (host 127.0.0.1, port 2222, user alice)\nremove it when done: benchctl ssh-key remove")
 
 
 @ssh_key_app.command("remove")

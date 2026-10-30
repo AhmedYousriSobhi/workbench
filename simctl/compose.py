@@ -147,6 +147,6 @@ def write(compose: dict, out: Path = Path("compose/generated/docker-compose.yml"
     out.parent.mkdir(parents=True, exist_ok=True)
     if sim is not None:
         slurmconf.write(sim, out.parent / "slurm", compute_nodes, "mariadb" in compose["services"])
-    out.write_text("# GENERATED from sim.yaml by `simctl compose`; do not edit.\n"
+    out.write_text("# GENERATED from sim.yaml by `benchctl compose`; do not edit.\n"
                    + yaml.safe_dump(compose, sort_keys=False))
     return out

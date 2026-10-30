@@ -13,7 +13,7 @@ def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool 
     compute = [n for n, k in names if k == "compute"]
     gpu = [n for n, k in names if k == "gpu"]
     lines = [
-        "# GENERATED from sim.yaml by `simctl compose`; do not edit.",
+        "# GENERATED from sim.yaml by `benchctl compose`; do not edit.",
         "ClusterName=hpcsim",
         f"SlurmctldHost={CTLD}",
         "AuthType=auth/munge",

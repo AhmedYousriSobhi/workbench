@@ -346,7 +346,7 @@ def install_client_key(dest: Path | None = None, src: Path = SSH_DIR) -> Path:
     dest = dest or Path.home() / ".ssh" / CLIENT_KEY
     key = src / "id_ed25519"
     if not key.exists():
-        raise FileNotFoundError("no login key yet: run `simctl up` first")
+        raise FileNotFoundError("no login key yet: run `benchctl up` first")
     if dest.exists() and dest.read_bytes() != key.read_bytes():
         raise FileExistsError(f"{dest.name} exists and is not the opti-sim key; not overwriting it")
     dest.parent.mkdir(parents=True, exist_ok=True, mode=0o700)

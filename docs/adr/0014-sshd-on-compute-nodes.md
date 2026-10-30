@@ -13,7 +13,7 @@ Users and monitoring clients reach a compute node from the login node: `ssh cn00
   the controller and other users of the image run none.
 - Same rules as the login node: key login only, no root, no password, `UsePAM no`, only the simulated users;
   TCP forwarding is off on nodes. No published port: nodes are reached through the login node only.
-- `simctl up` makes two more keys in `compose/generated/secrets/ssh/` (kept across runs): one host key shared by all
+- `benchctl up` makes two more keys in `compose/generated/secrets/ssh/` (kept across runs): one host key shared by all
   nodes, and a cluster key. Each login-node user gets the cluster key as `~/.ssh/id_ed25519`, as a shared home
   directory would give on a real cluster; `authorized_keys` lists the client key and the cluster key.
 - The login node trusts the shared node host key for `cn*` and `gpu*` in `/etc/ssh/ssh_known_hosts`, so the hop

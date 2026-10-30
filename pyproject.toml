@@ -10,7 +10,8 @@ dev = ["pytest", "ruff", "coverage"]
 browser = ["playwright"]  # UI screenshots/checks: then `playwright install chromium`
 
 [project.scripts]
-simctl = "simctl.cli:app"
+benchctl = "simctl.cli:app"
+simctl = "simctl.cli:app"   # old name, kept as an alias
 
 [build-system]
 requires = ["setuptools>=68"]

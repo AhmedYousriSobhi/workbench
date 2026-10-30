@@ -7,32 +7,31 @@ for, and why. Every command runs from the repository root.
 
 | I want to... | Run | Why this one |
 |---|---|---|
-| start everything, including the web page | `./scripts/opti start` | checks the machine, starts the memory governor, the cluster and the web page |
-| start only the cluster (for example to test SSH) | `./scripts/simctl up --profile min` | the cluster alone; no web page, no governor |
-| see what is running | `./scripts/opti status` | governor, cluster and web page in one view |
-| open the web page | `./scripts/opti open` | prints the login link |
-| stop everything | `./scripts/opti stop` | stops the web page, the cluster and the governor it started |
-| stop only the cluster | `./scripts/simctl down` | touches only the `hpcsim` project |
-| open a shell on a node | `docker exec -it hpcsim-cn001-1 bash`, or `ssh` through the login node | the login node is the way in, like a real cluster; the exact `ssh` line is in [chapter 4](04-nodes-and-shells.md) |
-| break something on purpose | `./scripts/simctl scenario run NAME` | plays a scripted fault ([chapter 6](06-scenarios.md)) |
-| see what a scenario would do first | `./scripts/simctl scenario run NAME --dry-run` | prints the steps, touches nothing |
-| list the scenarios | `./scripts/simctl scenario list` | name, steps, description |
+| start everything, including the web page | `./scripts/benchctl start` | checks the machine, starts the memory governor, the cluster and the web page |
+| start only the cluster (for example to test SSH) | `./scripts/benchctl up --profile min` | the cluster alone; no web page, no governor |
+| see what is running | `./scripts/benchctl get nodes` and `./scripts/benchctl status` | the nodes and their state; the governor level |
+| open the web page | `./scripts/benchctl open` | prints the login link |
+| stop everything | `./scripts/benchctl stop` | stops the web page, the cluster and the governor it started |
+| stop only the cluster | `./scripts/benchctl down` | touches only the `hpcsim` project |
+| open a shell on a node | `./scripts/benchctl exec cn001` (or `ssh` through the login node) | the login node is the way in, like a real cluster; the exact `ssh` line is in [chapter 4](04-nodes-and-shells.md) |
+| break something on purpose | `./scripts/benchctl scenario run NAME` | plays a scripted fault ([chapter 6](06-scenarios.md)) |
+| see what a scenario would do first | `./scripts/benchctl scenario run NAME --dry-run` | prints the steps, touches nothing |
+| list the scenarios | `./scripts/benchctl scenario list` | name, steps, description |
 | click a fault on one node | the web page, Cluster tab | the same steps without the terminal ([chapter 5](05-web-page.md)) |
-| see why a start was refused | `./scripts/simctl status` and `./scripts/simctl preflight --profile min` | the governor level and whether the profile fits |
-| check my machine is ready | `./scripts/simctl check` | OS, RAM, disk, Docker, ports |
-| give a client that only reads `~/.ssh` the login key | `./scripts/simctl ssh-key install` (and `remove` after) | copies the key to `~/.ssh/opti-sim_ed25519`, mode 600 |
-| report a problem | `./scripts/simctl diag` | one masked tarball to attach |
+| see why a start was refused | `./scripts/benchctl status` and `./scripts/benchctl preflight --profile min` | the governor level and whether the profile fits |
+| check my machine is ready | `./scripts/benchctl check` | OS, RAM, disk, Docker, ports |
+| give a client that only reads `~/.ssh` the login key | `./scripts/benchctl ssh-key install` (and `remove` after) | copies the key to `~/.ssh/opti-sim_ed25519`, mode 600 |
+| report a problem | `./scripts/benchctl diag` | one masked tarball to attach |
 
-## `opti` or `simctl`?
+## `start` or `up`?
 
-- `opti` is the **one-command launcher**. Use it when you want a working setup and the web page. Its default profile
-  is `min`.
-- `simctl` is the **CLI underneath**. `opti start` calls `simctl up` as its last step. Use `simctl` for one specific
-  job: `up`, `down`, `scale`, `scenario`, `status`, `diag`. Its `up` default profile is `std`, so pass
-  `--profile min` on a small machine.
+- `benchctl start` is the **one-command launcher**. Use it when you want a working setup and the web page. Its default
+  profile is `min`.
+- `benchctl up` is the **cluster alone**: one specific job. `start` calls it as its last step. Its default profile is
+  `std`, so pass `--profile min` on a small machine. Related verbs: `down`, `scale`, `scenario`, `status`, `diag`.
 
-If you only need the cluster, `simctl up --profile min` is enough. Without `opti start` the governor is not started, so
-nothing protects the host's memory: on a 16 GB machine prefer `opti start`.
+Without `benchctl start` the governor is not started, so nothing protects the host's memory: on a 16 GB machine prefer
+`start`. (The old names `./scripts/opti` and `simctl` still work as aliases of these.)
 
 ## Which profile?
 
@@ -42,7 +41,7 @@ nothing protects the host's memory: on a 16 GB machine prefer `opti start`.
 | `std` | `min` plus accounting and load, 16 compute nodes (planned budget 6 GB) |
 | `full` | `std` with 32 compute nodes (planned budget 8.5 GB), only on a machine with room |
 
-`./scripts/simctl preflight --profile std` tells you whether it fits before you start.
+`./scripts/benchctl preflight --profile std` tells you whether it fits before you start.
 
 ## Scenarios, faults and the web page
 
@@ -67,8 +66,8 @@ nothing protects the host's memory: on a 16 GB machine prefer `opti start`.
 
 | You see | Meaning | Do |
 |---|---|---|
-| `up` says REFUSED | the governor is at level L2 or higher, or memory is low | close browsers, check `./scripts/simctl status`, retry |
+| `up` says REFUSED | the governor is at level L2 or higher, or memory is low | close browsers, check `./scripts/benchctl status`, retry |
 | port 8080 already in use | another program holds the Jira mock's port | stop it, or see [troubleshooting](09-troubleshooting.md) |
-| `fault` or `scenario run` says "No such container" | the stack is not running | `./scripts/simctl up --profile min` |
+| `fault` or `scenario run` says "No such container" | the stack is not running | `./scripts/benchctl up --profile min` |
 
 More symptoms and fixes: [troubleshooting](09-troubleshooting.md). Every flag and file: [reference](10-reference.md).

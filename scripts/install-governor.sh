@@ -4,7 +4,7 @@
 #   sudo ./scripts/install-governor.sh --uninstall  stop and remove it
 #   ./scripts/install-governor.sh --print           show the unit that would be installed (no root)
 # The unit points at this checkout (--workdir), so scale/set-profile work. The Grafana token is read
-# from compose/generated/secrets/grafana_token at start; restart the service after a fresh `simctl up`
+# from compose/generated/secrets/grafana_token at start; restart the service after a fresh `benchctl up`
 # created a new token: sudo systemctl restart hpcsim-governor
 set -eu
 repo="$(cd "$(dirname "$0")/.." && pwd)"

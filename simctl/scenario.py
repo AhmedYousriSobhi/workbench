@@ -74,7 +74,7 @@ class Report:
 def load(name: str, root: Path = SCENARIOS) -> dict:
     path = root / f"{name}.yaml"
     if not path.is_file():
-        raise ScenarioError(f"no scenario {name!r} (see: simctl scenario list)")
+        raise ScenarioError(f"no scenario {name!r} (see: benchctl scenario list)")
     return yaml.safe_load(path.read_text())
 
 

@@ -184,7 +184,7 @@ def test_page_recovery_hint_needs_no_sudo():
     """ADR 0010: a dead governor is started with `opti start`; the sudo service is only an optional upgrade."""
     page = (ROOT / "webui" / "static" / "index.html").read_text()
     offline = next(line for line in page.splitlines() if "Governor not reachable" in line)
-    assert "./scripts/opti start" in offline and offline.index("opti start") < offline.index("sudo")
+    assert "./scripts/benchctl start" in offline and offline.index("benchctl start") < offline.index("sudo")
 
 
 def test_help_wiki_needs_the_token_and_serves_pages_images_and_search(ui):

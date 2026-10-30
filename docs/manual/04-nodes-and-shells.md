@@ -1,7 +1,7 @@
 # 4. Nodes and shells
 
 **There is no `ssh` into a simulated node.** The nodes are unprivileged containers without an SSH server. You open a shell
-with `docker exec`. The only machine with a real `sshd` is the optional [fidelity VM](#the-fidelity-vm).
+with `benchctl exec` (a thin wrapper over `docker exec`). The only machine with a real `sshd` is the optional [fidelity VM](#the-fidelity-vm).
 
 ## Find the nodes
 
@@ -9,7 +9,9 @@ Node names come from [sim.yaml](../../sim.yaml): compute nodes `cn001`, `cn002`,
 Each container is named `hpcsim-<name>-1`.
 
 ```bash
-docker ps --format '{{.Names}}' --filter label=hpcsim.class      # every opti-sim container
+./scripts/benchctl get nodes                                     # the nodes and their state (add -o json for scripts)
+./scripts/benchctl get services                                  # every container of the stack
+docker ps --format '{{.Names}}' --filter label=hpcsim.class      # the same with docker
 docker ps --format '{{.Names}}' --filter label=hpcsim.node       # only compute and GPU nodes
 docker exec hpcsim-slurmctld-1 sinfo -N -l                       # Slurm's view of the nodes
 ```
@@ -21,11 +23,12 @@ docker exec hpcsim-slurmctld-1 sinfo -N -l                       # Slurm's view 
 ## Open a shell
 
 ```bash
-docker exec -it hpcsim-slurmctld-1 bash        # the controller
-docker exec -it hpcsim-cn001-1 bash            # a compute node
-docker exec -it hpcsim-gpu001-1 bash           # a GPU node (fake GPU device files /dev/hpcsim-gpu0..7)
-docker exec -u alice -it hpcsim-cn001-1 bash   # the same node as a simulated user
-docker exec hpcsim-cn001-1 hostname            # one command, no shell
+./scripts/benchctl exec slurmctld              # the controller
+./scripts/benchctl exec cn001                  # a compute node
+./scripts/benchctl exec gpu001                 # a GPU node (fake GPU device files /dev/hpcsim-gpu0..7)
+./scripts/benchctl exec cn001 -u alice         # the same node as a simulated user
+./scripts/benchctl exec cn001 -- hostname      # one command, no shell
+# the long form, same result: docker exec -it hpcsim-cn001-1 bash
 ```
 
 The shell starts as root *inside the container*; that is not root on your host. Simulated users (`alice`, `bob`, from
@@ -47,12 +50,12 @@ ls /dev/hpcsim-gpu*                # the fake GPUs (GPU nodes only)
 
 - **Nodes can freeze or stop under memory pressure.** The governor pauses (L3) then stops (L4) low-priority containers,
   compute nodes among the first (class P4). A shell that hangs may be a paused container: check
-  `./scripts/simctl status`. Un-pausing happens by itself after 60 s calm, and a stopped node comes back with the
-  governor's `start` command or `simctl up`.
+  `./scripts/benchctl status`. Un-pausing happens by itself after 60 s calm, and a stopped node comes back with the
+  governor's `start` command or `benchctl up`.
 - Nodes are small: each is capped at 60 MB and runs `slurmd` and `munge`, not a full set of system services.
-- Scaling down (`simctl scale 2`) removes nodes, and a shell open on one ends.
+- Scaling down (`benchctl scale 2`) removes nodes, and a shell open on one ends.
 - Nodes run `sshd`, reachable only through the login node (`ssh cn001` there, ADR 0014). There is no real NFS or Lustre; storage is faked with metrics only.
-- Do not add `--privileged`, extra capabilities or the Docker socket to a container; `simctl doctor` fails the stack if
+- Do not add `--privileged`, extra capabilities or the Docker socket to a container; `benchctl doctor` fails the stack if
   you do, and the governor's watchdog flags it.
 
 ## The fidelity VM

@@ -12,7 +12,7 @@ the governor, which was a root systemd service because it writes cgroup files (f
 (the user is in the `docker` group): freeze/thaw become `docker pause/unpause`, stop becomes `docker kill` then `docker stop`. Admission
 (GV-9), the escalation ladder, the security watchdog, Grafana annotations, `/metrics` and the control socket all work
 unchanged; the socket lives under `$XDG_RUNTIME_DIR/hpcsim/` and `simctl`/the web page find it automatically when no
-system socket exists. `./scripts/opti start` starts it (`OPTI_GOVERNOR=auto|user|system|off`) and `stop` ends it.
+system socket exists. `./scripts/benchctl start` starts it (`OPTI_GOVERNOR=auto|user|system|off`) and `stop` ends it.
 The root service stays available as an optional upgrade and wins when it is running.
 
 ## What rootless mode does not give

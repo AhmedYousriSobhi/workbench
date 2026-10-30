@@ -3,7 +3,7 @@
 Standard library only, so it runs before the venv or any image exists:
     ./scripts/check-machine.sh        (or: python3 -m simctl.machine)
 Pure functions over injected readers, so they unit-test without a host.
-`simctl doctor` is the later, deeper check of a running setup.
+`benchctl doctor` is the later, deeper check of a running setup.
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ MIN_CPUS, REC_CPUS = 2, 4
 MIN_PYTHON = (3, 11)
 PORTS = {8088: "web UI", 8080: "jira-mock", 8081: "bcm-mock", 8000: "bmc-farm", 9400: "gpu-exporter",
          3000: "Grafana", 9090: "Prometheus"}
-SAFETY_FLOOR = 1.0  # GB of MemAvailable that must remain after a profile starts (same as simctl preflight)
+SAFETY_FLOOR = 1.0  # GB of MemAvailable that must remain after a profile starts (same as benchctl preflight)
 
 
 @dataclass(frozen=True)
@@ -145,7 +145,7 @@ def check_ports(free=port_free) -> Check:
     busy = [f"{p} ({what})" for p, what in PORTS.items() if not free(p)]
     if busy:
         return Check("ports", WARN, "in use: " + ", ".join(busy),
-                     "stop what uses them, or this is a running stack (simctl down)")
+                     "stop what uses them, or this is a running stack (benchctl down)")
     return Check("ports", OK, "all free on 127.0.0.1")
 
 

@@ -1,6 +1,6 @@
 .PHONY: demo lint test
 demo:
-	simctl up --profile std
+	benchctl up --profile std
 lint:
 	ruff check .
 test:

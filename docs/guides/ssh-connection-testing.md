@@ -11,10 +11,10 @@ You need: the repository set up as in [getting-started.md](getting-started.md), 
 ## 1. Start the cluster
 
 ```bash
-./scripts/simctl up --profile min
+./scripts/benchctl up --profile min
 ```
 
-![Terminal: simctl up starts observability, Slurm, the mocks, six nodes and the login node, then prints the ssh line and "stack is up"](img/ssh-01-up.png)
+![Terminal: benchctl up starts observability, Slurm, the mocks, six nodes and the login node, then prints the ssh line and "stack is up"](img/ssh-01-up.png)
 
 The `ssh:` line is what you give your client: host `127.0.0.1`, port `2222`, user `alice` (or `bob`), and the private
 key `compose/generated/secrets/ssh/id_ed25519`. If `up` says it is **REFUSED**, the host is short of memory: close
@@ -30,7 +30,7 @@ osh() { ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 -o IdentitiesOnl
         -o ConnectTimeout=5 "$@"; }
 probe() { timeout 3 bash -c 'head -n1 </dev/tcp/127.0.0.1/2222' 2>&1; echo "  [exit $?]"; }
 fault() { printf 'name: ssh-try\ndescription: one SSH fault\nsteps:\n  - {at: 0s, target: ssh, do: {%s}}\n' "$1" \
-          > scenarios/ssh-try.yaml; ./scripts/simctl scenario run ssh-try; }
+          > scenarios/ssh-try.yaml; ./scripts/benchctl scenario run ssh-try; }
 ```
 
 - `osh` is `ssh` with the lab key and no host-key prompt (your client decides that for itself).
@@ -56,7 +56,7 @@ list and jobs view fill in before you break anything.
 Six scenarios ship for the SSH path (see [scenarios](../manual/06-scenarios.md)); check one before playing it:
 
 ```bash
-./scripts/simctl scenario run login-node-down --dry-run
+./scripts/benchctl scenario run login-node-down --dry-run
 ```
 
 ![Terminal: the dry run prints the two steps of login-node-down with their times](img/ssh-03-dryrun.png)
@@ -167,7 +167,7 @@ cluster, as unreachable. The container keeps running, so Slurm still sees the no
 ## 6. Play a shipped scenario
 
 ```bash
-./scripts/simctl scenario run login-node-down --speed 10
+./scripts/benchctl scenario run login-node-down --speed 10
 ```
 
 ![Terminal: both steps of login-node-down report ok, then "scenario passed"](img/ssh-08-shipped.png)
@@ -179,16 +179,16 @@ At `--speed 10` the outage lasts 3 seconds; leave the flag off (30 s) while watc
 ```bash
 rm -f scenarios/ssh-try.yaml compose/generated/known_hosts.try compose/generated/mux.try
 fault "reset: true"          # only if you stopped halfway; this also starts a stopped login node
-./scripts/simctl down
+./scripts/benchctl down
 ```
 
 ## If something does not match
 
 | You see | Why | What to do |
 |---|---|---|
-| `up` says REFUSED | the host is short of memory (governor) | free RAM, run `./scripts/simctl status`, rerun |
-| `Connection refused` on port 2222 right after `up` | the login node is still starting | wait a few seconds; `./scripts/simctl status` |
-| `fault` says failed, "No such container" | the stack is down | `./scripts/simctl up --profile min` |
+| `up` says REFUSED | the host is short of memory (governor) | free RAM, run `./scripts/benchctl status`, rerun |
+| `Connection refused` on port 2222 right after `up` | the login node is still starting | wait a few seconds; `./scripts/benchctl status` |
+| `fault` says failed, "No such container" | the stack is down | `./scripts/benchctl up --profile min` |
 | the connection hangs or is refused with no fault applied | an earlier `state: hung` or `down` is still active | `fault "reset: true"` |
 | `Permission denied` or a host-key warning with no fault applied | an earlier `rotate_host_key` is still active | `fault "reset: true"` |
 | a second session is refused with no fault applied | an earlier `max_sessions` is still active | `fault "reset: true"` |
