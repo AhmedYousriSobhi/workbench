@@ -133,6 +133,16 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
             say(f"FAILED login node keys: {e}")
             return False
     names = [n for n in data["services"] if n not in skip] + ["prometheus", "grafana", "gpu-exporter-farm"]
+    node_re = r"(cn|gpu)\d+"
+    changed = False
+    if chosen is not None:  # a selection can shrink or grow a running stack: drop nodes it no longer wants (issue 117)
+        have = [s for s in _project_services(runner) if re.fullmatch(node_re, s)]
+        want = [n for n in names if re.fullmatch(node_re, n)]
+        stale = [s for s in have if s not in want]
+        changed = bool(have) and (bool(stale) or any(n not in have for n in want))
+        if stale:
+            say(f"removing nodes no longer wanted: {', '.join(stale)}")
+            remove_services(stale, runner)
     # slurmctld, slurmrestd and login build FROM node-base's tag, which only a node service rebuilds. Build it first,
     # or a changed base (new munge key) leaves the controller on the old image and every Slurm call fails to authenticate.
     if (first := next((n for n in names if re.fullmatch(r"(cn|gpu)\d+", n)), None)):
@@ -148,6 +158,12 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
             return False
         if (late := wait_running(svcs, runner, wait)):
             say(f"FAILED {label}: not running: {', '.join(late)}")
+            return False
+    if changed and "slurmctld" in todo:  # the node set changed under a running controller: reload slurm.conf
+        say("restarting slurmctld to pick up the new node list")
+        r = runner(dc("up", "-d", "--no-deps", "--force-recreate", "slurmctld", file=path))
+        if r.returncode != 0 or wait_running(["slurmctld"], runner, wait):
+            say(f"FAILED slurmctld restart: {r.stderr.strip()[-300:]}")
             return False
     try:
         say(f"grafana token: {provision_token()}")

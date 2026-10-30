@@ -159,11 +159,9 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
     async def cluster_state(request: Request):
         return JSONResponse(await asyncio.to_thread(cluster.snapshot))
 
-    async def plan(request: Request):
-        """Estimate only, no side effects (W-3): the page cannot start containers, so it shows the command to run."""
-        from benchctl import checks, workbench
+    def build_plan(q) -> tuple:
+        from benchctl import workbench
 
-        q = request.query_params
         try:
             spec = workbench.from_dict({k: int(q[k]) for k in ("cpu_nodes", "gpu_nodes", "gpus_per_node") if k in q}
                                        | ({"parts": [p for p in q["parts"].split(",") if p]} if "parts" in q else {}),
@@ -175,10 +173,34 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         est = workbench.estimate(*workbench.effective(sim, spec))
         avail = checks.mem_available() // (1024 * 1024)
         ok, msg = workbench.verdict(est, avail, spec=spec)
+        return spec, est, avail, ok, msg
+
+    async def plan(request: Request):
+        """Estimate only, no side effects: the page cannot start containers. Applying goes through the governor."""
+        spec, est, avail, ok, msg = build_plan(request.query_params)
+        from benchctl import workbench
+
         flags = f"--cpu-nodes {spec.cpu_nodes} --gpu-nodes {spec.gpu_nodes} --gpus-per-node {spec.gpus_per_node}" + "".join(
             f" --with {p}" for p in sorted(spec.parts)) + "".join(f" --without {p}" for p in workbench.PARTS if p not in spec.parts)
         return JSONResponse({"fits": ok, "message": msg, "total_mb": est["total_mb"], "available_mb": avail,
                              "text": workbench.render(spec, est), "command": f"benchctl up {flags}"})
+
+    async def plan_apply(request: Request):
+        """Ask the governor to rebuild the workbench to this plan (it runs `benchctl up` as the user, calm levels only)."""
+        spec, _, _, ok, msg = build_plan(request.query_params)
+        if not ok:
+            raise HTTPException(422, "does not fit: " + msg)
+        req = {"cmd": "apply-plan", "cpu_nodes": spec.cpu_nodes, "gpu_nodes": spec.gpu_nodes,
+               "gpus_per_node": spec.gpus_per_node, "parts": sorted(spec.parts)}
+        try:
+            res = await asyncio.to_thread(checks.governor_request, req, socket)
+        except (OSError, ValueError) as e:
+            raise HTTPException(503, "the governor is not reachable: start it with ./scripts/benchctl start") from e
+        if not res.get("ok"):
+            raise HTTPException(409, res.get("error", "the governor refused"))
+        if res.get("dry_run"):
+            return JSONResponse({"started": False, "message": "The governor is in dry-run mode or has no --workdir, so nothing was applied. Run the command shown instead."})
+        return JSONResponse({"started": True, "message": "Applying. Nodes appear and disappear as they change; progress is in Governor activity."})
 
     async def node_detail(request: Request):
         from benchctl import describe
@@ -265,6 +287,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/cluster", protected(cluster_state)),
             Route("/api/flow", protected(flow_events)),
             Route("/api/plan", protected(plan)),
+            Route("/api/plan/apply", protected(plan_apply, write=True), methods=["POST"]),
             Route("/api/connections", protected(connections)),
             Route("/api/nodes/{node}", protected(node_detail)),
             Route("/api/nodes/{node}/{action}", protected(node_action, write=True), methods=["POST"]),

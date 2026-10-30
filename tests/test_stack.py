@@ -408,3 +408,28 @@ def test_client_key_refuses_foreign_file_and_missing_key(tmp_path):
     with pytest.raises(FileExistsError):
         stack.install_client_key(dest, src)
     assert not stack.remove_client_key(dest, src) and dest.read_text() == "mine"
+
+
+def test_up_with_a_selection_removes_unwanted_nodes_and_restarts_slurmctld(tmp_path, monkeypatch):
+    """Shrinking a running workbench (issue 117): stale nodes go, and slurmctld rereads the node list."""
+    sim = _workdir(tmp_path, monkeypatch)
+    from benchctl import workbench
+    spec = workbench.from_dict({"cpu_nodes": 1, "gpu_nodes": 0, "gpus_per_node": 1}, workbench.defaults(sim))
+    s2, prof = workbench.effective(sim, spec)
+    from benchctl import compose
+    every = [*compose.generate(s2, prof)["services"], "prometheus", "grafana", "gpu-exporter-farm", "cn002", "cn003"]
+    calls: list[list[str]] = []
+
+    def runner(cmd):
+        calls.append(cmd)
+        if cmd[:2] == ["docker", "ps"] and "-aq" in cmd:
+            return cp(out="abc123")
+        return cp(out="\n".join(every)) if "ps" in cmd else cp()
+
+    monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
+    monkeypatch.setattr(stack, "provision_token", lambda **kw: kw.get("path", tmp_path / "t"))
+    said: list[str] = []
+    assert stack.up(s2, "workbench", runner=runner, say=said.append, available=8 * 1024**3, wait=1, prof=prof)
+    assert any("removing nodes no longer wanted: cn002, cn003" in m for m in said)
+    assert ["docker", "rm", "-f", "abc123", ] in calls or any(c[:3] == ["docker", "rm", "-f"] for c in calls)
+    assert any("--force-recreate" in c and "slurmctld" in c for c in calls)

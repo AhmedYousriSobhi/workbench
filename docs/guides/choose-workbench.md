@@ -68,8 +68,11 @@ you chose, not the numbers in `sim.yaml`.
 
 ## From the web page
 
-**Plan a workbench** on the dashboard has the same form with a memory bar. It only estimates: the page has no Docker
-access by design, so it shows the `benchctl up ...` command to run in a terminal.
+**Plan a workbench** on the dashboard has the same form with a memory bar. Editing the numbers only estimates. **Apply to the
+running workbench** asks the governor to rebuild it to the plan: new nodes start, nodes you no longer want are removed,
+and Slurm's node list is reloaded. Progress shows in *Governor activity* and the node cards. It needs the governor
+started by `./scripts/benchctl start` (it has the repository path) and calm memory (L0-L1); otherwise the page says why
+in one line. You can always copy the command shown and run it in a terminal instead.
 
 ## Going back
 

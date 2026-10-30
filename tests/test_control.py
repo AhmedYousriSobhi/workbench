@@ -95,3 +95,16 @@ def test_socket_dir_follows_socket_gid():
             assert st.st_gid == os.getgid() and st.st_mode & 0o777 == 0o750
         finally:
             srv.shutdown()
+
+
+def test_apply_plan_accepts_only_bounded_ints_and_known_parts():
+    ok = {"cmd": "apply-plan", "cpu_nodes": 2, "gpu_nodes": 1, "gpus_per_node": 8, "parts": ["jira"]}
+    seen = []
+    handle = lambda cmd, req: seen.append(req) or {"ok": True}
+    d = lambda r: control.dispatch(json.dumps(r).encode(), handle, lambda: {"compute"})
+    assert d(ok) == {"ok": True} and seen
+    for bad in ({**ok, "cpu_nodes": 65}, {**ok, "gpu_nodes": -1}, {**ok, "gpus_per_node": 0}, {**ok, "cpu_nodes": True},
+                {**ok, "parts": ["jira; rm -rf /"]}, {**ok, "parts": "jira"}, {k: v for k, v in ok.items() if k != "parts"}):
+        assert d(bad)["ok"] is False
+    from benchctl import workbench
+    assert control.PLAN_PARTS == set(workbench.PARTS)

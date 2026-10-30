@@ -371,6 +371,16 @@ def test_scale_and_set_profile_run_effector_only_when_calm(tmp_path):
     assert any("scale=3: done" in a for a in g.audit)
 
 
+def test_apply_plan_builds_the_benchctl_selection_command(tmp_path):
+    import threading
+    calls, done = [], threading.Event()
+    g, _ = _calm_gov(tmp_path, effector=lambda a: calls.append(a) or done.set() or 0)
+    req = {"cpu_nodes": 2, "gpu_nodes": 3, "gpus_per_node": 4, "parts": ["jira", "bmc"]}
+    assert g.handle("apply-plan", req)["started"] and done.wait(5)
+    assert calls[0][:7] == ["up", "--cpu-nodes", "2", "--gpu-nodes", "3", "--gpus-per-node", "4"]
+    assert "--with" in calls[0] and calls[0][calls[0].index("jira") - 1] == "--with" and calls[0][calls[0].index("load") - 1] == "--without"
+
+
 def test_scale_dry_run_does_not_execute(tmp_path):
     g, _ = _calm_gov(tmp_path, effector=lambda a: 1 / 0, dry_run=True)
     assert g.handle("scale", {"group": "compute", "n": 2}) == {"ok": True, "dry_run": True}
