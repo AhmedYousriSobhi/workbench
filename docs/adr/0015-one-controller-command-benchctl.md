@@ -16,7 +16,7 @@ Familiar tools solve this with one controller and a fixed grammar: `kubectl get 
 - The old names (`simctl`, `./scripts/simctl`, `./scripts/opti`) stay as aliases. The Python package keeps its name
   `simctl` (renaming it would touch every import for no user benefit).
 - Docs and tests name only `benchctl`; a test fails if a guide tells a user to type an old name.
-- Tab completion comes from Typer (`benchctl --install-completion`); node arguments complete from `sim.yaml`.
+- Tab completion comes from Typer's shell handlers, installed by `benchctl completion install` (#105; Typer's own `--install-completion` is switched off because it needs `benchctl` on PATH): the script goes to `~/.local/share/workbench`, one line to the rc file, and a `~/.local/bin/benchctl` link; `remove` undoes all three. Completers (`simctl/completion.py`) read only `sim.yaml`, `profiles/` and `scenarios/`, never Docker. Wrong values get `Did you mean` and the valid list, exit 2.
 
 ## Consequences
 The command name is a brand choice and may change again with the rebrand (issue 89); because every doc line says

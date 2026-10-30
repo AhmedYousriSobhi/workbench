@@ -3,8 +3,8 @@
 ## The command: `benchctl`
 
 One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [flags]`**. Run it as `./scripts/benchctl`
-(no activation needed), or as `benchctl` once the venv is active. Tab completion for verbs and node names:
-`benchctl --install-completion` (once, then open a new terminal). The old names `simctl` and `./scripts/opti` still
+(no activation needed), or as `benchctl` once the venv is active. Tab completion for verbs, resources, node and service names, profiles, scenarios, users, parts, `-o` formats and `-l`/`--sort-by` keys:
+`benchctl completion install` (once, no sudo, then open a new terminal; `benchctl start` offers it too; `completion remove` undoes it; `completion bash|zsh|fish` prints the script). A wrong profile, node or scenario gets one message with `Did you mean` and the valid values. The old names `simctl` and `./scripts/opti` still
 work as aliases. What each verb does not do, exit codes, and what to use in a script: [the verbs guide](../guides/benchctl-verbs.md).
 
 | Verb | Does |

@@ -91,7 +91,7 @@ def test_scenario_list_and_unknown_and_dry_run():
     listing = invoke("scenario", "list")
     assert listing.exit_code == 0 and "node-down" in listing.output and "steps" in listing.output
     unknown = invoke("scenario", "run", "no-such")
-    assert unknown.exit_code == 1 and "no scenario" in unknown.output
+    assert unknown.exit_code == 1 and "unknown scenario" in unknown.output
     dry = invoke("scenario", "run", "node-down", "--dry-run")
     assert dry.exit_code == 0 and "bmc-farm" in dry.output and "drain" in dry.output
 
@@ -170,10 +170,10 @@ def test_get_services_lists_the_stack(monkeypatch):
 
 
 def test_node_completion_offers_sim_yaml_nodes():
-    from simctl.cli import _node_names
+    from simctl.completion import nodes
 
-    assert _node_names("gpu") == ["gpu001", "gpu002"]
-    assert "cn001" in _node_names("")
+    assert nodes("gpu") == ["gpu001", "gpu002"]
+    assert "cn001" in nodes("")
 
 
 def test_exec_and_logs_run_docker_in_the_project_container(monkeypatch):

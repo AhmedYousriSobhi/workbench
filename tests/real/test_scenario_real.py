@@ -80,4 +80,4 @@ def test_cli_dry_run_and_unknown_scenario(live):
     ok = subprocess.run([str(ROOT / "scripts/simctl"), "scenario", "run", "node-down", "--dry-run"], capture_output=True, text=True, check=False)
     assert ok.returncode == 0 and "drain" in ok.stdout
     bad = subprocess.run([str(ROOT / "scripts/simctl"), "scenario", "run", "nope"], capture_output=True, text=True, check=False)
-    assert bad.returncode == 1 and "no scenario" in bad.stderr
+    assert bad.returncode == 1 and "unknown scenario" in bad.stderr
