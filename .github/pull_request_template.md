@@ -16,4 +16,5 @@ Closes #
 - [ ] Wiki synced (`python scripts/sync_wiki.py --push`) and in-page help checked
 - [ ] Easy to follow: a new user can do it from the docs alone
 - [ ] Tested against the monitoring client (state what was and was not exercised)
+- [ ] Commits carry my own GitHub noreply identity (`./scripts/check-identity.sh --unpushed`)
 - [ ] No personal data, tokens or local paths in the diff or this text (`./scripts/check-privacy.sh --all`)
