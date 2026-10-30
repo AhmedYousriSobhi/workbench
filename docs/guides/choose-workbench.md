@@ -85,3 +85,16 @@ in one line. You can always copy the command shown and run it in a terminal inst
 - **`REFUSED ... does not fit`**: follow the `Try:` hint, or close browsers and the IDE (they use several GB) and plan again.
 - **`invalid: ...`**: every problem with the flags is listed at once; fix them all and rerun.
 - **`unknown field(s) in the workbench file`**: check the spelling against the example above.
+
+## Add accounting to a cluster that is already running
+
+`benchctl start` uses the `min` profile, which has no accounting, so `sacct` says accounting storage is disabled. You do
+not need to stop anything:
+
+```bash
+./scripts/benchctl up --with accounting      # starts mariadb and slurmdbd, then restarts slurmctld (about a minute)
+./scripts/benchctl exec login -- sacct       # no longer "accounting storage is disabled"
+```
+
+Or open **⚙ Plan** on the page, switch *Accounting* on and press Apply twice. Running jobs on the controller are lost
+when it restarts. The node counts stay as they are because a selection takes them from `sim.yaml` unless you pass flags.

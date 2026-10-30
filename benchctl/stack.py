@@ -135,6 +135,9 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     names = [n for n in data["services"] if n not in skip] + ["prometheus", "grafana", "gpu-exporter-farm"]
     node_re = r"(cn|gpu)\d+"
     changed = False
+    before = set(_project_services(runner))
+    # accounting added under a running controller: slurm.conf gains AccountingStorageType, which only a restart reads
+    acct_added = "slurmdbd" in todo and "slurmdbd" not in before and "slurmctld" in before
     if chosen is not None:  # a selection can shrink or grow a running stack: drop nodes it no longer wants (issue 117)
         have = [s for s in _project_services(runner) if re.fullmatch(node_re, s)]
         want = [n for n in names if re.fullmatch(node_re, n)]
@@ -159,8 +162,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         if (late := wait_running(svcs, runner, wait)):
             say(f"FAILED {label}: not running: {', '.join(late)}")
             return False
-    if changed and "slurmctld" in todo:  # the node set changed under a running controller: reload slurm.conf
-        say("restarting slurmctld to pick up the new node list")
+    if (changed or acct_added) and "slurmctld" in todo:  # the node set or accounting changed under a running controller
+        say("restarting slurmctld to pick up the new " + ("accounting setup" if acct_added and not changed else "node list"))
         r = runner(dc("up", "-d", "--no-deps", "--force-recreate", "slurmctld", file=path))
         if r.returncode != 0 or wait_running(["slurmctld"], runner, wait):
             say(f"FAILED slurmctld restart: {r.stderr.strip()[-300:]}")

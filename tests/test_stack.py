@@ -433,3 +433,25 @@ def test_up_with_a_selection_removes_unwanted_nodes_and_restarts_slurmctld(tmp_p
     assert any("removing nodes no longer wanted: cn002, cn003" in m for m in said)
     assert ["docker", "rm", "-f", "abc123", ] in calls or any(c[:3] == ["docker", "rm", "-f"] for c in calls)
     assert any("--force-recreate" in c and "slurmctld" in c for c in calls)
+
+
+def test_adding_accounting_to_a_running_stack_restarts_slurmctld(tmp_path, monkeypatch):
+    """`benchctl up --with accounting` after `start`: slurmctld must reread slurm.conf, or sacct stays disabled."""
+    sim = _workdir(tmp_path, monkeypatch)
+    from benchctl import compose, workbench
+    spec = workbench.from_dict({"parts": ["accounting"]}, workbench.defaults(sim))
+    s2, prof = workbench.effective(sim, spec)
+    running = [n for n in compose.generate(s2, prof)["services"] if n not in ("mariadb", "slurmdbd", "accounting-init")]
+    calls: list[list[str]] = []
+
+    def runner(cmd):
+        calls.append(cmd)
+        return cp(out="\n".join([*running, "prometheus", "grafana", "gpu-exporter-farm"])) if "ps" in cmd else cp()
+
+    monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
+    monkeypatch.setattr(stack, "provision_token", lambda **kw: kw.get("path", tmp_path / "t"))
+    monkeypatch.setattr(stack, "wait_running", lambda *a, **k: [])
+    said: list[str] = []
+    assert stack.up(s2, "workbench", runner=runner, say=said.append, available=8 * 1024**3, wait=1, prof=prof)
+    assert any("accounting setup" in m for m in said)
+    assert any("--force-recreate" in c and "slurmctld" in c for c in calls)
