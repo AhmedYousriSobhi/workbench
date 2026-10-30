@@ -175,7 +175,7 @@ def test_cluster_endpoints_need_auth_csrf_and_validate(ui):
 
 def test_page_has_the_app_shell(ui):
     body = req(ui, "/")[1].decode()
-    for needle in ('class="skip"', '<main id="main"', 'id="govdlg"', 'aria-label="Operate"',
+    for needle in ('class="skip"', '<main id="main"', 'id="govdlg"', 'id="scndlg"',
                    'id="theme"', 'id="strip"', 'id="attn"', 'id="list"', 'id="flow"', 'prefers-reduced-motion'):
         assert needle in body, needle
 

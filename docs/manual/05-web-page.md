@@ -11,7 +11,7 @@ One dashboard over everything: governor, cluster, scenarios.
 Open the link once: it sets a cookie. The token lives in `compose/generated/secrets/ui_token`; anyone with the link on
 this machine can use the page, so keep it private. The page listens on `127.0.0.1` only.
 
-![The dashboard: traffic diagram and the cluster tree in the middle, needs-attention and scenarios on the right; the screenshot predates the redesign](img/web-overview.png)
+![The dashboard: traffic and cluster tree side by side; the screenshot predates the redesign](img/web-overview.png)
 
 *The dashboard with a healthy cluster: L0 Normal, 4 of 4 services answering, 6 of 6 nodes healthy, "All clear" under Needs attention.*
 
@@ -19,9 +19,9 @@ this machine can use the page, so keep it private. The page listens on `127.0.0.
 
 | Area | Shows |
 |---|---|
-| **Top strip** | governor level, free memory, healthy services and nodes, the running scenario, **⚙ Plan**, help, theme switch. Press the level or the memory chip to open the **Governor** panel: the level and what it means, memory and pressure with two-minute trends |
-| **Middle: cluster** | the traffic diagram, then the cluster as a tree: *Services*, *Compute nodes* and *GPU nodes* branches, each entity a cell that is quiet when healthy and highlighted when not |
-| **Right** | *Needs attention*, the scenario list and the governor's log |
+| **Top strip** | governor level, free memory, healthy services and nodes, the running scenario, then three buttons that open a panel on the same page: **▶ Scenarios**, **⚙ Plan** and the level or memory chip for the **Governor** panel (level and meaning, memory and pressure trends, the governor's log), plus help and the theme switch |
+| **Needs attention** | one slim bar under the tabs, next to *Nodes* and *Connections*: every item that needs you, or "All clear" |
+| **Stage** | the traffic diagram on the left and the cluster tree on the right (*Services*, *Compute nodes*, *GPU nodes*; each entity a cell that is quiet when healthy and highlighted when not). Both fit one screen at 1280 × 800 with six nodes; a long tree scrolls inside its own panel |
 
 On a phone the panels stack (see the [phone view](img/web-phone.png)). The page has a skip link and landmarks, and honours reduced motion.
 
@@ -55,7 +55,7 @@ The same dialog shows everything known about that node (state of its BMC, GPUs b
 
 ## Scenarios
 
-In the right panel pick a scenario and a speed, press **Play**, and watch each step turn ok, skipped or failed. **Stop**
+Press **▶ Scenarios** in the top strip, pick a scenario and a speed, press **Play**, and watch each step turn ok, skipped or failed. **Stop**
 aborts. Steps that need Docker (the `slurm` target: drain and resume) are **skipped on this page**, because the page has no
 Docker access by design; run those with `./scripts/benchctl scenario run NAME`.
 
