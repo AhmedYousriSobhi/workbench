@@ -35,7 +35,7 @@ it only stops growth. Relief comes from stopping. Thresholds can be overridden w
 ./scripts/benchctl status          # level, mode (user or root), memory, groups, security findings, recent actions
 ```
 
-The same data is on the web page (left panel and log), in Grafana as annotations on every action, and in Prometheus
+The same data is on the web page (the Governor panel from the top strip, and the log), in Grafana as annotations on every action, and in Prometheus
 (`workbench_governor_level`, `workbench_host_mem_available_bytes`). The governor's own metrics come from its own endpoint, so
 they survive when Prometheus is stopped.
 

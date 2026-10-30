@@ -57,14 +57,14 @@ def capture(out: Path) -> dict:
                         if page.locator(sel).count() == 0:
                             result["a11y"].append(f"dashboard is missing {sel}")
                     down = page.locator("#stackdown").is_visible()  # stack down: one notice, nothing repeating it
-                    for sel in ("#svcpanel", "#nodegroups"):
+                    for sel in ("#svcpanel", "#br-compute"):
                         if page.locator(sel).is_visible() == down:
                             result["a11y"].append(f"{sel} must be {'hidden' if down else 'shown'} when the stack is {'down' if down else 'up'}")
                     page.keyboard.press("Tab")  # the skip link is the first stop
                     if not page.evaluate("document.activeElement.className === 'skip'"):
                         result["a11y"].append("skip link is not the first tab stop")
                     # landmarks and heading, theme toggle
-                    if page.locator("main#main").count() != 1 or page.locator("header.top h1").count() != 1 or page.locator("aside").count() != 2:
+                    if page.locator("main#main").count() != 1 or page.locator("header.top h1").count() != 1 or page.locator("aside").count() != 1:
                         result["a11y"].append("missing main landmark or page heading")
                     page.click("#theme")
                     if page.evaluate("document.documentElement.dataset.theme") != "light":

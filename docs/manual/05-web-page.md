@@ -11,7 +11,7 @@ One dashboard over everything: governor, cluster, scenarios.
 Open the link once: it sets a cookie. The token lives in `compose/generated/secrets/ui_token`; anyone with the link on
 this machine can use the page, so keep it private. The page listens on `127.0.0.1` only.
 
-![The dashboard: governor on the left, services and the traffic diagram in the middle, needs-attention and scenarios on the right](img/web-overview.png)
+![The dashboard: traffic diagram and the cluster tree in the middle, needs-attention and scenarios on the right; the screenshot predates the redesign](img/web-overview.png)
 
 *The dashboard with a healthy cluster: L0 Normal, 4 of 4 services answering, 6 of 6 nodes healthy, "All clear" under Needs attention.*
 
@@ -19,9 +19,8 @@ this machine can use the page, so keep it private. The page listens on `127.0.0.
 
 | Area | Shows |
 |---|---|
-| **Top strip** | governor level, free memory, healthy services and nodes, the running scenario, theme switch (auto, light, dark) |
-| **Left: governor** | level banner, memory and pressure with two-minute trends |
-| **Middle: cluster** | service chips, the traffic diagram, one card per node |
+| **Top strip** | governor level, free memory, healthy services and nodes, the running scenario, **⚙ Plan**, help, theme switch. Press the level or the memory chip to open the **Governor** panel: the level and what it means, memory and pressure with two-minute trends |
+| **Middle: cluster** | the traffic diagram, then the cluster as a tree: *Services*, *Compute nodes* and *GPU nodes* branches, each entity a cell that is quiet when healthy and highlighted when not |
 | **Right** | *Needs attention*, the scenario list and the governor's log |
 
 On a phone the panels stack (see the [phone view](img/web-phone.png)). The page has a skip link and landmarks, and honours reduced motion.
