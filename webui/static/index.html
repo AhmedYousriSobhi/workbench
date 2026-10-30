@@ -174,7 +174,6 @@
   #flow .frame { stroke:var(--line); fill:none; }
   .trafficpanel { padding:var(--sp5); }
   .node { display:flex; flex-wrap:wrap; align-items:center; gap:0 var(--sp3); } .node header, .node .facts { flex:1 0 100%; } .node details { flex:1 1 auto; margin:0; } .node details[open] { flex:1 0 100%; order:3; } .node .detailbtn { margin:0; }
-  .legend span:last-child { display:none; }
   /* shared highlight cell (#123): quiet when fine, tinted and bold when it needs you; used for nodes and services */
   .cells { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:var(--sp3); } .cells.small { grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); }
   .cell { display:flex; flex-direction:column; gap:2px; text-align:left; font:inherit; color:var(--fg); padding:10px 12px; min-height:64px; border:1px solid var(--line); border-radius:10px; background:transparent; }
@@ -187,7 +186,6 @@
   .cell.svc { min-height:0; padding:8px 12px; }
   .scn { border:1px solid var(--line); border-radius:10px; padding:8px 12px; margin-bottom:var(--sp2); } ul.scns { max-height:min(52vh,460px); padding-right:4px; } .scn p { -webkit-line-clamp:1; }
   .trafficpanel { padding:var(--sp5) var(--sp5) var(--sp5); } #flow { max-width:680px; margin:var(--sp4) auto; }
-  .legend span:nth-child(2) { display:none; }
   /* plan sheet (#123): a modal panel on the same page */
   dialog.sheet { padding:0; border:1px solid var(--line); border-radius:16px; width:min(94vw,560px); max-height:min(92vh,760px); overflow:hidden; box-shadow:0 24px 64px rgba(0,0,0,.35); }
   dialog.sheet[open] { display:flex; flex-direction:column; } dialog::backdrop { background:rgba(10,14,20,.55); backdrop-filter:blur(2px); }
@@ -203,7 +201,19 @@
   .fit { padding:var(--sp4); border:1px solid var(--line); border-radius:12px; } .fitnum b { font-size:26px; font-variant-numeric:tabular-nums; } #pl-bar { width:100%; height:10px; margin:var(--sp2) 0; } .fit p { margin:2px 0; }
   .cmdbox summary { cursor:pointer; min-height:36px; display:flex; align-items:center; color:var(--accent); } .cmdbox pre { margin:var(--sp2) 0; }
   @media (max-width:640px) { dialog.sheet { width:100vw; max-width:100vw; margin:auto 0 0; border-radius:16px 16px 0 0; max-height:92vh; } .steps3 { gap:var(--sp2); } }
-  .cells { grid-template-columns:repeat(auto-fill,minmax(118px,1fr)); } .cells.small { grid-template-columns:repeat(auto-fill,minmax(112px,1fr)); } .cell { min-height:60px; padding:8px 10px; }
+  .cells { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); } .cell .st { overflow-wrap:anywhere; } .cells.small { grid-template-columns:repeat(auto-fill,minmax(112px,1fr)); } .cell { min-height:60px; padding:8px 10px; }
+  /* governor panel, tree, bigger traffic (#125) */
+  .cols { grid-template-columns:minmax(0,1fr) 340px; max-width:1560px; }
+  @media (max-width:1200px) { .cols { grid-template-columns:minmax(0,1fr); } }
+  .duo { display:grid; grid-template-columns:1fr 1fr; gap:var(--sp5); } dialog .banner { margin:0; }
+  #flow { max-width:none; width:100%; margin:var(--sp3) 0; } #flow text { font:600 15px system-ui,sans-serif; } #flow text.sub { font:400 12.5px system-ui,sans-serif; } #flow .ftitle { font:700 13px system-ui,sans-serif; } #flow .ndt { font:600 11px system-ui,sans-serif; } #flow .ndt.cl { font:600 14px system-ui,sans-serif; }
+  #flow .lane { stroke-width:2.5; } #flow .lane.on { stroke-width:4; } #flow .blk { stroke-width:2.5; } #flow .pk { stroke-width:1.5; }
+  .nodeswrap { display:block; } .trafficpanel { margin-bottom:var(--sp5); position:static !important; }
+  ul.tree, ul.tree ul { list-style:none; margin:0; padding:0; } .tree .tl { display:inline-block; font-weight:700; padding:4px 14px; border:1px solid var(--line); border-radius:999px; margin-bottom:var(--sp2); }
+  .tree .br { position:relative; padding:var(--sp3) 0 var(--sp3) 36px; margin-left:18px; } .tree .bh { margin:0 0 var(--sp2); font-size:14px; font-weight:650; }
+  .tree .br::after { content:''; position:absolute; left:0; top:0; bottom:0; border-left:2px solid var(--line); } .tree .br:last-child::after { bottom:auto; height:28px; }
+  .tree .br::before { content:''; position:absolute; left:0; top:28px; width:26px; border-top:2px solid var(--line); }
+  .legend { flex-direction:row; flex-wrap:wrap; gap:var(--sp2) var(--sp5); } #flow rect.pk { fill:var(--warn); }
 </style>
 </head>
 <body>
@@ -217,8 +227,8 @@
 <rect class="pi" x="6" y="95" width="108" height="14" rx="4"/>
 </g></svg> workbench</h1>
   <div class="status" id="strip" aria-label="Live status">
-    <span class="pillchip" id="c-level"><b aria-hidden="true">●</b> Governor …</span>
-    <span class="pillchip" id="c-mem">Memory …</span>
+    <button class="pillchip" id="c-level" aria-haspopup="dialog" aria-label="Governor level: open the governor panel"><b aria-hidden="true">●</b> Governor …</button>
+    <button class="pillchip" id="c-mem" aria-haspopup="dialog" aria-label="Free memory: open the governor panel">Memory …</button>
     <span class="pillchip" id="c-svc">Services …</span>
     <span class="pillchip" id="c-nodes">Nodes …</span>
     <button class="pillchip" id="c-run" hidden></button>
@@ -229,18 +239,6 @@
   </div>
 </header>
 <div class="cols">
-<aside class="rail left" aria-label="Governor">
-  <div id="banner" class="banner" role="status"><i class="orb" aria-hidden="true"></i><div><b>Connecting…</b><span class="m">Waiting for the governor.</span></div></div>
-  <div class="panel duo"><div><h2 class="rh">Memory</h2>
-    <div class="big" id="mem">–</div><div class="sub small dim">available</div>
-    <svg class="spark" id="sp-mem" viewBox="0 0 120 40" preserveAspectRatio="none" role="img" aria-label="Free memory over the last two minutes"><polygon points=""/><polyline points=""/></svg>
-    <div class="axis"><span id="mem-lo"></span><span id="mem-hi"></span></div></div>
-  <div><h2 class="rh">Pressure</h2>
-    <div class="big" id="psi">–</div><div class="sub small dim">PSI, 10 s</div>
-    <svg class="spark" id="sp-psi" viewBox="0 0 120 40" preserveAspectRatio="none" role="img" aria-label="Memory pressure over the last two minutes"><polygon points=""/><polyline points=""/></svg>
-    <div class="axis"><span>0 %</span><span id="psi-hi"></span></div></div></div>
-  <p class="dim small" style="margin:0 var(--sp2)">Local only · 127.0.0.1</p>
-</aside>
 <main id="main" tabindex="-1" aria-label="Cluster components">
   <div class="tabs" role="tablist" aria-label="Dashboard sections">
     <button role="tab" id="tb-nodes" aria-controls="tab-nodes" aria-selected="true">Nodes</button>
@@ -248,8 +246,7 @@
   </div>
   <div id="tab-nodes" role="tabpanel" aria-labelledby="tb-nodes">
   <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/benchctl start</code>.</div>
-  <div id="svcpanel"><h2 class="grouphead" style="margin-top:0">Services</h2><div id="services" class="cells small"></div></div>
-  <div class="nodeswrap">
+    <div class="nodeswrap">
   <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 id="traffic-h" style="margin:0">Traffic</h2>
     <button class="btn small" id="flowpause" aria-pressed="false">Pause animation</button></div>
     <svg id="flow" viewBox="0 0 420 270" role="img" aria-label="Traffic from clients and from injected faults to the mock services and the nodes of the cluster"></svg>
@@ -259,11 +256,13 @@
     <p id="flowstate" class="dim small" role="status" style="margin-bottom:0"></p></section>
   <div class="nodesmain">
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-  <div id="nodegroups">
-    <h2 class="grouphead">Compute nodes</h2><div id="nodes-compute" class="cells"></div>
-  <h2 class="grouphead">GPU nodes</h2><div id="nodes-gpu" class="cells"></div>
+  <ul class="tree" id="tree" aria-label="Cluster entities"><li class="troot"><span class="tl">Cluster</span>
+    <ul>
+      <li class="br" id="svcpanel"><h3 class="bh">Services</h3><div id="services" class="cells small"></div></li>
+      <li class="br" id="br-compute"><h3 class="bh">Compute nodes</h3><div id="nodes-compute" class="cells"></div></li>
+      <li class="br" id="br-gpu"><h3 class="bh">GPU nodes</h3><div id="nodes-gpu" class="cells"></div></li>
+    </ul></li></ul>
   <p class="dim small">Drain in Slurm and Kubernetes node faults are not available here: the page has no Docker access by design, and Kubernetes is not built yet. Use <code>./scripts/benchctl scenario run node-down</code> for Slurm.</p>
-  </div>
   </div></div>
   </div>
   <div id="tab-conn" role="tabpanel" aria-labelledby="tb-conn" hidden>
@@ -274,6 +273,21 @@
   <dialog id="nodedlg" aria-labelledby="nodetitle"><h2 id="nodetitle"></h2><h3 class="rh" style="margin:0 0 4px;font-size:14px">Connect</h3><dl class="kv" id="nodeconn"></dl><h3 class="rh" style="margin:12px 0 4px;font-size:14px">Fault actions</h3><div class="actions" id="nodeacts"></div><p id="nodeactmsg" role="status" class="small dim"></p><h3 class="rh" style="margin:12px 0 4px;font-size:14px">Status</h3><pre id="nodetext"></pre>
     <p class="dim small">Same text as <code>benchctl describe node NAME</code>, without the Docker and Slurm lines (this page has no Docker access by design).</p>
     <form method="dialog"><button class="btn">Close</button></form></dialog>
+  <dialog id="govdlg" class="sheet" aria-labelledby="gov-h">
+    <div class="sheet-h"><div><h2 id="gov-h">Governor</h2><p class="dim small">Protects the host's memory. Local only, 127.0.0.1.</p></div>
+      <button class="btn small" id="gov-close" aria-label="Close the governor panel">✕ Close</button></div>
+    <div class="sheet-b">
+  <div id="banner" class="banner" role="status"><i class="orb" aria-hidden="true"></i><div><b>Connecting…</b><span class="m">Waiting for the governor.</span></div></div>
+  <div class="duo"><div><h2 class="rh">Memory</h2>
+    <div class="big" id="mem">–</div><div class="sub small dim">available</div>
+    <svg class="spark" id="sp-mem" viewBox="0 0 120 40" preserveAspectRatio="none" role="img" aria-label="Free memory over the last two minutes"><polygon points=""/><polyline points=""/></svg>
+    <div class="axis"><span id="mem-lo"></span><span id="mem-hi"></span></div></div>
+  <div><h2 class="rh">Pressure</h2>
+    <div class="big" id="psi">–</div><div class="sub small dim">PSI, 10 s</div>
+    <svg class="spark" id="sp-psi" viewBox="0 0 120 40" preserveAspectRatio="none" role="img" aria-label="Memory pressure over the last two minutes"><polygon points=""/><polyline points=""/></svg>
+    <div class="axis"><span>0 %</span><span id="psi-hi"></span></div></div></div>
+    </div>
+  </dialog>
   <dialog id="plandlg" class="sheet" aria-labelledby="plan-h">
     <div class="sheet-h"><div><h2 id="plan-h">Plan a workbench</h2><p class="dim small">Pick the size, check that it fits, then apply.</p></div>
       <button class="btn small" id="plan-close" aria-label="Close the plan">✕ Close</button></div>
@@ -395,7 +409,7 @@ es.onerror = () => { $('conn').className = ''; $('conn').lastElementChild.textCo
 const STATE_ICON = { ok: '✓', warn: '▲', fault: '✗', down: '⏻', unknown: '?' };
 let clusterTimer, lastCluster = '', flashTimer;
 function node(n) {
-  const meta = [n.temp == null ? null : n.temp.toFixed(0) + ' °C', n.gpus ? n.gpus + ' GPUs' : null, n.fans_failed ? n.fans_failed + ' fan(s) failed' : null].filter(Boolean).join(' · ') || (n.power ?? '–');
+  const meta = [n.temp == null ? null : n.temp.toFixed(0) + ' °C', n.gpus ? n.gpus + ' GPUs' : null].filter(Boolean).join(' · ') || (n.power ?? '–');
   return `<button class="cell node ${n.state}" data-node="${esc(n.name)}" aria-label="${esc(n.name)}: ${esc(n.label)}. Open details and fault actions">
     <span class="nm">${esc(n.name)}</span><span class="st"><b aria-hidden="true">${STATE_ICON[n.state]}</b> ${esc(n.label)}</span><span class="mt">${esc(meta)}</span></button>`;
 }
@@ -404,7 +418,7 @@ function renderCluster(c) {
   if ($('flow').firstChild) paintTiles();
   const stackUp = Object.values(c.services).some(Boolean);
   $('stackdown').hidden = stackUp;
-  for (const id of ['svcpanel', 'nodegroups']) $(id).hidden = !stackUp;  // one message when down, not five
+  for (const id of ['tree']) $(id).hidden = !stackUp;  // one message when down, not five
   $('services').innerHTML = Object.entries(c.services).map(([k, up]) =>
     `<span class="cell svc ${up ? 'ok' : 'fault'}"><span class="nm">${esc(k)}</span><span class="st"><b aria-hidden="true">${up ? '✓' : '✗'}</b> ${up ? 'answering' : 'not answering'}</span></span>`).join('');
   for (const kind of ['compute', 'gpu']) {
@@ -454,6 +468,8 @@ function openPlan() {
   $('pl-now-cpu').textContent = c.cpu + c.gpu ? `now ${c.cpu}` : ''; $('pl-now-gpu').textContent = c.cpu + c.gpu ? `now ${c.gpu}` : ''; $('pl-now-gpus').textContent = c.gpus ? `now ${c.gpus}` : '';
   $('pl-apply-msg').textContent = ''; armed = 0; $('plandlg').showModal(); loadPlan();
 }
+$('c-level').onclick = $('c-mem').onclick = () => $('govdlg').showModal(); $('gov-close').onclick = () => $('govdlg').close();
+$('govdlg').addEventListener('click', e => { if (e.target === $('govdlg')) $('govdlg').close(); });
 $('planbtn').onclick = openPlan; $('plan-close').onclick = $('plan-cancel').onclick = () => $('plandlg').close();
 $('plandlg').addEventListener('click', e => { if (e.target === $('plandlg')) $('plandlg').close(); });  // a click on the dim backdrop closes it
 let connCache = null;
@@ -523,7 +539,7 @@ async function nodeAction(name, action, label) {
 // ---- traffic (#74, #118): real request counters from the mocks plus injected faults, over SSE, drawn with the nodes in the cluster ----
 const SVGNS = 'http:' + '//www.w3.org/2000/svg';  // an XML namespace name, not a fetch; split so the no-external-URL test stays strict
 const SERVICES = [['bmc-farm', 'BMC farm', 'Redfish'], ['bcm-mock', 'BCM mock', 'CMDaemon'], ['jira-mock', 'Jira mock', 'tickets'], ['gpu-exporter', 'GPU exporter', 'DCGM metrics']];
-const FW = 420, G = { clients: { x: 4, y: 4, w: 104, h: 180 }, injector: { x: 4, y: 192, w: 104, h: 70 }, cluster: { x: 128, y: 4, w: 288 } };
+const FW = 760, G = { clients: { x: 8, y: 8, w: 176, h: 208 }, injector: { x: 8, y: 232, w: 176, h: 108 }, cluster: { x: 268, y: 8, w: 484 } };
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 let flowEs = null, flowPaused = false, flowCursor = 0, dots = [], raf = 0, recent = [], flowSnap = null, flowLevel = 0, flowNodes = '', tiles = {}, svcPos = {};
 function sv(tag, attrs, text) { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; }
@@ -534,34 +550,30 @@ function nodeList() { try { return lastCluster ? JSON.parse(lastCluster).nodes :
 function buildFlow() {
   const g = $('flow'), nodes = nodeList(); g.innerHTML = ''; tiles = {}; svcPos = {};
   flowNodes = nodes.map(n => n.name).join(',');
-  const COLS = 3, TW = 36, TH = 26, GAP = 4, nx = 276, groups = ['compute', 'gpu'].map(k => [k, nodes.filter(n => n.kind === k)]).filter(([, r]) => r.length);
-  let y = 62; const layout = [];
-  for (const [k, rows] of groups) { layout.push(['label', k, y]); y += 14; rows.forEach((n, i) => layout.push(['node', n, nx + (i % COLS) * (TW + GAP), y + Math.floor(i / COLS) * (TH + GAP)])); y += Math.ceil(rows.length / COLS) * (TH + GAP) + 8; }
-  const H = Math.max(270, y + 8); g.setAttribute('viewBox', `0 0 ${FW} ${H}`); G.cluster.h = H - 8;
-  // frames
+  const COLS = 4, TW = 52, TH = 38, GAP = 8, nx = 500, groups = ['compute', 'gpu'].map(k => [k, nodes.filter(n => n.kind === k)]).filter(([, r]) => r.length);
+  let y = 50; const layout = [];
+  for (const [k, rows] of groups) { layout.push(['label', k, y]); y += 20; rows.forEach((n, i) => layout.push(['node', n, nx + (i % COLS) * (TW + GAP), y + Math.floor(i / COLS) * (TH + GAP)])); y += Math.ceil(rows.length / COLS) * (TH + GAP) + 14; }
+  const H = Math.max(356, y + 12); g.setAttribute('viewBox', `0 0 ${FW} ${H}`); G.cluster.h = H - 16;
   const fr = (b, rx) => sv('rect', { class: 'frame', x: b.x, y: b.y, width: b.w, height: b.h, rx });
-  g.append(fr(G.clients, 10), fr(G.injector, 10), fr(G.cluster, 12));
-  g.append(sv('text', { class: 'ftitle', x: 12, y: 20 }, 'Clients'), sv('text', { class: 'ftitle', x: 12, y: 208 }, 'Faults'), sv('text', { class: 'ftitle', x: 140, y: 20 }, 'Cluster'));
-  g.append(sv('text', { class: 'sub', id: 'fc-clients', x: 12, y: 176, 'font-size': 10 }, ''), sv('text', { class: 'sub', id: 'fc-injector', x: 12, y: 256, 'font-size': 10 }, ''));
-  // the clients, drawn as small labelled devices inside their frame
+  g.append(fr(G.clients, 12), fr(G.injector, 12), fr(G.cluster, 14));
+  g.append(sv('text', { class: 'ftitle', x: 22, y: 34 }, 'Clients'), sv('text', { class: 'ftitle', x: 22, y: 258 }, 'Faults'), sv('text', { class: 'ftitle', x: 284, y: 34 }, 'Cluster'));
+  g.append(sv('text', { class: 'sub', id: 'fc-clients', x: 22, y: 204 }, ''), sv('text', { class: 'sub', id: 'fc-injector', x: 22, y: 328 }, ''));
   ['Monitoring app', 'Prometheus', 'curl · scripts'].forEach((t, i) => {
-    g.append(sv('rect', { class: 'chipbg', x: 12, y: 30 + i * 44, width: 88, height: 36, rx: 7 }), sv('text', { class: 'ndt', x: 20, y: 52 + i * 44, 'font-size': 10 }, '▭ ' + t));
+    g.append(sv('rect', { class: 'chipbg', x: 20, y: 46 + i * 52, width: 152, height: 42, rx: 9 }), sv('text', { class: 'ndt cl', x: 32, y: 72 + i * 52 }, t));
   });
-  g.append(sv('text', { class: 'sub', x: 12, y: 223 }, '◆ scenarios'), sv('text', { class: 'sub', x: 12, y: 237 }, '◆ buttons'));
-  // services and lanes
+  g.append(sv('text', { class: 'sub', x: 22, y: 286 }, '◆ scenarios'), sv('text', { class: 'sub', x: 22, y: 308 }, '◆ buttons'));
   const clientsOut = { x: G.clients.x + G.clients.w, y: G.clients.y + G.clients.h / 2 }, injOut = { x: G.injector.x + G.injector.w, y: G.injector.y + G.injector.h / 2 };
   const lanes = sv('g', {}); g.append(lanes);
   SERVICES.forEach(([k, label, sub], i) => {
-    const p = { x: 140, y: 30 + i * 58, w: 120, h: 50 }; svcPos[k] = p;
-    lanes.append(sv('path', { class: 'lane', id: 'ln-' + k, d: dpath(curve(clientsOut, { x: p.x, y: p.y + p.h / 2 })) }), sv('path', { class: 'lane inj', d: dpath(curve(injOut, { x: p.x, y: p.y + p.h / 2 + 6 })), opacity: 0.45 }));
-    g.append(sv('rect', { class: 'blk', id: 'fb-' + k, x: p.x, y: p.y, width: p.w, height: p.h, rx: 8 }), sv('text', { x: p.x + 8, y: p.y + 17 }, label), sv('text', { class: 'sub', id: 'fs-' + k, x: p.x + 8, y: p.y + 31 }, ''), sv('text', { class: 'sub', id: 'fc-' + k, x: p.x + 8, y: p.y + 43 }, sub));
+    const p = { x: 284, y: 50 + i * 74, w: 196, h: 64 }; svcPos[k] = p;
+    lanes.append(sv('path', { class: 'lane', id: 'ln-' + k, d: dpath(curve(clientsOut, { x: p.x, y: p.y + p.h / 2 })) }), sv('path', { class: 'lane inj', d: dpath(curve(injOut, { x: p.x, y: p.y + p.h / 2 + 8 })), opacity: 0.5 }));
+    g.append(sv('rect', { class: 'blk', id: 'fb-' + k, x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), sv('text', { class: 'sn', x: p.x + 12, y: p.y + 24 }, label), sv('text', { class: 'sub', id: 'fs-' + k, x: p.x + 12, y: p.y + 42 }, ''), sv('text', { class: 'sub', id: 'fc-' + k, x: p.x + 12, y: p.y + 58 }, sub));
   });
-  // the nodes, inside the cluster
   for (const item of layout) {
-    if (item[0] === 'label') { g.append(sv('text', { class: 'ftitle', x: nx, y: item[2] + 6 }, item[1] === 'gpu' ? 'GPU nodes' : 'Compute nodes')); continue; }
+    if (item[0] === 'label') { g.append(sv('text', { class: 'ftitle', x: nx, y: item[2] + 4 }, item[1] === 'gpu' ? 'GPU nodes' : 'Compute nodes')); continue; }
     const [, n, x, ty] = item, glyph = STATE_ICON[n.state] || '?';
-    const tg = sv('g', { id: 'nd-' + n.name }); tg.append(sv('title', {}, `${n.name}: ${n.label}`), sv('rect', { class: 'nd ' + n.state, x, y: ty, width: TW, height: TH, rx: 5 }),
-      sv('text', { class: 'ndt', x: x + 3, y: ty + 11 }, n.name), sv('text', { class: 'ndt', x: x + 3, y: ty + 22 }, glyph));
+    const tg = sv('g', { id: 'nd-' + n.name }); tg.append(sv('title', {}, `${n.name}: ${n.label}`), sv('rect', { class: 'nd ' + n.state, x, y: ty, width: TW, height: TH, rx: 7 }),
+      sv('text', { class: 'ndt', x: x + 6, y: ty + 16 }, n.name), sv('text', { class: 'ndt', x: x + 6, y: ty + 31 }, glyph));
     g.append(tg); tiles[n.name] = { x, y: ty, w: TW, h: TH, g: tg };
   }
   g.append(sv('g', { id: 'dots' })); paintBlocks();
@@ -597,9 +609,9 @@ function launch(ev) {
   const sp = svcPos[ev.to], fault = ev.from === 'injector', origin = fault ? { x: G.injector.x + G.injector.w, y: G.injector.y + G.injector.h / 2 } : { x: G.clients.x + G.clients.w, y: G.clients.y + G.clients.h / 2 };
   const targets = fault && ev.nodes?.some(n => tiles[n]) ? ev.nodes.filter(n => tiles[n]).map(n => ({ pt: { x: tiles[n].x, y: tiles[n].y + tiles[n].h / 2 }, node: n })) : [{ pt: { x: sp.x, y: sp.y + sp.h / 2 + (fault ? 6 : 0) }, node: null }];
   for (const t of targets) for (let i = 0; i < Math.min(ev.n, 5) && dots.length < 60; i++) {
-    const el = fault ? sv('rect', { class: 'pk', width: 9, height: 9, rx: 1 }) : sv('circle', { class: 'pk', r: 4.5 }), trail = sv('circle', { class: 'pkt', r: 3 });
+    const el = fault ? sv('rect', { class: 'pk', width: 14, height: 14, rx: 2 }) : sv('circle', { class: 'pk', r: 7 }), trail = sv('circle', { class: 'pkt', r: 5 });
     $('dots').append(trail, el);
-    dots.push({ el, trail, fault, bez: curve(origin, t.pt), node: t.node, svc: ev.to, t0: performance.now() + i * 130, dur: fault ? 1500 : 1000 });
+    dots.push({ el, trail, fault, bez: curve(origin, t.pt), node: t.node, svc: ev.to, t0: performance.now() + i * 130, dur: fault ? 1700 : 1200 });
   }
   if (!raf) raf = requestAnimationFrame(step);
 }
@@ -613,7 +625,7 @@ function step(now) {
     if (p >= 1) { d.el.remove(); d.trail.remove(); if (d.fault) hit(d); return false; }
     const q = Math.max(p, 0), pt = at(d.bez, q), tr = at(d.bez, Math.max(q - 0.07, 0)), vis = p < 0 ? 'hidden' : 'visible';
     d.el.setAttribute('visibility', vis); d.trail.setAttribute('visibility', vis); d.trail.setAttribute('cx', tr.x); d.trail.setAttribute('cy', tr.y);
-    if (d.fault) { d.el.setAttribute('transform', `translate(${pt.x} ${pt.y}) rotate(45) translate(-4.5 -4.5)`); } else { d.el.setAttribute('cx', pt.x); d.el.setAttribute('cy', pt.y); }
+    if (d.fault) { d.el.setAttribute('transform', `translate(${pt.x} ${pt.y}) rotate(45) translate(-7 -7)`); } else { d.el.setAttribute('cx', pt.x); d.el.setAttribute('cy', pt.y); }
     return true;
   });
   raf = dots.length ? requestAnimationFrame(step) : 0;
