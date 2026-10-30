@@ -22,6 +22,16 @@ def wait_for(pred, timeout: float = 15) -> bool:
     return False
 
 
+def exporter_up() -> bool:
+    """True once the GPU exporter serves metrics. It `pip install`s pyyaml at container start, so for a while after
+    `up` the port answers with a reset or nothing; tests that read it must wait (this was the cause of flaky failures)."""
+    import urllib.request
+    try:
+        return b"DCGM_FI_DEV_GPU_UTIL" in urllib.request.urlopen("http://127.0.0.1:9400/metrics", timeout=3).read()
+    except OSError:
+        return False
+
+
 def bring_up(sim: dict, profile: str = "min") -> None:
     """Start the stack for a fixture. On failure say why: a refusal by the governor (host memory low, GV-9) is the
     environment, not a defect in the code under test, so the message says so instead of a bare AssertionError."""

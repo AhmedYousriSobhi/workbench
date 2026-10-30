@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import bring_up, wait_for
+from helpers import bring_up, exporter_up, wait_for
 
 from benchctl import stack
 
@@ -29,6 +29,7 @@ def cluster():
     os.chdir(ROOT)
     bring_up(yaml.safe_load((ROOT / "sim.yaml").read_text()))
     assert wait_for(lambda: "gpu001" in slurm("sinfo", "-h", "-N", "-p", "gpu", "-t", "idle", "-o", "%N").stdout, timeout=90)
+    assert wait_for(exporter_up, timeout=180), "the GPU exporter (it installs pyyaml at start) never answered"
     yield
     stack.down(say=lambda m: None)
 
