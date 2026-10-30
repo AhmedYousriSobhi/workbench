@@ -5,7 +5,7 @@
 One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [flags]`**. Run it as `./scripts/benchctl`
 (no activation needed), or as `benchctl` once the venv is active. Tab completion for verbs and node names:
 `benchctl --install-completion` (once, then open a new terminal). The old names `simctl` and `./scripts/opti` still
-work as aliases.
+work as aliases. What each verb does not do, exit codes, and what to use in a script: [the verbs guide](../guides/benchctl-verbs.md).
 
 | Verb | Does |
 |---|---|

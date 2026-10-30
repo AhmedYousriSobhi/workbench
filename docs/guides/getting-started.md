@@ -15,7 +15,7 @@ How to run opti-sim on your workstation and see it working. Keep this page in st
 Every command has the same shape, like `kubectl`: `benchctl VERB [RESOURCE] [NAME]`, for example `benchctl get nodes`,
 `benchctl exec gpu001 -- nvidia-smi`, `benchctl scenario run node-down`. `benchctl --help` lists the verbs;
 `benchctl --install-completion` adds Tab completion (once, then open a new terminal). The old names `simctl` and
-`./scripts/opti` still work as aliases.
+`./scripts/opti` still work as aliases. A mistyped verb gets a `Did you mean` hint and is never run; the limits of every verb are in [the verbs guide](benchctl-verbs.md).
 
 The numbered sections below are the same steps one at a time, for when you want to see or change each.
 
