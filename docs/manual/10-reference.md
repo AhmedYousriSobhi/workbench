@@ -12,12 +12,12 @@ work as aliases. What each verb does not do, exit codes, and what to use in a sc
 | `start [--profile P]` | machine check, venv, governor (as you), cluster, web page; default profile `min` |
 | `stop` | stop the web page, the cluster and your own governor |
 | `open` | print the login link, open a browser if there is a display |
-| `get nodes\|services\|profiles\|scenarios [-o json]` | list what exists; `nodes` shows every node `sim.yaml` defines and its state (`absent` = not started) |
+| `get nodes\|services\|profiles\|scenarios [-o json\|name] [-l SEL] [--sort-by COL] [-w]` | list what exists, filter (`-l kind=gpu`), sort, redraw; `nodes` shows every node `sim.yaml` defines and its state (`absent` = not started) |
 | `exec NODE [-u USER] [-- CMD]` | shell on a node, or one command: `benchctl exec gpu001 -- nvidia-smi` |
 | `logs NODE [-f] [--tail N]` | container log of a node or service |
 | `up --profile P` | pre-flight, governor admission, ordered start (default profile `std`) |
-| `down` | stop and remove the `hpcsim` project only |
-| `scale N [--profile P]` | change the compute node count |
+| `down [-n] [-y]` | stop and remove the `hpcsim` project only; asks first in a terminal, `-n` only lists |
+| `scale N [--profile P] [-n] [-y]` | change the compute node count; asks before removing nodes in a terminal, `-n` only says what would change |
 | `scenario list` / `scenario run NAME [--speed N] [--dry-run]` | list scenarios; play one, exit 1 on failure |
 | `export profile [-o FILE] [--bmc] [--user U] [--name N] [--format ID]` | write the workbench as a client profile file ([guide](../guides/export-profile.md)) |
 | `ssh-key install\|remove` | put the login key under `~/.ssh` for clients that only read there |
