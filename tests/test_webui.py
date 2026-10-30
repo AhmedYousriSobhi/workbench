@@ -220,3 +220,14 @@ def test_plan_endpoint_estimates_without_side_effects(ui):
     assert req(ui, "/api/plan?cpu_nodes=999")[0] == 422 and req(ui, "/api/plan?cpu_nodes=x")[0] == 422
     assert req(ui, "/api/plan", auth=False)[0] == 401
     assert b'id="plan"' in req(ui, "/")[1] and b"loadPlan" in req(ui, "/")[1]
+
+
+def test_connections_endpoint_lists_every_entity_with_credential_paths_only(ui):
+    code, body = req(ui, "/api/connections")
+    rows = {e["id"]: e for e in json.loads(body)["entities"]}
+    assert code == 200 and {"login", "nodes", "bmc", "bcm", "jira", "slurm", "gpu", "prometheus", "grafana", "ui"} <= set(rows)
+    assert rows["login"]["address"] == "127.0.0.1:2222" and rows["login"]["credential"].endswith("ssh/id_ed25519")
+    assert rows["bmc"]["credential"].endswith("bmc_credentials") and "admin:<password>" in rows["bmc"]["command"]
+    assert req(ui, "/api/connections", auth=False)[0] == 401
+    page = req(ui, "/")[1]
+    assert b'role="tablist"' in page and b'id="tab-conn"' in page and b"paintConnections" in page

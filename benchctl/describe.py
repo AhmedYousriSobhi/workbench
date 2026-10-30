@@ -69,7 +69,9 @@ def gather(sim: dict, name: str, fetch: Callable, runner: Callable | None = None
             mem = d["HostConfig"].get("Memory") or 0
             info["container"] = {"state": d["State"]["Status"], "image": d["Config"]["Image"],
                                  "memory_limit_mb": mem // (1024 * 1024) or None,
-                                 "class": d["Config"]["Labels"].get("workbench.class")}
+                                 "class": d["Config"]["Labels"].get("workbench.class"),
+                                 "ip": next((n["IPAddress"] for n in d.get("NetworkSettings", {}).get("Networks", {}).values()
+                                             if n.get("IPAddress")), None)}
         else:
             info["container"] = {"state": "absent"}
             info["notes"].append("container not found: is the stack up? (benchctl up)")
@@ -115,6 +117,8 @@ def render(info: dict) -> str:
     if c := info.get("container"):
         lines.append(f"Container:   {c['state']}" + (f"  image {c['image']}, memory limit {c['memory_limit_mb']} MB, "
                                                     f"class {c['class']}" if c["state"] != "absent" else ""))
+        if c.get("ip"):
+            lines.append(f"IP:          {c['ip']} (cluster network; SSH from the login node: {info['name']})")
     if s := info.get("slurm"):
         lines.append("Slurm:")
         lines += [f"  {k + ':':12} {v}" for k, v in s.items()]

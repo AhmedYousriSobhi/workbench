@@ -90,6 +90,7 @@ Profiles: `min`, `std`, `full`, `jira-real`, `mac-agent` ([architecture section 
 | W-9 | Accessibility: status is never shown by colour alone; text contrast is at least 4.5:1 in light and dark; tap targets are at least 40 px; tables stack as cards under 640 px; the page has ARIA landmarks and a skip link; reduced motion is respected; nothing scrolls sideways at 390 px. |
 | W-10 | One message per condition. When the stack or the governor is down the page shows a single notice and one "needs attention" entry, hides data that cannot exist (no red or empty placeholders), and names a recovery command that works in a supported mode (the start path never needs sudo). |
 | W-11 | Live feeds (SSE, polling) run only while the page is visible, and animation stops at governor L3 and under reduced motion (ADR 0009). |
+| W-12 | The page never scrolls the cluster away: side panels stay in view and scroll on their own, long lists are bounded and filterable, and a Connections view gives each part's address, a command to try and the path of its credential (never the secret). |
 
 ## 9. Non-functional requirements
 

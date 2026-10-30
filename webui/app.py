@@ -189,6 +189,11 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             raise HTTPException(404, str(e.args[0])) from e
         return JSONResponse({"info": info, "text": describe.render(info)})
 
+    async def connections(request: Request):
+        from webui import connections as conn
+
+        return JSONResponse({"entities": conn.entities(cluster.sim)})
+
     async def node_action(request: Request):
         try:
             results = await asyncio.to_thread(cluster.act, request.path_params["node"], request.path_params["action"])
@@ -260,6 +265,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/cluster", protected(cluster_state)),
             Route("/api/flow", protected(flow_events)),
             Route("/api/plan", protected(plan)),
+            Route("/api/connections", protected(connections)),
             Route("/api/nodes/{node}", protected(node_detail)),
             Route("/api/nodes/{node}/{action}", protected(node_action, write=True), methods=["POST"]),
             Route("/api/scenarios", protected(list_scenarios)),

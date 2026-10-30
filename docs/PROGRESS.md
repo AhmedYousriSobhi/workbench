@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-10-29. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**77% built** (35 done, 19 in review, 11 partial, 5 to do, 70 items).
+**77% built** (35 done, 20 in review, 11 partial, 5 to do, 71 items).
 
 ## Roadmap
 
@@ -16,7 +16,7 @@ flowchart LR
     p4["People and chaos<br/>0%"]:::partial
     p5["Kubernetes<br/>50%"]:::partial
     p6["Fidelity VM<br/>0%"]:::partial
-    p7["Web UI and profiles<br/>62%"]:::partial
+    p7["Web UI and profiles<br/>67%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
     p0 --> p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7 --> p8
     classDef done fill:#1a7f37,stroke:#1a7f37,color:#fff
@@ -194,7 +194,7 @@ _One real Ubuntu VM with Redfish power control._
 
 0/1 done
 
-### Web UI and profiles (62%)
+### Web UI and profiles (67%)
 
 _One click from cold start to a busy cluster._
 
@@ -206,10 +206,11 @@ _One click from cold start to a busy cluster._
 | GitHub Wiki from docs | 🔍 In review | `scripts/sync_wiki.py --out DIR` turns docs/manual, guides, architecture and ADRs into wiki pages (Home, sidebar, footer, images, rewritten links); `--push` clones the wiki repository, syncs and pushes without printing the token. docs/ stays the only source. A GitHub Actions workflow (.github/workflows/wiki.yml) runs it after every push to dev that changes the docs (issue 113). | `scripts/sync_wiki.py`, `.github/workflows/wiki.yml`, `tests/test_sync_wiki.py`, `docs/guides/github-wiki.md` | #149 |
 | Cluster Canvas | 🟡 Partial | Cluster tab: service reachability chips and a card per sim.yaml node (power, CPU temp, fans, BCM state, GPU XID) refreshed every 3 s, with Power off/on, Overheat, Fan failure, GPU error and Clear actions that go through the mocks. Slurm drain and K8s faults are not offered (UI has no Docker access; K8s not built). Verified live. | `webui/cluster.py`, `webui/static/index.html` | #84 |
 | App shell and layout | 🔍 In review | One dashboard page: cluster components in the middle (service chips, traffic dots, node cards), governor in the left panel, needs-attention, scenarios and log in the right panel; panels stack on small screens. A status strip on top (governor level, memory, services, nodes, running scenario, theme), a calm palette with a soft level banner and area sparklines, light/dark/auto theme, skip link and landmarks, 4 px spacing scale. Based on dashboard and navigation guidance from Splunk, Zuora, Grafana and SaaS UX guides (issue 46). | `webui/static/index.html` | #91 |
+| Dashboard tabs and connection details | 🔍 In review | Main column has Nodes, Traffic, Connections and Plan tabs; the right rail stays in view and scrolls on its own; scenarios are a compact, filterable list with one speed control. Connections tab lists every part with address, a copyable command and the credential file path (never the secret); node details show the SSH, BMC and IP hints; `benchctl describe node` prints the container IP (issue 115). | `webui/connections.py`, `webui/static/index.html`, `benchctl/describe.py` | #116 |
 | Animated workload dots | 🔍 In review | Cluster tab Traffic panel: a dot travels from Clients to a mock each time it serves a real request (the mocks count them at /sim/stats; health checks, /sim calls and the UI's own polls are excluded), a diamond from Fault injector when a fault is applied. SSE at /api/flow opened only while the tab shows; pause button; stops at governor L3+ and for reduced motion. Slurm job dots are not drawn (the UI cannot read the scheduler). ADR 0009. | `webui/flow.py`, `components/*/ (GET /sim/stats)`, `webui/static/index.html` | #89 |
 | Budget manager | ⬜ To do | Profile/budget form (W-7). | - | - |
 
-1/8 done
+1/9 done
 
 ### macOS agent and CI (0%)
 

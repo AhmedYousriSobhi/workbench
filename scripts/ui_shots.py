@@ -72,13 +72,25 @@ def capture(out: Path) -> dict:
                     page.click("#theme")
                     if page.evaluate("document.documentElement.dataset.theme") != "dark":
                         result["a11y"].append("theme toggle did not switch to dark")
-                    page.click("#plan summary")  # planner: opens, estimates, reacts to a change, shows the command
+                    page.click("#tb-conn")  # connections tab: every entity listed with an address and a credential location
+                    page.wait_for_selector("#conn-rows tr td code")
+                    cpath = out / f"connections-{vp}-{scheme}.png"
+                    page.screenshot(path=str(cpath), full_page=True)
+                    result["shots"].append(str(cpath))
+                    if page.locator("#conn-rows tr").count() < 8:
+                        result["a11y"].append("connections tab lists fewer than 8 parts")
+                    page.click("#tb-traffic")
+                    page.wait_for_selector("#flow rect.blk")
+                    if vp == "desktop" and page.evaluate("getComputedStyle(document.querySelector('.rail.right')).position") != "sticky":
+                        result["a11y"].append("right rail must stay in view (sticky) on desktop")
+                    page.click("#tb-plan")
                     page.wait_for_function("document.querySelector('#pl-msg').textContent.length > 5")
                     page.fill("#pl-cpu", "2")
                     page.wait_for_function("document.querySelector('#pl-cmd').textContent.includes('--cpu-nodes 2') || document.querySelector('#pl-cmd').textContent.startsWith('Does not fit')")
                     ppath = out / f"plan-{vp}-{scheme}.png"
                     page.locator("#planpanel").screenshot(path=str(ppath))
                     result["shots"].append(str(ppath))
+                    page.click("#tb-nodes")
                     page.evaluate("showNode('cn001')")  # node Details dialog (its button is hidden while the stack is down): text, fits, closes
                     page.wait_for_selector("#nodedlg[open]")
                     page.wait_for_function("document.querySelector('#nodetext').textContent.includes('Name:')")

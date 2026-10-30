@@ -19,7 +19,8 @@ DCGM_FI_DEV_XID_ERRORS{node="gpu001",gpu="2",Hostname="gpu001"} 79"""
 SCONTROL = ("NodeName=gpu001 Arch=x86_64 CPUTot=8 CPUAlloc=2 RealMemory=4096 Gres=gpu:h200:8 "
             "State=MIXED Partitions=gpu Reason=(null)")
 INSPECT = json.dumps([{"State": {"Status": "running"}, "Config": {"Image": "workbench/node:dev", "Labels": {"workbench.class": "P4"}},
-                       "HostConfig": {"Memory": 60 * 1024 * 1024}}])
+                       "HostConfig": {"Memory": 60 * 1024 * 1024},
+                       "NetworkSettings": {"Networks": {"workbench_default": {"IPAddress": "172.20.0.5"}}}}])
 
 
 def fetch(url):
@@ -41,7 +42,8 @@ def runner(cmd):
 
 def test_gpu_node_gathers_every_source():
     info = describe.gather(SIM, "gpu001", fetch, runner)
-    assert info["container"] == {"state": "running", "image": "workbench/node:dev", "memory_limit_mb": 60, "class": "P4"}
+    assert info["container"] == {"state": "running", "image": "workbench/node:dev", "memory_limit_mb": 60, "class": "P4",
+                                 "ip": "172.20.0.5"}
     assert info["slurm"]["State"] == "MIXED" and info["slurm"]["Partitions"] == "gpu" and "Reason" not in info["slurm"]
     assert info["jobs"] == [{"id": "42", "user": "alice", "partition": "gpu", "state": "RUNNING"}]
     assert info["gpus"] == {"type": "h200", "count": 8, "busy": [0, 1], "idle": [2], "xid": 79}

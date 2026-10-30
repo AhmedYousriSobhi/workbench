@@ -77,6 +77,17 @@ page. Start with [Which command do I use?](11-which-command.md) when the command
 
 ![The help pages: the manual's sidebar on the left and the "Which command do I use?" table on the right](img/web-help.png)
 
+## Tabs, scenarios and how to connect
+
+The middle column has four tabs: **Nodes** (services and node cards), **Traffic**, **Connections** and **Plan**. The right
+panel stays in view while you scroll and scrolls on its own, so the nodes never move away. **Scenarios** is a short list:
+type in *Filter scenarios*, pick one speed for all, press **▶ Play**.
+
+**Connections** lists every part (login node, nodes, BMC, BCM, Jira, Slurm REST, GPU exporter, Prometheus, Grafana, this page)
+with its address, a command you can copy, and the **file that holds its credential**. The page shows paths, never secrets.
+A node card's **Details and how to connect** shows its SSH command, key file and BMC login; the container IP needs Docker, so
+run `./scripts/benchctl describe node cn001` (it prints an `IP:` line).
+
 ## Limits
 
 - The Profile and Budget manager (edit `sim.yaml` in the page) is **not built**; edit the file ([chapter 8](08-configuration.md)).
