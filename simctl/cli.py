@@ -6,7 +6,7 @@ import click
 import typer
 from typer.core import TyperGroup
 
-from . import checks, compose, diag, inventory, machine, measure, nodes, scenario, stack
+from . import checks, compose, diag, export, inventory, machine, measure, nodes, scenario, stack
 
 
 class SuggestingGroup(TyperGroup):
@@ -272,6 +272,38 @@ def logs(node: str = NODE, follow: bool = typer.Option(False, "-f", "--follow"),
 
     os.execvp("docker", ["docker", "logs", *(["-f"] if follow else []), "--tail", str(tail),
                          f"{stack.PROJECT}-{node}-1"])
+
+
+export_app = typer.Typer(cls=SuggestingGroup, help="Write the workbench in a form another tool can import")
+app.add_typer(export_app, name="export")
+
+
+@export_app.command("profile")
+def export_profile(out: str = typer.Option("bench-profile.json", "-o", "--output", help="file to write, or - for stdout"),
+                   profile: str = typer.Option(None, "--profile", help="default: the profile `up` last started"),
+                   name: str = typer.Option("workbench", "--name", help="the cluster's name in the client"),
+                   user: str = typer.Option(None, "--user", help="SSH user, default the first user in sim.yaml"),
+                   bmc: bool = typer.Option(False, "--bmc", help="also list one BMC target per node"),
+                   fmt: str = typer.Option(None, "--format", help="client format ID[:VERSION]; else $BENCH_EXPORT_FORMAT "
+                                                                 "or .git/export-format")) -> None:
+    """Write a profile file the monitoring client can import: SSH, Slurm, Grafana, Jira, storage (no secrets)."""
+    from pathlib import Path
+
+    sim = _sim()
+    prof = profile or stack.current_profile()
+    try:
+        text = export.to_json(export.build(sim, export.services_for(sim, prof), name, bmc, user), export.format_id(fmt))
+    except export.ExportError as e:
+        typer.echo(f"cannot export: {e}", err=True)
+        raise typer.Exit(1) from e
+    if out == "-":
+        typer.echo(text, nl=False)
+        return
+    Path(out).write_text(text)
+    typer.echo(f"wrote {out} (profile {prof}). Import it in the client, then set what a file never holds:\n"
+               "  SSH key: benchctl ssh-key install, then pick ~/.ssh/opti-sim_ed25519\n"
+               "  Grafana token: cat compose/generated/secrets/grafana_viewer_token (new after every `up`)"
+               + ("\n  BMC password: the part after 'admin:' in compose/generated/secrets/bmc_credentials" if bmc else ""))
 
 
 ssh_key_app = typer.Typer(cls=SuggestingGroup, help="Put the login key where a client that only reads ~/.ssh can use it")

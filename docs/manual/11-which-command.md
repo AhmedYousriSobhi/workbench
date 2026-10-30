@@ -21,6 +21,7 @@ for, and why. Every command runs from the repository root.
 | see why a start was refused | `./scripts/benchctl status` and `./scripts/benchctl preflight --profile min` | the governor level and whether the profile fits |
 | check my machine is ready | `./scripts/benchctl check` | OS, RAM, disk, Docker, ports |
 | give a client that only reads `~/.ssh` the login key | `./scripts/benchctl ssh-key install` (and `remove` after) | copies the key to `~/.ssh/workbench_ed25519`, mode 600 |
+| import the cluster into the client in one step | `./scripts/benchctl export profile` | writes a profile file; only the key and token are set by hand ([guide](../guides/export-profile.md)) |
 | report a problem | `./scripts/benchctl diag` | one masked tarball to attach |
 
 ## `start` or `up`?
