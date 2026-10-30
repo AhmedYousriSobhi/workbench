@@ -64,6 +64,7 @@ PY
 
 step "progress docs"
 python3 -m simctl.progress --check || bad "docs/PROGRESS.md or progress.html is stale"
+python3 scripts/make_logo_assets.py --check || bad "logo files or web page icons are stale (python scripts/make_logo_assets.py)"
 
 step "json"
 for f in $(git ls-files '*.json'); do python3 -m json.tool "$f" >/dev/null || bad "json $f"; done
