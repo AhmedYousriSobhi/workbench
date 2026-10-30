@@ -1,6 +1,7 @@
 """describe node against the live stack: a Slurm job shows up with its busy GPUs, and the page serves the same text (#93)."""
 import os
 import subprocess
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,13 @@ def describe(node: str) -> str:
                           timeout=60, check=False).stdout
 
 
+def _exporter_up() -> bool:
+    try:
+        return b"DCGM_FI_DEV_GPU_UTIL" in urllib.request.urlopen("http://127.0.0.1:9400/metrics", timeout=3).read()
+    except OSError:
+        return False
+
+
 @pytest.fixture(scope="module")
 def cluster():
     os.chdir(ROOT)
@@ -24,6 +32,7 @@ def cluster():
     assert wait_for(lambda: "gpu001" in subprocess.run(
         ["docker", "exec", "-u", "alice", "hpcsim-login-1", "sinfo", "-h", "-N", "-p", "gpu", "-t", "idle", "-o", "%N"],
         capture_output=True, text=True, check=False).stdout, timeout=90)
+    assert wait_for(_exporter_up, timeout=120), "the GPU exporter (it installs pyyaml at start) never answered"
     yield
     stack.down(say=lambda m: None)
 
