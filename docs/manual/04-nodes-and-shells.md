@@ -71,7 +71,7 @@ ssh -i .vagrant/machines/fidelity/libvirt/private_key vagrant@<IP>      # plain 
 
 ## Not built: SSH or Teleport to the simulated nodes
 
-The application under test is meant to reach nodes through Teleport (issue #77). That needs decisions that are still
+The application under test is meant to reach nodes through Teleport (issue #39). That needs decisions that are still
 open (which access types, real Teleport or a mock) and an `sshd` in the node image. Until then, `docker exec` from the
 host is the way to reach a node; the application under test reaches the cluster through Slurm REST, Redfish and the
 other APIs in [chapter 3](03-using-the-cluster.md).

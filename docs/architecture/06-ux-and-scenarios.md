@@ -39,7 +39,7 @@ Budget: **< 50 MB** host RAM. No heavy JS frameworks.
 A compromise of the Web UI can only issue the pre-approved commands the socket accepts; it never gets root.
 
 **Modules.**
-1. **Cluster Canvas (built; animated workload flow planned, #74):** visual map of the `sim.yaml` topology (K8s nodes, Slurm nodes, BMCs) with right-click node faults (*Set K8s NotReady*, *Inject GPU XID*, *Drain slurmd*).
+1. **Cluster Canvas (built; animated workload flow planned, #37):** visual map of the `sim.yaml` topology (K8s nodes, Slurm nodes, BMCs) with right-click node faults (*Set K8s NotReady*, *Inject GPU XID*, *Drain slurmd*).
 2. **Governor Dashboard (built):** SSE sparklines for `MemAvailable` and PSI, a color-coded level banner (L0 green, L2 yellow, L4 red) and a scrolling audit log of governor actions.
 3. **Scenario Orchestrator (built, Play/Stop/speed):** browse and run scenarios from `scenarios/` with Play, Stop and Fast-Forward, plus a timeline of upcoming injection steps.
 4. **Profile & Budget Manager (not built yet):** form editor for `sim.yaml`; sliders for node/GPU counts feed a projected PSS memory calculator, and deployment is blocked if the budget exceeds host safety limits.

@@ -25,4 +25,4 @@ Users and monitoring clients reach a compute node from the login node: `ssh cn00
 - `up` now builds `node-base` first and `slurmctld`/`slurmrestd` get their `images/slurm-ctl` build context.
   Before, a change to the base image (a new munge key) left the controller on the old image and every Slurm call
   failed with "Protocol authentication error".
-- Cert-based access (Teleport, issue 77) and the fake `cmsh` (issue 127) still build on the login node.
+- Cert-based access (Teleport, issue 39) and the fake `cmsh` (issue 66) still build on the login node.

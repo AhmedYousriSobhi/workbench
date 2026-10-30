@@ -3,7 +3,7 @@
 Status: accepted
 
 ## Context
-Issue #74 asks for dots that move between blocks to show workload. The Web UI cannot read Slurm (no Docker access,
+Issue #37 asks for dots that move between blocks to show workload. The Web UI cannot read Slurm (no Docker access,
 SPEC W-3), and user-sim does not exist yet, so Slurm job events are not available to it.
 
 ## Decision

@@ -1,4 +1,4 @@
-"""GPU metrics follow the scheduler: a job's GPUs read busy while it runs and idle again after it ends (#158)."""
+"""GPU metrics follow the scheduler: a job's GPUs read busy while it runs and idle again after it ends (#83)."""
 import os
 import re
 import subprocess

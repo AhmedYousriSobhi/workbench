@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fake read-only `cmsh` for the login node, which doubles as the BCM head node (ADR 0013, issue 127).
+"""Fake read-only `cmsh` for the login node, which doubles as the BCM head node (ADR 0013, issue 66).
 
 Answers the fixed one-shot scripts a monitoring client runs (`cmsh -c "device; list"`, `device; status`,
 `category; list`, `jobqueue; list`, `monitoring; healthchecks; list`) from bcm-mock's node state, so a node a scenario

@@ -77,8 +77,9 @@ def architecture_mermaid(data: dict) -> str:
     return "\n".join(lines + _classdefs())
 
 
-def _pr_links(item: dict, repo: str) -> str:
-    return ", ".join(f"[#{n}]({repo}/pull/{n})" for n in prs(item)) or "-"
+def _pr_links(item: dict, repo: str, legacy: int = 0) -> str:
+    """PR numbers up to `legacy` come from the previous repository: shown as text, since nothing there to link to."""
+    return ", ".join(f"#{n}" if n <= legacy else f"[#{n}]({repo}/pull/{n})" for n in prs(item)) or "-"
 
 
 def _legend() -> str:
@@ -86,7 +87,7 @@ def _legend() -> str:
 
 
 def render_md(data: dict) -> str:
-    repo, items = data["repo"], all_items(data)
+    repo, items, legacy = data["repo"], all_items(data), data.get("legacy_pr_max", 0)
     c = counts(items)
     intro = (f"Last updated {data['updated']}. Legend: {_legend()}. "
              "Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).")
@@ -110,7 +111,7 @@ def render_md(data: dict) -> str:
         for i in p["items"]:
             where = ", ".join(f"`{w.strip()}`" for w in i["where"].split(",")) if i.get("where") else "-"
             out.append(f"| {i['name']} | {ICON[i['status']]} {LABEL[i['status']]} | {i['how']} | {where} | "
-                       f"{_pr_links(i, repo)} |")
+                       f"{_pr_links(i, repo, legacy)} |")
         out += ["", f"{n['done']}/{len(p['items'])} done", ""]
     out += ["## Next up", ""] + [f"{k}. {t}" for k, t in enumerate(data["next"], 1)]
     out += ["", "## Known gaps", ""] + [f"- {g}" for g in data["gaps"]]
@@ -118,7 +119,7 @@ def render_md(data: dict) -> str:
 
 
 def render_html(data: dict) -> str:
-    repo, items = data["repo"], all_items(data)
+    repo, items, legacy = data["repo"], all_items(data), data.get("legacy_pr_max", 0)
     c = counts(items)
     rows = []
     for p in data["phases"]:
@@ -128,7 +129,7 @@ def render_html(data: dict) -> str:
         for i in p["items"]:
             where = ", ".join(f"<code>{html.escape(w.strip())}</code>" for w in i["where"].split(",")) \
                 if i.get("where") else "-"
-            prl = ", ".join(f'<a href="{repo}/pull/{n}">#{n}</a>' for n in prs(i)) or "-"
+            prl = ", ".join(f"#{n}" if n <= legacy else f'<a href="{repo}/pull/{n}">#{n}</a>' for n in prs(i)) or "-"
             rows.append(f'<tr><td>{html.escape(i["name"])}</td><td><span class="pill {i["status"]}">'
                         f'{LABEL[i["status"]]}</span></td><td>{html.escape(i["how"])}</td><td>{where}</td>'
                         f"<td>{prl}</td></tr>")

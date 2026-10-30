@@ -1,4 +1,4 @@
-"""Workload flow feed (issue #74): who is talking to which mock, for the dots on the Cluster Canvas.
+"""Workload flow feed (issue #37): who is talking to which mock, for the dots on the Cluster Canvas.
 
 Two real sources, no invented traffic:
 - client traffic: every mock counts the requests it serves (`GET /sim/stats`), ignoring health checks, `/sim`
