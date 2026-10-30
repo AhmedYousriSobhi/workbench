@@ -29,7 +29,7 @@ def test_mocks_publish_on_localhost_only():
     svcs = compose.generate(SIM, compose.load_profile("min"))["services"]
     assert svcs["bcm-mock"]["ports"] == ["127.0.0.1:8081:8081"]
     assert svcs["jira-mock"]["ports"] == ["127.0.0.1:8080:8080"]
-    assert "../../sim.yaml:/sim.yaml:ro" in svcs["bcm-mock"]["volumes"]
+    assert "./sim.yaml:/sim.yaml:ro" in svcs["bcm-mock"]["volumes"]
     assert svcs["bcm-mock"]["build"] == "../../components/bcm-mock"
 
 

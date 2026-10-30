@@ -159,6 +159,27 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
     async def cluster_state(request: Request):
         return JSONResponse(await asyncio.to_thread(cluster.snapshot))
 
+    async def plan(request: Request):
+        """Estimate only, no side effects (W-3): the page cannot start containers, so it shows the command to run."""
+        from simctl import checks, workbench
+
+        q = request.query_params
+        try:
+            spec = workbench.from_dict({k: int(q[k]) for k in ("cpu_nodes", "gpu_nodes", "gpus_per_node") if k in q}
+                                       | ({"parts": [p for p in q["parts"].split(",") if p]} if "parts" in q else {}),
+                                       workbench.defaults(sim))
+        except (ValueError, workbench.SpecError) as e:
+            raise HTTPException(422, str(e)) from e
+        if problems := spec.problems():
+            raise HTTPException(422, "; ".join(problems))
+        est = workbench.estimate(*workbench.effective(sim, spec))
+        avail = checks.mem_available() // (1024 * 1024)
+        ok, msg = workbench.verdict(est, avail, spec=spec)
+        flags = f"--cpu-nodes {spec.cpu_nodes} --gpu-nodes {spec.gpu_nodes} --gpus-per-node {spec.gpus_per_node}" + "".join(
+            f" --with {p}" for p in sorted(spec.parts)) + "".join(f" --without {p}" for p in workbench.PARTS if p not in spec.parts)
+        return JSONResponse({"fits": ok, "message": msg, "total_mb": est["total_mb"], "available_mb": avail,
+                             "text": workbench.render(spec, est), "command": f"benchctl up {flags}"})
+
     async def node_detail(request: Request):
         from simctl import describe
 
@@ -238,6 +259,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/events", protected(events)),
             Route("/api/cluster", protected(cluster_state)),
             Route("/api/flow", protected(flow_events)),
+            Route("/api/plan", protected(plan)),
             Route("/api/nodes/{node}", protected(node_detail)),
             Route("/api/nodes/{node}/{action}", protected(node_action, write=True), methods=["POST"]),
             Route("/api/scenarios", protected(list_scenarios)),

@@ -12,6 +12,7 @@ from . import (
     nodes,
     scenario,
     stack,
+    workbench,
 )
 
 app = typer.Typer(help="benchctl: control the simulated cluster. Pattern: benchctl VERB [RESOURCE] [NAME]. "
@@ -100,7 +101,7 @@ def compose_cmd(profile: str = typer.Option("std", "--profile")) -> None:
                f"{compose.budget_mb(data)} MB of limits (plus observability)")
 
 
-def _sim() -> dict:
+def _base_sim() -> dict:
     from pathlib import Path
 
     import yaml
@@ -108,10 +109,95 @@ def _sim() -> dict:
     return yaml.safe_load(Path("sim.yaml").read_text())
 
 
+def _sim() -> dict:
+    """sim.yaml with the workbench last built applied (node counts), so every command sees what is really there."""
+    base = _base_sim()
+    try:
+        spec = workbench.current(base)
+    except workbench.SpecError:
+        return base
+    return workbench.effective(base, spec)[0] if spec else base
+
+
+def _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes):
+    """(spec, sim, profile) from a workbench file and/or flags; flags win. Exits 1 with every problem listed."""
+    base = _base_sim()
+    try:
+        spec = workbench.load_file(file, workbench.defaults(base)) if file else workbench.defaults(base)
+    except workbench.SpecError as e:
+        typer.echo(f"invalid workbench: {e}")
+        raise typer.Exit(1) from e
+    for key, val in (("name", name), ("cpu_nodes", cpu_nodes), ("gpu_nodes", gpu_nodes),
+                     ("gpus_per_node", gpus_per_node), ("k8s_nodes", k8s_nodes)):
+        if val is not None:
+            setattr(spec, key, val)
+    spec.parts = sorted((set(spec.parts) | set(with_ or [])) - set(without or []))
+    if problems := spec.problems():
+        for p in problems:
+            typer.echo(f"invalid: {p}")
+        raise typer.Exit(1)
+    return (spec, *workbench.effective(base, spec))
+
+
+FILE = typer.Option(None, "-f", "--file", help="workbench file (YAML: cpu_nodes, gpu_nodes, gpus_per_node, parts)")
+NAME = typer.Option(None, "--name", help="workbench name")
+CPU = typer.Option(None, "--cpu-nodes", help="compute nodes (default: sim.yaml)")
+GPU = typer.Option(None, "--gpu-nodes", help="GPU nodes (default: sim.yaml)")
+GPUS = typer.Option(None, "--gpus-per-node", help="GPUs on each GPU node, 1 to 8")
+WITH = typer.Option(None, "--with", help=f"add a part: {', '.join(workbench.PARTS)} (repeat)")
+WITHOUT = typer.Option(None, "--without", help="remove a part (repeat)")
+K8S = typer.Option(None, "--k8s-nodes", help="Kubernetes nodes (not built yet)")
+SAVE = typer.Option(None, "--save", help="write the selection to this workbench file")
+
+
 @app.command()
-def up(profile: str = typer.Option("std", "--profile")) -> None:
-    """Pre-flight, then start the profile in dependency order (refuses if it does not fit)."""
-    raise typer.Exit(0 if stack.up(_sim(), profile, say=typer.echo) else 1)
+def plan(file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS,
+         with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, save: str = SAVE) -> None:
+    """Estimate the memory a workbench needs against what the host has free; exit 1 if it would not fit."""
+    from pathlib import Path
+
+    import yaml
+
+    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes)
+    est = workbench.estimate(sim, prof)
+    ok, msg = workbench.verdict(est, checks.mem_available() // (1024 * 1024), spec=spec)
+    typer.echo(workbench.render(spec, est) + f"\n\n{msg}")
+    if save:
+        Path(save).write_text(yaml.safe_dump(spec.to_dict(), sort_keys=False))
+        typer.echo(f"saved {save}; build it with: benchctl apply -f {save}")
+    raise typer.Exit(0 if ok else 1)
+
+
+def _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes) -> None:
+    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes)
+    typer.echo(workbench.render(spec, workbench.estimate(sim, prof)) + "\n")
+    if not stack.up(sim, "workbench", say=typer.echo, prof=prof):
+        raise typer.Exit(1)
+    workbench.save(spec)
+
+
+@app.command()
+def up(profile: str = typer.Option(None, "--profile", help="a size preset (default std); or choose by counts below"),
+       file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS,
+       with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S) -> None:
+    """Estimate, then start. By preset (--profile) or by selection (--cpu-nodes 2 --gpu-nodes 4 --with jira ...)."""
+    chosen = any(v is not None for v in (file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes))
+    if chosen and profile:
+        typer.echo("choose one: --profile PRESET, or a selection (--cpu-nodes, --gpu-nodes, --with, -f FILE)")
+        raise typer.Exit(1)
+    if chosen:
+        _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes)
+        return
+    workbench.forget()
+    raise typer.Exit(0 if stack.up(_base_sim(), profile or "std", say=typer.echo) else 1)
+
+
+@app.command()
+def apply(file: str = typer.Option(..., "-f", "--file", help="workbench file to build"), name: str = NAME,
+          cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS, with_: list[str] = WITH,
+          without: list[str] = WITHOUT, k8s_nodes: int = K8S) -> None:
+    """Build the workbench a file describes (the same as `up -f FILE`)."""
+    _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes)
 
 
 def _launcher(*args: str) -> None:
@@ -172,6 +258,21 @@ def get_nodes(output: str = OUTPUT) -> None:
 def get_services(output: str = OUTPUT) -> None:
     """Every container of the running stack with its state."""
     typer.echo(inventory.render(inventory.service_rows(), output))
+
+
+@get_app.command("workbench")
+def get_workbench(output: str = OUTPUT) -> None:
+    """The workbench last built by `up`/`apply` with a selection (none after a plain `up --profile`)."""
+    import json
+
+    import yaml
+
+    spec = workbench.current(_base_sim())
+    if spec is None:
+        typer.echo("none: the last start used a size preset (benchctl get profiles)")
+        return
+    data = spec.to_dict()
+    typer.echo(json.dumps(data, indent=2) if output == "json" else yaml.safe_dump(data, sort_keys=False).rstrip())
 
 
 @get_app.command("profiles")
@@ -241,9 +342,12 @@ def export_profile(out: str = typer.Option("bench-profile.json", "-o", "--output
     from pathlib import Path
 
     sim = _sim()
-    prof = profile or stack.current_profile()
+    spec = workbench.current(_base_sim())
+    prof = profile or ("workbench" if spec else stack.current_profile())
     try:
-        text = export.to_json(export.build(sim, export.services_for(sim, prof), name, bmc, user), export.format_id(fmt))
+        services = (set(compose.generate(*workbench.effective(_base_sim(), spec))["services"]) | {"grafana"}
+                    if spec and not profile else export.services_for(sim, prof))
+        text = export.to_json(export.build(sim, services, name, bmc, user), export.format_id(fmt))
     except export.ExportError as e:
         typer.echo(f"cannot export: {e}")
         raise typer.Exit(1) from e
@@ -282,6 +386,10 @@ def ssh_key_remove() -> None:
 def scale(n: int = typer.Argument(..., min=0, help="compute node count"),
           profile: str = typer.Option(None, "--profile", help="default: the profile `up` last started")) -> None:
     """Change the compute-node count: regenerates slurm.conf, restarts slurmctld, starts/stops slurmd."""
+    if workbench.current(_base_sim()):
+        typer.echo("a workbench is built: to change its size run `benchctl up --cpu-nodes N ...` "
+                   "(or edit its file and `benchctl apply -f FILE`); `scale` works on a size preset (`up --profile`)")
+        raise typer.Exit(1)
     raise typer.Exit(0 if stack.scale(_sim(), profile or stack.current_profile(), n, say=typer.echo) else 1)
 
 

@@ -12,11 +12,14 @@ work as aliases.
 | `start [--profile P]` | machine check, venv, governor (as you), cluster, web page; default profile `min` |
 | `stop` | stop the web page, the cluster and your own governor |
 | `open` | print the login link, open a browser if there is a display |
-| `get nodes\|services\|profiles\|scenarios [-o json]` | list what exists; `nodes` shows every node `sim.yaml` defines and its state (`absent` = not started) |
+| `get nodes\|services\|profiles\|scenarios\|workbench [-o json]` | list what exists; `nodes` shows every node `sim.yaml` defines and its state (`absent` = not started) |
 | `describe node NAME [-o json]` | everything known about one node: container, Slurm, jobs, GPUs busy/idle, BMC |
 | `exec NODE [-u USER] [-- CMD]` | shell on a node, or one command: `benchctl exec gpu001 -- nvidia-smi` |
 | `logs NODE [-f] [--tail N]` | container log of a node or service |
+| `plan [selection]` | estimate the memory a workbench needs against free memory; exit 1 if it does not fit ([guide](../guides/choose-workbench.md)) |
 | `up --profile P` | pre-flight, governor admission, ordered start (default profile `std`) |
+| `up --cpu-nodes N --gpu-nodes N [--gpus-per-node N] [--with PART] [--without PART] [-f FILE]` | the same by selection: estimate first, build only if it fits |
+| `apply -f FILE` | build the workbench a file describes |
 | `down` | stop and remove the `hpcsim` project only |
 | `scale N [--profile P]` | change the compute node count |
 | `scenario list` / `scenario run NAME [--speed N] [--dry-run]` | list scenarios; play one, exit 1 on failure |
@@ -31,7 +34,7 @@ work as aliases.
 | `benchctl measure run LABEL [--duration S] [--interval S]` | sample memory to `docs/measurements/` |
 | `benchctl measure report IDLE [LOADED]` | markdown table with suggested budgets |
 
-`benchctl COMMAND --help` shows the exact flags. Planned in the same grammar: `plan` / `apply` (issue 92).
+`benchctl COMMAND --help` shows the exact flags. All the planned verbs of ADR 0015 now exist.
 
 ## Scripts
 

@@ -11,7 +11,7 @@ instead; `benchctl export profile` writes one that matches what the workbench co
 ```
 
 Add `--bmc` for one BMC target per node, `--user bob` for another SSH user, `--name lab` for another cluster name,
-`-o -` to print instead of write, `--profile std` to export a profile other than the one running.
+`-o -` to print instead of write, `--profile std` to export a profile other than the one running. With a workbench built ([choose the workbench](choose-workbench.md)) the file lists exactly its nodes and parts.
 
 Then in the client: **import a profile**, choose `bench-profile.json`. The cluster appears with SSH, Slurm, Grafana,
 Jira and storage already filled in. A file never holds secrets, so set these three by hand (the command prints them):

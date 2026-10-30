@@ -53,6 +53,8 @@ def generate(sim: dict, profile: dict) -> dict:
     services: dict = {}
     for group in profile["groups"]:
         for name, (image, mem, prio) in CATALOG.get(group, {}).items():
+            if name in profile.get("drop", []):  # a part the workbench did not select (benchctl plan/apply)
+                continue
             # the build directory is the service name, or the image name (slurmctld and slurmrestd share images/slurm-ctl)
             img = image.split("/")[-1].split(":")[0]
             build = next((f"../../{d}/{n}" for n in (name, img) for d in ("components", "images") if (Path(d) / n).is_dir()), None)
@@ -83,11 +85,11 @@ def generate(sim: dict, profile: dict) -> dict:
         # :8443 is TLS at the standard /redfish/v1, the node chosen by Host: clients reach it as bmc-<node>
         names = [n for n, _ in node_names(sim)]
         services["bmc-farm"].update({
-            "volumes": ["../../sim.yaml:/sim.yaml:ro", "./secrets/bmc_credentials:/run/hpcsim/bmc_credentials:ro"],
+            "volumes": ["./sim.yaml:/sim.yaml:ro", "./secrets/bmc_credentials:/run/hpcsim/bmc_credentials:ro"],
             "ports": ["127.0.0.1:8000:8000", "127.0.0.1:8443:8443"],
             "networks": {"default": {"aliases": [f"bmc-{n}" for n in names]}}})
     if "bcm-mock" in services:  # CMDaemon JSON API on the same node inventory, localhost only
-        services["bcm-mock"].update({"volumes": ["../../sim.yaml:/sim.yaml:ro"], "ports": ["127.0.0.1:8081:8081"]})
+        services["bcm-mock"].update({"volumes": ["./sim.yaml:/sim.yaml:ro"], "ports": ["127.0.0.1:8081:8081"]})
     if "jira-mock" in services:
         services["jira-mock"].update({"ports": ["127.0.0.1:8080:8080"]})
     _wire_slurm_services(services)
@@ -147,6 +149,10 @@ def write(compose: dict, out: Path = Path("compose/generated/docker-compose.yml"
     out.parent.mkdir(parents=True, exist_ok=True)
     if sim is not None:
         slurmconf.write(sim, out.parent / "slurm", compute_nodes, "mariadb" in compose["services"])
+        # The mocks and the GPU exporter read the node list from this copy, so they agree with slurm.conf even when the
+        # workbench or `scale` changed the counts (the repository's sim.yaml is the default, not the running truth).
+        shown = {**sim, "compute": {**sim.get("compute", {}), **({"count": compute_nodes} if compute_nodes is not None else {})}}
+        (out.parent / "sim.yaml").write_text(yaml.safe_dump(shown, sort_keys=False))
     out.write_text("# GENERATED from sim.yaml by `benchctl compose`; do not edit.\n"
                    + yaml.safe_dump(compose, sort_keys=False))
     return out
