@@ -51,7 +51,7 @@ If port 2222 refuses connections, the checkout is probably on a branch without t
   state=drain reason="test"`, and `state=resume` afterwards.
 - **GPU panel:** set the datasource uid to `prometheus`, the host label to `Hostname`, and the Viewer token. Per-job
   GPU usage appears only while the SSH user has a running job, and the GPUs of that job read busy (the others idle).
-- **Jira:** base URL `http://10.141.255.11:8080` (a client that refuses plain HTTP for a non-local host: use the fallback `http://127.0.0.1:8080`). `POST /sim/tickets` and the ticket scenarios ([tickets guide](jira-tickets.md)) file and move tickets; `POST /sim/failure` injects 401,
+- **Jira:** base URL `http://10.141.255.11:8080` (a client that refuses plain HTTP for a non-local host: use the fallback `http://127.0.0.1:8080`). `POST /sim/tickets` and the ticket scenarios ([tickets guide](jira-tickets.md)) file and move tickets; **a team changes tickets in the background** (`benchctl set jira-activity off` stops it, [guide](jira-tickets.md)) and **a node fault files one ticket by itself** (project OPS, reporter `ops-bot`, labels `node-<name>`, `fault-<kind>`, `auto`): Power off, GPU error (XID), overheat and fan failure each open one per node and kind (a repeat comments), Power on or Clear faults comments and resolves it, from the page, `benchctl set node` and scenarios alike; `POST /sim/failure` injects 401,
   429, 503 or slow responses.
 
 ## Verifying without a GUI
@@ -127,6 +127,10 @@ starting `NHC:`), never one an operator set. A node that publishes nothing (powe
 not drained. Not checked yet, because nothing in the simulation models them: NIC link flapping and down InfiniBand ports
 ([issue 143](https://github.com/AhmedYousriSobhi/workbench/issues/143)). A cluster built before this needs `benchctl up`
 once: it rebuilds the node image and restarts `slurmctld` (it does so whenever `slurm.conf` changes).
+
+## A live queue
+
+`benchctl load on` starts simulated users: `alice` and `bob` submit cpu jobs and 1 to 4 GPU jobs at random, so the Slurm panel has running and pending jobs and a node going down hits real work. `benchctl load off` stops it; `benchctl submit NODE` (or the node panel's Workload card) runs one job on a chosen node. A job pinned to a node that is down stays pending (*ReqNodeNotAvail*) until the node is back or you `scancel` it.
 
 ## Taking a node down so Slurm notices
 

@@ -461,6 +461,79 @@ def set_node(node: str = TARGET, state: str = typer.Argument(..., help="off or o
     raise typer.Exit(0 if o.status == "ok" else 1)
 
 
+@app.command("submit")
+def submit(node: str = TARGET, gpus: int = typer.Option(0, "--gpus", help="GPUs the job holds (GPU nodes)"),
+           cpus: int = typer.Option(1, "--cpus", help="CPUs the job holds"),
+           duration: int = typer.Option(300, "--duration", help="seconds the job runs (10 to 3600)"),
+           user: str = typer.Option(None, "-u", "--user", autocompletion=completion.users, help="simulated user, default the first in sim.yaml")) -> None:
+    """Submit a job on one node: `benchctl submit gpu001 --gpus 4 --duration 600`. It sleeps for the duration, holding its CPUs
+    and GPUs, so squeue lists it, the node shows allocated and the GPU metrics show those GPUs busy."""
+    from . import workload
+
+    try:
+        cmd = workload.command(_sim(), node, gpus, duration, user, cpus)
+    except workload.WorkloadError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    r = stack._run(cmd)
+    out = (r.stdout or r.stderr or "").strip()
+    typer.echo(f"{node}: job {out} submitted for {duration} s" if r.returncode == 0 else f"cannot submit on {node}: {out}",
+               err=r.returncode != 0)
+    raise typer.Exit(r.returncode)
+
+
+load_app = typer.Typer(cls=SuggestingGroup, help="Simulated users submitting jobs")
+app.add_typer(load_app, name="load")
+
+
+@load_app.command("on")
+def load_on(rate: float = typer.Option(6, "--rate", help="jobs per minute (Poisson arrivals)"),
+            duration: float = typer.Option(120, "--duration", help="mean job length in seconds"),
+            seed: int = typer.Option(None, "--seed", help="a fixed seed makes the arrivals repeatable")) -> None:
+    """Start the user simulator: alice and bob submit cpu jobs and GPU jobs at random, so squeue and the node states have a live queue."""
+    from . import workload
+
+    try:
+        cmds = workload.load_on(_sim(), rate, duration, seed)
+    except workload.WorkloadError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    for cmd in cmds:
+        r = stack._run(cmd)
+        if r.returncode and cmd != workload.load_off():  # pkill finding nothing to stop is fine
+            typer.echo(f"cannot start the load: {(r.stderr or r.stdout).strip()}", err=True)
+            raise typer.Exit(1)
+    typer.echo(f"load: on, about {rate:g} job(s) a minute, each about {duration:g} s (benchctl load off to stop)")
+
+
+@load_app.command("off")
+def load_off() -> None:
+    """Stop the user simulator (jobs already queued keep running)."""
+    from . import workload
+
+    r = stack._run(workload.load_off())
+    typer.echo("load: off" if r.returncode in (0, 1) else f"cannot stop the load: {(r.stderr or r.stdout).strip()}",
+               err=r.returncode not in (0, 1))
+    raise typer.Exit(0 if r.returncode in (0, 1) else 1)
+
+
+@set_app.command("jira-activity")
+def set_jira_activity(state: str = typer.Argument(..., help="on or off"),
+                      every: float = typer.Option(None, "--every", help="seconds between changes (default 45)"),
+                      seed: int = typer.Option(None, "--seed", help="a fixed seed makes the changes repeatable")) -> None:
+    """Background changes in the Jira mock: a team moves tickets along, comments, reassigns, reopens and files new ones."""
+    if state not in ("on", "off"):
+        typer.echo("state must be on or off", err=True)
+        raise typer.Exit(1)
+    body = {"on": state == "on", **({"every": every} if every else {"every": 45}), **({"seed": seed} if seed is not None else {})}
+    try:
+        scenario.post(scenario.ENDPOINTS["jira-activity"], body)
+    except (OSError, ValueError) as e:
+        typer.echo(f"cannot reach the Jira mock: {e}", err=True)
+        raise typer.Exit(1) from e
+    typer.echo(f"jira activity: {state}" + (f", a change about every {body['every']:g} s" if state == "on" else ""))
+
+
 @app.command("exec", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def exec_cmd(ctx: typer.Context, node: str = TARGET,
              user: str = typer.Option(None, "-u", "--user", autocompletion=completion.users, help="run as this simulated user, e.g. alice")) -> None:

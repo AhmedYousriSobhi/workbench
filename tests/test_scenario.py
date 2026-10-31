@@ -43,8 +43,9 @@ def test_execute_posts_to_each_node_and_reports_http_errors():
     sent = []
     ok = scenario.execute(scenario.Step(0, "bmc-farm", {"nodes": ["cn001", "cn002"], "fan_fail": 2}),
                           poster=lambda url, body: sent.append((url, body)))
-    assert ok.status == "ok" and [b["node"] for _, b in sent] == ["cn001", "cn002"]
+    assert ok.status == "ok" and [b["node"] for u, b in sent if "8000" in u] == ["cn001", "cn002"]
     assert sent[0][1] == {"node": "cn001", "fan_fail": 2}
+    assert [b["kind"] for u, b in sent if "8080" in u] == ["fan", "fan"]  # and a ticket each
 
     def refuse(url, body):
         raise urllib.error.HTTPError(url, 400, "bad", {}, None)
@@ -244,14 +245,15 @@ def test_a_bmc_power_step_also_sets_bcm_exporter_and_freezes_the_node():
     runner = lambda cmd: ran.append(cmd) or type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
     out = scenario.execute(scenario.Step(0, "bmc-farm", {"nodes": ["cn002"], "power": "Off"}), poster=lambda u, b: posts.append((u.split(":")[2][:4], b)), runner=runner)
     assert out.status == "ok"
-    assert posts == [("8000", {"node": "cn002", "power": "Off"}), ("8081", {"node": "cn002", "state": "DOWN"}), ("9400", {"node": "cn002", "down": True})]
+    assert posts == [("8000", {"node": "cn002", "power": "Off"}), ("8081", {"node": "cn002", "state": "DOWN"}), ("9400", {"node": "cn002", "down": True}),
+                     ("8080", {"action": "fault", "node": "cn002", "kind": "power", "detail": "BMC power Off"})]
     assert ran == [["docker", "pause", "workbench-cn002-1"]]
     posts.clear(); ran.clear()
     scenario.execute(scenario.Step(0, "bmc-farm", {"nodes": ["cn002"], "clear": True}), poster=lambda u, b: posts.append(b), runner=runner)
     assert {"node": "cn002", "state": "UP"} in posts and {"node": "cn002", "down": False} in posts and ran == [["docker", "unpause", "workbench-cn002-1"]]
-    posts.clear(); ran.clear()  # other BMC changes imply nothing else
+    posts.clear(); ran.clear()  # other BMC changes imply nothing else but their ticket
     scenario.execute(scenario.Step(0, "bmc-farm", {"nodes": ["cn002"], "temp": 92}), poster=lambda u, b: posts.append(b), runner=runner)
-    assert posts == [{"node": "cn002", "temp": 92}] and ran == []
+    assert posts == [{"node": "cn002", "temp": 92}, {"action": "fault", "node": "cn002", "kind": "overheat", "detail": "CPU at 92 C"}] and ran == []
 
 
 def test_without_docker_the_slurm_part_goes_through_the_callback_and_a_refusal_is_a_note_not_a_failure():
@@ -266,3 +268,30 @@ def test_without_docker_the_slurm_part_goes_through_the_callback_and_a_refusal_i
     d = scenario.execute(scenario.Step(0, "slurm", {"drain": ["gpu001"], "reason": "xid 79"}), host=False, slurm=gov)
     assert d.status == "ok" and asked[-1] == ("gpu001", "drain", "xid 79")
     assert scenario.execute(scenario.Step(0, "ssh", {"state": "hung"}), host=False, slurm=gov).status == "skipped"  # ssh needs Docker
+
+
+def test_faults_file_tickets_and_recovery_resolves_them_and_no_jira_is_not_a_failure():
+    def tickets(do, target="bmc-farm"):
+        return [(e.do["tickets"]["kind"], e.do["tickets"].get("open", True)) for e in scenario.side_effects(scenario.Step(0, target, do))
+                if e.target == "jira"]
+
+    assert tickets({"nodes": ["cn001"], "power": "Off"}) == [("power", True)]
+    assert tickets({"nodes": ["cn001"], "temp": 92, "fan_fail": 2}) == [("overheat", True), ("fan", True)]
+    assert tickets({"nodes": ["cn001"], "temp": 60}) == []
+    assert tickets({"nodes": ["cn001"], "power": "On"}) == [("power", False)] and tickets({"nodes": ["cn001"], "clear": True}) == [("", False)]
+    assert tickets({"nodes": ["gpu001"], "xid": 79}, "gpu-exporter") == [("xid", True)]
+    assert tickets({"nodes": ["gpu001"], "clear": True}, "gpu-exporter") == [("xid", False)]
+    assert tickets({"nodes": ["gpu001"], "down": True}, "gpu-exporter") == []  # the exporter going quiet is a side effect, not a fault of its own
+
+    def refuse_jira(url, body):
+        if "8080" in url:
+            raise OSError("refused")
+
+    out = scenario.execute(scenario.Step(0, "gpu-exporter", {"nodes": ["gpu001"], "xid": 79}), poster=refuse_jira)
+    assert out.status == "ok" and "no Jira" in out.detail
+
+
+def test_a_jira_activity_step_switches_the_background_changes_and_is_validated():
+    sent = []
+    out = scenario.execute(scenario.Step(0, "jira", {"activity": {"on": True, "every": 5}}), poster=lambda u, b: sent.append((u, b)))
+    assert out.status == "ok" and sent == [("http://127.0.0.1:8080/sim/activity", {"on": True, "every": 5})]

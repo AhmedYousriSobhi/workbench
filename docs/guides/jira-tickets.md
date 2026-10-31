@@ -91,3 +91,27 @@ it with the Resolve form (the mock describes the resolution choices). Create the
 
 Jira Cloud's Teams and Assets fields, attachments, linked tickets, Confluence, and transition screens with extra fields. A
 client that needs one of them reads an empty answer, not an error. The mock keeps tickets in memory: a restart empties it.
+
+
+## A team working in the background
+
+The project starts with a backlog of eight tickets in every status (some assigned to `alice`, the default user), so a client's first look is not empty.
+
+The Jira mock starts with a team working the project, like a live Jira Cloud: about every 45 seconds one ticket moves along the workflow (Open, In Progress, Resolved, Closed), gets a comment from `bob`, `carol`, `dave` or `erin`, a new owner, is reopened, or a new ticket is filed (at most 30 open). Webhook events fire for each change. A ticket changed in the last 20 seconds is left alone, so your own edit is not undone under you.
+
+`benchctl set jira-activity off` stops it, `on --every 10 --seed 4` makes it faster and repeatable; `GET /sim/activity` shows the state and the number of changes; a scenario step `jira: {activity: {on: true, every: 5}}` switches it too.
+
+## Tickets for node faults
+
+Every node fault files a ticket and every recovery resolves it, like an ops integration would. It happens in the same place as the fault, so the page's buttons, `benchctl set node NAME off|on` and a scenario's `bmc-farm` and `gpu-exporter` steps all do it. With no Jira in the cluster nothing is filed and nothing fails.
+
+| Fault | Ticket summary | Priority |
+|---|---|---|
+| Power off | `cn002: node is down (powered off)` | Highest |
+| GPU error (XID) | `gpu001: GPU error` | High |
+| Overheat (92 °C) | `cn002: node is overheating` | High |
+| Fan failure | `cn002: fan failure` | Medium |
+
+One ticket stays open per node and kind: the same fault again adds a comment (`Still failing.`) instead of a second ticket. Power on or Clear faults adds `Recovered.` and moves the ticket to Resolved; a fault after that opens a new one. Tickets have the labels `node-<name>`, `fault-<kind>` and `auto`, type Incident, reporter `ops-bot`.
+
+`POST /sim/tickets {"action": "fault", "node": "cn002", "kind": "power", "detail": "..."}` does the same by hand (`"open": false` resolves; leave `kind` out to resolve every kind for the node).

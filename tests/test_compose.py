@@ -118,3 +118,8 @@ def test_login_node_is_local_only_with_keys_mounted():
     assert "./secrets/ssh:/run/workbench/ssh:ro" in login["volumes"] and "./slurm:/etc/slurm:ro" in login["volumes"]
     assert login["build"] == "../../images/login" and login["labels"]["workbench.class"] == "P2"
     assert "cap_add" not in login and login["environment"]["WORKBENCH_USERS"]
+
+
+def test_the_jira_mock_starts_with_a_team_working_the_project():
+    svc = compose.generate(SIM, compose.load_profile("std"))["services"]["jira-mock"]
+    assert svc["environment"]["JIRA_ACTIVITY_EVERY"] == "45"

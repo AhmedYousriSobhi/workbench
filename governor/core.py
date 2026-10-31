@@ -210,6 +210,10 @@ class Governor:
             if cmd == "node-state":
                 args = ["set", "node", req["node"], req["state"]] + (["--reason", req["reason"]] if req.get("reason") else [])
                 return self._change(f"node-state={req['node']}:{req['state']}", args)
+            if cmd == "submit-job":
+                args = ["submit", req["node"], "--gpus", str(req["gpus"]), "--duration", str(req["duration"])] + (
+                    ["--user", req["user"]] if req.get("user") else [])
+                return self._change(f"submit-job={req['node']}:{req['gpus']}gpu", args)
             if cmd == "apply-plan":
                 args = ["up", "--cpu-nodes", str(req["cpu_nodes"]), "--gpu-nodes", str(req["gpu_nodes"]),
                         "--gpus-per-node", str(req["gpus_per_node"])]

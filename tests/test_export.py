@@ -161,3 +161,18 @@ def test_set_node_freezes_a_node_for_off_and_on_and_sets_the_slurm_state_for_dow
     assert ("8081", {"node": "cn001", "state": "UP"}) in posted
     assert runner.invoke(cli.app, ["set", "node", "cn001", "down"]).exit_code == 0 and "state=down" in ran[-1] and "nodename=cn001" in ran[-1]
     assert runner.invoke(cli.app, ["set", "node", "cn001", "sideways"]).exit_code == 1
+
+
+def test_set_jira_activity_switches_the_mocks_background_changes(monkeypatch):
+    posted = []
+    monkeypatch.setattr(cli.scenario, "post", lambda url, body: posted.append((url, body)))
+    assert runner.invoke(cli.app, ["set", "jira-activity", "on", "--every", "10", "--seed", "4"]).exit_code == 0
+    assert posted[-1] == ("http://127.0.0.1:8080/sim/activity", {"on": True, "every": 10.0, "seed": 4})
+    assert runner.invoke(cli.app, ["set", "jira-activity", "off"]).exit_code == 0 and posted[-1][1]["on"] is False
+    assert runner.invoke(cli.app, ["set", "jira-activity", "maybe"]).exit_code == 1
+
+    def refuse(url, body):
+        raise OSError("refused")
+
+    monkeypatch.setattr(cli.scenario, "post", refuse)
+    assert runner.invoke(cli.app, ["set", "jira-activity", "on"]).exit_code == 1

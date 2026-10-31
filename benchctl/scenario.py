@@ -20,8 +20,8 @@ from .nodes import node_names
 
 ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "http://127.0.0.1:8000/sim/inject",
              "bcm-mock": "http://127.0.0.1:8081/sim/inject", "jira": "http://127.0.0.1:8080/sim/failure",
-             "jira-tickets": "http://127.0.0.1:8080/sim/tickets"}
-JIRA_ACTIONS = ("create", "transition", "comment", "reset")
+             "jira-tickets": "http://127.0.0.1:8080/sim/tickets", "jira-activity": "http://127.0.0.1:8080/sim/activity"}
+JIRA_ACTIONS = ("create", "transition", "comment", "fault", "reset")
 SLURMCTLD = "workbench-slurmctld-1"
 LOGIN = "workbench-login-1"
 HOST_TARGETS = ("slurm", "ssh")  # steps that need Docker on the host
@@ -110,7 +110,7 @@ def validate(sc: dict, sim: dict) -> list[str]:
         except (KeyError, ScenarioError):
             problems.append(f"step {i}: bad or missing 'at'")
         t = s.get("target")
-        if t == "jira-tickets":  # the endpoint key, not a target: steps say `jira` with `tickets:`
+        if t in ("jira-tickets", "jira-activity"):  # the endpoint key, not a target: steps say `jira` with `tickets:`
             problems.append(f"step {i}: unknown target {t!r}")
             continue
         if t not in ENDPOINTS and t not in HOST_TARGETS and t not in NOT_BUILT:
@@ -128,7 +128,7 @@ def validate(sc: dict, sim: dict) -> list[str]:
 def jira_ticket_problems(tk) -> list[str]:
     if not isinstance(tk, dict) or tk.get("action") not in JIRA_ACTIONS:
         return [f"jira tickets needs action: one of {', '.join(JIRA_ACTIONS)}"]
-    need = {"create": ("summary",), "transition": ("jql", "to"), "comment": ("jql", "body"), "reset": ()}[tk["action"]]
+    need = {"create": ("summary",), "transition": ("jql", "to"), "comment": ("jql", "body"), "fault": ("node",), "reset": ()}[tk["action"]]
     return [f"jira tickets {tk['action']} needs {k}" for k in need if not tk.get(k)]
 
 
@@ -197,17 +197,39 @@ SLURM_STATES = {"drain": "drain", "down": "down", "resume": "resume", "power_off
 
 def side_effects(step: Step) -> list[Step]:
     """A power change on the BMC is also a change on the BCM, the GPU exporter and the node itself (and so in Slurm):
-    a scenario says it once, as the page's Power off does. `clear` powers the node on again, so it thaws it too."""
+    a scenario says it once, as the page's Power off does. `clear` powers the node on again, so it thaws it too. Every
+    fault also files, and every recovery resolves, the node's Jira ticket (the mock's `fault` action, #157)."""
     do = step.do
-    if step.target != "bmc-farm" or not do.get("nodes"):
+    nodes = do.get("nodes")
+    if not nodes or step.target not in ("bmc-farm", "gpu-exporter"):
         return []
+    tickets, faults, recovered = [], [], []
+    if step.target == "bmc-farm":
+        if do.get("power") == "Off":
+            faults.append(("power", "BMC power Off"))
+        if float(do.get("temp") or 0) >= 85:
+            faults.append(("overheat", f"CPU at {do['temp']} C"))
+        if int(do.get("fan_fail") or 0) > 0:
+            faults.append(("fan", f"{do['fan_fail']} fan(s) failed"))
+        if do.get("clear"):
+            recovered.append("")  # every kind
+        elif do.get("power") == "On":
+            recovered.append("power")
+    else:
+        if int(do.get("xid") or 0) > 0:
+            faults.append(("xid", f"XID {do['xid']}"))
+        if do.get("clear"):
+            recovered.append("xid")
+    for n in nodes:
+        tickets += [Step(step.at, "jira", {"tickets": {"action": "fault", "node": n, "kind": k, "detail": d}}) for k, d in faults]
+        tickets += [Step(step.at, "jira", {"tickets": {"action": "fault", "node": n, "kind": k, "open": False,
+                                                      "detail": "The node reports healthy again."}}) for k in recovered]
     on = do.get("power") == "On" or bool(do.get("clear"))
-    if do.get("power") != "Off" and not on:
-        return []
-    nodes = do["nodes"]
+    if step.target != "bmc-farm" or (do.get("power") != "Off" and not on):
+        return tickets
     return [Step(step.at, "bcm-mock", {"nodes": nodes, "state": "UP" if on else "DOWN"}),
             Step(step.at, "gpu-exporter", {"nodes": nodes, "down": not on}),
-            Step(step.at, "slurm", {"power_on" if on else "power_off": nodes})]
+            Step(step.at, "slurm", {"power_on" if on else "power_off": nodes}), *tickets]
 
 
 def execute(step: Step, poster=post, runner=checks.run, host: bool = True, slurm=None) -> Outcome:
@@ -222,6 +244,8 @@ def execute(step: Step, poster=post, runner=checks.run, host: bool = True, slurm
     failed, notes = [], []
     for extra in side_effects(step):
         o = _apply(extra, poster, runner, host, slurm)
+        if extra.target == "jira" and o.status == "failed":  # no Jira in this cluster: a fault is still a fault
+            o = Outcome(o.label, "skipped", "no Jira to file the ticket in")
         (failed if o.status == "failed" else notes if o.status == "skipped" else []).append(f"{extra.target}: {o.detail}")
     if failed:
         return Outcome(main.label, "failed", "; ".join(failed))
@@ -272,6 +296,8 @@ def _apply(step: Step, poster, runner, host: bool, slurm) -> Outcome:
         elif step.target == "jira":
             if "tickets" in step.do:  # {tickets: {action: create|transition|comment|reset, ...}}
                 poster(ENDPOINTS["jira-tickets"], step.do["tickets"])
+            elif "activity" in step.do:  # {activity: {on: true, every: 10}}
+                poster(ENDPOINTS["jira-activity"], step.do["activity"])
             else:
                 poster(ENDPOINTS["jira"], step.do.get("failure", {"mode": None}))
         else:

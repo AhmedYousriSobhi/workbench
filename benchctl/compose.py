@@ -90,7 +90,8 @@ def generate(sim: dict, profile: dict) -> dict:
     if "bcm-mock" in services:  # CMDaemon JSON API on the same node inventory, localhost only
         services["bcm-mock"].update({"volumes": ["./sim.yaml:/sim.yaml:ro"], "ports": ["127.0.0.1:8081:8081"]})
     if "jira-mock" in services:
-        services["jira-mock"].update({"ports": ["127.0.0.1:8080:8080"]})
+        # a team works the project in the background, one change about every 45 s (benchctl set jira-activity off to stop it, #158)
+        services["jira-mock"].update({"ports": ["127.0.0.1:8080:8080"], "environment": {"JIRA_ACTIVITY_EVERY": "45"}})
     _wire_slurm_services(services)
     ips = addressing.plan(sim, profile.get("compute_nodes"))
     for name, svc in services.items():  # a fixed address for everything (ADR 0018)

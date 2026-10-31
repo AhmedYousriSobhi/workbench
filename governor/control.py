@@ -10,7 +10,7 @@ from pathlib import Path
 
 log = logging.getLogger("governor.control")
 
-ALLOWED = {"status", "scale", "freeze", "thaw", "stop", "start", "set-profile", "admit", "apply-plan", "node-state"}
+ALLOWED = {"status", "scale", "freeze", "thaw", "stop", "start", "set-profile", "admit", "apply-plan", "node-state", "submit-job"}
 MAX_REQUEST = 4096
 TARGETED = {"freeze", "thaw", "stop", "start"}  # require a known group name
 
@@ -63,6 +63,11 @@ def dispatch(line: bytes, handle: Handler, groups: Callable[[], set[str]]) -> di
                                         and req.get("state") in ("off", "on", "down", "resume", "drain")
                                         and REASON_RE.fullmatch(req.get("reason") or "")):
             return {"ok": False, "error": "node-state needs node:NAME (cn001), state: off|on|down|resume|drain and an optional short reason"}
+        if cmd == "submit-job" and not (isinstance(req.get("node"), str) and NODE_RE.fullmatch(req["node"])
+                                        and all(isinstance(req.get(k), int) and not isinstance(req.get(k), bool) and lo <= req[k] <= hi
+                                                for k, lo, hi in (("gpus", 0, 8), ("duration", 10, 3600)))
+                                        and re.fullmatch(r"[a-z][a-z0-9_-]{0,15}", req.get("user") or "x")):
+            return {"ok": False, "error": "submit-job needs node:NAME, gpus:int 0..8, duration:int 10..3600 and an optional user"}
         if cmd == "admit" and not (isinstance(req.get("budget_mb"), int) and req["budget_mb"] >= 0):
             return {"ok": False, "error": "admit needs budget_mb:int>=0"}
         return handle(cmd, req)
