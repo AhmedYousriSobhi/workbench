@@ -96,9 +96,9 @@ def generate(sim: dict, profile: dict) -> dict:
     for name, svc in services.items():  # a fixed address for everything (ADR 0018)
         if ip := addressing.address_of(ips, name):
             svc.setdefault("networks", {}).setdefault("default", {})["ipv4_address"] = ip
-    nets = {"default": {"ipam": {"config": [{"subnet": addressing.INTERNAL}]}}}
+    nets = {"default": {"ipam": {"config": [{"subnet": addressing.INTERNAL, "gateway": addressing.GATEWAY}]}}}
     if "bmc-farm" in services:
-        nets["ipmi"] = {"ipam": {"config": [{"subnet": addressing.IPMI}]}}
+        nets["ipmi"] = {"ipam": {"config": [{"subnet": addressing.IPMI, "gateway": addressing.IPMI_GATEWAY}]}}
     return {"name": "workbench", "include": [OBSERVABILITY], "networks": nets, "services": services}
 
 

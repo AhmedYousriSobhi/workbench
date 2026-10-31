@@ -109,13 +109,13 @@ def wait_running(names: list[str], runner: Runner = _run, timeout: float = 120,
 def network_problem(runner: Runner = _run) -> str | None:
     """Why the fixed addressing cannot be applied, or None. A network that already exists with another subnet cannot be
     changed under running containers; a new one must not overlap a route of the host (a VPN, an office network)."""
-    r = runner(["docker", "network", "inspect", f"{PROJECT}_default", "--format", "{{range .IPAM.Config}}{{.Subnet}} {{end}}"])
+    r = runner(["docker", "network", "inspect", f"{PROJECT}_default", "--format", "{{range .IPAM.Config}}{{.Subnet}} {{.Gateway}} {{end}}"])
     have = r.stdout.split() if r.returncode == 0 else []
     if have:
-        if addressing.INTERNAL in have:
+        if addressing.INTERNAL in have and addressing.GATEWAY in have:
             return None
-        return (f"the cluster network uses {' '.join(have)} but the addressing plan is {addressing.INTERNAL} (ADR 0018): "
-                "run ./scripts/benchctl down once, then start again")
+        return (f"the cluster network is {' '.join(have)} but the addressing plan is {addressing.INTERNAL} with gateway "
+                f"{addressing.GATEWAY} (ADR 0018): run ./scripts/benchctl down once, then start again")
     clash = addressing.overlaps(runner(["ip", "route"]).stdout)
     if clash:
         return (f"the host already routes {'; '.join(clash)}. The workbench needs {addressing.INTERNAL} and "

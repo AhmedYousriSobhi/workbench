@@ -47,7 +47,7 @@ def test_every_generated_service_has_its_fixed_address_and_the_network_has_the_s
     prof = compose.load_profile("std")
     data = compose.generate(SIM, prof)
     p = addressing.plan(SIM, prof["compute_nodes"])
-    assert data["networks"]["default"]["ipam"]["config"] == [{"subnet": "10.141.0.0/16"}]
+    assert data["networks"]["default"]["ipam"]["config"][0]["subnet"] == "10.141.0.0/16"
     unplanned = set()
     for name, svc in data["services"].items():
         want = addressing.address_of(p, name)
@@ -59,7 +59,7 @@ def test_every_generated_service_has_its_fixed_address_and_the_network_has_the_s
             continue
         assert svc["networks"]["default"]["ipv4_address"] == want, name
     assert unplanned == {"accounting-init"}  # a one-shot job that exits; it needs no fixed address
-    assert data["networks"]["ipmi"]["ipam"]["config"] == [{"subnet": "10.148.0.0/16"}]
+    assert data["networks"]["ipmi"]["ipam"]["config"][0]["subnet"] == "10.148.0.0/16"
     assert data["services"]["bmc-farm"]["networks"]["ipmi"]["ipv4_address"] == addressing.IPMI_FARM_IP
     assert data["services"]["login"]["networks"]["ipmi"]["ipv4_address"] == addressing.IPMI_LOGIN_IP
 
@@ -83,9 +83,10 @@ class R:
 
 
 def test_up_refuses_an_existing_network_with_another_subnet_and_names_the_fix():
-    msg = stack.network_problem(lambda cmd: R("172.20.0.0/16 "))
+    msg = stack.network_problem(lambda cmd: R("172.20.0.0/16 172.20.0.1 "))
     assert "172.20.0.0/16" in msg and "benchctl down" in msg
-    assert stack.network_problem(lambda cmd: R("10.141.0.0/16 ")) is None
+    assert "benchctl down" in stack.network_problem(lambda cmd: R("10.141.0.0/16 10.141.0.1 "))  # the old gateway: it is node cn001's address
+    assert stack.network_problem(lambda cmd: R("10.141.0.0/16 10.141.255.253 ")) is None
 
 
 def test_up_refuses_a_new_network_that_overlaps_a_host_route():
@@ -93,3 +94,13 @@ def test_up_refuses_a_new_network_that_overlaps_a_host_route():
         return R(rc=1) if cmd[:3] == ["docker", "network", "inspect"] else R("10.0.0.0/8 via 10.8.0.1 dev tun0\n")
     assert "already routes" in stack.network_problem(runner)
     assert stack.network_problem(lambda cmd: R(rc=1) if cmd[0] == "docker" else R("default via 1.1.1.1 dev eth0\n")) is None
+
+
+def test_no_node_service_or_bmc_address_is_a_network_gateway():
+    p = addressing.plan(SIM, 64)
+    taken = {*p["nodes"].values(), *p["services"].values(), p["login"], *p["bmc"].values(), addressing.IPMI_FARM_IP, addressing.IPMI_LOGIN_IP}
+    assert addressing.GATEWAY not in taken and addressing.IPMI_GATEWAY not in taken
+    assert not ({"10.141.0.1", "10.148.0.1"} & {addressing.GATEWAY, addressing.IPMI_GATEWAY})  # Docker's default would have collided
+    nets = compose.generate(SIM, compose.load_profile("min"))["networks"]
+    assert nets["default"]["ipam"]["config"] == [{"subnet": "10.141.0.0/16", "gateway": addressing.GATEWAY}]
+    assert nets["ipmi"]["ipam"]["config"] == [{"subnet": "10.148.0.0/16", "gateway": addressing.IPMI_GATEWAY}]

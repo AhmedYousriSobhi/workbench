@@ -19,6 +19,8 @@ between starts, and `cmsh` listed made-up addresses. A real cluster has distinct
 - The ports published on 127.0.0.1 stay: they are the tool's own plumbing (the page talks to the mocks there) and the
   fallback (`benchctl export profile --loopback`) for a client that cannot route to the Docker network or that insists on
   HTTPS for non-local hosts (plain-HTTP Jira).
+- Each network's gateway is pinned to 10.141.255.253 / 10.148.255.253. Docker's default is the first address (x.x.0.1), which is the
+  first node's (and the first BMC's); the first live start failed with "Address already in use" before this was set.
 - The subnets are fixed, not configurable (observability.yml is a static file). `benchctl up` refuses with one message when
   the existing network has another subnet (run `benchctl down` once) or a host route (VPN, office network) overlaps.
 - Phase 2 (issue 149): every node's BMC has its own address on `ipminet`: 10.148.0.N (compute), 10.148.100.N (GPU) at the

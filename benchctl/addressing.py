@@ -13,6 +13,9 @@ from .nodes import node_names
 
 INTERNAL = "10.141.0.0/16"
 IPMI = "10.148.0.0/16"
+# Docker gives a network's gateway the first address (x.x.0.1) unless told otherwise, which would be the first node's.
+GATEWAY = "10.141.255.253"
+IPMI_GATEWAY = "10.148.255.253"
 LOGIN_IP = "10.141.255.254"
 IPMI_LOGIN_IP = "10.148.255.254"  # the head node is also on the BMC network (the jump host)
 IPMI_FARM_IP = "10.148.255.12"    # the farm that owns every BMC's state
