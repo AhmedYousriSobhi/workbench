@@ -73,8 +73,11 @@ open_link() {
 }
 
 cmd_start() {
-  profile=min
-  while [ $# -gt 0 ]; do case "$1" in --profile) profile="$2"; shift ;; *) echo "usage: $0 start [--profile P]" >&2; exit 2 ;; esac; shift; done
+  profile=min; sel=()
+  while [ $# -gt 0 ]; do case "$1" in
+    --profile) profile="$2"; shift ;;
+    --with|--without) sel+=("$1" "$2"); shift ;;
+    *) echo "usage: $0 start [--profile P | --with PART ... --without PART ...]" >&2; exit 2 ;; esac; shift; done
   echo "== 1/4 checking the machine"
   out=$(./scripts/check-machine.sh); rc=$?
   printf '%s\n' "$out" | grep -E "WARN|FAIL|fix:|READY"
@@ -82,8 +85,9 @@ cmd_start() {
   echo "== 2/4 tools"; ensure_venv || exit 1
   echo "== 3/4 governor"
   start_governor || exit 1
-  echo "== 4/4 starting the cluster (profile $profile; the first run builds images and takes a few minutes)"
-  ./scripts/benchctl up --profile "$profile" || { echo "cluster did not start; ./scripts/benchctl diag collects details" >&2; exit 1; }
+  if [ ${#sel[@]} -gt 0 ]; then up_args=("${sel[@]}"); what="parts ${sel[*]}"; else up_args=(--profile "$profile"); what="profile $profile"; fi
+  echo "== 4/4 starting the cluster ($what; the first run builds images and takes a few minutes)"
+  ./scripts/benchctl up "${up_args[@]}" || { echo "cluster did not start; ./scripts/benchctl diag collects details" >&2; exit 1; }
   refresh_governor
   start_ui || exit 1
   show_link; open_link

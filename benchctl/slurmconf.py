@@ -30,10 +30,12 @@ def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool 
         "SlurmdParameters=config_overrides",
         "SelectType=select/cons_tres",
         "SelectTypeParameters=CR_Core_Memory",
-        "ReturnToService=2",
+        "ReturnToService=1",  # 2 would return a node set DOWN by an admin (Power off) as soon as slurmd answers a ping
         "SlurmctldTimeout=60",
         "SlurmdTimeout=120",
         "GresTypes=gpu",
+        # Node health check (images/node-base/nhc): drains a node whose GPU count or XID state is wrong.
+        "HealthCheckProgram=/usr/local/sbin/nhc", "HealthCheckInterval=30", "HealthCheckNodeState=ANY",
         # slurmrestd authenticates callers with JWT; the key is baked into the lab image (ADR 0002).
         "AuthAltTypes=auth/jwt",
         "AuthAltParameters=jwt_key=/var/spool/slurmctld/jwt_hs256.key",

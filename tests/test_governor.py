@@ -418,3 +418,11 @@ def test_metrics_text_and_endpoint(tmp_path):
             assert e.code == 404
     finally:
         srv.shutdown()
+
+
+def test_node_state_runs_benchctl_set_node(tmp_path):
+    import threading
+    calls, done = [], threading.Event()
+    g, _ = _calm_gov(tmp_path, effector=lambda a: calls.append(a) or done.set() or 0)
+    assert g.handle("node-state", {"node": "cn003", "state": "down"})["started"] and done.wait(5)
+    assert calls == [["set", "node", "cn003", "down"]] and any("node-state=cn003:down: done" in a for a in g.audit)

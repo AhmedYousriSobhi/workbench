@@ -16,11 +16,11 @@ never print or commit them).
 
 | Client feature | Endpoint | Credential | Status |
 |---|---|---|---|
-| SSH terminal, Slurm (`squeue`, `sinfo`; `sacct` needs an accounting profile), port forwarding | `127.0.0.1:2222` | user `alice` or `bob` (from `sim.yaml`), key `secrets/ssh/id_ed25519` | merged (ADR 0011); compute nodes `cn001`... and `gpu001`... have sshd too, reached from the login node (ADR 0014) |
+| SSH terminal, Slurm (`squeue`, `sinfo`; `sacct` needs the `accounting` part: on in a default workbench, `--with accounting` otherwise; without it sacct says accounting storage is disabled), port forwarding | `127.0.0.1:2222` | user `alice` or `bob` (from `sim.yaml`), key `secrets/ssh/id_ed25519` | merged (ADR 0011); compute nodes `cn001`... and `gpu001`... have sshd too, reached from the login node (ADR 0014) |
 | GPU usage through Grafana `/api/ds/query` | Grafana `127.0.0.1:3000`, datasource uid `prometheus`, host label `Hostname` | Viewer token in `secrets/grafana_viewer_token` | merged |
 | Jira search (`/rest/api/3/search/jql`, fallback `/rest/api/2/search`), `/myself`, `/field` | `http://127.0.0.1:8080` | none in mock mode | merged (ADR 0005) |
-| BMC Redfish over TLS, certificate pinning | `127.0.0.1:8443`, one listener for all nodes, node chosen by the `Host: bmc-<node>` header | `admin` and the password in `secrets/bmc_credentials` | merged (ADR 0012); plain HTTP on `:8000` also remains |
-| BCM (`cmsh` on a head node) | the login node is the head node: `cmsh -c "device; list"` over the same SSH connection | as for SSH | built (ADR 0013, #66); read-only, console not available; node state follows bcm-mock and scenarios |
+| BMC Redfish over TLS, certificate pinning | `127.0.0.1:8443`, one listener for all nodes, node chosen by the `Host: bmc-<node>` header | `admin` and the password in `secrets/bmc_credentials` | merged (ADR 0012); plain HTTP on `:8000` also remains. Inside the cluster network (login node, containers) the BMCs also answer on the standard `bmc-<node>:443`; on the host only `8443` is published (443 needs root) |
+| BCM (`cmsh` on a head node) | the login node is the head node: `cmsh -c "device; list"` over the same SSH connection | as for SSH | built (ADR 0013, #66); read-only, with a small interactive console (modes, list, status); node state follows bcm-mock and scenarios |
 | Kubernetes, Teleport | not built | | SPEC section 11 |
 
 If port 2222 refuses connections, the checkout is probably on a branch without the login node; that is not a client bug.
@@ -106,13 +106,24 @@ engine's targets, not in ad hoc `docker exec` commands.
 
 ## Known gaps
 
-Kubernetes and Teleport are not built; the fake `cmsh` has no interactive console.
+Kubernetes and Teleport are not built; the fake `cmsh` console is a read-only subset.
 The full list is the roadmap, issue #69.
 
 ## After the dashboard or the plan changes
 
-When the web page's **⚙ Plan → Apply** rebuilds the workbench under a connected client, check that the client follows: new
+When the web page's **⚙ Settings → Apply** rebuilds the workbench under a connected client, check that the client follows: new
 nodes appear (and `ssh <node>` from the login node works), removed nodes disappear from Slurm and the client without stale
 entries, and GPU metrics for new GPU nodes show in Grafana. Then use a node's **Actions** in the web page (power off,
 overheat, fan failure, GPU error) and confirm the client sees each through BMC, BCM and the GPU metrics. Results of the
 last full pass are tracked in issue #131.
+
+## Node health check (what drains a node)
+
+Every `slurmd` runs `/usr/local/sbin/nhc` every 30 s (`HealthCheckProgram`, source `images/node-base/nhc`). On a GPU node
+it reads the GPU exporter and **drains the node** when a GPU is missing (fewer series than the node's GRES) or a GPU
+reports an XID error; the reason says why (`NHC: GPU XID 79`, `NHC: GPU count 7 of 8`), so `sinfo -R` shows it within about
+30 s of **GPU error (XID 79)** on the page. When the fault is cleared the check resumes a drain it made itself (reasons
+starting `NHC:`), never one an operator set. A node that publishes nothing (powered off) and an unreachable exporter are
+not drained. Not checked yet, because nothing in the simulation models them: NIC link flapping and down InfiniBand ports
+([issue 143](https://github.com/AhmedYousriSobhi/workbench/issues/143)). A cluster built before this needs `benchctl up`
+once: it rebuilds the node image and restarts `slurmctld` (it does so whenever `slurm.conf` changes).

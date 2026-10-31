@@ -107,3 +107,7 @@ def test_secrets_are_private_stable_and_ignored_by_git(tmp_path):
     ignored = subprocess.run(["git", "check-ignore", "-q", "compose/generated/secrets/mariadb.env"],
                              check=False)
     assert ignored.returncode == 0
+
+
+def test_a_node_set_down_by_an_admin_stays_down_until_resumed():
+    assert "ReturnToService=1\n" in slurmconf.slurm_conf(SIM, 4)  # 2 returns any DOWN node that answers (issue 138)

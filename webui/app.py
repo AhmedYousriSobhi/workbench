@@ -20,6 +20,7 @@ from starlette.responses import (
     HTMLResponse,
     JSONResponse,
     RedirectResponse,
+    Response,
     StreamingResponse,
 )
 from starlette.routing import Route
@@ -33,6 +34,9 @@ from .wiki import Wiki, WikiError, esc, page
 STATIC = Path(__file__).parent / "static"
 COOKIE = "workbench_ui"
 DOCS = Path(__file__).resolve().parent.parent / "docs"
+
+
+SLURM_STATE = {"power-off": "down", "power-on": "resume", "clear": "resume"}  # page action -> scontrol state
 
 
 def governor_status(socket: str) -> dict:
@@ -97,11 +101,12 @@ class Runs:
 
 
 def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Path("scenarios"),
-               sim_yaml: Path = Path("sim.yaml"), interval: float = 1.0, docs: Path = DOCS) -> Starlette:
+               sim_yaml: Path = Path("sim.yaml"), interval: float = 1.0, docs: Path = DOCS,
+               fetch=None, poster=None) -> Starlette:
     sim = yaml.safe_load(sim_yaml.read_text())
     flow = Flow()
     runs = Runs(scenarios, sim, flow)
-    cluster = Cluster(sim)
+    cluster = Cluster(sim, **{k: v for k, v in (("fetch", fetch), ("poster", poster)) if v})  # test seams: a host stack must not answer or be hit
     wiki = Wiki(docs)
 
     def authed(request: Request) -> None:
@@ -175,6 +180,18 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         ok, msg = workbench.verdict(est, avail, spec=spec)
         return spec, est, avail, ok, msg
 
+    async def settings(request: Request):
+        """The options the Settings sheet offers, with what each costs; `on` follows the workbench last built."""
+        from benchctl import export, workbench
+
+        try:
+            _, services, _ = export.configured(yaml.safe_load(sim_yaml.read_text()))
+            built = workbench.parts_in(services)
+        except (export.ExportError, OSError, ValueError):
+            built = None  # nothing built to read: offer the defaults
+        return JSONResponse({"parts": workbench.catalog(built),
+                             "limits": {k: list(v) for k, v in workbench.LIMITS.items()}})
+
     async def plan(request: Request):
         """Estimate only, no side effects: the page cannot start containers. Applying goes through the governor."""
         spec, est, avail, ok, msg = build_plan(request.query_params)
@@ -216,11 +233,44 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
         return JSONResponse({"entities": conn.entities(cluster.sim)})
 
+    async def export_profile(request: Request):
+        """The client profile file for the cluster on disk now. Read fresh per request (the page has no Docker, W-3),
+        so it follows a rebuild; the format ID comes from the local file, never from the repository."""
+        from benchctl import export
+
+        q = request.query_params
+        try:
+            base = yaml.safe_load(sim_yaml.read_text())
+            sim, services, label = export.configured(base)
+            body = export.build(sim, services, "workbench", q.get("bmc") == "1", q.get("user") or None,
+                                bmc_via=q.get("bmc_via", "login"))
+            text = export.to_json(body, export.format_id())
+        except export.ExportError as e:
+            raise HTTPException(422, str(e)) from e
+        return Response(text, media_type="application/json",
+                        headers={"Content-Disposition": 'attachment; filename="bench-profile.json"', "X-Profile": label,
+                                 "X-Warning": " ".join(export.warnings(services))})
+
+    def slurm_state(node: str, state: str) -> dict:
+        """Slurm is told through the governor (the page has no Docker, W-3); a refusal is reported, never fatal."""
+        try:
+            res = checks.governor_request({"cmd": "node-state", "node": node, "state": state}, socket)
+        except (OSError, ValueError):
+            return {"target": "slurm", "status": "skipped", "detail": "the governor is not reachable"}
+        if not res.get("ok"):
+            return {"target": "slurm", "status": "skipped", "detail": res.get("error", "refused")}
+        if res.get("dry_run"):
+            return {"target": "slurm", "status": "skipped", "detail": "the governor is in dry-run mode or has no --workdir"}
+        return {"target": "slurm", "status": "ok", "detail": f"asked Slurm to set {node} {state}"}
+
     async def node_action(request: Request):
         try:
             results = await asyncio.to_thread(cluster.act, request.path_params["node"], request.path_params["action"])
         except ActionError as e:
             raise HTTPException(422, str(e)) from e
+        state = SLURM_STATE.get(request.path_params["action"])
+        if state and any(r["status"] == "ok" for r in results):  # the BMC changed; Slurm only knows through the governor
+            results.append(await asyncio.to_thread(slurm_state, request.path_params["node"], state))
         for r in results:
             if r["status"] == "ok":
                 flow.note(r["target"], f"{request.path_params['action']} on {request.path_params['node']}", [request.path_params["node"]])
@@ -286,9 +336,11 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/events", protected(events)),
             Route("/api/cluster", protected(cluster_state)),
             Route("/api/flow", protected(flow_events)),
+            Route("/api/settings", protected(settings)),
             Route("/api/plan", protected(plan)),
             Route("/api/plan/apply", protected(plan_apply, write=True), methods=["POST"]),
             Route("/api/connections", protected(connections)),
+            Route("/api/export/profile", protected(export_profile)),
             Route("/api/nodes/{node}", protected(node_detail)),
             Route("/api/nodes/{node}/{action}", protected(node_action, write=True), methods=["POST"]),
             Route("/api/scenarios", protected(list_scenarios)),

@@ -20,7 +20,7 @@ def spec(**kw):
 
 def test_defaults_come_from_sim_yaml_and_flags_override_only_what_they_name():
     d = workbench.defaults(SIM)
-    assert (d.cpu_nodes, d.gpu_nodes, d.gpus_per_node) == (4, 2, 8) and sorted(d.parts) == ["bcm", "bmc", "jira", "scenarios"]
+    assert (d.cpu_nodes, d.gpu_nodes, d.gpus_per_node) == (4, 2, 8) and sorted(d.parts) == ["accounting", "bcm", "bmc", "jira", "scenarios"]
     assert spec(cpu_nodes=2, gpu_nodes=4).gpu_nodes == 4 and spec(cpu_nodes=2).gpus_per_node == 8
 
 
@@ -200,8 +200,8 @@ def test_compose_writes_the_effective_sim_next_to_the_file(cwd):
 def test_export_follows_the_built_workbench(cwd, monkeypatch):
     monkeypatch.setattr(stack, "up", lambda *a, **k: True)
     assert runner.invoke(cli.app, ["up", "--cpu-nodes", "1", "--gpu-nodes", "1", "--with", "bmc", "--without", "jira"]).exit_code == 0
-    r = runner.invoke(cli.app, ["export", "profile", "--format", "demo", "--bmc", "-o", "-"])
-    body = json.loads(r.output)
+    r = runner.invoke(cli.app, ["export", "profile", "--format", "demo", "--bmc", "--configured", "-o", "-"])
+    body = json.loads(r.stdout)
     assert body["clusters"][0]["jira"] is None and [t["node"] for t in body["bmc"]] == ["cn001", "gpu001"]
 
 
@@ -217,3 +217,16 @@ def test_web_page_reads_the_generated_sim_while_a_workbench_is_in_use(cwd):
     Path("compose/generated").mkdir(parents=True, exist_ok=True)
     Path("compose/generated/sim.yaml").write_text("x: 1\n")
     assert workbench.live_sim_path() == Path("compose/generated/sim.yaml")
+
+
+def test_catalog_lists_every_part_with_its_cost_and_state():
+    cat = {p["id"]: p for p in workbench.catalog(["jira"])}
+    assert set(cat) == set(workbench.PARTS) == set(workbench.PART_INFO)
+    assert cat["jira"]["on"] and not cat["accounting"]["on"] and cat["accounting"]["mb"] == 360
+    assert all(p["label"] and p["help"] and p["mb"] > 0 for p in cat.values())
+    assert {p["id"] for p in workbench.catalog() if p["on"]} == set(workbench.DEFAULT_PARTS)
+
+
+def test_parts_in_reads_what_a_build_contains():
+    assert workbench.parts_in({"jira-mock", "bmc-farm"}) == ["jira", "bmc"]
+    assert "accounting" in workbench.parts_in({"mariadb", "slurmdbd", "accounting-init"}) and "accounting" not in workbench.parts_in({"slurmdbd"})

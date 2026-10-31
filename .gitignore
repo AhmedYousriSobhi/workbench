@@ -16,6 +16,9 @@ cov-report.txt
 .claude/
 graphify-out/
 
+# `benchctl diag` output (a tarball and its extracted folder): machine-specific, never published
+workbench-diag-*
+
 # Editors, OS, caches, logs
 .vscode/
 .idea/

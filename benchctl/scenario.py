@@ -215,6 +215,11 @@ def execute(step: Step, poster=post, runner=checks.run, host: bool = True) -> Ou
                             f"reason={step.do.get('reason', 'scenario')}"])
                 if r.returncode:
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+            for n in step.do.get("down", []):
+                r = runner(["docker", "exec", SLURMCTLD, "scontrol", "update", f"nodename={n}", "state=down",
+                            f"reason={step.do.get('reason', 'scenario')}"])
+                if r.returncode:
+                    return Outcome(label, "failed", (r.stderr or r.stdout).strip())
             for n in step.do.get("resume", []):
                 r = runner(["docker", "exec", SLURMCTLD, "scontrol", "update", f"nodename={n}", "state=resume"])
                 if r.returncode:

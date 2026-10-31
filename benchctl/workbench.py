@@ -19,7 +19,17 @@ FLOOR_MB = 1024                                   # MemAvailable that must remai
 PARTS: dict[str, tuple[str, list[str] | None]] = {
     "jira": ("mocks", ["jira-mock"]), "bmc": ("mocks", ["bmc-farm"]), "bcm": ("mocks", ["bcm-mock"]),
     "accounting": ("accounting", None), "scenarios": ("scenarios", None), "load": ("load", None)}
-DEFAULT_PARTS = ("jira", "bmc", "bcm", "scenarios")
+# The one registry of options that change what runs and so what memory it needs. The Settings sheet is drawn from it
+# (`catalog`): a new option is an entry here and in PARTS, not new page code.
+PART_INFO: dict[str, tuple[str, str]] = {
+    "accounting": ("Accounting", "slurmdbd and MariaDB. Needed for sacct and job history; without it sacct says accounting storage is disabled."),
+    "jira": ("Jira", "The Jira mock (REST v2 subset)."),
+    "bmc": ("BMC farm", "One Redfish endpoint per node: power, thermals, fans."),
+    "bcm": ("BCM", "The BCM mock (CMDaemon JSON) and its device list."),
+    "scenarios": ("Scenarios", "The scenario engine that plays timed faults."),
+    "load": ("Load", "User and ticket simulators that generate jobs and tickets."),
+}
+DEFAULT_PARTS = ("jira", "bmc", "bcm", "accounting", "scenarios")  # accounting: without slurmdbd, sacct says storage is disabled
 DROP_ORDER = ("load", "accounting", "scenarios", "bcm", "jira", "bmc")  # what to suggest removing first
 LIMITS = {"cpu_nodes": (0, 64), "gpu_nodes": (0, 16), "gpus_per_node": (1, 8)}
 
@@ -76,6 +86,22 @@ def load_file(path: Path, base: Spec) -> Spec:
     if not isinstance(data, dict):
         raise SpecError(f"{path}: expected a mapping of fields (cpu_nodes, gpu_nodes, parts...)")
     return from_dict(data, base)
+
+
+def parts_in(services: set[str]) -> list[str]:
+    """The optional parts whose services are all in `services` (what a build contains)."""
+    out = []
+    for part, (group, names) in PARTS.items():
+        want = names or list(compose.CATALOG[group])
+        if all(n in services for n in want):
+            out.append(part)
+    return out
+
+
+def catalog(selected: list[str] | None = None) -> list[dict]:
+    """Every optional part with its label, help, memory limit (MB) and whether it is on, for the Settings sheet."""
+    on = set(DEFAULT_PARTS if selected is None else selected)
+    return [{"id": p, "label": PART_INFO[p][0], "help": PART_INFO[p][1], "mb": _part_mb(p), "on": p in on} for p in PARTS]
 
 
 def effective(sim: dict, spec: Spec) -> tuple[dict, dict]:

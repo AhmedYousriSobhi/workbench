@@ -252,10 +252,17 @@ def _launcher(*args: str) -> None:
 
 
 @app.command()
-def start(profile: str = typer.Option("min", "--profile", autocompletion=completion.profiles, callback=_profile_check)) -> None:
-    """Everything in one step: machine check, governor, cluster, web page (the first run builds images)."""
+def start(profile: str = typer.Option(None, "--profile", autocompletion=completion.profiles, callback=_profile_check,
+                                      help="a size preset (default min)"),
+          with_: list[str] = WITH, without: list[str] = WITHOUT) -> None:
+    """Everything in one step: machine check, governor, cluster, web page (the first run builds images). Add parts
+    with --with (for example `--with accounting`); on a running cluster it adds them and leaves the page up."""
+    if profile and (with_ or without):
+        typer.echo("choose one: --profile PRESET, or parts (--with, --without)", err=True)
+        raise typer.Exit(1)
     _offer_completion()
-    _launcher("start", "--profile", profile)
+    parts = [x for p in (with_ or []) for x in ("--with", p)] + [x for p in (without or []) for x in ("--without", p)]
+    _launcher("start", *(parts or ["--profile", profile or "min"]))
 
 
 def _offer_completion() -> None:
@@ -425,6 +432,22 @@ def get_scenarios(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by:
     _get(inventory.scenario_rows, output, selector, sort_by, False, 2.0)
 
 
+set_app = typer.Typer(cls=SuggestingGroup, help="Change one thing on the running cluster")
+app.add_typer(set_app, name="set")
+
+
+@set_app.command("node")
+def set_node(node: str = TARGET, state: str = typer.Argument(..., help="down (Slurm marks it not responding) or resume")) -> None:
+    """Tell Slurm a node is down or back: `benchctl set node cn001 down`. What the page's Power off/on does after the BMC."""
+    if state not in ("down", "resume"):
+        typer.echo("state must be down or resume", err=True)
+        raise typer.Exit(1)
+    o = scenario.execute(scenario.Step(0, "slurm", {state: [node], "reason": "workbench power off"}), host=True,
+                         runner=lambda c: stack._run(c))
+    typer.echo(f"{node}: {state}" if o.status == "ok" else f"cannot set {node}: {o.detail}", err=o.status != "ok")
+    raise typer.Exit(0 if o.status == "ok" else 1)
+
+
 @app.command("exec", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def exec_cmd(ctx: typer.Context, node: str = TARGET,
              user: str = typer.Option(None, "-u", "--user", autocompletion=completion.users, help="run as this simulated user, e.g. alice")) -> None:
@@ -470,25 +493,34 @@ app.add_typer(export_app, name="export")
 
 @export_app.command("profile")
 def export_profile(out: str = typer.Option("bench-profile.json", "-o", "--output", help="file to write, or - for stdout"),
-                   profile: str = typer.Option(None, "--profile", autocompletion=completion.profiles, callback=_profile_check, help="default: the profile `up` last started"),
+                   profile: str = typer.Option(None, "--profile", autocompletion=completion.profiles, callback=_profile_check, help="export this profile instead of the running containers"),
                    name: str = typer.Option("workbench", "--name", help="the cluster's name in the client"),
                    user: str = typer.Option(None, "--user", autocompletion=completion.users, help="SSH user, default the first user in sim.yaml"),
                    bmc: bool = typer.Option(False, "--bmc", help="also list one BMC target per node"),
+                   bmc_via: str = typer.Option("login", "--bmc-via", help="how the client reaches BMCs: login (through the login node, "
+                                                                          "address bmc-NODE) or direct (127.0.0.1)"),
+                   configured: bool = typer.Option(False, "--configured", help="list what the selection says, not the running containers"),
                    fmt: str = typer.Option(None, "--format", help="client format ID[:VERSION]; else $BENCH_EXPORT_FORMAT "
                                                                  "or .git/export-format")) -> None:
     """Write a profile file the monitoring client can import: SSH, Slurm, Grafana, Jira, storage (no secrets)."""
     from pathlib import Path
 
-    sim = _sim()
-    spec = workbench.current(_base_sim())
-    prof = profile or ("workbench" if spec else stack.current_profile())
+    base = _base_sim()
     try:
-        services = (set(compose.generate(*workbench.effective(_base_sim(), spec))["services"]) | {"grafana"}
-                    if spec and not profile else export.services_for(sim, prof))
-        text = export.to_json(export.build(sim, services, name, bmc, user), export.format_id(fmt))
+        live = None if configured or profile else export.running(base)
+        if live:
+            (sim, services), prof = live, "running containers"
+        else:
+            sim, services, prof = export.configured(base, profile)
+            if not configured and not profile:
+                typer.echo("note: no containers are running, so this lists the configured cluster "
+                           f"({prof}); start it first for the live one", err=True)
+        text = export.to_json(export.build(sim, services, name, bmc, user, live=bool(live), bmc_via=bmc_via), export.format_id(fmt))
     except export.ExportError as e:
         typer.echo(f"cannot export: {e}", err=True)
         raise typer.Exit(1) from e
+    for w in export.warnings(services):
+        typer.echo(f"warning: {w}", err=True)
     if out == "-":
         typer.echo(text, nl=False)
         return

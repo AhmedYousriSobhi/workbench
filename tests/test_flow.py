@@ -169,6 +169,7 @@ def test_default_fetch_reaches_real_counters(monkeypatch):
     srv, base = serve(MOCKS[2][1]())
     try:
         monkeypatch.setitem(wf.STATS, "jira-mock", base + "/sim/stats")
+        monkeypatch.setitem(wf.STATS, "bmc-farm", "http://127.0.0.1:9/sim/stats")  # a closed port, whatever runs on the host
         f = wf.Flow()
         f.poll()
         snap = f.since(0)

@@ -19,7 +19,8 @@ its limits, so you do not find them by surprise, and what to use in a script.
 
 | Verb | Does | Limits and cautions | For scripts |
 |---|---|---|---|
-| `start [--profile P]` | machine check, venv, governor (as you), cluster, web page; prints the login link | first run builds images (minutes); refuses when the governor says memory is low; default profile `min` | exit 1 when anything fails |
+| `start [--profile P | --with PART ...]` | machine check, venv, governor (as you), cluster, web page; prints the login link | first run builds images (minutes); refuses when the governor says memory is low; default profile `min`; `--with accounting` builds a selection instead and, on a running cluster, adds the part and leaves the page up | exit 1 when anything fails |
+| `set node NAME down|resume` | marks the node down (or back) in Slurm with `scontrol`; the page's Power off/on does this after the BMC | needs the stack running; changes Slurm state only, not the BMC | exit 1 when scontrol fails |
 | `stop` | stops the web page, the cluster and the governor **it started** | does not touch a system governor service, images, or `compose/generated/` | |
 | `open` | prints the web page link, opens a browser if there is a display | the page must be running (`start` first) | prints the link on stdout |
 | `up [--profile P]` | pre-flight, governor admission, ordered start of the cluster alone | safe to repeat (starts only what is missing); default profile `std`, so pass `--profile min` on 16 GB; no web page, no governor | exit 1 when refused or a part fails to start |
@@ -35,7 +36,7 @@ its limits, so you do not find them by surprise, and what to use in a script.
 | `scenario list` / `scenario run NAME [--speed N] [--dry-run]` | lists scenarios; plays one against the running stack | needs the stack up; `--dry-run` only validates and prints the timeline; Kubernetes and ticket-bot steps are skipped; `--speed` compresses waits, not step order | exit 1 when a step or expectation fails |
 | `completion install\|remove\|bash\|zsh\|fish` | turns Tab completion on or off for your shell, or prints the script | no sudo; edits one line in `~/.bashrc` or `~/.zshrc` (fish: a file in `~/.config/fish/completions`) and links `~/.local/bin/benchctl`; completes names from files only, so it works with the stack down; `start` asks once in a terminal | |
 | `ssh-key install\|remove` | copies the login key to `~/.ssh/workbench_ed25519` (mode 600) or deletes it | never overwrites a file that is not ours; `remove` deletes only our own key | |
-| `export profile [-o FILE] [--bmc] [--user U] [--name N] [--format ID]` | writes the workbench as a client profile file | needs the client's format ID once (`.git/export-format`); holds no password, token or key path; Kubernetes and BCM are not exported; writes the file, never sends it | `-o -` prints the JSON on stdout |
+| `export profile [-o FILE] [--bmc] [--user U] [--name N] [--format ID] [--configured]` | writes the running cluster (Docker) as a client profile file; `--configured` lists the selection instead | needs the client's format ID once (`.git/export-format`); holds no password, token or key path; Kubernetes and BCM are not exported; writes the file, never sends it | `-o -` prints the JSON on stdout |
 | `status` | governor level, then whether the cluster and web page run | text for people; exits 1 when the governor is unreachable (it still prints the cluster lines) | use `get services -o json` for the cluster |
 | `check` | machine check before building (OS, RAM, disk, Docker, ports) | read-only; works before the venv exists via `./scripts/check-machine.sh` | exit 1 when not ready |
 | `doctor` | host prerequisites and container safety | read-only; exit 1 on any failure | exit code |

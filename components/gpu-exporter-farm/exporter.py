@@ -52,6 +52,7 @@ class State:
         self.xid: dict[str, int] = {}
         self.temp_override: dict[str, float] = {}
         self.xid_count: dict[str, int] = {}
+        self.down: set[str] = set()  # powered-off nodes publish nothing, as a real exporter on a dead host
         self.alloc: dict[str, set[int]] = {}  # node -> GPU indexes held by running jobs
 
     def set_alloc(self, nodes: dict[str, list[int]]) -> None:
@@ -61,6 +62,8 @@ class State:
         node = req["node"]
         if node not in self.nodes:
             raise KeyError(node)
+        if "down" in req:
+            (self.down.add if req["down"] else self.down.discard)(node)
         if req.get("clear"):
             self.xid.pop(node, None)
             self.temp_override.pop(node, None)
@@ -74,6 +77,7 @@ class State:
     def render(self) -> str:
         r = self.rng
         out: list[str] = []
+        nodes = {n: g for n, g in self.nodes.items() if n not in self.down}
 
         def head(name: str, help_: str, typ: str = "gauge") -> None:
             out.append(f"# HELP {name} {help_}")
@@ -84,13 +88,13 @@ class State:
 
         # A GPU a job holds works hard; every other GPU idles, so usage follows the scheduler.
         used = {(n, g): r.randint(int(self.fb_total * 0.6), int(self.fb_total * 0.95)) if busy(n, g) else r.randint(300, 700)
-                for n, gpus in self.nodes.items() for g in range(gpus)}
+                for n, gpus in nodes.items() for g in range(gpus)}
 
         def per_gpu(name: str, help_: str, value) -> None:
             """`node` is this sim's own label; the rest are the labels the real DCGM exporter puts on every series
             (clients filter on Hostname and read modelName)."""
             head(name, help_)
-            for n, gpus in self.nodes.items():
+            for n, gpus in nodes.items():
                 for g in range(gpus):
                     labels = (f'node="{n}",gpu="{g}",Hostname="{n}",device="nvidia{g}",'
                               f'UUID="GPU-{n}-{g:02d}",modelName="{self.model}"')
@@ -98,7 +102,7 @@ class State:
 
         def per_node(name: str, help_: str, value, labels: str = "", typ: str = "gauge") -> None:
             head(name, help_, typ)
-            for n in self.nodes:
+            for n in nodes:
                 out.append(f'{name}{{node="{n}"{labels}}} {value(n)}')
 
         per_gpu("DCGM_FI_DEV_GPU_UTIL", "GPU utilization (percent)", lambda n, g: r.randint(70, 100) if busy(n, g) else r.randint(0, 3))

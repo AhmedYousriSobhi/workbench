@@ -39,7 +39,7 @@ nothing) when the estimate does not fit. Check: `benchctl get nodes`, `benchctl 
 | `-f FILE` | read the selection from a workbench file; flags override it |
 | `--save FILE` (plan) | write the selection to a file |
 
-Flags you leave out come from `sim.yaml`. Default parts: `jira`, `bmc`, `bcm`, `scenarios`. Always present: Slurm, the
+Flags you leave out come from `sim.yaml`. Default parts: `jira`, `bmc`, `bcm`, `accounting`, `scenarios` (accounting, about 360 MB, is what makes `sacct` work). Always present: Slurm, the
 login node, Prometheus and Grafana.
 
 ## A workbench file
@@ -68,7 +68,7 @@ you chose, not the numbers in `sim.yaml`.
 
 ## From the web page
 
-**⚙ Plan** in the top bar of the dashboard opens a panel with the same form (steppers for the counts, toggles for the parts) and a memory bar. Editing the numbers only estimates. **Apply to the
+**⚙ Settings** in the top bar of the dashboard opens a panel with the same form (steppers for the counts, toggles for the parts) and a memory bar. Editing the numbers only estimates. **Apply to the
 running workbench** asks the governor to rebuild it to the plan: new nodes start, nodes you no longer want are removed,
 and Slurm's node list is reloaded. Progress shows in the entity list, the traffic diagram and *Governor activity* (in the Governor panel). It needs the governor
 started by `./scripts/benchctl start` (it has the repository path) and calm memory (L0-L1); otherwise the page says why
@@ -85,3 +85,18 @@ in one line. You can always copy the command shown and run it in a terminal inst
 - **`REFUSED ... does not fit`**: follow the `Try:` hint, or close browsers and the IDE (they use several GB) and plan again.
 - **`invalid: ...`**: every problem with the flags is listed at once; fix them all and rerun.
 - **`unknown field(s) in the workbench file`**: check the spelling against the example above.
+
+## Add accounting to a cluster that is already running
+
+`benchctl start` uses the `min` profile, which has no accounting, so `sacct` says accounting storage is disabled. You do
+not need to stop anything. `start --with accounting` does it and leaves the page running (or starts the page if it is
+not up); `up` alone only builds the cluster and never starts the page:
+
+```bash
+./scripts/benchctl start --with accounting   # same as the next line, plus the page and the governor
+./scripts/benchctl up --with accounting      # starts mariadb and slurmdbd, then restarts slurmctld (about a minute)
+./scripts/benchctl exec login -- sacct       # no longer "accounting storage is disabled"
+```
+
+Or open **⚙ Settings** on the page, switch *Accounting* on and press Apply twice. Running jobs on the controller are lost
+when it restarts. The node counts stay as they are because a selection takes them from `sim.yaml` unless you pass flags.

@@ -136,3 +136,14 @@ def test_http_handler_serves_metrics_injects_and_rejects_bad_requests():
         assert e.value.code == 404
     finally:
         srv.shutdown()
+
+
+def test_a_powered_off_node_publishes_nothing_until_powered_on():
+    s = exporter.State({"gpu001": 2, "gpu002": 2}, random.Random(1), "h200")
+    s.inject({"node": "gpu001", "down": True})
+    text = s.render()
+    assert 'Hostname="gpu001"' not in text and 'node="gpu001"' not in text and 'Hostname="gpu002"' in text
+    s.inject({"node": "gpu001", "clear": True})  # clearing faults does not power it on
+    assert 'node="gpu001"' not in s.render()
+    s.inject({"node": "gpu001", "down": False})
+    assert 'Hostname="gpu001"' in s.render()

@@ -85,6 +85,9 @@ def admit(profile: str, available: int | None = None) -> tuple[bool, str]:
     return checks.preflight(profile, checks.load_profiles(), avail)
 
 
+ONESHOT = {"accounting-init"}  # run once and exit; success is exit code 0, not "running"
+
+
 def wait_running(names: list[str], runner: Runner = _run, timeout: float = 120,
                  sleep: Callable[[float], None] = time.sleep) -> list[str]:
     """Return the services still not running after `timeout` seconds (empty when all are up)."""
@@ -92,6 +95,9 @@ def wait_running(names: list[str], runner: Runner = _run, timeout: float = 120,
     while pending:
         r = runner(dc("ps", "--status", "running", "--format", "{{.Service}}"))
         up = set(r.stdout.split())
+        if any(n not in up and n in ONESHOT for n in pending):  # a job that ran and exited 0 has started
+            done = runner(dc("ps", "-a", "--status", "exited", "--format", "{{.Service}} {{.ExitCode}}")).stdout.splitlines()
+            up |= {line.split()[0] for line in done if len(line.split()) == 2 and line.split()[1] == "0"} & ONESHOT
         pending = [n for n in pending if n not in up]
         if not pending or time.monotonic() >= end:
             break
@@ -106,7 +112,10 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     chosen = prof
     prof = prof if prof is not None else compose.load_profile(profile)
     data = compose.generate(sim, prof)
+    conf = COMPOSE_FILE.parent / "slurm" / "slurm.conf"  # a changed file needs a controller restart (it only rereads at start)
+    old_conf = conf.read_text() if conf.is_file() else None
     path = compose.write(data, sim=sim, compute_nodes=prof.get("compute_nodes"))
+    conf_changed = old_conf is not None and conf.is_file() and conf.read_text() != old_conf
     skip = unbuildable(data["services"], path.parent)
     todo = {n: v for n, v in data["services"].items() if n not in skip}
     missing = missing_mb(todo, runner, path)
@@ -135,6 +144,9 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     names = [n for n in data["services"] if n not in skip] + ["prometheus", "grafana", "gpu-exporter-farm"]
     node_re = r"(cn|gpu)\d+"
     changed = False
+    before = set(_project_services(runner))
+    # accounting added under a running controller: slurm.conf gains AccountingStorageType, which only a restart reads
+    acct_added = "slurmdbd" in todo and "slurmdbd" not in before and "slurmctld" in before
     if chosen is not None:  # a selection can shrink or grow a running stack: drop nodes it no longer wants (issue 117)
         have = [s for s in _project_services(runner) if re.fullmatch(node_re, s)]
         want = [n for n in names if re.fullmatch(node_re, n)]
@@ -159,8 +171,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         if (late := wait_running(svcs, runner, wait)):
             say(f"FAILED {label}: not running: {', '.join(late)}")
             return False
-    if changed and "slurmctld" in todo:  # the node set changed under a running controller: reload slurm.conf
-        say("restarting slurmctld to pick up the new node list")
+    if (changed or acct_added or (conf_changed and "slurmctld" in before)) and "slurmctld" in todo:  # slurm.conf changed under a running controller
+        say("restarting slurmctld to pick up the new " + ("accounting setup" if acct_added and not changed else "node list" if changed else "slurm.conf"))
         r = runner(dc("up", "-d", "--no-deps", "--force-recreate", "slurmctld", file=path))
         if r.returncode != 0 or wait_running(["slurmctld"], runner, wait):
             say(f"FAILED slurmctld restart: {r.stderr.strip()[-300:]}")

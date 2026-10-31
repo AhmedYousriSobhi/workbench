@@ -124,6 +124,8 @@
   @media (min-width:1700px) { .nodeswrap { display:grid; grid-template-columns:minmax(0,1fr) 400px; align-items:start; } .nodesmain { order:1; } .trafficpanel { order:2; position:sticky; top:72px; } }
   #flow .frame { fill:color-mix(in srgb,var(--panel) 70%,var(--bg)); stroke:var(--line); stroke-width:1.5; } #flow .ftitle { font:700 11px system-ui,sans-serif; fill:var(--dim); letter-spacing:.05em; text-transform:uppercase; }
   #flow .chipbg { fill:var(--panel); stroke:var(--line); stroke-width:1.2; } #flow .lane { fill:none; stroke:var(--line); stroke-width:1.5; } #flow .lane.on { stroke:var(--accent); stroke-width:2.5; opacity:.85; } #flow .lane.inj { stroke-dasharray:2 5; }
+  #flow .hit { cursor:pointer; } #flow .hit:hover rect, #flow .hit:focus-visible rect { stroke:var(--accent); } #flow .hit:focus-visible { outline:2px solid var(--accent); outline-offset:2px; } #flow #dots { pointer-events:none; }
+  table.conn tr.focus td { background:var(--sel, rgba(80,140,255,.14)); }
   #flow .nd { fill:var(--panel); stroke:var(--line); stroke-width:1.5; } #flow .nd.ok { stroke:var(--ok); } #flow .nd.warn { stroke:var(--warn); stroke-width:2.2; } #flow .nd.fault { stroke:var(--bad); stroke-width:3; } #flow .nd.down { stroke:var(--pending); stroke-dasharray:3 3; } #flow .nd.unknown { stroke:var(--line); stroke-dasharray:1 3; }
   #flow .ndt { font:600 8.5px system-ui,sans-serif; fill:var(--fg); } #flow .ring { fill:none; stroke:var(--warn); stroke-width:2.5; animation:ring 1.1s ease-out forwards; transform-box:fill-box; transform-origin:center; }
   @keyframes ring { from { opacity:1; transform:scale(1); } to { opacity:0; transform:scale(2.2); } }
@@ -274,7 +276,8 @@
     <button class="pillchip" id="c-run" hidden></button>
     <span id="conn" role="status"><i></i><span>connecting…</span></span>
     <button class="pillchip" id="scnbtn" aria-haspopup="dialog">▶ Scenarios</button>
-    <button class="pillchip" id="planbtn" aria-haspopup="dialog">⚙ Plan</button>
+    <button class="pillchip" id="planbtn" aria-haspopup="dialog">⚙ Settings</button>
+    <button class="pillchip" id="expbtn" aria-haspopup="dialog">⇩ Export</button>
     <a class="pillchip" id="helplink" href="/help/" aria-label="Help: the manual, guides and command reference">? Help</a>
     <button class="pillchip" id="theme" aria-label="Colour theme: automatic. Press to change.">◐ Auto</button>
   </div>
@@ -354,8 +357,19 @@
     </details>
     </div>
   </dialog>
+  <dialog id="expdlg" class="sheet" aria-labelledby="exp-h">
+    <div class="sheet-h"><div><h2 id="exp-h">Export the cluster</h2><p class="dim small">A profile file the monitoring client can import: this cluster's SSH, Slurm, Grafana, Jira and storage.</p></div>
+      <button class="btn small" id="exp-close" aria-label="Close the export">✕ Close</button></div>
+    <div class="sheet-b">
+      <div class="toggles"><label class="tog"><input type="checkbox" id="exp-bmc" checked><span>One BMC target per node</span></label>
+        <label class="small dim" for="exp-via" style="display:flex;align-items:center;gap:8px">Reached
+          <select id="exp-via"><option value="login">through the login node: bmc-NODE:8443</option><option value="direct">directly: 127.0.0.1:8443</option></select></label></div>
+      <p class="small dim">The file holds no secrets. After importing it, set the SSH key (<code>benchctl ssh-key install</code>) and the Grafana token (<code>cat compose/generated/secrets/grafana_viewer_token</code>; it changes at every <code>benchctl up</code>).</p>
+    </div>
+    <div class="sheet-f"><p id="exp-msg" role="status" class="small"></p><button class="btn small" id="exp-cancel">Cancel</button><button class="btn" id="exp-go">Download bench-profile.json</button></div>
+  </dialog>
   <dialog id="plandlg" class="sheet" aria-labelledby="plan-h">
-    <div class="sheet-h"><div><h2 id="plan-h">Plan a workbench</h2><p class="dim small">Pick the size, check that it fits, then apply.</p></div>
+    <div class="sheet-h"><div><h2 id="plan-h">Settings</h2><p class="dim small">Everything that changes what runs, and so how much memory it needs. Check that it fits, then apply.</p></div>
       <button class="btn small" id="plan-close" aria-label="Close the plan">✕ Close</button></div>
     <div class="sheet-b">
       <div class="steps3">
@@ -363,8 +377,8 @@
         <div class="stp"><label for="pl-gpu">GPU nodes</label><div class="stpin"><button type="button" class="btn small" data-step="pl-gpu" data-d="-1" aria-label="Fewer GPU nodes">−</button><input type="number" id="pl-gpu" min="0" max="16" value="2"><button type="button" class="btn small" data-step="pl-gpu" data-d="1" aria-label="More GPU nodes">+</button></div><span class="small dim" id="pl-now-gpu"></span></div>
         <div class="stp"><label for="pl-gpus">GPUs per node</label><div class="stpin"><button type="button" class="btn small" data-step="pl-gpus" data-d="-1" aria-label="Fewer GPUs per node">−</button><input type="number" id="pl-gpus" min="1" max="8" value="8"><button type="button" class="btn small" data-step="pl-gpus" data-d="1" aria-label="More GPUs per node">+</button></div><span class="small dim" id="pl-now-gpus"></span></div>
       </div>
-      <fieldset class="planparts"><legend class="small dim">Optional parts</legend>
-        <div class="toggles"><label class="tog"><input type="checkbox" value="jira" checked><span>Jira</span></label><label class="tog"><input type="checkbox" value="bmc" checked><span>BMC</span></label><label class="tog"><input type="checkbox" value="bcm" checked><span>BCM</span></label><label class="tog"><input type="checkbox" value="scenarios" checked><span>Scenarios</span></label><label class="tog"><input type="checkbox" value="accounting"><span>Accounting</span></label><label class="tog"><input type="checkbox" value="load"><span>Load</span></label></div>
+      <fieldset class="planparts"><legend class="small dim">Optional parts (memory limit each adds)</legend>
+        <div class="toggles" id="pl-parts"></div>
         <p class="small dim" style="margin:8px 0 0">Slurm, the login node, Prometheus and Grafana are always on.</p></fieldset>
       <section class="fit" aria-label="Does it fit"><div class="fitnum"><b id="pl-need">–</b><span class="dim small" id="pl-free"></span></div>
         <progress id="pl-bar" max="100" value="0" aria-label="Memory needed as a share of free memory"></progress>
@@ -520,7 +534,18 @@ function currentSize() {
   const nodes = nodeList(), g = nodes.find(n => n.kind === 'gpu');
   return { cpu: nodes.filter(n => n.kind === 'compute').length, gpu: nodes.filter(n => n.kind === 'gpu').length, gpus: g ? g.gpus : null };
 }
-function openPlan() {
+let partsDrawn = false;
+async function drawParts() {  // the options come from the backend registry (/api/settings), so a new one needs no page change
+  if (partsDrawn) return;
+  try {
+    const j = await (await fetch('/api/settings')).json();
+    $('pl-parts').innerHTML = j.parts.map(p => `<label class="tog" title="${esc(p.help)}"><input type="checkbox" value="${esc(p.id)}"${p.on ? ' checked' : ''}><span>${esc(p.label)} <small class="dim">+${p.mb} MB</small></span></label>`).join('');
+    $('pl-parts').querySelectorAll('input').forEach(i => i.oninput = i.onchange = () => planInputs());
+    partsDrawn = true;
+  } catch (e) { $('pl-parts').textContent = 'Could not load the options.'; }
+}
+async function openPlan() {
+  await drawParts();
   const c = currentSize();
   if (c.cpu + c.gpu) { $('pl-cpu').value = c.cpu; $('pl-gpu').value = c.gpu; if (c.gpus) $('pl-gpus').value = c.gpus; }
   $('pl-now-cpu').textContent = c.cpu + c.gpu ? `now ${c.cpu}` : ''; $('pl-now-gpu').textContent = c.cpu + c.gpu ? `now ${c.gpu}` : ''; $('pl-now-gpus').textContent = c.gpus ? `now ${c.gpus}` : '';
@@ -532,6 +557,20 @@ $('scnbtn').onclick = () => $('scndlg').showModal(); $('scn-close').onclick = ()
 $('scndlg').addEventListener('click', e => { if (e.target === $('scndlg')) $('scndlg').close(); });
 $('planbtn').onclick = openPlan; $('plan-close').onclick = $('plan-cancel').onclick = () => $('plandlg').close();
 $('plandlg').addEventListener('click', e => { if (e.target === $('plandlg')) $('plandlg').close(); });  // a click on the dim backdrop closes it
+$('expbtn').onclick = () => { $('exp-msg').textContent = ''; $('expdlg').showModal(); };
+$('exp-close').onclick = $('exp-cancel').onclick = () => $('expdlg').close();
+$('expdlg').addEventListener('click', e => { if (e.target === $('expdlg')) $('expdlg').close(); });
+$('exp-go').onclick = async () => {
+  $('exp-msg').textContent = 'Preparing…';
+  try {
+    const r = await fetch('/api/export/profile' + ($('exp-bmc').checked ? '?bmc=1&bmc_via=' + $('exp-via').value : ''));
+    if (r.status === 404) { $('exp-msg').textContent = '✗ This page is newer than its backend. Restart it: ./scripts/benchctl stop && ./scripts/benchctl start'; return; }
+    if (!r.ok) { $('exp-msg').textContent = '✗ ' + (await r.json()).detail; return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = 'bench-profile.json';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    $('exp-msg').textContent = '✓ Saved. Import it in the client, then set what a file never holds. SSH key: run ./scripts/benchctl ssh-key install in a terminal and pick ~/.ssh/workbench_ed25519 in the cluster\'s SSH section. Grafana token: cat compose/generated/secrets/grafana_viewer_token (new after every benchctl up).' + ($('exp-bmc').checked ? ' BMC password: the part after admin: in compose/generated/secrets/bmc_credentials.' : '') + ' Jira needs no token: any value is accepted.' + (r.headers.get('X-Warning') ? ' ⚠ ' + r.headers.get('X-Warning') : '');
+  } catch (e) { $('exp-msg').textContent = '✗ Could not reach the page backend.'; }
+};
 let connCache = null;
 async function connections() {
   if (connCache) return connCache;
@@ -540,7 +579,7 @@ async function connections() {
 }
 async function paintConnections() {
   const rows = await connections();
-  $('conn-rows').innerHTML = rows.map(e => `<tr><td data-h="Part"><b>${esc(e.name)}</b><div class="small dim">${esc(e.how).replace(/`([^`]+)`/g, '<code>$1</code>')}</div></td>
+  $('conn-rows').innerHTML = rows.map(e => `<tr data-id="${esc(e.id)}"><td data-h="Part"><b>${esc(e.name)}</b><div class="small dim">${esc(e.how).replace(/`([^`]+)`/g, '<code>$1</code>')}</div></td>
     <td data-h="Address"><code>${esc(e.address)}</code></td><td data-h="Try it"><code>${esc(e.command)}</code><button class="btn small copy" data-copy="${esc(e.command)}" aria-label="Copy the command for ${esc(e.name)}">Copy</button></td>
     <td data-h="Credential">${e.credential ? `<code>${esc(e.credential)}</code>` : '<span class="dim">none</span>'}</td></tr>`).join('') || '<tr><td colspan="4">Could not load.</td></tr>';
   document.querySelectorAll('.copy').forEach(b => b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Copied'; } catch (e) { b.textContent = 'Select and copy'; } setTimeout(() => { b.textContent = 'Copy'; }, 1500); });
@@ -601,7 +640,8 @@ async function nodeAction(name, action, label) {
   if (!r.ok) { const m = `${label} on ${name} was refused: ${(await r.json()).detail}`; toast(m); $('nodeactmsg').textContent = m; return; }
   const res = (await r.json()).results;
   const bad = res.filter(x => x.status === 'failed');
-  const msg = bad.length ? `${label} on ${name}: ${bad.length} step(s) failed — is the stack running?` : `${label} on ${name}: done`;
+  const skipped = res.filter(x => x.target === 'slurm' && x.status === 'skipped');
+  const msg = skipped.length ? `${label} on ${name}: done, but Slurm was not told (${skipped[0].detail}); run ./scripts/benchctl set node ${name} ${action === 'power-off' ? 'down' : 'resume'}` : bad.length ? `${label} on ${name}: ${bad.length} step(s) failed — is the stack running?` : `${label} on ${name}: done`;
   toast(msg); $('nodeactmsg').textContent = msg;
   lastCluster = ''; loadCluster();
 }
@@ -617,6 +657,17 @@ const curve = (a, b) => { const dx = (b.x - a.x) * 0.5; return [a, { x: a.x + dx
 const at = ([p0, p1, p2, p3], t) => { const u = 1 - t, f = (c) => u ** 3 * p0[c] + 3 * u * u * t * p1[c] + 3 * u * t * t * p2[c] + t ** 3 * p3[c]; return { x: f('x'), y: f('y') }; };
 const dpath = ([p0, p1, p2, p3]) => `M${p0.x} ${p0.y} C${p1.x} ${p1.y} ${p2.x} ${p2.y} ${p3.x} ${p3.y}`;
 function nodeList() { try { return lastCluster ? JSON.parse(lastCluster).nodes : []; } catch (e) { return []; } }
+const SVC_CONN = { 'bmc-farm': 'bmc', 'bcm-mock': 'bcm', 'jira-mock': 'jira', 'gpu-exporter': 'gpu' };  // diagram box -> Connections row
+function asButton(el, name, act) {  // an SVG shape that behaves like a button: click, Enter or Space, announced by name
+  el.setAttribute('class', 'hit'); el.setAttribute('role', 'button'); el.setAttribute('tabindex', '0'); el.setAttribute('aria-label', name);
+  el.addEventListener('click', act); el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act(); } });
+  return el;
+}
+async function openConnection(id) {  // the Connections tab, with the row for this part marked
+  selectTab('conn'); await paintConnections();
+  const row = id && document.querySelector(`#conn-rows tr[data-id="${id}"]`); if (!row) return;
+  document.querySelectorAll('#conn-rows tr.focus').forEach(r => r.classList.remove('focus')); row.classList.add('focus'); row.scrollIntoView({ block: 'center' });
+}
 function buildFlow() {
   const g = $('flow'), nodes = nodeList(); g.innerHTML = ''; tiles = {}; svcPos = {};
   flowNodes = nodes.map(n => n.name).join(',');
@@ -628,8 +679,9 @@ function buildFlow() {
   g.append(fr(G.clients, 12), fr(G.injector, 12), fr(G.cluster, 14));
   g.append(sv('text', { class: 'ftitle', x: 22, y: 34 }, 'Clients'), sv('text', { class: 'ftitle', x: 22, y: 258 }, 'Faults'), sv('text', { class: 'ftitle', x: 284, y: 34 }, 'Cluster'));
   g.append(sv('text', { class: 'sub', id: 'fc-clients', x: 22, y: 204 }, ''), sv('text', { class: 'sub', id: 'fc-injector', x: 22, y: 328 }, ''));
-  ['Monitoring app', 'Prometheus', 'curl · scripts'].forEach((t, i) => {
-    g.append(sv('rect', { class: 'chipbg', x: 20, y: 46 + i * 52, width: 152, height: 42, rx: 9 }), sv('text', { class: 'ndt cl', x: 32, y: 72 + i * 52 }, t));
+  [['Monitoring app', 'login'], ['Prometheus', 'prometheus'], ['curl · scripts', null]].forEach(([t, conn], i) => {
+    const cg = asButton(sv('g', {}), `${t}: how to reach it`, () => openConnection(conn));
+    cg.append(sv('rect', { class: 'chipbg', x: 20, y: 46 + i * 52, width: 152, height: 42, rx: 9 }), sv('text', { class: 'ndt cl', x: 32, y: 72 + i * 52 }, t)); g.append(cg);
   });
   g.append(sv('text', { class: 'sub', x: 22, y: 286 }, '◆ scenarios'), sv('text', { class: 'sub', x: 22, y: 308 }, '◆ buttons'));
   const clientsOut = { x: G.clients.x + G.clients.w, y: G.clients.y + G.clients.h / 2 }, injOut = { x: G.injector.x + G.injector.w, y: G.injector.y + G.injector.h / 2 };
@@ -637,12 +689,13 @@ function buildFlow() {
   SERVICES.forEach(([k, label, sub], i) => {
     const p = { x: 284, y: 50 + i * 74, w: 196, h: 64 }; svcPos[k] = p;
     lanes.append(sv('path', { class: 'lane', id: 'ln-' + k, d: dpath(curve(clientsOut, { x: p.x, y: p.y + p.h / 2 })) }), sv('path', { class: 'lane inj', d: dpath(curve(injOut, { x: p.x, y: p.y + p.h / 2 + 8 })), opacity: 0.5 }));
-    g.append(sv('rect', { class: 'blk', id: 'fb-' + k, x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), sv('text', { class: 'sn', x: p.x + 12, y: p.y + 24 }, label), sv('text', { class: 'sub', id: 'fs-' + k, x: p.x + 12, y: p.y + 42 }, ''), sv('text', { class: 'sub', id: 'fc-' + k, x: p.x + 12, y: p.y + 58 }, sub));
+    const bg = asButton(sv('g', {}), `${label}: open its address and credential`, () => openConnection(SVC_CONN[k]));
+    bg.append(sv('rect', { class: 'blk', id: 'fb-' + k, x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), sv('text', { class: 'sn', x: p.x + 12, y: p.y + 24 }, label), sv('text', { class: 'sub', id: 'fs-' + k, x: p.x + 12, y: p.y + 42 }, ''), sv('text', { class: 'sub', id: 'fc-' + k, x: p.x + 12, y: p.y + 58 }, sub)); g.append(bg);
   });
   for (const item of layout) {
     if (item[0] === 'label') { g.append(sv('text', { class: 'ftitle', x: nx, y: item[2] + 4 }, item[1] === 'gpu' ? 'GPU nodes' : 'Compute nodes')); continue; }
     const [, n, x, ty] = item, glyph = STATE_ICON[n.state] || '?';
-    const tg = sv('g', { id: 'nd-' + n.name }); tg.append(sv('title', {}, `${n.name}: ${n.label}`), sv('rect', { class: 'nd ' + n.state, x, y: ty, width: TW, height: TH, rx: 7 }),
+    const tg = asButton(sv('g', { id: 'nd-' + n.name }), `${n.name}: ${n.label}. Open its panel`, () => showNode(n.name)); tg.append(sv('title', {}, `${n.name}: ${n.label}`), sv('rect', { class: 'nd ' + n.state, x, y: ty, width: TW, height: TH, rx: 7 }),
       sv('text', { class: 'ndt', x: x + 6, y: ty + 16 }, n.name), sv('text', { class: 'ndt', x: x + 6, y: ty + 31 }, glyph));
     g.append(tg); tiles[n.name] = { x, y: ty, w: TW, h: TH, g: tg };
   }
@@ -651,7 +704,7 @@ function buildFlow() {
 function paintTiles() {  // node states change without a rebuild; a different node list does rebuild
   const nodes = nodeList(), sig = nodes.map(n => n.name).join(',');
   if (sig !== flowNodes) { buildFlow(); return; }
-  for (const n of nodes) { const t = tiles[n.name]; if (t) { t.g.firstChild.textContent = `${n.name}: ${n.label}`; t.g.children[1].setAttribute('class', 'nd ' + n.state); t.g.children[3].textContent = STATE_ICON[n.state] || '?'; } }
+  for (const n of nodes) { const t = tiles[n.name]; if (t) { t.g.firstChild.textContent = `${n.name}: ${n.label}`; t.g.setAttribute('aria-label', `${n.name}: ${n.label}. Open its panel`); t.g.children[1].setAttribute('class', 'nd ' + n.state); t.g.children[3].textContent = STATE_ICON[n.state] || '?'; } }
 }
 function paintBlocks() {
   if (!flowSnap || !svcPos['bmc-farm']) return;

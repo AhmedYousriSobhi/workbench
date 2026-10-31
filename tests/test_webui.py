@@ -28,6 +28,10 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
+def no_stack(*args, **kw):
+    raise OSError("no stack in unit tests")  # a stack running on the host must not change the result
+
+
 @pytest.fixture
 def ui(tmp_path):
     sock = str(tmp_path / "gov.sock")
@@ -40,7 +44,7 @@ def ui(tmp_path):
     (scen / "slow.yaml").write_text("name: slow\ndescription: d\nsteps:\n  - {at: 0s, target: k8s, do: {a: 1}}\n"
                                     "  - {at: 1h, target: k8s, do: {b: 2}}\n")
     port = free_port()
-    server = uvicorn.Server(uvicorn.Config(create_app(TOKEN, sock, scen, ROOT / "sim.yaml", interval=0.05),
+    server = uvicorn.Server(uvicorn.Config(create_app(TOKEN, sock, scen, ROOT / "sim.yaml", interval=0.05, fetch=no_stack, poster=no_stack),
                                            host="127.0.0.1", port=port, log_level="error"))
     threading.Thread(target=server.run, daemon=True).start()
     deadline = time.time() + 5
@@ -240,3 +244,80 @@ def test_plan_apply_needs_csrf_validates_and_asks_the_governor(ui):
     code, body = req(ui, q, "POST", headers={"X-Requested-With": "workbench"})
     assert code == 200 and json.loads(body)["started"] is True
     assert b"pl-apply" in req(ui, "/")[1]
+
+
+def test_export_button_downloads_the_profile_and_explains_a_missing_format(ui, monkeypatch, tmp_path):
+    from benchctl import workbench
+    monkeypatch.setattr(workbench, "SAVED", tmp_path / "none.yaml")
+    monkeypatch.setattr("benchctl.export.stack.current_profile", lambda: "min")  # not whatever the host last started
+    monkeypatch.setattr("benchctl.export.LOCAL_FORMAT_FILE", tmp_path / "none")
+    monkeypatch.setattr("benchctl.export.format_id.__defaults__", (None, None, tmp_path / "none"))
+    monkeypatch.delenv("BENCH_EXPORT_FORMAT", raising=False)
+    code, body = req(ui, "/api/export/profile")
+    assert code == 422 and ".git/export-format" in json.loads(body)["detail"]
+    monkeypatch.setenv("BENCH_EXPORT_FORMAT", "demo:2")
+    code, body = req(ui, "/api/export/profile?bmc=1")
+    data = json.loads(body)
+    assert code == 200 and data["format"] == "demo" and data["version"] == 2 and len(data["bmc"]) == 6
+    assert "token" not in body.decode().lower() and req(ui, "/api/export/profile", auth=False)[0] == 401
+    assert b'id="expdlg"' in req(ui, "/")[1] and b"newer than its backend" in req(ui, "/")[1] and b"ssh-key install in a terminal" in req(ui, "/")[1] and b"Jira needs no token" in req(ui, "/")[1]
+
+
+def test_power_off_also_asks_the_governor_to_mark_the_node_down_in_slurm(tmp_path):
+    """The BMC and BCM change, but sinfo only follows if Slurm is told; the page has no Docker, so the governor does it."""
+    asked = []
+    answer = {"ok": True, "started": True}
+
+    def handle(cmd, req):
+        if cmd == "node-state":
+            asked.append(req)
+            return answer
+        return STATUS
+
+    sock = str(tmp_path / "g.sock")
+    gov = control.serve(sock, handle, lambda: {"compute"})
+    port = free_port()
+    server = uvicorn.Server(uvicorn.Config(create_app(TOKEN, sock, tmp_path, ROOT / "sim.yaml", fetch=no_stack, poster=lambda u, b: {}),
+                                           host="127.0.0.1", port=port, log_level="error"))
+    threading.Thread(target=server.run, daemon=True).start()
+    while not server.started:
+        time.sleep(0.02)
+    base, h = f"http://127.0.0.1:{port}", {"X-Requested-With": "workbench"}
+    try:
+        res = json.loads(req(base, "/api/nodes/cn002/power-off", "POST", headers=h)[1])["results"]
+        assert asked == [{"cmd": "node-state", "node": "cn002", "state": "down"}]
+        assert res[-1]["target"] == "slurm" and res[-1]["status"] == "ok"
+        answer.update(ok=False, error="refused at L3")
+        res = json.loads(req(base, "/api/nodes/cn002/power-on", "POST", headers=h)[1])["results"]
+        assert asked[-1]["state"] == "resume" and res[-1]["status"] == "skipped" and "refused at L3" in res[-1]["detail"]
+        res = json.loads(req(base, "/api/nodes/cn002/overheat", "POST", headers=h)[1])["results"]
+        assert not any(r["target"] == "slurm" for r in res)
+    finally:
+        server.should_exit = True
+        gov.shutdown()
+
+
+def test_settings_endpoint_serves_the_option_registry_and_the_sheet_draws_from_it(ui, monkeypatch, tmp_path):
+    from benchctl import workbench
+    monkeypatch.setattr(workbench, "SAVED", tmp_path / "none.yaml")
+    code, body = req(ui, "/api/settings")
+    parts = {p["id"]: p for p in json.loads(body)["parts"]}
+    assert code == 200 and set(parts) == set(workbench.PARTS) and parts["accounting"]["mb"] > 0 and parts["accounting"]["label"]
+    assert req(ui, "/api/settings", auth=False)[0] == 401
+    page = req(ui, "/")[1]
+    assert b"/api/settings" in page and b'id="pl-parts"' in page and b"\xe2\x9a\x99 Settings" in page
+
+
+def test_traffic_diagram_shapes_are_buttons_that_open_the_node_or_the_connection(ui):
+    page = req(ui, "/")[1].decode()
+    for needle in ("function asButton(", "role', 'button'", "showNode(n.name)", "openConnection(SVC_CONN[k])", "tr[data-id=",
+                   "#flow #dots { pointer-events:none; }", "Enter' || e.key === ' '"):
+        assert needle in page, needle
+
+
+def test_page_script_declares_every_function_once():
+    """A second `function name` silently replaces the first (hoisting): that emptied the traffic diagram (issue 142)."""
+    import re
+    page = (ROOT / "webui" / "static" / "index.html").read_text()
+    names = re.findall(r"^(?:async )?function ([A-Za-z_$][\w$]*)", page, re.MULTILINE)
+    assert len(names) > 20 and [n for n in set(names) if names.count(n) > 1] == []

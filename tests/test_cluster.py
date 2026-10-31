@@ -89,9 +89,10 @@ def test_actions_reuse_scenario_steps_with_the_node_filled_in():
     sent = []
     c = cluster.Cluster(SIM, fetch=make_fetch(), poster=lambda url, body: sent.append((url, body)))
     res = c.act("cn002", "power-off")
-    assert [r["status"] for r in res] == ["ok", "ok"]
+    assert [r["status"] for r in res] == ["ok", "ok", "ok"]
     assert sent == [("http://127.0.0.1:8000/sim/inject", {"node": "cn002", "power": "Off"}),
-                    ("http://127.0.0.1:8081/sim/inject", {"node": "cn002", "state": "DOWN"})]
+                    ("http://127.0.0.1:8081/sim/inject", {"node": "cn002", "state": "DOWN"}),
+                    ("http://127.0.0.1:9400/sim/inject", {"node": "cn002", "down": True})]
     sent.clear()
     c.act("gpu001", "gpu-xid")
     assert sent == [("http://127.0.0.1:9400/sim/inject", {"node": "gpu001", "xid": 79})]

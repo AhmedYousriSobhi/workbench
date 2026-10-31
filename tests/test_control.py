@@ -108,3 +108,14 @@ def test_apply_plan_accepts_only_bounded_ints_and_known_parts():
         assert d(bad)["ok"] is False
     from benchctl import workbench
     assert control.PLAN_PARTS == set(workbench.PARTS)
+
+
+def test_node_state_accepts_only_a_node_name_and_down_or_resume():
+    seen = []
+    d = lambda r: control.dispatch(json.dumps(r).encode(), lambda c, q: seen.append(q) or {"ok": True}, lambda: {"compute"})
+    assert d({"cmd": "node-state", "node": "cn001", "state": "down"}) == {"ok": True}
+    assert d({"cmd": "node-state", "node": "gpu002", "state": "resume"}) == {"ok": True}
+    for bad in ({"node": "cn001; rm", "state": "down"}, {"node": "../x", "state": "down"}, {"node": "cn001", "state": "drain"},
+                {"node": "cn001"}, {"state": "down"}, {"node": 1, "state": "down"}):
+        assert d({"cmd": "node-state", **bad})["ok"] is False
+    assert len(seen) == 2

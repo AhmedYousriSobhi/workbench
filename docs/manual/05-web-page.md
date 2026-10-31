@@ -20,7 +20,7 @@ screenshots in this chapter predate the redesign described below; regenerate the
 
 | Area | Shows |
 |---|---|
-| **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **▶ Scenarios**, **⚙ Plan**, help and the theme switch. Pressing the level or memory chip opens the **Governor** panel |
+| **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **▶ Scenarios**, **⚙ Settings**, help and the theme switch. Pressing the level or memory chip opens the **Governor** panel |
 | **Tabs and Needs attention** | the tabs *Nodes* and *Connections*, and one slim bar next to them with every item that needs you, or "All clear" |
 | **Stage** (Nodes tab) | the **traffic diagram** on the left and the **entity list** on the right |
 
@@ -82,7 +82,7 @@ live state.
 
 ## Plan: change the workbench
 
-**⚙ Plan** opens a panel with steppers for CPU nodes, GPU nodes and GPUs per node, toggles for the optional parts, and a
+**⚙ Settings** opens a panel with steppers for CPU nodes, GPU nodes and GPUs per node, toggles for the optional parts (accounting, Jira, BMC, BCM, scenarios, load; each shows the memory limit it adds, and the toggles show what is built now), and a
 memory bar ("1.7 GB needed of 4.5 GB free"). It shows the change against what runs now ("GPU nodes 2 → 3 (+1)") and the
 `benchctl up ...` command for a terminal. Editing the numbers only estimates. **Apply to the running workbench** (press
 twice: the second press confirms) asks the governor to rebuild it; new nodes start and nodes you no longer want are
@@ -134,3 +134,23 @@ page. Start with [Which command do I use?](11-which-command.md) when the command
 - The Profile and Budget manager (edit `sim.yaml` in the page) is **not built**; edit the file ([chapter 8](08-configuration.md)).
 - Backend memory stays under 50 MB. Starlette and one static page, no framework, no CDN.
 - Browser debugging for developers: `.venv/bin/python scripts/ui_shots.py` ([reference](10-reference.md)).
+
+## Export: a profile file for the monitoring client
+
+**⇩ Export** in the top strip downloads `bench-profile.json` for the cluster on disk (the workbench last built, else the
+profile `up` started); tick *One BMC target per node* to include the BMC farm. The file never holds secrets, so after a
+successful download the sheet lists what to set by hand: the SSH key (`benchctl ssh-key install`), the Grafana token
+(`compose/generated/secrets/grafana_viewer_token`), the BMC password if asked for, and that Jira needs no token. It also
+warns when Slurm accounting is missing (`sacct` would fail). See [export a profile](../guides/export-profile.md).
+
+**Power off and Slurm.** Power off sets the BMC and BCM state, makes the GPU exporter stop publishing the node (its GPU series vanish from Grafana, as on a dead host; Power on brings them back), and also asks the governor to mark the node `down` in Slurm,
+so `sinfo` shows it down; Power on and Clear faults resume it. This needs the governor started with `--workdir` (the
+launcher does) and level L0-L1; otherwise the page says Slurm was not told and names `benchctl set node NAME down`.
+
+A node powered off from the page stays `down` in Slurm until you power it on or run `benchctl set node NAME resume`
+(`ReturnToService=1`). A cluster built before this setting keeps the old behaviour until its `slurm.conf` is regenerated
+and reloaded: `./scripts/benchctl up`, then `./scripts/benchctl exec slurmctld -- scontrol reconfigure`.
+
+**The traffic diagram is clickable.** A node tile opens that node's panel; a service box (BMC farm, BCM mock, Jira mock,
+GPU exporter) or the *Monitoring app* and *Prometheus* chips open the Connections tab with that part's row marked. Tab to
+a shape and press Enter or Space for the same.
