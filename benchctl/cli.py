@@ -499,6 +499,8 @@ def export_profile(out: str = typer.Option("bench-profile.json", "-o", "--output
                    bmc: bool = typer.Option(False, "--bmc", help="also list one BMC target per node"),
                    bmc_via: str = typer.Option("login", "--bmc-via", help="how the client reaches BMCs: login (through the login node, "
                                                                           "address bmc-NODE) or direct (127.0.0.1)"),
+                   loopback: bool = typer.Option(False, "--loopback", help="write 127.0.0.1 and the published ports (a client that cannot "
+                                                                           "route to the cluster network) instead of the container IPs"),
                    configured: bool = typer.Option(False, "--configured", help="list what the selection says, not the running containers"),
                    fmt: str = typer.Option(None, "--format", help="client format ID[:VERSION]; else $BENCH_EXPORT_FORMAT "
                                                                  "or .git/export-format")) -> None:
@@ -515,7 +517,7 @@ def export_profile(out: str = typer.Option("bench-profile.json", "-o", "--output
             if not configured and not profile:
                 typer.echo("note: no containers are running, so this lists the configured cluster "
                            f"({prof}); start it first for the live one", err=True)
-        text = export.to_json(export.build(sim, services, name, bmc, user, live=bool(live), bmc_via=bmc_via), export.format_id(fmt))
+        text = export.to_json(export.build(sim, services, name, bmc, user, live=bool(live), bmc_via=bmc_via, loopback=loopback), export.format_id(fmt))
     except export.ExportError as e:
         typer.echo(f"cannot export: {e}", err=True)
         raise typer.Exit(1) from e

@@ -105,6 +105,7 @@ Profiles: `min`, `std`, `full`, `jira-real`, `mac-agent` ([architecture section 
 - NF-5. Starting, building and stopping the simulation MUST NOT need sudo (ADR 0010); root is only for the optional boot-time governor service.
 - NF-6. When the governor refuses an action (admission at L2 and above, GV-9) the tool MUST say so and why, and tests and scripts MUST NOT report that as a defect in the code under test.
 - NF-7. Every commit is authored and committed with the repository owner's (or an allow-listed contributor's) real GitHub noreply identity; GitHub credits by the numeric ID in the address, so a placeholder identity MUST be refused before it is committed or pushed (`scripts/check-identity.sh`, run by the pre-commit and pre-push hooks and `validate.sh`).
+- NF-8. Every container has a fixed private IP from one plan (`benchctl/addressing.py`, ADR 0018): compute nodes 10.141.0.N, GPU nodes 10.141.100.N, login 10.141.255.254, services 10.141.255.0/24. Clients use those at standard ports; 127.0.0.1 with the published ports is the fallback. `benchctl up` MUST refuse, with one message, an existing network with another subnet or a host route that overlaps the plan.
 
 ## 10. Acceptance (per roadmap phase)
 

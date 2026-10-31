@@ -1,6 +1,9 @@
 # Core observability (priority P1). Data directories live on capped tmpfs: sim state is disposable.
 services:
   prometheus:
+    networks:
+      default:
+        ipv4_address: 10.141.255.20  # benchctl/addressing.py SERVICE_HOSTS
     image: prom/prometheus:v2.53.0
     command:
       - --config.file=/etc/prometheus/prometheus.yml
@@ -15,6 +18,9 @@ services:
     cgroup_parent: workbench-p1.slice
     extra_hosts: ["host.docker.internal:host-gateway"]
   grafana:
+    networks:
+      default:
+        ipv4_address: 10.141.255.21  # benchctl/addressing.py SERVICE_HOSTS
     image: grafana/grafana-oss:11.1.0
     environment:
       GF_ANALYTICS_REPORTING_ENABLED: "false"
@@ -28,6 +34,9 @@ services:
     cgroup_parent: workbench-p1.slice
     depends_on: [prometheus]
   gpu-exporter-farm:
+    networks:
+      default:
+        ipv4_address: 10.141.255.22  # benchctl/addressing.py SERVICE_HOSTS
     image: python:3.12-slim
     command: sh -c "pip install -q pyyaml && python /app/exporter.py /sim.yaml 9400"
     volumes:

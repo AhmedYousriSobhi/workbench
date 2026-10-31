@@ -226,7 +226,10 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             info = await asyncio.to_thread(describe.gather, cluster.sim, request.path_params["node"], cluster.fetch)
         except describe.UnknownNode as e:
             raise HTTPException(404, str(e.args[0])) from e
-        return JSONResponse({"info": info, "text": describe.render(info)})
+        from benchctl import addressing
+
+        return JSONResponse({"info": info, "text": describe.render(info),
+                             "ip": addressing.plan(cluster.sim)["nodes"].get(request.path_params["node"])})
 
     async def connections(request: Request):
         from webui import connections as conn
@@ -243,7 +246,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             base = yaml.safe_load(sim_yaml.read_text())
             sim, services, label = export.configured(base)
             body = export.build(sim, services, "workbench", q.get("bmc") == "1", q.get("user") or None,
-                                bmc_via=q.get("bmc_via", "login"))
+                                bmc_via=q.get("bmc_via", "login"), loopback=q.get("addr") == "loopback")
             text = export.to_json(body, export.format_id())
         except export.ExportError as e:
             raise HTTPException(422, str(e)) from e

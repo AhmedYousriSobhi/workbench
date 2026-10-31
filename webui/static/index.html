@@ -322,7 +322,7 @@
   </div>
   <div id="tab-conn" role="tabpanel" aria-labelledby="tb-conn" hidden>
     <div class="panel"><h2>How to reach each part</h2>
-      <p class="dim small">Addresses are on this machine only (127.0.0.1). Credentials are never shown here: the last column is the file that holds them. A node's own address is in its details.</p>
+      <p class="dim small">Addresses are the cluster's fixed private IPs, reachable from this machine; 127.0.0.1 is the fallback where a row says so. Credentials are never shown here: the last column is the file that holds them. A node's own address is in its details.</p>
       <div class="tablewrap"><table class="conn"><thead><tr><th>Part</th><th>Address</th><th>Try it</th><th>Credential</th></tr></thead><tbody id="conn-rows"><tr><td colspan="4" class="skel">Loading…</td></tr></tbody></table></div></div>
   </div>
   <dialog id="scndlg" class="sheet" aria-labelledby="scn-h">
@@ -363,7 +363,9 @@
     <div class="sheet-b">
       <div class="toggles"><label class="tog"><input type="checkbox" id="exp-bmc" checked><span>One BMC target per node</span></label>
         <label class="small dim" for="exp-via" style="display:flex;align-items:center;gap:8px">Reached
-          <select id="exp-via"><option value="login">through the login node: bmc-NODE:8443</option><option value="direct">directly: 127.0.0.1:8443</option></select></label></div>
+          <select id="exp-via"><option value="login">through the login node: bmc-NODE:8443</option><option value="direct">directly: the BMC farm address, port 8443</option></select></label>
+        <label class="small dim" for="exp-addr" style="display:flex;align-items:center;gap:8px">Addresses
+          <select id="exp-addr"><option value="network">cluster IPs (10.141.x.x, standard ports)</option><option value="loopback">127.0.0.1 and published ports</option></select></label></div>
       <p class="small dim">The file holds no secrets. After importing it, set the SSH key (<code>benchctl ssh-key install</code>) and the Grafana token (<code>cat compose/generated/secrets/grafana_viewer_token</code>; it changes at every <code>benchctl up</code>).</p>
     </div>
     <div class="sheet-f"><p id="exp-msg" role="status" class="small"></p><button class="btn small" id="exp-cancel">Cancel</button><button class="btn" id="exp-go">Download bench-profile.json</button></div>
@@ -563,7 +565,7 @@ $('expdlg').addEventListener('click', e => { if (e.target === $('expdlg')) $('ex
 $('exp-go').onclick = async () => {
   $('exp-msg').textContent = 'Preparing…';
   try {
-    const r = await fetch('/api/export/profile' + ($('exp-bmc').checked ? '?bmc=1&bmc_via=' + $('exp-via').value : ''));
+    const r = await fetch('/api/export/profile' + ($('exp-bmc').checked ? '?bmc=1&bmc_via=' + $('exp-via').value : '?x=1') + '&addr=' + $('exp-addr').value);
     if (r.status === 404) { $('exp-msg').textContent = '✗ This page is newer than its backend. Restart it: ./scripts/benchctl stop && ./scripts/benchctl start'; return; }
     if (!r.ok) { $('exp-msg').textContent = '✗ ' + (await r.json()).detail; return; }
     const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = 'bench-profile.json';
@@ -626,14 +628,15 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && openNode &
 async function showNode(name) {
   openNode = name; openerEl = document.activeElement; paintNodeActions(name); $('nodeactmsg').textContent = '';
   $('tree').hidden = true; $('treenote').hidden = true; $('nodepane').hidden = false; $('nodetitle').textContent = name; $('node-back').focus();
-  const r = await fetch(`/api/nodes/${name}`);
+  const r = await fetch(`/api/nodes/${name}`), body = r.ok ? await r.json() : null;
   $('nodetitle').textContent = name;
   const cx = (await connections()).find(e => e.id === 'nodes'), kv = [];
   if (cx) kv.push(['SSH', `<code>${esc(cx.command.replace('<node>', name))}</code>`], ['User and key', esc(cx.how.split('.')[0]) + ` · key file <code>${esc(cx.credential)}</code>`]);
-  kv.push(['BMC', `<code>127.0.0.1:8443/redfish/v1</code> (HTTPS) with Host header <code>bmc-${esc(name)}</code>, user admin, password in <code>compose/generated/secrets/bmc_credentials</code>`],
-    ['IP address', `assigned by Docker at start; run <code>./scripts/benchctl describe node ${esc(name)}</code>`]);
+  const bm = (await connections()).find(e => e.id === 'bmc');
+  kv.push(['BMC', `<code>${esc(bm ? bm.address : '')}</code> (HTTPS) with Host header <code>bmc-${esc(name)}</code>, user admin, password in <code>compose/generated/secrets/bmc_credentials</code>`],
+    ['IP address', body && body.ip ? `<code>${esc(body.ip)}</code> (fixed; reach it from the login node)` : `run <code>./scripts/benchctl describe node ${esc(name)}</code>`]);
   $('nodeconn').innerHTML = kv.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
-  $('nodetext').textContent = r.ok ? (await r.json()).text : `Could not read ${name}: ${(await r.json()).detail}`;
+  $('nodetext').textContent = body ? body.text : `Could not read ${name}: ${(await r.json()).detail}`;
 }
 async function nodeAction(name, action, label) {
   const r = await fetch(`/api/nodes/${name}/${action}`, { method: 'POST', headers: H });

@@ -17,8 +17,9 @@ runner = CliRunner()
 
 def test_profile_describes_every_part_that_is_built():
     c = export.build(SIM, ALL)["clusters"][0]
-    assert c["connection"] == {"host": "127.0.0.1", "port": 2222, "username": "alice", "authMethod": "private-key"}
+    assert c["connection"] == {"host": "10.141.255.254", "port": 22, "username": "alice", "authMethod": "private-key"}
     assert c["scheduler"]["partitions"] == ["cpu", "gpu"] and c["scheduler"]["kind"] == "slurm"
+    assert c["grafana"]["baseUrl"] == "http://10.141.255.21:3000" and c["jira"]["baseUrl"] == "http://10.141.255.11:8080"
     assert c["grafana"]["dashboardUids"] == ["hpc-overview"] and c["grafana"]["gpuDatasourceUid"] == "prometheus"
     assert c["jira"]["projectKey"] == "OPS" and c["jira"]["authMode"] == "datacenter"
     assert c["storage"]["paths"] == ["~"] and c["k8s"] is None
@@ -161,6 +162,14 @@ def test_bmc_targets_use_the_node_name_through_the_login_node_and_loopback_when_
     via_login = export.build(SIM, ALL, include_bmc=True)["bmc"]
     assert [t["address"] for t in via_login][:2] == ["bmc-cn001", "bmc-cn002"] and {t["port"] for t in via_login} == {8443}
     direct = export.build(SIM, ALL, include_bmc=True, bmc_via="direct")["bmc"]
-    assert {t["address"] for t in direct} == {"127.0.0.1"} and [t["node"] for t in direct] == [t["node"] for t in via_login]
+    assert {t["address"] for t in direct} == {"10.141.255.12"} and [t["node"] for t in direct] == [t["node"] for t in via_login]
     with pytest.raises(export.ExportError, match="bad --bmc-via"):
         export.build(SIM, ALL, include_bmc=True, bmc_via="tunnel")
+
+
+def test_loopback_writes_the_published_ports_for_a_client_that_cannot_route_to_the_cluster():
+    c = export.build(SIM, ALL, include_bmc=True, bmc_via="direct", loopback=True)
+    cl = c["clusters"][0]
+    assert cl["connection"]["host"] == "127.0.0.1" and cl["connection"]["port"] == 2222
+    assert cl["grafana"]["baseUrl"] == "http://127.0.0.1:3000" and cl["jira"]["baseUrl"] == "http://127.0.0.1:8080"
+    assert {t["address"] for t in c["bmc"]} == {"127.0.0.1"}

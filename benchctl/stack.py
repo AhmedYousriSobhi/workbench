@@ -11,7 +11,7 @@ import urllib.error
 from collections.abc import Callable
 from pathlib import Path
 
-from . import checks, compose, workbench
+from . import addressing, checks, compose, workbench
 
 COMPOSE_FILE = Path("compose/generated/docker-compose.yml")
 PROJECT = "workbench"
@@ -105,6 +105,23 @@ def wait_running(names: list[str], runner: Runner = _run, timeout: float = 120,
     return pending
 
 
+def network_problem(runner: Runner = _run) -> str | None:
+    """Why the fixed addressing cannot be applied, or None. A network that already exists with another subnet cannot be
+    changed under running containers; a new one must not overlap a route of the host (a VPN, an office network)."""
+    r = runner(["docker", "network", "inspect", f"{PROJECT}_default", "--format", "{{range .IPAM.Config}}{{.Subnet}} {{end}}"])
+    have = r.stdout.split() if r.returncode == 0 else []
+    if have:
+        if addressing.INTERNAL in have:
+            return None
+        return (f"the cluster network uses {' '.join(have)} but the addressing plan is {addressing.INTERNAL} (ADR 0018): "
+                "run ./scripts/benchctl down once, then start again")
+    clash = addressing.overlaps(runner(["ip", "route"]).stdout)
+    if clash:
+        return (f"the host already routes {'; '.join(clash)}. The workbench needs {addressing.INTERNAL} and "
+                f"{addressing.IPMI}: disconnect that network or free the range")
+    return None
+
+
 def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None] = print,
        available: int | None = None, wait: float = 120, prof: dict | None = None) -> bool:
     """Start the profile. `prof` is a profile built from a workbench selection (benchctl apply): admitted by its own
@@ -118,6 +135,9 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     conf_changed = old_conf is not None and conf.is_file() and conf.read_text() != old_conf
     skip = unbuildable(data["services"], path.parent)
     todo = {n: v for n, v in data["services"].items() if n not in skip}
+    if (problem := network_problem(runner)):
+        say(f"REFUSED: {problem}")
+        return False
     missing = missing_mb(todo, runner, path)
     if missing:  # a running stack is already in "used" memory: nothing to admit when nothing starts
         if chosen is None:

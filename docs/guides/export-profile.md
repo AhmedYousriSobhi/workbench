@@ -29,10 +29,10 @@ Press **⇩ Export** in the top strip, tick *One BMC target per node* if you wan
 
 ## What is in the file
 
-Only parts the chosen profile builds: SSH (`127.0.0.1:2222`, user `alice`, private-key auth), Slurm (partitions from
-`sim.yaml`), Grafana (`http://127.0.0.1:3000`, dashboard `hpc-overview`, GPU datasource `prometheus`, label
-`Hostname`), Jira (`http://127.0.0.1:8080`, project `OPS`), storage (`~`) and, with `--bmc`, a target per node
-(`127.0.0.1:8443`, user `admin`, the node name). It has no password, token or key path. Kubernetes and BCM are not
+Only parts the chosen profile builds: SSH (`10.141.255.254:22`, user `alice`, private-key auth), Slurm (partitions from
+`sim.yaml`), Grafana (`http://10.141.255.21:3000`, dashboard `hpc-overview`, GPU datasource `prometheus`, label
+`Hostname`), Jira (`http://10.141.255.11:8080`, project `OPS`), storage (`~`) and, with `--bmc`, a target per node
+(`bmc-<node>:8443` through the login node, or the BMC farm `10.141.255.12:8443` with `--bmc-via direct`; user `admin`). `--loopback` writes `127.0.0.1` and the published ports instead (a client that cannot route to the cluster network, or that insists on HTTPS for non-local Jira). It has no password, token or key path. Kubernetes and BCM are not
 exported: Kubernetes is not built, and BCM is configured in the client over the SSH connection
 ([by component](client-setup-by-component.md)).
 

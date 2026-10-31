@@ -3,7 +3,7 @@ from pathlib import Path
 
 import yaml
 
-from . import slurmconf
+from . import addressing, slurmconf
 from .nodes import node_names
 
 OBSERVABILITY = "../observability.yml"  # static; hosts prometheus, grafana, gpu-exporter-farm
@@ -93,7 +93,12 @@ def generate(sim: dict, profile: dict) -> dict:
     if "jira-mock" in services:
         services["jira-mock"].update({"ports": ["127.0.0.1:8080:8080"]})
     _wire_slurm_services(services)
-    return {"name": "workbench", "include": [OBSERVABILITY], "services": services}
+    ips = addressing.plan(sim, profile.get("compute_nodes"))
+    for name, svc in services.items():  # a fixed address for everything (ADR 0018)
+        if ip := addressing.address_of(ips, name):
+            svc.setdefault("networks", {}).setdefault("default", {})["ipv4_address"] = ip
+    return {"name": "workbench", "include": [OBSERVABILITY],
+            "networks": {"default": {"ipam": {"config": [{"subnet": addressing.INTERNAL}]}}}, "services": services}
 
 
 def users_env(sim: dict) -> str:
