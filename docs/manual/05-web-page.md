@@ -150,3 +150,7 @@ launcher does) and level L0-L1; otherwise the page says Slurm was not told and n
 A node powered off from the page stays `down` in Slurm until you power it on or run `benchctl set node NAME resume`
 (`ReturnToService=1`). A cluster built before this setting keeps the old behaviour until its `slurm.conf` is regenerated
 and reloaded: `./scripts/benchctl up`, then `./scripts/benchctl exec slurmctld -- scontrol reconfigure`.
+
+**The traffic diagram is clickable.** A node tile opens that node's panel; a service box (BMC farm, BCM mock, Jira mock,
+GPU exporter) or the *Monitoring app* and *Prometheus* chips open the Connections tab with that part's row marked. Tab to
+a shape and press Enter or Space for the same.

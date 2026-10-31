@@ -306,3 +306,10 @@ def test_settings_endpoint_serves_the_option_registry_and_the_sheet_draws_from_i
     assert req(ui, "/api/settings", auth=False)[0] == 401
     page = req(ui, "/")[1]
     assert b"/api/settings" in page and b'id="pl-parts"' in page and b"\xe2\x9a\x99 Settings" in page
+
+
+def test_traffic_diagram_shapes_are_buttons_that_open_the_node_or_the_connection(ui):
+    page = req(ui, "/")[1].decode()
+    for needle in ("function hit(", "role', 'button'", "showNode(n.name)", "openConnection(SVC_CONN[k])", "tr[data-id=",
+                   "#flow #dots { pointer-events:none; }", "Enter' || e.key === ' '"):
+        assert needle in page, needle

@@ -124,6 +124,8 @@
   @media (min-width:1700px) { .nodeswrap { display:grid; grid-template-columns:minmax(0,1fr) 400px; align-items:start; } .nodesmain { order:1; } .trafficpanel { order:2; position:sticky; top:72px; } }
   #flow .frame { fill:color-mix(in srgb,var(--panel) 70%,var(--bg)); stroke:var(--line); stroke-width:1.5; } #flow .ftitle { font:700 11px system-ui,sans-serif; fill:var(--dim); letter-spacing:.05em; text-transform:uppercase; }
   #flow .chipbg { fill:var(--panel); stroke:var(--line); stroke-width:1.2; } #flow .lane { fill:none; stroke:var(--line); stroke-width:1.5; } #flow .lane.on { stroke:var(--accent); stroke-width:2.5; opacity:.85; } #flow .lane.inj { stroke-dasharray:2 5; }
+  #flow .hit { cursor:pointer; } #flow .hit:hover rect, #flow .hit:focus-visible rect { stroke:var(--accent); } #flow .hit:focus-visible { outline:2px solid var(--accent); outline-offset:2px; } #flow #dots { pointer-events:none; }
+  table.conn tr.focus td { background:var(--sel, rgba(80,140,255,.14)); }
   #flow .nd { fill:var(--panel); stroke:var(--line); stroke-width:1.5; } #flow .nd.ok { stroke:var(--ok); } #flow .nd.warn { stroke:var(--warn); stroke-width:2.2; } #flow .nd.fault { stroke:var(--bad); stroke-width:3; } #flow .nd.down { stroke:var(--pending); stroke-dasharray:3 3; } #flow .nd.unknown { stroke:var(--line); stroke-dasharray:1 3; }
   #flow .ndt { font:600 8.5px system-ui,sans-serif; fill:var(--fg); } #flow .ring { fill:none; stroke:var(--warn); stroke-width:2.5; animation:ring 1.1s ease-out forwards; transform-box:fill-box; transform-origin:center; }
   @keyframes ring { from { opacity:1; transform:scale(1); } to { opacity:0; transform:scale(2.2); } }
@@ -575,7 +577,7 @@ async function connections() {
 }
 async function paintConnections() {
   const rows = await connections();
-  $('conn-rows').innerHTML = rows.map(e => `<tr><td data-h="Part"><b>${esc(e.name)}</b><div class="small dim">${esc(e.how).replace(/`([^`]+)`/g, '<code>$1</code>')}</div></td>
+  $('conn-rows').innerHTML = rows.map(e => `<tr data-id="${esc(e.id)}"><td data-h="Part"><b>${esc(e.name)}</b><div class="small dim">${esc(e.how).replace(/`([^`]+)`/g, '<code>$1</code>')}</div></td>
     <td data-h="Address"><code>${esc(e.address)}</code></td><td data-h="Try it"><code>${esc(e.command)}</code><button class="btn small copy" data-copy="${esc(e.command)}" aria-label="Copy the command for ${esc(e.name)}">Copy</button></td>
     <td data-h="Credential">${e.credential ? `<code>${esc(e.credential)}</code>` : '<span class="dim">none</span>'}</td></tr>`).join('') || '<tr><td colspan="4">Could not load.</td></tr>';
   document.querySelectorAll('.copy').forEach(b => b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Copied'; } catch (e) { b.textContent = 'Select and copy'; } setTimeout(() => { b.textContent = 'Copy'; }, 1500); });
@@ -653,6 +655,17 @@ const curve = (a, b) => { const dx = (b.x - a.x) * 0.5; return [a, { x: a.x + dx
 const at = ([p0, p1, p2, p3], t) => { const u = 1 - t, f = (c) => u ** 3 * p0[c] + 3 * u * u * t * p1[c] + 3 * u * t * t * p2[c] + t ** 3 * p3[c]; return { x: f('x'), y: f('y') }; };
 const dpath = ([p0, p1, p2, p3]) => `M${p0.x} ${p0.y} C${p1.x} ${p1.y} ${p2.x} ${p2.y} ${p3.x} ${p3.y}`;
 function nodeList() { try { return lastCluster ? JSON.parse(lastCluster).nodes : []; } catch (e) { return []; } }
+const SVC_CONN = { 'bmc-farm': 'bmc', 'bcm-mock': 'bcm', 'jira-mock': 'jira', 'gpu-exporter': 'gpu' };  // diagram box -> Connections row
+function hit(el, name, act) {  // an SVG shape that behaves like a button: click, Enter or Space, announced by name
+  el.setAttribute('class', 'hit'); el.setAttribute('role', 'button'); el.setAttribute('tabindex', '0'); el.setAttribute('aria-label', name);
+  el.addEventListener('click', act); el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act(); } });
+  return el;
+}
+async function openConnection(id) {  // the Connections tab, with the row for this part marked
+  selectTab('conn'); await paintConnections();
+  const row = id && document.querySelector(`#conn-rows tr[data-id="${id}"]`); if (!row) return;
+  document.querySelectorAll('#conn-rows tr.focus').forEach(r => r.classList.remove('focus')); row.classList.add('focus'); row.scrollIntoView({ block: 'center' });
+}
 function buildFlow() {
   const g = $('flow'), nodes = nodeList(); g.innerHTML = ''; tiles = {}; svcPos = {};
   flowNodes = nodes.map(n => n.name).join(',');
@@ -664,8 +677,9 @@ function buildFlow() {
   g.append(fr(G.clients, 12), fr(G.injector, 12), fr(G.cluster, 14));
   g.append(sv('text', { class: 'ftitle', x: 22, y: 34 }, 'Clients'), sv('text', { class: 'ftitle', x: 22, y: 258 }, 'Faults'), sv('text', { class: 'ftitle', x: 284, y: 34 }, 'Cluster'));
   g.append(sv('text', { class: 'sub', id: 'fc-clients', x: 22, y: 204 }, ''), sv('text', { class: 'sub', id: 'fc-injector', x: 22, y: 328 }, ''));
-  ['Monitoring app', 'Prometheus', 'curl · scripts'].forEach((t, i) => {
-    g.append(sv('rect', { class: 'chipbg', x: 20, y: 46 + i * 52, width: 152, height: 42, rx: 9 }), sv('text', { class: 'ndt cl', x: 32, y: 72 + i * 52 }, t));
+  [['Monitoring app', 'login'], ['Prometheus', 'prometheus'], ['curl · scripts', null]].forEach(([t, conn], i) => {
+    const cg = hit(sv('g', {}), `${t}: how to reach it`, () => openConnection(conn));
+    cg.append(sv('rect', { class: 'chipbg', x: 20, y: 46 + i * 52, width: 152, height: 42, rx: 9 }), sv('text', { class: 'ndt cl', x: 32, y: 72 + i * 52 }, t)); g.append(cg);
   });
   g.append(sv('text', { class: 'sub', x: 22, y: 286 }, '◆ scenarios'), sv('text', { class: 'sub', x: 22, y: 308 }, '◆ buttons'));
   const clientsOut = { x: G.clients.x + G.clients.w, y: G.clients.y + G.clients.h / 2 }, injOut = { x: G.injector.x + G.injector.w, y: G.injector.y + G.injector.h / 2 };
@@ -673,12 +687,13 @@ function buildFlow() {
   SERVICES.forEach(([k, label, sub], i) => {
     const p = { x: 284, y: 50 + i * 74, w: 196, h: 64 }; svcPos[k] = p;
     lanes.append(sv('path', { class: 'lane', id: 'ln-' + k, d: dpath(curve(clientsOut, { x: p.x, y: p.y + p.h / 2 })) }), sv('path', { class: 'lane inj', d: dpath(curve(injOut, { x: p.x, y: p.y + p.h / 2 + 8 })), opacity: 0.5 }));
-    g.append(sv('rect', { class: 'blk', id: 'fb-' + k, x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), sv('text', { class: 'sn', x: p.x + 12, y: p.y + 24 }, label), sv('text', { class: 'sub', id: 'fs-' + k, x: p.x + 12, y: p.y + 42 }, ''), sv('text', { class: 'sub', id: 'fc-' + k, x: p.x + 12, y: p.y + 58 }, sub));
+    const bg = hit(sv('g', {}), `${label}: open its address and credential`, () => openConnection(SVC_CONN[k]));
+    bg.append(sv('rect', { class: 'blk', id: 'fb-' + k, x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), sv('text', { class: 'sn', x: p.x + 12, y: p.y + 24 }, label), sv('text', { class: 'sub', id: 'fs-' + k, x: p.x + 12, y: p.y + 42 }, ''), sv('text', { class: 'sub', id: 'fc-' + k, x: p.x + 12, y: p.y + 58 }, sub)); g.append(bg);
   });
   for (const item of layout) {
     if (item[0] === 'label') { g.append(sv('text', { class: 'ftitle', x: nx, y: item[2] + 4 }, item[1] === 'gpu' ? 'GPU nodes' : 'Compute nodes')); continue; }
     const [, n, x, ty] = item, glyph = STATE_ICON[n.state] || '?';
-    const tg = sv('g', { id: 'nd-' + n.name }); tg.append(sv('title', {}, `${n.name}: ${n.label}`), sv('rect', { class: 'nd ' + n.state, x, y: ty, width: TW, height: TH, rx: 7 }),
+    const tg = hit(sv('g', { id: 'nd-' + n.name }), `${n.name}: ${n.label}. Open its panel`, () => showNode(n.name)); tg.append(sv('title', {}, `${n.name}: ${n.label}`), sv('rect', { class: 'nd ' + n.state, x, y: ty, width: TW, height: TH, rx: 7 }),
       sv('text', { class: 'ndt', x: x + 6, y: ty + 16 }, n.name), sv('text', { class: 'ndt', x: x + 6, y: ty + 31 }, glyph));
     g.append(tg); tiles[n.name] = { x, y: ty, w: TW, h: TH, g: tg };
   }
@@ -687,7 +702,7 @@ function buildFlow() {
 function paintTiles() {  // node states change without a rebuild; a different node list does rebuild
   const nodes = nodeList(), sig = nodes.map(n => n.name).join(',');
   if (sig !== flowNodes) { buildFlow(); return; }
-  for (const n of nodes) { const t = tiles[n.name]; if (t) { t.g.firstChild.textContent = `${n.name}: ${n.label}`; t.g.children[1].setAttribute('class', 'nd ' + n.state); t.g.children[3].textContent = STATE_ICON[n.state] || '?'; } }
+  for (const n of nodes) { const t = tiles[n.name]; if (t) { t.g.firstChild.textContent = `${n.name}: ${n.label}`; t.g.setAttribute('aria-label', `${n.name}: ${n.label}. Open its panel`); t.g.children[1].setAttribute('class', 'nd ' + n.state); t.g.children[3].textContent = STATE_ICON[n.state] || '?'; } }
 }
 function paintBlocks() {
   if (!flowSnap || !svcPos['bmc-farm']) return;
