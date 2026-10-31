@@ -285,6 +285,26 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             return {"target": "slurm", "status": "skipped", "detail": "the governor is in dry-run mode or has no --workdir"}
         return {"target": "slurm", "status": "ok", "detail": f"asked the governor to set {node} {state}"}
 
+    async def node_workload(request: Request):
+        """Submit a job on this node: the governor runs `benchctl submit` (the page has no Docker, W-3)."""
+        q, node = request.query_params, request.path_params["node"]
+        try:
+            gpus, duration = int(q.get("gpus", "0")), int(q.get("duration", "300"))
+        except ValueError as e:
+            raise HTTPException(422, "gpus and duration must be whole numbers") from e
+        if node not in {n["name"] for n in cluster.snapshot()["nodes"]}:
+            raise HTTPException(404, f"unknown node {node}")
+        try:
+            res = await asyncio.to_thread(checks.governor_request, {"cmd": "submit-job", "node": node, "gpus": gpus, "duration": duration}, socket)
+        except (OSError, ValueError) as e:
+            raise HTTPException(503, "the governor is not reachable: start it with ./scripts/benchctl start") from e
+        if not res.get("ok"):
+            raise HTTPException(409, res.get("error", "the governor refused"))
+        if res.get("dry_run"):
+            return JSONResponse({"started": False, "message": f"The governor is in dry-run mode or has no --workdir, so nothing was submitted. Run: ./scripts/benchctl submit {node} --gpus {gpus} --duration {duration}"})
+        flow.note("slurm", f"job submitted on {node}", [node])
+        return JSONResponse({"started": True, "message": f"Job submitted on {node} for {duration // 60} min: squeue shows it in a few seconds."})
+
     async def node_action(request: Request):
         try:
             results = await asyncio.to_thread(cluster.act, request.path_params["node"], request.path_params["action"])
@@ -364,6 +384,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/connections", protected(connections)),
             Route("/api/export/profile", protected(export_profile)),
             Route("/api/nodes/{node}", protected(node_detail)),
+            Route("/api/nodes/{node}/workload", protected(node_workload, write=True), methods=["POST"]),
             Route("/api/nodes/{node}/{action}", protected(node_action, write=True), methods=["POST"]),
             Route("/api/scenarios", protected(list_scenarios)),
             Route("/api/scenarios/run", protected(run_state)),

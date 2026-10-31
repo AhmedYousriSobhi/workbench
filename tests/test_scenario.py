@@ -289,3 +289,9 @@ def test_faults_file_tickets_and_recovery_resolves_them_and_no_jira_is_not_a_fai
 
     out = scenario.execute(scenario.Step(0, "gpu-exporter", {"nodes": ["gpu001"], "xid": 79}), poster=refuse_jira)
     assert out.status == "ok" and "no Jira" in out.detail
+
+
+def test_a_jira_activity_step_switches_the_background_changes_and_is_validated():
+    sent = []
+    out = scenario.execute(scenario.Step(0, "jira", {"activity": {"on": True, "every": 5}}), poster=lambda u, b: sent.append((u, b)))
+    assert out.status == "ok" and sent == [("http://127.0.0.1:8080/sim/activity", {"on": True, "every": 5})]

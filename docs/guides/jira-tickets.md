@@ -93,6 +93,12 @@ Jira Cloud's Teams and Assets fields, attachments, linked tickets, Confluence, a
 client that needs one of them reads an empty answer, not an error. The mock keeps tickets in memory: a restart empties it.
 
 
+## A team working in the background
+
+The Jira mock starts with a team working the project, like a live Jira Cloud: about every 45 seconds one ticket moves along the workflow (Open, In Progress, Resolved, Closed), gets a comment from `bob`, `carol`, `dave` or `erin`, a new owner, is reopened, or a new ticket is filed (at most 30 open). Webhook events fire for each change. A ticket changed in the last 20 seconds is left alone, so your own edit is not undone under you.
+
+`benchctl set jira-activity off` stops it, `on --every 10 --seed 4` makes it faster and repeatable; `GET /sim/activity` shows the state and the number of changes; a scenario step `jira: {activity: {on: true, every: 5}}` switches it too.
+
 ## Tickets for node faults
 
 Every node fault files a ticket and every recovery resolves it, like an ops integration would. It happens in the same place as the fault, so the page's buttons, `benchctl set node NAME off|on` and a scenario's `bmc-farm` and `gpu-exporter` steps all do it. With no Jira in the cluster nothing is filed and nothing fails.

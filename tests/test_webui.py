@@ -340,3 +340,34 @@ def test_plan_with_a_bmc_selection_costs_less_and_names_the_flag(ui):
     one = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8&parts=bmc&bmc_nodes=cn001")[1])
     assert full["total_mb"] - one["total_mb"] == 2 * 32 and "--bmc-nodes cn001" in one["command"]
     assert req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8&parts=bmc&bmc_nodes=..%2Fx")[0] == 422
+
+
+def test_a_workload_button_asks_the_governor_to_submit_a_job_on_that_node(tmp_path):
+    asked, answer = [], {"ok": True, "started": True}
+
+    def handle(cmd, req):
+        if cmd == "submit-job":
+            asked.append(req)
+            return answer
+        return STATUS
+
+    sock = str(tmp_path / "g.sock")
+    gov = control.serve(sock, handle, lambda: {"compute"})
+    port = free_port()
+    server = uvicorn.Server(uvicorn.Config(create_app(TOKEN, sock, tmp_path, ROOT / "sim.yaml", fetch=no_stack, poster=lambda u, b: {}),
+                                           host="127.0.0.1", port=port, log_level="error"))
+    threading.Thread(target=server.run, daemon=True).start()
+    while not server.started:
+        time.sleep(0.02)
+    base, h = f"http://127.0.0.1:{port}", {"X-Requested-With": "workbench"}
+    try:
+        code, body = req(base, "/api/nodes/gpu001/workload?gpus=4&duration=600", "POST", headers=h)[:2]
+        assert code == 200 and json.loads(body)["started"] is True
+        assert asked == [{"cmd": "submit-job", "node": "gpu001", "gpus": 4, "duration": 600}]
+        assert req(base, "/api/nodes/nope/workload", "POST", headers=h)[0] == 404
+        assert req(base, "/api/nodes/cn001/workload?gpus=x", "POST", headers=h)[0] == 422
+        answer.update(ok=False, error="refused at L3")
+        assert req(base, "/api/nodes/cn001/workload", "POST", headers=h)[0] == 409
+    finally:
+        server.should_exit = True
+        gov.shutdown()

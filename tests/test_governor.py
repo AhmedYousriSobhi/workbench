@@ -428,6 +428,14 @@ def test_node_state_runs_benchctl_set_node(tmp_path):
     assert calls == [["set", "node", "cn003", "down"]] and any("node-state=cn003:down: done" in a for a in g.audit)
 
 
+def test_submit_job_runs_benchctl_submit(tmp_path):
+    import threading
+    calls, done = [], threading.Event()
+    g, _ = _calm_gov(tmp_path, effector=lambda a: calls.append(a) or done.set() or 0)
+    assert g.handle("submit-job", {"node": "gpu001", "gpus": 2, "duration": 300, "user": "bob"})["started"] and done.wait(5)
+    assert calls == [["submit", "gpu001", "--gpus", "2", "--duration", "300", "--user", "bob"]]
+
+
 def test_apply_plan_passes_the_bmc_nodes_to_benchctl(tmp_path):
     import threading
     calls, done = [], threading.Event()

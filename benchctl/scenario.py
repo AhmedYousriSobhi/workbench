@@ -20,7 +20,7 @@ from .nodes import node_names
 
 ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "http://127.0.0.1:8000/sim/inject",
              "bcm-mock": "http://127.0.0.1:8081/sim/inject", "jira": "http://127.0.0.1:8080/sim/failure",
-             "jira-tickets": "http://127.0.0.1:8080/sim/tickets"}
+             "jira-tickets": "http://127.0.0.1:8080/sim/tickets", "jira-activity": "http://127.0.0.1:8080/sim/activity"}
 JIRA_ACTIONS = ("create", "transition", "comment", "fault", "reset")
 SLURMCTLD = "workbench-slurmctld-1"
 LOGIN = "workbench-login-1"
@@ -110,7 +110,7 @@ def validate(sc: dict, sim: dict) -> list[str]:
         except (KeyError, ScenarioError):
             problems.append(f"step {i}: bad or missing 'at'")
         t = s.get("target")
-        if t == "jira-tickets":  # the endpoint key, not a target: steps say `jira` with `tickets:`
+        if t in ("jira-tickets", "jira-activity"):  # the endpoint key, not a target: steps say `jira` with `tickets:`
             problems.append(f"step {i}: unknown target {t!r}")
             continue
         if t not in ENDPOINTS and t not in HOST_TARGETS and t not in NOT_BUILT:
@@ -296,6 +296,8 @@ def _apply(step: Step, poster, runner, host: bool, slurm) -> Outcome:
         elif step.target == "jira":
             if "tickets" in step.do:  # {tickets: {action: create|transition|comment|reset, ...}}
                 poster(ENDPOINTS["jira-tickets"], step.do["tickets"])
+            elif "activity" in step.do:  # {activity: {on: true, every: 10}}
+                poster(ENDPOINTS["jira-activity"], step.do["activity"])
             else:
                 poster(ENDPOINTS["jira"], step.do.get("failure", {"mode": None}))
         else:

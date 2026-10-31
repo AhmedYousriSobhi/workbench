@@ -17,6 +17,7 @@ GET  /rest/api/{2,3}/user/search | user/assignable/search   ?query= or ?username
 GET  /rest/api/{2,3}/{myself,serverInfo,field,project,project/search}
 JQL: AND OR NOT ( ), = != ~ !~ in, not in, is [not] EMPTY, < > <= >= (dates, -7d), currentUser(), ORDER BY created|updated|key; fields incl. watcher (reporter, assignee); dates as 2026-10-30 14:00 or 2026/10/30 14:00
 POST /rest/webhooks/1.0/webhook                   {"url": "...", "events": ["jira:issue_created", ...]}
+GET|POST /sim/activity {"on": true, "every": 30, "seed": 1}   (background changes by a team, #158; JIRA_ACTIVITY_EVERY sets it at start)
 POST /sim/failure  {"mode": "401|429|503|slow", "count": 3, "delay": 2}   (applies to the next /rest requests)
 GET|POST /sim/tickets   {"action": "create|transition|comment|fault|reset", ...}: tickets without a client (scenarios, #107)
 GET  /rest/api/{2,3}/issue/KEY/editmeta            (priority, labels, description, summary: what an edit form draws)
@@ -24,7 +25,10 @@ GET  /healthz
 Workflow: Open -> In Progress -> Resolved (needs "resolution") -> Closed; Reopen from any later state.
 """
 import base64
+import calendar
 import json
+import os
+import random
 import re
 import sys
 import threading
@@ -40,6 +44,15 @@ WORKFLOW = {
     "Resolved": [("41", "Close", "Closed", []), ("51", "Reopen", "Open", [])],
     "Closed": [("51", "Reopen", "Open", [])],
 }
+COOLDOWN = 20  # seconds a ticket is left alone after any change
+ENGINEERS = ("bob", "carol", "dave", "erin")
+CHATTER = ("Looking into this now.", "Can someone confirm this is still happening?", "Checked the node, nothing obvious yet.",
+           "Restarted the service, watching it.", "Vendor case opened, waiting on a reply.", "Seen this before, same cause as last week.",
+           "Moving this up, users are asking.", "Not reproducible on my side, will retry after the next job.")
+NEW_TICKETS = (("Job stuck in CG state on the CPU partition", "Medium"), ("Request: more scratch quota for a project", "Low"),
+               ("InfiniBand port flapping on a rack switch", "High"), ("Login node slow, high load", "Medium"),
+               ("Reservation needed for a training run next week", "Low"), ("Lustre mount stale on a compute node", "High"),
+               ("Grafana dashboard shows no GPU data", "Medium"), ("License server unreachable from the cluster", "High"))
 FAULTS = {"power": ("node is down (powered off)", "Highest"), "xid": ("GPU error", "High"),
           "overheat": ("node is overheating", "High"), "fan": ("fan failure", "Medium")}  # kind: (summary, priority)
 RESOLUTIONS = ("Done", "Won't Do", "Duplicate", "Cannot Reproduce")
@@ -119,6 +132,9 @@ class Jira:
         self.failure = {"mode": None, "count": 0, "delay": 0.0}
         self.deliver, self.sleep = deliver, sleep
         self.lock = threading.Lock()
+        self.activity = {"on": False, "every": 30.0, "seed": None, "changes": 0}
+        self.stop = threading.Event()
+        self.rng = random.Random()
 
     def set_failure(self, req: dict) -> None:
         if req.get("mode") not in ("401", "429", "503", "slow", None):
@@ -183,13 +199,13 @@ class Jira:
         found = self.get(key)["fields"]["comment"]["comments"]
         return {"startAt": 0, "maxResults": len(found), "total": len(found), "comments": found}
 
-    def comment(self, key: str, body: dict) -> dict:
+    def comment(self, key: str, body: dict, author: str = "") -> dict:
         issue = self.get(key)
         if not body.get("body"):
             raise JiraError(400, errors={"comment": "Comment body can not be empty!"})
         found = issue["fields"]["comment"]["comments"]
         now = stamp()
-        c = {"id": str(max((int(x["id"]) for x in found), default=0) + 1), "body": body["body"], "author": person(ME),
+        c = {"id": str(max((int(x["id"]) for x in found), default=0) + 1), "body": body["body"], "author": person(author or ME),
              "created": now, "updated": now, **({"visibility": body["visibility"]} if body.get("visibility") else {})}
         found.append(c)
         touch(issue)
@@ -324,6 +340,71 @@ class Jira:
         if action == "fault":
             return self.fault(body)
         raise JiraError(400, ["action must be create, transition, comment, fault or reset"])
+
+    def set_activity(self, req: dict) -> dict:
+        """Background activity (#158): every `every` seconds (a little jittered) one change a team would make: a ticket moves
+        along the workflow, gets a comment or a new owner, is reopened, or a new one is filed. Tickets touched in the last
+        COOLDOWN seconds are left alone, so a client's own edit is not undone under it."""
+        every = float(req.get("every", self.activity["every"]))
+        if every < 1:
+            raise JiraError(400, ["every must be at least 1 second"])
+        self.stop.set()  # ends a running loop; a new one starts below when it is on
+        self.stop = stop = threading.Event()
+        self.activity = {"on": bool(req.get("on", True)), "every": every, "seed": req.get("seed"),
+                         "changes": self.activity["changes"]}
+        self.rng = random.Random(req.get("seed"))
+        if self.activity["on"]:
+            threading.Thread(target=self._run_activity, args=(stop,), daemon=True).start()
+        return dict(self.activity)
+
+    def _run_activity(self, stop: threading.Event) -> None:
+        while not stop.wait(self.activity["every"] * self.rng.uniform(0.7, 1.3)):
+            try:
+                self.tick()
+            except JiraError:
+                pass
+
+    def tick(self) -> str | None:
+        """One background change; what was done, or None when nothing was fit to change."""
+        r = self.rng
+        now = time.time()
+        quiet = [i for i in self.issues.values() if now - calendar.timegm(time.strptime(i["fields"]["updated"][:19], "%Y-%m-%dT%H:%M:%S")) >= COOLDOWN]
+        live = [i for i in quiet if i["fields"]["status"]["name"] in ("Open", "In Progress")]
+        done = [i for i in quiet if i["fields"]["status"]["name"] == "Resolved"]
+        choice = r.choices(["advance", "comment", "assign", "create", "reopen"], [45, 25, 10, 12, 8])[0]
+        if choice == "create" and sum(i["fields"]["status"]["name"] != "Closed" for i in self.issues.values()) >= 30:
+            choice = "advance"
+        who = r.choice(ENGINEERS)
+        if choice == "create":
+            summary, priority = r.choice(NEW_TICKETS)
+            key = self.create({"fields": {"project": {"key": "OPS"}, "summary": summary, "priority": {"name": priority},
+                                          "issuetype": {"name": "Task"}, "reporter": r.choice(ENGINEERS), "labels": ["activity"]}})["key"]
+            self.changes(1)
+            return f"created {key}"
+        pool = {"advance": live + done, "comment": live, "assign": live, "reopen": done}[choice]
+        if not pool:
+            return None
+        issue = r.choice(pool)
+        key, status = issue["key"], issue["fields"]["status"]["name"]
+        if choice == "comment":
+            self.comment(key, {"body": r.choice(CHATTER)}, who)
+        elif choice == "assign":
+            self.assign(key, {"name": who})
+        elif choice == "reopen":
+            self.move_to(issue, "Open")
+        elif status == "Open":
+            if not issue["fields"].get("assignee"):
+                self.assign(key, {"name": who})
+            self.move_to(issue, "In Progress")
+        elif status == "In Progress":
+            self.move_to(issue, "Resolved", r.choices(RESOLUTIONS, [80, 8, 6, 6])[0])
+        else:
+            self.move_to(issue, "Closed")
+        self.changes(1)
+        return f"{choice} {key}"
+
+    def changes(self, n: int) -> None:
+        self.activity["changes"] += n
 
     def fault(self, body: dict) -> dict:
         """What an ops integration does about a node fault: `open` files one ticket per node and kind (a repeat of the same
@@ -648,6 +729,8 @@ def make_handler(jira: Jira):
             if url.path == "/sim/failure" and method == "POST":
                 jira.set_failure(self._body())
                 return 200, {"ok": True}
+            if url.path == "/sim/activity":
+                return 200, jira.set_activity(self._body()) if method == "POST" else dict(jira.activity)
             if url.path == "/sim/tickets":
                 return 200, jira.sim_tickets(self._body()) if method == "POST" else jira.overview()
             api = API.match(url.path)
@@ -774,7 +857,11 @@ def make_handler(jira: Jira):
 
 def main() -> None:
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
-    ThreadingHTTPServer(("0.0.0.0", port), make_handler(Jira())).serve_forever()
+    jira = Jira()
+    every = float(os.environ.get("JIRA_ACTIVITY_EVERY") or 0)  # compose sets it; 0 leaves the project still until /sim/activity
+    if every:
+        jira.set_activity({"on": True, "every": every})
+    ThreadingHTTPServer(("0.0.0.0", port), make_handler(jira)).serve_forever()
 
 
 if __name__ == "__main__":

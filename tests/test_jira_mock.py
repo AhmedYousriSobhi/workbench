@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import random
 import threading
 import time
 from http.server import ThreadingHTTPServer
@@ -334,3 +335,30 @@ def test_a_fault_needs_a_node_and_a_known_kind(server):
     base, *_ = server
     assert call(base, "/sim/tickets", {"action": "fault", "node": "cn001", "kind": "nope"})[0] == 400
     assert call(base, "/sim/tickets", {"action": "fault", "kind": "power"})[0] == 400
+
+
+def test_background_activity_changes_tickets_on_its_own_and_leaves_fresh_ones_alone(monkeypatch):
+    j = jira.Jira(deliver=lambda *a: None)
+    j.rng = random.Random(7)
+    for n in range(6):
+        j.create({"fields": {"project": {"key": "OPS"}, "summary": f"t{n}"}})
+    assert j.tick() is None  # everything was just touched: the cooldown keeps the background from undoing a client's edit
+    monkeypatch.setattr(jira, "COOLDOWN", 0)
+    did = [j.tick() for _ in range(80)]
+    assert j.activity["changes"] == len([d for d in did if d])
+    kinds = {d.split()[0] for d in did if d}
+    assert {"advance", "comment", "assign", "created"} <= kinds
+    statuses = {i["fields"]["status"]["name"] for i in j.issues.values()}
+    assert statuses & {"In Progress", "Resolved", "Closed"}
+    assert any(c["author"]["name"] in jira.ENGINEERS for i in j.issues.values() for c in i["fields"]["comment"]["comments"])
+    assert sum(i["fields"]["status"]["name"] != "Closed" for i in j.issues.values()) <= 31  # new tickets stop at 30 open
+
+
+def test_activity_is_switched_over_http_and_stops(server):
+    base, *_ = server
+    assert call(base, "/sim/activity")[1]["on"] is False
+    on = call(base, "/sim/activity", {"on": True, "every": 1, "seed": 3})[1]
+    assert on["on"] is True and on["every"] == 1 and on["seed"] == 3
+    assert call(base, "/sim/activity", {"on": False})[1]["on"] is False
+    assert call(base, "/sim/activity", {"every": 0})[0] == 400
+    assert call(base, "/sim/stats")[1]["requests"] == 0  # control calls are not client traffic

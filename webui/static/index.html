@@ -310,6 +310,8 @@
       <p class="small dim" style="margin:0 0 var(--sp2)">Break it, then watch the traffic diagram.</p><div class="actions" id="nodeacts-fault"></div>
       <p class="small dim" style="margin:var(--sp3) 0 var(--sp2)">Recover</p><div class="actions" id="nodeacts-fix"></div>
       <p id="nodeactmsg" role="status" class="small"></p></div>
+    <div class="np-card"><h3>Workload</h3>
+      <p class="small dim" style="margin:0 0 var(--sp2)">Submit a job on this node; <code>squeue</code> lists it and the node shows allocated.</p><div class="actions" id="nodeacts-job"></div></div>
     <div class="np-card"><h3>Info</h3><dl class="kv" id="nodeconn"></dl><pre id="nodetext"></pre>
       <p class="dim small" style="margin:var(--sp2) 0 0">Same text as <code>benchctl describe node NAME</code>, without the Docker and Slurm lines (this page has no Docker access by design).</p></div>
   </section>
@@ -623,6 +625,9 @@ function paintNodeActions(name) {
   const ok = n ? c.actions.filter(a => !a.gpu_only || n.kind === 'gpu') : [];
   $('nodeacts-fault').innerHTML = btns(ok.filter(a => !fix.has(a.id))); $('nodeacts-fix').innerHTML = btns(ok.filter(a => fix.has(a.id)));
   document.querySelectorAll('#nodepane .actions .btn').forEach(b => b.onclick = () => nodeAction(b.dataset.node, b.dataset.action, b.textContent));
+  const jobs = n && n.kind === 'gpu' ? [['1 GPU, 5 min', 1, 300], [`All ${n.gpus} GPUs, 5 min`, n.gpus, 300], ['All GPUs, 30 min', n.gpus, 1800]] : [['1 CPU, 5 min', 0, 300], ['1 CPU, 30 min', 0, 1800]];
+  $('nodeacts-job').innerHTML = n ? jobs.map(([l, g, d]) => `<button class="btn" data-gpus="${g}" data-dur="${d}">Run ${esc(l)}</button>`).join('') : '';
+  document.querySelectorAll('#nodeacts-job .btn').forEach(b => b.onclick = () => nodeJob(name, +b.dataset.gpus, +b.dataset.dur));
   if (n) { $('nodestate').className = 'pill ' + n.state; $('nodestate').textContent = `${STATE_ICON[n.state]} ${n.label}`; }
 }
 let openNode = null, openerEl = null;
@@ -645,6 +650,11 @@ async function showNode(name) {
   if (body) kv[kv.findIndex(r => r[0] === 'BMC')] = ['BMC', body.bmc_ip ? `<code>${esc(body.bmc_ip)}:443</code> (HTTPS), user admin, password in <code>compose/generated/secrets/bmc_credentials</code>` : 'none for this node (switched off in Settings)'];
   $('nodeconn').innerHTML = kv.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
   $('nodetext').textContent = body ? body.text : `Could not read ${name}: ${(await r.json()).detail}`;
+}
+async function nodeJob(name, gpus, dur) {
+  const r = await fetch(`/api/nodes/${name}/workload?gpus=${gpus}&duration=${dur}`, { method: 'POST', headers: H });
+  const m = r.ok ? (await r.json()).message : `Could not submit on ${name}: ${(await r.json()).detail}`;
+  toast(m); $('nodeactmsg').textContent = m;
 }
 async function nodeAction(name, action, label) {
   const r = await fetch(`/api/nodes/${name}/${action}`, { method: 'POST', headers: H });
