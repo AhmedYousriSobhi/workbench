@@ -310,6 +310,14 @@ def test_settings_endpoint_serves_the_option_registry_and_the_sheet_draws_from_i
 
 def test_traffic_diagram_shapes_are_buttons_that_open_the_node_or_the_connection(ui):
     page = req(ui, "/")[1].decode()
-    for needle in ("function hit(", "role', 'button'", "showNode(n.name)", "openConnection(SVC_CONN[k])", "tr[data-id=",
+    for needle in ("function asButton(", "role', 'button'", "showNode(n.name)", "openConnection(SVC_CONN[k])", "tr[data-id=",
                    "#flow #dots { pointer-events:none; }", "Enter' || e.key === ' '"):
         assert needle in page, needle
+
+
+def test_page_script_declares_every_function_once():
+    """A second `function name` silently replaces the first (hoisting): that emptied the traffic diagram (issue 142)."""
+    import re
+    page = (ROOT / "webui" / "static" / "index.html").read_text()
+    names = re.findall(r"^(?:async )?function ([A-Za-z_$][\w$]*)", page, re.MULTILINE)
+    assert len(names) > 20 and [n for n in set(names) if names.count(n) > 1] == []
