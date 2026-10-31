@@ -7,8 +7,10 @@
 #  prolog:   exits 1 when unhealthy, so Slurm requeues the job instead of running it on a bad node.
 #  epilog:   always exits 0 (the drain is done here): catches a fault the job caused before the next one is scheduled.
 # Test hooks: NHC_METRICS_FILE (instead of the exporter), NHC_SCONTROL, NHC_NODE, NHC_EXPECTED_GPUS, NHC_EXPECTED_IB,
-# NHC_STATE_DIR (where the carrier counter is remembered between runs).
+# NHC_STATE_DIR (where the carrier counter is remembered between runs), NHC_ENV_FILE (default /etc/workbench-node.env).
 mode=${1:-periodic}
+# slurmd gives this script a bare environment: what to expect of the node comes from the file the entrypoint wrote.
+[ -r "${NHC_ENV_FILE:-/etc/workbench-node.env}" ] && . "${NHC_ENV_FILE:-/etc/workbench-node.env}"
 node=${NHC_NODE:-$(hostname -s)}
 expected=${NHC_EXPECTED_GPUS:-${WORKBENCH_GPUS:-0}}
 expected_ib=${NHC_EXPECTED_IB:-${WORKBENCH_IB:-0}}

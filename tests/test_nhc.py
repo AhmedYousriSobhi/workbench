@@ -72,6 +72,7 @@ def test_slurm_runs_it_on_every_node_and_the_image_ships_it():
     assert "Prolog=/usr/local/sbin/nhc-prolog" in conf and "Epilog=/usr/local/sbin/nhc-epilog" in conf
     assert "COPY --chmod=755 nhc nhc-prolog nhc-epilog /usr/local/sbin/" in (NHC.parent / "Dockerfile").read_text()
     assert os.access(NHC, os.X_OK)
+    assert "/etc/workbench-node.env" in (NHC.parent / "entrypoint.sh").read_text()  # slurmd's bare environment: counts come from this file
     for wrapper, mode in (("nhc-prolog", "prolog"), ("nhc-epilog", "epilog")):
         assert os.access(NHC.parent / wrapper, os.X_OK) and f"nhc {mode}" in (NHC.parent / wrapper).read_text()
 
@@ -116,3 +117,21 @@ def test_the_epilog_drains_but_always_succeeds(tmp_path):
 
 def test_a_node_without_ib_or_gpu_expectations_is_not_checked(tmp_path):
     assert run(tmp_path, ib_metrics([1]), expected=0, ib=0)[1] == []
+
+
+def test_the_expectations_come_from_the_node_file_when_slurmd_gives_a_bare_environment(tmp_path):
+    """slurmd runs the health check without the container's environment: GPU and IB counts must come from a file."""
+    (tmp_path / "m.txt").write_text(ib_metrics([4, 1]) + metrics(xid=79, gpus=2))
+    stub = tmp_path / "scontrol"
+    stub.write_text(f'#!/bin/sh\nif [ "$1" = show ]; then exit 0; fi\necho "$@" >> {tmp_path}/calls.txt\n')
+    stub.chmod(0o755)
+    envfile = tmp_path / "node.env"
+    envfile.write_text("WORKBENCH_GPUS=2\nWORKBENCH_IB=2\n")
+    bare = {"PATH": os.environ["PATH"], "NHC_METRICS_FILE": str(tmp_path / "m.txt"), "NHC_SCONTROL": str(stub), "NHC_NODE": "gpu001",
+            "NHC_STATE_DIR": str(tmp_path), "NHC_ENV_FILE": str(envfile)}
+    r = subprocess.run(["bash", str(NHC)], check=False, env=bare, capture_output=True, text=True, timeout=10)
+    reason = (tmp_path / "calls.txt").read_text()
+    assert r.returncode == 1 and "GPU XID 79" in reason and "IB port down: mlx5_1" in reason
+    envfile.unlink()  # no file and no environment: nothing to expect, nothing to drain
+    (tmp_path / "calls.txt").unlink()
+    assert subprocess.run(["bash", str(NHC)], check=False, env=bare, capture_output=True, text=True, timeout=10).returncode == 0
