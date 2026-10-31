@@ -101,6 +101,8 @@ def test_stack_lifecycle(sim):
     assert redfish("cn001/redfish/v1/Systems/1")["PowerState"] == "On"  # bmc-farm answers
     devices = post_json("http://127.0.0.1:8081/json", {"service": "cmdevice", "call": "getDevices"})["result"]
     assert [d["hostname"] for d in devices] == ["cn001", "cn002", "cn003", "cn004", "gpu001", "gpu002"]  # bcm-mock
+    post_json("http://127.0.0.1:8080/sim/activity", {"on": False})  # the mock starts with a backlog and a team working it:
+    post_json("http://127.0.0.1:8080/sim/tickets", {"action": "reset"})  # start numbering from OPS-1 for this check
     issue = post_json("http://127.0.0.1:8080/rest/api/2/issue",
                       {"fields": {"project": {"key": "OPS"}, "summary": "real-test"}})
     assert issue["key"] == "OPS-1"  # jira-mock

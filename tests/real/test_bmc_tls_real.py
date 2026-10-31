@@ -86,7 +86,7 @@ def test_every_node_resolves_by_its_network_alias(farm):
     out = subprocess.run(["docker", "exec", "workbench-jira-mock-1", "python", "-c",
                           "import socket;print(socket.gethostbyname('bmc-cn001'))"],
                          capture_output=True, text=True, check=False)
-    assert out.returncode == 0 and out.stdout.strip().startswith("172.")
+    assert out.returncode == 0 and out.stdout.strip() == "10.148.0.1"  # its own address on the ipmi network (ADR 0018)
 
 
 def test_legacy_http_surface_still_answers_without_auth(farm):

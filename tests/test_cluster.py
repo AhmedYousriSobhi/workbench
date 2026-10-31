@@ -150,3 +150,20 @@ def test_gpu_util_by_node_groups_every_gpu():
     text = ('DCGM_FI_DEV_GPU_UTIL{gpu="0",Hostname="gpu001"} 90\nDCGM_FI_DEV_GPU_UTIL{gpu="1",Hostname="gpu001"} 2\n'
             'DCGM_FI_DEV_GPU_UTIL{gpu="0",Hostname="gpu002"} 0\nDCGM_FI_DEV_XID_ERRORS{Hostname="gpu001"} 0')
     assert cluster.gpu_util_by_node(text) == {"gpu001": [90.0, 2.0], "gpu002": [0.0]}
+
+
+def test_infiniband_and_nic_faults_show_on_the_node_card():
+    text = ('node_infiniband_state_id{node="gpu001",Hostname="gpu001",device="mlx5_0",port="1"} 1\n'
+            'node_infiniband_state_id{node="gpu001",Hostname="gpu001",device="mlx5_1",port="1"} 4\n'
+            'node_infiniband_state_id{node="cn001",Hostname="cn001",device="mlx5_0",port="1"} 4\n'
+            'sim_nic_flapping{node="cn001"} 1\nsim_nic_flapping{node="gpu001"} 0\n')
+    assert cluster.ib_by_node(text) == ({"gpu001": 1}, {"cn001"})
+    base = {"power": "On", "temp": 50, "fans_failed": 0, "xid": 0, "bcm": "UP"}
+    assert cluster.classify({**base, "ib_down": 2}) == ("warn", "2 InfiniBand port(s) down")
+    assert cluster.classify({**base, "nic_flap": True}) == ("warn", "NIC flapping")
+    snap = cluster.Cluster(SIM, fetch=make_fetch(xid=text)).snapshot()
+    by = {n["name"]: n for n in snap["nodes"]}
+    assert by["gpu001"]["label"] == "1 InfiniBand port(s) down" and by["cn001"]["label"] == "NIC flapping"
+    sent = []
+    cluster.Cluster(SIM, fetch=make_fetch(), poster=lambda url, body: sent.append((url, body))).act("gpu001", "ib-down")
+    assert ("http://127.0.0.1:9400/sim/inject", {"node": "gpu001", "ib_down": 1}) in sent

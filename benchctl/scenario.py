@@ -218,8 +218,16 @@ def side_effects(step: Step) -> list[Step]:
     else:
         if int(do.get("xid") or 0) > 0:
             faults.append(("xid", f"XID {do['xid']}"))
+        if int(do.get("ib_down") or 0) > 0:
+            faults.append(("ib", f"{do['ib_down']} InfiniBand port(s) down"))
+        if do.get("nic_flap"):
+            faults.append(("nic", "eth0 link flapping"))
         if do.get("clear"):
-            recovered.append("xid")
+            recovered += ["xid", "ib", "nic"]
+        elif "ib_down" in do and not int(do["ib_down"] or 0):
+            recovered.append("ib")
+        elif "nic_flap" in do and not do["nic_flap"]:
+            recovered.append("nic")
     for n in nodes:
         tickets += [Step(step.at, "jira", {"tickets": {"action": "fault", "node": n, "kind": k, "detail": d}}) for k, d in faults]
         tickets += [Step(step.at, "jira", {"tickets": {"action": "fault", "node": n, "kind": k, "open": False,

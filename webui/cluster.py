@@ -25,6 +25,8 @@ ACTIONS = {
     "overheat": ("Overheat (92 °C)", False, [("bmc-farm", {"temp": 92})]),
     "fan-fail": ("Fan failure", False, [("bmc-farm", {"fan_fail": 3})]),
     "gpu-xid": ("GPU error (XID 79)", True, [("gpu-exporter", {"xid": 79})]),
+    "ib-down": ("InfiniBand port down", False, [("gpu-exporter", {"ib_down": 1})]),
+    "nic-flap": ("NIC flapping", False, [("gpu-exporter", {"nic_flap": True})]),
     "clear": ("Clear faults", False, [("bmc-farm", {"clear": True}), ("gpu-exporter", {"clear": True})]),
 }
 
@@ -56,6 +58,19 @@ def xid_by_node(metrics: str) -> dict[str, int]:
     return out
 
 
+def ib_by_node(metrics: str) -> tuple[dict[str, int], set[str]]:
+    """(InfiniBand ports that are not active per node, nodes whose NIC is flapping) from a Prometheus text scrape."""
+    down: dict[str, int] = {}
+    for line in metrics.splitlines():
+        if line.startswith("node_infiniband_state_id{") and not line.endswith(" 4"):
+            m = re.search(r'node="([^"]+)"', line)
+            if m:
+                down[m.group(1)] = down.get(m.group(1), 0) + 1
+    flap = {m.group(1) for line in metrics.splitlines() if line.startswith("sim_nic_flapping{") and line.endswith(" 1")
+            for m in [re.search(r'node="([^"]+)"', line)] if m}
+    return down, flap
+
+
 def gpu_util_by_node(metrics: str) -> dict[str, list[float]]:
     """DCGM_FI_DEV_GPU_UTIL per GPU, grouped by node, from a Prometheus text scrape."""
     out: dict[str, list[float]] = {}
@@ -77,6 +92,10 @@ def classify(n: dict) -> tuple[str, str]:
         return "fault", f"GPU error XID {n['xid']}"
     if n["temp"] is not None and n["temp"] >= HOT_C:
         return "fault", f"Overheating ({n['temp']:.0f} °C)"
+    if n.get("ib_down"):
+        return "warn", f"{n['ib_down']} InfiniBand port(s) down"
+    if n.get("nic_flap"):
+        return "warn", "NIC flapping"
     if n["fans_failed"]:
         return "warn", f"{n['fans_failed']} fan(s) failed"
     if n["bcm"] not in (None, "UP"):
@@ -119,12 +138,14 @@ class Cluster:
         scrape = self._try(SERVICES["gpu-exporter"]) or ""
         scrape = scrape if isinstance(scrape, str) else ""
         xids, utils = xid_by_node(scrape), gpu_util_by_node(scrape)
+        ib, flap = ib_by_node(scrape)
         for row in rows:
             if row["name"] in utils:
                 u = utils[row["name"]]
                 row["gpu_util"], row["gpus_busy"] = round(sum(u) / len(u)), sum(1 for x in u if x >= 50)
             row["bcm"] = bcm.get(row["name"])
             row["xid"] = xids.get(row["name"], 0)
+            row["ib_down"], row["nic_flap"] = ib.get(row["name"], 0), row["name"] in flap
             row["state"], row["label"] = classify(row)
         return {"services": dict(zip(names, up, strict=True)), "nodes": rows,
                 "actions": [{"id": a, "label": v[0], "gpu_only": v[1]} for a, v in ACTIONS.items()]}

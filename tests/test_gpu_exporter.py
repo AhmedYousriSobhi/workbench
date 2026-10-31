@@ -147,3 +147,22 @@ def test_a_powered_off_node_publishes_nothing_until_powered_on():
     assert 'node="gpu001"' not in s.render()
     s.inject({"node": "gpu001", "down": False})
     assert 'Hostname="gpu001"' in s.render()
+
+
+def test_infiniband_ports_and_the_nic_carrier_follow_injected_faults():
+    s = exporter.State({"cn001": 0, "gpu001": 2})
+    text = s.render()
+    assert text.count("node_infiniband_state_id{") == 3 and "} 4\n" in text and 'node_infiniband_state_id{node="gpu001",Hostname="gpu001",device="mlx5_1",port="1"} 4' in text
+    s.inject({"node": "gpu001", "ib_down": 1})
+    down = [ln for ln in s.render().splitlines() if ln.startswith("node_infiniband_state_id") and ln.endswith(" 1")]
+    assert down == ['node_infiniband_state_id{node="gpu001",Hostname="gpu001",device="mlx5_0",port="1"} 1']
+    with pytest.raises(ValueError):
+        s.inject({"node": "gpu001", "ib_down": 3})
+    s.inject({"node": "cn001", "nic_flap": True})
+    first = s.render()
+    assert 'node_network_carrier_changes_total{node="cn001",device="eth0"} 2' in first and 'sim_nic_flapping{node="cn001"} 1' in first
+    assert 'node_network_carrier_changes_total{node="cn001",device="eth0"} 4' in s.render()  # it keeps rising while it flaps
+    s.inject({"node": "cn001", "clear": True})
+    s.inject({"node": "gpu001", "clear": True})
+    cleared = s.render()
+    assert 'sim_nic_flapping{node="cn001"} 0' in cleared and 'device="mlx5_0",port="1"} 4' in cleared
