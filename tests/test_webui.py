@@ -111,7 +111,7 @@ def test_governor_down_is_reported_not_crashed(tmp_path):
     assert out["ok"] is False and "not reachable" in out["error"]
 
 
-def test_scenario_list_and_run_skips_slurm_without_docker(ui):
+def test_scenario_list_and_run_sends_slurm_steps_through_the_governor(ui):
     names = [s["name"] for s in json.loads(req(ui, "/api/scenarios")[1])]
     assert names == ["quick", "slow"]
     assert req(ui, "/api/scenarios/quick/run", "POST")[0] == 403  # no X-Requested-With: CSRF guard
@@ -124,8 +124,9 @@ def test_scenario_list_and_run_skips_slurm_without_docker(ui):
         if not state["running"]:
             break
         time.sleep(0.05)
-    assert state["ok"] is True and [s["status"] for s in state["steps"]] == ["skipped", "skipped"]
-    assert "Docker" in state["steps"][0]["detail"]  # the UI never drains Slurm itself
+    # the Slurm drain goes through the governor (the page never runs Docker itself); the k8s step is not built
+    assert state["ok"] is True and [s["status"] for s in state["steps"]] == ["ok", "skipped"]
+    assert "not built" in state["steps"][1]["detail"]
 
 
 def test_stop_ends_a_running_scenario_and_unknown_is_404(ui):

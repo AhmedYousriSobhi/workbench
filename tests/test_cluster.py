@@ -89,7 +89,7 @@ def test_actions_reuse_scenario_steps_with_the_node_filled_in():
     sent = []
     c = cluster.Cluster(SIM, fetch=make_fetch(), poster=lambda url, body: sent.append((url, body)))
     res = c.act("cn002", "power-off")
-    assert [r["status"] for r in res] == ["ok", "ok", "ok"]
+    assert [r["status"] for r in res] == ["ok"] and "slurm" in res[0]["detail"]  # one step; the BCM and exporter ride along (side effects), Slurm is the governor's
     assert sent == [("http://127.0.0.1:8000/sim/inject", {"node": "cn002", "power": "Off"}),
                     ("http://127.0.0.1:8081/sim/inject", {"node": "cn002", "state": "DOWN"}),
                     ("http://127.0.0.1:9400/sim/inject", {"node": "cn002", "down": True})]
@@ -97,11 +97,13 @@ def test_actions_reuse_scenario_steps_with_the_node_filled_in():
     c.act("gpu001", "gpu-xid")
     assert sent == [("http://127.0.0.1:9400/sim/inject", {"node": "gpu001", "xid": 79})]
     sent.clear()
-    c.act("cn001", "clear")  # no GPU exporter call for a compute node
-    assert [u for u, _ in sent] == ["http://127.0.0.1:8000/sim/inject", "http://127.0.0.1:8081/sim/inject"]
+    c.act("cn001", "clear")  # clear powers the node on: BCM up and the exporter publishing again; no GPU fault to clear on a compute node
+    assert sent == [("http://127.0.0.1:8000/sim/inject", {"node": "cn001", "clear": True}),
+                    ("http://127.0.0.1:8081/sim/inject", {"node": "cn001", "state": "UP"}),
+                    ("http://127.0.0.1:9400/sim/inject", {"node": "cn001", "down": False})]
     sent.clear()
-    c.act("gpu002", "clear")
-    assert len(sent) == 3
+    c.act("gpu002", "clear")  # a GPU node also gets its GPU fault cleared
+    assert len(sent) == 4 and ("http://127.0.0.1:9400/sim/inject", {"node": "gpu002", "clear": True}) in sent
 
 
 def test_action_validation():

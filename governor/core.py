@@ -208,7 +208,8 @@ class Governor:
             if cmd == "set-profile":
                 return self._change(f"set-profile={req['profile']}", ["up", "--profile", req["profile"]])
             if cmd == "node-state":
-                return self._change(f"node-state={req['node']}:{req['state']}", ["set", "node", req["node"], req["state"]])
+                args = ["set", "node", req["node"], req["state"]] + (["--reason", req["reason"]] if req.get("reason") else [])
+                return self._change(f"node-state={req['node']}:{req['state']}", args)
             if cmd == "apply-plan":
                 args = ["up", "--cpu-nodes", str(req["cpu_nodes"]), "--gpu-nodes", str(req["gpu_nodes"]),
                         "--gpus-per-node", str(req["gpus_per_node"])]

@@ -134,3 +134,6 @@ once: it rebuilds the node image and restarts `slurmctld` (it does so whenever `
 `slurmctld` marks it `down*` (Not responding) by itself after about 30-40 s, which is what a monitoring client sees on a real
 dead node; the BMC reports it off and its GPU metrics disappear. **Power on** (`set node cn001 on`) thaws it and Slurm returns
 it after its next answer. Use `set node NAME down` only to set the state by hand.
+
+Scenarios behave the same: one `bmc-farm` `power: "Off"` step takes the node down on the BMC, BCM, GPU metrics and in Slurm
+([scenarios chapter](../manual/06-scenarios.md)), also when the scenario is played from the page.

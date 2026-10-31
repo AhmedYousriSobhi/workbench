@@ -18,6 +18,7 @@ Handler = Callable[[str, dict], dict]
 
 
 NODE_RE = re.compile(r"[a-z]{2,8}[0-9]{3}")  # sim.yaml node names: cn001, gpu002
+REASON_RE = re.compile(r"[A-Za-z0-9 .,:_/()+-]{0,60}")  # a drain reason: short, no shell characters
 PLAN_PARTS = {"jira", "bmc", "bcm", "scenarios", "accounting", "load"}  # mirrors benchctl.workbench.PARTS
 
 
@@ -59,8 +60,9 @@ def dispatch(line: bytes, handle: Handler, groups: Callable[[], set[str]]) -> di
         if cmd == "apply-plan" and (err := plan_error(req)):
             return {"ok": False, "error": err}
         if cmd == "node-state" and not (isinstance(req.get("node"), str) and NODE_RE.fullmatch(req["node"])
-                                        and req.get("state") in ("off", "on", "down", "resume")):
-            return {"ok": False, "error": "node-state needs node:NAME (cn001) and state: off|on|down|resume"}
+                                        and req.get("state") in ("off", "on", "down", "resume", "drain")
+                                        and REASON_RE.fullmatch(req.get("reason") or "")):
+            return {"ok": False, "error": "node-state needs node:NAME (cn001), state: off|on|down|resume|drain and an optional short reason"}
         if cmd == "admit" and not (isinstance(req.get("budget_mb"), int) and req["budget_mb"] >= 0):
             return {"ok": False, "error": "admit needs budget_mb:int>=0"}
         return handle(cmd, req)

@@ -8,6 +8,7 @@ budget (ADR 0008).
 import asyncio
 import hmac
 import json
+import re
 import threading
 from pathlib import Path
 
@@ -50,8 +51,8 @@ def governor_status(socket: str) -> dict:
 class Runs:
     """At most one scenario at a time; state is what the page polls."""
 
-    def __init__(self, root: Path, sim: dict, flow: Flow | None = None):
-        self.root, self.sim, self.flow = root, sim, flow
+    def __init__(self, root: Path, sim: dict, flow: Flow | None = None, slurm=None):
+        self.root, self.sim, self.flow, self.slurm = root, sim, flow, slurm
         self.lock = threading.Lock()
         self.stop_flag = threading.Event()
         self.state: dict = {"running": False}
@@ -90,7 +91,8 @@ class Runs:
 
         try:
             rep = scenario.run(sc, speed=speed, dilation=float(self.sim.get("time_dilation", 1.0)), say=lambda m: None,
-                               host=False, should_stop=self.stop_flag.is_set, on_step=on_step, on_expect=on_expect)
+                               host=False, should_stop=self.stop_flag.is_set, on_step=on_step, on_expect=on_expect,
+                               slurm=self.slurm)
             self.state.update(ok=rep.ok, stopped=rep.stopped)
         finally:
             self.state["running"] = False
@@ -105,7 +107,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
                fetch=None, poster=None) -> Starlette:
     sim = yaml.safe_load(sim_yaml.read_text())
     flow = Flow()
-    runs = Runs(scenarios, sim, flow)
+    runs = Runs(scenarios, sim, flow, slurm=lambda n, s, r: _governed(slurm_state(n, s, r)))
     cluster = Cluster(sim, **{k: v for k, v in (("fetch", fetch), ("poster", poster)) if v})  # test seams: a host stack must not answer or be hit
     wiki = Wiki(docs)
 
@@ -266,10 +268,15 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
                         headers={"Content-Disposition": 'attachment; filename="bench-profile.json"', "X-Profile": label,
                                  "X-Warning": " ".join(export.warnings(services))})
 
-    def slurm_state(node: str, state: str) -> dict:
+    def _governed(row: dict) -> tuple[bool, str]:
+        """(done, why not) from a slurm_state row, for the scenario engine."""
+        return row["status"] == "ok", row["detail"]
+
+    def slurm_state(node: str, state: str, reason: str | None = None) -> dict:
         """Slurm is told through the governor (the page has no Docker, W-3); a refusal is reported, never fatal."""
         try:
-            res = checks.governor_request({"cmd": "node-state", "node": node, "state": state}, socket)
+            res = checks.governor_request({"cmd": "node-state", "node": node, "state": state,
+                                           **({"reason": re.sub(r"[^A-Za-z0-9 .,:_/()+-]", "", reason)[:60]} if reason else {})}, socket)
         except (OSError, ValueError):
             return {"target": "slurm", "status": "skipped", "detail": "the governor is not reachable"}
         if not res.get("ok"):

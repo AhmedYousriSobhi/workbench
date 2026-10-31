@@ -237,3 +237,32 @@ def test_power_off_and_on_pause_and_unpause_the_node_container_and_tolerate_repe
     bad = scenario.execute(scenario.Step(0, "slurm", {"power_off": ["cn001"]}), runner=lambda c: type("R", (), {"returncode": 1, "stdout": "", "stderr": "no such container"})())
     assert bad.status == "failed" and "no such container" in bad.detail
     assert scenario.validate({"steps": [{"at": "0s", "target": "slurm", "do": {"power_off": ["nope"]}}]}, SIM)
+
+
+def test_a_bmc_power_step_also_sets_bcm_exporter_and_freezes_the_node():
+    posts, ran = [], []
+    runner = lambda cmd: ran.append(cmd) or type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+    out = scenario.execute(scenario.Step(0, "bmc-farm", {"nodes": ["cn002"], "power": "Off"}), poster=lambda u, b: posts.append((u.split(":")[2][:4], b)), runner=runner)
+    assert out.status == "ok"
+    assert posts == [("8000", {"node": "cn002", "power": "Off"}), ("8081", {"node": "cn002", "state": "DOWN"}), ("9400", {"node": "cn002", "down": True})]
+    assert ran == [["docker", "pause", "workbench-cn002-1"]]
+    posts.clear(); ran.clear()
+    scenario.execute(scenario.Step(0, "bmc-farm", {"nodes": ["cn002"], "clear": True}), poster=lambda u, b: posts.append(b), runner=runner)
+    assert {"node": "cn002", "state": "UP"} in posts and {"node": "cn002", "down": False} in posts and ran == [["docker", "unpause", "workbench-cn002-1"]]
+    posts.clear(); ran.clear()  # other BMC changes imply nothing else
+    scenario.execute(scenario.Step(0, "bmc-farm", {"nodes": ["cn002"], "temp": 92}), poster=lambda u, b: posts.append(b), runner=runner)
+    assert posts == [{"node": "cn002", "temp": 92}] and ran == []
+
+
+def test_without_docker_the_slurm_part_goes_through_the_callback_and_a_refusal_is_a_note_not_a_failure():
+    asked = []
+    def gov(node, state, reason):
+        asked.append((node, state, reason))
+        return state != "on", "refused at L3"
+    out = scenario.execute(scenario.Step(0, "bmc-farm", {"nodes": ["cn002"], "power": "Off"}), poster=lambda u, b: None, host=False, slurm=gov)
+    assert out.status == "ok" and asked == [("cn002", "off", None)]
+    again = scenario.execute(scenario.Step(0, "bmc-farm", {"nodes": ["cn002"], "power": "On"}), poster=lambda u, b: None, host=False, slurm=gov)
+    assert again.status == "ok" and "refused at L3" in again.detail
+    d = scenario.execute(scenario.Step(0, "slurm", {"drain": ["gpu001"], "reason": "xid 79"}), host=False, slurm=gov)
+    assert d.status == "ok" and asked[-1] == ("gpu001", "drain", "xid 79")
+    assert scenario.execute(scenario.Step(0, "ssh", {"state": "hung"}), host=False, slurm=gov).status == "skipped"  # ssh needs Docker
