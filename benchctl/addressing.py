@@ -14,6 +14,9 @@ from .nodes import node_names
 INTERNAL = "10.141.0.0/16"
 IPMI = "10.148.0.0/16"
 LOGIN_IP = "10.141.255.254"
+IPMI_LOGIN_IP = "10.148.255.254"  # the head node is also on the BMC network (the jump host)
+IPMI_FARM_IP = "10.148.255.12"    # the farm that owns every BMC's state
+BMC_NODE_PORT_BASE = 9000          # the farm's per-node TLS port: 9000 + index in node order (components/bmc-farm/bmc.py)
 # service -> last octet in 10.141.255.0/24. observability.yml (a static file) repeats the three observability ones.
 SERVICE_HOSTS = {"slurmctld": 1, "slurmrestd": 2, "slurmdbd": 3, "mariadb": 4, "bcm-mock": 10, "jira-mock": 11,
                  "bmc-farm": 12, "scenario-engine": 13, "user-sim": 14, "ticket-bot": 15,
@@ -48,6 +51,7 @@ def plan(sim: dict, compute_override: int | None = None) -> dict:
         nodes[name], bmc[name] = host_ip(INTERNAL, seen[kind], kind), host_ip(IPMI, seen[kind], kind)
         seen[kind] += 1
     return {"internal": INTERNAL, "ipmi": IPMI, "login": LOGIN_IP, "nodes": nodes, "bmc": bmc,
+            "bmc_port": {n: BMC_NODE_PORT_BASE + i for i, (n, _) in enumerate(node_names(sim, compute_override))},
             "services": {s: f"{a}.{b}.255.{h}" for s, h in SERVICE_HOSTS.items()}}
 
 

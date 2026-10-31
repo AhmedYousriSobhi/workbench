@@ -154,3 +154,8 @@ and reloaded: `./scripts/benchctl up`, then `./scripts/benchctl exec slurmctld -
 **The traffic diagram is clickable.** A node tile opens that node's panel; a service box (BMC farm, BCM mock, Jira mock,
 GPU exporter) or the *Monitoring app* and *Prometheus* chips open the Connections tab with that part's row marked. Tab to
 a shape and press Enter or Space for the same.
+
+**BMCs per node.** In **⚙ Settings**, switching *BMC* on shows the nodes that get a BMC address (all by default). Each
+BMC is its own small container with its own address (`10.148.x.y:443`) and costs about 32 MB, shown in the memory bar; switch off
+the nodes you do not need. A node panel shows its BMC address, or "none for this node". Apply rebuilds as usual and removes
+the BMCs you switched off.

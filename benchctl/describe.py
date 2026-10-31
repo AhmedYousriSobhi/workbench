@@ -8,7 +8,7 @@ import re
 import urllib.request
 from collections.abc import Callable
 
-from . import nodes
+from . import addressing, compose, nodes
 from .stack import PROJECT
 
 BMC, EXPORTER = "http://127.0.0.1:8000", "http://127.0.0.1:9400"
@@ -89,7 +89,10 @@ def gather(sim: dict, name: str, fetch: Callable, runner: Callable | None = None
         thermal = thermal if isinstance(thermal, dict) else {}
         temps = [t.get("ReadingCelsius") for t in thermal.get("Temperatures", []) if t.get("Name") == "CPU"]
         fans = thermal.get("Fans", [])
-        info["bmc"] = {"address": f"bmc-{name}:{BMC_TLS_PORT} (Host header bmc-{name} on 127.0.0.1:{BMC_TLS_PORT})",
+        plan = addressing.plan(sim)
+        has = name in compose.bmc_nodes(sim)  # a node whose BMC is switched off is still answered by the farm's plain port
+        info["bmc"] = {"address": (f"{plan['bmc'][name]}:443 (bmc-{name} from the login node)" if has
+                                   else f"none for this node (switched off); the farm answers at 127.0.0.1:{BMC_TLS_PORT} with Host bmc-{name}"),
                        "power": system.get("PowerState"), "cpu_temp_c": temps[0] if temps else None,
                        "fans": len(fans), "fans_failed": sum(1 for f in fans if f.get("Status", {}).get("Health") == "Critical")}
     else:

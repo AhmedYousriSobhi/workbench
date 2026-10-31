@@ -21,8 +21,13 @@ between starts, and `cmsh` listed made-up addresses. A real cluster has distinct
   HTTPS for non-local hosts (plain-HTTP Jira).
 - The subnets are fixed, not configurable (observability.yml is a static file). `benchctl up` refuses with one message when
   the existing network has another subnet (run `benchctl down` once) or a host route (VPN, office network) overlaps.
-- Phase 2 (issue 149): one small BMC container per node on `ipminet`, enabled or disabled per node in Settings to save
-  memory, the login node attached to both networks.
+- Phase 2 (issue 149): every node's BMC has its own address on `ipminet`: 10.148.0.N (compute), 10.148.100.N (GPU) at the
+  standard port 443. Each is a tiny forwarder container (`components/bmc-farm/forward.py`, 32 MB) that pipes TCP to its own port
+  on the farm (9000 + the node's index), which keeps all BMC state; the farm picks the node by that port, so the Host header
+  is not needed. A separate state container per BMC was rejected: it would have touched every tool path (scenario injection,
+  the page, the traffic counters). The farm and the login node (the jump host) are on both networks. A node's BMC is switched
+  on or off per node (`bmc_nodes` in the workbench selection, `--bmc-nodes`, the Settings sheet): no forwarder, no address,
+  no export target, 32 MB saved. 127.0.0.1:8000/8443 on the farm stays for the tool and as the fallback.
 
 ## Consequences
 Addresses are stable and realistic; the jump-host case works with `bmc-<node>`. A host that already uses 10.141/16 or

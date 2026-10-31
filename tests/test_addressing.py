@@ -51,12 +51,17 @@ def test_every_generated_service_has_its_fixed_address_and_the_network_has_the_s
     unplanned = set()
     for name, svc in data["services"].items():
         want = addressing.address_of(p, name)
+        if name.startswith("bmc-") and name != "bmc-farm":  # a BMC lives only on the ipmi network
+            assert svc["networks"]["ipmi"]["ipv4_address"] == p["bmc"][name.removeprefix("bmc-")], name
+            continue
         if want is None:
             unplanned.add(name)
             continue
         assert svc["networks"]["default"]["ipv4_address"] == want, name
     assert unplanned == {"accounting-init"}  # a one-shot job that exits; it needs no fixed address
-    assert "aliases" in data["services"]["bmc-farm"]["networks"]["default"]  # the node aliases survive
+    assert data["networks"]["ipmi"]["ipam"]["config"] == [{"subnet": "10.148.0.0/16"}]
+    assert data["services"]["bmc-farm"]["networks"]["ipmi"]["ipv4_address"] == addressing.IPMI_FARM_IP
+    assert data["services"]["login"]["networks"]["ipmi"]["ipv4_address"] == addressing.IPMI_LOGIN_IP
 
 
 def test_observability_file_repeats_the_planned_addresses():

@@ -214,5 +214,7 @@ class Governor:
                         "--gpus-per-node", str(req["gpus_per_node"])]
                 for part in sorted(PLAN_PARTS):
                     args += ["--with" if part in req["parts"] else "--without", part]
+                if req.get("bmc_nodes") is not None:
+                    args += ["--bmc-nodes", ",".join(req["bmc_nodes"])]
                 return self._change(f"apply-plan={req['cpu_nodes']}cpu+{req['gpu_nodes']}gpu", args)
         return {"ok": False, "error": "unhandled"}

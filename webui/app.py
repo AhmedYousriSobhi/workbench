@@ -169,7 +169,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
         try:
             spec = workbench.from_dict({k: int(q[k]) for k in ("cpu_nodes", "gpu_nodes", "gpus_per_node") if k in q}
-                                       | ({"parts": [p for p in q["parts"].split(",") if p]} if "parts" in q else {}),
+                                       | ({"parts": [p for p in q["parts"].split(",") if p]} if "parts" in q else {})
+                                       | ({"bmc_nodes": [n for n in q["bmc_nodes"].split(",") if n]} if "bmc_nodes" in q else {}),
                                        workbench.defaults(sim))
         except (ValueError, workbench.SpecError) as e:
             raise HTTPException(422, str(e)) from e
@@ -182,14 +183,16 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
     async def settings(request: Request):
         """The options the Settings sheet offers, with what each costs; `on` follows the workbench last built."""
-        from benchctl import export, workbench
+        from benchctl import compose, export, workbench
 
         try:
             _, services, _ = export.configured(yaml.safe_load(sim_yaml.read_text()))
             built = workbench.parts_in(services)
         except (export.ExportError, OSError, ValueError):
-            built = None  # nothing built to read: offer the defaults
-        return JSONResponse({"parts": workbench.catalog(built),
+            services, built = set(), None  # nothing built to read: offer the defaults
+        nodes = [{"name": n, "kind": k, "bmc": f"bmc-{n}" in services if "bmc-farm" in services else True}
+                 for n, k in cluster.nodes]
+        return JSONResponse({"parts": workbench.catalog(built), "nodes": nodes, "bmc_node_mb": compose.BMC_FORWARDER_MB,
                              "limits": {k: list(v) for k, v in workbench.LIMITS.items()}})
 
     async def plan(request: Request):
@@ -199,6 +202,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
         flags = f"--cpu-nodes {spec.cpu_nodes} --gpu-nodes {spec.gpu_nodes} --gpus-per-node {spec.gpus_per_node}" + "".join(
             f" --with {p}" for p in sorted(spec.parts)) + "".join(f" --without {p}" for p in workbench.PARTS if p not in spec.parts)
+        if spec.bmc_nodes is not None:
+            flags += f" --bmc-nodes {','.join(spec.bmc_nodes)}"
         return JSONResponse({"fits": ok, "message": msg, "total_mb": est["total_mb"], "available_mb": avail,
                              "text": workbench.render(spec, est), "command": f"benchctl up {flags}"})
 
@@ -209,6 +214,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             raise HTTPException(422, "does not fit: " + msg)
         req = {"cmd": "apply-plan", "cpu_nodes": spec.cpu_nodes, "gpu_nodes": spec.gpu_nodes,
                "gpus_per_node": spec.gpus_per_node, "parts": sorted(spec.parts)}
+        if spec.bmc_nodes is not None:
+            req["bmc_nodes"] = spec.bmc_nodes
         try:
             res = await asyncio.to_thread(checks.governor_request, req, socket)
         except (OSError, ValueError) as e:
@@ -226,10 +233,15 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             info = await asyncio.to_thread(describe.gather, cluster.sim, request.path_params["node"], cluster.fetch)
         except describe.UnknownNode as e:
             raise HTTPException(404, str(e.args[0])) from e
-        from benchctl import addressing
+        from benchctl import addressing, export
 
-        return JSONResponse({"info": info, "text": describe.render(info),
-                             "ip": addressing.plan(cluster.sim)["nodes"].get(request.path_params["node"])})
+        node, plan = request.path_params["node"], addressing.plan(cluster.sim)
+        try:
+            _, services, _ = export.configured(yaml.safe_load(sim_yaml.read_text()))
+        except (export.ExportError, OSError, ValueError):
+            services = set()
+        return JSONResponse({"info": info, "text": describe.render(info), "ip": plan["nodes"].get(node),
+                             "bmc_ip": plan["bmc"].get(node) if f"bmc-{node}" in services else None})
 
     async def connections(request: Request):
         from webui import connections as conn
@@ -246,7 +258,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             base = yaml.safe_load(sim_yaml.read_text())
             sim, services, label = export.configured(base)
             body = export.build(sim, services, "workbench", q.get("bmc") == "1", q.get("user") or None,
-                                bmc_via=q.get("bmc_via", "login"), loopback=q.get("addr") == "loopback")
+                                bmc_via=q.get("bmc_via", "ip"), loopback=q.get("addr") == "loopback")
             text = export.to_json(body, export.format_id())
         except export.ExportError as e:
             raise HTTPException(422, str(e)) from e

@@ -123,18 +123,18 @@ Press **Test BCM Connection** (save the cluster first). You can check by hand wh
 
 | Value | |
 |---|---|
-| Address | `https://10.141.255.12:8443` (fallback `https://127.0.0.1:8443`), one node per `Host` header `bmc-<node>` (for example `bmc-gpu001`); through the login node it is `bmc-gpu001:8443` |
+| Address | one per node: `10.148.0.N:443` for compute nodes, `10.148.100.N:443` for GPU nodes (for example `10.148.100.1` is `gpu001`); the name `bmc-<node>` also works from the login node |
 | User / password | `admin` / the password after the colon in `compose/generated/secrets/bmc_credentials` (the file reads `admin:<password>`) |
-| Certificate | self-signed; the client must be told to trust or pin it |
+| Certificate | self-signed, the same on every BMC; the client must be told to trust or pin it |
 
-**Which address?** It depends on how the client reaches the BMCs. If it goes **through the login node** (the jump host, the
-usual design: BMCs sit on the management network behind the head node), use `bmc-<node>` port `8443` (or the standard `443`):
-`127.0.0.1` there is the login container itself and nothing listens on it, so the connection is refused. If it connects **directly** from your machine, use `127.0.0.1` port `8443`;
-all nodes then share that one address because the BMC farm is a single process that picks the node by the `Host` header
-(`bmc-<node>`). `benchctl export profile --bmc --bmc-via login|direct` (and the page's Export sheet) writes either form;
-the default is `login`. One address per node is a design question: [issue 147](https://github.com/AhmedYousriSobhi/workbench/issues/147).
+Each BMC is a small container on the BMC network (`10.148.0.0/16`) with its own fixed IP at the standard port 443
+([ADR 0018](../adr/0018-fixed-addressing-plan.md)). The address works from this machine and from the login node (the jump
+host is also on that network). `benchctl export profile --bmc` writes one target per node with its own address.
+A node can have no BMC: switch it off in **⚙ Settings** (the BMC part lists the nodes) or with `--bmc-nodes cn001,gpu001`;
+each BMC costs about 32 MB. A client that cannot route to the cluster network uses the old single listener,
+`127.0.0.1:8443` with the Host header `bmc-<node>` (`--loopback`).
 
-Check by hand: `curl -sk -H "Host: bmc-gpu001" -u "admin:<password>" https://127.0.0.1:8443/redfish/v1/` (it answers "gpu001 service root"). Break something with
+Check by hand: `curl -sk -u "admin:<password>" https://10.148.100.1/redfish/v1/` (or, with the old listener, `curl -sk -H "Host: bmc-gpu001" -u "admin:<password>" https://127.0.0.1:8443/redfish/v1/`) (it answers "gpu001 service root"). Break something with
 `./scripts/benchctl scenario run fan-failure`.
 
 ## 8. Try a fault

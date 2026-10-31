@@ -17,6 +17,7 @@ TARGETED = {"freeze", "thaw", "stop", "start"}  # require a known group name
 Handler = Callable[[str, dict], dict]
 
 
+NODE_RE = re.compile(r"[a-z]{2,8}[0-9]{3}")  # sim.yaml node names: cn001, gpu002
 PLAN_PARTS = {"jira", "bmc", "bcm", "scenarios", "accounting", "load"}  # mirrors benchctl.workbench.PARTS
 
 
@@ -29,10 +30,11 @@ def plan_error(req: dict) -> str | None:
     parts = req.get("parts")
     if not (isinstance(parts, list) and all(isinstance(p, str) and p in PLAN_PARTS for p in parts)):
         return f"apply-plan parts must be a list of: {', '.join(sorted(PLAN_PARTS))}"
+    nodes = req.get("bmc_nodes")  # optional: the nodes that get a BMC; absent means every node
+    if nodes is not None and not (isinstance(nodes, list) and len(nodes) <= 80
+                                  and all(isinstance(n, str) and NODE_RE.fullmatch(n) for n in nodes)):
+        return "apply-plan bmc_nodes must be a list of node names such as cn001"
     return None
-
-
-NODE_RE = re.compile(r"[a-z]{2,8}[0-9]{3}")  # sim.yaml node names: cn001, gpu002
 
 
 def dispatch(line: bytes, handle: Handler, groups: Callable[[], set[str]]) -> dict:

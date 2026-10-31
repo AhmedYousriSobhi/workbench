@@ -21,6 +21,7 @@ STAGES = [  # (label, service-name pattern); later stages depend on earlier ones
     ("slurm core", r"slurmctld|mariadb|slurmdbd"),
     ("slurm services", r"slurmrestd|accounting-init"),
     ("mocks", r"bmc-farm|bcm-mock|jira-mock"),
+    ("bmc addresses", r"bmc-(cn|gpu)\d+"),
     ("nodes", r"(cn|gpu)\d+"),
     ("login node", r"login"),
     ("scenarios", r"scenario-engine"),
@@ -165,6 +166,10 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     node_re = r"(cn|gpu)\d+"
     changed = False
     before = set(_project_services(runner))
+    stale_bmc = sorted(s for s in before if re.fullmatch(r"bmc-(cn|gpu)\d+", s) and s not in names)  # a BMC switched off, or its node gone
+    if stale_bmc:
+        say(f"removing BMCs no longer wanted: {', '.join(stale_bmc)}")
+        remove_services(stale_bmc, runner)
     # accounting added under a running controller: slurm.conf gains AccountingStorageType, which only a restart reads
     acct_added = "slurmdbd" in todo and "slurmdbd" not in before and "slurmctld" in before
     if chosen is not None:  # a selection can shrink or grow a running stack: drop nodes it no longer wants (issue 117)

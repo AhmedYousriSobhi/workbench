@@ -83,11 +83,10 @@ def generate(sim: dict, profile: dict) -> dict:
                                   "depends_on": ["slurmctld"] if "slurmctld" in services else []})
     if "bmc-farm" in services:  # Redfish endpoints for every node in sim.yaml, localhost only
         # :8443 is TLS at the standard /redfish/v1, the node chosen by Host: clients reach it as bmc-<node>
-        names = [n for n, _ in node_names(sim)]
         services["bmc-farm"].update({
             "volumes": ["./sim.yaml:/sim.yaml:ro", "./secrets/bmc_credentials:/run/workbench/bmc_credentials:ro"],
-            "ports": ["127.0.0.1:8000:8000", "127.0.0.1:8443:8443"],
-            "networks": {"default": {"aliases": [f"bmc-{n}" for n in names]}}})
+            "ports": ["127.0.0.1:8000:8000", "127.0.0.1:8443:8443"]})
+        _bmc_forwarders(services, sim, profile)
     if "bcm-mock" in services:  # CMDaemon JSON API on the same node inventory, localhost only
         services["bcm-mock"].update({"volumes": ["./sim.yaml:/sim.yaml:ro"], "ports": ["127.0.0.1:8081:8081"]})
     if "jira-mock" in services:
@@ -97,8 +96,36 @@ def generate(sim: dict, profile: dict) -> dict:
     for name, svc in services.items():  # a fixed address for everything (ADR 0018)
         if ip := addressing.address_of(ips, name):
             svc.setdefault("networks", {}).setdefault("default", {})["ipv4_address"] = ip
-    return {"name": "workbench", "include": [OBSERVABILITY],
-            "networks": {"default": {"ipam": {"config": [{"subnet": addressing.INTERNAL}]}}}, "services": services}
+    nets = {"default": {"ipam": {"config": [{"subnet": addressing.INTERNAL}]}}}
+    if "bmc-farm" in services:
+        nets["ipmi"] = {"ipam": {"config": [{"subnet": addressing.IPMI}]}}
+    return {"name": "workbench", "include": [OBSERVABILITY], "networks": nets, "services": services}
+
+
+BMC_FORWARDER_MB = 32
+
+
+def bmc_nodes(sim: dict, profile: dict | None = None) -> list[str]:
+    """The nodes that have a BMC address: `sim["bmc"]["nodes"]` when a selection names some, else every node."""
+    every = [n for n, _ in node_names(sim, (profile or {}).get("compute_nodes"))]
+    chosen = (sim.get("bmc") or {}).get("nodes")
+    return every if chosen is None else [n for n in every if n in chosen]
+
+
+def _bmc_forwarders(services: dict, sim: dict, profile: dict) -> None:
+    """One small container per BMC, its own IP on the ipmi network at the standard port (ADR 0018). It forwards to the
+    farm, which keeps the state, so a node without a forwarder simply has no BMC address."""
+    p = addressing.plan(sim, profile.get("compute_nodes"))
+    for n in bmc_nodes(sim, profile):
+        port = p["bmc_port"][n]
+        svc = _service("python:3.12-slim", BMC_FORWARDER_MB, 2)
+        svc.update({"command": ["python", "/app/forward.py", f"443:bmc-farm:{port}", f"8443:bmc-farm:{port}"],
+                    "volumes": ["../../components/bmc-farm/forward.py:/app/forward.py:ro"], "depends_on": ["bmc-farm"],
+                    "networks": {"ipmi": {"ipv4_address": p["bmc"][n]}}})
+        services[f"bmc-{n}"] = svc
+    services["bmc-farm"]["networks"] = {"default": {}, "ipmi": {"ipv4_address": addressing.IPMI_FARM_IP}}
+    if "login" in services:  # the head node reaches the BMC network: it is the jump host
+        services["login"]["networks"] = {"default": {}, "ipmi": {"ipv4_address": addressing.IPMI_LOGIN_IP}}
 
 
 def users_env(sim: dict) -> str:

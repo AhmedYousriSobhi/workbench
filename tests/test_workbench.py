@@ -66,7 +66,7 @@ def test_estimate_is_the_sum_of_the_generated_limits_plus_observability():
     assert est["total_mb"] == compose.budget_mb(data) + workbench.OBSERVABILITY_MB
     assert est["node_count"] == 6 and est["nodes_mb"] == 6 * compose.SLURMD_MB
     more = workbench.estimate(*workbench.effective(SIM, spec(cpu_nodes=10, gpu_nodes=4)))
-    assert more["total_mb"] - est["total_mb"] == 8 * compose.SLURMD_MB
+    assert more["total_mb"] - est["total_mb"] == 8 * (compose.SLURMD_MB + compose.BMC_FORWARDER_MB)  # a node and its BMC
 
 
 def test_observability_constant_matches_the_static_compose_file():
@@ -194,7 +194,7 @@ def test_compose_writes_the_effective_sim_next_to_the_file(cwd):
     copy = yaml.safe_load((path.parent / "sim.yaml").read_text())
     assert copy["compute"]["count"] == 2 and copy["gpu"]["nodes"] == 4
     assert (path.parent / "slurm" / "slurm.conf").read_text().count("gpu[001-004]") >= 1
-    assert "gpu003" in compose.generate(sim, prof)["services"]["bmc-farm"]["networks"]["default"]["aliases"][-2]
+    assert "bmc-gpu003" in compose.generate(sim, prof)["services"]  # every node has a BMC forwarder
 
 
 def test_export_follows_the_built_workbench(cwd, monkeypatch):
@@ -230,3 +230,24 @@ def test_catalog_lists_every_part_with_its_cost_and_state():
 def test_parts_in_reads_what_a_build_contains():
     assert workbench.parts_in({"jira-mock", "bmc-farm"}) == ["jira", "bmc"]
     assert "accounting" in workbench.parts_in({"mariadb", "slurmdbd", "accounting-init"}) and "accounting" not in workbench.parts_in({"slurmdbd"})
+
+
+def test_bmc_nodes_select_which_nodes_get_a_bmc_and_survive_the_saved_file(tmp_path):
+    s = spec(bmc_nodes=["gpu001", "cn002", "cn002"])
+    assert s.problems() == [] and s.to_dict()["bmc_nodes"] == ["cn002", "gpu001"]
+    sim, prof = workbench.effective(SIM, s)
+    assert sim["bmc"] == {"per_node": True, "nodes": ["cn002", "gpu001"]}
+    names = sorted(n for n in compose.generate(sim, prof)["services"] if n.startswith("bmc-") and n != "bmc-farm")
+    assert names == ["bmc-cn002", "bmc-gpu001"]
+    path = tmp_path / "wb.yaml"
+    workbench.save(s, path)
+    assert workbench.load_file(path, workbench.defaults(SIM)).bmc_nodes == ["cn002", "gpu001"]
+    assert "nodes" not in workbench.effective(SIM, spec())[0]["bmc"]  # unset: every node
+    assert spec(bmc_nodes=["../x"]).problems() == ["bmc_nodes must be node names such as cn001, gpu002"]
+    assert "bmc_nodes" in spec().to_dict() and spec().to_dict()["bmc_nodes"] is None
+
+
+def test_each_bmc_adds_its_forwarder_to_the_estimate():
+    all_on = workbench.estimate(*workbench.effective(SIM, spec()))["total_mb"]
+    two = workbench.estimate(*workbench.effective(SIM, spec(bmc_nodes=["cn001", "cn002"])))["total_mb"]
+    assert all_on - two == 4 * compose.BMC_FORWARDER_MB

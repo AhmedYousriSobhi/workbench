@@ -29,7 +29,7 @@ kubernetes:
   kwok_nodes: 0
 
 bmc:
-  per_node: true
+  per_node: true   # one BMC address per node (ADR 0018); a workbench selection can limit which nodes (--bmc-nodes)
 
 host:
   reserve_gb: 3

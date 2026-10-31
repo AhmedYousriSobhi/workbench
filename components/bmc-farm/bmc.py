@@ -214,8 +214,9 @@ def node_for(farm: Farm, host_header: str) -> str:
 
 
 def make_handler(farm: Farm, sessions: Sessions | None = None, stats: dict | None = None,
-                 lock=None):
-    """Legacy HTTP surface (/<node>/redfish/v1, no auth) when `sessions` is None, else the TLS surface."""
+                 lock=None, fixed_node: str | None = None):
+    """Legacy HTTP surface (/<node>/redfish/v1, no auth) when `sessions` is None, else the TLS surface. `fixed_node`
+    pins a TLS listener to one node (the per-node BMC address forwards to its own port, ADR 0018)."""
     if stats is None:
         stats, lock = {"requests": 0}, threading.Lock()
 
@@ -238,7 +239,7 @@ def make_handler(farm: Farm, sessions: Sessions | None = None, stats: dict | Non
             path = self.path.split("?")[0]
             if sessions is not None:
                 if path.rstrip("/") == "/redfish/v1" or path.startswith("/redfish/v1/"):
-                    return node_for(farm, self.headers.get("Host", "")), path[len("/redfish/v1"):].strip("/"), "/redfish/v1"
+                    return fixed_node or node_for(farm, self.headers.get("Host", "")), path[len("/redfish/v1"):].strip("/"), "/redfish/v1"
                 return None
             parts = path.strip("/").split("/", 3)  # node, redfish, v1, rest
             if len(parts) >= 3 and parts[1:3] == ["redfish", "v1"] and parts[0] in farm.nodes:
@@ -309,6 +310,7 @@ def read_credentials(path: Path) -> tuple[str, str] | None:
     return (user, pw) if user and pw else None
 
 
+NODE_PORT_BASE = 9000  # per-node TLS listener: 9000 + index in node order (benchctl/addressing.py BMC_NODE_PORT_BASE)
 STANDARD_TLS_PORT = 443  # not published on the host (binding it there needs root); reached as bmc-<node> inside the cluster
 
 
@@ -332,6 +334,13 @@ def main() -> None:
                 continue
             secure.socket = ctx.wrap_socket(secure.socket, server_side=True)
             threading.Thread(target=secure.serve_forever, daemon=True).start()
+        for i, node in enumerate(farm.nodes):  # the address of each node's BMC forwards here, so its port names the node
+            try:
+                one = ThreadingHTTPServer(("0.0.0.0", NODE_PORT_BASE + i), make_handler(farm, sessions, stats, lock, fixed_node=node))
+            except OSError:
+                continue
+            one.socket = ctx.wrap_socket(one.socket, server_side=True)
+            threading.Thread(target=one.serve_forever, daemon=True).start()
     ThreadingHTTPServer(("0.0.0.0", port), make_handler(farm, None, stats, lock)).serve_forever()
 
 

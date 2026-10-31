@@ -10,7 +10,7 @@ instead; `benchctl export profile` writes one that matches what the workbench co
 ./scripts/benchctl export profile                # writes bench-profile.json in the current folder
 ```
 
-The file describes the cluster **running now** (read from Docker): a part or node that is stopped is left out. With nothing running it lists the configured cluster and says so; `--configured` forces that. Add `--bmc` for one BMC target per node (`--bmc-via login`, the default, writes `bmc-<node>:8443` for a client that reaches BMCs through the login node; `--bmc-via direct` writes `127.0.0.1:8443`), `--user bob` for another SSH user, `--name lab` for another cluster name,
+The file describes the cluster **running now** (read from Docker): a part or node that is stopped is left out. With nothing running it lists the configured cluster and says so; `--configured` forces that. Add `--bmc` for one BMC target per node that has a BMC (each with its own address `10.148.x.y:443`; `--bmc-via name` writes `bmc-<node>` instead), `--user bob` for another SSH user, `--name lab` for another cluster name,
 `-o -` to print instead of write, `--profile std` to export a profile other than the one running. With a workbench built ([choose the workbench](choose-workbench.md)) the file lists exactly its nodes and parts.
 
 Then in the client: **import a profile**, choose `bench-profile.json`. The cluster appears with SSH, Slurm, Grafana,
@@ -32,7 +32,7 @@ Press **⇩ Export** in the top strip, tick *One BMC target per node* if you wan
 Only parts the chosen profile builds: SSH (`10.141.255.254:22`, user `alice`, private-key auth), Slurm (partitions from
 `sim.yaml`), Grafana (`http://10.141.255.21:3000`, dashboard `hpc-overview`, GPU datasource `prometheus`, label
 `Hostname`), Jira (`http://10.141.255.11:8080`, project `OPS`), storage (`~`) and, with `--bmc`, a target per node
-(`bmc-<node>:8443` through the login node, or the BMC farm `10.141.255.12:8443` with `--bmc-via direct`; user `admin`). `--loopback` writes `127.0.0.1` and the published ports instead (a client that cannot route to the cluster network, or that insists on HTTPS for non-local Jira). It has no password, token or key path. Kubernetes and BCM are not
+(its own `10.148.x.y:443`, user `admin`). `--loopback` writes `127.0.0.1` and the published ports instead (all BMCs then share `127.0.0.1:8443`) (a client that cannot route to the cluster network, or that insists on HTTPS for non-local Jira). It has no password, token or key path. Kubernetes and BCM are not
 exported: Kubernetes is not built, and BCM is configured in the client over the SSH connection
 ([by component](client-setup-by-component.md)).
 

@@ -5,6 +5,7 @@ an effective `sim` dict (node counts) and a profile dict (compose groups, minus 
 the sum of the container memory limits the generated compose file would set, plus the always-on observability stack:
 an upper bound, which is what the governor's admission also uses."""
 import copy
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -46,6 +47,7 @@ class Spec:
     gpus_per_node: int = 8
     parts: list[str] = field(default_factory=lambda: list(DEFAULT_PARTS))
     k8s_nodes: int = 0
+    bmc_nodes: list[str] | None = None  # nodes that get a BMC address; None = every node (part "bmc")
 
     def problems(self) -> list[str]:
         out = []
@@ -55,13 +57,16 @@ class Spec:
         if self.cpu_nodes + self.gpu_nodes < 1:
             out.append("a workbench needs at least one node")
         out += [f"unknown part {p!r}; parts: {', '.join(PARTS)}" for p in self.parts if p not in PARTS]
+        if self.bmc_nodes is not None and not all(isinstance(n, str) and re.fullmatch(r"[a-z]{2,8}[0-9]{3}", n) for n in self.bmc_nodes):
+            out.append("bmc_nodes must be node names such as cn001, gpu002")
         if self.k8s_nodes:
             out.append("Kubernetes nodes are not built yet (SPEC section 11): use --k8s-nodes 0")
         return out
 
     def to_dict(self) -> dict:
         return {"name": self.name, "cpu_nodes": self.cpu_nodes, "gpu_nodes": self.gpu_nodes,
-                "gpus_per_node": self.gpus_per_node, "parts": sorted(set(self.parts)), "k8s_nodes": self.k8s_nodes}
+                "gpus_per_node": self.gpus_per_node, "parts": sorted(set(self.parts)), "k8s_nodes": self.k8s_nodes,
+                "bmc_nodes": None if self.bmc_nodes is None else sorted(set(self.bmc_nodes))}
 
 
 def defaults(sim: dict) -> Spec:
@@ -75,7 +80,8 @@ def from_dict(data: dict, base: Spec) -> Spec:
     if unknown:
         raise SpecError(f"unknown field(s) in the workbench file: {', '.join(sorted(unknown))}")
     merged = {**base.to_dict(), **data}
-    return Spec(**{**merged, "parts": list(merged["parts"])})
+    return Spec(**{**merged, "parts": list(merged["parts"]),
+                   "bmc_nodes": None if merged.get("bmc_nodes") is None else list(merged["bmc_nodes"])})
 
 
 def load_file(path: Path, base: Spec) -> Spec:
@@ -110,6 +116,8 @@ def effective(sim: dict, spec: Spec) -> tuple[dict, dict]:
     s.setdefault("compute", {})["count"] = spec.cpu_nodes
     s.setdefault("gpu", {}).update({"nodes": spec.gpu_nodes, "gpus_per_node": spec.gpus_per_node})
     have = {"compute": spec.cpu_nodes, "gpu": spec.gpu_nodes}
+    if spec.bmc_nodes is not None:
+        s["bmc"] = {**(s.get("bmc") or {}), "nodes": sorted(set(spec.bmc_nodes))}
     s["partitions"] = [p for p in s.get("partitions", []) if have.get(p["nodes"], 1) > 0]
     groups, drop = ["core", "access"], []
     for part in spec.parts:

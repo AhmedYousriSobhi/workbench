@@ -193,3 +193,25 @@ def test_bmc_also_listens_on_the_standard_redfish_port_inside_the_cluster():
     from benchctl import compose
     ports = compose.generate({"compute": {"prefix": "cn", "count": 1, "cpus": 2, "memory_mb": 100}, "gpu": {}}, {"groups": ["core", "mocks"]})["services"]["bmc-farm"]["ports"]
     assert ports == ["127.0.0.1:8000:8000", "127.0.0.1:8443:8443"]
+
+
+def test_a_listener_pinned_to_a_node_ignores_the_host_header():
+    nodes = bmc.load_nodes(ROOT / "sim.yaml")
+    farm = bmc.Farm(nodes)
+    last = list(nodes)[-1]
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), bmc.make_handler(farm, bmc.Sessions(("ops", "pw")), fixed_node=last))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{srv.server_port}"
+        h, _ = login(base, f"bmc-{next(iter(nodes))}")  # asks for the first node by name; its own address wins
+        assert raw(f"{base}/redfish/v1/Systems/1", headers=h)[2]["HostName"] == last
+    finally:
+        srv.shutdown()
+
+
+def test_the_farm_ports_match_the_addressing_plan():
+    from benchctl import addressing
+    assert bmc.NODE_PORT_BASE == addressing.BMC_NODE_PORT_BASE
+    nodes = bmc.load_nodes(ROOT / "sim.yaml")
+    plan = addressing.plan(yaml.safe_load((ROOT / "sim.yaml").read_text()))
+    assert [plan["bmc_port"][n] for n in nodes] == [bmc.NODE_PORT_BASE + i for i in range(len(nodes))]

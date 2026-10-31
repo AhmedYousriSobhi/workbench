@@ -11,7 +11,8 @@ from benchctl import cli, export
 
 ROOT = Path(__file__).resolve().parent.parent
 SIM = yaml.safe_load((ROOT / "sim.yaml").read_text())
-ALL = {"login", "slurmctld", "grafana", "jira-mock", "bmc-farm"}
+NODES = ["cn001", "cn002", "cn003", "cn004", "gpu001", "gpu002"]
+ALL = {"login", "slurmctld", "grafana", "jira-mock", "bmc-farm", *(f"bmc-{n}" for n in NODES)}
 runner = CliRunner()
 
 
@@ -46,7 +47,7 @@ def test_bmc_targets_one_per_node_only_when_asked():
     assert "bmc" not in export.build(SIM, ALL)
     targets = export.build(SIM, ALL, include_bmc=True)["bmc"]
     assert [t["node"] for t in targets][:2] == ["cn001", "cn002"] and len(targets) == 6
-    assert all(t["cluster"] == 0 and t["port"] == 8443 and t["username"] == "admin" for t in targets)
+    assert all(t["cluster"] == 0 and t["port"] == 443 and t["username"] == "admin" for t in targets)
     assert "bmc" not in export.build(SIM, {"login"}, include_bmc=True)
 
 
@@ -111,8 +112,8 @@ def test_live_profile_leaves_out_stopped_parts_and_nodes(tmp_path):
     body = export.build(sim, services, include_bmc=True, live=True)
     assert body["clusters"][0]["jira"] is None and body["clusters"][0]["grafana"] is None
     assert "bmc" not in body  # bmc-farm is not running
-    sim, services = export.running(SIM, fake_docker("login", "bmc-farm", "cn001"), tmp_path / "none.yaml")
-    assert [t["node"] for t in export.build(sim, services, include_bmc=True, live=True)["bmc"]] == ["cn001"]
+    sim, services = export.running(SIM, fake_docker("login", "bmc-farm", "cn001", "bmc-cn001", "bmc-cn002"), tmp_path / "none.yaml")
+    assert [t["node"] for t in export.build(sim, services, include_bmc=True, live=True)["bmc"]] == ["cn001", "cn002"]  # a BMC that runs
 
 
 def test_command_follows_the_running_containers_and_falls_back_with_a_note(tmp_path, monkeypatch):
@@ -158,18 +159,21 @@ def test_set_node_marks_a_node_down_or_back_through_scontrol(monkeypatch):
     assert runner.invoke(cli.app, ["set", "node", "cn001", "sideways"]).exit_code == 1
 
 
-def test_bmc_targets_use_the_node_name_through_the_login_node_and_loopback_when_direct():
-    via_login = export.build(SIM, ALL, include_bmc=True)["bmc"]
-    assert [t["address"] for t in via_login][:2] == ["bmc-cn001", "bmc-cn002"] and {t["port"] for t in via_login} == {8443}
-    direct = export.build(SIM, ALL, include_bmc=True, bmc_via="direct")["bmc"]
-    assert {t["address"] for t in direct} == {"10.141.255.12"} and [t["node"] for t in direct] == [t["node"] for t in via_login]
+def test_every_bmc_has_its_own_address_and_only_nodes_with_a_bmc_are_listed():
+    by_ip = export.build(SIM, ALL, include_bmc=True)["bmc"]
+    assert [t["address"] for t in by_ip] == ["10.148.0.1", "10.148.0.2", "10.148.0.3", "10.148.0.4", "10.148.100.1", "10.148.100.2"]
+    assert {t["port"] for t in by_ip} == {443}
+    by_name = export.build(SIM, ALL, include_bmc=True, bmc_via="name")["bmc"]
+    assert [t["address"] for t in by_name][:2] == ["bmc-cn001", "bmc-cn002"]
+    few = {"login", "slurmctld", "bmc-farm", "bmc-cn002", "bmc-gpu001"}  # the others have their BMC switched off
+    assert [(t["node"], t["address"]) for t in export.build(SIM, few, include_bmc=True)["bmc"]] == [("cn002", "10.148.0.2"), ("gpu001", "10.148.100.1")]
     with pytest.raises(export.ExportError, match="bad --bmc-via"):
         export.build(SIM, ALL, include_bmc=True, bmc_via="tunnel")
 
 
 def test_loopback_writes_the_published_ports_for_a_client_that_cannot_route_to_the_cluster():
-    c = export.build(SIM, ALL, include_bmc=True, bmc_via="direct", loopback=True)
+    c = export.build(SIM, ALL, include_bmc=True, loopback=True)
     cl = c["clusters"][0]
     assert cl["connection"]["host"] == "127.0.0.1" and cl["connection"]["port"] == 2222
     assert cl["grafana"]["baseUrl"] == "http://127.0.0.1:3000" and cl["jira"]["baseUrl"] == "http://127.0.0.1:8080"
-    assert {t["address"] for t in c["bmc"]} == {"127.0.0.1"}
+    assert {(t["address"], t["port"]) for t in c["bmc"]} == {("127.0.0.1", 8443)} and len(c["bmc"]) == 6  # one shared listener

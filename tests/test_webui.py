@@ -321,3 +321,21 @@ def test_page_script_declares_every_function_once():
     page = (ROOT / "webui" / "static" / "index.html").read_text()
     names = re.findall(r"^(?:async )?function ([A-Za-z_$][\w$]*)", page, re.MULTILINE)
     assert len(names) > 20 and [n for n in set(names) if names.count(n) > 1] == []
+
+
+def test_settings_lists_the_nodes_for_the_bmc_picker_and_the_sheet_sends_the_choice(ui, monkeypatch, tmp_path):
+    from benchctl import compose, workbench
+    monkeypatch.setattr(workbench, "SAVED", tmp_path / "none.yaml")
+    monkeypatch.setattr("benchctl.export.stack.current_profile", lambda: "min")
+    body = json.loads(req(ui, "/api/settings")[1])
+    assert [n["name"] for n in body["nodes"]] == ["cn001", "cn002", "cn003", "cn004", "gpu001", "gpu002"]
+    assert all(n["bmc"] for n in body["nodes"]) and body["bmc_node_mb"] == compose.BMC_FORWARDER_MB
+    page = req(ui, "/")[1].decode()
+    assert 'id="pl-bmcnodes"' in page and "bmc_nodes" in page and "showBmcNodes" in page
+
+
+def test_plan_with_a_bmc_selection_costs_less_and_names_the_flag(ui):
+    full = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8&parts=bmc")[1])
+    one = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8&parts=bmc&bmc_nodes=cn001")[1])
+    assert full["total_mb"] - one["total_mb"] == 2 * 32 and "--bmc-nodes cn001" in one["command"]
+    assert req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8&parts=bmc&bmc_nodes=..%2Fx")[0] == 422

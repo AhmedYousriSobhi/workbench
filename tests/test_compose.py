@@ -63,7 +63,8 @@ def test_slurmd_count_follows_profile():
 
 def test_budget_matches_limits():
     data = compose.generate(SIM, compose.load_profile("min"))
-    assert compose.budget_mb(data) == 200 + 60 + 3 * 100 + 40 + 60 + (4 + SIM["gpu"]["nodes"]) * 60
+    nodes = 4 + SIM["gpu"]["nodes"]  # every node also has its BMC forwarder
+    assert compose.budget_mb(data) == 200 + 60 + 3 * 100 + 40 + 60 + nodes * (60 + compose.BMC_FORWARDER_MB)
 
 
 def test_write_marks_generated(tmp_path):
@@ -84,12 +85,24 @@ def test_docker_compose_accepts_generated_file():
         out.unlink()
 
 
-def test_bmc_farm_publishes_tls_and_a_dns_alias_per_node():
-    farm = compose.generate(SIM, compose.load_profile("min"))["services"]["bmc-farm"]
+def test_bmc_farm_publishes_tls_and_every_node_has_its_own_bmc_address():
+    services = compose.generate(SIM, compose.load_profile("min"))["services"]
+    farm = services["bmc-farm"]
     assert "127.0.0.1:8443:8443" in farm["ports"] and "127.0.0.1:8000:8000" in farm["ports"]
-    aliases = farm["networks"]["default"]["aliases"]
-    assert "bmc-cn001" in aliases and "bmc-gpu001" in aliases
     assert any(v.endswith(":/run/workbench/bmc_credentials:ro") for v in farm["volumes"])
+    one = services["bmc-gpu001"]  # a forwarder on the ipmi network, standard port 443, to this node's farm port
+    assert one["networks"] == {"ipmi": {"ipv4_address": "10.148.100.1"}} and one["mem_limit"] == "32m"
+    assert one["command"][-2:] == ["443:bmc-farm:9004", "8443:bmc-farm:9004"] and one["depends_on"] == ["bmc-farm"]
+    assert set(farm["networks"]) == {"default", "ipmi"} and set(services["login"]["networks"]) == {"default", "ipmi"}
+
+
+def test_a_bmc_selection_limits_the_forwarders_and_none_means_every_node():
+    sim = {**SIM, "bmc": {"nodes": ["cn002", "gpu001"]}}
+    names = sorted(n for n in compose.generate(sim, compose.load_profile("min"))["services"] if n.startswith("bmc-") and n != "bmc-farm")
+    assert names == ["bmc-cn002", "bmc-gpu001"]
+    assert compose.bmc_nodes({**SIM, "bmc": {"nodes": []}}) == [] and len(compose.bmc_nodes(SIM)) == 6
+    off = compose.generate({**SIM, "bmc": {"nodes": []}}, compose.load_profile("min"))["services"]
+    assert not [n for n in off if n.startswith("bmc-") and n != "bmc-farm"] and "bmc-farm" in off
 
 
 def test_compute_nodes_run_sshd_with_the_shared_keys():
