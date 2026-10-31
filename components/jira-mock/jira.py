@@ -18,7 +18,7 @@ GET  /rest/api/{2,3}/{myself,serverInfo,field,project,project/search}
 JQL: AND OR NOT ( ), = != ~ !~ in, not in, is [not] EMPTY, < > <= >= (dates, -7d), currentUser(), ORDER BY created|updated|key; fields incl. watcher (reporter, assignee); dates as 2026-10-30 14:00 or 2026/10/30 14:00
 POST /rest/webhooks/1.0/webhook                   {"url": "...", "events": ["jira:issue_created", ...]}
 POST /sim/failure  {"mode": "401|429|503|slow", "count": 3, "delay": 2}   (applies to the next /rest requests)
-GET|POST /sim/tickets   {"action": "create|transition|comment|reset", ...}: tickets without a client (scenarios, #107)
+GET|POST /sim/tickets   {"action": "create|transition|comment|fault|reset", ...}: tickets without a client (scenarios, #107)
 GET  /rest/api/{2,3}/issue/KEY/editmeta            (priority, labels, description, summary: what an edit form draws)
 GET  /healthz
 Workflow: Open -> In Progress -> Resolved (needs "resolution") -> Closed; Reopen from any later state.
@@ -40,6 +40,8 @@ WORKFLOW = {
     "Resolved": [("41", "Close", "Closed", []), ("51", "Reopen", "Open", [])],
     "Closed": [("51", "Reopen", "Open", [])],
 }
+FAULTS = {"power": ("node is down (powered off)", "Highest"), "xid": ("GPU error", "High"),
+          "overheat": ("node is overheating", "High"), "fan": ("fan failure", "Medium")}  # kind: (summary, priority)
 RESOLUTIONS = ("Done", "Won't Do", "Duplicate", "Cannot Reproduce")
 PRIORITIES = ("Highest", "High", "Medium", "Low", "Lowest")
 SCREEN = {  # what a form needs to draw a field: the shape of Jira's own transition and edit screens
@@ -319,7 +321,38 @@ class Jira:
                 elif self.issues[hit["key"]]["fields"]["status"]["name"] != body["to"]:
                     self.move_to(self.issues[hit["key"]], body["to"], body.get("resolution", "Done"))
             return {"matched": [h["key"] for h in hits]}
-        raise JiraError(400, ["action must be create, transition, comment or reset"])
+        if action == "fault":
+            return self.fault(body)
+        raise JiraError(400, ["action must be create, transition, comment, fault or reset"])
+
+    def fault(self, body: dict) -> dict:
+        """What an ops integration does about a node fault: `open` files one ticket per node and kind (a repeat of the same
+        report comments instead, and an identical comment is not added twice); otherwise the node's open tickets of that kind
+        (every kind when `kind` is empty) get a recovery comment and are resolved."""
+        node, kind, detail = body.get("node"), body.get("kind") or "", str(body.get("detail") or "")
+        if not node or (body.get("open", True) and kind not in FAULTS):
+            raise JiraError(400, ["fault needs node and, to open one, kind: " + ", ".join(FAULTS)])
+        with self.lock:
+            mine = [i for i in self.issues.values() if f"node-{node}" in i["fields"]["labels"]
+                    and i["fields"]["status"]["name"] not in ("Resolved", "Closed")
+                    and (not kind or f"fault-{kind}" in i["fields"]["labels"])]
+        if not body.get("open", True):
+            for i in mine:
+                self.comment(i["key"], {"body": f"Recovered. {detail}".strip()})
+                self.move_to(i, "Resolved", "Done")
+            return {"resolved": [i["key"] for i in mine]}
+        if mine:
+            text = f"Still failing. {detail}".strip()
+            last = (mine[0]["fields"]["comment"]["comments"] or [{}])[-1].get("body")
+            if last != text:
+                self.comment(mine[0]["key"], {"body": text})
+            return {"existing": mine[0]["key"]}
+        title, priority = FAULTS[kind]
+        key = self.create({"fields": {
+            "project": {"key": body.get("project", "OPS")}, "summary": f"{node}: {title}", "description": detail or title,
+            "labels": [f"node-{node}", f"fault-{kind}", "auto"], "issuetype": {"name": "Incident"},
+            "priority": {"name": priority}, "reporter": "ops-bot"}})["key"]
+        return {"created": key}
 
     def overview(self) -> dict:
         by: dict[str, int] = {}

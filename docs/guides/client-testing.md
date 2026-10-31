@@ -51,7 +51,7 @@ If port 2222 refuses connections, the checkout is probably on a branch without t
   state=drain reason="test"`, and `state=resume` afterwards.
 - **GPU panel:** set the datasource uid to `prometheus`, the host label to `Hostname`, and the Viewer token. Per-job
   GPU usage appears only while the SSH user has a running job, and the GPUs of that job read busy (the others idle).
-- **Jira:** base URL `http://10.141.255.11:8080` (a client that refuses plain HTTP for a non-local host: use the fallback `http://127.0.0.1:8080`). `POST /sim/tickets` and the ticket scenarios ([tickets guide](jira-tickets.md)) file and move tickets; `POST /sim/failure` injects 401,
+- **Jira:** base URL `http://10.141.255.11:8080` (a client that refuses plain HTTP for a non-local host: use the fallback `http://127.0.0.1:8080`). `POST /sim/tickets` and the ticket scenarios ([tickets guide](jira-tickets.md)) file and move tickets; **a node fault files one ticket by itself** (project OPS, reporter `ops-bot`, labels `node-<name>`, `fault-<kind>`, `auto`): Power off, GPU error (XID), overheat and fan failure each open one per node and kind (a repeat comments), Power on or Clear faults comments and resolves it, from the page, `benchctl set node` and scenarios alike; `POST /sim/failure` injects 401,
   429, 503 or slow responses.
 
 ## Verifying without a GUI

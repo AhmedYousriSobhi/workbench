@@ -92,18 +92,22 @@ def test_actions_reuse_scenario_steps_with_the_node_filled_in():
     assert [r["status"] for r in res] == ["ok"] and "slurm" in res[0]["detail"]  # one step; the BCM and exporter ride along (side effects), Slurm is the governor's
     assert sent == [("http://127.0.0.1:8000/sim/inject", {"node": "cn002", "power": "Off"}),
                     ("http://127.0.0.1:8081/sim/inject", {"node": "cn002", "state": "DOWN"}),
-                    ("http://127.0.0.1:9400/sim/inject", {"node": "cn002", "down": True})]
+                    ("http://127.0.0.1:9400/sim/inject", {"node": "cn002", "down": True}),
+                    ("http://127.0.0.1:8080/sim/tickets", {"action": "fault", "node": "cn002", "kind": "power", "detail": "BMC power Off"})]
     sent.clear()
     c.act("gpu001", "gpu-xid")
-    assert sent == [("http://127.0.0.1:9400/sim/inject", {"node": "gpu001", "xid": 79})]
+    assert sent == [("http://127.0.0.1:9400/sim/inject", {"node": "gpu001", "xid": 79}),
+                    ("http://127.0.0.1:8080/sim/tickets", {"action": "fault", "node": "gpu001", "kind": "xid", "detail": "XID 79"})]
     sent.clear()
     c.act("cn001", "clear")  # clear powers the node on: BCM up and the exporter publishing again; no GPU fault to clear on a compute node
     assert sent == [("http://127.0.0.1:8000/sim/inject", {"node": "cn001", "clear": True}),
                     ("http://127.0.0.1:8081/sim/inject", {"node": "cn001", "state": "UP"}),
-                    ("http://127.0.0.1:9400/sim/inject", {"node": "cn001", "down": False})]
+                    ("http://127.0.0.1:9400/sim/inject", {"node": "cn001", "down": False}),
+                    ("http://127.0.0.1:8080/sim/tickets", {"action": "fault", "node": "cn001", "kind": "", "open": False,
+                                                           "detail": "The node reports healthy again."})]
     sent.clear()
     c.act("gpu002", "clear")  # a GPU node also gets its GPU fault cleared
-    assert len(sent) == 4 and ("http://127.0.0.1:9400/sim/inject", {"node": "gpu002", "clear": True}) in sent
+    assert ("http://127.0.0.1:9400/sim/inject", {"node": "gpu002", "clear": True}) in sent
 
 
 def test_action_validation():

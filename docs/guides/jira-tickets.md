@@ -91,3 +91,19 @@ it with the Resolve form (the mock describes the resolution choices). Create the
 
 Jira Cloud's Teams and Assets fields, attachments, linked tickets, Confluence, and transition screens with extra fields. A
 client that needs one of them reads an empty answer, not an error. The mock keeps tickets in memory: a restart empties it.
+
+
+## Tickets for node faults
+
+Every node fault files a ticket and every recovery resolves it, like an ops integration would. It happens in the same place as the fault, so the page's buttons, `benchctl set node NAME off|on` and a scenario's `bmc-farm` and `gpu-exporter` steps all do it. With no Jira in the cluster nothing is filed and nothing fails.
+
+| Fault | Ticket summary | Priority |
+|---|---|---|
+| Power off | `cn002: node is down (powered off)` | Highest |
+| GPU error (XID) | `gpu001: GPU error` | High |
+| Overheat (92 °C) | `cn002: node is overheating` | High |
+| Fan failure | `cn002: fan failure` | Medium |
+
+One ticket stays open per node and kind: the same fault again adds a comment (`Still failing.`) instead of a second ticket. Power on or Clear faults adds `Recovered.` and moves the ticket to Resolved; a fault after that opens a new one. Tickets have the labels `node-<name>`, `fault-<kind>` and `auto`, type Incident, reporter `ops-bot`.
+
+`POST /sim/tickets {"action": "fault", "node": "cn002", "kind": "power", "detail": "..."}` does the same by hand (`"open": false` resolves; leave `kind` out to resolve every kind for the node).
