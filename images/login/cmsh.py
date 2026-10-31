@@ -85,6 +85,23 @@ def healthchecks_list() -> str:
     return table(["Name (key)", "Description"], [list(h) for h in HEALTHCHECKS])
 
 
+def device_show(name: str) -> str:
+    d = next((x for x in devices() if x["hostname"] == name), None)
+    if d is None:
+        raise Unreachable(f"no such device: {name}")
+    rows = [["Hostname", d["hostname"]], ["Type", d["childType"]], ["Category", d["category"]], ["IP", d["ip"]],
+            ["MAC", d["mac"]], ["Network", "internalnet"], ["Status", d["status"]]]
+    return table(["Parameter", "Value"], rows)
+
+
+def category_show(name: str) -> str:
+    ds = devices()
+    if name not in {d["category"] for d in ds[1:]}:
+        raise Unreachable(f"no such category: {name}")
+    members = [d["hostname"] for d in ds if d["category"] == name]
+    return table(["Parameter", "Value"], [["Name", name], ["Software image", f"default-image-{name}"], ["Nodes", ",".join(members)]])
+
+
 SCRIPTS = {("device", "list"): device_list, ("device", "status"): device_status, ("category", "list"): category_list,
            ("jobqueue", "list"): jobqueue_list, ("monitoring", "healthchecks", "list"): healthchecks_list}
 
@@ -99,6 +116,11 @@ def run(script: str) -> tuple[int, str, str]:
         if verb in MUTATING:
             return 1, "", f"Error: this cmsh is read-only (workbench); '{p}' would change the cluster\n"
     fn = SCRIPTS.get(parts)
+    if fn is None and len(parts) == 2 and len(parts[1].split()) == 2 and parts[1].split()[0] == "show":
+        fn = {"device": device_show, "category": category_show}.get(parts[0])
+        if fn:
+            arg = parts[1].split()[1]
+            fn = (lambda f=fn, a=arg: f(a))
     if fn is None:
         return 1, "", f"Error: unknown command: {'; '.join(parts)}\n"
     try:
@@ -108,16 +130,76 @@ def run(script: str) -> tuple[int, str, str]:
 
 
 ROOT_MODES = {"device", "category", "jobqueue", "monitoring"}
-HELP = "Modes: device, category, jobqueue, monitoring. In a mode: list, status. Also: .. (up), exit, quit, help. Read-only."
+COMMANDS = {  # what each mode offers, with the line `help` prints
+    (): {"device": "enter device mode (nodes)", "category": "enter category mode (node categories)",
+         "jobqueue": "enter job queue mode (Slurm partitions)", "monitoring": "enter monitoring mode",
+         "help": "show this list", "exit": "leave cmsh", "quit": "leave cmsh"},
+    ("device",): {"list": "list devices", "status": "show the status of every device", "show": "show one device: show <name>"},
+    ("category",): {"list": "list categories", "show": "show one category: show <name>"},
+    ("jobqueue",): {"list": "list job queues"},
+    ("monitoring",): {"healthchecks": "enter health checks mode"},
+    ("monitoring", "healthchecks"): {"list": "list health checks"},
+}
+COMMON = {"..": "go up one level", "help": "show this list", "exit": "leave cmsh", "quit": "leave cmsh"}
+
+
+def commands(path: list[str]) -> dict[str, str]:
+    return {**COMMANDS.get(tuple(path), {}), **({} if not path else COMMON)}
+
+
+def help_text(path: list[str]) -> str:
+    cmds = commands(path)
+    width = max(map(len, cmds))
+    return "\n".join([f"Commands here ({'->'.join(path) or 'top level'}), read-only:", *(f"  {c.ljust(width)}  {d}" for c, d in cmds.items()),
+                      "Several commands on one line are separated by ;"])
+
+
+def completions(path: list[str], buffer: str, text: str) -> list[str]:
+    """Tab candidates for `text`, the word being typed at the end of `buffer`."""
+    stmt = buffer.rsplit(";", 1)[-1].lstrip()
+    words = stmt.split()
+    first = len(words) == 0 or (len(words) == 1 and not stmt.endswith(" "))
+    if first:
+        pool = list(commands(path))
+    elif words[0] == "show" and path in (["device"], ["category"]):
+        try:
+            ds = devices()
+            pool = [d["hostname"] for d in ds] if path == ["device"] else sorted({d["category"] for d in ds[1:]})
+        except Unreachable:
+            pool = []
+    else:
+        pool = []
+    return sorted(c for c in pool if c.startswith(text))
+
+
+def setup_readline(path: list[str]) -> None:
+    """Tab completion and line editing when a person types (a terminal); a pipe has no use for it."""
+    try:
+        import readline
+    except ImportError:
+        return
+    readline.set_completer_delims(" \t;")
+    readline.parse_and_bind("tab: complete")
+    readline.set_completer(lambda text, n: (completions(path, readline.get_line_buffer(), text) + [None])[n])
 
 
 def console(stdin, stdout, stderr) -> int:
     """Interactive session: `[host]% device` enters a mode, `list` prints, `..` goes up, `exit` leaves. Read-only."""
     host, path = socket.gethostname(), []
+    tty = stdin.isatty() if hasattr(stdin, "isatty") else False
+    if tty:
+        setup_readline(path)
     while True:
-        stdout.write(f"[{'->'.join([host, *path])}]% ")
-        stdout.flush()
-        line = stdin.readline()
+        prompt = f"[{'->'.join([host, *path])}]% "
+        if tty:  # input() is what engages readline: tab completion, history, cursor keys
+            try:
+                line = input(prompt) + "\n"
+            except EOFError:
+                line = ""
+        else:
+            stdout.write(prompt)
+            stdout.flush()
+            line = stdin.readline()
         if not line:
             stdout.write("\n")
             return 0
@@ -129,9 +211,10 @@ def console(stdin, stdout, stderr) -> int:
             if verb in ("exit", "quit"):
                 return 0
             if verb == "..":
-                path = path[:-1]
+                if path:
+                    path.pop()  # in place: the tab completer holds this same list
             elif verb in ("help", "?"):
-                stdout.write(HELP + "\n")
+                stdout.write(help_text(path) + "\n")
             elif verb in MUTATING:
                 stderr.write(f"Error: this cmsh is read-only (workbench); '{stmt}' would change the cluster\n")
             elif (verb in ROOT_MODES and not path) or (path == ["monitoring"] and verb == "healthchecks"):

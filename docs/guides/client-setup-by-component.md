@@ -127,6 +127,13 @@ Press **Test BCM Connection** (save the cluster first). You can check by hand wh
 | User / password | `admin` / the password after the colon in `compose/generated/secrets/bmc_credentials` (the file reads `admin:<password>`) |
 | Certificate | self-signed; the client must be told to trust or pin it |
 
+**Which address?** It depends on how the client reaches the BMCs. If it goes **through the login node** (the jump host, the
+usual design: BMCs sit on the management network behind the head node), use `bmc-<node>` port `8443` (or the standard `443`):
+`127.0.0.1` there is the login container itself and nothing listens on it, so the connection is refused. If it connects **directly** from your machine, use `127.0.0.1` port `8443`;
+all nodes then share that one address because the BMC farm is a single process that picks the node by the `Host` header
+(`bmc-<node>`). `benchctl export profile --bmc --bmc-via login|direct` (and the page's Export sheet) writes either form;
+the default is `login`. One address per node is a design question: [issue 147](https://github.com/AhmedYousriSobhi/workbench/issues/147).
+
 Check by hand: `curl -sk -H "Host: bmc-gpu001" -u "admin:<password>" https://127.0.0.1:8443/redfish/v1/` (it answers "gpu001 service root"). Break something with
 `./scripts/benchctl scenario run fan-failure`.
 

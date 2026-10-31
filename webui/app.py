@@ -242,7 +242,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         try:
             base = yaml.safe_load(sim_yaml.read_text())
             sim, services, label = export.configured(base)
-            body = export.build(sim, services, "workbench", q.get("bmc") == "1", q.get("user") or None)
+            body = export.build(sim, services, "workbench", q.get("bmc") == "1", q.get("user") or None,
+                                bmc_via=q.get("bmc_via", "login"))
             text = export.to_json(body, export.format_id())
         except export.ExportError as e:
             raise HTTPException(422, str(e)) from e

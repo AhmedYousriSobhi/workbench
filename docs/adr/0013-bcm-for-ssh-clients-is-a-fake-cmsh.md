@@ -16,7 +16,7 @@ CMDaemon events log. Nothing in that path is HTTP.
   down by a scenario shows as down in `device; status`. It refuses everything that would change state.
 - Output follows real `cmsh` table formatting closely enough for a client's parser; the formats are an assumed subset
   until a real capture is available (record it as a fixture then, NF-2).
-- The events-log tail and `module load cmsh` are out of scope for the first cut. The interactive console was added later (issue 144): `[host]% ` prompt, modes (`device`, `category`, `jobqueue`, `monitoring` > `healthchecks`), `list`, `status`, `..`, `exit`, `help`, read-only like `-c`.
+- The events-log tail and `module load cmsh` are out of scope for the first cut. The interactive console was added later (issue 144): `[host]% ` prompt, modes (`device`, `category`, `jobqueue`, `monitoring` > `healthchecks`), `list`, `status`, `show <name>`, `..`, `exit`, `help` (lists the commands of the current mode), Tab completion of commands and node names on a terminal, read-only like `-c`.
 
 ## Consequences
 - No new container and no new port: the cost is one script in `images/login`.

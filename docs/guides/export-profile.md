@@ -10,7 +10,7 @@ instead; `benchctl export profile` writes one that matches what the workbench co
 ./scripts/benchctl export profile                # writes bench-profile.json in the current folder
 ```
 
-The file describes the cluster **running now** (read from Docker): a part or node that is stopped is left out. With nothing running it lists the configured cluster and says so; `--configured` forces that. Add `--bmc` for one BMC target per node, `--user bob` for another SSH user, `--name lab` for another cluster name,
+The file describes the cluster **running now** (read from Docker): a part or node that is stopped is left out. With nothing running it lists the configured cluster and says so; `--configured` forces that. Add `--bmc` for one BMC target per node (`--bmc-via login`, the default, writes `bmc-<node>:8443` for a client that reaches BMCs through the login node; `--bmc-via direct` writes `127.0.0.1:8443`), `--user bob` for another SSH user, `--name lab` for another cluster name,
 `-o -` to print instead of write, `--profile std` to export a profile other than the one running. With a workbench built ([choose the workbench](choose-workbench.md)) the file lists exactly its nodes and parts.
 
 Then in the client: **import a profile**, choose `bench-profile.json`. The cluster appears with SSH, Slurm, Grafana,

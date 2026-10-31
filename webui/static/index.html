@@ -361,7 +361,9 @@
     <div class="sheet-h"><div><h2 id="exp-h">Export the cluster</h2><p class="dim small">A profile file the monitoring client can import: this cluster's SSH, Slurm, Grafana, Jira and storage.</p></div>
       <button class="btn small" id="exp-close" aria-label="Close the export">✕ Close</button></div>
     <div class="sheet-b">
-      <div class="toggles"><label class="tog"><input type="checkbox" id="exp-bmc" checked><span>One BMC target per node (host 127.0.0.1, port 8443)</span></label></div>
+      <div class="toggles"><label class="tog"><input type="checkbox" id="exp-bmc" checked><span>One BMC target per node</span></label>
+        <label class="small dim" for="exp-via" style="display:flex;align-items:center;gap:8px">Reached
+          <select id="exp-via"><option value="login">through the login node: bmc-NODE:8443</option><option value="direct">directly: 127.0.0.1:8443</option></select></label></div>
       <p class="small dim">The file holds no secrets. After importing it, set the SSH key (<code>benchctl ssh-key install</code>) and the Grafana token (<code>cat compose/generated/secrets/grafana_viewer_token</code>; it changes at every <code>benchctl up</code>).</p>
     </div>
     <div class="sheet-f"><p id="exp-msg" role="status" class="small"></p><button class="btn small" id="exp-cancel">Cancel</button><button class="btn" id="exp-go">Download bench-profile.json</button></div>
@@ -561,7 +563,7 @@ $('expdlg').addEventListener('click', e => { if (e.target === $('expdlg')) $('ex
 $('exp-go').onclick = async () => {
   $('exp-msg').textContent = 'Preparing…';
   try {
-    const r = await fetch('/api/export/profile' + ($('exp-bmc').checked ? '?bmc=1' : ''));
+    const r = await fetch('/api/export/profile' + ($('exp-bmc').checked ? '?bmc=1&bmc_via=' + $('exp-via').value : ''));
     if (r.status === 404) { $('exp-msg').textContent = '✗ This page is newer than its backend. Restart it: ./scripts/benchctl stop && ./scripts/benchctl start'; return; }
     if (!r.ok) { $('exp-msg').textContent = '✗ ' + (await r.json()).detail; return; }
     const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = 'bench-profile.json';

@@ -108,7 +108,7 @@ def test_interactive_console_enters_modes_lists_and_leaves(monkeypatch):
 
 def test_interactive_console_is_read_only_and_reports_unknown_commands(monkeypatch):
     _, out, err = session(monkeypatch, "device\nset cn001 category x\nfrobnicate\nhelp\n")
-    assert "read-only" in err and "unknown command: frobnicate" in err and "Modes:" in out
+    assert "read-only" in err and "unknown command: frobnicate" in err and "Commands here (device)" in out
     assert session(monkeypatch, "")[0] == 0  # end of input leaves cleanly
 
 
@@ -117,3 +117,26 @@ def test_main_without_c_opens_the_console(monkeypatch):
     monkeypatch.setattr(cmsh.socket, "gethostname", lambda: "login")
     monkeypatch.setattr(cmsh.sys, "stdin", io.StringIO("exit\n"))
     assert cmsh.main([]) == 0
+
+
+def test_help_lists_the_commands_of_the_current_mode(monkeypatch):
+    _, out, _ = session(monkeypatch, "help\ndevice\nhelp\n")
+    assert "device" in out and "category" in out and "exit" in out          # top level
+    assert "list" in out and "show" in out and "status" in out and ".." in out  # inside device
+
+
+def test_show_prints_one_device_or_category(monkeypatch):
+    _, out, err = session(monkeypatch, "device\nshow cn001\nshow nope\n..\ncategory\nshow compute\n")
+    assert "Hostname" in out and "cn001" in out and "no such device: nope" in err.replace("Unable to connect to CMDaemon: ", "")
+    assert "Software image" in out and "default-image-compute" in out
+
+
+def test_tab_completion_offers_modes_commands_and_node_names(monkeypatch):
+    monkeypatch.setattr(cmsh.socket, "gethostname", lambda: "login")
+    monkeypatch.setattr(cmsh, "call", lambda service, name, args=None: DEVICES)
+    assert cmsh.completions([], "de", "de") == ["device"] and "monitoring" in cmsh.completions([], "", "")
+    assert cmsh.completions(["device"], "", "") == sorted(["list", "status", "show", "..", "help", "exit", "quit"])
+    assert cmsh.completions(["device"], "show cn", "cn") == [d["hostname"] for d in DEVICES if d["hostname"].startswith("cn")]
+    assert cmsh.completions(["device"], "list; sh", "sh") == ["show"]  # a new statement after ;
+    assert cmsh.completions(["monitoring"], "h", "h") == ["healthchecks", "help"]
+    assert cmsh.completions(["jobqueue"], "list ", "") == []

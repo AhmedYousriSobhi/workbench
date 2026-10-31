@@ -32,7 +32,7 @@ def format_id(flag: str | None = None, env: dict | None = None, local: Path = LO
 
 
 def build(sim: dict, services: set[str], name: str = "workbench", include_bmc: bool = False,
-          user: str | None = None, live: bool = False) -> dict:
+          user: str | None = None, live: bool = False, bmc_via: str = "login") -> dict:
     """The profile for what the workbench contains. `services` are the compose service names that exist, so a part
     that is not built (no Jira, no Grafana) is left out instead of pointing at nothing. With `live`, `services` are
     the running containers, so a BMC target is listed only for a node that is up."""
@@ -61,7 +61,11 @@ def build(sim: dict, services: set[str], name: str = "workbench", include_bmc: b
                            "wholeProject": True}
     out: dict = {"profile": {"name": name}, "clusters": [cluster]}
     if include_bmc and "bmc-farm" in services:
-        out["bmc"] = [{"name": f"bmc-{n}", "address": "127.0.0.1", "port": BMC_PORT, "node": n, "username": "admin",
+        if bmc_via not in ("login", "direct"):
+            raise ExportError(f"bad --bmc-via {bmc_via!r}: login or direct")
+        # Through the login node (jump host) 127.0.0.1 is the login container, where nothing listens: the BMC is bmc-<node>.
+        out["bmc"] = [{"name": f"bmc-{n}", "address": f"bmc-{n}" if bmc_via == "login" else "127.0.0.1", "port": BMC_PORT,
+                       "node": n, "username": "admin",
                        "cluster": 0} for n, _ in nodes.node_names(sim) if not live or n in services]
     return out
 

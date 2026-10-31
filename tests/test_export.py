@@ -155,3 +155,12 @@ def test_set_node_marks_a_node_down_or_back_through_scontrol(monkeypatch):
     r = runner.invoke(cli.app, ["set", "node", "cn001", "down"])
     assert r.exit_code == 0 and "state=down" in ran[-1] and "nodename=cn001" in ran[-1]
     assert runner.invoke(cli.app, ["set", "node", "cn001", "sideways"]).exit_code == 1
+
+
+def test_bmc_targets_use_the_node_name_through_the_login_node_and_loopback_when_direct():
+    via_login = export.build(SIM, ALL, include_bmc=True)["bmc"]
+    assert [t["address"] for t in via_login][:2] == ["bmc-cn001", "bmc-cn002"] and {t["port"] for t in via_login} == {8443}
+    direct = export.build(SIM, ALL, include_bmc=True, bmc_via="direct")["bmc"]
+    assert {t["address"] for t in direct} == {"127.0.0.1"} and [t["node"] for t in direct] == [t["node"] for t in via_login]
+    with pytest.raises(export.ExportError, match="bad --bmc-via"):
+        export.build(SIM, ALL, include_bmc=True, bmc_via="tunnel")
