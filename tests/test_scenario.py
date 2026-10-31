@@ -280,7 +280,9 @@ def test_faults_file_tickets_and_recovery_resolves_them_and_no_jira_is_not_a_fai
     assert tickets({"nodes": ["cn001"], "temp": 60}) == []
     assert tickets({"nodes": ["cn001"], "power": "On"}) == [("power", False)] and tickets({"nodes": ["cn001"], "clear": True}) == [("", False)]
     assert tickets({"nodes": ["gpu001"], "xid": 79}, "gpu-exporter") == [("xid", True)]
-    assert tickets({"nodes": ["gpu001"], "clear": True}, "gpu-exporter") == [("xid", False)]
+    assert tickets({"nodes": ["gpu001"], "clear": True}, "gpu-exporter") == [("xid", False), ("ib", False), ("nic", False)]
+    assert tickets({"nodes": ["cn001"], "ib_down": 1}, "gpu-exporter") == [("ib", True)] and tickets({"nodes": ["cn001"], "ib_down": 0}, "gpu-exporter") == [("ib", False)]
+    assert tickets({"nodes": ["cn001"], "nic_flap": True}, "gpu-exporter") == [("nic", True)] and tickets({"nodes": ["cn001"], "nic_flap": False}, "gpu-exporter") == [("nic", False)]
     assert tickets({"nodes": ["gpu001"], "down": True}, "gpu-exporter") == []  # the exporter going quiet is a side effect, not a fault of its own
 
     def refuse_jira(url, body):

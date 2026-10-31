@@ -35,8 +35,10 @@ def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool 
         "SlurmdTimeout=15",  # a node that stops answering is DOWN* (Not responding) after about 30 s
         "MessageTimeout=5",  # the default 10 made each ping to a frozen node block an agent for 21 s: DOWN took ~85 s (#154)
         "GresTypes=gpu",
-        # Node health check (images/node-base/nhc): drains a node whose GPU count or XID state is wrong.
+        # Node health check (images/node-base/nhc): drains a node whose GPU count, XID state, IB ports or NIC are wrong.
         "HealthCheckProgram=/usr/local/sbin/nhc", "HealthCheckInterval=30", "HealthCheckNodeState=ANY",
+        # The same checks before a job starts (a failure drains the node and requeues the job) and after it ends.
+        "Prolog=/usr/local/sbin/nhc-prolog", "Epilog=/usr/local/sbin/nhc-epilog",
         # slurmrestd authenticates callers with JWT; the key is baked into the lab image (ADR 0002).
         "AuthAltTypes=auth/jwt",
         "AuthAltParameters=jwt_key=/var/spool/slurmctld/jwt_hs256.key",

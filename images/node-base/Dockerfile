@@ -49,7 +49,7 @@ COPY --from=build /tmp/slurm-${SLURM_VERSION}/contribs/slurm_completion_help/slu
 RUN echo /opt/slurm/lib >/etc/ld.so.conf.d/slurm.conf && ldconfig \
  && for f in /opt/slurm/bin/*; do ln -sf "$f" /usr/local/bin/; done
 COPY sshd_config /etc/ssh/sshd_config
-COPY --chmod=755 nhc /usr/local/sbin/nhc
+COPY --chmod=755 nhc nhc-prolog nhc-epilog /usr/local/sbin/
 COPY entrypoint.sh /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["slurmd", "-D"]

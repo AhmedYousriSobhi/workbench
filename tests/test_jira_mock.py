@@ -372,3 +372,18 @@ def test_the_backlog_gives_a_client_something_to_see_and_is_made_once():
     assert any(i["fields"]["assignee"]["name"] == jira.ME for i in j.issues.values())
     j.seed_backlog()
     assert len(j.issues) == len(jira.NEW_TICKETS)
+
+
+def test_a_slurm_report_joins_the_nodes_open_ticket_instead_of_opening_a_second(server):
+    base, *_ = server
+    fault = lambda **b: call(base, "/sim/tickets", {"action": "fault", "node": "cn002", **b})[1]
+    power = fault(kind="power", detail="BMC power Off")["created"]
+    assert fault(kind="slurm", detail="Slurm state down*: Not responding", merge=True) == {"existing": power}
+    comments = call(base, f"/rest/api/2/issue/{power}")[1]["fields"]["comment"]["comments"]
+    assert [c["body"] for c in comments] == ["Slurm reports: Slurm state down*: Not responding"]
+    fault(open=False, kind="power")
+    own = fault(kind="slurm", detail="Slurm state drain: NHC: GPU XID 79", merge=True)["created"]  # nothing open: its own ticket
+    f = call(base, f"/rest/api/2/issue/{own}")[1]["fields"]
+    assert f["summary"] == "cn002: Slurm took the node out of service" and "fault-slurm" in f["labels"]
+    assert fault(open=False, kind="slurm", detail="back")["resolved"] == [own]
+    assert fault(kind="ib", detail="1 InfiniBand port(s) down")["created"] and fault(kind="nic", detail="flap")["created"]

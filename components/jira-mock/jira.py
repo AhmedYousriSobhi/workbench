@@ -54,7 +54,9 @@ NEW_TICKETS = (("Job stuck in CG state on the CPU partition", "Medium"), ("Reque
                ("Reservation needed for a training run next week", "Low"), ("Lustre mount stale on a compute node", "High"),
                ("Grafana dashboard shows no GPU data", "Medium"), ("License server unreachable from the cluster", "High"))
 FAULTS = {"power": ("node is down (powered off)", "Highest"), "xid": ("GPU error", "High"),
-          "overheat": ("node is overheating", "High"), "fan": ("fan failure", "Medium")}  # kind: (summary, priority)
+          "overheat": ("node is overheating", "High"), "fan": ("fan failure", "Medium"),
+          "ib": ("InfiniBand port down", "High"), "nic": ("NIC link flapping", "Medium"),
+          "slurm": ("Slurm took the node out of service", "High")}  # kind: (summary, priority)
 RESOLUTIONS = ("Done", "Won't Do", "Duplicate", "Cannot Reproduce")
 PRIORITIES = ("Highest", "High", "Medium", "Low", "Lowest")
 SCREEN = {  # what a form needs to draw a field: the shape of Jira's own transition and edit screens
@@ -428,17 +430,18 @@ class Jira:
         node, kind, detail = body.get("node"), body.get("kind") or "", str(body.get("detail") or "")
         if not node or (body.get("open", True) and kind not in FAULTS):
             raise JiraError(400, ["fault needs node and, to open one, kind: " + ", ".join(FAULTS)])
+        merge = bool(body.get("merge")) and body.get("open", True)  # any open ticket for the node takes the report
         with self.lock:
             mine = [i for i in self.issues.values() if f"node-{node}" in i["fields"]["labels"]
                     and i["fields"]["status"]["name"] not in ("Resolved", "Closed")
-                    and (not kind or f"fault-{kind}" in i["fields"]["labels"])]
+                    and (merge or not kind or f"fault-{kind}" in i["fields"]["labels"])]
         if not body.get("open", True):
             for i in mine:
                 self.comment(i["key"], {"body": f"Recovered. {detail}".strip()})
                 self.move_to(i, "Resolved", "Done")
             return {"resolved": [i["key"] for i in mine]}
         if mine:
-            text = f"Still failing. {detail}".strip()
+            text = f"{'Slurm reports: ' if kind == 'slurm' else 'Still failing. '}{detail}".strip()
             last = (mine[0]["fields"]["comment"]["comments"] or [{}])[-1].get("body")
             if last != text:
                 self.comment(mine[0]["key"], {"body": text})

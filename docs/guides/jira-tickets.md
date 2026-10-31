@@ -111,6 +111,9 @@ Every node fault files a ticket and every recovery resolves it, like an ops inte
 | GPU error (XID) | `gpu001: GPU error` | High |
 | Overheat (92 °C) | `cn002: node is overheating` | High |
 | Fan failure | `cn002: fan failure` | Medium |
+| InfiniBand port down | `gpu001: InfiniBand port down` | High |
+| NIC flapping | `gpu001: NIC link flapping` | Medium |
+| Slurm takes the node out of service (DOWN, drained by the health check or by hand) | `cn002: Slurm took the node out of service`, or a *Slurm reports* comment on the node's open ticket | High |
 
 One ticket stays open per node and kind: the same fault again adds a comment (`Still failing.`) instead of a second ticket. Power on or Clear faults adds `Recovered.` and moves the ticket to Resolved; a fault after that opens a new one. Tickets have the labels `node-<name>`, `fault-<kind>` and `auto`, type Incident, reporter `ops-bot`.
 

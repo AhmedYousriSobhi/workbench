@@ -54,9 +54,16 @@ class State:
         self.xid_count: dict[str, int] = {}
         self.down: set[str] = set()  # powered-off nodes publish nothing, as a real exporter on a dead host
         self.alloc: dict[str, set[int]] = {}  # node -> GPU indexes held by running jobs
+        self.ib_down: dict[str, int] = {}     # node -> how many InfiniBand ports are down (the first N)
+        self.flapping: set[str] = set()       # nodes whose NIC link keeps changing: the carrier counter rises on every scrape
+        self.carrier: dict[str, int] = {}
 
     def set_alloc(self, nodes: dict[str, list[int]]) -> None:
         self.alloc = {n: set(g) for n, g in nodes.items()}
+
+    def ib_ports(self, node: str) -> int:
+        """One HCA per GPU on a GPU node, one port on a compute node."""
+        return max(1, self.nodes[node])
 
     def inject(self, req: dict) -> None:
         node = req["node"]
@@ -65,9 +72,20 @@ class State:
         if "down" in req:
             (self.down.add if req["down"] else self.down.discard)(node)
         if req.get("clear"):
-            self.xid.pop(node, None)
-            self.temp_override.pop(node, None)
+            for gone in (self.xid, self.temp_override, self.ib_down):
+                gone.pop(node, None)
+            self.flapping.discard(node)
             return
+        if "ib_down" in req:
+            n = int(req["ib_down"])
+            if not 0 <= n <= self.ib_ports(node):
+                raise ValueError(f"ib_down must be 0 to {self.ib_ports(node)}")
+            if n:
+                self.ib_down[node] = n
+            else:
+                self.ib_down.pop(node, None)
+        if "nic_flap" in req:
+            (self.flapping.add if req["nic_flap"] else self.flapping.discard)(node)
         if "xid" in req:
             self.xid[node] = int(req["xid"])
             self.xid_count[node] = self.xid_count.get(node, 0) + 1
@@ -123,6 +141,15 @@ class State:
         )
         per_node("hpc_jobs_running", "Synthetic running jobs", lambda n: r.randint(1, 6))
         per_node("hpc_jobs_pending", "Synthetic pending jobs", lambda n: r.randint(0, 3))
+        head("node_infiniband_state_id", "InfiniBand port state (4 = active, 1 = down)")
+        for n in nodes:
+            for i in range(self.ib_ports(n)):
+                state = 1 if i < self.ib_down.get(n, 0) else 4
+                out.append(f'node_infiniband_state_id{{node="{n}",Hostname="{n}",device="mlx5_{i}",port="1"}} {state}')
+        for n in self.flapping:
+            self.carrier[n] = self.carrier.get(n, 0) + 2
+        per_node("node_network_carrier_changes_total", "Link state changes", lambda n: self.carrier.get(n, 0), ',device="eth0"', "counter")
+        per_node("sim_nic_flapping", "1 while a NIC flap is injected", lambda n: int(n in self.flapping))
         mp = f',mountpoint="{MOUNT}"'
         per_node("node_filesystem_size_bytes", "Fake filesystem size", lambda n: FS_SIZE, mp)
         per_node(
