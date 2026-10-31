@@ -145,7 +145,7 @@ warns when Slurm accounting is missing (`sacct` would fail). See [export a profi
 
 **Power off and Slurm.** Power off sets the BMC and BCM state, makes the GPU exporter stop publishing the node (its GPU series vanish from Grafana), and
 asks the governor to **freeze the node's container**. Its `slurmd` then stops answering, exactly as on a dead host, and
-`slurmctld` notices by itself: `sinfo` shows the node `down*` (reason *Not responding*) after about 30-40 s (`SlurmdTimeout=30`).
+`slurmctld` notices by itself: `sinfo` shows the node `down*` (reason *Not responding*) after about 30 s (`SlurmdTimeout=15`, `MessageTimeout=5`).
 Power on thaws it, and with `ReturnToService=1` Slurm returns it on its own after its next answer. This needs the governor
 started with `--workdir` (the launcher does) and level L0-L1; otherwise the page says the node was not frozen and names
 `benchctl set node NAME off`. `benchctl set node NAME down|resume` sets the Slurm state by hand instead.

@@ -114,4 +114,5 @@ def test_a_node_set_down_by_an_admin_stays_down_until_resumed():
 
 
 def test_a_node_that_stops_answering_is_marked_down_within_about_half_a_minute():
-    assert "SlurmdTimeout=30" in slurmconf.slurm_conf(SIM, 4) and "ReturnToService=1\n" in slurmconf.slurm_conf(SIM, 4)
+    conf = slurmconf.slurm_conf(SIM, 4)
+    assert "SlurmdTimeout=15\n" in conf and "MessageTimeout=5\n" in conf and "ReturnToService=1\n" in conf
