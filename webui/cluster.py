@@ -18,8 +18,10 @@ SERVICES = {"bmc-farm": f"{BMC}/healthz", "bcm-mock": f"{BCM}/healthz", "jira-mo
 HOT_C = 90.0
 # action -> (label, only for gpu nodes, steps as (target, do-template))
 ACTIONS = {
-    "power-off": ("Power off", False, [("bmc-farm", {"power": "Off"}), ("bcm-mock", {"state": "DOWN"})]),
-    "power-on": ("Power on", False, [("bmc-farm", {"power": "On"}), ("bcm-mock", {"state": "UP"})]),
+    "power-off": ("Power off", False, [("bmc-farm", {"power": "Off"}), ("bcm-mock", {"state": "DOWN"}),
+                                       ("gpu-exporter", {"down": True})]),
+    "power-on": ("Power on", False, [("bmc-farm", {"power": "On"}), ("bcm-mock", {"state": "UP"}),
+                                     ("gpu-exporter", {"down": False})]),
     "overheat": ("Overheat (92 °C)", False, [("bmc-farm", {"temp": 92})]),
     "fan-fail": ("Fan failure", False, [("bmc-farm", {"fan_fail": 3})]),
     "gpu-xid": ("GPU error (XID 79)", True, [("gpu-exporter", {"xid": 79})]),

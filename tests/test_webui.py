@@ -249,6 +249,7 @@ def test_plan_apply_needs_csrf_validates_and_asks_the_governor(ui):
 def test_export_button_downloads_the_profile_and_explains_a_missing_format(ui, monkeypatch, tmp_path):
     from benchctl import workbench
     monkeypatch.setattr(workbench, "SAVED", tmp_path / "none.yaml")
+    monkeypatch.setattr("benchctl.export.stack.current_profile", lambda: "min")  # not whatever the host last started
     monkeypatch.setattr("benchctl.export.LOCAL_FORMAT_FILE", tmp_path / "none")
     monkeypatch.setattr("benchctl.export.format_id.__defaults__", (None, None, tmp_path / "none"))
     monkeypatch.delenv("BENCH_EXPORT_FORMAT", raising=False)
