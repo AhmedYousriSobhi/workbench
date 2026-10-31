@@ -59,8 +59,8 @@ def dispatch(line: bytes, handle: Handler, groups: Callable[[], set[str]]) -> di
         if cmd == "apply-plan" and (err := plan_error(req)):
             return {"ok": False, "error": err}
         if cmd == "node-state" and not (isinstance(req.get("node"), str) and NODE_RE.fullmatch(req["node"])
-                                        and req.get("state") in ("down", "resume")):
-            return {"ok": False, "error": "node-state needs node:NAME (cn001) and state: down|resume"}
+                                        and req.get("state") in ("off", "on", "down", "resume")):
+            return {"ok": False, "error": "node-state needs node:NAME (cn001) and state: off|on|down|resume"}
         if cmd == "admit" and not (isinstance(req.get("budget_mb"), int) and req["budget_mb"] >= 0):
             return {"ok": False, "error": "admit needs budget_mb:int>=0"}
         return handle(cmd, req)

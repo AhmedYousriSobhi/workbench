@@ -120,7 +120,7 @@ def validate(sc: dict, sim: dict) -> list[str]:
             problems += [f"step {i}: {m}" for m in ssh_problems(do)]
         if t == "jira" and "tickets" in do:
             problems += [f"step {i}: {m}" for m in jira_ticket_problems(do["tickets"])]
-        names = (do.get("nodes") or []) + (do.get("drain") or []) + (do.get("resume") or [])
+        names = [n for key in ("nodes", "drain", "down", "resume", "power_off", "power_on") for n in do.get(key) or []]
         problems += [f"step {i}: unknown node {n!r}" for n in names if n not in nodes]
     return problems
 
@@ -220,6 +220,12 @@ def execute(step: Step, poster=post, runner=checks.run, host: bool = True) -> Ou
                             f"reason={step.do.get('reason', 'scenario')}"])
                 if r.returncode:
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+            for verb, key in (("pause", "power_off"), ("unpause", "power_on")):
+                # the node stops answering (or answers again) and slurmctld notices by itself, as with a dead host
+                for n in step.do.get(key, []):
+                    r = runner(["docker", verb, f"workbench-{n}-1"])
+                    if r.returncode and f"already {verb}d" not in r.stderr and "is not paused" not in r.stderr:
+                        return Outcome(label, "failed", (r.stderr or r.stdout).strip())
             for n in step.do.get("resume", []):
                 r = runner(["docker", "exec", SLURMCTLD, "scontrol", "update", f"nodename={n}", "state=resume"])
                 if r.returncode:

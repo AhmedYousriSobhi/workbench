@@ -36,7 +36,7 @@ COOKIE = "workbench_ui"
 DOCS = Path(__file__).resolve().parent.parent / "docs"
 
 
-SLURM_STATE = {"power-off": "down", "power-on": "resume", "clear": "resume"}  # page action -> scontrol state
+SLURM_STATE = {"power-off": "off", "power-on": "on", "clear": "resume"}  # page action -> governor node-state (off/on freeze the node)
 
 
 def governor_status(socket: str) -> dict:
@@ -276,7 +276,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             return {"target": "slurm", "status": "skipped", "detail": res.get("error", "refused")}
         if res.get("dry_run"):
             return {"target": "slurm", "status": "skipped", "detail": "the governor is in dry-run mode or has no --workdir"}
-        return {"target": "slurm", "status": "ok", "detail": f"asked Slurm to set {node} {state}"}
+        return {"target": "slurm", "status": "ok", "detail": f"asked the governor to set {node} {state}"}
 
     async def node_action(request: Request):
         try:

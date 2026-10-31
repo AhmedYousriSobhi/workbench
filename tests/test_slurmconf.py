@@ -111,3 +111,7 @@ def test_secrets_are_private_stable_and_ignored_by_git(tmp_path):
 
 def test_a_node_set_down_by_an_admin_stays_down_until_resumed():
     assert "ReturnToService=1\n" in slurmconf.slurm_conf(SIM, 4)  # 2 returns any DOWN node that answers (issue 138)
+
+
+def test_a_node_that_stops_answering_is_marked_down_within_about_half_a_minute():
+    assert "SlurmdTimeout=30" in slurmconf.slurm_conf(SIM, 4) and "ReturnToService=1\n" in slurmconf.slurm_conf(SIM, 4)

@@ -652,7 +652,7 @@ async function nodeAction(name, action, label) {
   const res = (await r.json()).results;
   const bad = res.filter(x => x.status === 'failed');
   const skipped = res.filter(x => x.target === 'slurm' && x.status === 'skipped');
-  const msg = skipped.length ? `${label} on ${name}: done, but Slurm was not told (${skipped[0].detail}); run ./scripts/benchctl set node ${name} ${action === 'power-off' ? 'down' : 'resume'}` : bad.length ? `${label} on ${name}: ${bad.length} step(s) failed — is the stack running?` : `${label} on ${name}: done`;
+  const msg = skipped.length ? `${label} on ${name}: done, but Slurm was not told (${skipped[0].detail}); run ./scripts/benchctl set node ${name} ${action === 'power-off' ? 'off' : action === 'power-on' ? 'on' : 'resume'}` : bad.length ? `${label} on ${name}: ${bad.length} step(s) failed — is the stack running?` : `${label} on ${name}: done`;
   toast(msg); $('nodeactmsg').textContent = msg;
   lastCluster = ''; loadCluster();
 }

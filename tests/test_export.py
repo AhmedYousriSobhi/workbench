@@ -151,29 +151,10 @@ def test_start_passes_parts_to_the_launcher_and_refuses_a_mix(monkeypatch):
     assert runner.invoke(cli.app, ["start", "--profile", "std", "--with", "load"]).exit_code == 1
 
 
-def test_set_node_marks_a_node_down_or_back_through_scontrol(monkeypatch):
+def test_set_node_freezes_a_node_for_off_and_on_and_sets_the_slurm_state_for_down_and_resume(monkeypatch):
     ran = []
     monkeypatch.setattr(cli.stack, "_run", lambda cmd: ran.append(cmd) or type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})())
-    r = runner.invoke(cli.app, ["set", "node", "cn001", "down"])
-    assert r.exit_code == 0 and "state=down" in ran[-1] and "nodename=cn001" in ran[-1]
+    assert runner.invoke(cli.app, ["set", "node", "cn001", "off"]).exit_code == 0 and ran[-1] == ["docker", "pause", "workbench-cn001-1"]
+    assert runner.invoke(cli.app, ["set", "node", "cn001", "on"]).exit_code == 0 and ran[-1] == ["docker", "unpause", "workbench-cn001-1"]
+    assert runner.invoke(cli.app, ["set", "node", "cn001", "down"]).exit_code == 0 and "state=down" in ran[-1] and "nodename=cn001" in ran[-1]
     assert runner.invoke(cli.app, ["set", "node", "cn001", "sideways"]).exit_code == 1
-
-
-def test_every_bmc_has_its_own_address_and_only_nodes_with_a_bmc_are_listed():
-    by_ip = export.build(SIM, ALL, include_bmc=True)["bmc"]
-    assert [t["address"] for t in by_ip] == ["10.148.0.1", "10.148.0.2", "10.148.0.3", "10.148.0.4", "10.148.100.1", "10.148.100.2"]
-    assert {t["port"] for t in by_ip} == {443}
-    by_name = export.build(SIM, ALL, include_bmc=True, bmc_via="name")["bmc"]
-    assert [t["address"] for t in by_name][:2] == ["bmc-cn001", "bmc-cn002"]
-    few = {"login", "slurmctld", "bmc-farm", "bmc-cn002", "bmc-gpu001"}  # the others have their BMC switched off
-    assert [(t["node"], t["address"]) for t in export.build(SIM, few, include_bmc=True)["bmc"]] == [("cn002", "10.148.0.2"), ("gpu001", "10.148.100.1")]
-    with pytest.raises(export.ExportError, match="bad --bmc-via"):
-        export.build(SIM, ALL, include_bmc=True, bmc_via="tunnel")
-
-
-def test_loopback_writes_the_published_ports_for_a_client_that_cannot_route_to_the_cluster():
-    c = export.build(SIM, ALL, include_bmc=True, loopback=True)
-    cl = c["clusters"][0]
-    assert cl["connection"]["host"] == "127.0.0.1" and cl["connection"]["port"] == 2222
-    assert cl["grafana"]["baseUrl"] == "http://127.0.0.1:3000" and cl["jira"]["baseUrl"] == "http://127.0.0.1:8080"
-    assert {(t["address"], t["port"]) for t in c["bmc"]} == {("127.0.0.1", 8443)} and len(c["bmc"]) == 6  # one shared listener

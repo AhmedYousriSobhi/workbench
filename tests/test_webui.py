@@ -263,7 +263,7 @@ def test_export_button_downloads_the_profile_and_explains_a_missing_format(ui, m
     assert b'id="expdlg"' in req(ui, "/")[1] and b"newer than its backend" in req(ui, "/")[1] and b"ssh-key install in a terminal" in req(ui, "/")[1] and b"Jira needs no token" in req(ui, "/")[1]
 
 
-def test_power_off_also_asks_the_governor_to_mark_the_node_down_in_slurm(tmp_path):
+def test_power_off_asks_the_governor_to_freeze_the_node_so_slurm_notices_by_itself(tmp_path):
     """The BMC and BCM change, but sinfo only follows if Slurm is told; the page has no Docker, so the governor does it."""
     asked = []
     answer = {"ok": True, "started": True}
@@ -285,11 +285,11 @@ def test_power_off_also_asks_the_governor_to_mark_the_node_down_in_slurm(tmp_pat
     base, h = f"http://127.0.0.1:{port}", {"X-Requested-With": "workbench"}
     try:
         res = json.loads(req(base, "/api/nodes/cn002/power-off", "POST", headers=h)[1])["results"]
-        assert asked == [{"cmd": "node-state", "node": "cn002", "state": "down"}]
+        assert asked == [{"cmd": "node-state", "node": "cn002", "state": "off"}]
         assert res[-1]["target"] == "slurm" and res[-1]["status"] == "ok"
         answer.update(ok=False, error="refused at L3")
         res = json.loads(req(base, "/api/nodes/cn002/power-on", "POST", headers=h)[1])["results"]
-        assert asked[-1]["state"] == "resume" and res[-1]["status"] == "skipped" and "refused at L3" in res[-1]["detail"]
+        assert asked[-1]["state"] == "on" and res[-1]["status"] == "skipped" and "refused at L3" in res[-1]["detail"]
         res = json.loads(req(base, "/api/nodes/cn002/overheat", "POST", headers=h)[1])["results"]
         assert not any(r["target"] == "slurm" for r in res)
     finally:

@@ -32,7 +32,7 @@ def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool 
         "SelectTypeParameters=CR_Core_Memory",
         "ReturnToService=1",  # 2 would return a node set DOWN by an admin (Power off) as soon as slurmd answers a ping
         "SlurmctldTimeout=60",
-        "SlurmdTimeout=120",
+        "SlurmdTimeout=30",  # a node that stops answering is DOWN* (Not responding) after about 30-40 s
         "GresTypes=gpu",
         # Node health check (images/node-base/nhc): drains a node whose GPU count or XID state is wrong.
         "HealthCheckProgram=/usr/local/sbin/nhc", "HealthCheckInterval=30", "HealthCheckNodeState=ANY",

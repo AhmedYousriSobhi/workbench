@@ -220,3 +220,20 @@ def test_jira_expectations_check_labels_status_and_count(monkeypatch):
     monkeypatch.setattr(scenario, "jira_search", lambda jql: [])
     _, holds, _ = scenario.expectation({"jira.issue_status": {"jql": "x", "status": "Resolved"}})
     assert not holds()  # nothing matched is not "all resolved"
+
+
+def test_power_off_and_on_pause_and_unpause_the_node_container_and_tolerate_repeats():
+    ran = []
+
+    def runner(cmd):
+        ran.append(cmd)
+        return type("R", (), {"returncode": 1 if len(ran) == 3 else 0, "stdout": "", "stderr": "container is already paused" if len(ran) == 3 else ""})()
+    ok = scenario.execute(scenario.Step(0, "slurm", {"power_off": ["cn001", "gpu002"]}), runner=runner)
+    assert ok.status == "ok" and ran == [["docker", "pause", "workbench-cn001-1"], ["docker", "pause", "workbench-gpu002-1"]]
+    scenario.execute(scenario.Step(0, "slurm", {"power_on": ["cn001"]}), runner=runner)
+    assert ran[-1] == ["docker", "unpause", "workbench-cn001-1"]
+    again = scenario.execute(scenario.Step(0, "slurm", {"power_off": ["cn001"]}), runner=runner)  # the third call: already paused
+    assert again.status == "ok"
+    bad = scenario.execute(scenario.Step(0, "slurm", {"power_off": ["cn001"]}), runner=lambda c: type("R", (), {"returncode": 1, "stdout": "", "stderr": "no such container"})())
+    assert bad.status == "failed" and "no such container" in bad.detail
+    assert scenario.validate({"steps": [{"at": "0s", "target": "slurm", "do": {"power_off": ["nope"]}}]}, SIM)

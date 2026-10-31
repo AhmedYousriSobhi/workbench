@@ -441,12 +441,15 @@ app.add_typer(set_app, name="set")
 
 
 @set_app.command("node")
-def set_node(node: str = TARGET, state: str = typer.Argument(..., help="down (Slurm marks it not responding) or resume")) -> None:
-    """Tell Slurm a node is down or back: `benchctl set node cn001 down`. What the page's Power off/on does after the BMC."""
-    if state not in ("down", "resume"):
-        typer.echo("state must be down or resume", err=True)
+def set_node(node: str = TARGET, state: str = typer.Argument(..., help="off or on (freeze the node so Slurm detects it by itself), "
+                                                                       "down or resume (set the Slurm state by hand)")) -> None:
+    """`benchctl set node cn001 off` freezes the node (slurmd stops answering; slurmctld marks it DOWN* after about 30 s, as for a
+    dead host), `on` thaws it. `down`/`resume` set the Slurm state directly. The page's Power off/on does off/on."""
+    keys = {"off": "power_off", "on": "power_on", "down": "down", "resume": "resume"}
+    if state not in keys:
+        typer.echo("state must be off, on, down or resume", err=True)
         raise typer.Exit(1)
-    o = scenario.execute(scenario.Step(0, "slurm", {state: [node], "reason": "workbench power off"}), host=True,
+    o = scenario.execute(scenario.Step(0, "slurm", {keys[state]: [node], "reason": "workbench power off"}), host=True,
                          runner=lambda c: stack._run(c))
     typer.echo(f"{node}: {state}" if o.status == "ok" else f"cannot set {node}: {o.detail}", err=o.status != "ok")
     raise typer.Exit(0 if o.status == "ok" else 1)

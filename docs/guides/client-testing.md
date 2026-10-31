@@ -127,3 +127,10 @@ starting `NHC:`), never one an operator set. A node that publishes nothing (powe
 not drained. Not checked yet, because nothing in the simulation models them: NIC link flapping and down InfiniBand ports
 ([issue 143](https://github.com/AhmedYousriSobhi/workbench/issues/143)). A cluster built before this needs `benchctl up`
 once: it rebuilds the node image and restarts `slurmctld` (it does so whenever `slurm.conf` changes).
+
+## Taking a node down so Slurm notices
+
+**Power off** on the page (or `benchctl set node cn001 off`) freezes the node's container: its `slurmd` stops answering and
+`slurmctld` marks it `down*` (Not responding) by itself after about 30-40 s, which is what a monitoring client sees on a real
+dead node; the BMC reports it off and its GPU metrics disappear. **Power on** (`set node cn001 on`) thaws it and Slurm returns
+it after its next answer. Use `set node NAME down` only to set the state by hand.
