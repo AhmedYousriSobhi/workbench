@@ -1,0 +1,8 @@
+name: ib-port-down
+description: An InfiniBand port goes down on a GPU node and its NIC flaps; the health check drains the node and a ticket opens, then it recovers
+steps:
+  - {at: 0s,  target: gpu-exporter, do: {nodes: [gpu001], ib_down: 1}}
+  - {at: 45s, target: gpu-exporter, do: {nodes: [gpu002], nic_flap: true}}
+  - {at: 2m,  target: gpu-exporter, do: {nodes: [gpu001, gpu002], clear: true}}
+expect:
+  - slurm.node_state: {node: gpu001, state: drain, within: 90s}

@@ -119,14 +119,27 @@ last full pass are tracked in issue #131.
 
 ## Node health check (what drains a node)
 
-Every `slurmd` runs `/usr/local/sbin/nhc` every 30 s (`HealthCheckProgram`, source `images/node-base/nhc`). On a GPU node
-it reads the GPU exporter and **drains the node** when a GPU is missing (fewer series than the node's GRES) or a GPU
-reports an XID error; the reason says why (`NHC: GPU XID 79`, `NHC: GPU count 7 of 8`), so `sinfo -R` shows it within about
-30 s of **GPU error (XID 79)** on the page. When the fault is cleared the check resumes a drain it made itself (reasons
-starting `NHC:`), never one an operator set. A node that publishes nothing (powered off) and an unreachable exporter are
-not drained. Not checked yet, because nothing in the simulation models them: NIC link flapping and down InfiniBand ports
-([issue 143](https://github.com/AhmedYousriSobhi/workbench/issues/143)). A cluster built before this needs `benchctl up`
-once: it rebuilds the node image and restarts `slurmctld` (it does so whenever `slurm.conf` changes).
+Every `slurmd` runs `/usr/local/sbin/nhc` (source `images/node-base/nhc`, a small stand-in for LBNL NHC) three ways: every 30 s
+(`HealthCheckProgram`), before each job starts on the node (`Prolog=nhc-prolog`) and after it ends (`Epilog=nhc-epilog`). It reads
+the exporter farm and **drains the node** with a reason starting `NHC:` when:
+
+| Check | Fault to inject | Reason in `sinfo -R` |
+|---|---|---|
+| GPU missing (fewer series than the GRES) | none yet (a fault action is not modelled) | `NHC: GPU count 7 of 8` |
+| GPU XID error | **GPU error (XID 79)** | `NHC: GPU XID 79` |
+| InfiniBand port down (one HCA per GPU, one port on a CPU node) | **InfiniBand port down** | `NHC: IB port down: mlx5_0` |
+| NIC link flapping (`node_network_carrier_changes_total` keeps rising) | **NIC flapping** | `NHC: NIC eth0 flapping (4 link changes)` |
+
+The periodic run drains within about 30 s and resumes a drain it made itself once the fault is cleared (never one an operator
+set). The **prolog** fails an unhealthy node, so Slurm requeues the job instead of running it there; the **epilog** drains a node
+that a job left unhealthy, so the next job is not scheduled on it. A node that publishes nothing (powered off) and an unreachable
+exporter are not drained. A cluster built before this needs `benchctl up` once: it rebuilds the node image (the prolog and epilog
+scripts are in it) and restarts `slurmctld`. Without the rebuilt image a job start fails on a missing prolog and drains the node.
+
+**Tickets for what Slurm does.** `slurmctld` also runs a watcher (`images/slurm-ctl/node_watch.py`) that polls `sinfo` every 10 s: a
+node that turns DOWN or drained files a ticket (kind `slurm`, or a comment on the node's open ticket, so a Power off stays one
+ticket), and one that comes back is resolved. That covers a node Slurm drained by the health check or by hand, and a node that went
+down by not answering, which no page button or scenario step reports.
 
 ## A live queue
 

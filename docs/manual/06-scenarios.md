@@ -19,6 +19,7 @@ ticket-bot) are reported as **skipped**, not failed. From the web page ([chapter
 |---|---|
 | `node-down` | a compute node loses power; BMC and BCM show it down, Slurm drains it, then it recovers |
 | `fan-failure` | fans fail on a GPU node and it runs hot; the BMC event log shows critical entries |
+| `ib-port-down` | an InfiniBand port goes down on `gpu001`, `gpu002`'s NIC flaps; the health check drains the nodes, tickets open, then both recover |
 | `gpu-xid-storm` | GPU errors on both GPU nodes, thermal rise, Slurm drain; the app should open tickets |
 | `jira-429` | Jira rate-limits the next 5 calls (429 with Retry-After); the app must back off |
 | `jira-outage` | Jira answers 503 to the next 20 calls, then recovers |

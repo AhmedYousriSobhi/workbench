@@ -63,8 +63,9 @@ def generate(sim: dict, profile: dict) -> dict:
         svc = _service("workbench/node-base:dev", SLURMD_MB, SLURMD_PRIO, "../../images/node-base")
         svc["hostname"] = name
         svc["labels"]["workbench.node"] = kind
+        svc["environment"] = {"WORKBENCH_IB": str(sim["gpu"]["gpus_per_node"] if kind == "gpu" else 1)}  # InfiniBand ports nhc expects
         if kind == "gpu":
-            svc["environment"] = {"WORKBENCH_GPUS": str(sim["gpu"]["gpus_per_node"])}
+            svc["environment"]["WORKBENCH_GPUS"] = str(sim["gpu"]["gpus_per_node"])
         if "slurmctld" in services:
             svc["depends_on"] = ["slurmctld"]
         services[name] = svc
