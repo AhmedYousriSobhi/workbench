@@ -467,3 +467,26 @@ def test_a_one_shot_job_that_exited_zero_counts_as_started():
     failed = lambda cmd: cp(out="accounting-init 1") if "exited" in cmd else cp(out="slurmrestd")
     assert stack.wait_running(["slurmrestd", "accounting-init"], failed, timeout=0, sleep=lambda s: None) == ["accounting-init"]
     assert stack.wait_running(["slurmrestd", "cn001"], lambda c: cp(out="slurmrestd"), timeout=0, sleep=lambda s: None) == ["cn001"]
+
+
+def test_a_changed_slurm_conf_restarts_a_running_slurmctld(tmp_path, monkeypatch):
+    """New settings in slurm.conf (health check, ReturnToService) are only read when the controller starts."""
+    sim = _workdir(tmp_path, monkeypatch)
+    from benchctl import compose
+    prof = compose.load_profile("min")
+    conf = tmp_path / "compose" / "generated" / "slurm" / "slurm.conf"
+    conf.parent.mkdir(parents=True)
+    conf.write_text("# an older slurm.conf\n")
+    running = [*compose.generate(sim, prof)["services"], "prometheus", "grafana", "gpu-exporter-farm"]
+    calls: list[list[str]] = []
+
+    def runner(cmd):
+        calls.append(cmd)
+        return cp(out="\n".join(running)) if "ps" in cmd else cp()
+
+    monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
+    monkeypatch.setattr(stack, "provision_token", lambda **kw: kw.get("path", tmp_path / "t"))
+    monkeypatch.setattr(stack, "wait_running", lambda *a, **k: [])
+    said: list[str] = []
+    assert stack.up(sim, "min", runner=runner, say=said.append, available=8 * 1024**3, wait=1)
+    assert any("pick up the new slurm.conf" in m for m in said) and any("--force-recreate" in c and "slurmctld" in c for c in calls)

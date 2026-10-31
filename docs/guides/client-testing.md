@@ -116,3 +116,14 @@ nodes appear (and `ssh <node>` from the login node works), removed nodes disappe
 entries, and GPU metrics for new GPU nodes show in Grafana. Then use a node's **Actions** in the web page (power off,
 overheat, fan failure, GPU error) and confirm the client sees each through BMC, BCM and the GPU metrics. Results of the
 last full pass are tracked in issue #131.
+
+## Node health check (what drains a node)
+
+Every `slurmd` runs `/usr/local/sbin/nhc` every 30 s (`HealthCheckProgram`, source `images/node-base/nhc`). On a GPU node
+it reads the GPU exporter and **drains the node** when a GPU is missing (fewer series than the node's GRES) or a GPU
+reports an XID error; the reason says why (`NHC: GPU XID 79`, `NHC: GPU count 7 of 8`), so `sinfo -R` shows it within about
+30 s of **GPU error (XID 79)** on the page. When the fault is cleared the check resumes a drain it made itself (reasons
+starting `NHC:`), never one an operator set. A node that publishes nothing (powered off) and an unreachable exporter are
+not drained. Not checked yet, because nothing in the simulation models them: NIC link flapping and down InfiniBand ports
+([issue 143](https://github.com/AhmedYousriSobhi/workbench/issues/143)). A cluster built before this needs `benchctl up`
+once: it rebuilds the node image and restarts `slurmctld` (it does so whenever `slurm.conf` changes).

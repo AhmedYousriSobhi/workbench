@@ -34,6 +34,8 @@ def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool 
         "SlurmctldTimeout=60",
         "SlurmdTimeout=120",
         "GresTypes=gpu",
+        # Node health check (images/node-base/nhc): drains a node whose GPU count or XID state is wrong.
+        "HealthCheckProgram=/usr/local/sbin/nhc", "HealthCheckInterval=30", "HealthCheckNodeState=ANY",
         # slurmrestd authenticates callers with JWT; the key is baked into the lab image (ADR 0002).
         "AuthAltTypes=auth/jwt",
         "AuthAltParameters=jwt_key=/var/spool/slurmctld/jwt_hs256.key",

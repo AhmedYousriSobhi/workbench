@@ -1,0 +1,40 @@
+#!/bin/bash
+# Node health check, run by slurmd (HealthCheckProgram). A small stand-in for LBNL NHC: it checks what the simulation
+# models and drains the node when a check fails. Today: the GPU count against the node's GRES, and GPU XID errors, both
+# read from the GPU exporter. NIC flapping and down InfiniBand ports are not modelled yet (issue 143).
+# Test hooks: NHC_METRICS_FILE (instead of the exporter), NHC_SCONTROL, NHC_NODE, NHC_EXPECTED_GPUS.
+node=${NHC_NODE:-$(hostname -s)}
+expected=${NHC_EXPECTED_GPUS:-${WORKBENCH_GPUS:-0}}
+scontrol=${NHC_SCONTROL:-scontrol}
+url=${NHC_METRICS_URL:-http://gpu-exporter-farm:9400/metrics}
+
+fetch() {
+  if [ -n "$NHC_METRICS_FILE" ]; then cat "$NHC_METRICS_FILE"; return; fi
+  local hp=${url#http://}; hp=${hp%%/*}
+  exec 3<>"/dev/tcp/${hp%%:*}/${hp##*:}" || return 1
+  printf 'GET %s HTTP/1.0\r\nHost: %s\r\nX-Workbench-Probe: 1\r\n\r\n' "/${url#http://*/}" "$hp" >&3
+  cat <&3; exec 3<&-
+}
+
+[ "$expected" -gt 0 ] 2>/dev/null || exit 0           # no GPUs on this node: nothing to check
+metrics=$(fetch) || exit 0                              # exporter unreachable: cannot judge, do not drain
+mine=$(printf '%s\n' "$metrics" | grep "Hostname=\"$node\"")
+seen=$(printf '%s\n' "$mine" | grep -c '^DCGM_FI_DEV_GPU_TEMP{')
+fail=""
+if [ "$seen" -gt 0 ]; then                              # no series at all means the node is off: not a health matter
+  [ "$seen" -lt "$expected" ] && fail="GPU count $seen of $expected"
+  xid=$(printf '%s\n' "$mine" | grep '^DCGM_FI_DEV_XID_ERRORS{' | awk '$NF != 0 {print $NF; exit}')
+  [ -n "$xid" ] && fail="${fail:+$fail; }GPU XID $xid"
+fi
+
+if [ -n "$fail" ]; then
+  "$scontrol" update "nodename=$node" state=drain "reason=NHC: $fail"
+  echo "NHC: $node unhealthy: $fail"
+  exit 1
+fi
+# healthy again: lift only a drain this script made
+if "$scontrol" show node "$node" 2>/dev/null | grep -q 'Reason=NHC: '; then
+  "$scontrol" update "nodename=$node" state=resume
+  echo "NHC: $node healthy again, resumed"
+fi
+exit 0

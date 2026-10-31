@@ -112,7 +112,10 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     chosen = prof
     prof = prof if prof is not None else compose.load_profile(profile)
     data = compose.generate(sim, prof)
+    conf = COMPOSE_FILE.parent / "slurm" / "slurm.conf"  # a changed file needs a controller restart (it only rereads at start)
+    old_conf = conf.read_text() if conf.is_file() else None
     path = compose.write(data, sim=sim, compute_nodes=prof.get("compute_nodes"))
+    conf_changed = old_conf is not None and conf.is_file() and conf.read_text() != old_conf
     skip = unbuildable(data["services"], path.parent)
     todo = {n: v for n, v in data["services"].items() if n not in skip}
     missing = missing_mb(todo, runner, path)
@@ -168,8 +171,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         if (late := wait_running(svcs, runner, wait)):
             say(f"FAILED {label}: not running: {', '.join(late)}")
             return False
-    if (changed or acct_added) and "slurmctld" in todo:  # the node set or accounting changed under a running controller
-        say("restarting slurmctld to pick up the new " + ("accounting setup" if acct_added and not changed else "node list"))
+    if (changed or acct_added or (conf_changed and "slurmctld" in before)) and "slurmctld" in todo:  # slurm.conf changed under a running controller
+        say("restarting slurmctld to pick up the new " + ("accounting setup" if acct_added and not changed else "node list" if changed else "slurm.conf"))
         r = runner(dc("up", "-d", "--no-deps", "--force-recreate", "slurmctld", file=path))
         if r.returncode != 0 or wait_running(["slurmctld"], runner, wait):
             say(f"FAILED slurmctld restart: {r.stderr.strip()[-300:]}")
