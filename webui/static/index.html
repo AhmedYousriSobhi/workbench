@@ -197,6 +197,7 @@
   .steps3 { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--sp3); } .stp { display:flex; flex-direction:column; gap:6px; } .stp label { font-size:13px; font-weight:600; }
   .stpin { display:flex; align-items:center; border:1px solid var(--line); border-radius:10px; overflow:hidden; } .stpin .btn { border:0; border-radius:0; min-width:40px; background:transparent; color:var(--fg); font-size:18px; }
   .stpin input { width:100%; min-width:0; border:0; text-align:center; font:600 18px/1 inherit; background:transparent; color:var(--fg); min-height:44px; -moz-appearance:textfield; } .stpin input::-webkit-outer-spin-button, .stpin input::-webkit-inner-spin-button { -webkit-appearance:none; }
+  fieldset.bmcnodes { border:0; padding:0; margin:var(--sp3) 0 0; }
   fieldset.planparts { border:0; padding:0; margin:0; } .toggles { display:flex; flex-wrap:wrap; gap:var(--sp2); }
   .tog { position:relative; } .tog input { position:absolute; opacity:0; inset:0; cursor:pointer; } .tog span { display:inline-flex; align-items:center; gap:4px; min-height:40px; padding:0 14px; border:1px solid var(--line); border-radius:999px; font-size:14px; }
   .tog input:checked + span { background:color-mix(in srgb,var(--accent) 14%,var(--panel)); border-color:var(--accent); font-weight:650; } .tog input:checked + span::before { content:'✓'; } .tog input:focus-visible + span { outline:2px solid var(--accent); outline-offset:2px; }
@@ -322,7 +323,7 @@
   </div>
   <div id="tab-conn" role="tabpanel" aria-labelledby="tb-conn" hidden>
     <div class="panel"><h2>How to reach each part</h2>
-      <p class="dim small">Addresses are on this machine only (127.0.0.1). Credentials are never shown here: the last column is the file that holds them. A node's own address is in its details.</p>
+      <p class="dim small">Addresses are the cluster's fixed private IPs, reachable from this machine; 127.0.0.1 is the fallback where a row says so. Credentials are never shown here: the last column is the file that holds them. A node's own address is in its details.</p>
       <div class="tablewrap"><table class="conn"><thead><tr><th>Part</th><th>Address</th><th>Try it</th><th>Credential</th></tr></thead><tbody id="conn-rows"><tr><td colspan="4" class="skel">Loading…</td></tr></tbody></table></div></div>
   </div>
   <dialog id="scndlg" class="sheet" aria-labelledby="scn-h">
@@ -362,8 +363,10 @@
       <button class="btn small" id="exp-close" aria-label="Close the export">✕ Close</button></div>
     <div class="sheet-b">
       <div class="toggles"><label class="tog"><input type="checkbox" id="exp-bmc" checked><span>One BMC target per node</span></label>
-        <label class="small dim" for="exp-via" style="display:flex;align-items:center;gap:8px">Reached
-          <select id="exp-via"><option value="login">through the login node: bmc-NODE:8443</option><option value="direct">directly: 127.0.0.1:8443</option></select></label></div>
+        <label class="small dim" for="exp-via" style="display:flex;align-items:center;gap:8px">Address
+          <select id="exp-via"><option value="ip">by IP (10.148.x.y:443, from here or the login node)</option><option value="name">by name (bmc-NODE:443, from the login node)</option></select></label>
+        <label class="small dim" for="exp-addr" style="display:flex;align-items:center;gap:8px">Addresses
+          <select id="exp-addr"><option value="network">cluster IPs (10.141.x.x, standard ports)</option><option value="loopback">127.0.0.1 and published ports</option></select></label></div>
       <p class="small dim">The file holds no secrets. After importing it, set the SSH key (<code>benchctl ssh-key install</code>) and the Grafana token (<code>cat compose/generated/secrets/grafana_viewer_token</code>; it changes at every <code>benchctl up</code>).</p>
     </div>
     <div class="sheet-f"><p id="exp-msg" role="status" class="small"></p><button class="btn small" id="exp-cancel">Cancel</button><button class="btn" id="exp-go">Download bench-profile.json</button></div>
@@ -379,6 +382,7 @@
       </div>
       <fieldset class="planparts"><legend class="small dim">Optional parts (memory limit each adds)</legend>
         <div class="toggles" id="pl-parts"></div>
+        <fieldset class="bmcnodes" id="pl-bmcbox" hidden><legend class="small dim">Nodes that get a BMC (<span id="pl-bmcmb"></span> MB each)</legend><div class="toggles" id="pl-bmcnodes"></div></fieldset>
         <p class="small dim" style="margin:8px 0 0">Slurm, the login node, Prometheus and Grafana are always on.</p></fieldset>
       <section class="fit" aria-label="Does it fit"><div class="fitnum"><b id="pl-need">–</b><span class="dim small" id="pl-free"></span></div>
         <progress id="pl-bar" max="100" value="0" aria-label="Memory needed as a share of free memory"></progress>
@@ -512,8 +516,9 @@ function toast(msg) {
 }
 let planTimer, planQuery = '';
 async function loadPlan() {
-  const parts = [...document.querySelectorAll('.planparts input:checked')].map(i => i.value).join(',');
+  const parts = [...document.querySelectorAll('#pl-parts input:checked')].map(i => i.value).join(',');
   const q = new URLSearchParams({ cpu_nodes: $('pl-cpu').value, gpu_nodes: $('pl-gpu').value, gpus_per_node: $('pl-gpus').value, parts });
+  if (!$('pl-bmcbox').hidden) q.set('bmc_nodes', [...document.querySelectorAll('#pl-bmcnodes input:checked')].map(i => i.value).join(','));
   const r = await fetch('/api/plan?' + q);
   if (!r.ok) { $('pl-msg').textContent = '✗ ' + (await r.json()).detail; $('pl-cmd').textContent = ''; $('pl-bar').value = 0; $('pl-need').textContent = '–'; $('pl-free').textContent = ''; $('pl-apply').hidden = true; return; }
   const p = await r.json();
@@ -526,7 +531,7 @@ async function loadPlan() {
   $('pl-copy').hidden = !p.fits; $('pl-apply').hidden = !p.fits; planQuery = q.toString();
   $('pl-copy').onclick = async () => { try { await navigator.clipboard.writeText(p.command); $('pl-copy').textContent = 'Copied'; } catch (e) { $('pl-copy').textContent = 'Select and copy'; } setTimeout(() => { $('pl-copy').textContent = 'Copy command'; }, 1500); };
 }
-document.querySelectorAll('#plandlg input').forEach(i => i.oninput = i.onchange = () => planInputs());
+document.querySelectorAll('#plandlg input[type=number]').forEach(i => i.oninput = i.onchange = () => planInputs());
 let armed = 0;
 function planInputs() { clearTimeout(planTimer); planTimer = setTimeout(loadPlan, 250); armed = 0; $('pl-apply').textContent = 'Apply to the running workbench'; }
 document.querySelectorAll('[data-step]').forEach(b => b.onclick = () => { const i = $(b.dataset.step); i.value = Math.min(+i.max, Math.max(+i.min, (+i.value || 0) + +b.dataset.d)); planInputs(); });
@@ -534,14 +539,18 @@ function currentSize() {
   const nodes = nodeList(), g = nodes.find(n => n.kind === 'gpu');
   return { cpu: nodes.filter(n => n.kind === 'compute').length, gpu: nodes.filter(n => n.kind === 'gpu').length, gpus: g ? g.gpus : null };
 }
+function showBmcNodes() { $('pl-bmcbox').hidden = !document.querySelector('#pl-parts input[value="bmc"]:checked'); }
 let partsDrawn = false;
 async function drawParts() {  // the options come from the backend registry (/api/settings), so a new one needs no page change
   if (partsDrawn) return;
   try {
     const j = await (await fetch('/api/settings')).json();
     $('pl-parts').innerHTML = j.parts.map(p => `<label class="tog" title="${esc(p.help)}"><input type="checkbox" value="${esc(p.id)}"${p.on ? ' checked' : ''}><span>${esc(p.label)} <small class="dim">+${p.mb} MB</small></span></label>`).join('');
-    $('pl-parts').querySelectorAll('input').forEach(i => i.oninput = i.onchange = () => planInputs());
-    partsDrawn = true;
+    $('pl-parts').querySelectorAll('input').forEach(i => i.oninput = i.onchange = () => { showBmcNodes(); planInputs(); });
+    $('pl-bmcmb').textContent = j.bmc_node_mb;
+    $('pl-bmcnodes').innerHTML = j.nodes.map(n => `<label class="tog"><input type="checkbox" value="${esc(n.name)}"${n.bmc ? ' checked' : ''}><span>${esc(n.name)}</span></label>`).join('');
+    $('pl-bmcnodes').querySelectorAll('input').forEach(i => i.oninput = i.onchange = () => planInputs());
+    showBmcNodes(); partsDrawn = true;
   } catch (e) { $('pl-parts').textContent = 'Could not load the options.'; }
 }
 async function openPlan() {
@@ -563,7 +572,7 @@ $('expdlg').addEventListener('click', e => { if (e.target === $('expdlg')) $('ex
 $('exp-go').onclick = async () => {
   $('exp-msg').textContent = 'Preparing…';
   try {
-    const r = await fetch('/api/export/profile' + ($('exp-bmc').checked ? '?bmc=1&bmc_via=' + $('exp-via').value : ''));
+    const r = await fetch('/api/export/profile' + ($('exp-bmc').checked ? '?bmc=1&bmc_via=' + $('exp-via').value : '?x=1') + '&addr=' + $('exp-addr').value);
     if (r.status === 404) { $('exp-msg').textContent = '✗ This page is newer than its backend. Restart it: ./scripts/benchctl stop && ./scripts/benchctl start'; return; }
     if (!r.ok) { $('exp-msg').textContent = '✗ ' + (await r.json()).detail; return; }
     const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = 'bench-profile.json';
@@ -626,14 +635,16 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && openNode &
 async function showNode(name) {
   openNode = name; openerEl = document.activeElement; paintNodeActions(name); $('nodeactmsg').textContent = '';
   $('tree').hidden = true; $('treenote').hidden = true; $('nodepane').hidden = false; $('nodetitle').textContent = name; $('node-back').focus();
-  const r = await fetch(`/api/nodes/${name}`);
+  const r = await fetch(`/api/nodes/${name}`), body = r.ok ? await r.json() : null;
   $('nodetitle').textContent = name;
   const cx = (await connections()).find(e => e.id === 'nodes'), kv = [];
   if (cx) kv.push(['SSH', `<code>${esc(cx.command.replace('<node>', name))}</code>`], ['User and key', esc(cx.how.split('.')[0]) + ` · key file <code>${esc(cx.credential)}</code>`]);
-  kv.push(['BMC', `<code>127.0.0.1:8443/redfish/v1</code> (HTTPS) with Host header <code>bmc-${esc(name)}</code>, user admin, password in <code>compose/generated/secrets/bmc_credentials</code>`],
-    ['IP address', `assigned by Docker at start; run <code>./scripts/benchctl describe node ${esc(name)}</code>`]);
+  const bm = (await connections()).find(e => e.id === 'bmc');
+  kv.push(['BMC', `<code>${esc(bm ? bm.address : '')}</code> (HTTPS) with Host header <code>bmc-${esc(name)}</code>, user admin, password in <code>compose/generated/secrets/bmc_credentials</code>`],
+    ['IP address', body && body.ip ? `<code>${esc(body.ip)}</code> (fixed; reach it from the login node)` : `run <code>./scripts/benchctl describe node ${esc(name)}</code>`]);
+  if (body) kv[kv.findIndex(r => r[0] === 'BMC')] = ['BMC', body.bmc_ip ? `<code>${esc(body.bmc_ip)}:443</code> (HTTPS), user admin, password in <code>compose/generated/secrets/bmc_credentials</code>` : 'none for this node (switched off in Settings)'];
   $('nodeconn').innerHTML = kv.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
-  $('nodetext').textContent = r.ok ? (await r.json()).text : `Could not read ${name}: ${(await r.json()).detail}`;
+  $('nodetext').textContent = body ? body.text : `Could not read ${name}: ${(await r.json()).detail}`;
 }
 async function nodeAction(name, action, label) {
   const r = await fetch(`/api/nodes/${name}/${action}`, { method: 'POST', headers: H });
@@ -641,7 +652,7 @@ async function nodeAction(name, action, label) {
   const res = (await r.json()).results;
   const bad = res.filter(x => x.status === 'failed');
   const skipped = res.filter(x => x.target === 'slurm' && x.status === 'skipped');
-  const msg = skipped.length ? `${label} on ${name}: done, but Slurm was not told (${skipped[0].detail}); run ./scripts/benchctl set node ${name} ${action === 'power-off' ? 'down' : 'resume'}` : bad.length ? `${label} on ${name}: ${bad.length} step(s) failed — is the stack running?` : `${label} on ${name}: done`;
+  const msg = skipped.length ? `${label} on ${name}: done, but Slurm was not told (${skipped[0].detail}); run ./scripts/benchctl set node ${name} ${action === 'power-off' ? 'off' : action === 'power-on' ? 'on' : 'resume'}` : bad.length ? `${label} on ${name}: ${bad.length} step(s) failed — is the stack running?` : `${label} on ${name}: done`;
   toast(msg); $('nodeactmsg').textContent = msg;
   lastCluster = ''; loadCluster();
 }

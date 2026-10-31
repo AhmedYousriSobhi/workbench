@@ -33,7 +33,7 @@ Normative requirements for workbench. [README.md](README.md) gives the overview 
 |---|---|---|
 | C-1 | Slurm | `slurmctld` + `slurmrestd` in core; `slurmdbd`/MariaDB only in accounting profiles; N `slurmd` containers from one shared base image; GPUs as count-based GRES; jobs are synthetic. |
 | C-2 | Kubernetes | k3d/kind with 1 server + 1 real agent, plus KWOK fake nodes (incl. `nvidia.com/gpu` capacity). Governor addresses nodes by container name/label. |
-| C-3 | bmc-farm | One process serving N Redfish endpoints with inventory, power, thermals, fans, sensors, event log; fault injection via `/sim/inject`. Also standard Redfish over TLS on 127.0.0.1:8443 (`/redfish/v1`, node chosen by the `Host` header, network alias `bmc-<node>`, session login, collections, firmware, accounts; ADR 0012). |
+| C-3 | bmc-farm | One process serving N Redfish endpoints (each node also has its own address 10.148.x.y:443 through a forwarder container that can be switched off per node, ADR 0018) with inventory, power, thermals, fans, sensors, event log; fault injection via `/sim/inject`. Also standard Redfish over TLS on 127.0.0.1:8443 (`/redfish/v1`, node chosen by the `Host` header, network alias `bmc-<node>`, session login, collections, firmware, accounts; ADR 0012). |
 | C-4 | bcm-mock | Implements only the BCM surface the app calls (CMDaemon REST or `pythoncm`), data-driven from fixtures and `sim.yaml`. For SSH-based clients (they run `cmsh` on the head node over an SSH hop) the surface is a fake read-only `cmsh` on the login node (ADR 0013, issue 66): `cmsh -c "device; list"`, `device; status`, `category; list`, `jobqueue; list` and `monitoring; healthchecks; list`, state taken from bcm-mock, anything mutating refused. |
 | C-5 | jira-mock | Jira REST subset (issue create/transition/comment, JQL subset, webhooks) with failure modes (429, 503, slow); per-transition required-field rules that refuse a transition with a per-field error, as real workflow validators do. Modes: `mock` (default), `cloud`, `dc`. Also the calls an HPC monitoring client makes: POST search (`/search/jql` and `/search`), `myself`, `serverInfo`, `field`, `project`, and JQL with grouping, OR and text search (ADR 0005). |
 | C-6 | gpu-exporter-farm | Fake DCGM metrics (util, memory, temp, power, XID/ECC) per simulated GPU, scenario-controllable. Series carry the real DCGM labels (`Hostname`, `gpu`, `UUID`, `device`, `modelName`) next to `node`, and `FB_USED` + `FB_FREE` add up to the GPU type's framebuffer. |
@@ -49,7 +49,7 @@ Normative requirements for workbench. [README.md](README.md) gives the overview 
 
 ## 4a. Component interfaces (summary)
 
-- Governor control socket: `/run/workbench/gov.sock`, JSON requests, a fixed allow-list of commands (status, scale, freeze, thaw, stop, start, set-profile, admit, apply-plan, node-state: a node name and `down` or `resume`, so the page can tell Slurm about a power-off, W-4). Unknown commands MUST be rejected.
+- Governor control socket: `/run/workbench/gov.sock`, JSON requests, a fixed allow-list of commands (status, scale, freeze, thaw, stop, start, set-profile, admit, apply-plan, node-state: a node name and `off`, `on` (freeze or thaw its container so Slurm detects the outage itself), `down`, `drain` (with a short reason) or `resume`, W-4). Unknown commands MUST be rejected.
 - bmc-farm: Redfish under `/redfish/v1/...` per endpoint (TLS :8443, ADR 0012; plain `/<node>/redfish/v1` on :8000); control API `POST /sim/inject`.
 - Scenario file: YAML, see [architecture section 7](docs/architecture/06-ux-and-scenarios.md).
 
@@ -105,6 +105,7 @@ Profiles: `min`, `std`, `full`, `jira-real`, `mac-agent` ([architecture section 
 - NF-5. Starting, building and stopping the simulation MUST NOT need sudo (ADR 0010); root is only for the optional boot-time governor service.
 - NF-6. When the governor refuses an action (admission at L2 and above, GV-9) the tool MUST say so and why, and tests and scripts MUST NOT report that as a defect in the code under test.
 - NF-7. Every commit is authored and committed with the repository owner's (or an allow-listed contributor's) real GitHub noreply identity; GitHub credits by the numeric ID in the address, so a placeholder identity MUST be refused before it is committed or pushed (`scripts/check-identity.sh`, run by the pre-commit and pre-push hooks and `validate.sh`).
+- NF-8. Every container has a fixed private IP from one plan (`benchctl/addressing.py`, ADR 0018): compute nodes 10.141.0.N, GPU nodes 10.141.100.N, login 10.141.255.254, services 10.141.255.0/24. Clients use those at standard ports; 127.0.0.1 with the published ports is the fallback. `benchctl up` MUST refuse, with one message, an existing network with another subnet or a host route that overlaps the plan.
 
 ## 10. Acceptance (per roadmap phase)
 

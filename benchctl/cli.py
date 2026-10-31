@@ -161,7 +161,7 @@ def _sim() -> dict:
     return workbench.effective(base, spec)[0] if spec else base
 
 
-def _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes):
+def _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes=None):
     """(spec, sim, profile) from a workbench file and/or flags; flags win. Exits 1 with every problem listed."""
     base = _base_sim()
     try:
@@ -174,6 +174,8 @@ def _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, 
         if val is not None:
             setattr(spec, key, val)
     spec.parts = sorted((set(spec.parts) | set(with_ or [])) - set(without or []))
+    if bmc_nodes is not None:
+        spec.bmc_nodes = [n for n in bmc_nodes.split(",") if n]
     if problems := spec.problems():
         for p in problems:
             typer.echo(f"invalid: {p}", err=True)
@@ -189,18 +191,20 @@ GPUS = typer.Option(None, "--gpus-per-node", help="GPUs on each GPU node, 1 to 8
 WITH = typer.Option(None, "--with", autocompletion=completion.parts, help=f"add a part: {', '.join(workbench.PARTS)} (repeat)")
 WITHOUT = typer.Option(None, "--without", autocompletion=completion.parts, help="remove a part (repeat)")
 K8S = typer.Option(None, "--k8s-nodes", help="Kubernetes nodes (not built yet)")
+BMC_NODES = typer.Option(None, "--bmc-nodes", help="nodes that get a BMC address, comma separated (default all); each costs about 32 MB")
 SAVE = typer.Option(None, "--save", help="write the selection to this workbench file")
 
 
 @app.command()
 def plan(file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS,
-         with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, save: str = SAVE) -> None:
+         with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, save: str = SAVE,
+         bmc_nodes: str = BMC_NODES) -> None:
     """Estimate the memory a workbench needs against what the host has free; exit 1 if it would not fit."""
     from pathlib import Path
 
     import yaml
 
-    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes)
+    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes)
     est = workbench.estimate(sim, prof)
     ok, msg = workbench.verdict(est, checks.mem_available() // (1024 * 1024), spec=spec)
     typer.echo(workbench.render(spec, est) + f"\n\n{msg}")
@@ -210,8 +214,8 @@ def plan(file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: in
     raise typer.Exit(0 if ok else 1)
 
 
-def _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes) -> None:
-    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes)
+def _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes=None) -> None:
+    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes)
     typer.echo(workbench.render(spec, workbench.estimate(sim, prof)) + "\n")
     if not stack.up(sim, "workbench", say=typer.echo, prof=prof):
         raise typer.Exit(1)
@@ -221,14 +225,14 @@ def _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_
 @app.command()
 def up(profile: str = typer.Option(None, "--profile", autocompletion=completion.profiles, callback=_profile_check, help="a size preset (default std); or choose by counts below"),
        file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS,
-       with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S) -> None:
+       with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, bmc_nodes: str = BMC_NODES) -> None:
     """Estimate, then start. By preset (--profile) or by selection (--cpu-nodes 2 --gpu-nodes 4 --with jira ...)."""
-    chosen = any(v is not None for v in (file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes))
+    chosen = any(v is not None for v in (file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes))
     if chosen and profile:
         typer.echo("choose one: --profile PRESET, or a selection (--cpu-nodes, --gpu-nodes, --with, -f FILE)", err=True)
         raise typer.Exit(1)
     if chosen:
-        _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes)
+        _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes)
         return
     workbench.forget()
     raise typer.Exit(0 if stack.up(_base_sim(), profile or "std", say=typer.echo) else 1)
@@ -237,9 +241,9 @@ def up(profile: str = typer.Option(None, "--profile", autocompletion=completion.
 @app.command()
 def apply(file: str = typer.Option(..., "-f", "--file", help="workbench file to build"), name: str = NAME,
           cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS, with_: list[str] = WITH,
-          without: list[str] = WITHOUT, k8s_nodes: int = K8S) -> None:
+          without: list[str] = WITHOUT, k8s_nodes: int = K8S, bmc_nodes: str = BMC_NODES) -> None:
     """Build the workbench a file describes (the same as `up -f FILE`)."""
-    _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes)
+    _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes)
 
 
 def _launcher(*args: str) -> None:
@@ -437,13 +441,22 @@ app.add_typer(set_app, name="set")
 
 
 @set_app.command("node")
-def set_node(node: str = TARGET, state: str = typer.Argument(..., help="down (Slurm marks it not responding) or resume")) -> None:
-    """Tell Slurm a node is down or back: `benchctl set node cn001 down`. What the page's Power off/on does after the BMC."""
-    if state not in ("down", "resume"):
-        typer.echo("state must be down or resume", err=True)
+def set_node(node: str = TARGET, state: str = typer.Argument(..., help="off or on (freeze the node so Slurm detects it by itself), "
+                                                                       "down, drain or resume (set the Slurm state by hand)"),
+             reason: str = typer.Option(None, "--reason", help="the reason Slurm shows for down or drain")) -> None:
+    """`benchctl set node cn001 off` powers the node off like the page's button: the BMC reports it off, the BCM and the GPU metrics
+    follow, and its container freezes (slurmd stops answering; slurmctld marks it DOWN* after about 30 s, as for a dead host). `on` reverses it. `down`/`resume` set the Slurm state directly. The page's Power off/on does off/on."""
+    keys = {"off": "power_off", "on": "power_on", "down": "down", "drain": "drain", "resume": "resume"}
+    if state not in keys:
+        typer.echo("state must be off, on, down, drain or resume", err=True)
         raise typer.Exit(1)
-    o = scenario.execute(scenario.Step(0, "slurm", {state: [node], "reason": "workbench power off"}), host=True,
-                         runner=lambda c: stack._run(c))
+    run, post = (lambda c: stack._run(c)), (lambda url, body: scenario.post(url, body))
+    slurm_only = scenario.Step(0, "slurm", {keys[state]: [node], "reason": "workbench power off"})
+    o = scenario.execute(slurm_only if state not in ("off", "on") else
+                         scenario.Step(0, "bmc-farm", {"nodes": [node], "power": "Off" if state == "off" else "On"}),  # the page's Power off/on: BMC, BCM and GPU metrics follow
+                         poster=post, host=True, runner=run)
+    if o.status != "ok" and state in ("off", "on"):  # no BMC farm in this profile: freeze or thaw alone
+        o = scenario.execute(slurm_only, poster=post, host=True, runner=run)
     typer.echo(f"{node}: {state}" if o.status == "ok" else f"cannot set {node}: {o.detail}", err=o.status != "ok")
     raise typer.Exit(0 if o.status == "ok" else 1)
 
@@ -497,8 +510,10 @@ def export_profile(out: str = typer.Option("bench-profile.json", "-o", "--output
                    name: str = typer.Option("workbench", "--name", help="the cluster's name in the client"),
                    user: str = typer.Option(None, "--user", autocompletion=completion.users, help="SSH user, default the first user in sim.yaml"),
                    bmc: bool = typer.Option(False, "--bmc", help="also list one BMC target per node"),
-                   bmc_via: str = typer.Option("login", "--bmc-via", help="how the client reaches BMCs: login (through the login node, "
-                                                                          "address bmc-NODE) or direct (127.0.0.1)"),
+                   bmc_via: str = typer.Option("ip", "--bmc-via", help="a BMC's address in the file: ip (10.148.x.y, reachable from here and "
+                                                                       "from the login node) or name (bmc-NODE, only from the login node)"),
+                   loopback: bool = typer.Option(False, "--loopback", help="write 127.0.0.1 and the published ports (a client that cannot "
+                                                                           "route to the cluster network) instead of the container IPs"),
                    configured: bool = typer.Option(False, "--configured", help="list what the selection says, not the running containers"),
                    fmt: str = typer.Option(None, "--format", help="client format ID[:VERSION]; else $BENCH_EXPORT_FORMAT "
                                                                  "or .git/export-format")) -> None:
@@ -515,7 +530,7 @@ def export_profile(out: str = typer.Option("bench-profile.json", "-o", "--output
             if not configured and not profile:
                 typer.echo("note: no containers are running, so this lists the configured cluster "
                            f"({prof}); start it first for the live one", err=True)
-        text = export.to_json(export.build(sim, services, name, bmc, user, live=bool(live), bmc_via=bmc_via), export.format_id(fmt))
+        text = export.to_json(export.build(sim, services, name, bmc, user, live=bool(live), bmc_via=bmc_via, loopback=loopback), export.format_id(fmt))
     except export.ExportError as e:
         typer.echo(f"cannot export: {e}", err=True)
         raise typer.Exit(1) from e

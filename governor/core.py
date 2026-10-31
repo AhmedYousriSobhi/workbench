@@ -208,11 +208,14 @@ class Governor:
             if cmd == "set-profile":
                 return self._change(f"set-profile={req['profile']}", ["up", "--profile", req["profile"]])
             if cmd == "node-state":
-                return self._change(f"node-state={req['node']}:{req['state']}", ["set", "node", req["node"], req["state"]])
+                args = ["set", "node", req["node"], req["state"]] + (["--reason", req["reason"]] if req.get("reason") else [])
+                return self._change(f"node-state={req['node']}:{req['state']}", args)
             if cmd == "apply-plan":
                 args = ["up", "--cpu-nodes", str(req["cpu_nodes"]), "--gpu-nodes", str(req["gpu_nodes"]),
                         "--gpus-per-node", str(req["gpus_per_node"])]
                 for part in sorted(PLAN_PARTS):
                     args += ["--with" if part in req["parts"] else "--without", part]
+                if req.get("bmc_nodes") is not None:
+                    args += ["--bmc-nodes", ",".join(req["bmc_nodes"])]
                 return self._change(f"apply-plan={req['cpu_nodes']}cpu+{req['gpu_nodes']}gpu", args)
         return {"ok": False, "error": "unhandled"}

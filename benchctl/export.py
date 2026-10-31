@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 
-from . import compose, nodes, stack, workbench
+from . import addressing, compose, nodes, stack, workbench
 
 LOCAL_FORMAT_FILE = Path(".git/export-format")
 BMC_PORT = 8443
@@ -32,10 +32,15 @@ def format_id(flag: str | None = None, env: dict | None = None, local: Path = LO
 
 
 def build(sim: dict, services: set[str], name: str = "workbench", include_bmc: bool = False,
-          user: str | None = None, live: bool = False, bmc_via: str = "login") -> dict:
+          user: str | None = None, live: bool = False, bmc_via: str = "ip", loopback: bool = False) -> dict:
     """The profile for what the workbench contains. `services` are the compose service names that exist, so a part
     that is not built (no Jira, no Grafana) is left out instead of pointing at nothing. With `live`, `services` are
-    the running containers, so a BMC target is listed only for a node that is up."""
+    the running containers, so a BMC target is listed only for a node that is up. Addresses are the containers' fixed
+    private IPs at their standard ports (ADR 0018); `loopback` writes the published 127.0.0.1 ports instead, for a
+    client that cannot route to the Docker network."""
+    ips = addressing.plan(sim)["services"]
+    login = ("127.0.0.1", compose.SSH_PORT) if loopback else (addressing.LOGIN_IP, 22)
+    web = lambda svc, port: f"http://127.0.0.1:{port}" if loopback else f"http://{ips[svc]}:{port}"
     users = [u["name"] for u in sim.get("users", [])]
     ssh_user = user or (users[0] if users else "alice")
     if user and users and user not in users:
@@ -46,7 +51,7 @@ def build(sim: dict, services: set[str], name: str = "workbench", include_bmc: b
         "name": name,
         "description": "Simulated cluster (workbench). Synthetic data on 127.0.0.1.",
         "tags": ["simulated"],
-        "connection": {"host": "127.0.0.1", "port": 2222, "username": ssh_user, "authMethod": "private-key"},
+        "connection": {"host": login[0], "port": login[1], "username": ssh_user, "authMethod": "private-key"},
         "grafana": None, "jira": None, "azureTunnel": None, "teleport": None, "scheduler": None, "k8s": None,
         "storage": {"paths": ["~"], "autoRefresh": False},
     }
@@ -54,19 +59,23 @@ def build(sim: dict, services: set[str], name: str = "workbench", include_bmc: b
         cluster["scheduler"] = {"kind": "slurm", "scope": "mine", "partitions": [p["name"] for p in sim.get("partitions", [])],
                                 "intervalSec": 60, "autoRefresh": True}
     if "grafana" in services:
-        cluster["grafana"] = {"baseUrl": "http://127.0.0.1:3000", "dashboardUids": ["hpc-overview"],
+        cluster["grafana"] = {"baseUrl": web("grafana", 3000), "dashboardUids": ["hpc-overview"],
                               "gpuDatasourceUid": "prometheus", "gpuHostLabel": "Hostname"}
     if "jira-mock" in services:
-        cluster["jira"] = {"baseUrl": "http://127.0.0.1:8080", "authMode": "datacenter", "projectKey": "OPS",
+        cluster["jira"] = {"baseUrl": web("jira-mock", 8080), "authMode": "datacenter", "projectKey": "OPS",
                            "wholeProject": True}
     out: dict = {"profile": {"name": name}, "clusters": [cluster]}
     if include_bmc and "bmc-farm" in services:
-        if bmc_via not in ("login", "direct"):
-            raise ExportError(f"bad --bmc-via {bmc_via!r}: login or direct")
-        # Through the login node (jump host) 127.0.0.1 is the login container, where nothing listens: the BMC is bmc-<node>.
-        out["bmc"] = [{"name": f"bmc-{n}", "address": f"bmc-{n}" if bmc_via == "login" else "127.0.0.1", "port": BMC_PORT,
-                       "node": n, "username": "admin",
-                       "cluster": 0} for n, _ in nodes.node_names(sim) if not live or n in services]
+        if bmc_via not in ("ip", "name"):
+            raise ExportError(f"bad --bmc-via {bmc_via!r}: ip or name")
+        every = [n for n, _ in nodes.node_names(sim)]
+        if loopback:  # the one published listener; the node is chosen by the Host header, so every target looks alike
+            targets = [(n, "127.0.0.1", BMC_PORT) for n in every]
+        else:  # each BMC has its own address on the ipmi network, reachable from here and from the login node (ADR 0018)
+            bmc_ip = addressing.plan(sim)["bmc"]
+            targets = [(n, bmc_ip[n] if bmc_via == "ip" else f"bmc-{n}", 443) for n in every if f"bmc-{n}" in services]
+        out["bmc"] = [{"name": f"bmc-{n}", "address": a, "port": p, "node": n, "username": "admin", "cluster": 0}
+                      for n, a, p in targets]
     return out
 
 

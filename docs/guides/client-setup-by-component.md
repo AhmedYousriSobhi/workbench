@@ -5,7 +5,7 @@ scratch. Quickest alternative: [import everything from a file](export-profile.md
 (SSH, Slurm, Grafana, storage, Jira, BCM, BMC) without reading the rest. Each section says what to start, where to find
 each value, what to type, what you should see, and the usual failure.
 
-Every section uses synthetic data on `127.0.0.1`. Field names are the client's own labels, as in its cluster form.
+Every section uses synthetic data on the cluster's fixed private addresses (`10.141.x.x`, standard ports; [ADR 0018](../adr/0018-fixed-addressing-plan.md)); `127.0.0.1` with the published ports is the fallback (`benchctl export profile --loopback`) for a client that cannot route to the Docker network or insists on HTTPS for non-local hosts. Field names are the client's own labels, as in its cluster form.
 
 ## 0. Start the cluster once
 
@@ -22,7 +22,7 @@ When you are done: `./scripts/benchctl down`.
 
 | Client field | Value |
 |---|---|
-| Host / Port | `127.0.0.1` / `2222` |
+| Host / Port | `10.141.255.254` / `22` (fallback `127.0.0.1` / `2222`) |
 | Username | `alice` (or `bob`) |
 | Auth method | Private key |
 | Private key | a file under `~/.ssh` (the client refuses other places) |
@@ -68,7 +68,7 @@ afterwards.
 
 | Client field | Value | Where it comes from |
 |---|---|---|
-| Grafana base URL | `http://127.0.0.1:3000` | fixed |
+| Grafana base URL | `http://10.141.255.21:3000` (fallback `http://127.0.0.1:3000`) | fixed |
 | Dashboard UIDs | `hpc-overview` | the provisioned dashboard "HPC Cluster Overview (workbench)" |
 | Service account API token | the Viewer token | `cat compose/generated/secrets/grafana_viewer_token` |
 | GPU datasource UID (advanced) | `prometheus` | fixed |
@@ -96,7 +96,7 @@ commands are not simulated yet (roadmap, issue #69). The dashboard's `/mnt/lustr
 | Client field | Value |
 |---|---|
 | Jira type | Jira Data Center (PAT) |
-| Jira base URL | `http://127.0.0.1:8080` (plain HTTP is accepted for localhost) |
+| Jira base URL | `http://10.141.255.11:8080` (fallback `http://127.0.0.1:8080`; if the client refuses plain HTTP for a non-local host, use the fallback) |
 | API token | any text (the mock treats a Bearer token as user `alice`) |
 | Default project key | `OPS` (the mock's project; `curl -s 127.0.0.1:8080/rest/api/2/project` lists it) |
 
@@ -114,27 +114,27 @@ The login node is the head node, with a read-only `cmsh`. In the cluster's **Bas
 
 | Client field | Value |
 |---|---|
-| Host | the same `127.0.0.1`, port `2222`, over the SSH connection from section 1 |
+| Host | the login node `10.141.255.254`, port `22`, over the SSH connection from section 1 |
 
 Press **Test BCM Connection** (save the cluster first). You can check by hand what it runs:
-`ssh -p 2222 alice@127.0.0.1 'cmsh -c "device; list"'` (it lists the head node `login` and the nodes with their status). Only reading works. Plain `cmsh` over a terminal opens a read-only console: type `device`, then `list` or `status`, `..` to go up, `exit` to leave.
+`ssh -i compose/generated/secrets/ssh/id_ed25519 alice@10.141.255.254 'cmsh -c "device; list"'` (it lists the head node `login` and the nodes with their status). Only reading works. Plain `cmsh` over a terminal opens a read-only console: type `device`, then `list` or `status`, `..` to go up, `exit` to leave.
 
 ## 7. BMC (Redfish)
 
 | Value | |
 |---|---|
-| Address | `https://127.0.0.1:8443`, one node per `Host` header `bmc-<node>` (for example `bmc-gpu001`); through the login node it is `bmc-gpu001:8443` |
+| Address | one per node: `10.148.0.N:443` for compute nodes, `10.148.100.N:443` for GPU nodes (for example `10.148.100.1` is `gpu001`); the name `bmc-<node>` also works from the login node |
 | User / password | `admin` / the password after the colon in `compose/generated/secrets/bmc_credentials` (the file reads `admin:<password>`) |
-| Certificate | self-signed; the client must be told to trust or pin it |
+| Certificate | self-signed, the same on every BMC; the client must be told to trust or pin it |
 
-**Which address?** It depends on how the client reaches the BMCs. If it goes **through the login node** (the jump host, the
-usual design: BMCs sit on the management network behind the head node), use `bmc-<node>` port `8443` (or the standard `443`):
-`127.0.0.1` there is the login container itself and nothing listens on it, so the connection is refused. If it connects **directly** from your machine, use `127.0.0.1` port `8443`;
-all nodes then share that one address because the BMC farm is a single process that picks the node by the `Host` header
-(`bmc-<node>`). `benchctl export profile --bmc --bmc-via login|direct` (and the page's Export sheet) writes either form;
-the default is `login`. One address per node is a design question: [issue 147](https://github.com/AhmedYousriSobhi/workbench/issues/147).
+Each BMC is a small container on the BMC network (`10.148.0.0/16`) with its own fixed IP at the standard port 443
+([ADR 0018](../adr/0018-fixed-addressing-plan.md)). The address works from this machine and from the login node (the jump
+host is also on that network). `benchctl export profile --bmc` writes one target per node with its own address.
+A node can have no BMC: switch it off in **⚙ Settings** (the BMC part lists the nodes) or with `--bmc-nodes cn001,gpu001`;
+each BMC costs about 32 MB. A client that cannot route to the cluster network uses the old single listener,
+`127.0.0.1:8443` with the Host header `bmc-<node>` (`--loopback`).
 
-Check by hand: `curl -sk -H "Host: bmc-gpu001" -u "admin:<password>" https://127.0.0.1:8443/redfish/v1/` (it answers "gpu001 service root"). Break something with
+Check by hand: `curl -sk -u "admin:<password>" https://10.148.100.1/redfish/v1/` (or, with the old listener, `curl -sk -H "Host: bmc-gpu001" -u "admin:<password>" https://127.0.0.1:8443/redfish/v1/`) (it answers "gpu001 service root"). Break something with
 `./scripts/benchctl scenario run fan-failure`.
 
 ## 8. Try a fault

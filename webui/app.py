@@ -8,6 +8,7 @@ budget (ADR 0008).
 import asyncio
 import hmac
 import json
+import re
 import threading
 from pathlib import Path
 
@@ -36,7 +37,7 @@ COOKIE = "workbench_ui"
 DOCS = Path(__file__).resolve().parent.parent / "docs"
 
 
-SLURM_STATE = {"power-off": "down", "power-on": "resume", "clear": "resume"}  # page action -> scontrol state
+SLURM_STATE = {"power-off": "off", "power-on": "on", "clear": "resume"}  # page action -> governor node-state (off/on freeze the node)
 
 
 def governor_status(socket: str) -> dict:
@@ -50,8 +51,8 @@ def governor_status(socket: str) -> dict:
 class Runs:
     """At most one scenario at a time; state is what the page polls."""
 
-    def __init__(self, root: Path, sim: dict, flow: Flow | None = None):
-        self.root, self.sim, self.flow = root, sim, flow
+    def __init__(self, root: Path, sim: dict, flow: Flow | None = None, slurm=None):
+        self.root, self.sim, self.flow, self.slurm = root, sim, flow, slurm
         self.lock = threading.Lock()
         self.stop_flag = threading.Event()
         self.state: dict = {"running": False}
@@ -90,7 +91,8 @@ class Runs:
 
         try:
             rep = scenario.run(sc, speed=speed, dilation=float(self.sim.get("time_dilation", 1.0)), say=lambda m: None,
-                               host=False, should_stop=self.stop_flag.is_set, on_step=on_step, on_expect=on_expect)
+                               host=False, should_stop=self.stop_flag.is_set, on_step=on_step, on_expect=on_expect,
+                               slurm=self.slurm)
             self.state.update(ok=rep.ok, stopped=rep.stopped)
         finally:
             self.state["running"] = False
@@ -105,7 +107,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
                fetch=None, poster=None) -> Starlette:
     sim = yaml.safe_load(sim_yaml.read_text())
     flow = Flow()
-    runs = Runs(scenarios, sim, flow)
+    runs = Runs(scenarios, sim, flow, slurm=lambda n, s, r: _governed(slurm_state(n, s, r)))
     cluster = Cluster(sim, **{k: v for k, v in (("fetch", fetch), ("poster", poster)) if v})  # test seams: a host stack must not answer or be hit
     wiki = Wiki(docs)
 
@@ -169,7 +171,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
         try:
             spec = workbench.from_dict({k: int(q[k]) for k in ("cpu_nodes", "gpu_nodes", "gpus_per_node") if k in q}
-                                       | ({"parts": [p for p in q["parts"].split(",") if p]} if "parts" in q else {}),
+                                       | ({"parts": [p for p in q["parts"].split(",") if p]} if "parts" in q else {})
+                                       | ({"bmc_nodes": [n for n in q["bmc_nodes"].split(",") if n]} if "bmc_nodes" in q else {}),
                                        workbench.defaults(sim))
         except (ValueError, workbench.SpecError) as e:
             raise HTTPException(422, str(e)) from e
@@ -182,14 +185,16 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
     async def settings(request: Request):
         """The options the Settings sheet offers, with what each costs; `on` follows the workbench last built."""
-        from benchctl import export, workbench
+        from benchctl import compose, export, workbench
 
         try:
             _, services, _ = export.configured(yaml.safe_load(sim_yaml.read_text()))
             built = workbench.parts_in(services)
         except (export.ExportError, OSError, ValueError):
-            built = None  # nothing built to read: offer the defaults
-        return JSONResponse({"parts": workbench.catalog(built),
+            services, built = set(), None  # nothing built to read: offer the defaults
+        nodes = [{"name": n, "kind": k, "bmc": f"bmc-{n}" in services if "bmc-farm" in services else True}
+                 for n, k in cluster.nodes]
+        return JSONResponse({"parts": workbench.catalog(built), "nodes": nodes, "bmc_node_mb": compose.BMC_FORWARDER_MB,
                              "limits": {k: list(v) for k, v in workbench.LIMITS.items()}})
 
     async def plan(request: Request):
@@ -199,6 +204,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
         flags = f"--cpu-nodes {spec.cpu_nodes} --gpu-nodes {spec.gpu_nodes} --gpus-per-node {spec.gpus_per_node}" + "".join(
             f" --with {p}" for p in sorted(spec.parts)) + "".join(f" --without {p}" for p in workbench.PARTS if p not in spec.parts)
+        if spec.bmc_nodes is not None:
+            flags += f" --bmc-nodes {','.join(spec.bmc_nodes)}"
         return JSONResponse({"fits": ok, "message": msg, "total_mb": est["total_mb"], "available_mb": avail,
                              "text": workbench.render(spec, est), "command": f"benchctl up {flags}"})
 
@@ -209,6 +216,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             raise HTTPException(422, "does not fit: " + msg)
         req = {"cmd": "apply-plan", "cpu_nodes": spec.cpu_nodes, "gpu_nodes": spec.gpu_nodes,
                "gpus_per_node": spec.gpus_per_node, "parts": sorted(spec.parts)}
+        if spec.bmc_nodes is not None:
+            req["bmc_nodes"] = spec.bmc_nodes
         try:
             res = await asyncio.to_thread(checks.governor_request, req, socket)
         except (OSError, ValueError) as e:
@@ -226,7 +235,15 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             info = await asyncio.to_thread(describe.gather, cluster.sim, request.path_params["node"], cluster.fetch)
         except describe.UnknownNode as e:
             raise HTTPException(404, str(e.args[0])) from e
-        return JSONResponse({"info": info, "text": describe.render(info)})
+        from benchctl import addressing, export
+
+        node, plan = request.path_params["node"], addressing.plan(cluster.sim)
+        try:
+            _, services, _ = export.configured(yaml.safe_load(sim_yaml.read_text()))
+        except (export.ExportError, OSError, ValueError):
+            services = set()
+        return JSONResponse({"info": info, "text": describe.render(info), "ip": plan["nodes"].get(node),
+                             "bmc_ip": plan["bmc"].get(node) if f"bmc-{node}" in services else None})
 
     async def connections(request: Request):
         from webui import connections as conn
@@ -243,7 +260,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             base = yaml.safe_load(sim_yaml.read_text())
             sim, services, label = export.configured(base)
             body = export.build(sim, services, "workbench", q.get("bmc") == "1", q.get("user") or None,
-                                bmc_via=q.get("bmc_via", "login"))
+                                bmc_via=q.get("bmc_via", "ip"), loopback=q.get("addr") == "loopback")
             text = export.to_json(body, export.format_id())
         except export.ExportError as e:
             raise HTTPException(422, str(e)) from e
@@ -251,17 +268,22 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
                         headers={"Content-Disposition": 'attachment; filename="bench-profile.json"', "X-Profile": label,
                                  "X-Warning": " ".join(export.warnings(services))})
 
-    def slurm_state(node: str, state: str) -> dict:
+    def _governed(row: dict) -> tuple[bool, str]:
+        """(done, why not) from a slurm_state row, for the scenario engine."""
+        return row["status"] == "ok", row["detail"]
+
+    def slurm_state(node: str, state: str, reason: str | None = None) -> dict:
         """Slurm is told through the governor (the page has no Docker, W-3); a refusal is reported, never fatal."""
         try:
-            res = checks.governor_request({"cmd": "node-state", "node": node, "state": state}, socket)
+            res = checks.governor_request({"cmd": "node-state", "node": node, "state": state,
+                                           **({"reason": re.sub(r"[^A-Za-z0-9 .,:_/()+-]", "", reason)[:60]} if reason else {})}, socket)
         except (OSError, ValueError):
             return {"target": "slurm", "status": "skipped", "detail": "the governor is not reachable"}
         if not res.get("ok"):
             return {"target": "slurm", "status": "skipped", "detail": res.get("error", "refused")}
         if res.get("dry_run"):
             return {"target": "slurm", "status": "skipped", "detail": "the governor is in dry-run mode or has no --workdir"}
-        return {"target": "slurm", "status": "ok", "detail": f"asked Slurm to set {node} {state}"}
+        return {"target": "slurm", "status": "ok", "detail": f"asked the governor to set {node} {state}"}
 
     async def node_action(request: Request):
         try:

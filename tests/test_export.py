@@ -11,14 +11,16 @@ from benchctl import cli, export
 
 ROOT = Path(__file__).resolve().parent.parent
 SIM = yaml.safe_load((ROOT / "sim.yaml").read_text())
-ALL = {"login", "slurmctld", "grafana", "jira-mock", "bmc-farm"}
+NODES = ["cn001", "cn002", "cn003", "cn004", "gpu001", "gpu002"]
+ALL = {"login", "slurmctld", "grafana", "jira-mock", "bmc-farm", *(f"bmc-{n}" for n in NODES)}
 runner = CliRunner()
 
 
 def test_profile_describes_every_part_that_is_built():
     c = export.build(SIM, ALL)["clusters"][0]
-    assert c["connection"] == {"host": "127.0.0.1", "port": 2222, "username": "alice", "authMethod": "private-key"}
+    assert c["connection"] == {"host": "10.141.255.254", "port": 22, "username": "alice", "authMethod": "private-key"}
     assert c["scheduler"]["partitions"] == ["cpu", "gpu"] and c["scheduler"]["kind"] == "slurm"
+    assert c["grafana"]["baseUrl"] == "http://10.141.255.21:3000" and c["jira"]["baseUrl"] == "http://10.141.255.11:8080"
     assert c["grafana"]["dashboardUids"] == ["hpc-overview"] and c["grafana"]["gpuDatasourceUid"] == "prometheus"
     assert c["jira"]["projectKey"] == "OPS" and c["jira"]["authMode"] == "datacenter"
     assert c["storage"]["paths"] == ["~"] and c["k8s"] is None
@@ -45,7 +47,7 @@ def test_bmc_targets_one_per_node_only_when_asked():
     assert "bmc" not in export.build(SIM, ALL)
     targets = export.build(SIM, ALL, include_bmc=True)["bmc"]
     assert [t["node"] for t in targets][:2] == ["cn001", "cn002"] and len(targets) == 6
-    assert all(t["cluster"] == 0 and t["port"] == 8443 and t["username"] == "admin" for t in targets)
+    assert all(t["cluster"] == 0 and t["port"] == 443 and t["username"] == "admin" for t in targets)
     assert "bmc" not in export.build(SIM, {"login"}, include_bmc=True)
 
 
@@ -110,8 +112,8 @@ def test_live_profile_leaves_out_stopped_parts_and_nodes(tmp_path):
     body = export.build(sim, services, include_bmc=True, live=True)
     assert body["clusters"][0]["jira"] is None and body["clusters"][0]["grafana"] is None
     assert "bmc" not in body  # bmc-farm is not running
-    sim, services = export.running(SIM, fake_docker("login", "bmc-farm", "cn001"), tmp_path / "none.yaml")
-    assert [t["node"] for t in export.build(sim, services, include_bmc=True, live=True)["bmc"]] == ["cn001"]
+    sim, services = export.running(SIM, fake_docker("login", "bmc-farm", "cn001", "bmc-cn001", "bmc-cn002"), tmp_path / "none.yaml")
+    assert [t["node"] for t in export.build(sim, services, include_bmc=True, live=True)["bmc"]] == ["cn001", "cn002"]  # a BMC that runs
 
 
 def test_command_follows_the_running_containers_and_falls_back_with_a_note(tmp_path, monkeypatch):
@@ -149,18 +151,13 @@ def test_start_passes_parts_to_the_launcher_and_refuses_a_mix(monkeypatch):
     assert runner.invoke(cli.app, ["start", "--profile", "std", "--with", "load"]).exit_code == 1
 
 
-def test_set_node_marks_a_node_down_or_back_through_scontrol(monkeypatch):
-    ran = []
+def test_set_node_freezes_a_node_for_off_and_on_and_sets_the_slurm_state_for_down_and_resume(monkeypatch):
+    ran, posted = [], []
     monkeypatch.setattr(cli.stack, "_run", lambda cmd: ran.append(cmd) or type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})())
-    r = runner.invoke(cli.app, ["set", "node", "cn001", "down"])
-    assert r.exit_code == 0 and "state=down" in ran[-1] and "nodename=cn001" in ran[-1]
+    monkeypatch.setattr(cli.scenario, "post", lambda url, body: posted.append((url.split(":")[2].split("/")[0], body)))
+    assert runner.invoke(cli.app, ["set", "node", "cn001", "off"]).exit_code == 0 and ran[-1] == ["docker", "pause", "workbench-cn001-1"]
+    assert runner.invoke(cli.app, ["set", "node", "cn001", "on"]).exit_code == 0 and ran[-1] == ["docker", "unpause", "workbench-cn001-1"]
+    assert ("8000", {"node": "cn001", "power": "Off"}) in posted and ("8000", {"node": "cn001", "power": "On"}) in posted  # the BMC follows, as for the page's button
+    assert ("8081", {"node": "cn001", "state": "UP"}) in posted
+    assert runner.invoke(cli.app, ["set", "node", "cn001", "down"]).exit_code == 0 and "state=down" in ran[-1] and "nodename=cn001" in ran[-1]
     assert runner.invoke(cli.app, ["set", "node", "cn001", "sideways"]).exit_code == 1
-
-
-def test_bmc_targets_use_the_node_name_through_the_login_node_and_loopback_when_direct():
-    via_login = export.build(SIM, ALL, include_bmc=True)["bmc"]
-    assert [t["address"] for t in via_login][:2] == ["bmc-cn001", "bmc-cn002"] and {t["port"] for t in via_login} == {8443}
-    direct = export.build(SIM, ALL, include_bmc=True, bmc_via="direct")["bmc"]
-    assert {t["address"] for t in direct} == {"127.0.0.1"} and [t["node"] for t in direct] == [t["node"] for t in via_login]
-    with pytest.raises(export.ExportError, match="bad --bmc-via"):
-        export.build(SIM, ALL, include_bmc=True, bmc_via="tunnel")

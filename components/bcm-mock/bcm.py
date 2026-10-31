@@ -47,7 +47,9 @@ class Cluster:
                 "gpus": n["gpus"], "memory_mb": n["memory_mb"], "cpus": n["cpus"], "status": self.state[name]}
 
     def ip(self, name: str) -> str:
-        return f"10.141.0.{list(self.nodes).index(name) + 1}"
+        kind = self.nodes[name]["category"]  # the same formula as benchctl/addressing.py host_ip (this file cannot import it)
+        i = [n for n, v in self.nodes.items() if v["category"] == kind].index(name)
+        return f"10.141.{i // 254 + (100 if kind == 'gpu' else 0)}.{i % 254 + 1}"
 
     def inject(self, req: dict) -> None:
         node = req["node"]

@@ -59,3 +59,12 @@ expect:
   holds when the app, or ticket-bot once built, does its part.
 
 Always run `--dry-run` first: it rejects unknown targets and unknown nodes. Design: [ADR 0006](../adr/0006-scenario-engine-runs-in-the-host-cli.md).
+
+## Faults reach the whole cluster
+
+A `bmc-farm` step with `power: "Off"` is a power loss for the node: besides the BMC it sets the BCM state `DOWN`, makes the GPU
+exporter stop publishing the node and freezes the node's container, so `slurmctld` marks it `down*` (Not responding) by
+itself after about 30-40 s. `power: "On"` and `clear: true` undo all of that. You write one step; the BCM, exporter and
+Slurm steps are no longer needed (they are harmless if present). Played from the page, the Slurm part (`drain`, `down`,
+`resume`, `power_off`, `power_on`) goes through the governor, at calm levels only (L0-L1); when it is refused the step still
+runs and says why in its detail. `ssh` steps still need `benchctl scenario run`.

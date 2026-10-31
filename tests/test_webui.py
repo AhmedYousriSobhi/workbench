@@ -111,7 +111,7 @@ def test_governor_down_is_reported_not_crashed(tmp_path):
     assert out["ok"] is False and "not reachable" in out["error"]
 
 
-def test_scenario_list_and_run_skips_slurm_without_docker(ui):
+def test_scenario_list_and_run_sends_slurm_steps_through_the_governor(ui):
     names = [s["name"] for s in json.loads(req(ui, "/api/scenarios")[1])]
     assert names == ["quick", "slow"]
     assert req(ui, "/api/scenarios/quick/run", "POST")[0] == 403  # no X-Requested-With: CSRF guard
@@ -124,8 +124,9 @@ def test_scenario_list_and_run_skips_slurm_without_docker(ui):
         if not state["running"]:
             break
         time.sleep(0.05)
-    assert state["ok"] is True and [s["status"] for s in state["steps"]] == ["skipped", "skipped"]
-    assert "Docker" in state["steps"][0]["detail"]  # the UI never drains Slurm itself
+    # the Slurm drain goes through the governor (the page never runs Docker itself); the k8s step is not built
+    assert state["ok"] is True and [s["status"] for s in state["steps"]] == ["ok", "skipped"]
+    assert "not built" in state["steps"][1]["detail"]
 
 
 def test_stop_ends_a_running_scenario_and_unknown_is_404(ui):
@@ -230,7 +231,7 @@ def test_connections_endpoint_lists_every_entity_with_credential_paths_only(ui):
     code, body = req(ui, "/api/connections")
     rows = {e["id"]: e for e in json.loads(body)["entities"]}
     assert code == 200 and {"login", "nodes", "bmc", "bcm", "jira", "slurm", "gpu", "prometheus", "grafana", "ui"} <= set(rows)
-    assert rows["login"]["address"] == "127.0.0.1:2222" and rows["login"]["credential"].endswith("ssh/id_ed25519")
+    assert rows["login"]["address"] == "10.141.255.254:22" and "127.0.0.1:2222" in rows["login"]["how"] and rows["login"]["credential"].endswith("ssh/id_ed25519")
     assert rows["bmc"]["credential"].endswith("bmc_credentials") and "admin:<password>" in rows["bmc"]["command"]
     assert req(ui, "/api/connections", auth=False)[0] == 401
     page = req(ui, "/")[1]
@@ -263,7 +264,7 @@ def test_export_button_downloads_the_profile_and_explains_a_missing_format(ui, m
     assert b'id="expdlg"' in req(ui, "/")[1] and b"newer than its backend" in req(ui, "/")[1] and b"ssh-key install in a terminal" in req(ui, "/")[1] and b"Jira needs no token" in req(ui, "/")[1]
 
 
-def test_power_off_also_asks_the_governor_to_mark_the_node_down_in_slurm(tmp_path):
+def test_power_off_asks_the_governor_to_freeze_the_node_so_slurm_notices_by_itself(tmp_path):
     """The BMC and BCM change, but sinfo only follows if Slurm is told; the page has no Docker, so the governor does it."""
     asked = []
     answer = {"ok": True, "started": True}
@@ -285,11 +286,11 @@ def test_power_off_also_asks_the_governor_to_mark_the_node_down_in_slurm(tmp_pat
     base, h = f"http://127.0.0.1:{port}", {"X-Requested-With": "workbench"}
     try:
         res = json.loads(req(base, "/api/nodes/cn002/power-off", "POST", headers=h)[1])["results"]
-        assert asked == [{"cmd": "node-state", "node": "cn002", "state": "down"}]
+        assert asked == [{"cmd": "node-state", "node": "cn002", "state": "off"}]
         assert res[-1]["target"] == "slurm" and res[-1]["status"] == "ok"
         answer.update(ok=False, error="refused at L3")
         res = json.loads(req(base, "/api/nodes/cn002/power-on", "POST", headers=h)[1])["results"]
-        assert asked[-1]["state"] == "resume" and res[-1]["status"] == "skipped" and "refused at L3" in res[-1]["detail"]
+        assert asked[-1]["state"] == "on" and res[-1]["status"] == "skipped" and "refused at L3" in res[-1]["detail"]
         res = json.loads(req(base, "/api/nodes/cn002/overheat", "POST", headers=h)[1])["results"]
         assert not any(r["target"] == "slurm" for r in res)
     finally:
@@ -321,3 +322,21 @@ def test_page_script_declares_every_function_once():
     page = (ROOT / "webui" / "static" / "index.html").read_text()
     names = re.findall(r"^(?:async )?function ([A-Za-z_$][\w$]*)", page, re.MULTILINE)
     assert len(names) > 20 and [n for n in set(names) if names.count(n) > 1] == []
+
+
+def test_settings_lists_the_nodes_for_the_bmc_picker_and_the_sheet_sends_the_choice(ui, monkeypatch, tmp_path):
+    from benchctl import compose, workbench
+    monkeypatch.setattr(workbench, "SAVED", tmp_path / "none.yaml")
+    monkeypatch.setattr("benchctl.export.stack.current_profile", lambda: "min")
+    body = json.loads(req(ui, "/api/settings")[1])
+    assert [n["name"] for n in body["nodes"]] == ["cn001", "cn002", "cn003", "cn004", "gpu001", "gpu002"]
+    assert all(n["bmc"] for n in body["nodes"]) and body["bmc_node_mb"] == compose.BMC_FORWARDER_MB
+    page = req(ui, "/")[1].decode()
+    assert 'id="pl-bmcnodes"' in page and "bmc_nodes" in page and "showBmcNodes" in page
+
+
+def test_plan_with_a_bmc_selection_costs_less_and_names_the_flag(ui):
+    full = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8&parts=bmc")[1])
+    one = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8&parts=bmc&bmc_nodes=cn001")[1])
+    assert full["total_mb"] - one["total_mb"] == 2 * 32 and "--bmc-nodes cn001" in one["command"]
+    assert req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8&parts=bmc&bmc_nodes=..%2Fx")[0] == 422

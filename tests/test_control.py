@@ -115,7 +115,17 @@ def test_node_state_accepts_only_a_node_name_and_down_or_resume():
     d = lambda r: control.dispatch(json.dumps(r).encode(), lambda c, q: seen.append(q) or {"ok": True}, lambda: {"compute"})
     assert d({"cmd": "node-state", "node": "cn001", "state": "down"}) == {"ok": True}
     assert d({"cmd": "node-state", "node": "gpu002", "state": "resume"}) == {"ok": True}
-    for bad in ({"node": "cn001; rm", "state": "down"}, {"node": "../x", "state": "down"}, {"node": "cn001", "state": "drain"},
+    assert d({"cmd": "node-state", "node": "cn003", "state": "off"}) == {"ok": True} and d({"cmd": "node-state", "node": "cn003", "state": "on"}) == {"ok": True}
+    for bad in ({"node": "cn001; rm", "state": "down"}, {"node": "../x", "state": "down"}, {"node": "cn001", "state": "sideways"}, {"node": "cn001", "state": "drain", "reason": "x; rm -rf /"},
                 {"node": "cn001"}, {"state": "down"}, {"node": 1, "state": "down"}):
         assert d({"cmd": "node-state", **bad})["ok"] is False
-    assert len(seen) == 2
+    assert d({"cmd": "node-state", "node": "cn001", "state": "drain", "reason": "node down: xid 79"}) == {"ok": True}
+    assert len(seen) == 5
+
+
+def test_apply_plan_accepts_an_optional_list_of_bmc_node_names_only():
+    ok = {"cmd": "apply-plan", "cpu_nodes": 2, "gpu_nodes": 1, "gpus_per_node": 8, "parts": ["bmc"]}
+    d = lambda r: control.dispatch(json.dumps(r).encode(), lambda c, q: {"ok": True}, lambda: {"compute"})
+    assert d(ok)["ok"] and d({**ok, "bmc_nodes": ["cn001", "gpu002"]})["ok"] and d({**ok, "bmc_nodes": []})["ok"]
+    for bad in ("cn001", ["cn001; rm -rf /"], ["../x"], [1], ["cn001"] * 81):
+        assert d({**ok, "bmc_nodes": bad})["ok"] is False

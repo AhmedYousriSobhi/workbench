@@ -143,14 +143,22 @@ successful download the sheet lists what to set by hand: the SSH key (`benchctl 
 (`compose/generated/secrets/grafana_viewer_token`), the BMC password if asked for, and that Jira needs no token. It also
 warns when Slurm accounting is missing (`sacct` would fail). See [export a profile](../guides/export-profile.md).
 
-**Power off and Slurm.** Power off sets the BMC and BCM state, makes the GPU exporter stop publishing the node (its GPU series vanish from Grafana, as on a dead host; Power on brings them back), and also asks the governor to mark the node `down` in Slurm,
-so `sinfo` shows it down; Power on and Clear faults resume it. This needs the governor started with `--workdir` (the
-launcher does) and level L0-L1; otherwise the page says Slurm was not told and names `benchctl set node NAME down`.
+**Power off and Slurm.** Power off sets the BMC and BCM state, makes the GPU exporter stop publishing the node (its GPU series vanish from Grafana), and
+asks the governor to **freeze the node's container**. Its `slurmd` then stops answering, exactly as on a dead host, and
+`slurmctld` notices by itself: `sinfo` shows the node `down*` (reason *Not responding*) after about 30 s (`SlurmdTimeout=15`, `MessageTimeout=5`).
+Power on thaws it, and with `ReturnToService=1` Slurm returns it on its own after its next answer. This needs the governor
+started with `--workdir` (the launcher does) and level L0-L1; otherwise the page says the node was not frozen and names
+`benchctl set node NAME off`. `benchctl set node NAME down|resume` sets the Slurm state by hand instead.
 
-A node powered off from the page stays `down` in Slurm until you power it on or run `benchctl set node NAME resume`
-(`ReturnToService=1`). A cluster built before this setting keeps the old behaviour until its `slurm.conf` is regenerated
+A node set `down` by hand (`benchctl set node NAME down`) stays down until `resume`; one that went down by not answering returns
+by itself (`ReturnToService=1`). A cluster built before this setting keeps the old behaviour until its `slurm.conf` is regenerated
 and reloaded: `./scripts/benchctl up`, then `./scripts/benchctl exec slurmctld -- scontrol reconfigure`.
 
 **The traffic diagram is clickable.** A node tile opens that node's panel; a service box (BMC farm, BCM mock, Jira mock,
 GPU exporter) or the *Monitoring app* and *Prometheus* chips open the Connections tab with that part's row marked. Tab to
 a shape and press Enter or Space for the same.
+
+**BMCs per node.** In **⚙ Settings**, switching *BMC* on shows the nodes that get a BMC address (all by default). Each
+BMC is its own small container with its own address (`10.148.x.y:443`) and costs about 32 MB, shown in the memory bar; switch off
+the nodes you do not need. A node panel shows its BMC address, or "none for this node". Apply rebuilds as usual and removes
+the BMCs you switched off.

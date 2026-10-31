@@ -120,7 +120,7 @@ def validate(sc: dict, sim: dict) -> list[str]:
             problems += [f"step {i}: {m}" for m in ssh_problems(do)]
         if t == "jira" and "tickets" in do:
             problems += [f"step {i}: {m}" for m in jira_ticket_problems(do["tickets"])]
-        names = (do.get("nodes") or []) + (do.get("drain") or []) + (do.get("resume") or [])
+        names = [n for key in ("nodes", "drain", "down", "resume", "power_off", "power_on") for n in do.get(key) or []]
         problems += [f"step {i}: unknown node {n!r}" for n in names if n not in nodes]
     return problems
 
@@ -192,14 +192,53 @@ def post(url: str, body: dict, timeout: float = 10) -> None:
     urllib.request.urlopen(req, timeout=timeout).close()
 
 
-def execute(step: Step, poster=post, runner=checks.run, host: bool = True) -> Outcome:
-    """Apply one step; the label names what was done, status says whether it worked.
+SLURM_STATES = {"drain": "drain", "down": "down", "resume": "resume", "power_off": "off", "power_on": "on"}
 
-    host=False is for callers without Docker access (the Web UI): Slurm steps are skipped, not attempted.
+
+def side_effects(step: Step) -> list[Step]:
+    """A power change on the BMC is also a change on the BCM, the GPU exporter and the node itself (and so in Slurm):
+    a scenario says it once, as the page's Power off does. `clear` powers the node on again, so it thaws it too."""
+    do = step.do
+    if step.target != "bmc-farm" or not do.get("nodes"):
+        return []
+    on = do.get("power") == "On" or bool(do.get("clear"))
+    if do.get("power") != "Off" and not on:
+        return []
+    nodes = do["nodes"]
+    return [Step(step.at, "bcm-mock", {"nodes": nodes, "state": "UP" if on else "DOWN"}),
+            Step(step.at, "gpu-exporter", {"nodes": nodes, "down": not on}),
+            Step(step.at, "slurm", {"power_on" if on else "power_off": nodes})]
+
+
+def execute(step: Step, poster=post, runner=checks.run, host: bool = True, slurm=None) -> Outcome:
+    """Apply one step (and what it implies, see side_effects); the label names what was done, status says whether it worked.
+
+    host=False is for callers without Docker access (the Web UI): `slurm(node, state, reason)` (the governor) takes
+    Slurm steps when given, otherwise they are skipped, not attempted.
     """
+    main = _apply(step, poster, runner, host, slurm)
+    if main.status != "ok":
+        return main
+    failed, notes = [], []
+    for extra in side_effects(step):
+        o = _apply(extra, poster, runner, host, slurm)
+        (failed if o.status == "failed" else notes if o.status == "skipped" else []).append(f"{extra.target}: {o.detail}")
+    if failed:
+        return Outcome(main.label, "failed", "; ".join(failed))
+    return Outcome(main.label, "ok", "; ".join(notes))
+
+
+def _apply(step: Step, poster, runner, host: bool, slurm) -> Outcome:
     label = f"{step.target} {json.dumps(step.do, sort_keys=True)}"
     if step.target in NOT_BUILT:
         return Outcome(label, "skipped", f"{step.target} is not built yet")
+    if step.target == "slurm" and not host and slurm:  # no Docker here: the governor does it
+        for key, state in SLURM_STATES.items():
+            for n in step.do.get(key, []):
+                ok, detail = slurm(n, state, step.do.get("reason"))
+                if not ok:
+                    return Outcome(label, "skipped", detail)  # a refusal (calm levels only) is not a failure of the scenario
+        return Outcome(label, "ok")
     if step.target in HOST_TARGETS and not host:
         return Outcome(label, "skipped", f"{step.target} steps need the host CLI (no Docker access here)")
     try:
@@ -220,6 +259,12 @@ def execute(step: Step, poster=post, runner=checks.run, host: bool = True) -> Ou
                             f"reason={step.do.get('reason', 'scenario')}"])
                 if r.returncode:
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+            for verb, key in (("pause", "power_off"), ("unpause", "power_on")):
+                # the node stops answering (or answers again) and slurmctld notices by itself, as with a dead host
+                for n in step.do.get(key, []):
+                    r = runner(["docker", verb, f"workbench-{n}-1"])
+                    if r.returncode and f"already {verb}d" not in r.stderr and "is not paused" not in r.stderr:
+                        return Outcome(label, "failed", (r.stderr or r.stdout).strip())
             for n in step.do.get("resume", []):
                 r = runner(["docker", "exec", SLURMCTLD, "scontrol", "update", f"nodename={n}", "state=resume"])
                 if r.returncode:
@@ -300,7 +345,7 @@ def check_expect(exp: dict, factor: float, sleep=time.sleep, clock=time.monotoni
 
 def run(sc: dict, speed: float = 1.0, dilation: float = 1.0, say=print, sleep=time.sleep, clock=time.monotonic,
         poster=post, runner=checks.run, host: bool = True, should_stop=lambda: False,
-        on_step=lambda step, outcome: None, on_expect=lambda outcome: None) -> Report:
+        on_step=lambda step, outcome: None, on_expect=lambda outcome: None, slurm=None) -> Report:
     """Play the scenario: wait for each step's time (divided by speed x time_dilation) and apply it.
 
     Every expectation is watched from the start: it passes the moment it holds (even if a later step undoes it) and
@@ -342,7 +387,7 @@ def run(sc: dict, speed: float = 1.0, dilation: float = 1.0, say=print, sleep=ti
         if should_stop():
             report.stopped = True
             return report
-        outcome = execute(step, poster, runner, host)
+        outcome = execute(step, poster, runner, host, slurm)
         report.steps.append(outcome)
         on_step(step, outcome)
         say(f"[{step.at:6.1f}s] {outcome.status:7} {outcome.label}" + (f"  ({outcome.detail})" if outcome.detail else ""))
