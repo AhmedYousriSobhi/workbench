@@ -130,9 +130,9 @@ once: it rebuilds the node image and restarts `slurmctld` (it does so whenever `
 
 ## Taking a node down so Slurm notices
 
-**Power off** on the page (or `benchctl set node cn001 off`) freezes the node's container: its `slurmd` stops answering and
+**Power off** on the page (or `benchctl set node cn001 off`, which does the same) sets the BMC, BCM and GPU metrics and freezes the node's container: its `slurmd` stops answering and
 `slurmctld` marks it `down*` (Not responding) by itself after about 30 s (a client then shows it on its next poll: 60 s with the Slurm section open and the window focused, 5 min otherwise), which is what a monitoring client sees on a real
-dead node; the BMC reports it off and its GPU metrics disappear. **Power on** (`set node cn001 on`) thaws it and Slurm returns
+dead node; the BMC reports it off and its GPU metrics disappear. **Power on** (`set node cn001 on`, or the page's button) reverses all of that and thaws it and Slurm returns
 it after its next answer. Use `set node NAME down` only to set the state by hand.
 
 Scenarios behave the same: one `bmc-farm` `power: "Off"` step takes the node down on the BMC, BCM, GPU metrics and in Slurm

@@ -152,9 +152,12 @@ def test_start_passes_parts_to_the_launcher_and_refuses_a_mix(monkeypatch):
 
 
 def test_set_node_freezes_a_node_for_off_and_on_and_sets_the_slurm_state_for_down_and_resume(monkeypatch):
-    ran = []
+    ran, posted = [], []
     monkeypatch.setattr(cli.stack, "_run", lambda cmd: ran.append(cmd) or type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})())
+    monkeypatch.setattr(cli.scenario, "post", lambda url, body: posted.append((url.split(":")[2].split("/")[0], body)))
     assert runner.invoke(cli.app, ["set", "node", "cn001", "off"]).exit_code == 0 and ran[-1] == ["docker", "pause", "workbench-cn001-1"]
     assert runner.invoke(cli.app, ["set", "node", "cn001", "on"]).exit_code == 0 and ran[-1] == ["docker", "unpause", "workbench-cn001-1"]
+    assert ("8000", {"node": "cn001", "power": "Off"}) in posted and ("8000", {"node": "cn001", "power": "On"}) in posted  # the BMC follows, as for the page's button
+    assert ("8081", {"node": "cn001", "state": "UP"}) in posted
     assert runner.invoke(cli.app, ["set", "node", "cn001", "down"]).exit_code == 0 and "state=down" in ran[-1] and "nodename=cn001" in ran[-1]
     assert runner.invoke(cli.app, ["set", "node", "cn001", "sideways"]).exit_code == 1

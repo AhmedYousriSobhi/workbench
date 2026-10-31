@@ -444,14 +444,19 @@ app.add_typer(set_app, name="set")
 def set_node(node: str = TARGET, state: str = typer.Argument(..., help="off or on (freeze the node so Slurm detects it by itself), "
                                                                        "down, drain or resume (set the Slurm state by hand)"),
              reason: str = typer.Option(None, "--reason", help="the reason Slurm shows for down or drain")) -> None:
-    """`benchctl set node cn001 off` freezes the node (slurmd stops answering; slurmctld marks it DOWN* after about 30 s, as for a
-    dead host), `on` thaws it. `down`/`resume` set the Slurm state directly. The page's Power off/on does off/on."""
+    """`benchctl set node cn001 off` powers the node off like the page's button: the BMC reports it off, the BCM and the GPU metrics
+    follow, and its container freezes (slurmd stops answering; slurmctld marks it DOWN* after about 30 s, as for a dead host). `on` reverses it. `down`/`resume` set the Slurm state directly. The page's Power off/on does off/on."""
     keys = {"off": "power_off", "on": "power_on", "down": "down", "drain": "drain", "resume": "resume"}
     if state not in keys:
         typer.echo("state must be off, on, down, drain or resume", err=True)
         raise typer.Exit(1)
-    o = scenario.execute(scenario.Step(0, "slurm", {keys[state]: [node], "reason": reason or "workbench power off"}), host=True,
-                         runner=lambda c: stack._run(c))
+    run, post = (lambda c: stack._run(c)), (lambda url, body: scenario.post(url, body))
+    slurm_only = scenario.Step(0, "slurm", {keys[state]: [node], "reason": "workbench power off"})
+    o = scenario.execute(slurm_only if state not in ("off", "on") else
+                         scenario.Step(0, "bmc-farm", {"nodes": [node], "power": "Off" if state == "off" else "On"}),  # the page's Power off/on: BMC, BCM and GPU metrics follow
+                         poster=post, host=True, runner=run)
+    if o.status != "ok" and state in ("off", "on"):  # no BMC farm in this profile: freeze or thaw alone
+        o = scenario.execute(slurm_only, poster=post, host=True, runner=run)
     typer.echo(f"{node}: {state}" if o.status == "ok" else f"cannot set {node}: {o.detail}", err=o.status != "ok")
     raise typer.Exit(0 if o.status == "ok" else 1)
 
