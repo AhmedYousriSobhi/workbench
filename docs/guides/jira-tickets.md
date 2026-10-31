@@ -95,6 +95,8 @@ client that needs one of them reads an empty answer, not an error. The mock keep
 
 ## A team working in the background
 
+The project starts with a backlog of eight tickets in every status (some assigned to `alice`, the default user), so a client's first look is not empty.
+
 The Jira mock starts with a team working the project, like a live Jira Cloud: about every 45 seconds one ticket moves along the workflow (Open, In Progress, Resolved, Closed), gets a comment from `bob`, `carol`, `dave` or `erin`, a new owner, is reopened, or a new ticket is filed (at most 30 open). Webhook events fire for each change. A ticket changed in the last 20 seconds is left alone, so your own edit is not undone under you.
 
 `benchctl set jira-activity off` stops it, `on --every 10 --seed 4` makes it faster and repeatable; `GET /sim/activity` shows the state and the number of changes; a scenario step `jira: {activity: {on: true, every: 5}}` switches it too.

@@ -32,8 +32,31 @@ def command(sim: dict, node: str, gpus: int = 0, duration: int = 300, user: str 
         raise WorkloadError(f"{node} has {per_node} GPU(s); asked for {gpus}")
     if not 1 <= cpus <= 64:
         raise WorkloadError("cpus must be 1 to 64")
+    # --output/--error: the working directory here is /, which a user cannot write, so a default slurm-N.out fails the job at launch
     part = "gpu" if kinds[node] == "gpu" else "cpu"
     args = ["sbatch", "--parsable", f"--nodelist={node}", f"--partition={part}", f"--cpus-per-task={cpus}",
-            f"--job-name=wb-{node}", f"--time={duration // 60 + 1}", *([f"--gres=gpu:{gpus}"] if gpus else []),
+            f"--job-name=wb-{node}", f"--time={duration // 60 + 1}", "--output=/dev/null", "--error=/dev/null", *([f"--gres=gpu:{gpus}"] if gpus else []),
             f"--wrap=sleep {duration}"]
     return ["docker", "exec", "-u", user, LOGIN, "bash", "-lc", shlex.join(args)]
+
+
+SIM_SCRIPT = "images/login/user_sim.py"
+SIM_PATH = "/usr/local/bin/user-sim"
+
+
+def load_on(sim: dict, rate: float = 6, duration: float = 120, seed: int | None = None) -> list[list[str]]:
+    """Commands that (re)start the user simulator on the login node. The script is copied in first, so a cluster built before
+    it existed needs no rebuild."""
+    if not 0.1 <= rate <= 120:
+        raise WorkloadError("rate must be 0.1 to 120 jobs per minute")
+    if not 5 <= duration <= 3600:
+        raise WorkloadError("duration must be 5 to 3600 seconds")
+    users = ",".join(u["name"] for u in sim.get("users", [])) or "alice,bob"
+    gpus = sim.get("gpu", {}).get("gpus_per_node", 0) if sim.get("gpu", {}).get("nodes") else 0
+    return [["docker", "cp", SIM_SCRIPT, f"{LOGIN}:{SIM_PATH}"], load_off(),
+            ["docker", "exec", "-d", LOGIN, "python3", SIM_PATH, "--rate", f"{rate:g}", "--duration", f"{duration:g}", "--users", users,
+             "--gpus", str(gpus), *(["--seed", str(seed)] if seed is not None else [])]]
+
+
+def load_off() -> list[str]:
+    return ["docker", "exec", LOGIN, "pkill", "-f", SIM_PATH]

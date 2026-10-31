@@ -128,6 +128,10 @@ not drained. Not checked yet, because nothing in the simulation models them: NIC
 ([issue 143](https://github.com/AhmedYousriSobhi/workbench/issues/143)). A cluster built before this needs `benchctl up`
 once: it rebuilds the node image and restarts `slurmctld` (it does so whenever `slurm.conf` changes).
 
+## A live queue
+
+`benchctl load on` starts simulated users: `alice` and `bob` submit cpu jobs and 1 to 4 GPU jobs at random, so the Slurm panel has running and pending jobs and a node going down hits real work. `benchctl load off` stops it; `benchctl submit NODE` (or the node panel's Workload card) runs one job on a chosen node. A job pinned to a node that is down stays pending (*ReqNodeNotAvail*) until the node is back or you `scancel` it.
+
 ## Taking a node down so Slurm notices
 
 **Power off** on the page (or `benchctl set node cn001 off`, which does the same) sets the BMC, BCM and GPU metrics and freezes the node's container: its `slurmd` stops answering and

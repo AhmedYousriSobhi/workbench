@@ -357,12 +357,27 @@ class Jira:
             threading.Thread(target=self._run_activity, args=(stop,), daemon=True).start()
         return dict(self.activity)
 
+    def seed_backlog(self) -> None:
+        """A project that already has history: tickets in every status, some on the default user, so a client's first look
+        is not an empty list. Only when there are none."""
+        if self.issues:
+            return
+        for n, (summary, priority) in enumerate(NEW_TICKETS):
+            status = ("Open", "Open", "In Progress", "Resolved", "Closed", "Open", "In Progress", "Open")[n % 8]
+            key = self.create({"fields": {"project": {"key": "OPS"}, "summary": summary, "priority": {"name": priority},
+                                          "issuetype": {"name": "Task"}, "reporter": ENGINEERS[n % 4], "labels": ["backlog"],
+                                          "assignee": ME if n % 2 == 0 else ENGINEERS[n % 4]}})["key"]
+            if status != "Open":
+                self.move_to(self.issues[key], status)
+
     def _run_activity(self, stop: threading.Event) -> None:
-        while not stop.wait(self.activity["every"] * self.rng.uniform(0.7, 1.3)):
+        stop.wait(5)  # the first change comes soon, not after a whole interval
+        while not stop.is_set():
             try:
                 self.tick()
             except JiraError:
                 pass
+            stop.wait(self.activity["every"] * self.rng.uniform(0.7, 1.3))
 
     def tick(self) -> str | None:
         """One background change; what was done, or None when nothing was fit to change."""
@@ -860,6 +875,7 @@ def main() -> None:
     jira = Jira()
     every = float(os.environ.get("JIRA_ACTIVITY_EVERY") or 0)  # compose sets it; 0 leaves the project still until /sim/activity
     if every:
+        jira.seed_backlog()
         jira.set_activity({"on": True, "every": every})
     ThreadingHTTPServer(("0.0.0.0", port), make_handler(jira)).serve_forever()
 

@@ -362,3 +362,13 @@ def test_activity_is_switched_over_http_and_stops(server):
     assert call(base, "/sim/activity", {"on": False})[1]["on"] is False
     assert call(base, "/sim/activity", {"every": 0})[0] == 400
     assert call(base, "/sim/stats")[1]["requests"] == 0  # control calls are not client traffic
+
+
+def test_the_backlog_gives_a_client_something_to_see_and_is_made_once():
+    j = jira.Jira(deliver=lambda *a: None)
+    j.seed_backlog()
+    names = {i["fields"]["status"]["name"] for i in j.issues.values()}
+    assert len(j.issues) == len(jira.NEW_TICKETS) and names == {"Open", "In Progress", "Resolved", "Closed"}
+    assert any(i["fields"]["assignee"]["name"] == jira.ME for i in j.issues.values())
+    j.seed_backlog()
+    assert len(j.issues) == len(jira.NEW_TICKETS)

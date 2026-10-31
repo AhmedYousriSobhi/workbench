@@ -482,6 +482,41 @@ def submit(node: str = TARGET, gpus: int = typer.Option(0, "--gpus", help="GPUs 
     raise typer.Exit(r.returncode)
 
 
+load_app = typer.Typer(cls=SuggestingGroup, help="Simulated users submitting jobs")
+app.add_typer(load_app, name="load")
+
+
+@load_app.command("on")
+def load_on(rate: float = typer.Option(6, "--rate", help="jobs per minute (Poisson arrivals)"),
+            duration: float = typer.Option(120, "--duration", help="mean job length in seconds"),
+            seed: int = typer.Option(None, "--seed", help="a fixed seed makes the arrivals repeatable")) -> None:
+    """Start the user simulator: alice and bob submit cpu jobs and GPU jobs at random, so squeue and the node states have a live queue."""
+    from . import workload
+
+    try:
+        cmds = workload.load_on(_sim(), rate, duration, seed)
+    except workload.WorkloadError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    for cmd in cmds:
+        r = stack._run(cmd)
+        if r.returncode and cmd != workload.load_off():  # pkill finding nothing to stop is fine
+            typer.echo(f"cannot start the load: {(r.stderr or r.stdout).strip()}", err=True)
+            raise typer.Exit(1)
+    typer.echo(f"load: on, about {rate:g} job(s) a minute, each about {duration:g} s (benchctl load off to stop)")
+
+
+@load_app.command("off")
+def load_off() -> None:
+    """Stop the user simulator (jobs already queued keep running)."""
+    from . import workload
+
+    r = stack._run(workload.load_off())
+    typer.echo("load: off" if r.returncode in (0, 1) else f"cannot stop the load: {(r.stderr or r.stdout).strip()}",
+               err=r.returncode not in (0, 1))
+    raise typer.Exit(0 if r.returncode in (0, 1) else 1)
+
+
 @set_app.command("jira-activity")
 def set_jira_activity(state: str = typer.Argument(..., help="on or off"),
                       every: float = typer.Option(None, "--every", help="seconds between changes (default 45)"),
