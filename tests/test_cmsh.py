@@ -63,11 +63,10 @@ def test_unreachable_bcm_mock_is_an_error_not_an_empty_table(monkeypatch):
     assert code == 1 and not out and "Unable to connect to CMDaemon" in err
 
 
-def test_main_handles_flags_version_and_missing_script(capsys):
+def test_main_handles_flags_and_version(capsys):
     assert cmsh.main(["--hide-events", "-c", "device; status"]) == 0
     assert "login " in capsys.readouterr().out
     assert cmsh.main(["--version"]) == 0 and "cmsh" in capsys.readouterr().out
-    assert cmsh.main([]) == 1 and "interactive" in capsys.readouterr().err
 
 
 def test_call_reports_http_and_service_errors(monkeypatch):
@@ -88,3 +87,33 @@ def test_call_reports_http_and_service_errors(monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", refuse)
     with pytest.raises(cmsh.Unreachable):
         cmsh.call("x", "y")
+
+
+def session(monkeypatch, text):
+    import io
+    monkeypatch.setattr(cmsh.socket, "gethostname", lambda: "login")
+    monkeypatch.setattr(cmsh, "call", lambda service, name, args=None: DEVICES)
+    out, err = io.StringIO(), io.StringIO()
+    code = cmsh.console(io.StringIO(text), out, err)
+    return code, out.getvalue(), err.getvalue()
+
+
+def test_interactive_console_enters_modes_lists_and_leaves(monkeypatch):
+    code, out, err = session(monkeypatch, "device\nlist\n..\nmonitoring\nhealthchecks\nlist\nexit\n")
+    assert code == 0 and not err
+    assert "[login]% " in out and "[login->device]% " in out and "[login->monitoring->healthchecks]% " in out
+    assert "Hostname (key)" in out and "DeviceIsUp" in out
+    assert session(monkeypatch, "device; status\n")[1].count("[   UP   ]") >= 1  # one line, several statements
+
+
+def test_interactive_console_is_read_only_and_reports_unknown_commands(monkeypatch):
+    _, out, err = session(monkeypatch, "device\nset cn001 category x\nfrobnicate\nhelp\n")
+    assert "read-only" in err and "unknown command: frobnicate" in err and "Modes:" in out
+    assert session(monkeypatch, "")[0] == 0  # end of input leaves cleanly
+
+
+def test_main_without_c_opens_the_console(monkeypatch):
+    import io
+    monkeypatch.setattr(cmsh.socket, "gethostname", lambda: "login")
+    monkeypatch.setattr(cmsh.sys, "stdin", io.StringIO("exit\n"))
+    assert cmsh.main([]) == 0

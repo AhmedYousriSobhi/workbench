@@ -309,6 +309,9 @@ def read_credentials(path: Path) -> tuple[str, str] | None:
     return (user, pw) if user and pw else None
 
 
+STANDARD_TLS_PORT = 443  # not published on the host (binding it there needs root); reached as bmc-<node> inside the cluster
+
+
 def main() -> None:
     sim = Path(sys.argv[1] if len(sys.argv) > 1 else "sim.yaml")
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 8000
@@ -319,11 +322,16 @@ def main() -> None:
         farm.account = creds[0]
     cert, key = Path("/app/certs/cert.pem"), Path("/app/certs/key.pem")
     if tls_port and cert.is_file():
-        secure = ThreadingHTTPServer(("0.0.0.0", tls_port), make_handler(farm, Sessions(creds), stats, lock))
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.load_cert_chain(cert, key)
-        secure.socket = ctx.wrap_socket(secure.socket, server_side=True)
-        threading.Thread(target=secure.serve_forever, daemon=True).start()
+        sessions = Sessions(creds)
+        for p in dict.fromkeys((tls_port, STANDARD_TLS_PORT)):  # 443 is where a client looks when it is given no port
+            try:
+                secure = ThreadingHTTPServer(("0.0.0.0", p), make_handler(farm, sessions, stats, lock))
+            except OSError:  # a runtime that does not allow low ports for this user: 8443 still serves
+                continue
+            secure.socket = ctx.wrap_socket(secure.socket, server_side=True)
+            threading.Thread(target=secure.serve_forever, daemon=True).start()
     ThreadingHTTPServer(("0.0.0.0", port), make_handler(farm, None, stats, lock)).serve_forever()
 
 

@@ -184,3 +184,12 @@ def test_sessions_are_capped():
     for _ in range(bmc.Sessions.MAX):
         s.login("u", "p")
     assert first not in s.tokens and len(s.tokens) == bmc.Sessions.MAX
+
+
+def test_bmc_also_listens_on_the_standard_redfish_port_inside_the_cluster():
+    src = (ROOT / "components" / "bmc-farm" / "bmc.py").read_text()
+    assert "STANDARD_TLS_PORT = 443" in src and "(tls_port, STANDARD_TLS_PORT)" in src
+    # not published on the host: binding 443 there needs root (NF-5)
+    from benchctl import compose
+    ports = compose.generate({"compute": {"prefix": "cn", "count": 1, "cpus": 2, "memory_mb": 100}, "gpu": {}}, {"groups": ["core", "mocks"]})["services"]["bmc-farm"]["ports"]
+    assert ports == ["127.0.0.1:8000:8000", "127.0.0.1:8443:8443"]

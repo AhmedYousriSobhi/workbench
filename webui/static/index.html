@@ -361,7 +361,7 @@
     <div class="sheet-h"><div><h2 id="exp-h">Export the cluster</h2><p class="dim small">A profile file the monitoring client can import: this cluster's SSH, Slurm, Grafana, Jira and storage.</p></div>
       <button class="btn small" id="exp-close" aria-label="Close the export">✕ Close</button></div>
     <div class="sheet-b">
-      <div class="toggles"><label class="tog"><input type="checkbox" id="exp-bmc"><span>One BMC target per node</span></label></div>
+      <div class="toggles"><label class="tog"><input type="checkbox" id="exp-bmc" checked><span>One BMC target per node (host 127.0.0.1, port 8443)</span></label></div>
       <p class="small dim">The file holds no secrets. After importing it, set the SSH key (<code>benchctl ssh-key install</code>) and the Grafana token (<code>cat compose/generated/secrets/grafana_viewer_token</code>; it changes at every <code>benchctl up</code>).</p>
     </div>
     <div class="sheet-f"><p id="exp-msg" role="status" class="small"></p><button class="btn small" id="exp-cancel">Cancel</button><button class="btn" id="exp-go">Download bench-profile.json</button></div>

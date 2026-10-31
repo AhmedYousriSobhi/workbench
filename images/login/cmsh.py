@@ -4,7 +4,8 @@
 Answers the fixed one-shot scripts a monitoring client runs (`cmsh -c "device; list"`, `device; status`,
 `category; list`, `jobqueue; list`, `monitoring; healthchecks; list`) from bcm-mock's node state, so a node a scenario
 took down shows DOWN. Anything that would change the cluster is refused. The table layout follows real cmsh closely
-enough for a parser; it is an assumed subset until a real capture exists. No interactive console (use -c).
+enough for a parser; it is an assumed subset until a real capture exists. The interactive console is a read-only subset
+(modes, list/status, `..`, exit).
 """
 import json
 import os
@@ -106,6 +107,41 @@ def run(script: str) -> tuple[int, str, str]:
         return 1, "", f"Unable to connect to CMDaemon: {e}\n"
 
 
+ROOT_MODES = {"device", "category", "jobqueue", "monitoring"}
+HELP = "Modes: device, category, jobqueue, monitoring. In a mode: list, status. Also: .. (up), exit, quit, help. Read-only."
+
+
+def console(stdin, stdout, stderr) -> int:
+    """Interactive session: `[host]% device` enters a mode, `list` prints, `..` goes up, `exit` leaves. Read-only."""
+    host, path = socket.gethostname(), []
+    while True:
+        stdout.write(f"[{'->'.join([host, *path])}]% ")
+        stdout.flush()
+        line = stdin.readline()
+        if not line:
+            stdout.write("\n")
+            return 0
+        for stmt in (s.strip() for s in line.split(";")):
+            words = stmt.split()
+            if not words:
+                continue
+            verb = words[0]
+            if verb in ("exit", "quit"):
+                return 0
+            if verb == "..":
+                path = path[:-1]
+            elif verb in ("help", "?"):
+                stdout.write(HELP + "\n")
+            elif verb in MUTATING:
+                stderr.write(f"Error: this cmsh is read-only (workbench); '{stmt}' would change the cluster\n")
+            elif (verb in ROOT_MODES and not path) or (path == ["monitoring"] and verb == "healthchecks"):
+                path.append(verb)
+            else:
+                _code, out, err = run("; ".join([*path, stmt]))
+                stdout.write(out)
+                stderr.write(err.replace("unknown command: " + "; ".join([*path, stmt]), f"unknown command: {stmt}"))
+
+
 def main(argv: list[str]) -> int:
     script, args = None, [a for a in argv if a != "--hide-events"]
     if args[:1] in (["-v"], ["--version"]):
@@ -114,8 +150,7 @@ def main(argv: list[str]) -> int:
     if args[:1] in (["-c"], ["--command"]) and len(args) >= 2:
         script = args[1]
     if script is None:
-        sys.stderr.write("cmsh: the interactive console is not available in this simulation; use cmsh -c \"device; list\"\n")
-        return 1
+        return console(sys.stdin, sys.stdout, sys.stderr)
     code, out, err = run(script)
     sys.stdout.write(out)
     sys.stderr.write(err)

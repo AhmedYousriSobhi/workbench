@@ -117,7 +117,7 @@ The login node is the head node, with a read-only `cmsh`. In the cluster's **Bas
 | Host | the same `127.0.0.1`, port `2222`, over the SSH connection from section 1 |
 
 Press **Test BCM Connection** (save the cluster first). You can check by hand what it runs:
-`ssh -p 2222 alice@127.0.0.1 'cmsh -c "device; list"'` (it lists the head node `login` and the nodes with their status). Only reading works; the interactive console is not available.
+`ssh -p 2222 alice@127.0.0.1 'cmsh -c "device; list"'` (it lists the head node `login` and the nodes with their status). Only reading works. Plain `cmsh` over a terminal opens a read-only console: type `device`, then `list` or `status`, `..` to go up, `exit` to leave.
 
 ## 7. BMC (Redfish)
 
