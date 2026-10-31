@@ -180,6 +180,18 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         ok, msg = workbench.verdict(est, avail, spec=spec)
         return spec, est, avail, ok, msg
 
+    async def settings(request: Request):
+        """The options the Settings sheet offers, with what each costs; `on` follows the workbench last built."""
+        from benchctl import export, workbench
+
+        try:
+            _, services, _ = export.configured(yaml.safe_load(sim_yaml.read_text()))
+            built = workbench.parts_in(services)
+        except (export.ExportError, OSError, ValueError):
+            built = None  # nothing built to read: offer the defaults
+        return JSONResponse({"parts": workbench.catalog(built),
+                             "limits": {k: list(v) for k, v in workbench.LIMITS.items()}})
+
     async def plan(request: Request):
         """Estimate only, no side effects: the page cannot start containers. Applying goes through the governor."""
         spec, est, avail, ok, msg = build_plan(request.query_params)
@@ -323,6 +335,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/events", protected(events)),
             Route("/api/cluster", protected(cluster_state)),
             Route("/api/flow", protected(flow_events)),
+            Route("/api/settings", protected(settings)),
             Route("/api/plan", protected(plan)),
             Route("/api/plan/apply", protected(plan_apply, write=True), methods=["POST"]),
             Route("/api/connections", protected(connections)),

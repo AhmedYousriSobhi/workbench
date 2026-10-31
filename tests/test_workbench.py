@@ -217,3 +217,16 @@ def test_web_page_reads_the_generated_sim_while_a_workbench_is_in_use(cwd):
     Path("compose/generated").mkdir(parents=True, exist_ok=True)
     Path("compose/generated/sim.yaml").write_text("x: 1\n")
     assert workbench.live_sim_path() == Path("compose/generated/sim.yaml")
+
+
+def test_catalog_lists_every_part_with_its_cost_and_state():
+    cat = {p["id"]: p for p in workbench.catalog(["jira"])}
+    assert set(cat) == set(workbench.PARTS) == set(workbench.PART_INFO)
+    assert cat["jira"]["on"] and not cat["accounting"]["on"] and cat["accounting"]["mb"] == 360
+    assert all(p["label"] and p["help"] and p["mb"] > 0 for p in cat.values())
+    assert {p["id"] for p in workbench.catalog() if p["on"]} == set(workbench.DEFAULT_PARTS)
+
+
+def test_parts_in_reads_what_a_build_contains():
+    assert workbench.parts_in({"jira-mock", "bmc-farm"}) == ["jira", "bmc"]
+    assert "accounting" in workbench.parts_in({"mariadb", "slurmdbd", "accounting-init"}) and "accounting" not in workbench.parts_in({"slurmdbd"})

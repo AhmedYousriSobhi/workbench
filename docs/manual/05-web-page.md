@@ -20,7 +20,7 @@ screenshots in this chapter predate the redesign described below; regenerate the
 
 | Area | Shows |
 |---|---|
-| **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **▶ Scenarios**, **⚙ Plan**, help and the theme switch. Pressing the level or memory chip opens the **Governor** panel |
+| **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **▶ Scenarios**, **⚙ Settings**, help and the theme switch. Pressing the level or memory chip opens the **Governor** panel |
 | **Tabs and Needs attention** | the tabs *Nodes* and *Connections*, and one slim bar next to them with every item that needs you, or "All clear" |
 | **Stage** (Nodes tab) | the **traffic diagram** on the left and the **entity list** on the right |
 
@@ -82,7 +82,7 @@ live state.
 
 ## Plan: change the workbench
 
-**⚙ Plan** opens a panel with steppers for CPU nodes, GPU nodes and GPUs per node, toggles for the optional parts, and a
+**⚙ Settings** opens a panel with steppers for CPU nodes, GPU nodes and GPUs per node, toggles for the optional parts (accounting, Jira, BMC, BCM, scenarios, load; each shows the memory limit it adds, and the toggles show what is built now), and a
 memory bar ("1.7 GB needed of 4.5 GB free"). It shows the change against what runs now ("GPU nodes 2 → 3 (+1)") and the
 `benchctl up ...` command for a terminal. Editing the numbers only estimates. **Apply to the running workbench** (press
 twice: the second press confirms) asks the governor to rebuild it; new nodes start and nodes you no longer want are

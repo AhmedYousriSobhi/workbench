@@ -274,7 +274,7 @@
     <button class="pillchip" id="c-run" hidden></button>
     <span id="conn" role="status"><i></i><span>connecting…</span></span>
     <button class="pillchip" id="scnbtn" aria-haspopup="dialog">▶ Scenarios</button>
-    <button class="pillchip" id="planbtn" aria-haspopup="dialog">⚙ Plan</button>
+    <button class="pillchip" id="planbtn" aria-haspopup="dialog">⚙ Settings</button>
     <button class="pillchip" id="expbtn" aria-haspopup="dialog">⇩ Export</button>
     <a class="pillchip" id="helplink" href="/help/" aria-label="Help: the manual, guides and command reference">? Help</a>
     <button class="pillchip" id="theme" aria-label="Colour theme: automatic. Press to change.">◐ Auto</button>
@@ -365,7 +365,7 @@
     <div class="sheet-f"><p id="exp-msg" role="status" class="small"></p><button class="btn small" id="exp-cancel">Cancel</button><button class="btn" id="exp-go">Download bench-profile.json</button></div>
   </dialog>
   <dialog id="plandlg" class="sheet" aria-labelledby="plan-h">
-    <div class="sheet-h"><div><h2 id="plan-h">Plan a workbench</h2><p class="dim small">Pick the size, check that it fits, then apply.</p></div>
+    <div class="sheet-h"><div><h2 id="plan-h">Settings</h2><p class="dim small">Everything that changes what runs, and so how much memory it needs. Check that it fits, then apply.</p></div>
       <button class="btn small" id="plan-close" aria-label="Close the plan">✕ Close</button></div>
     <div class="sheet-b">
       <div class="steps3">
@@ -373,8 +373,8 @@
         <div class="stp"><label for="pl-gpu">GPU nodes</label><div class="stpin"><button type="button" class="btn small" data-step="pl-gpu" data-d="-1" aria-label="Fewer GPU nodes">−</button><input type="number" id="pl-gpu" min="0" max="16" value="2"><button type="button" class="btn small" data-step="pl-gpu" data-d="1" aria-label="More GPU nodes">+</button></div><span class="small dim" id="pl-now-gpu"></span></div>
         <div class="stp"><label for="pl-gpus">GPUs per node</label><div class="stpin"><button type="button" class="btn small" data-step="pl-gpus" data-d="-1" aria-label="Fewer GPUs per node">−</button><input type="number" id="pl-gpus" min="1" max="8" value="8"><button type="button" class="btn small" data-step="pl-gpus" data-d="1" aria-label="More GPUs per node">+</button></div><span class="small dim" id="pl-now-gpus"></span></div>
       </div>
-      <fieldset class="planparts"><legend class="small dim">Optional parts</legend>
-        <div class="toggles"><label class="tog"><input type="checkbox" value="jira" checked><span>Jira</span></label><label class="tog"><input type="checkbox" value="bmc" checked><span>BMC</span></label><label class="tog"><input type="checkbox" value="bcm" checked><span>BCM</span></label><label class="tog"><input type="checkbox" value="scenarios" checked><span>Scenarios</span></label><label class="tog"><input type="checkbox" value="accounting" checked><span>Accounting</span></label><label class="tog"><input type="checkbox" value="load"><span>Load</span></label></div>
+      <fieldset class="planparts"><legend class="small dim">Optional parts (memory limit each adds)</legend>
+        <div class="toggles" id="pl-parts"></div>
         <p class="small dim" style="margin:8px 0 0">Slurm, the login node, Prometheus and Grafana are always on.</p></fieldset>
       <section class="fit" aria-label="Does it fit"><div class="fitnum"><b id="pl-need">–</b><span class="dim small" id="pl-free"></span></div>
         <progress id="pl-bar" max="100" value="0" aria-label="Memory needed as a share of free memory"></progress>
@@ -530,7 +530,18 @@ function currentSize() {
   const nodes = nodeList(), g = nodes.find(n => n.kind === 'gpu');
   return { cpu: nodes.filter(n => n.kind === 'compute').length, gpu: nodes.filter(n => n.kind === 'gpu').length, gpus: g ? g.gpus : null };
 }
-function openPlan() {
+let partsDrawn = false;
+async function drawParts() {  // the options come from the backend registry (/api/settings), so a new one needs no page change
+  if (partsDrawn) return;
+  try {
+    const j = await (await fetch('/api/settings')).json();
+    $('pl-parts').innerHTML = j.parts.map(p => `<label class="tog" title="${esc(p.help)}"><input type="checkbox" value="${esc(p.id)}"${p.on ? ' checked' : ''}><span>${esc(p.label)} <small class="dim">+${p.mb} MB</small></span></label>`).join('');
+    $('pl-parts').querySelectorAll('input').forEach(i => i.oninput = i.onchange = () => planInputs());
+    partsDrawn = true;
+  } catch (e) { $('pl-parts').textContent = 'Could not load the options.'; }
+}
+async function openPlan() {
+  await drawParts();
   const c = currentSize();
   if (c.cpu + c.gpu) { $('pl-cpu').value = c.cpu; $('pl-gpu').value = c.gpu; if (c.gpus) $('pl-gpus').value = c.gpus; }
   $('pl-now-cpu').textContent = c.cpu + c.gpu ? `now ${c.cpu}` : ''; $('pl-now-gpu').textContent = c.cpu + c.gpu ? `now ${c.gpu}` : ''; $('pl-now-gpus').textContent = c.gpus ? `now ${c.gpus}` : '';

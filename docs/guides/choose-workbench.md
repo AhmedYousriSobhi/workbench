@@ -68,7 +68,7 @@ you chose, not the numbers in `sim.yaml`.
 
 ## From the web page
 
-**⚙ Plan** in the top bar of the dashboard opens a panel with the same form (steppers for the counts, toggles for the parts) and a memory bar. Editing the numbers only estimates. **Apply to the
+**⚙ Settings** in the top bar of the dashboard opens a panel with the same form (steppers for the counts, toggles for the parts) and a memory bar. Editing the numbers only estimates. **Apply to the
 running workbench** asks the governor to rebuild it to the plan: new nodes start, nodes you no longer want are removed,
 and Slurm's node list is reloaded. Progress shows in the entity list, the traffic diagram and *Governor activity* (in the Governor panel). It needs the governor
 started by `./scripts/benchctl start` (it has the repository path) and calm memory (L0-L1); otherwise the page says why
@@ -98,5 +98,5 @@ not up); `up` alone only builds the cluster and never starts the page:
 ./scripts/benchctl exec login -- sacct       # no longer "accounting storage is disabled"
 ```
 
-Or open **⚙ Plan** on the page, switch *Accounting* on and press Apply twice. Running jobs on the controller are lost
+Or open **⚙ Settings** on the page, switch *Accounting* on and press Apply twice. Running jobs on the controller are lost
 when it restarts. The node counts stay as they are because a selection takes them from `sim.yaml` unless you pass flags.

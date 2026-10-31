@@ -294,3 +294,14 @@ def test_power_off_also_asks_the_governor_to_mark_the_node_down_in_slurm(tmp_pat
     finally:
         server.should_exit = True
         gov.shutdown()
+
+
+def test_settings_endpoint_serves_the_option_registry_and_the_sheet_draws_from_it(ui, monkeypatch, tmp_path):
+    from benchctl import workbench
+    monkeypatch.setattr(workbench, "SAVED", tmp_path / "none.yaml")
+    code, body = req(ui, "/api/settings")
+    parts = {p["id"]: p for p in json.loads(body)["parts"]}
+    assert code == 200 and set(parts) == set(workbench.PARTS) and parts["accounting"]["mb"] > 0 and parts["accounting"]["label"]
+    assert req(ui, "/api/settings", auth=False)[0] == 401
+    page = req(ui, "/")[1]
+    assert b"/api/settings" in page and b'id="pl-parts"' in page and b"\xe2\x9a\x99 Settings" in page

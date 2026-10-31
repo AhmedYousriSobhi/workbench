@@ -111,7 +111,7 @@ The full list is the roadmap, issue #69.
 
 ## After the dashboard or the plan changes
 
-When the web page's **⚙ Plan → Apply** rebuilds the workbench under a connected client, check that the client follows: new
+When the web page's **⚙ Settings → Apply** rebuilds the workbench under a connected client, check that the client follows: new
 nodes appear (and `ssh <node>` from the login node works), removed nodes disappear from Slurm and the client without stale
 entries, and GPU metrics for new GPU nodes show in Grafana. Then use a node's **Actions** in the web page (power off,
 overheat, fan failure, GPU error) and confirm the client sees each through BMC, BCM and the GPU metrics. Results of the
