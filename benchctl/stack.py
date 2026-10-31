@@ -85,6 +85,9 @@ def admit(profile: str, available: int | None = None) -> tuple[bool, str]:
     return checks.preflight(profile, checks.load_profiles(), avail)
 
 
+ONESHOT = {"accounting-init"}  # run once and exit; success is exit code 0, not "running"
+
+
 def wait_running(names: list[str], runner: Runner = _run, timeout: float = 120,
                  sleep: Callable[[float], None] = time.sleep) -> list[str]:
     """Return the services still not running after `timeout` seconds (empty when all are up)."""
@@ -92,6 +95,9 @@ def wait_running(names: list[str], runner: Runner = _run, timeout: float = 120,
     while pending:
         r = runner(dc("ps", "--status", "running", "--format", "{{.Service}}"))
         up = set(r.stdout.split())
+        if any(n not in up and n in ONESHOT for n in pending):  # a job that ran and exited 0 has started
+            done = runner(dc("ps", "-a", "--status", "exited", "--format", "{{.Service}} {{.ExitCode}}")).stdout.splitlines()
+            up |= {line.split()[0] for line in done if len(line.split()) == 2 and line.split()[1] == "0"} & ONESHOT
         pending = [n for n in pending if n not in up]
         if not pending or time.monotonic() >= end:
             break

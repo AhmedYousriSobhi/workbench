@@ -455,3 +455,15 @@ def test_adding_accounting_to_a_running_stack_restarts_slurmctld(tmp_path, monke
     assert stack.up(s2, "workbench", runner=runner, say=said.append, available=8 * 1024**3, wait=1, prof=prof)
     assert any("accounting setup" in m for m in said)
     assert any("--force-recreate" in c and "slurmctld" in c for c in calls)
+
+
+def test_a_one_shot_job_that_exited_zero_counts_as_started():
+    """accounting-init registers the cluster in slurmdbd and exits (issue 139)."""
+    def runner(cmd):
+        if "exited" in cmd:
+            return cp(out="accounting-init 0\nslurmrestd 0")  # only the one-shot may count
+        return cp(out="slurmrestd")
+    assert stack.wait_running(["slurmrestd", "accounting-init"], runner, timeout=0, sleep=lambda s: None) == []
+    failed = lambda cmd: cp(out="accounting-init 1") if "exited" in cmd else cp(out="slurmrestd")
+    assert stack.wait_running(["slurmrestd", "accounting-init"], failed, timeout=0, sleep=lambda s: None) == ["accounting-init"]
+    assert stack.wait_running(["slurmrestd", "cn001"], lambda c: cp(out="slurmrestd"), timeout=0, sleep=lambda s: None) == ["cn001"]
