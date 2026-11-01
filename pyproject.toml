@@ -7,7 +7,7 @@ dependencies = ["typer", "pyyaml", "starlette", "uvicorn"]
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "coverage"]
-browser = ["playwright"]  # UI screenshots/checks: then `playwright install chromium`
+browser = ["playwright", "pillow"]  # UI screenshots/checks: then `playwright install chromium`
 
 [project.scripts]
 benchctl = "benchctl.cli:app"
