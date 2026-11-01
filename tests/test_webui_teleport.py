@@ -78,3 +78,14 @@ def test_the_options_sheet_survives_a_backend_without_logins():
     html = Path("webui/static/index.html").read_text()
     assert "const lg = j.logins;" in html and "need the newer page backend" in html          # parts still listed, the login rows say why they are off
     assert "./scripts/benchctl stop" in html and "different versions" in html               # and the failure names its cure
+
+
+def test_login_boxes_carry_the_private_address(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    f = tmp_path / "compose" / "generated" / "workbench.yaml"
+    f.parent.mkdir(parents=True)
+    f.write_text(yaml.safe_dump({"name": "w", "cpu_nodes": 1, "gpu_nodes": 0, "gpus_per_node": 8, "parts": ["jira", "teleport"],
+                                 "k8s_nodes": 0, "bmc_nodes": None, "login_nodes": ["ssh", "teleport"]}))
+    rows = cluster.saved_logins(SIM)
+    assert rows[0]["ip"] == "10.141.255.254" and rows[1]["ip"] == "10.141.255.252" and rows[1]["port"] is None
+    assert "ip" not in cluster.saved_logins()[0]
