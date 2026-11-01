@@ -791,7 +791,7 @@ $('pl-apply').onclick = async () => {
   $('pl-apply-msg').textContent = (j.started ? '▶ ' : '▲ ') + j.message;
   if (!j.started) { $('pl-apply').disabled = false; return; }
   const t0 = Date.now(), timer = setInterval(() => {
-    const done = lastLog.find(l => l.includes('apply-plan') && /: (done|FAILED)/.test(l) && !before.has(l));
+    const done = lastLog.find(l => l.includes('apply-plan') && /: (done|FAILED)|^FAILED /.test(l) && !before.has(l));
     if (done || Date.now() - t0 > 600000) {
       clearInterval(timer); $('pl-apply').disabled = false;
       $('pl-apply-msg').textContent = done ? (done.includes('FAILED') ? '✗ ' : '✓ ') + done : '▲ Still running after 10 minutes: check Governor activity.';

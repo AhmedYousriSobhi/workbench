@@ -1,6 +1,7 @@
 """Governor core: ties sampler, ladder, planner and the control commands together."""
 import logging
 import threading
+import time
 from collections.abc import Callable
 
 from . import metrics
@@ -31,6 +32,7 @@ class Governor:
         self.executor, self.dry_run = executor, dry_run
         self.signals: Signals | None = None
         self.audit: list[str] = []
+        self._changes = 0
         self.counts = {"actions": 0, "action_failures": 0, "admit_ok": 0, "admit_refused": 0}
         self.metrics: bytes = b""  # rendered at the end of each step, served by governor.metrics
         self._lock = threading.Lock()
@@ -173,13 +175,16 @@ class Governor:
         if self.dry_run or not self.effector:
             return {"ok": True, "dry_run": True}
 
+        self._changes += 1
+        tag = f"(#{self._changes} {time.strftime('%H:%M:%S')})"  # two identical changes must not look alike: the page waits for a line it has not seen
+
         def run() -> None:
             try:
                 rc = self.effector(args)
             except Exception as e:  # noqa: BLE001
-                self._record(f"FAILED {label}: {e}")
+                self._record(f"FAILED {label}: {e} {tag}")
                 return
-            self._record(f"{label}: {'done' if rc == 0 else f'FAILED (exit {rc})'}")
+            self._record(f"{label}: {'done' if rc == 0 else f'FAILED (exit {rc})'} {tag}")
 
         threading.Thread(target=run, daemon=True, name="change").start()
         return {"ok": True, "started": True}
@@ -195,7 +200,7 @@ class Governor:
                         "psi_some": s.psi_some_avg10 if s else None,
                         "psi_full": s.psi_full_avg10 if s else None,
                         "groups": sorted(self.group_names()), "violations": sorted(self.violations),
-                        "audit": self.audit[-20:]}
+                        "audit": self.audit[-60:]}
             if cmd in ("freeze", "thaw", "stop", "start"):
                 self._act(Action(cmd, req["target"], self.ladder.level))
                 return {"ok": True}

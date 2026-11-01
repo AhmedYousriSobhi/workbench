@@ -443,3 +443,31 @@ def test_apply_plan_passes_the_bmc_nodes_to_benchctl(tmp_path):
     req = {"cpu_nodes": 2, "gpu_nodes": 1, "gpus_per_node": 4, "parts": ["bmc"], "bmc_nodes": ["cn001", "gpu001"]}
     assert g.handle("apply-plan", req)["started"] and done.wait(5)
     assert calls[0][-2:] == ["--bmc-nodes", "cn001,gpu001"]
+
+
+def test_two_identical_changes_leave_different_lines_so_the_page_sees_the_second_finish(tmp_path):
+    """The page waits for a done line it has not seen; the same apply twice used to write the same line twice (#202)."""
+    import time as _t
+
+    results = iter([0, 1])
+    g, _ = _calm_gov(tmp_path, effector=lambda args: next(results))
+    for n in (1, 2):
+        assert g.handle("scale", {"group": "compute", "n": 3})["started"]
+        deadline = _t.time() + 5
+        while _t.time() < deadline and len([a for a in g.audit if a.startswith("scale=3:")]) < n:
+            _t.sleep(0.02)
+    ends = [a for a in g.audit if a.startswith("scale=3:")]
+    assert len(ends) == 2 and len(set(ends)) == 2 and ": done (#1 " in ends[0] and ": FAILED (exit 1) (#2 " in ends[1]
+
+
+def test_a_change_that_raises_is_recorded_as_failed_with_its_tag(tmp_path):
+    def boom(args):
+        raise OSError("docker is gone")
+
+    g, _ = _calm_gov(tmp_path, effector=boom)
+    g.handle("scale", {"group": "compute", "n": 2})
+    import time as _t
+    deadline = _t.time() + 5
+    while _t.time() < deadline and not any(a.startswith("FAILED scale=2") for a in g.audit):
+        _t.sleep(0.02)
+    assert any(a.startswith("FAILED scale=2: docker is gone (#1 ") for a in g.audit)
