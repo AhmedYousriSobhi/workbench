@@ -62,6 +62,8 @@ Read it from left to right:
 | **Cluster nodes** | every compute and GPU node as a tile with its state |
 | **Services: what clients call** | BMC farm, BCM mock, Jira mock, GPU exporter |
 
+A login node that is in the selection but not running (never built, or stopped) is drawn **dashed with "✗ not running"**: the page checks whether anything answers on its port 22, so the diagram shows what runs, not only what you picked. With the whole stack down they all look dim instead.
+
 Every line says **how** it connects:
 
 | Line | Meaning |
