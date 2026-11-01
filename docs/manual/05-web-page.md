@@ -171,7 +171,7 @@ page**, because the page has no Docker access by design; run those with `./scrip
 ## Governor
 
 Press the level chip (for example **✓ L0 Normal**) or the memory chip. The panel shows the level and what it means, free
-memory and pressure with two-minute trends, and the governor's log (*Governor activity*, newest first). If the governor
+memory and pressure with two-minute trends, and the governor's log (*Governor activity*, newest first). A change the page asked for ends with a line such as `apply-plan=4cpu+2gpu: done (#3 14:50:12)`; the number and time make every change's line unique, which is how the sheet knows *this* apply finished (an older build wrote the same line for the same selection, and the sheet then waited forever). If the governor
 is offline, or memory is tight (L2 and up), the same is also listed under *Needs attention*.
 
 ## Connections
