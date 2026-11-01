@@ -98,8 +98,8 @@ tsh --proxy=127.0.0.1:3080 --insecure -i $ID ls               # the login node a
 tsh --proxy=127.0.0.1:3080 --insecure -i $ID ssh alice@cn001 hostname
 ```
 
-For an interactive `tsh login`, choose a password once: `./scripts/benchctl add invite alice` prints a one-time link; open it in a browser
-(the certificate is self-signed), then `tsh login --proxy=127.0.0.1:3080 --insecure --user=alice`. The identity files need no password.
+For an interactive `tsh login`, set a password and a one-time-code authenticator once (Teleport 18 requires a second factor): `./scripts/benchctl add invite alice` prints a one-time link; open it in a browser
+(the certificate is self-signed), scan the QR code with an authenticator app (or keep the secret it shows for `oathtool`), then `tsh login --proxy=127.0.0.1:3080 --insecure --user=alice`. The identity files need neither a password nor a code.
 Your `tsh` must not be a newer major version than the server (`teleport.version` in `sim.yaml`, default 18.x); use a separate
 `TELEPORT_HOME` if you keep other Teleport profiles. Not simulated: the Teleport agent's extras (dynamic labels, session
 recording that survives a dropped connection, session sharing), Kubernetes, web and database access.

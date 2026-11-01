@@ -228,7 +228,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         say(f"ssh: ssh -i {SSH_DIR}/id_ed25519 -p {compose.SSH_PORT} <user>@127.0.0.1 (users from sim.yaml)")
     if "teleport" in todo:
         say(f"teleport: https://127.0.0.1:{teleport.PROXY_PORT} (self-signed); identity files in "
-            f"{teleport.SECRETS_DIR}/identity; password for tsh login: ./scripts/benchctl add invite <user>")
+            f"{teleport.SECRETS_DIR}/identity; password and one-time code for tsh login: ./scripts/benchctl add invite <user>")
     say("stack is up")
     return True
 

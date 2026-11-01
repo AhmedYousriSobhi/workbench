@@ -29,7 +29,8 @@ installation, agentless OpenSSH, upgrade overview).
   session recording that survives the connection, session sharing). Those are not simulated; client-testing lists them.
 - **Auth:** local users and roles from `sim.yaml` (SSO mock is out of scope). Teleport documents no scripted password
   setup, so each user gets an identity file (`tctl auth sign --user --ttl`, Teleport's documented automation path) and
-  `benchctl add invite <user>` prints the one-time browser link that sets a password for `tsh login`. Certificate TTL is a `sim.yaml` value;
+  `benchctl add invite <user>` prints the one-time browser link that sets a password and a one-time-code (OTP) authenticator for `tsh login`: Teleport 18 cannot disable MFA (`second_factor: off` is
+  refused at start; `second_factors: [otp]` is its documented setting), so the sim keeps OTP. Identity files need neither. Certificate TTL is a `sim.yaml` value;
   a scenario expires it mid-session, and `teleport-outage` stops the proxy.
 - **Version:** configurable in `sim.yaml`, default the current 18.x Community Edition image from
   `public.ecr.aws/gravitational/teleport-distroless`, pinned by tag (and digest once measured). Teleport supports a

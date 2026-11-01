@@ -51,14 +51,15 @@ def image(sim: dict) -> str:
 
 def config(sim: dict) -> str:
     """teleport.yaml for auth + proxy only (no ssh_service: nodes are agentless). Config v3 serves everything on one
-    port, so only 3080 is published. A self-signed certificate (no https_keypairs), local users, no second factor
-    so `tsh login` needs just the password set through the invite link."""
+    port, so only 3080 is published. A self-signed certificate (no https_keypairs), local users with
+    one-time codes (OTP): Teleport 18 cannot turn MFA off (`second_factor: off` makes auth exit with "cannot disable
+    multi-factor authentication"), and `second_factors` is its documented setting. Identity files need no code."""
     settings(sim)
     conf = {"version": "v3",
             "teleport": {"nodename": "teleport", "data_dir": "/var/lib/teleport",
                          "log": {"output": "stderr", "severity": "INFO"}},
             "auth_service": {"enabled": True, "cluster_name": CLUSTER, "listen_addr": "0.0.0.0:3025",
-                             "authentication": {"type": "local", "second_factor": "off"}},
+                             "authentication": {"type": "local", "second_factors": ["otp"]}},
             "ssh_service": {"enabled": False},
             "proxy_service": {"enabled": True, "web_listen_addr": f"0.0.0.0:{PROXY_PORT}",
                               "public_addr": [f"127.0.0.1:{PROXY_PORT}"]}}

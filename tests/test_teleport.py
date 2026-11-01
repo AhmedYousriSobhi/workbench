@@ -28,7 +28,7 @@ def test_settings_default_and_validated():
 def test_config_is_auth_and_proxy_only_on_one_port():
     c = yaml.safe_load(teleport.config(SIM))
     assert c["version"] == "v3" and c["ssh_service"] == {"enabled": False}
-    assert c["auth_service"]["cluster_name"] == "workbench" and c["auth_service"]["authentication"]["second_factor"] == "off"
+    assert c["auth_service"]["cluster_name"] == "workbench" and c["auth_service"]["authentication"] == {"type": "local", "second_factors": ["otp"]}
     assert c["proxy_service"]["web_listen_addr"] == "0.0.0.0:3080" and c["proxy_service"]["public_addr"] == ["127.0.0.1:3080"]
 
 
