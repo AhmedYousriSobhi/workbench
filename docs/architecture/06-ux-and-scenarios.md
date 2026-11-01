@@ -45,7 +45,7 @@ A compromise of the Web UI can only issue the pre-approved commands the socket a
 **Modules.**
 1. **Cluster view (built):** the traffic diagram (clients, fault injector, the mock services and every node as a state tile, with moving dots, #37, #118) beside an entity list (one card per node and service with status and quick facts). A node opens a panel in place of the list with *Actions* (power off, overheat, fan failure, GPU error, then recover) and *Info* (how to connect). Slurm drain and Kubernetes faults are not offered here (no Docker access; use the scenario CLI).
 2. **Governor panel (built):** opens from the level and memory chips in the top strip: SSE sparklines for `MemAvailable` and PSI, a color-coded level banner (L0 green, L2 yellow, L4 red) and the audit log of governor actions. A level of L2 or higher, or an offline governor, also appears in *Needs attention*.
-3. **Scenario Orchestrator (built, Play/Stop/speed):** a sheet opened from the top strip: browse and filter the scenarios in `scenarios/`, Play, Stop and Fast-Forward, with a timeline of the run's steps.
+3. **Scenario Orchestrator (built, Play/Stop/speed):** a sheet opened from the top strip's Menu: browse and filter the scenarios in `scenarios/`, Play, Stop and Fast-Forward, with a timeline of the run's steps.
 4. **Profile & Budget Manager (not built yet):** form editor for `sim.yaml`; sliders for node/GPU counts feed a projected PSS memory calculator, and deployment is blocked if the budget exceeds host safety limits.
 
 ### Scenario catalog (YAML, composable)

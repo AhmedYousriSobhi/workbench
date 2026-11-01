@@ -50,6 +50,7 @@ def test_the_sheet_changes_the_files_through_drag_and_buttons(tmp_path):
                 page = browser.new_context(viewport={"width": width, "height": 800}).new_page()
                 page.on("pageerror", lambda e: errors.append(str(e)))
                 page.goto(f"http://127.0.0.1:{port}/login?token=tok")
+                page.click("#menubtn")
                 page.click("#nhcbtn")
                 page.wait_for_selector(".nhcrow")
                 assert not page.evaluate("document.documentElement.scrollWidth > innerWidth")  # nothing scrolls sideways (W-9)

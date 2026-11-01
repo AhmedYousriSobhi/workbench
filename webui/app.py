@@ -184,7 +184,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         return spec, est, avail, ok, msg
 
     async def settings(request: Request):
-        """The options the Settings sheet offers, with what each costs; `on` follows the workbench last built."""
+        """The options the Cluster architecture sheet offers, with what each costs; `on` follows the workbench last built."""
         from benchctl import compose, export, workbench
 
         try:

@@ -148,7 +148,8 @@
     .cols { grid-template-columns:minmax(0,1fr); padding:var(--sp3) var(--sp4) var(--sp5); }
     .rail.left { position:static; }
     .top { padding:var(--sp3) var(--sp4); } .top h1 { width:100%; }
-    .status { flex-wrap:nowrap; overflow-x:auto; width:100%; padding-bottom:2px; scrollbar-width:thin; }
+    .status { flex-wrap:wrap; width:100%; }
+    .menu { position:fixed; left:16px; right:16px; top:auto; width:auto; margin-top:6px; }
   }
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
   /* calm pass (#121): more space, fewer boxes, one primary action per area */
@@ -203,6 +204,12 @@
   .tog input:checked + span { background:color-mix(in srgb,var(--accent) 14%,var(--panel)); border-color:var(--accent); font-weight:650; } .tog input:checked + span::before { content:'✓'; } .tog input:focus-visible + span { outline:2px solid var(--accent); outline-offset:2px; }
   .fit { padding:var(--sp4); border:1px solid var(--line); border-radius:12px; } .fitnum b { font-size:26px; font-variant-numeric:tabular-nums; } #pl-bar { width:100%; height:10px; margin:var(--sp2) 0; } .fit p { margin:2px 0; }
   .cmdbox summary { cursor:pointer; min-height:36px; display:flex; align-items:center; color:var(--accent); } .cmdbox pre { margin:var(--sp2) 0; }
+  .menuwrap { position:relative; margin-left:var(--sp3); } .menubtn { font-weight:650; }
+  .menu { position:absolute; right:0; top:calc(100% + 6px); z-index:30; width:min(320px,calc(100vw - 32px)); padding:var(--sp2); background:var(--panel); border:1px solid var(--line); border-radius:12px; box-shadow:0 12px 32px rgba(0,0,0,.28); }
+  .menugroup { margin:var(--sp2) var(--sp3) 2px; font-size:12px; font-weight:650; color:var(--dim); text-transform:uppercase; letter-spacing:.04em; } .menugroup:first-child { margin-top:2px; }
+  .menuitem { display:flex; align-items:center; gap:var(--sp3); width:100%; min-height:48px; padding:6px var(--sp3); border:0; border-radius:8px; background:transparent; color:var(--fg); font:inherit; text-align:left; cursor:pointer; }
+  .menuitem:hover, .menuitem:focus-visible { background:color-mix(in srgb,var(--accent) 12%,var(--panel)); outline:none; } .menuitem:focus-visible { box-shadow:inset 0 0 0 2px var(--accent); }
+  .menuitem > b { flex:0 0 20px; text-align:center; } .menuitem .mi-t { display:block; font-weight:650; font-size:14px; } .menuitem .mi-h { display:block; font-size:12px; color:var(--dim); line-height:1.35; }
   .nhclist { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:var(--sp2); }
   .nhcrow { display:grid; grid-template-columns:auto 1fr auto; gap:var(--sp2) var(--sp3); align-items:center; padding:var(--sp2) var(--sp3); border:1px solid var(--line); border-radius:10px; background:var(--panel); }
   .nhcrow.off { opacity:.75; } .nhcrow.dragging { opacity:.4; } .nhcrow.over { border-color:var(--accent); box-shadow:0 -3px 0 var(--accent); }
@@ -287,10 +294,16 @@
     <span class="pillchip" id="c-nodes">Nodes …</span>
     <button class="pillchip" id="c-run" hidden></button>
     <span id="conn" role="status"><i></i><span>connecting…</span></span>
-    <button class="pillchip" id="scnbtn" aria-haspopup="dialog">▶ Scenarios</button>
-    <button class="pillchip" id="planbtn" aria-haspopup="dialog">⚙ Settings</button>
-    <button class="pillchip" id="nhcbtn" aria-haspopup="dialog">✚ Health checks</button>
-    <button class="pillchip" id="expbtn" aria-haspopup="dialog">⇩ Export</button>
+    <span class="menuwrap"><button class="pillchip menubtn" id="menubtn" aria-expanded="false" aria-controls="menu">☰ Menu</button>
+      <div id="menu" class="menu" hidden>
+        <p class="menugroup" id="mg-run">Run</p>
+        <button class="menuitem" id="scnbtn" aria-haspopup="dialog"><b aria-hidden="true">▶</b><span><span class="mi-t">Scenarios</span><span class="mi-h">Play timed faults and workloads</span></span></button>
+        <p class="menugroup" id="mg-conf">Configure</p>
+        <button class="menuitem" id="planbtn" aria-haspopup="dialog"><b aria-hidden="true">▦</b><span><span class="mi-t">Cluster architecture</span><span class="mi-h">Nodes, GPUs per node, optional parts, and what fits in memory</span></span></button>
+        <button class="menuitem" id="nhcbtn" aria-haspopup="dialog"><b aria-hidden="true">✚</b><span><span class="mi-t">Health checks</span><span class="mi-h">What makes a node drain</span></span></button>
+        <p class="menugroup" id="mg-share">Share</p>
+        <button class="menuitem" id="expbtn" aria-haspopup="dialog"><b aria-hidden="true">⇩</b><span><span class="mi-t">Export</span><span class="mi-h">A profile file for the monitoring client</span></span></button>
+      </div></span>
     <a class="pillchip" id="helplink" href="/help/" aria-label="Help: the manual, guides and command reference">? Help</a>
     <button class="pillchip" id="theme" aria-label="Colour theme: automatic. Press to change.">◐ Auto</button>
   </div>
@@ -386,7 +399,7 @@
     <div class="sheet-f"><p id="exp-msg" role="status" class="small"></p><button class="btn small" id="exp-cancel">Cancel</button><button class="btn" id="exp-go">Download bench-profile.json</button></div>
   </dialog>
   <dialog id="plandlg" class="sheet" aria-labelledby="plan-h">
-    <div class="sheet-h"><div><h2 id="plan-h">Settings</h2><p class="dim small">Everything that changes what runs, and so how much memory it needs. Check that it fits, then apply.</p></div>
+    <div class="sheet-h"><div><h2 id="plan-h">Cluster architecture</h2><p class="dim small">Everything that changes what runs, and so how much memory it needs. Check that it fits, then apply.</p></div>
       <button class="btn small" id="plan-close" aria-label="Close the plan">✕ Close</button></div>
     <div class="sheet-b">
       <div class="steps3">
@@ -592,6 +605,22 @@ $('scnbtn').onclick = () => $('scndlg').showModal(); $('scn-close').onclick = ()
 $('scndlg').addEventListener('click', e => { if (e.target === $('scndlg')) $('scndlg').close(); });
 $('planbtn').onclick = openPlan; $('plan-close').onclick = $('plan-cancel').onclick = () => $('plandlg').close();
 $('plandlg').addEventListener('click', e => { if (e.target === $('plandlg')) $('plandlg').close(); });  // a click on the dim backdrop closes it
+// Top menu: a disclosure (button + aria-expanded + list of buttons), closed by Escape, an outside click or choosing an item.
+function setMenu(open, refocus) {
+  $('menu').hidden = !open; $('menubtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open) { if (innerWidth <= 860) $('menu').style.top = ($('menubtn').getBoundingClientRect().bottom) + 'px'; $('menu').querySelector('.menuitem').focus(); }
+  else if (refocus) $('menubtn').focus();
+}
+$('menubtn').onclick = () => setMenu($('menu').hidden);
+$('menu').addEventListener('click', e => { if (e.target.closest('.menuitem')) setMenu(false); });  // the item's own handler opens its sheet
+document.addEventListener('click', e => { if (!$('menu').hidden && !e.target.closest('.menuwrap')) setMenu(false); });
+document.addEventListener('keydown', e => {
+  if ($('menu').hidden) return;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setMenu(false, true); return; }
+  const items = [...$('menu').querySelectorAll('.menuitem')], i = items.indexOf(document.activeElement);
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus(); }
+  if (e.key === 'Tab' && !e.shiftKey && i === items.length - 1) setMenu(false);  // tabbing past the last item leaves the menu
+}, true);
 // Health checks: the list comes from /api/nhc; every change is a POST the backend validates (same code as the CLI), then redrawn from its answer.
 let nhcState = null, nhcDrag = null, nhcPending = null;
 const nhcMsg = (t) => { $('nhc-msg').textContent = t; };
@@ -748,7 +777,7 @@ async function showNode(name) {
   const bm = (await connections()).find(e => e.id === 'bmc');
   kv.push(['BMC', `<code>${esc(bm ? bm.address : '')}</code> (HTTPS) with Host header <code>bmc-${esc(name)}</code>, user admin, password in <code>compose/generated/secrets/bmc_credentials</code>`],
     ['IP address', body && body.ip ? `<code>${esc(body.ip)}</code> (fixed; reach it from the login node)` : `run <code>./scripts/benchctl describe node ${esc(name)}</code>`]);
-  if (body) kv[kv.findIndex(r => r[0] === 'BMC')] = ['BMC', body.bmc_ip ? `<code>${esc(body.bmc_ip)}:443</code> (HTTPS), user admin, password in <code>compose/generated/secrets/bmc_credentials</code>` : 'none for this node (switched off in Settings)'];
+  if (body) kv[kv.findIndex(r => r[0] === 'BMC')] = ['BMC', body.bmc_ip ? `<code>${esc(body.bmc_ip)}:443</code> (HTTPS), user admin, password in <code>compose/generated/secrets/bmc_credentials</code>` : 'none for this node (switched off in Cluster architecture)'];
   $('nodeconn').innerHTML = kv.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
   $('nodetext').textContent = body ? body.text : `Could not read ${name}: ${(await r.json()).detail}`;
 }

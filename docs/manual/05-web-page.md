@@ -20,11 +20,11 @@ screenshots in this chapter predate the redesign described below; regenerate the
 
 | Area | Shows |
 |---|---|
-| **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **▶ Scenarios**, **⚙ Settings**, **✚ Health checks**, help and the theme switch. Pressing the level or memory chip opens the **Governor** panel |
+| **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **☰ Menu**, help and the theme switch. The strip is for status only. **☰ Menu** lists the actions in three groups, each with a one-line hint: *Run* (**▶ Scenarios**), *Configure* (**▦ Cluster architecture**: nodes, GPUs per node, optional parts and the plan; **✚ Health checks**) and *Share* (**⇩ Export**). Esc closes it. Pressing the level or memory chip opens the **Governor** panel |
 | **Tabs and Needs attention** | the tabs *Nodes* and *Connections*, and one slim bar next to them with every item that needs you, or "All clear" |
 | **Stage** (Nodes tab) | the **traffic diagram** on the left and the **entity list** on the right |
 
-Three panels open on top of the page from the top strip and close with **✕ Close**, Esc or a click outside: **Scenarios**,
+Three panels open on top of the page from the top strip or its **☰ Menu** and close with **✕ Close**, Esc or a click outside: **Scenarios**,
 **Plan** and **Governor**. A node is different: it opens *in place of the list* (below), so the traffic diagram stays in view.
 
 On a phone, and under 1100 px, the traffic diagram and the list stack in one column. The page has a skip link and
@@ -82,7 +82,7 @@ live state.
 
 ## Plan: change the workbench
 
-**⚙ Settings** opens a panel with steppers for CPU nodes, GPU nodes and GPUs per node, toggles for the optional parts (accounting, Jira, BMC, BCM, scenarios, load; each shows the memory limit it adds, and the toggles show what is built now), and a
+**▦ Cluster architecture** opens a panel with steppers for CPU nodes, GPU nodes and GPUs per node, toggles for the optional parts (accounting, Jira, BMC, BCM, scenarios, load; each shows the memory limit it adds, and the toggles show what is built now), and a
 memory bar ("1.7 GB needed of 4.5 GB free"). It shows the change against what runs now ("GPU nodes 2 → 3 (+1)") and the
 `benchctl up ...` command for a terminal. Editing the numbers only estimates. **Apply to the running workbench** (press
 twice: the second press confirms) asks the governor to rebuild it; new nodes start and nodes you no longer want are
@@ -137,7 +137,7 @@ page. Start with [Which command do I use?](11-which-command.md) when the command
 
 ## Health checks: what drains a node
 
-**✚ Health checks** opens the list of checks every node's health check runs, in run order. Drag a block by its handle to
+**☰ Menu → Configure → ✚ Health checks** opens the list of checks every node's health check runs, in run order. Drag a block by its handle to
 reorder it (the ↑ ↓ buttons do the same from the keyboard), tick it to switch the check on or off, edit a parameter and
 leave the field to save it, ✕ removes it. To add one, drag a template (`metric-above`, `metric-below`) into the list or press
 it, then name it and fill in its parameters. Each change is checked before it is saved (syntax, parameters, a run on healthy
@@ -147,7 +147,7 @@ rebuild. The page adds checks from templates only; your own script goes in with 
 
 ## Export: a profile file for the monitoring client
 
-**⇩ Export** in the top strip downloads `bench-profile.json` for the cluster on disk (the workbench last built, else the
+**☰ Menu → Share → ⇩ Export** downloads `bench-profile.json` for the cluster on disk (the workbench last built, else the
 profile `up` started); tick *One BMC target per node* to include the BMC farm. The file never holds secrets, so after a
 successful download the sheet lists what to set by hand: the SSH key (`benchctl ssh-key install`), the Grafana token
 (`compose/generated/secrets/grafana_viewer_token`), the BMC password if asked for, and that Jira needs no token. It also
@@ -168,7 +168,7 @@ and reloaded: `./scripts/benchctl up`, then `./scripts/benchctl exec slurmctld -
 GPU exporter) or the *Monitoring app* and *Prometheus* chips open the Connections tab with that part's row marked. Tab to
 a shape and press Enter or Space for the same.
 
-**BMCs per node.** In **⚙ Settings**, switching *BMC* on shows the nodes that get a BMC address (all by default). Each
+**BMCs per node.** In **▦ Cluster architecture**, switching *BMC* on shows the nodes that get a BMC address (all by default). Each
 BMC is its own small container with its own address (`10.148.x.y:443`) and costs about 32 MB, shown in the memory bar; switch off
 the nodes you do not need. A node panel shows its BMC address, or "none for this node". Apply rebuilds as usual and removes
 the BMCs you switched off.

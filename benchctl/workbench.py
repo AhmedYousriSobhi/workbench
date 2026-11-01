@@ -20,7 +20,7 @@ FLOOR_MB = 1024                                   # MemAvailable that must remai
 PARTS: dict[str, tuple[str, list[str] | None]] = {
     "jira": ("mocks", ["jira-mock"]), "bmc": ("mocks", ["bmc-farm"]), "bcm": ("mocks", ["bcm-mock"]),
     "accounting": ("accounting", None), "scenarios": ("scenarios", None), "load": ("load", None)}
-# The one registry of options that change what runs and so what memory it needs. The Settings sheet is drawn from it
+# The one registry of options that change what runs and so what memory it needs. The Cluster architecture sheet is drawn from it
 # (`catalog`): a new option is an entry here and in PARTS, not new page code.
 PART_INFO: dict[str, tuple[str, str]] = {
     "accounting": ("Accounting", "slurmdbd and MariaDB. Needed for sacct and job history; without it sacct says accounting storage is disabled."),
@@ -105,7 +105,7 @@ def parts_in(services: set[str]) -> list[str]:
 
 
 def catalog(selected: list[str] | None = None) -> list[dict]:
-    """Every optional part with its label, help, memory limit (MB) and whether it is on, for the Settings sheet."""
+    """Every optional part with its label, help, memory limit (MB) and whether it is on, for the Cluster architecture sheet."""
     on = set(DEFAULT_PARTS if selected is None else selected)
     return [{"id": p, "label": PART_INFO[p][0], "help": PART_INFO[p][1], "mb": _part_mb(p), "on": p in on} for p in PARTS]
 

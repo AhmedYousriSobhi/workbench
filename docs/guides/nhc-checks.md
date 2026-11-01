@@ -59,7 +59,7 @@ they are invalid.
 
 ## 3. In the web page
 
-Open **✚ Health checks** in the top strip. Drag a block by its handle to reorder (or use the ↑ ↓ buttons, which work with
+Open **☰ Menu → ✚ Health checks** in the top strip. Drag a block by its handle to reorder (or use the ↑ ↓ buttons, which work with
 the keyboard), tick a block to switch the check on or off, edit a parameter and leave the field to save it, and ✕ removes a
 check. To add one, drag a template from the bottom of the sheet into the list (or press it), name it and fill in its
 parameters. A refused change shows one line saying why and the list goes back to what was saved. The page adds checks
