@@ -114,13 +114,11 @@ def _tctl(runner: Callable, dc: Callable, *args: str):
 
 
 def wait_ready(runner: Callable, dc: Callable, timeout: float = 90, sleep: Callable[[float], None] = time.sleep) -> bool:
-    end = time.monotonic() + timeout
-    while True:
+    for _ in range(max(1, int(timeout // 2))):   # counted, not timed, so an injected sleep keeps tests instant
         if _tctl(runner, dc, "status").returncode == 0:
             return True
-        if time.monotonic() >= end:
-            return False
         sleep(2)
+    return False
 
 
 def fetch_ca(port: int = PROXY_PORT, opener: Callable | None = None) -> str:
