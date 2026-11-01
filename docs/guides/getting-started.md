@@ -163,4 +163,4 @@ To look at the web page without a screen: `pip install -e '.[browser]'`, `.venv/
 
 Once per clone: `./scripts/install-hooks.sh` (no sudo) installs the git hooks: no commits on `main`/`dev`, an issue reference in every commit message, a check that your git identity is your own GitHub noreply address (`./scripts/check-identity.sh`; GitHub credits a commit by the ID in that address, so a placeholder would credit a stranger), `validate.sh` before each commit, and a privacy scan (`./scripts/check-privacy.sh`) so no personal path, email or token is published. The repository is public, and the Claude skills under `.claude/` are symlinks into a home directory, so that folder is gitignored.
 
-`./scripts/verify.sh` (add `--full` for the live stack) before asking for a merge; see CLAUDE.md.
+`./scripts/verify.sh` (add `--full` for the live stack) before asking for a merge; see CLAUDE.md. To check one component, `./scripts/verify.sh --unit teleport --clean` (list them with `--list-units`).
