@@ -173,6 +173,41 @@ The web UI is at `https://10.141.255.30:3080` (same login). The proxy has its ow
 
 ![The Infrastructure architecture with Teleport: a dot travels from the clients to the Teleport box for each SSH connection](img/web-infrastructure.png)
 
-**A login or compute node you drop is forgotten.** `benchctl up` removes the Teleport registration and the host certificate of every node the workbench no longer has, so `tsh ls` lists only what exists (before this, a dropped `login2` stayed registered and a dial failed with *no route to host*). **Your password survives `up`.** `benchctl up` creates a Teleport user only when it does not exist yet, so the password and one-time code you chose from an invite stay. (Before this fix every `up` replaced the users and `tsh login` then said *invalid username or password*; run `benchctl add invite <user>` once to set them again.) **Good to know.** A Teleport container created before the page showed Teleport has no diagnostics port yet, so the card says `not answering` and no dots appear; run `./scripts/benchctl up --with teleport` once to recreate it. Your `tsh` must not be a newer major version than the server (`teleport.version` in `sim.yaml`, default 18.x); use a separate
+**The same Teleport cluster survives a rebuild** (see *Keep or reset the Teleport cluster* below). **A login or compute node you drop is forgotten.** `benchctl up` removes the Teleport registration and the host certificate of every node the workbench no longer has, so `tsh ls` lists only what exists (before this, a dropped `login2` stayed registered and a dial failed with *no route to host*). **Your password survives `up`.** `benchctl up` creates a Teleport user only when it does not exist yet, so the password and one-time code you chose from an invite stay. (Before this fix every `up` replaced the users and `tsh login` then said *invalid username or password*; run `benchctl add invite <user>` once to set them again.) **Good to know.** A Teleport container created before the page showed Teleport has no diagnostics port yet, so the card says `not answering` and no dots appear; run `./scripts/benchctl up --with teleport` once to recreate it. Your `tsh` must not be a newer major version than the server (`teleport.version` in `sim.yaml`, default 18.x); use a separate
 `TELEPORT_HOME` if you keep other Teleport profiles. Not simulated: the Teleport agent's extras (dynamic labels, session
 recording that survives a dropped connection, session sharing), Kubernetes, web and database access.
+
+### Keep or reset the Teleport cluster
+
+A Teleport cluster has an identity: its certificate authority, its users and their passwords. A client's saved `tsh` session
+is signed by that authority. If the cluster is rebuilt with a new one, the session fails with
+`remote error: tls: unknown certificate authority` (even though `tsh status` says it is still valid) and every password is gone.
+
+**Normal use: do nothing.** `benchctl down`, `benchctl up` and `benchctl add invite` save the identity to
+`compose/generated/secrets/teleport/state`. When the Teleport data (`compose/generated/teleport/data`) is empty at the next `up`
+and `teleport.version` in `sim.yaml` is unchanged, the saved identity is restored: same authority, so sessions, passwords and node
+certificates still work. Nothing to type; the clients stay logged in. The save is taken at those three commands, so a password you
+set in the browser is safe after the next `down` or `up`, not after a power cut before that.
+
+**Start a really new cluster** (a clean test, a corrupted Teleport, a new `teleport.version`): stop first, then delete both folders.
+Do it after `down`, because `down` saves the identity again.
+
+```bash
+./scripts/benchctl down
+./scripts/benchctl remove teleport-state     # asks first; -y skips the question; refuses while Teleport runs
+./scripts/benchctl up --with teleport        # or: ./scripts/benchctl start --addons --login ssh,teleport
+```
+
+`remove teleport-state` deletes `compose/generated/teleport/data` and `compose/generated/secrets/teleport/state` (by hand:
+`rm -rf` both; deleting only `data` brings the old cluster back from `state`). `./scripts/verify.sh --unit teleport --clean` does this deletion itself.
+
+**Then every client signs in again** (the new cluster knows nobody):
+
+```bash
+tsh logout --proxy=10.141.255.30:3080 --insecure     # drop the old session; or: rm -rf ~/.tsh/keys/10.141.255.30 ~/.tsh/10.141.255.30.yaml
+./scripts/benchctl add invite alice                  # one-time link: choose the password and the one-time code
+tsh login --proxy=10.141.255.30:3080 --insecure --user=alice
+```
+
+The monitoring client's own **Log in** button does the last step. If you see `unknown certificate authority` after a rebuild you did not
+expect, run the three lines above: the client holds a session from an older cluster.

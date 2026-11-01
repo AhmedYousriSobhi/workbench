@@ -1,5 +1,6 @@
 import difflib
 import json
+import sqlite3
 import sys
 import time
 from pathlib import Path as _Path
@@ -425,6 +426,10 @@ def down(dry_run: bool = typer.Option(False, "-n", "--dry-run", help="list what 
         return
     if running:
         _confirm(f"This stops {len(running)} containers and ends open shells on the nodes.", yes)
+    try:
+        teleport.snapshot()  # while Teleport still runs: a later rebuild is the same cluster, so clients stay logged in
+    except (OSError, sqlite3.Error) as e:
+        typer.echo(f"note: Teleport's identity was not saved ({e}); a rebuild will be a new cluster", err=True)
     raise typer.Exit(0 if stack.down(say=typer.echo) else 1)
 
 
@@ -618,6 +623,7 @@ def add_invite(user: str = typer.Argument(..., help="a user from sim.yaml")) -> 
         raise typer.Exit(2)
     try:
         typer.echo(teleport.invite(user, stack._run, stack.dc))
+        teleport.snapshot()  # the user's password is chosen in the browser; the next `down` saves that too
     except teleport.TeleportError as e:
         typer.echo(f"{e}\nIs Teleport running? Start it with `benchctl up --with teleport` (see `benchctl get services`).", err=True)
         raise typer.Exit(1) from e
@@ -667,6 +673,20 @@ def set_check(name: str = CHECK, state: str = typer.Argument(None, help="on or o
 def remove_jobs() -> None:
     """Cancel every job of the simulated users (scancel); the nodes go back to idle."""
     _daemon({"cancel": True}, "jobs cancelled")
+
+
+@remove_app.command("teleport-state")
+def remove_teleport_state(yes: bool = typer.Option(False, "-y", "--yes", help="do not ask (a terminal asks; scripts are never asked)")) -> None:
+    """Forget the Teleport cluster: the next `benchctl up` makes a new one (new certificate authority, no passwords), and every
+    client must `tsh logout`, then `benchctl add invite USER`, then log in again. Stop the stack first (`benchctl down`)."""
+    if any(r["name"] == "teleport" and r["state"] == "running" for r in inventory.service_rows()):
+        typer.echo("Teleport is running: run `benchctl down` first (it saves the identity again), then repeat this.", err=True)
+        raise typer.Exit(1)
+    _confirm("This deletes Teleport's data and its saved identity: every Teleport user and password is lost.", yes)
+    gone = teleport.reset()
+    typer.echo("removed: " + ", ".join(str(p) for p in gone) if gone else "nothing to remove: no Teleport state")
+    typer.echo("next: benchctl up --with teleport; then each client: tsh logout --proxy=10.141.255.30:3080 --insecure, "
+               "benchctl add invite USER, log in")
 
 
 @remove_app.command("check")
