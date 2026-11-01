@@ -51,6 +51,7 @@ def capture(out: Path) -> dict:
                                 raise
                             time.sleep(0.3)
                     page.wait_for_timeout(2000)
+                    page.evaluate("setTree(true, false)")  # a 1280 px window starts with the list folded; the checks below look at the list
                     path = out / f"dashboard-{vp}-{scheme}.png"
                     page.screenshot(path=str(path), full_page=True)
                     result["shots"].append(str(path))

@@ -283,8 +283,8 @@
   .trafficpanel { position:relative !important; top:auto !important; }
   .nodesmain .er { grid-template-columns:20px 84px minmax(0,1fr); } .nodesmain .er .info { grid-column:2 / -1; white-space:normal; flex-wrap:wrap; } .trafficpanel .row { display:flex; align-items:center; gap:var(--sp3); flex-wrap:wrap; } .trafficpanel .row .grow { flex:1; }
   .nodesmain { max-height:calc(100vh - 175px); } #flow { max-height:calc(100vh - 300px); } .legendbox { margin-top:var(--sp1); } .trafficpanel { padding-top:var(--sp3); padding-bottom:var(--sp3); } #flow { margin:var(--sp1) 0; } .legendbox > summary { min-height:30px; }
-  #flow text { font-size:20px; } #flow text.sub { font-size:16px; } #flow .ftitle { font-size:15px; } #flow .ndt { font-size:13px; } #flow .ndt.cl { font-size:15px; }
-  #flow text.elab { font:600 13px system-ui,sans-serif; fill:var(--fg); } #flow .elbg { fill:var(--panel); stroke:var(--line); stroke-width:1; }
+  #flow text { font-size:22px; } #flow text.sub { font-size:17.5px; } #flow .ftitle { font-size:16px; } #flow .ndt { font-size:15px; } #flow .ndt.cl { font-size:16px; }
+  #flow text.elab { font:600 15px system-ui,sans-serif; fill:var(--fg); } #flow .elbg { fill:var(--panel); stroke:var(--line); stroke-width:1; }
   #flow marker path { fill:var(--dim); } #flow .lane.ssh, #flow .lane.teleport, #flow .lane.jump { stroke:var(--dim); stroke-width:2.5; opacity:.9; }
   #flow .lane.teleport { stroke-dasharray:12 6; } #flow .lane.jump { stroke-dasharray:3 6; stroke-linecap:round; } #flow .elabs { pointer-events:none; }
   #flow .blk.lgn, #flow .blk.blkacc { stroke:var(--accent); } #flow .blk.blkacc.down { stroke:var(--bad); }
@@ -853,7 +853,7 @@ const BASE_SERVICES = [['bmc-farm', 'BMC farm', 'Redfish'], ['bcm-mock', 'BCM mo
 const TELEPORT_BOX = ['teleport', 'Teleport', 'SSH proxy'];
 function hasTeleport() { try { return !!(lastCluster && 'teleport' in JSON.parse(lastCluster).services); } catch (e) { return false; } }
 function svcList() { return hasTeleport() ? [...BASE_SERVICES, TELEPORT_BOX] : BASE_SERVICES; }  // Teleport only when the part is built: no phantom box
-const FW = 1008, G = { clients: { x: 8, y: 8, w: 150, h: 272 }, injector: { x: 8, y: 294, w: 150, h: 108 }, cluster: { x: 588, y: 8, w: 412 } };
+const FW = 1180, G = { clients: { x: 8, y: 8, w: 164, h: 272 }, injector: { x: 8, y: 300, w: 164, h: 124 }, cluster: { x: 668, y: 8, w: 504 } };
 let svcOut = {}, svcLane = {};
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 let flowEs = null, flowPaused = false, flowCursor = 0, dots = [], raf = 0, recent = [], flowSnap = null, flowLevel = 0, flowNodes = '', tiles = {}, svcPos = {};
@@ -944,28 +944,28 @@ function loginList() { try { const l = lastCluster && JSON.parse(lastCluster).lo
 function buildFlow() {
   const g = $('flow'), nodes = nodeList(), lgs = loginList(), svcs = svcList().filter(x => x[0] !== 'teleport'), tpBox = svcList().find(x => x[0] === 'teleport');
   g.innerHTML = ''; tiles = {}; svcPos = {}; svcOut = {}; svcLane = {}; flowNodes = flowSig(nodes);
-  const BX = 330, BW = 200, BH = 64, PITCH = 72, AX = 232, AW = 300, SW = 170, SPITCH = 188;
+  const BX = 366, BW = 216, BH = 68, PITCH = 92, AX = 252, AW = 336, SW = 196, SPITCH = 222;
   const CHIPS = [['Monitoring app', lgs[0].name], ['Prometheus', 'prometheus'], ['curl · scripts', null], ['You: ssh · tsh', lgs[0].name]];
-  const acc = [...(tpBox ? [tpBox] : []), ...lgs], accTop = 8, accH = 42 + acc.length * PITCH;
-  G.clients.h = 46 + CHIPS.length * 50 + 24; G.injector.y = G.clients.y + G.clients.h + 14;
-  const COLS = 5, TW = 60, TH = 40, GAP = 8, nx = G.cluster.x + 24, groups = ['compute', 'gpu'].map(k => [k, nodes.filter(n => n.kind === k)]).filter(([, r]) => r.length);
-  let y = 50; const layout = [];
-  for (const [k, rows] of groups) { layout.push(['label', k, y]); y += 20; rows.forEach((n, i) => layout.push(['node', n, nx + (i % COLS) * (TW + GAP), y + Math.floor(i / COLS) * (TH + GAP)])); y += Math.ceil(rows.length / COLS) * (TH + GAP) + 14; }
-  const topEnd = Math.max(accTop + accH, y + 4), svTop = topEnd + 56, svH = 38 + BH + 34, rightEdge = G.cluster.x + G.cluster.w;  // the band of services sits under the access layer and the nodes
-  const H = Math.max(G.injector.y + G.injector.h + 16, svTop + svH + 16); g.setAttribute('viewBox', `0 0 ${FW} ${H}`); G.cluster.h = topEnd - G.cluster.y;
+  const acc = [...(tpBox ? [tpBox] : []), ...lgs], accTop = 8, accH = 56 + acc.length * PITCH;
+  G.clients.h = 56 + CHIPS.length * 60 + 20; G.injector.y = G.clients.y + G.clients.h + 20;
+  const COLS = 5, TW = 68, TH = 46, GAP = 14, nx = G.cluster.x + 24, groups = ['compute', 'gpu'].map(k => [k, nodes.filter(n => n.kind === k)]).filter(([, r]) => r.length);
+  let y = 60; const layout = [];
+  for (const [k, rows] of groups) { layout.push(['label', k, y]); y += 26; rows.forEach((n, i) => layout.push(['node', n, nx + (i % COLS) * (TW + GAP), y + Math.floor(i / COLS) * (TH + GAP)])); y += Math.ceil(rows.length / COLS) * (TH + GAP) + 22; }
+  const topEnd = Math.max(accTop + accH, y + 4), svTop = topEnd + 84, svH = 46 + BH + 40, rightEdge = G.cluster.x + G.cluster.w;  // the band of services sits under the access layer and the nodes
+  const H = Math.max(G.injector.y + G.injector.h + 20, svTop + svH + 20); g.setAttribute('viewBox', `0 0 ${FW} ${H}`); G.cluster.h = topEnd - G.cluster.y;
   const fr = (x, y0, w, h, rx) => sv('rect', { class: 'frame', x, y: y0, width: w, height: h, rx });
   const defs = sv('defs', {}), mk = sv('marker', { id: 'arr', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, orient: 'auto' }); mk.append(sv('path', { d: 'M0 0 L10 5 L0 10 z' })); defs.append(mk); g.append(defs);
   g.append(fr(G.clients.x, G.clients.y, G.clients.w, G.clients.h, 12), fr(G.injector.x, G.injector.y, G.injector.w, G.injector.h, 12), fr(AX, accTop, AW, accH, 14), fr(AX, svTop, rightEdge - AX, svH, 14), fr(G.cluster.x, G.cluster.y, G.cluster.w, G.cluster.h, 14));
   const jy = G.injector.y;
   g.append(sv('text', { class: 'ftitle', x: 22, y: 34 }, 'Clients'), sv('text', { class: 'ftitle', x: 22, y: jy + 26 }, 'Faults'), sv('text', { class: 'ftitle', x: AX + 16, y: accTop + 26 }, 'Access: how users get in'), sv('text', { class: 'ftitle', x: AX + 16, y: svTop + svH - 12 }, 'Services: what clients call'), sv('text', { class: 'ftitle', x: G.cluster.x + 16, y: 34 }, 'Cluster nodes'));
-  g.append(sv('text', { class: 'sub', id: 'fc-clients', x: 22, y: G.clients.y + G.clients.h - 12 }, ''), sv('text', { class: 'sub', id: 'fc-injector', x: 22, y: jy + 96 }, ''), sv('text', { class: 'sub', x: 22, y: jy + 54 }, '◆ scenarios'), sv('text', { class: 'sub', x: 22, y: jy + 76 }, '◆ buttons'));
+  g.append(sv('text', { class: 'sub', id: 'fc-clients', x: 22, y: G.clients.y + G.clients.h - 12 }, ''), sv('text', { class: 'sub', id: 'fc-injector', x: 22, y: jy + 110 }, ''), sv('text', { class: 'sub', x: 22, y: jy + 58 }, '◆ scenarios'), sv('text', { class: 'sub', x: 22, y: jy + 84 }, '◆ buttons'));
   const nOut = (tpBox ? 1 : 0) + lgs.filter(l => l.mode !== 'teleport').length + svcs.length; let oi = 0;  // lines leave the client frame spread along its edge, so they do not pile up
-  const out = () => ({ x: G.clients.x + G.clients.w, y: G.clients.y + 40 + (oi++) * ((G.clients.h - 90) / Math.max(nOut - 1, 1)) });
+  const out = () => ({ x: G.clients.x + G.clients.w, y: G.clients.y + 50 + (oi++) * ((G.clients.h - 110) / Math.max(nOut - 1, 1)) });
   const injOut = { x: G.injector.x + G.injector.w, y: G.injector.y + G.injector.h / 2 };
   const lanes = sv('g', {}), labels = sv('g', { class: 'elabs' }); g.append(lanes);
   const edge = (kind, bz, text, tt = 0.5, id) => {  // a labelled line: `kind` says the method (ssh, teleport, jump, api), the label says it in words
     lanes.append(sv('path', { class: 'lane ' + kind, d: dpath(bz), ...(id ? { id } : {}), ...(kind !== 'api' ? { 'marker-end': 'url(#arr)' } : {}) }));
-    const m = at(bz, tt), w = text.length * 7.2 + 14; labels.append(sv('rect', { class: 'elbg', x: m.x - w / 2, y: m.y - 11, width: w, height: 22, rx: 6 }), sv('text', { class: 'elab', x: m.x, y: m.y + 4.5, 'text-anchor': 'middle' }, text));
+    const m = at(bz, tt), w = text.length * 8.4 + 16; labels.append(sv('rect', { class: 'elbg', x: m.x - w / 2, y: m.y - 11, width: w, height: 22, rx: 6 }), sv('text', { class: 'elab', x: m.x, y: m.y + 4.5, 'text-anchor': 'middle' }, text));
     return bz;
   };
   const box = (k, label, sub, p, popKind, popId, cls = '') => {
@@ -974,7 +974,7 @@ function buildFlow() {
     bg.append(sv('rect', { class: 'blk ' + cls, id: 'fb-' + k, x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), sv('text', { class: 'sn', x: p.x + 12, y: p.y + 24 }, label), sv('text', { class: 'sub', id: 'fs-' + k, x: p.x + 12, y: p.y + 42 }, ''), sv('text', { class: 'sub', id: 'fc-' + k, x: p.x + 12, y: p.y + 58 }, sub)); return bg;
   };
   const svTip = k => { const l = svcList().find(x => x[0] === k); const up = flowSnap?.reachable[k]; return [l[1] + ' · ' + (up ? 'up' : flowSnap ? 'not reachable' : 'checking'), SVC_METHOD[k] + ' · click for address and command']; };
-  const place = acc.map((a, i) => [a, { x: BX, y: accTop + 46 + i * PITCH, w: BW, h: BH }]);
+  const place = acc.map((a, i) => [a, { x: BX, y: accTop + 56 + i * PITCH, w: BW, h: BH }]);
   const tpP = tpBox && place[0][1];
   if (tpBox) { const o = svcOut.teleport = out(); svcLane.teleport = edge('api', curve(o, { x: tpP.x, y: tpP.y + BH / 2 }), SVC_METHOD.teleport, 0.5, 'ln-teleport'); }
   for (const [l, p] of place) {
@@ -985,7 +985,7 @@ function buildFlow() {
   }
   const outs = svcs.map(() => out()).reverse();  // the rightmost box takes the topmost origin: no two service lines cross
   svcs.forEach(([k], i) => {  // services: a line from the clients runs down the gutter, along the channel above the band, and drops into the top of each box; faults get a dotted one
-    const p = { x: AX + 12 + i * SPITCH, y: svTop + 38, w: SW, h: BH }, o = svcOut[k] = outs[i], top = { x: p.x + p.w / 2, y: p.y }, vx = G.clients.x + G.clients.w + 14 + i * 8, hy = topEnd + 12 + (svcs.length - 1 - i) * 9;
+    const p = { x: AX + 18 + i * SPITCH, y: svTop + 46, w: SW, h: BH }, o = svcOut[k] = outs[i], top = { x: p.x + p.w / 2, y: p.y }, vx = G.clients.x + G.clients.w + 18 + i * 10, hy = topEnd + 18 + (svcs.length - 1 - i) * 11;
     svcLane[k] = edge('api', poly([o, { x: vx, y: o.y }, { x: vx, y: hy }, { x: top.x, y: hy }, top]), SVC_METHOD[k], 0.93, 'ln-' + k); svcPos[k] = p;
     lanes.append(sv('path', { class: 'lane inj', d: dpath(poly([injOut, { x: vx + 40, y: injOut.y }, { x: vx + 40, y: hy + 4 }, { x: top.x + 16, y: hy + 4 }, { x: top.x + 16, y: top.y }])), opacity: 0.3 }));
   });
@@ -1001,7 +1001,7 @@ function buildFlow() {
   svcs.forEach(([k, label, sub]) => g.append(box(k, label, sub, svcPos[k], 'svc', k)));
   CHIPS.forEach(([t], i) => {
     const cg = asButton(sv('g', {}), `${t}: how it connects`, () => openPop(cg, 'client', t), () => [t, CLIENT_INFO[t]]);
-    cg.append(sv('rect', { class: 'chipbg', x: 20, y: 46 + i * 50, width: 126, height: 42, rx: 9 }), sv('text', { class: 'ndt cl', x: 28, y: 72 + i * 50 }, t)); g.append(cg);
+    cg.append(sv('rect', { class: 'chipbg', x: 20, y: 56 + i * 60, width: 140, height: 46, rx: 9 }), sv('text', { class: 'ndt cl', x: 30, y: 85 + i * 60 }, t)); g.append(cg);
   });
   for (const item of layout) {
     if (item[0] === 'label') { g.append(sv('text', { class: 'ftitle', x: nx, y: item[2] + 4 }, item[1] === 'gpu' ? 'GPU nodes' : 'Compute nodes')); continue; }
@@ -1082,13 +1082,13 @@ function closeFlow() { if (flowEs) flowEs.close(); flowEs = null; flowCursor = 0
 $('flowpause').onclick = () => { flowPaused = !flowPaused; $('flowpause').setAttribute('aria-pressed', flowPaused); $('flowpause').textContent = flowPaused ? 'Resume animation' : 'Pause animation'; flowNote(); };
 
 // the node list beside the diagram folds away, so the diagram can have the whole width (remembered when storage allows)
-function setTree(open) {
+function setTree(open, remember = true) {
   $('nodeswrap').classList.toggle('treeoff', !open); $('treetoggle').setAttribute('aria-expanded', open); $('treetoggle').textContent = open ? 'Hide node list' : 'Show node list';
-  try { localStorage.setItem('workbench-tree', open ? 'open' : 'closed'); } catch (e) { /* not remembered */ }
+  if (remember) try { localStorage.setItem('workbench-tree', open ? 'open' : 'closed'); } catch (e) { /* not remembered */ }
 }
 $('treetoggle').onclick = () => setTree($('treetoggle').getAttribute('aria-expanded') !== 'true');
 let treePref = null; try { treePref = localStorage.getItem('workbench-tree'); } catch (e) { /* default */ }
-if (treePref === 'closed') setTree(false);
+if (treePref === 'closed' || (!treePref && innerWidth < 1500 && innerWidth > 1100)) setTree(false, false);  // a mid-size window: the diagram gets the width until you ask for the list (a wide one has room for both; a narrow one stacks them)
 // scenario chip in the status strip, so a running scenario is visible on every page
 let chipTimer;
 async function runChip() {

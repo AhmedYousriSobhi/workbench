@@ -21,7 +21,7 @@ this machine can use the page, so keep it private. The page listens on `127.0.0.
 |---|---|
 | **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **☰ Menu**, help and the theme switch. The strip is for status only. **☰ Menu** lists the actions in three groups, each with a one-line hint: *Run* (**▶ Scenarios**), *Configure* (**▦ Cluster architecture**: nodes, GPUs per node, optional parts and the plan; **✚ Health checks**) and *Share* (**⇩ Export**). Esc closes it. Pressing the level or memory chip opens the **Governor** panel |
 | **Tabs and Needs attention** | the tabs *Nodes* and *Connections*, and one slim bar next to them with every item that needs you, or "All clear" |
-| **Stage** (Nodes tab) | the **Infrastructure architecture** on the left and the **node list** on the right (its three groups, Compute, GPU and Services, stacked one under the other). **Hide node list** folds the list away and gives the diagram the whole width; the choice is remembered |
+| **Stage** (Nodes tab) | the **Infrastructure architecture** on the left and the **node list** on the right (its three groups, Compute, GPU and Services, stacked one under the other). **Hide node list** folds the list away and gives the diagram the whole width; the choice is remembered (windows between 1100 and 1500 px start with the list folded, press **Show node list**) |
 
 Three panels open on top of the page from the top strip or its **☰ Menu** and close with **✕ Close**, Esc or a click outside: **Scenarios**,
 **Plan** and **Governor**. A node is different: it opens *in place of the list* (below), so the Infrastructure architecture stays in view.
