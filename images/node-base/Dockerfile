@@ -26,7 +26,7 @@ FROM ubuntu:24.04
 ARG SLURM_VERSION
 ENV DEBIAN_FRONTEND=noninteractive PATH=/opt/slurm/bin:/opt/slurm/sbin:$PATH
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      munge libjson-c5 libhttp-parser2.9 libyaml-0-2 libjwt2 libmariadb3 libdbus-1-3 openssh-server bash-completion less \
+      munge libjson-c5 libhttp-parser2.9 libyaml-0-2 libjwt2 libmariadb3 libdbus-1-3 openssh-server python3 bash-completion less \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /run/sshd \
  && sed -i 's#^SHELL=.*#SHELL=/bin/bash#' /etc/default/useradd \
