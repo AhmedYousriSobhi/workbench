@@ -199,7 +199,7 @@ def test_help_wiki_needs_the_token_and_serves_pages_images_and_search(ui):
     assert b"http://" not in body.replace(b"http://127.0.0.1", b"")  # nothing third-party is loaded
     code, body = req(ui, "/help/search?q=governor")
     assert code == 200 and b"/help/manual/07-governor" in body
-    assert req(ui, "/help/files/manual/img/web-overview.png")[0] == 200
+    assert req(ui, "/help/files/manual/img/web-infrastructure.png")[0] == 200
     assert req(ui, "/help/manual/nope")[0] == 404 and req(ui, "/help/files/manual/README.md")[0] == 404
     assert req(ui, "/help/..%2F..%2FSPEC")[0] == 404 and req(ui, "/help/files/..%2F..%2Fsim.yaml")[0] == 404
 

@@ -21,6 +21,7 @@ IMAGE = "public.ecr.aws/gravitational/teleport-distroless"
 DEFAULT_VERSION = "18.11.8"   # a Community Edition tag; licence note in ADR 0020. Teleport supports a tsh one major behind it.
 DEFAULT_TTL = "12h"
 CLUSTER = "workbench"
+DIAG_PORT = 3434               # diagnostics (/healthz, /metrics), published on 127.0.0.1 only; the page reads it for status and traffic dots
 PROXY_PORT = 3080              # web UI, the API and (single-port mode, config v3) the SSH proxy
 ROLE = "workbench-user"
 CONF_DIR = Path("compose/generated/teleport")             # mounted read-only at /etc/teleport; data/ is writable
@@ -56,7 +57,7 @@ def config(sim: dict) -> str:
     multi-factor authentication"), and `second_factors` is its documented setting. Identity files need no code."""
     settings(sim)
     conf = {"version": "v3",
-            "teleport": {"nodename": "teleport", "data_dir": "/var/lib/teleport",
+            "teleport": {"nodename": "teleport", "data_dir": "/var/lib/teleport", "diag_addr": f"0.0.0.0:{DIAG_PORT}",
                          "log": {"output": "stderr", "severity": "INFO"}},
             "auth_service": {"enabled": True, "cluster_name": CLUSTER, "listen_addr": "0.0.0.0:3025",
                              "proxy_listener_mode": "multiplex",  # tells tsh to use the web port for SSH too (ping said tls_routing false without it)

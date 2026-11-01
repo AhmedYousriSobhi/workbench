@@ -41,6 +41,9 @@ installation, agentless OpenSSH, upgrade overview).
   companies under 100 employees and 10 million USD revenue; no resale or embedding). The repository only names the
   image tag and never redistributes the binary. Teleport's source stays AGPLv3.
 
+- **Diagnostics port:** `teleport.diag_addr` on 3434, published on 127.0.0.1 only (ADR 0022): `/healthz` is the page's
+  status probe and `/metrics` carries `teleport_connect_to_node_attempts_total`, the counter behind the diagram's dots.
+
 ## Consequences
 - The login node and nodes need `TrustedUserCAKeys` and a host certificate: both generated into
   `compose/generated/secrets` (gitignored) and mounted read-only; node-base `sshd_config` gains those two lines

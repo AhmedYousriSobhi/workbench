@@ -15,6 +15,7 @@ BMC, BCM, JIRA, EXPORTER = ("http://127.0.0.1:8000", "http://127.0.0.1:8081", "h
                             "http://127.0.0.1:9400")
 SERVICES = {"bmc-farm": f"{BMC}/healthz", "bcm-mock": f"{BCM}/healthz", "jira-mock": f"{JIRA}/healthz",
             "gpu-exporter": f"{EXPORTER}/metrics"}
+TELEPORT = "http://127.0.0.1:3434"  # Teleport's diagnostics endpoint (benchctl/teleport.py DIAG_PORT); a service only when the part is built
 HOT_C = 90.0
 # action -> (label, only for gpu nodes, steps as (target, do-template))
 ACTIONS = {
@@ -33,6 +34,22 @@ ACTIONS = {
 
 class ActionError(ValueError):
     pass
+
+
+def teleport_built() -> bool:
+    return saved_has_teleport()
+
+
+def saved_has_teleport() -> bool:
+    """Whether the workbench last built has the Teleport part (read from the saved selection: the page has no Docker, W-3).
+    A page for a cluster without it must not show a Teleport that cannot exist."""
+    from benchctl import workbench
+
+    try:
+        spec = workbench.current({})
+    except (workbench.SpecError, OSError, ValueError):
+        return False
+    return bool(spec and "teleport" in spec.parts)
 
 
 def http_json(url: str, body: dict | None = None, timeout: float = 2.0):
@@ -130,8 +147,9 @@ class Cluster:
 
         Sequential on purpose: localhost calls take a few ms, and a thread pool pushed the UI over its 50 MB budget.
         """
-        names = list(SERVICES)
-        up = [self._try(SERVICES[n]) is not None for n in names]
+        probes = {**SERVICES, **({"teleport": f"{TELEPORT}/healthz"} if teleport_built() else {})}
+        names = list(probes)
+        up = [self._try(probes[n]) is not None for n in names]
         rows = [self._node(*nk) for nk in self.nodes]
         devices = self._try(f"{BCM}/json", {"service": "cmdevice", "call": "getDevices"})
         bcm = {d["hostname"]: d["status"] for d in (devices or {}).get("result", [])} if isinstance(devices, dict) else {}

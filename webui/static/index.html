@@ -321,10 +321,10 @@
   <div id="tab-nodes" role="tabpanel" aria-labelledby="tb-nodes">
   <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/benchctl start</code>.</div>
     <div class="nodeswrap" id="nodeswrap">
-  <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 id="traffic-h" style="margin:0">Traffic</h2>
+  <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 id="traffic-h" style="margin:0">Infrastructure architecture</h2>
     <button class="btn small" id="flowpause" aria-pressed="false">Pause animation</button></div>
-    <svg id="flow" viewBox="0 0 420 270" role="img" aria-label="Traffic from clients and from injected faults to the mock services and the nodes of the cluster"></svg>
-    <p class="legend small dim"><span><b style="color:var(--accent)" aria-hidden="true">●</b> round dot: a request from a client (the app, Prometheus, curl)</span>
+    <svg id="flow" viewBox="0 0 420 270" role="img" aria-label="Infrastructure architecture: traffic from clients and from injected faults to the services (mocks, Teleport when on) and the nodes of the cluster"></svg>
+    <p class="legend small dim"><span><b style="color:var(--accent)" aria-hidden="true">●</b> round dot: a request from a client (the app, Prometheus, curl) or an SSH connection through Teleport</span>
       <span><b style="color:var(--warn)" aria-hidden="true">◆</b> diamond: a fault from a scenario or a button, travelling to the node it hits</span>
       <span>Node tiles: ✓ healthy · ▲ warning · ✗ fault · ⏻ off · ? unknown</span></p>
     <p id="flowstate" class="dim small" role="status" style="margin-bottom:0"></p></section>
@@ -333,7 +333,7 @@
   <section id="nodepane" hidden aria-labelledby="nodetitle">
     <div class="np-head"><button class="btn small" id="node-back">← All nodes</button><h2 id="nodetitle"></h2><span id="nodestate" class="pill"></span></div>
     <div class="np-card"><h3>Actions</h3>
-      <p class="small dim" style="margin:0 0 var(--sp2)">Break it, then watch the traffic diagram.</p><div class="actions" id="nodeacts-fault"></div>
+      <p class="small dim" style="margin:0 0 var(--sp2)">Break it, then watch the Infrastructure architecture.</p><div class="actions" id="nodeacts-fault"></div>
       <p class="small dim" style="margin:var(--sp3) 0 var(--sp2)">Recover</p><div class="actions" id="nodeacts-fix"></div>
       <p id="nodeactmsg" role="status" class="small"></p></div>
     <div class="np-card"><h3>Workload</h3>
@@ -800,7 +800,10 @@ async function nodeAction(name, action, label) {
 
 // ---- traffic (#74, #118): real request counters from the mocks plus injected faults, over SSE, drawn with the nodes in the cluster ----
 const SVGNS = 'http:' + '//www.w3.org/2000/svg';  // an XML namespace name, not a fetch; split so the no-external-URL test stays strict
-const SERVICES = [['bmc-farm', 'BMC farm', 'Redfish'], ['bcm-mock', 'BCM mock', 'CMDaemon'], ['jira-mock', 'Jira mock', 'tickets'], ['gpu-exporter', 'GPU exporter', 'DCGM metrics']];
+const BASE_SERVICES = [['bmc-farm', 'BMC farm', 'Redfish'], ['bcm-mock', 'BCM mock', 'CMDaemon'], ['jira-mock', 'Jira mock', 'tickets'], ['gpu-exporter', 'GPU exporter', 'DCGM metrics']];
+const TELEPORT_BOX = ['teleport', 'Teleport', 'SSH proxy'];
+function hasTeleport() { try { return !!(lastCluster && 'teleport' in JSON.parse(lastCluster).services); } catch (e) { return false; } }
+function svcList() { return hasTeleport() ? [...BASE_SERVICES, TELEPORT_BOX] : BASE_SERVICES; }  // Teleport only when the part is built: no phantom box
 const FW = 760, G = { clients: { x: 8, y: 8, w: 176, h: 208 }, injector: { x: 8, y: 232, w: 176, h: 108 }, cluster: { x: 268, y: 8, w: 484 } };
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 let flowEs = null, flowPaused = false, flowCursor = 0, dots = [], raf = 0, recent = [], flowSnap = null, flowLevel = 0, flowNodes = '', tiles = {}, svcPos = {};
@@ -809,7 +812,7 @@ const curve = (a, b) => { const dx = (b.x - a.x) * 0.5; return [a, { x: a.x + dx
 const at = ([p0, p1, p2, p3], t) => { const u = 1 - t, f = (c) => u ** 3 * p0[c] + 3 * u * u * t * p1[c] + 3 * u * t * t * p2[c] + t ** 3 * p3[c]; return { x: f('x'), y: f('y') }; };
 const dpath = ([p0, p1, p2, p3]) => `M${p0.x} ${p0.y} C${p1.x} ${p1.y} ${p2.x} ${p2.y} ${p3.x} ${p3.y}`;
 function nodeList() { try { return lastCluster ? JSON.parse(lastCluster).nodes : []; } catch (e) { return []; } }
-const SVC_CONN = { 'bmc-farm': 'bmc', 'bcm-mock': 'bcm', 'jira-mock': 'jira', 'gpu-exporter': 'gpu' };  // diagram box -> Connections row
+const SVC_CONN = { 'bmc-farm': 'bmc', 'bcm-mock': 'bcm', 'jira-mock': 'jira', 'gpu-exporter': 'gpu', 'teleport': 'teleport' };  // diagram box -> Connections row
 function asButton(el, name, act) {  // an SVG shape that behaves like a button: click, Enter or Space, announced by name
   el.setAttribute('class', 'hit'); el.setAttribute('role', 'button'); el.setAttribute('tabindex', '0'); el.setAttribute('aria-label', name);
   el.addEventListener('click', act); el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act(); } });
@@ -820,13 +823,14 @@ async function openConnection(id) {  // the Connections tab, with the row for th
   const row = id && document.querySelector(`#conn-rows tr[data-id="${id}"]`); if (!row) return;
   document.querySelectorAll('#conn-rows tr.focus').forEach(r => r.classList.remove('focus')); row.classList.add('focus'); row.scrollIntoView({ block: 'center' });
 }
+function flowSig(nodes) { return nodes.map(n => n.name).join(',') + (hasTeleport() ? '+teleport' : ''); }
 function buildFlow() {
   const g = $('flow'), nodes = nodeList(); g.innerHTML = ''; tiles = {}; svcPos = {};
-  flowNodes = nodes.map(n => n.name).join(',');
+  flowNodes = flowSig(nodes);
   const COLS = 4, TW = 52, TH = 38, GAP = 8, nx = 500, groups = ['compute', 'gpu'].map(k => [k, nodes.filter(n => n.kind === k)]).filter(([, r]) => r.length);
   let y = 50; const layout = [];
   for (const [k, rows] of groups) { layout.push(['label', k, y]); y += 20; rows.forEach((n, i) => layout.push(['node', n, nx + (i % COLS) * (TW + GAP), y + Math.floor(i / COLS) * (TH + GAP)])); y += Math.ceil(rows.length / COLS) * (TH + GAP) + 14; }
-  const H = Math.max(356, y + 12); g.setAttribute('viewBox', `0 0 ${FW} ${H}`); G.cluster.h = H - 16;
+  const H = Math.max(356, y + 12, 50 + svcList().length * 74); g.setAttribute('viewBox', `0 0 ${FW} ${H}`); G.cluster.h = H - 16;
   const fr = (b, rx) => sv('rect', { class: 'frame', x: b.x, y: b.y, width: b.w, height: b.h, rx });
   g.append(fr(G.clients, 12), fr(G.injector, 12), fr(G.cluster, 14));
   g.append(sv('text', { class: 'ftitle', x: 22, y: 34 }, 'Clients'), sv('text', { class: 'ftitle', x: 22, y: 258 }, 'Faults'), sv('text', { class: 'ftitle', x: 284, y: 34 }, 'Cluster'));
@@ -838,7 +842,7 @@ function buildFlow() {
   g.append(sv('text', { class: 'sub', x: 22, y: 286 }, '◆ scenarios'), sv('text', { class: 'sub', x: 22, y: 308 }, '◆ buttons'));
   const clientsOut = { x: G.clients.x + G.clients.w, y: G.clients.y + G.clients.h / 2 }, injOut = { x: G.injector.x + G.injector.w, y: G.injector.y + G.injector.h / 2 };
   const lanes = sv('g', {}); g.append(lanes);
-  SERVICES.forEach(([k, label, sub], i) => {
+  svcList().forEach(([k, label, sub], i) => {
     const p = { x: 284, y: 50 + i * 74, w: 196, h: 64 }; svcPos[k] = p;
     lanes.append(sv('path', { class: 'lane', id: 'ln-' + k, d: dpath(curve(clientsOut, { x: p.x, y: p.y + p.h / 2 })) }), sv('path', { class: 'lane inj', d: dpath(curve(injOut, { x: p.x, y: p.y + p.h / 2 + 8 })), opacity: 0.5 }));
     const bg = asButton(sv('g', {}), `${label}: open its address and credential`, () => openConnection(SVC_CONN[k]));
@@ -854,7 +858,7 @@ function buildFlow() {
   g.append(sv('g', { id: 'dots' })); paintBlocks();
 }
 function paintTiles() {  // node states change without a rebuild; a different node list does rebuild
-  const nodes = nodeList(), sig = nodes.map(n => n.name).join(',');
+  const nodes = nodeList(), sig = flowSig(nodes);
   if (sig !== flowNodes) { buildFlow(); return; }
   for (const n of nodes) { const t = tiles[n.name]; if (t) { t.g.firstChild.textContent = `${n.name}: ${n.label}`; t.g.setAttribute('aria-label', `${n.name}: ${n.label}. Open its panel`); t.g.children[1].setAttribute('class', 'nd ' + n.state); t.g.children[3].textContent = STATE_ICON[n.state] || '?'; } }
 }
@@ -863,13 +867,13 @@ function paintBlocks() {
   const rate = {}, cut = Date.now() - 60000;
   recent = recent.filter(r => r.t > cut); recent.forEach(r => { rate[r.to] = (rate[r.to] || 0) + r.n; });
   let sent = 0; const allOff = !Object.values(flowSnap.reachable).some(Boolean);
-  for (const [k] of SERVICES) {
+  for (const [k] of svcList()) {
     const up = flowSnap.reachable[k]; sent += flowSnap.totals[k] || 0;
     $('fb-' + k).setAttribute('class', 'blk ' + (up ? 'up' : allOff ? 'off' : 'down'));  // everything off = stack not running: stay calm, not red
-    $('fs-' + k).textContent = up ? '✓ up · ' + (rate[k] || 0) + ' req/min' : allOff ? '– offline' : '✗ not reachable';
+    $('fs-' + k).textContent = up ? '✓ up · ' + (rate[k] || 0) + (k === 'teleport' ? ' conn/min' : ' req/min') : allOff ? '– offline' : '✗ not reachable';
     $('ln-' + k).setAttribute('class', 'lane' + (rate[k] ? ' on' : ''));
-    const si = document.getElementById('si-' + (k === 'gpu-exporter' ? 'gpu-exporter' : k)); if (si) si.textContent = `${rate[k] || 0} req/min · ${(flowSnap.totals[k] || 0).toLocaleString()} seen`;
-    $('fc-' + k).textContent = (flowSnap.totals[k] || 0) ? (flowSnap.totals[k]).toLocaleString() + ((flowSnap.totals[k]) === 1 ? ' request seen' : ' requests seen') : SERVICES.find(x => x[0] === k)[2];
+    const si = document.getElementById('si-' + (k === 'gpu-exporter' ? 'gpu-exporter' : k)); if (si) si.textContent = `${rate[k] || 0} ${k === 'teleport' ? 'conn' : 'req'}/min · ${(flowSnap.totals[k] || 0).toLocaleString()} seen`;
+    $('fc-' + k).textContent = (flowSnap.totals[k] || 0) ? (flowSnap.totals[k]).toLocaleString() + ((flowSnap.totals[k]) === 1 ? ' request seen' : ' requests seen') : svcList().find(x => x[0] === k)[2];
   }
   $('fc-clients').textContent = sent.toLocaleString() + ' requests sent';
   $('fc-injector').textContent = (flowSnap.faults || 0) + (flowSnap.faults === 1 ? ' fault applied' : ' faults applied');
