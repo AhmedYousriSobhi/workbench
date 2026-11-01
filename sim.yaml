@@ -28,6 +28,10 @@ kubernetes:
   real_agents: 1
   kwok_nodes: 0
 
+teleport:               # the optional Teleport part (benchctl up --with teleport, ADR 0020)
+  version: 18.11.8      # Community Edition tag; the server must not be older than your tsh major
+  cert_ttl: 12h         # user certificate lifetime (max_session_ttl of the role)
+
 bmc:
   per_node: true   # one BMC address per node (ADR 0018); a workbench selection can limit which nodes (--bmc-nodes)
 

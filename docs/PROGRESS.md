@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**79% built** (35 done, 24 in review, 11 partial, 5 to do, 75 items).
+**80% built** (35 done, 25 in review, 11 partial, 4 to do, 75 items).
 
 ## Roadmap
 
@@ -12,7 +12,7 @@ flowchart LR
     p0["Baseline<br/>33%"]:::partial
     p1["Governor<br/>86%"]:::partial
     p2["Slurm<br/>100%"]:::done
-    p3["Mocks<br/>75%"]:::partial
+    p3["Mocks<br/>83%"]:::partial
     p4["People and chaos<br/>0%"]:::partial
     p5["Kubernetes<br/>50%"]:::partial
     p6["Fidelity VM<br/>0%"]:::partial
@@ -51,7 +51,7 @@ flowchart TB
         bcm["bcm-mock"]:::partial
         jira["jira-mock"]:::partial
         login["login node (sshd)"]:::done
-        tele["Teleport access"]:::todo
+        tele["Teleport access"]:::partial
         chaos["scenario engine (benchctl)"]:::partial
         users["user-sim / ticket-bot"]:::todo
         k8s["k3d + KWOK"]:::partial
@@ -142,7 +142,7 @@ _A real scheduler the app can read, built from sim.yaml._
 
 6/6 done
 
-### Mocks (75%)
+### Mocks (83%)
 
 _Fake BMC, BCM and Jira so the app's integrations can be exercised._
 
@@ -159,7 +159,7 @@ _Fake BMC, BCM and Jira so the app's integrations can be exercised._
 | Normal shell on nodes | 🔍 In review | Simulated users get bash (useradd default), bash-completion, Slurm tab completion from the Slurm source tree, history, a user@node prompt and Slurm on the login-shell PATH. Verified live: tests/real/test_login_real.py. Issue 81. | `images/node-base/Dockerfile` | - |
 | Client key helper | 🔍 In review | benchctl ssh-key install|remove: copies the login key to ~/.ssh/workbench_ed25519 (mode 600) for clients that only read keys under ~/.ssh; refuses to overwrite a foreign file. Issue 80. | `benchctl/stack.py`, `benchctl/cli.py` | - |
 | GPU metrics follow Slurm jobs | 🔍 In review | slurmctld serves the GPU indexes running jobs hold (internal :9401); the exporter polls it every 3 s and shows those GPUs busy, the rest idle (last answer kept 30 s if the feed is down). Verified live: tests/real/test_gpu_follows_slurm_real.py. Issue 83. | `components/gpu-exporter-farm/exporter.py`, `images/slurm-ctl/alloc_feed.py` | - |
-| Teleport access | ⬜ To do | Issue 39: the app reaches nodes through Teleport (auth + proxy, node access, outage and cert-expiry scenarios). Needs open decisions 6 first; will need sshd in node-base and a Phase 0 budget. | - | - |
+| Teleport access | 🔍 In review | Optional part (--with teleport): real Teleport auth+proxy container, agentless OpenSSH nodes trusting its CA, identity file per user, benchctl add invite for tsh login (ADR 0020). Unit-tested; live test tests/real/test_teleport_real.py. Not yet: outage and cert-expiry scenarios, Web UI entry, measured memory budget. Issue 39. | `benchctl/teleport.py`, `images/node-base/teleport-ssh` | - |
 
 5/12 done
 

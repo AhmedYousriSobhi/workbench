@@ -1,0 +1,15 @@
+#!/bin/sh
+# Teleport access (ADR 0020): when the host mounted a CA key and this node's host certificate, make sshd trust
+# certificates signed by the Teleport CA and present the host certificate. No mount (Teleport not selected): do nothing.
+# Called by the entrypoint (nodes) and login.sh (login node) before sshd starts.
+dir=/run/workbench/teleport
+name=$(hostname)
+[ -f "$dir/openssh_ca.pub" ] && [ -f "$dir/hosts/$name-cert.pub" ] || exit 0
+install -m 644 "$dir/openssh_ca.pub" /etc/ssh/teleport_openssh_ca.pub
+install -m 600 "$dir/hosts/$name" /etc/ssh/teleport_host_key
+install -m 644 "$dir/hosts/$name-cert.pub" /etc/ssh/teleport_host_key-cert.pub
+{
+  echo "TrustedUserCAKeys /etc/ssh/teleport_openssh_ca.pub"
+  echo "HostKey /etc/ssh/teleport_host_key"
+  echo "HostCertificate /etc/ssh/teleport_host_key-cert.pub"
+} >> /etc/ssh/sshd_config

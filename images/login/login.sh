@@ -15,4 +15,5 @@ echo "AllowUsers$names" >> /etc/ssh/sshd_config
 echo "cn*,gpu* $(cut -d' ' -f1,2 /run/workbench/ssh/ssh_host_node_ed25519_key.pub)" > /etc/ssh/ssh_known_hosts
 install -m 600 /run/workbench/ssh/ssh_host_ed25519_key /etc/ssh/ssh_host_ed25519_key
 install -m 644 /run/workbench/ssh/authorized_keys /etc/ssh/authorized_keys
+/usr/local/sbin/teleport-ssh
 exec /usr/sbin/sshd -D -e

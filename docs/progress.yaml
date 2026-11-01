@@ -88,7 +88,7 @@ phases:
       - {name: Normal shell on nodes, status: review, where: images/node-base/Dockerfile, how: "Simulated users get bash (useradd default), bash-completion, Slurm tab completion from the Slurm source tree, history, a user@node prompt and Slurm on the login-shell PATH. Verified live: tests/real/test_login_real.py. Issue 81."}
       - {name: Client key helper, status: review, where: "benchctl/stack.py, benchctl/cli.py", how: "benchctl ssh-key install|remove: copies the login key to ~/.ssh/workbench_ed25519 (mode 600) for clients that only read keys under ~/.ssh; refuses to overwrite a foreign file. Issue 80."}
       - {name: GPU metrics follow Slurm jobs, status: review, where: "components/gpu-exporter-farm/exporter.py, images/slurm-ctl/alloc_feed.py", how: "slurmctld serves the GPU indexes running jobs hold (internal :9401); the exporter polls it every 3 s and shows those GPUs busy, the rest idle (last answer kept 30 s if the feed is down). Verified live: tests/real/test_gpu_follows_slurm_real.py. Issue 83."}
-      - {name: Teleport access, status: todo, how: "Issue 39: the app reaches nodes through Teleport (auth + proxy, node access, outage and cert-expiry scenarios). Needs open decisions 6 first; will need sshd in node-base and a Phase 0 budget."}
+      - {name: Teleport access, status: review, where: "benchctl/teleport.py, images/node-base/teleport-ssh", how: "Optional part (--with teleport): real Teleport auth+proxy container, agentless OpenSSH nodes trusting its CA, identity file per user, benchctl add invite for tsh login (ADR 0020). Unit-tested; live test tests/real/test_teleport_real.py. Not yet: outage and cert-expiry scenarios, Web UI entry, measured memory budget. Issue 39."}
 
   - id: p4
     title: People and chaos
@@ -220,7 +220,7 @@ architecture:
     - {id: bcm, group: net, label: "bcm-mock", status: partial}
     - {id: jira, group: net, label: "jira-mock", status: partial}
     - {id: login, group: net, label: "login node (sshd)", status: done}
-    - {id: tele, group: net, label: "Teleport access", status: todo}
+    - {id: tele, group: net, label: "Teleport access", status: partial}
     - {id: chaos, group: net, label: "scenario engine (benchctl)", status: partial}
     - {id: users, group: net, label: "user-sim / ticket-bot", status: todo}
     - {id: k8s, group: net, label: "k3d + KWOK", status: partial}

@@ -1,10 +1,11 @@
 """Generate the Docker Compose file from sim.yaml and a profile (SPEC section 3)."""
+import os
 import sys
 from pathlib import Path
 
 import yaml
 
-from . import addressing, nhc, slurmconf
+from . import addressing, nhc, slurmconf, teleport
 from .nodes import node_names
 
 OBSERVABILITY = "../observability.yml"  # static; hosts prometheus, grafana, gpu-exporter-farm
@@ -21,6 +22,8 @@ CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {
         "jira-mock": ("workbench/jira-mock:dev", 100, 2),
     },
     "access": {"login": ("workbench/login:dev", 40, 2)},
+    # the tag is replaced from sim.yaml teleport.version (benchctl/teleport.py); the limit is a planning estimate until measured
+    "teleport": {"teleport": (f"{teleport.IMAGE}:{teleport.DEFAULT_VERSION}", 256, 2)},
     "scenarios": {"scenario-engine": ("workbench/scenario-engine:dev", 60, 5)},
     "load": {"user-sim": ("workbench/user-sim:dev", 60, 5), "ticket-bot": ("workbench/ticket-bot:dev", 40, 5)},
 }
@@ -84,6 +87,16 @@ def generate(sim: dict, profile: dict) -> dict:
         services["login"]["volumes"].append("./secrets/ssh:/run/workbench/ssh:ro")
         services["login"].update({"ports": [f"127.0.0.1:{SSH_PORT}:22"],
                                   "depends_on": ["slurmctld"] if "slurmctld" in services else []})
+    if "teleport" in services:  # auth + proxy (ADR 0020): only the proxy port is published, localhost only
+        services["teleport"].update({
+            "image": teleport.image(sim), "command": ["start", "-c", "/etc/teleport/teleport.yaml"],
+            "user": f"{os.getuid()}:{os.getgid()}",  # not root; the directories are made by `benchctl up` as this user
+            "volumes": ["./teleport:/etc/teleport:ro", "./teleport/data:/var/lib/teleport",
+                        f"./secrets/teleport:{teleport.CONTAINER_SECRETS}"],
+            "ports": [f"127.0.0.1:{teleport.PROXY_PORT}:{teleport.PROXY_PORT}"]})
+        for svc in services.values():  # sshd trusts the Teleport CA and presents its host certificate (nodes and login)
+            if svc["labels"].get("workbench.node") or svc is services.get("login"):
+                svc["volumes"].append(f"./secrets/teleport:{teleport.CONTAINER_SECRETS}:ro")
     if "bmc-farm" in services:  # Redfish endpoints for every node in sim.yaml, localhost only
         # :8443 is TLS at the standard /redfish/v1, the node chosen by Host: clients reach it as bmc-<node>
         services["bmc-farm"].update({
