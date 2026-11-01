@@ -36,6 +36,14 @@ def scenario_rows() -> list[dict]:
             for s in scenario.list_all()]
 
 
+def check_rows() -> list[dict]:
+    from . import nhc
+
+    return [{"position": i, "name": c.name, "state": "on" if c.enabled else "off",
+             "params": " ".join(f"{k}={v}" for k, v in c.params.items()) or "-", "description": c.description}
+            for i, c in enumerate(nhc.load(), 1)]
+
+
 class QueryError(ValueError):
     pass
 

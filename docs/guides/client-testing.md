@@ -130,7 +130,7 @@ the exporter farm and **drains the node** with a reason starting `NHC:` when:
 | InfiniBand port down (one HCA per GPU, one port on a CPU node) | **InfiniBand port down** | `NHC: IB port down: mlx5_0` |
 | NIC link flapping (`node_network_carrier_changes_total` keeps rising) | **NIC flapping** | `NHC: NIC eth0 flapping (4 link changes)` |
 
-The periodic run drains within about 30 s and resumes a drain it made itself once the fault is cleared (never one an operator
+The list of checks is not fixed: add your own, switch one off or reorder them from the command line, by editing files or in the page's **Health checks** sheet, with every change validated and live within 30 s ([NHC checks](nhc-checks.md)). The periodic run drains within about 30 s and resumes a drain it made itself once the fault is cleared (never one an operator
 set). The **prolog** fails an unhealthy node, so Slurm requeues the job instead of running it there; the **epilog** drains a node
 that a job left unhealthy, so the next job is not scheduled on it. A node that publishes nothing (powered off) and an unreachable
 exporter are not drained. A cluster built before this needs `benchctl up` once: it rebuilds the node image (the prolog and epilog

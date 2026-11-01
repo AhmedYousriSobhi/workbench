@@ -50,6 +50,8 @@ RUN echo /opt/slurm/lib >/etc/ld.so.conf.d/slurm.conf && ldconfig \
  && for f in /opt/slurm/bin/*; do ln -sf "$f" /usr/local/bin/; done
 COPY sshd_config /etc/ssh/sshd_config
 COPY --chmod=755 nhc nhc-prolog nhc-epilog /usr/local/sbin/
+# The checks the runner uses when the host mounts none (/etc/workbench/nhc, from compose/generated/nhc, wins).
+COPY nhc.d/checks.conf nhc.d/*.sh /usr/local/lib/nhc.d/
 COPY entrypoint.sh /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["slurmd", "-D"]

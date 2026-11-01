@@ -78,6 +78,8 @@ See [docs/architecture/08-repository-and-migration.md](docs/architecture/08-repo
 - `./scripts/benchctl <cmd>` runs benchctl with `.venv` without activating it (the venv is per shell). Same as `python -m benchctl.cli`.
 - `./scripts/benchctl up --profile X | down | scale N`: pre-flight, ordered start of the compose project (`benchctl/stack.py`), skips components without a Dockerfile, creates the governor's Grafana token once in `compose/generated/secrets/grafana_token`; `down` touches only the `workbench` project.
 
+- **NHC checks** (ADR 0019, SPEC C-15/W-16): the node health check is a runner (`images/node-base/nhc`) over files in `images/node-base/nhc.d/` (`checks.conf` + one `NAME.sh` per check + `templates/`). All changes go through `benchctl/nhc.py` (validated on a copy, written only when valid, then synced to `compose/generated/nhc`, which nodes mount read-only so a change is live within 30 s): `benchctl get|add|set|remove|validate|reload check(s)`, hand edits then `reload checks`, and the page's Health checks sheet (`/api/nhc`, templates only, never a script). Never edit `compose/generated/nhc`; add a new builtin as a template file, not in the runner. See [docs/guides/nhc-checks.md](docs/guides/nhc-checks.md).
+
 - `bcm-mock` (127.0.0.1:8081, CMDaemon-style `POST /json`) and `jira-mock` (127.0.0.1:8080, REST v2 subset, `POST /sim/failure`) are stdlib-only; surfaces and gaps in ADR 0005.
 
 - `./scripts/benchctl scenario list | run NAME [--speed N] [--dry-run]`: scenario engine (`benchctl/scenario.py`, ADR 0006) over `scenarios/*.yaml`; add a target in `execute()` and in `ENDPOINTS`/`validate`. gpu-exporter-farm publishes 127.0.0.1:9400 for injection.

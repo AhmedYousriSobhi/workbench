@@ -54,6 +54,7 @@ Without `benchctl start` the governor is not started, so nothing protects the ho
 - The **web page** plays the same scenarios, but has no Docker access, so it **skips** Slurm and SSH steps. To
   play those, use the terminal.
 - A **fault action** in a node's panel on the web page (power off, fan failure, XID) is one step applied right now.
+- To add, change or remove a node health check (what drains a node), follow [NHC checks](../guides/nhc-checks.md).
 - To test a client's SSH handling, follow [SSH connection testing](../guides/ssh-connection-testing.md).
 
 ## Checking your own changes
