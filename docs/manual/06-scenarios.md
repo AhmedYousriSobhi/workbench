@@ -8,10 +8,11 @@ A scenario is a named, repeatable timeline of faults. They live in `scenarios/*.
 ./scripts/benchctl scenario list                          # name, step count, description
 ./scripts/benchctl scenario run node-down --dry-run       # validate and print the timeline, change nothing
 ./scripts/benchctl scenario run node-down --speed 10      # play it ten times faster
+./scripts/benchctl scenario run slurmd-restart-mid-job --trace   # after each step: job states and the new Slurm log lines
 ```
 
 The command exits 1 when a step errors or an `expect` line does not hold. Steps for parts that are not built (Kubernetes,
-ticket-bot) are reported as **skipped**, not failed. From the web page ([chapter 5](05-web-page.md)) the `slurm` steps are skipped.
+ticket-bot) are reported as **skipped**, not failed. From the web page ([chapter 5](05-web-page.md)) the `slurm` steps go through the governor; tick **Slurm trace** there for the same trace (see the [resilience guide](../guides/slurm-resilience.md)).
 
 ## The scenarios shipped
 
@@ -33,6 +34,10 @@ ticket-bot) are reported as **skipped**, not failed. From the web page ([chapter
 | `ssh-session-limit` | one session per connection for 60 s: a client opening several channels is refused the extra ones |
 | `ssh-key-refused` | the login node rejects the client's key for 60 s: `Permission denied (publickey)` |
 | `ssh-node-sshd-down` | sshd on `cn001` stops for 60 s: the hop `ssh cn001` is refused, the login node and other nodes work |
+| `slurmd-restart-mid-job` | `slurmd` restarts under a running job; does `slurmstepd` survive ([guide](../guides/slurm-resilience.md); use `--trace`) |
+| `slurmd-disabled-mid-job` | `slurmd` stays down 45 s under a running job, then returns |
+| `slurmctld-restart-mid-job` | `slurmctld` restarts with a real and a simulated GPU job running |
+| `drain-mid-job` | a node is drained under a running job; the job finishes, the node ends drained |
 | `k8s-node-notready` | a KWOK node flips to NotReady (**Kubernetes not built**: skipped) |
 | `pod-crashloop` | a pod crash-loops and another is OOMKilled (**Kubernetes not built**: skipped) |
 
@@ -53,7 +58,7 @@ expect:
 - `at`: when the step runs, as `10s`, `2m`. `--speed` and `time_dilation` in `sim.yaml` compress it.
 - `target`: `bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira`, `slurm`, `ssh` (built); `k8s`, `ticket-bot` (not built, skipped).
 - `do`: the body for that target. `nodes: [...]` fans out one request per node and must name nodes from `sim.yaml`. `slurm`
-  takes `drain` and `resume` (node lists); `jira` takes `failure: {mode: "429"|"503"|null, count: N}`; `bmc-farm` takes `power`,
+  takes `drain` and `resume` (node lists) and the job and daemon steps of the [resilience guide](../guides/slurm-resilience.md) (`submit: {node, gpus, duration}`, `cancel`, `slurmd_restart`, `slurmd_stop`, `slurmd_start`, `slurmctld_restart`); `jira` takes `failure: {mode: "429"|"503"|null, count: N}`; `bmc-farm` takes `power`,
   `temp`, `fan_fail`, `ramp: {to, over}`, `clear`; `ssh` (the login node) takes `state: down|hung|up` (stop, freeze, restore),
   `rotate_host_key: true`, `max_sessions: N` (OpenSSH MaxSessions) and `reset: true` (original key, default limit, node up).
 - `expect`: assertions checked after the steps. Anything that needs the app under test (such as `jira.issue_created`) only

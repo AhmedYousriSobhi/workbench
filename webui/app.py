@@ -26,7 +26,7 @@ from starlette.responses import (
 )
 from starlette.routing import Route
 
-from benchctl import checks, nhc, scenario
+from benchctl import checks, nhc, scenario, slurmtrace
 
 from .cluster import ActionError, Cluster
 from .flow import PAUSE_LEVEL, Flow
@@ -51,13 +51,13 @@ def governor_status(socket: str) -> dict:
 class Runs:
     """At most one scenario at a time; state is what the page polls."""
 
-    def __init__(self, root: Path, sim: dict, flow: Flow | None = None, slurm=None):
-        self.root, self.sim, self.flow, self.slurm = root, sim, flow, slurm
+    def __init__(self, root: Path, sim: dict, flow: Flow | None = None, slurm=None, daemon=None, trace=None):
+        self.root, self.sim, self.flow, self.slurm, self.daemon, self.trace = root, sim, flow, slurm, daemon, trace
         self.lock = threading.Lock()
         self.stop_flag = threading.Event()
         self.state: dict = {"running": False}
 
-    def start(self, name: str, speed: float) -> dict:
+    def start(self, name: str, speed: float, trace: bool = False) -> dict:
         try:
             sc = scenario.load(name, self.root)
         except scenario.ScenarioError as e:
@@ -65,6 +65,8 @@ class Runs:
         problems = scenario.validate(sc, self.sim)
         if problems:
             raise HTTPException(422, "; ".join(problems))
+        if trace and not self.trace:
+            raise HTTPException(409, "the trace is read by the governor, which is not reachable or has no --workdir")
         with self.lock:
             if self.state.get("running"):
                 raise HTTPException(409, f"{self.state['name']} is already running")
@@ -72,11 +74,11 @@ class Runs:
             self.stop_flag.clear()
             self.state = {"running": True, "name": name, "speed": speed, "stopped": False, "ok": None,
                           "steps": [{"at": s.at, "target": s.target, "do": s.do, "status": "pending", "detail": ""}
-                                    for s in steps], "expects": []}
-            threading.Thread(target=self._play, args=(sc, steps, speed), daemon=True).start()
+                                    for s in steps], "expects": [], "trace": [] if trace else None}
+            threading.Thread(target=self._play, args=(sc, steps, speed, trace), daemon=True).start()
             return {"started": name}
 
-    def _play(self, sc: dict, steps: list, speed: float) -> None:
+    def _play(self, sc: dict, steps: list, speed: float, trace: bool = False) -> None:
         done = [0]
 
         def on_step(step, outcome) -> None:
@@ -89,10 +91,13 @@ class Runs:
         def on_expect(outcome) -> None:
             self.state["expects"].append({"label": outcome.label, "status": outcome.status, "detail": outcome.detail})
 
+        tracer = slurmtrace.Deferred(slurmtrace.nodes_of(sc), self.trace, self.state["trace"].append) if trace else None
         try:
             rep = scenario.run(sc, speed=speed, dilation=float(self.sim.get("time_dilation", 1.0)), say=lambda m: None,
                                host=False, should_stop=self.stop_flag.is_set, on_step=on_step, on_expect=on_expect,
-                               slurm=self.slurm)
+                               slurm=self.slurm, daemon=self.daemon, on_before=tracer.before_step if tracer else lambda step: None)
+            if tracer:
+                tracer.finish()
             self.state.update(ok=rep.ok, stopped=rep.stopped)
         finally:
             self.state["running"] = False
@@ -107,7 +112,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
                fetch=None, poster=None, nhc_src: Path = nhc.SRC, nhc_out: Path = nhc.OUT) -> Starlette:
     sim = yaml.safe_load(sim_yaml.read_text())
     flow = Flow()
-    runs = Runs(scenarios, sim, flow, slurm=lambda n, s, r: _governed(slurm_state(n, s, r)))
+    runs = Runs(scenarios, sim, flow, slurm=lambda n, s, r: _governed(slurm_state(n, s, r)),
+                daemon=lambda do: daemon_step(do), trace=lambda nodes, since: slurm_trace(nodes, since))
     cluster = Cluster(sim, **{k: v for k, v in (("fetch", fetch), ("poster", poster)) if v})  # test seams: a host stack must not answer or be hit
     wiki = Wiki(docs)
 
@@ -335,6 +341,33 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             return {"target": "slurm", "status": "skipped", "detail": "the governor is in dry-run mode or has no --workdir"}
         return {"target": "slurm", "status": "ok", "detail": f"asked the governor to set {node} {state}"}
 
+    def daemon_step(do: dict) -> tuple[bool, str]:
+        """The job and daemon steps of a scenario, asked of the governor (the page has no Docker, W-3); (done, why not)."""
+        reqs = [{"cmd": "slurm-step", "name": f"slurmd-{a}", "node": n} for a in ("stop", "restart", "start") for n in do.get(f"slurmd_{a}", [])]
+        reqs += [{"cmd": "slurm-step", "name": "slurmctld-restart"}] if do.get("slurmctld_restart") else []
+        if isinstance(do.get("submit"), dict):
+            sub = do["submit"]
+            reqs.append({"cmd": "submit-job", "node": sub["node"], "gpus": int(sub.get("gpus", 0)), "duration": int(sub.get("duration", 600)),
+                         **({"user": sub["user"]} if sub.get("user") else {})})
+        reqs += [{"cmd": "slurm-step", "name": "cancel-jobs"}] if do.get("cancel") else []
+        for r in reqs:
+            try:
+                res = checks.governor_request(r, socket)
+            except (OSError, ValueError):
+                return False, "the governor is not reachable"
+            if not res.get("ok"):
+                return False, res.get("error", "refused")
+            if res.get("dry_run"):
+                return False, "the governor is in dry-run mode or has no --workdir"
+        return True, "asked the governor"
+
+    def slurm_trace(nodes: list[str], since: float) -> dict | None:
+        try:
+            res = checks.governor_request({"cmd": "slurm-trace", "nodes": nodes, "since": since}, socket)
+        except (OSError, ValueError):
+            return None
+        return res.get("trace") if res.get("ok") else None
+
     async def node_workload(request: Request):
         """Submit a job on this node: the governor runs `benchctl submit` (the page has no Docker, W-3)."""
         q, node = request.query_params, request.path_params["node"]
@@ -385,7 +418,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             speed = 0.0
         if not 0.1 <= speed <= 1000:
             raise HTTPException(422, "speed must be between 0.1 and 1000")
-        return JSONResponse(runs.start(request.path_params["name"], speed))
+        return JSONResponse(runs.start(request.path_params["name"], speed, request.query_params.get("trace") == "1"))
 
     async def help_home(request: Request):
         return RedirectResponse("/help/manual/README", status_code=303)

@@ -9,6 +9,8 @@ Everything here is derived from sim.yaml and the addressing plan; `bootstrap` ru
 before the nodes start, because each node's sshd reads its host certificate when it starts."""
 import json
 import re
+import shutil
+import sqlite3
 import ssl
 import time
 import urllib.request
@@ -114,6 +116,58 @@ def user_resource(name: str) -> str:
     return yaml.safe_dump({"kind": "user", "version": "v2", "metadata": {"name": name}, "spec": {"roles": [ROLE]}}, sort_keys=False)
 
 
+STATE_DIR = "state"  # under the secrets folder: a copy of Teleport's own state that survives an emptied data directory
+STATE_FILES = ("host_uuid", "webproxy_cert.pem", "webproxy_key.pem")
+
+
+def snapshot(conf: Path = CONF_DIR, secrets: Path = SECRETS_DIR) -> bool:
+    """Copy the cluster's identity (CA, users, passwords, one-time codes live in the sqlite backend) to the secrets folder, so
+    a rebuilt workbench can be the same cluster. The sqlite backup API reads a database Teleport has open. False: nothing to copy."""
+    db = conf / "data" / "backend" / "sqlite.db"
+    version = conf / "cluster-version"
+    if not db.is_file() or not version.is_file():
+        return False
+    dest = secrets / STATE_DIR
+    dest.mkdir(parents=True, exist_ok=True, mode=0o700)
+    src, out = sqlite3.connect(f"file:{db}?mode=ro", uri=True), sqlite3.connect(dest / "sqlite.db.tmp")
+    try:
+        src.backup(out)
+    finally:
+        src.close()
+        out.close()
+    (dest / "sqlite.db.tmp").replace(dest / "sqlite.db")
+    for name in STATE_FILES:
+        if (conf / "data" / name).is_file():
+            shutil.copyfile(conf / "data" / name, dest / name)
+    (dest / "version").write_text(version.read_text())
+    return True
+
+
+def restore(conf: Path, secrets: Path, version: str) -> bool:
+    """Put a snapshot of the same Teleport version into an empty data directory. False: none, or another version (a new cluster)."""
+    src = secrets / STATE_DIR
+    if not (src / "sqlite.db").is_file() or not (src / "version").is_file() or (src / "version").read_text().strip() != version:
+        return False
+    data = conf / "data"
+    (data / "backend").mkdir(parents=True, exist_ok=True, mode=0o700)
+    shutil.copyfile(src / "sqlite.db", data / "backend" / "sqlite.db")
+    (data / "backend" / "sqlite.db").chmod(0o600)
+    for name in STATE_FILES:
+        if (src / name).is_file():
+            shutil.copyfile(src / name, data / name)
+            (data / name).chmod(0o600)
+    return True
+
+
+def reset(conf: Path = CONF_DIR, secrets: Path = SECRETS_DIR) -> list[Path]:
+    """Forget the cluster: delete its data and the saved identity, so the next `up` makes a new cluster (new CA, no users'
+    passwords). Returns what was removed. The caller makes sure Teleport is stopped: `down` saves the identity again."""
+    gone = [p for p in (conf / "data", secrets / STATE_DIR) if p.exists()]
+    for p in gone:
+        shutil.rmtree(p)
+    return gone
+
+
 def prepare(sim: dict, ips: dict, conf: Path = CONF_DIR, secrets: Path = SECRETS_DIR) -> None:
     """Write the config and resource files and make the directories the container writes to (owned by this user:
     Docker would create them as root, and the container runs as the invoking user)."""
@@ -121,6 +175,10 @@ def prepare(sim: dict, ips: dict, conf: Path = CONF_DIR, secrets: Path = SECRETS
     fresh = not data.is_dir() or not any(data.iterdir())  # a new cluster has a new CA: what the old one signed is useless
     data.mkdir(parents=True, exist_ok=True)
     (secrets / "hosts").mkdir(parents=True, exist_ok=True, mode=0o700)
+    version = settings(sim)["version"]
+    if fresh and restore(conf, secrets, version):  # the same cluster again: same CA, so certificates, sessions and passwords still hold
+        fresh = False
+    (conf / "cluster-version").write_text(version + "\n")
     if fresh:
         for old in (*(secrets / "hosts").iterdir(), secrets / "openssh_ca.pub"):
             old.unlink(missing_ok=True)

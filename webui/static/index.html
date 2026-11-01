@@ -381,13 +381,14 @@
     <div class="sheet-h"><div><h2 id="scn-h">Scenarios</h2><p class="dim small">Timed incidents against the running stack.</p></div>
       <button class="btn small" id="scn-close" aria-label="Close the scenarios">✕ Close</button></div>
     <div class="sheet-b">
-    <p class="dim small" style="margin-top:0">Slurm steps need <code>./scripts/benchctl scenario run NAME</code>.</p>
-    <div class="scnbar"><input type="search" id="scnq" placeholder="Filter scenarios" aria-label="Filter scenarios"><select id="speed" aria-label="Playback speed for every scenario"><option value="1">1× real time</option><option value="5">5×</option><option value="20">20×</option></select></div>
+    <p class="dim small" style="margin-top:0">Slurm steps go through the governor (the page has no Docker) and need it started with <code>--workdir</code>; otherwise use <code>./scripts/benchctl scenario run NAME --trace</code>.</p>
+    <div class="scnbar"><input type="search" id="scnq" placeholder="Filter scenarios" aria-label="Filter scenarios"><select id="speed" aria-label="Playback speed for every scenario"><option value="1">1× real time</option><option value="5">5×</option><option value="20">20×</option></select>
+      <label class="small" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="trace"> Slurm trace</label></div>
     <ul class="scns" id="list"><li class="skel">Loading…</li></ul>
   <div class="runbox" id="runpanel" hidden aria-live="polite"><h2 class="rh" id="runtitle">Run</h2>
     <div class="row"><div id="runresult"></div><div id="runctl"></div></div>
     <div class="progress" aria-hidden="true"><div id="bar" style="width:0"></div></div>
-    <div id="runnote"></div><ul class="steps" id="timeline"></ul><div id="expects"></div></div>
+    <div id="runnote"></div><ul class="steps" id="timeline"></ul><div id="expects"></div><div id="trace-out"></div></div>
     </div>
   </dialog>
   <dialog id="govdlg" class="sheet" aria-labelledby="gov-h">
@@ -1121,6 +1122,10 @@ function describe(s) {
   const d = s.do, n = (d.nodes || []).join(', ');
   if (d.drain) return `Drain ${d.drain.join(', ')} in Slurm (${d.reason || 'scenario'})`;
   if (d.resume) return `Resume ${d.resume.join(', ')} in Slurm`;
+  if (d.submit) return `Submit a ${d.submit.duration || 600} s job on ${d.submit.node}${d.submit.gpus ? ` holding ${d.submit.gpus} GPUs` : ''}`;
+  if (d.cancel) return 'Cancel the simulated users\' jobs';
+  for (const k of ['slurmd_restart', 'slurmd_stop', 'slurmd_start']) if (d[k]) return `${{ slurmd_restart: 'Restart', slurmd_stop: 'Stop', slurmd_start: 'Start' }[k]} slurmd on ${d[k].join(', ')}`;
+  if (d.slurmctld_restart) return 'Restart slurmctld';
   if (d.failure) return d.failure.mode ? `Make Jira answer ${d.failure.mode} for the next ${d.failure.count || 1} calls` : 'Jira back to normal';
   if (d.clear) return `Clear injected faults on ${n}`;
   if (d.power) return `Power ${d.power} ${n}`;
@@ -1151,7 +1156,7 @@ function filterScenarios() {
 }
 $('scnq').oninput = filterScenarios;
 async function play(name) {
-  const r = await fetch(`/api/scenarios/${name}/run?speed=${$('speed').value}`, { method: 'POST', headers: H });
+  const r = await fetch(`/api/scenarios/${name}/run?speed=${$('speed').value}${$('trace').checked ? '&trace=1' : ''}`, { method: 'POST', headers: H });
   if (!r.ok) { $('runpanel').hidden = false; $('runnote').innerHTML = `<div class="notice">${esc((await r.json()).detail)}</div>`; return; }
   poll();
 }
@@ -1177,6 +1182,10 @@ async function poll() {
      <div>${x.at.toFixed(0)} s · ${esc(describe(x))}${x.detail ? `<div class="small dim">${esc(plain(x))}</div>` : ''}</div></li>`).join('');
   $('expects').innerHTML = s.expects.length ? '<h2 class="rh" style="margin-top:14px">Expectations</h2>' + s.expects.map(x =>
     `<p class="st st-${x.status}" style="font-weight:500"><span aria-hidden="true">${ICON[x.status]}</span> ${x.status}: ${esc(x.label)} <span class="dim">${esc(x.detail)}</span></p>`).join('') : '';
+  $('trace-out').innerHTML = s.trace ? '<h2 class="rh" style="margin-top:14px">Slurm trace</h2>' + (s.trace.map(e =>
+    `<details class="small"><summary>${esc(e.label)}</summary><pre style="white-space:pre-wrap;overflow-x:auto">${esc([e.before && 'before: ' + e.before, ...e.logs.map(r => `log ${r.source} ${r.where}: ${r.line}`),
+      ...Object.entries(e.more).map(([k, n]) => `... ${n} more lines in docker logs ${k}`), 'after:  ' + e.after].filter(Boolean).join('\n'))}</pre></details>`).join('')
+    || `<p class="dim small">${s.running ? 'The first entry appears when the next step starts.' : 'Nothing to show.'}</p>`) : '';
   if (s.running) pollTimer = setTimeout(poll, 1000);
 }
 // tabs: the live traffic feed runs only while its tab and the page are visible

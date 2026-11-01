@@ -10,7 +10,7 @@ from pathlib import Path
 
 log = logging.getLogger("governor.control")
 
-ALLOWED = {"status", "scale", "freeze", "thaw", "stop", "start", "set-profile", "admit", "apply-plan", "node-state", "submit-job"}
+ALLOWED = {"status", "scale", "freeze", "thaw", "stop", "start", "set-profile", "admit", "apply-plan", "node-state", "submit-job", "slurm-step", "slurm-trace"}
 MAX_REQUEST = 4096
 TARGETED = {"freeze", "thaw", "stop", "start"}  # require a known group name
 
@@ -18,6 +18,8 @@ Handler = Callable[[str, dict], dict]
 
 
 NODE_RE = re.compile(r"[a-z]{2,8}[0-9]{3}")  # sim.yaml node names: cn001, gpu002
+SLURM_STEPS = ("slurmd-restart", "slurmd-stop", "slurmd-start", "slurmctld-restart", "cancel-jobs")  # resilience scenarios (#220)
+NODE_STEPS = ("slurmd-restart", "slurmd-stop", "slurmd-start")
 REASON_RE = re.compile(r"[A-Za-z0-9 .,:_/()+-]{0,60}")  # a drain reason: short, no shell characters
 LOGIN_MODES = {"ssh", "teleport", "both"}  # mirrors benchctl.logins.MODES
 PLAN_PARTS = {"jira", "bmc", "bcm", "scenarios", "accounting", "load", "teleport"}  # mirrors benchctl.workbench.PARTS
@@ -72,6 +74,13 @@ def dispatch(line: bytes, handle: Handler, groups: Callable[[], set[str]]) -> di
                                                 for k, lo, hi in (("gpus", 0, 8), ("duration", 10, 3600)))
                                         and re.fullmatch(r"[a-z][a-z0-9_-]{0,15}", req.get("user") or "x")):
             return {"ok": False, "error": "submit-job needs node:NAME, gpus:int 0..8, duration:int 10..3600 and an optional user"}
+        if cmd == "slurm-step" and not (req.get("name") in SLURM_STEPS
+                                        and (req["name"] not in NODE_STEPS or (isinstance(req.get("node"), str) and NODE_RE.fullmatch(req["node"])))):
+            return {"ok": False, "error": f"slurm-step needs name: {'|'.join(SLURM_STEPS)} (and node:NAME for slurmd-*)"}
+        if cmd == "slurm-trace" and not (isinstance(req.get("nodes"), list) and len(req["nodes"]) <= 8
+                                         and all(isinstance(n, str) and NODE_RE.fullmatch(n) for n in req["nodes"])
+                                         and isinstance(req.get("since"), (int, float)) and not isinstance(req.get("since"), bool)):
+            return {"ok": False, "error": "slurm-trace needs nodes:[NAME, ...] (at most 8) and since:number (unix seconds)"}
         if cmd == "admit" and not (isinstance(req.get("budget_mb"), int) and req["budget_mb"] >= 0):
             return {"ok": False, "error": "admit needs budget_mb:int>=0"}
         return handle(cmd, req)

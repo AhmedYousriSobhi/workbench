@@ -214,6 +214,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
             return False
         if label == "teleport" and not teleport.bootstrap(sim, ips, runner, dc, say):  # before the nodes read their certificates
             return False
+        if label == "teleport":
+            teleport.snapshot()  # the identity survives a rebuild (an emptied data directory restores it)
     if (changed or acct_added or (conf_changed and "slurmctld" in before)) and "slurmctld" in todo:  # slurm.conf changed under a running controller
         say("restarting slurmctld to pick up the new " + ("accounting setup" if acct_added and not changed else "node list" if changed else "slurm.conf"))
         r = runner(dc("up", "-d", "--no-deps", "--force-recreate", "slurmctld", file=path))

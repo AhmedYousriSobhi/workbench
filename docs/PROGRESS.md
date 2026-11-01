@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**82% built** (35 done, 32 in review, 11 partial, 4 to do, 82 items).
+**82% built** (35 done, 33 in review, 11 partial, 4 to do, 83 items).
 
 ## Roadmap
 
@@ -13,7 +13,7 @@ flowchart LR
     p1["Governor<br/>86%"]:::partial
     p2["Slurm<br/>100%"]:::review
     p3["Mocks<br/>83%"]:::partial
-    p4["People and chaos<br/>0%"]:::partial
+    p4["People and chaos<br/>25%"]:::partial
     p5["Kubernetes<br/>50%"]:::partial
     p6["Fidelity VM<br/>0%"]:::partial
     p7["Web UI and profiles<br/>73%"]:::partial
@@ -165,17 +165,18 @@ _Fake BMC, BCM and Jira so the app's integrations can be exercised._
 
 5/12 done
 
-### People and chaos (0%)
+### People and chaos (25%)
 
 _Simulated users and engineers, scripted faults._
 
 | Part | Status | How it is built | Where | PR |
 |---|---|---|---|---|
 | Scenario files | 🟡 Partial | Twelve scenarios: ib-port-down, gpu-xid-storm, node-down, fan-failure, jira-429, jira-outage, jira-flap, ticket-lifecycle, drain-ticket and ticket-wave run now; pod-crashloop and k8s-node-notready need k3d/KWOK. | `scenarios` | #73 |
+| Slurm resilience scenarios and trace | 🔍 In review | Four scenarios start a real job (and a simulated GPU job) and restart or stop slurmd, restart slurmctld or drain under it; `scenario run NAME --trace` prints job states, slurmstepd pids and the new Slurm log lines per step. slurmd now runs under slurmd-run instead of as PID 1 so it can restart without the container. Steps: submit {node, gpus, duration}, cancel, slurmd_restart|stop|start, slurmctld_restart; expect slurm.job_state, slurm.stepd. The page plays them and shows the trace (tick Slurm trace) through new governor commands slurm-step and slurm-trace (read-only `benchctl get trace`), so W-3 holds; also `benchctl set slurmd|slurmctld`, `remove jobs`. Unit tests run; live test written, NOT yet run (observed behaviour to be recorded). Issue 220. | `scenarios/slurmd-*.yaml`, `scenarios/slurmctld-restart-mid-job.yaml`, `scenarios/drain-mid-job.yaml`, `benchctl/slurmtrace.py`, `images/node-base/slurmd-run`, `governor/core.py`, `webui/app.py`, `webui/static/index.html`, `tests/real/test_slurmresilience_real.py`, `docs/guides/slurm-resilience.md` | - |
 | user-sim and ticket-bot | ⬜ To do | Personas with Poisson arrivals and engineers working tickets. | - | - |
 | scenario-engine | 🟡 Partial | `benchctl scenario list|run NAME [--speed N] [--dry-run]`: steps drive bmc-farm, bcm-mock, gpu-exporter, jira-mock, Slurm (scontrol) and the login node's sshd (ssh target: down, hung, up, rotate_host_key, max_sessions, reject_auth, node_sshd + nodes, reset; scenarios ssh-host-key-changed, login-node-down, login-node-hung, ssh-session-limit, ssh-key-refused, ssh-node-sshd-down; tests/real/test_ssh_faults_real.py); ramps; expect (slurm.node_state, jira.issue_created) watched from the start; k8s and ticket-bot steps skipped. Runs in the host CLI, not a container (ADR 0006). Verified live. | `benchctl/scenario.py` | #73 |
 
-0/3 done
+0/4 done
 
 ### Kubernetes (50%)
 
@@ -254,7 +255,7 @@ _What keeps every change safe and debuggable._
 | Decisions as ADRs | ✅ Done | 0001 record decisions, 0002 Slurm from source with no extra privileges, 0003 slurmrestd/JWT and accounting, 0004 slurmrestd keeps its unshare steps disabled, 0011 SSH login node. | `docs/adr` | - |
 | Getting-started guide | ✅ Done | Step-by-step use of the app; tests/test_docs.py fails if a documented command disappears. | `docs/guides/getting-started.md` | #52 |
 | User manual | 🔍 In review | Ten chapters with screenshots of the web page and real terminal output (concepts, install, using the cluster, nodes and shells, web page, scenarios, governor, configuration, troubleshooting, reference). Commands were run against a live min stack; tests/test_docs.py checks that every command, script and node name it uses exists. The guide gained a step for getting a shell on a node (docker exec; nodes have no sshd). | `docs/manual` | - |
-| Export with every login node | 🔍 In review | The client profile has one cluster entry per login node with its own auth (private-key, or a teleport block); the Teleport proxy is reached at its fixed private IP 10.141.255.30:3080 and the name teleport.workbench.test (container alias, optional /etc/hosts line), 127.0.0.1:3080 only a fallback. A Teleport route is the node name plus {proxy, user, insecure}, checked against the client's own importer. Unit-tested; live in tests/real/test_teleport_real.py. Issues 198, 199. A login node nothing answers for is drawn dashed; `up` forgets Teleport nodes and certificates the workbench no longer has (issue 205). | `benchctl/export.py`, `benchctl/teleport.py`, `benchctl/compose.py`, `webui/connections.py` | - |
+| Export with every login node | 🔍 In review | The client profile has one cluster entry per login node with its own auth (private-key, or a teleport block); the Teleport proxy is reached at its fixed private IP 10.141.255.30:3080 and the name teleport.workbench.test (container alias, optional /etc/hosts line), 127.0.0.1:3080 only a fallback. A Teleport route is the node name plus {proxy, user, insecure}, checked against the client's own importer. Unit-tested; live in tests/real/test_teleport_real.py. Issues 198, 199. A login node nothing answers for is drawn dashed; `up` forgets Teleport nodes and certificates the workbench no longer has (issue 205). Teleport's CA, users and passwords are saved on down/up/invite and restored into an empty data directory of the same version, so a rebuild is the same cluster (issue 223). | `benchctl/export.py`, `benchctl/teleport.py`, `benchctl/compose.py`, `webui/connections.py` | - |
 | Login nodes with their own auth | 🔍 In review | sim.yaml login: / --login ssh,teleport,both defines 1 to 8 login nodes (login, login2, ...); ssh = key login on a published port, teleport = no port and no key login, both; only Teleport logins are registered in Teleport; sheet row, Connections rows, client profile uses a key login (ADR 0023). Unit-tested; live access matrix in tests/real/test_teleport_real.py. Issue 189. | `benchctl/logins.py`, `benchctl/compose.py`, `images/login/login.sh`, `webui/connections.py` | - |
 | Architecture as the main view | 🔍 In review | The Infrastructure architecture draws every login node with its way in, the Teleport proxy, the services and the nodes, each line labelled direct SSH, Teleport or jump host; hover tip and click pop-up on every part; the node list folds away; the options sheet survives a backend without logins (ADR 0024). Unit-tested; layout, tip, pop-up and fold checked in headless Chromium (ui_shots.py). Issue 192. | `webui/static/index.html`, `webui/cluster.py` | - |
 | Teleport and Infrastructure architecture in the page | 🔍 In review | The diagram is renamed Infrastructure architecture; Teleport is a service box and list card when built (status from its diagnostics /healthz), dots from teleport_connect_to_node_attempts_total, a Connections row, part toggle in Cluster architecture (ADR 0022). Issue 187. | `webui/static/index.html`, `webui/cluster.py`, `webui/flow.py`, `webui/connections.py` | - |

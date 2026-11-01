@@ -471,3 +471,24 @@ def test_a_change_that_raises_is_recorded_as_failed_with_its_tag(tmp_path):
     while _t.time() < deadline and not any(a.startswith("FAILED scale=2") for a in g.audit):
         _t.sleep(0.02)
     assert any(a.startswith("FAILED scale=2: docker is gone (#1 ") for a in g.audit)
+
+
+def test_slurm_step_runs_the_matching_benchctl_command(tmp_path):
+    import threading
+    for req, want in (({"name": "slurmd-restart", "node": "cn001"}, ["set", "slurmd", "cn001", "restart"]),
+                      ({"name": "slurmd-stop", "node": "cn001"}, ["set", "slurmd", "cn001", "stop"]),
+                      ({"name": "slurmctld-restart"}, ["set", "slurmctld", "restart"]),
+                      ({"name": "cancel-jobs"}, ["remove", "jobs"])):
+        calls, done = [], threading.Event()
+        g, _ = _calm_gov(tmp_path, effector=lambda a, calls=calls, done=done: calls.append(a) or done.set() or 0)
+        assert g.handle("slurm-step", req)["started"] and done.wait(5)
+        assert calls == [want]
+
+
+def test_slurm_trace_is_read_only_and_needs_a_tracer(tmp_path):
+    g, _ = _calm_gov(tmp_path)
+    assert g.handle("slurm-trace", {"nodes": [], "since": 1.0})["ok"] is False
+    g.tracer = lambda nodes, since: {"jobs": ["(no jobs)"], "nodes": {}, "logs": {}, "asked": [nodes, since]}
+    assert g.handle("slurm-trace", {"nodes": ["cn001"], "since": 5})["trace"]["asked"] == [["cn001"], 5.0]
+    g.tracer = lambda nodes, since: 1 / 0
+    assert "trace failed" in g.handle("slurm-trace", {"nodes": [], "since": 1})["error"]

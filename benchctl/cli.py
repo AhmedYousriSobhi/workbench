@@ -1,5 +1,8 @@
 import difflib
+import json
+import sqlite3
 import sys
+import time
 from pathlib import Path as _Path
 
 import click
@@ -21,6 +24,7 @@ from . import (
     nhc,
     nodes,
     scenario,
+    slurmtrace,
     stack,
     teleport,
     workbench,
@@ -422,6 +426,10 @@ def down(dry_run: bool = typer.Option(False, "-n", "--dry-run", help="list what 
         return
     if running:
         _confirm(f"This stops {len(running)} containers and ends open shells on the nodes.", yes)
+    try:
+        teleport.snapshot()  # while Teleport still runs: a later rebuild is the same cluster, so clients stay logged in
+    except (OSError, sqlite3.Error) as e:
+        typer.echo(f"note: Teleport's identity was not saved ({e}); a rebuild will be a new cluster", err=True)
     raise typer.Exit(0 if stack.down(say=typer.echo) else 1)
 
 
@@ -507,6 +515,17 @@ def get_checks(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by: st
         raise typer.Exit(1) from e
 
 
+TRACE_NODES = typer.Option([], "--node", "-n", help="a node to watch (repeat), e.g. cn001")
+TRACE_SINCE = typer.Option(60, "--since", help="log lines from this many seconds ago")
+
+
+@get_app.command("trace")
+def get_trace(node: list[str] = TRACE_NODES, since: float = TRACE_SINCE) -> None:
+    """What Slurm shows now (jobs, slurmd and slurmstepd pids per node) and what slurmctld and the nodes logged lately, as JSON:
+    the data behind `scenario run --trace` and the page's Slurm trace. Read-only."""
+    typer.echo(json.dumps(slurmtrace.collect(node, time.time() - since, lambda c: stack._run(c))))
+
+
 @get_app.command("scenarios")
 def get_scenarios(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
     """The fault and workload scenarios for `benchctl scenario run`."""
@@ -544,7 +563,7 @@ POSITION = typer.Option(None, "--position", help="place in the run order, 1 = fi
 
 add_app = typer.Typer(cls=SuggestingGroup, help="Add something: a health check, a Teleport invite")
 app.add_typer(add_app, name="add")
-remove_app = typer.Typer(cls=SuggestingGroup, help="Remove something: a health check")
+remove_app = typer.Typer(cls=SuggestingGroup, help="Remove something: a health check, the simulated users' jobs")
 app.add_typer(remove_app, name="remove")
 validate_app = typer.Typer(cls=SuggestingGroup, help="Check files without changing anything: the health checks")
 app.add_typer(validate_app, name="validate")
@@ -604,9 +623,37 @@ def add_invite(user: str = typer.Argument(..., help="a user from sim.yaml")) -> 
         raise typer.Exit(2)
     try:
         typer.echo(teleport.invite(user, stack._run, stack.dc))
+        teleport.snapshot()  # the user's password is chosen in the browser; the next `down` saves that too
     except teleport.TeleportError as e:
         typer.echo(f"{e}\nIs Teleport running? Start it with `benchctl up --with teleport` (see `benchctl get services`).", err=True)
         raise typer.Exit(1) from e
+
+
+def _daemon(do: dict, what: str) -> None:
+    o = scenario.execute(scenario.Step(0, "slurm", do), host=True, runner=lambda c: stack._run(c))
+    typer.echo(what if o.status == "ok" else f"cannot {what}: {o.detail}", err=o.status != "ok")
+    raise typer.Exit(0 if o.status == "ok" else 1)
+
+
+ACTIONS = {"restart": "restart", "stop": "stop", "start": "start"}
+
+
+@set_app.command("slurmd")
+def set_slurmd(node: str = TARGET, action: str = typer.Argument(..., help="restart (kill it; it starts again), stop (keep it down) or start")) -> None:
+    """`benchctl set slurmd cn001 restart` kills slurmd on the node; running jobs keep their slurmstepd (see the Slurm resilience guide). `stop` keeps it down until `start`."""
+    if action not in ACTIONS:
+        typer.echo("action must be restart, stop or start", err=True)
+        raise typer.Exit(1)
+    _daemon({f"slurmd_{action}": [node]}, f"slurmd on {node}: {action}")
+
+
+@set_app.command("slurmctld")
+def set_slurmctld(action: str = typer.Argument(..., help="restart")) -> None:
+    """`benchctl set slurmctld restart` restarts the controller's container; the nodes keep their jobs."""
+    if action != "restart":
+        typer.echo("action must be restart", err=True)
+        raise typer.Exit(1)
+    _daemon({"slurmctld_restart": True}, "slurmctld: restart")
 
 
 @set_app.command("check")
@@ -620,6 +667,26 @@ def set_check(name: str = CHECK, state: str = typer.Argument(None, help="on or o
         raise typer.Exit(2)
     _nhc_run(lambda: nhc.set_check(name, enabled=None if state is None else state == "on", params=nhc.parse_sets(sets), position=position))
     _nhc_done(f"changed check {name}")
+
+
+@remove_app.command("jobs")
+def remove_jobs() -> None:
+    """Cancel every job of the simulated users (scancel); the nodes go back to idle."""
+    _daemon({"cancel": True}, "jobs cancelled")
+
+
+@remove_app.command("teleport-state")
+def remove_teleport_state(yes: bool = typer.Option(False, "-y", "--yes", help="do not ask (a terminal asks; scripts are never asked)")) -> None:
+    """Forget the Teleport cluster: the next `benchctl up` makes a new one (new certificate authority, no passwords), and every
+    client must `tsh logout`, then `benchctl add invite USER`, then log in again. Stop the stack first (`benchctl down`)."""
+    if any(r["name"] == "teleport" and r["state"] == "running" for r in inventory.service_rows()):
+        typer.echo("Teleport is running: run `benchctl down` first (it saves the identity again), then repeat this.", err=True)
+        raise typer.Exit(1)
+    _confirm("This deletes Teleport's data and its saved identity: every Teleport user and password is lost.", yes)
+    gone = teleport.reset()
+    typer.echo("removed: " + ", ".join(str(p) for p in gone) if gone else "nothing to remove: no Teleport state")
+    typer.echo("next: benchctl up --with teleport; then each client: tsh logout --proxy=10.141.255.30:3080 --insecure, "
+               "benchctl add invite USER, log in")
 
 
 @remove_app.command("check")
@@ -860,7 +927,8 @@ def scenario_list() -> None:
 @scenario_app.command("run")
 def scenario_run(name: str = typer.Argument(..., autocompletion=completion.scenarios, help="see `scenario list`"),
                  speed: float = typer.Option(1.0, help="fast-forward: 10 plays it ten times faster"),
-                 dry_run: bool = typer.Option(False, "--dry-run", help="validate and show the timeline only")) -> None:
+                 dry_run: bool = typer.Option(False, "--dry-run", help="validate and show the timeline only"),
+                 trace: bool = typer.Option(False, "--trace", help="after each step print job states and the new Slurm log lines")) -> None:
     """Play a scenario against the running stack; exit 1 if a step or expectation fails."""
     sim = _sim()
     try:
@@ -877,7 +945,14 @@ def scenario_run(name: str = typer.Argument(..., autocompletion=completion.scena
         for s in scenario.plan(sc):
             typer.echo(f"[{s.at:6.1f}s] {s.target} {s.do}")
         raise typer.Exit(0)
-    report = scenario.run(sc, speed=speed, dilation=float(sim.get("time_dilation", 1.0)), say=typer.echo)
+    if scenario.disruptive(sc) and not stack.governor_admits(0, typer.echo):  # GV-9: nothing starts at L2 and above
+        typer.echo("not run: the governor admits no new work at this memory level (see `benchctl status`)", err=True)
+        raise typer.Exit(1)
+    hooks = {}
+    if trace:
+        tracer = slurmtrace.Tracer(slurmtrace.nodes_of(sc), say=typer.echo)
+        hooks["on_step"] = tracer.step
+    report = scenario.run(sc, speed=speed, dilation=float(sim.get("time_dilation", 1.0)), say=typer.echo, **hooks)
     typer.echo("scenario " + ("passed" if report.ok else "FAILED"))
     raise typer.Exit(0 if report.ok else 1)
 
