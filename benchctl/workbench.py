@@ -5,6 +5,7 @@ an effective `sim` dict (node counts) and a profile dict (compose groups, minus 
 the sum of the container memory limits the generated compose file would set, plus the always-on observability stack:
 an upper bound, which is what the governor's admission also uses."""
 import copy
+import difflib
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -31,6 +32,20 @@ PART_INFO: dict[str, tuple[str, str]] = {
     "scenarios": ("Scenarios", "The scenario engine that plays timed faults."),
     "load": ("Load", "User and ticket simulators that generate jobs and tickets."),
 }
+# What a user picks by name (`--ticketing jira`, `--hardware bmc,bcm`, ...): category -> (what it groups, {item: part it turns on}).
+# An item whose part is None is always on (accepted, nothing to add); NOT_BUILT items are refused with a message.
+# Every optional part is in exactly one category (tested), so a new part is added here and in PARTS.
+CATEGORIES: dict[str, tuple[str, dict[str, str | None]]] = {
+    "workload": ("what runs the jobs", {"slurm": None, "kubernetes": None}),
+    "accounting": ("job history for sacct", {"slurmdbd": "accounting"}),
+    "monitoring": ("metrics and dashboards", {"prometheus": None, "grafana": None}),
+    "ticketing": ("ticket systems", {"jira": "jira"}),
+    "hardware": ("out-of-band management", {"bmc": "bmc", "bcm": "bcm"}),
+    "access": ("how users reach the nodes", {"teleport": "teleport"}),
+    "simulation": ("fault and user simulators", {"scenarios": "scenarios", "load": "load"}),
+}
+NOT_BUILT = {"kubernetes": "Kubernetes is not built yet (SPEC section 11); use --workload slurm"}
+PART_CATEGORY = {part: cat for cat, (_, items) in CATEGORIES.items() for part in items.values() if part}
 DEFAULT_PARTS = ("jira", "bmc", "bcm", "accounting", "scenarios")  # accounting: without slurmdbd, sacct says storage is disabled
 DROP_ORDER = ("load", "accounting", "scenarios", "bcm", "jira", "bmc")  # what to suggest removing first
 LIMITS = {"cpu_nodes": (0, 64), "gpu_nodes": (0, 16), "gpus_per_node": (1, 8)}
@@ -68,6 +83,30 @@ class Spec:
         return {"name": self.name, "cpu_nodes": self.cpu_nodes, "gpu_nodes": self.gpu_nodes,
                 "gpus_per_node": self.gpus_per_node, "parts": sorted(set(self.parts)), "k8s_nodes": self.k8s_nodes,
                 "bmc_nodes": None if self.bmc_nodes is None else sorted(set(self.bmc_nodes))}
+
+
+def items(category: str) -> list[str]:
+    """The names a category flag accepts (what Tab offers): the buildable items, then `all`."""
+    return [i for i in CATEGORIES[category][1] if i not in NOT_BUILT] + ["all"]
+
+
+def expand(picked: dict[str, list[str] | None], addons: bool = False) -> list[str]:
+    """The parts that category flags (`{"hardware": ["bmc,bcm"], ...}`) and `--addons` turn on. Values may be comma
+    separated; `all` takes every item of the category. Raises SpecError with one message for the first bad item."""
+    parts: list[str] = list(PARTS) if addons else []
+    for cat, values in picked.items():
+        every = [i for i in CATEGORIES[cat][1] if i not in NOT_BUILT]
+        for item in (v.strip() for val in (values or []) for v in val.split(",") if v.strip()):
+            if item in NOT_BUILT:
+                raise SpecError(NOT_BUILT[item])
+            if item != "all" and item not in CATEGORIES[cat][1]:
+                close = difflib.get_close_matches(item, every, n=1)
+                hint = f" Did you mean '{close[0]}'?" if close else ""
+                raise SpecError(f"unknown {cat} item '{item}'.{hint} Valid: {', '.join(items(cat))}.")
+            for i in every if item == "all" else [item]:
+                if part := CATEGORIES[cat][1][i]:
+                    parts.append(part)
+    return sorted(set(parts))
 
 
 def defaults(sim: dict) -> Spec:
@@ -108,7 +147,7 @@ def parts_in(services: set[str]) -> list[str]:
 def catalog(selected: list[str] | None = None) -> list[dict]:
     """Every optional part with its label, help, memory limit (MB) and whether it is on, for the Cluster architecture sheet."""
     on = set(DEFAULT_PARTS if selected is None else selected)
-    return [{"id": p, "label": PART_INFO[p][0], "help": PART_INFO[p][1], "mb": _part_mb(p), "on": p in on} for p in PARTS]
+    return [{"id": p, "category": PART_CATEGORY[p], "label": PART_INFO[p][0], "help": PART_INFO[p][1], "mb": _part_mb(p), "on": p in on} for p in PARTS]
 
 
 def effective(sim: dict, spec: Spec) -> tuple[dict, dict]:

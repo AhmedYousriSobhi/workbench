@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**80% built** (35 done, 25 in review, 11 partial, 4 to do, 75 items).
+**80% built** (35 done, 26 in review, 11 partial, 4 to do, 76 items).
 
 ## Roadmap
 
@@ -252,10 +252,11 @@ _What keeps every change safe and debuggable._
 | Decisions as ADRs | ✅ Done | 0001 record decisions, 0002 Slurm from source with no extra privileges, 0003 slurmrestd/JWT and accounting, 0004 slurmrestd keeps its unshare steps disabled, 0011 SSH login node. | `docs/adr` | - |
 | Getting-started guide | ✅ Done | Step-by-step use of the app; tests/test_docs.py fails if a documented command disappears. | `docs/guides/getting-started.md` | #52 |
 | User manual | 🔍 In review | Ten chapters with screenshots of the web page and real terminal output (concepts, install, using the cluster, nodes and shells, web page, scenarios, governor, configuration, troubleshooting, reference). Commands were run against a live min stack; tests/test_docs.py checks that every command, script and node name it uses exists. The guide gained a step for getting a shell on a node (docker exec; nodes have no sshd). | `docs/manual` | - |
+| Parts by category | 🔍 In review | --workload/--accounting/--monitoring/--ticketing/--hardware/--access/--simulation and --addons on start, up, apply, plan; one registry drives flags, Tab completion, errors and the sheet's grouping (ADR 0021). Issue 184. | `benchctl/workbench.py (CATEGORIES)`, `benchctl/cli.py`, `benchctl/completion.py` | - |
 | Verification helpers | ✅ Done | verify.sh runs validate.sh plus real tests (--full adds the live stack lifecycle); tests/real/helpers.py starts a live governor and talks to its socket. `--unit NAME [--clean]` verifies one component (tests/test_NAME*.py then tests/real/test_NAME*.py, optional reset hook scripts/verify.d/NAME.sh; --list-units, -n). Issue 180. | `scripts/verify.sh` | #48 |
 | Progress tracker | ✅ Done | This page, generated from docs/progress.yaml (issue 19). | `benchctl/progress.py` | #42 |
 
-9/22 done
+9/23 done
 
 ## Next up
 

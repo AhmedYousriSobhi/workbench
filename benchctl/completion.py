@@ -89,6 +89,20 @@ def parts(incomplete: str) -> list[str]:
     return _starts(list(workbench.PARTS), incomplete)
 
 
+def category(name: str):
+    """Completer for a category flag such as --hardware: its items, also after a comma (`bmc,b` -> `bmc,bcm`), without
+    repeating one already typed."""
+    @_safe
+    def complete(incomplete: str) -> list[str]:
+        from . import workbench
+
+        head, _, tail = incomplete.rpartition(",")
+        typed = {t for t in head.split(",") if t}
+        prefix = head + "," if head else ""
+        return [prefix + i for i in workbench.items(name) if i.startswith(tail) and i not in typed]
+    return complete
+
+
 @_safe
 def outputs(incomplete: str) -> list[str]:
     return _starts(OUTPUTS, incomplete)

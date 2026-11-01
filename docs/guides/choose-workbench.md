@@ -33,7 +33,9 @@ nothing) when the estimate does not fit. Check: `benchctl get nodes`, `benchctl 
 |---|---|
 | `--cpu-nodes N` / `--gpu-nodes N` | how many of each (0 to 64 and 0 to 16; at least one node) |
 | `--gpus-per-node N` | GPUs on each GPU node, 1 to 8 |
-| `--with PART` / `--without PART` | add or remove a part (repeat the flag): `jira`, `bmc`, `bcm`, `accounting`, `scenarios`, `load` |
+| `--with PART` / `--without PART` | add or remove a part (repeat the flag): `jira`, `bmc`, `bcm`, `accounting`, `teleport`, `scenarios`, `load` |
+| `--ticketing jira`, `--hardware bmc,bcm`, `--access teleport`, ... | the same parts by category, see below |
+| `--addons` | every optional part (`--without teleport` still removes one) |
 | `--k8s-nodes N` | Kubernetes nodes: not built yet, so any value above 0 is refused |
 | `--name NAME` | name of the workbench (also the cluster's name in an exported client profile) |
 | `-f FILE` | read the selection from a workbench file; flags override it |
@@ -41,6 +43,29 @@ nothing) when the estimate does not fit. Check: `benchctl get nodes`, `benchctl 
 
 Flags you leave out come from `sim.yaml`. Default parts: `jira`, `bmc`, `bcm`, `accounting`, `scenarios` (accounting, about 360 MB, is what makes `sacct` work). Always present: Slurm, the
 login node, Prometheus and Grafana.
+
+## Parts by category
+
+Name the parts by what they are for. Values are comma separated or repeated, `all` takes every item of the category, and Tab completion offers the flags and their items (also after a comma):
+
+| Flag | Items | Turns on |
+|---|---|---|
+| `--workload` | `slurm` (always on) | Kubernetes is not built yet; asking for it is refused with one message |
+| `--accounting` | `slurmdbd` | slurmdbd and MariaDB (`sacct`, job history) |
+| `--monitoring` | `prometheus`, `grafana` | always on; accepted so a command can say what it wants |
+| `--ticketing` | `jira` | the Jira mock |
+| `--hardware` | `bmc`, `bcm` | the BMC farm, the BCM mock |
+| `--access` | `teleport` | Teleport auth and proxy |
+| `--simulation` | `scenarios`, `load` | the scenario engine, the user and ticket simulators |
+
+```bash
+./scripts/benchctl start --ticketing jira --hardware bmc,bcm --access teleport
+./scripts/benchctl plan --simulation all --accounting slurmdbd   # what it would cost
+./scripts/benchctl start --addons                                 # everything optional
+./scripts/benchctl start --addons --without teleport              # everything except one
+```
+
+Category flags add to the default parts (`jira`, `bmc`, `bcm`, `accounting`, `scenarios`); `--without` removes. A typo gets a hint: `unknown ticketing item 'jirra'. Did you mean 'jira'?`. A plain `benchctl start` with no flags is the `min` preset, which has none of the optional parts.
 
 ## A workbench file
 

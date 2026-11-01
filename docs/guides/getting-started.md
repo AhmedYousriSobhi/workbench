@@ -12,7 +12,7 @@ How to run workbench on your workstation and see it working. Keep this page in s
 ./scripts/benchctl stop       # stop the web page and the cluster
 ```
 
-To pick your own mix (for example 2 CPU and 4 GPU nodes with Jira) and see what it costs first, use `benchctl plan` and `benchctl up --cpu-nodes ...` ([choose the workbench](choose-workbench.md)).
+Plain `start` is the small `min` preset. To include the optional parts by category use `./scripts/benchctl start --ticketing jira --hardware bmc,bcm --access teleport` or `./scripts/benchctl start --addons` for all of them (Tab completes the flags). To pick your own mix (for example 2 CPU and 4 GPU nodes with Jira) and see what it costs first, use `benchctl plan` and `benchctl up --cpu-nodes ...` ([choose the workbench](choose-workbench.md)).
 
 Every command has the same shape, like `kubectl`: `benchctl VERB [RESOURCE] [NAME]`, for example `benchctl get nodes`,
 `benchctl exec gpu001 -- nvidia-smi`, `benchctl scenario run node-down`. `benchctl --help` lists the verbs;
