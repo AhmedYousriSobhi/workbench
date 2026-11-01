@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**81% built** (35 done, 30 in review, 11 partial, 4 to do, 80 items).
+**81% built** (35 done, 31 in review, 11 partial, 4 to do, 81 items).
 
 ## Roadmap
 
@@ -11,7 +11,7 @@ Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do.
 flowchart LR
     p0["Baseline<br/>33%"]:::partial
     p1["Governor<br/>86%"]:::partial
-    p2["Slurm<br/>100%"]:::done
+    p2["Slurm<br/>100%"]:::review
     p3["Mocks<br/>83%"]:::partial
     p4["People and chaos<br/>0%"]:::partial
     p5["Kubernetes<br/>50%"]:::partial
@@ -138,9 +138,10 @@ _A real scheduler the app can read, built from sim.yaml._
 | Compose generation | ✅ Done | `benchctl compose --profile X` renders services with mem_limit, cgroup_parent and the workbench.class label from sim.yaml and profiles. | `benchctl/compose.py` | #30 |
 | slurmrestd with JWT | ✅ Done | JWT-only REST on the internal network, own user, no privileges; skips two unshare steps instead of loosening seccomp (ADR 0003, ADR 0004). Verified live: no token 401, bad tokens get no data. | `benchctl/compose.py` | #38 |
 | Accounting | ✅ Done | MariaDB on a capped tmpfs plus slurmdbd; sacctmgr bootstrap creates cluster, QOS and users from sim.yaml; secrets stay in a gitignored folder. Verified live: a job as alice appears in sacct and the REST slurmdb endpoint. | `benchctl/slurmconf.py` | #38 |
+| Real-Slurm decision record | 🔍 In review | One ADR: what is real (scheduler, output, REST auth, node death timing), what is simulated (GPUs, cgroups, jobs), cost and what to cut first; linked from architecture 4.1 and client-testing. Issue 218. | `docs/adr/0025-slurm-is-real-the-rest-is-simulated.md` | - |
 | benchctl up / down / scale | ✅ Done | Pre-flight, staged start (observability, slurm, nodes), skips unbuilt mocks, scale regenerates slurm.conf, Grafana token created once (0600). Verified live with min; scale really stops containers. | `benchctl/stack.py` | #45 |
 
-6/6 done
+6/7 done
 
 ### Mocks (83%)
 

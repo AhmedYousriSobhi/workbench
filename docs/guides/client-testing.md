@@ -55,6 +55,15 @@ If port 2222 refuses connections, the checkout is probably on a branch without t
 - **Jira:** base URL `http://10.141.255.11:8080` (a client that refuses plain HTTP for a non-local host: use the fallback `http://127.0.0.1:8080`). `POST /sim/tickets` and the ticket scenarios ([tickets guide](jira-tickets.md)) file and move tickets; **a team changes tickets in the background** (`benchctl set jira-activity off` stops it, [guide](jira-tickets.md)) and **a node fault files one ticket by itself** (project OPS, reporter `ops-bot`, labels `node-<name>`, `fault-<kind>`, `auto`): Power off, GPU error (XID), overheat and fan failure each open one per node and kind (a repeat comments), Power on or Clear faults comments and resolves it, from the page, `benchctl set node` and scenarios alike; `POST /sim/failure` injects 401,
   429, 503 or slow responses.
 
+## Slurm: what is real and what is not
+
+Slurm is the real software (ADR 0025), so a client sees real command output and real state changes. Real: `squeue`, `sinfo`,
+`sacct`, `scontrol` text and flags, node states (`down*`, `mixed`, `drain`), pending reasons (`ReqNodeNotAvail`), `slurmrestd`
+JWT auth, and a frozen node going `down*` by itself after about 30 s. Simulated: GPUs (count-based GRES), jobs (`sleep`),
+the node health checks' inputs and accounting storage unless the `accounting` part is on. **Not exercised:** cgroup limits,
+real GPU binding, resource contention, and `gres/gpu` in `AllocTRES` without `slurmdbd`. Do not report one of these as a
+client defect.
+
 ## Verifying without a GUI
 
 A headless check is faster than driving a window: connect with any SSH library to `127.0.0.1:2222`, run the client's

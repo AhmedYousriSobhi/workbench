@@ -66,6 +66,8 @@ phases:
          how: "JWT-only REST on the internal network, own user, no privileges; skips two unshare steps instead of loosening seccomp (ADR 0003, ADR 0004). Verified live: no token 401, bad tokens get no data."}
       - {name: Accounting, status: done, pr: 38, where: benchctl/slurmconf.py,
          how: "MariaDB on a capped tmpfs plus slurmdbd; sacctmgr bootstrap creates cluster, QOS and users from sim.yaml; secrets stay in a gitignored folder. Verified live: a job as alice appears in sacct and the REST slurmdb endpoint."}
+      - {name: Real-Slurm decision record, status: review, where: docs/adr/0025-slurm-is-real-the-rest-is-simulated.md,
+         how: "One ADR: what is real (scheduler, output, REST auth, node death timing), what is simulated (GPUs, cgroups, jobs), cost and what to cut first; linked from architecture 4.1 and client-testing. Issue 218."}
       - {name: benchctl up / down / scale, status: done, pr: 45, where: benchctl/stack.py,
          how: "Pre-flight, staged start (observability, slurm, nodes), skips unbuilt mocks, scale regenerates slurm.conf, Grafana token created once (0600). Verified live with min; scale really stops containers."}
 

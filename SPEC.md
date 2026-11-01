@@ -31,7 +31,7 @@ Normative requirements for workbench. [README.md](README.md) gives the overview 
 
 | ID | Component | Requirements |
 |---|---|---|
-| C-1 | Slurm | `slurmctld` + `slurmrestd` in core; `slurmdbd`/MariaDB only in accounting profiles; N `slurmd` containers from one shared base image; GPUs as count-based GRES; jobs are synthetic. |
+| C-1 | Slurm | `slurmctld` + `slurmrestd` in core; `slurmdbd`/MariaDB only in accounting profiles; N `slurmd` containers from one shared base image; GPUs as count-based GRES; jobs are synthetic. Real SchedMD daemons, not a mock; what is real and what is simulated: ADR 0025. |
 | C-2 | Kubernetes | k3d/kind with 1 server + 1 real agent, plus KWOK fake nodes (incl. `nvidia.com/gpu` capacity). Governor addresses nodes by container name/label. |
 | C-3 | bmc-farm | One process serving N Redfish endpoints (each node also has its own address 10.148.x.y:443 through a forwarder container that can be switched off per node, ADR 0018) with inventory, power, thermals, fans, sensors, event log; fault injection via `/sim/inject`. Also standard Redfish over TLS on 127.0.0.1:8443 (`/redfish/v1`, node chosen by the `Host` header, network alias `bmc-<node>`, session login, collections, firmware, accounts; ADR 0012). |
 | C-4 | bcm-mock | Implements only the BCM surface the app calls (CMDaemon REST or `pythoncm`), data-driven from fixtures and `sim.yaml`. For SSH-based clients (they run `cmsh` on the head node over an SSH hop) the surface is a fake read-only `cmsh` on the login node (ADR 0013, issue 66): `cmsh -c "device; list"`, `device; status`, `category; list`, `jobqueue; list` and `monitoring; healthchecks; list`, state taken from bcm-mock, anything mutating refused. |
