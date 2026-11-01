@@ -297,3 +297,78 @@ def test_a_jira_activity_step_switches_the_background_changes_and_is_validated()
     sent = []
     out = scenario.execute(scenario.Step(0, "jira", {"activity": {"on": True, "every": 5}}), poster=lambda u, b: sent.append((u, b)))
     assert out.status == "ok" and sent == [("http://127.0.0.1:8080/sim/activity", {"on": True, "every": 5})]
+
+
+def _rec():
+    ran = []
+
+    def runner(cmd):
+        ran.append(cmd)
+        return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+    return ran, runner
+
+
+def test_daemon_steps_become_docker_commands():
+    ran, runner = _rec()
+    scenario.execute(scenario.Step(0, "slurm", {"slurmd_stop": ["cn001"]}), runner=runner)
+    assert ran == [["docker", "exec", "workbench-cn001-1", "touch", scenario.HOLD],
+                   ["docker", "exec", "workbench-cn001-1", "pkill", "-x", "slurmd"]]
+    ran.clear()
+    scenario.execute(scenario.Step(0, "slurm", {"slurmd_start": ["cn001"], "slurmd_restart": ["cn002"]}), runner=runner)
+    assert ["docker", "exec", "workbench-cn001-1", "rm", "-f", scenario.HOLD] in ran
+    assert ["docker", "exec", "workbench-cn002-1", "pkill", "-x", "slurmd"] in ran
+    ran.clear()
+    scenario.execute(scenario.Step(0, "slurm", {"slurmctld_restart": True, "cancel": True}), runner=runner)
+    assert ran[0][:2] == ["docker", "restart"] and "scancel" in ran[1]
+
+
+def test_submit_makes_the_same_job_as_benchctl_submit_and_a_failed_submit_fails_the_step():
+    ran, runner = _rec()
+    sub = {"node": "gpu001", "gpus": 2, "duration": 40}
+    assert scenario.execute(scenario.Step(0, "slurm", {"submit": sub}), runner=runner).status == "ok"
+    assert ran[0][:5] == ["docker", "exec", "-u", "alice", "workbench-login-1"]
+    assert "--nodelist=gpu001" in ran[0][-1] and "--gres=gpu:2" in ran[0][-1] and "sleep 40" in ran[0][-1]
+    bad = scenario.execute(scenario.Step(0, "slurm", {"submit": {"node": "cn001"}}),
+                           runner=lambda c: type("R", (), {"returncode": 1, "stdout": "", "stderr": "invalid account"})())
+    assert bad.status == "failed" and "invalid account" in bad.detail
+    # pkill finding nothing (exit 1) is the goal of a stop, not a failure
+    none = scenario.execute(scenario.Step(0, "slurm", {"slurmd_stop": ["cn001"]}),
+                            runner=lambda c: type("R", (), {"returncode": 1 if "pkill" in c else 0, "stdout": "", "stderr": ""})())
+    assert none.status == "ok"
+
+
+def test_without_docker_daemon_steps_go_through_the_daemon_callback_and_a_refusal_is_a_skip():
+    asked = []
+    o = scenario.execute(scenario.Step(0, "slurm", {"slurmd_restart": ["cn001"]}), host=False,
+                         daemon=lambda do: asked.append(do) or (True, "asked the governor"))
+    assert o.status == "ok" and asked == [{"slurmd_restart": ["cn001"]}]
+    refused = scenario.execute(scenario.Step(0, "slurm", {"cancel": True}), host=False, daemon=lambda do: (False, "refused at L3"))
+    assert refused.status == "skipped" and "L3" in refused.detail
+    seen = []
+    scenario.run({"name": "x", "steps": [{"at": "0s", "target": "slurm", "do": {"cancel": True}}]}, host=False,
+                 daemon=lambda do: (True, ""), on_before=seen.append, say=lambda m: None)
+    assert len(seen) == 1
+
+
+def test_daemon_steps_need_the_host_and_are_validated():
+    o = scenario.execute(scenario.Step(0, "slurm", {"slurmd_restart": ["cn001"]}), host=False, slurm=lambda *a: (True, ""))
+    assert o.status == "skipped"
+    bad = {"steps": [{"at": "0s", "target": "slurm", "do": {"slurmd_stop": ["nope"], "submit": {"node": "cn001", "x": 1}}},
+                     {"at": "1s", "target": "slurm", "do": {"submit": "cn001"}}]}
+    problems = scenario.validate(bad, SIM)
+    assert len(problems) == 3 and any("nope" in p for p in problems) and any("unknown key" in p for p in problems)
+    assert scenario.disruptive(bad) and not scenario.disruptive({"steps": [{"at": "0s", "target": "slurm", "do": {"drain": ["cn001"]}}]})
+
+
+def test_job_and_stepd_expectations():
+    out = {"squeue": "RUNNING\n", "pgrep": ""}
+
+    def runner(cmd):
+        key = "squeue" if "squeue" in cmd else "pgrep"
+        return type("R", (), {"returncode": 0 if out[key] or key == "squeue" else 1, "stdout": out[key], "stderr": ""})()
+    _, holds, _ = scenario.expectation({"slurm.job_state": {"node": "cn001", "state": "RUNNING"}}, runner)
+    assert holds()
+    _, holds, _ = scenario.expectation({"slurm.stepd": {"node": "cn001", "alive": False, "within": "5s"}}, runner)
+    assert holds()  # pgrep found nothing
+    _, holds, _ = scenario.expectation({"slurm.stepd": {"node": "cn001"}}, runner)
+    assert not holds()

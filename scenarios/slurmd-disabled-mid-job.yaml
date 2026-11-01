@@ -1,0 +1,9 @@
+name: slurmd-disabled-mid-job
+description: slurmd stays down for 45 s under a running job (slurmctld marks the node not responding), then is started again; see what the job does (run with --trace)
+steps:
+  - {at: 0s,  target: slurm, do: {submit: {node: cn001, duration: 600}}}
+  - {at: 15s, target: slurm, do: {slurmd_stop: [cn001]}}
+  - {at: 60s, target: slurm, do: {slurmd_start: [cn001]}}
+  - {at: 100s, target: slurm, do: {cancel: true}}
+expect:
+  - slurm.job_state: {node: cn001, state: RUNNING, within: 14s}

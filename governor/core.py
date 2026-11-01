@@ -27,7 +27,7 @@ class Governor:
                  executor: Executor, dry_run: bool = True, watchdog: Watchdog | None = None,
                  watch_interval: float = 15.0, annotator: Annotator | None = None,
                  inventory: Callable[[], tuple[list[Group], dict]] | None = None,
-                 refresh_interval: float = 30.0, effector: Effector | None = None):
+                 refresh_interval: float = 30.0, effector: Effector | None = None, tracer: Callable | None = None):
         self.sampler, self.ladder, self.groups = sampler, ladder, groups
         self.executor, self.dry_run = executor, dry_run
         self.signals: Signals | None = None
@@ -43,6 +43,7 @@ class Governor:
         self._watch_failed = False
         self.annotator = annotator
         self.effector = effector
+        self.tracer = tracer
         self.inventory, self.refresh_interval = inventory, refresh_interval
         self._next_refresh = refresh_interval
         self._static = [g for g in groups if g.kind == "vm"]  # VMs are configured, not discovered
@@ -191,6 +192,13 @@ class Governor:
 
     def handle(self, cmd: str, req: dict) -> dict:
         """Control-socket command handler; request already validated by control.dispatch."""
+        if cmd == "slurm-trace":  # read-only, so allowed at every level, and slow (Docker): the lock is not held
+            if not self.tracer:
+                return {"ok": False, "error": "no trace without --workdir (the governor runs `benchctl get trace`)"}
+            try:
+                return {"ok": True, "trace": self.tracer(req["nodes"], float(req["since"]))}
+            except Exception as e:  # noqa: BLE001
+                return {"ok": False, "error": f"trace failed: {e}"}
         with self._lock:
             if cmd == "status":
                 s = self.signals
@@ -219,6 +227,11 @@ class Governor:
                 args = ["submit", req["node"], "--gpus", str(req["gpus"]), "--duration", str(req["duration"])] + (
                     ["--user", req["user"]] if req.get("user") else [])
                 return self._change(f"submit-job={req['node']}:{req['gpus']}gpu", args)
+            if cmd == "slurm-step":
+                what = req["name"]
+                args = (["set", "slurmd", req["node"], what.removeprefix("slurmd-")] if what.startswith("slurmd-")
+                        else ["set", "slurmctld", "restart"] if what == "slurmctld-restart" else ["remove", "jobs"])
+                return self._change(f"slurm-step={what}" + (f":{req['node']}" if req.get("node") else ""), args)
             if cmd == "apply-plan":
                 args = ["up", "--cpu-nodes", str(req["cpu_nodes"]), "--gpu-nodes", str(req["gpu_nodes"]),
                         "--gpus-per-node", str(req["gpus_per_node"])]
