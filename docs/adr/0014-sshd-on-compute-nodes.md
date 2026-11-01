@@ -26,3 +26,11 @@ Users and monitoring clients reach a compute node from the login node: `ssh cn00
   Before, a change to the base image (a new munge key) left the controller on the old image and every Slurm call
   failed with "Protocol authentication error".
 - Cert-based access (Teleport, issue 39) and the fake `cmsh` (issue 66) still build on the login node.
+
+## Addendum: node-base carries python3 too (issue 225)
+`login` and `slurm-ctl` are built `FROM node-base`; their own `apt-get install` steps re-ran over the network after every
+`node-base` change (nhc, teleport-ssh, slurmd-run): about 40 s measured for the pair. `python3` (used by `alloc_feed.py`,
+`node_watch.py`, `cmsh.py` and `user_sim.py`) is now installed once in `node-base`'s apt layer, and the derived images run
+no apt step: the same rebuild takes under 1 s, the first build after the change 22 s once. Compute nodes carry an unused
+`python3` (disk, no runtime memory). Rule: a package a derived image needs goes into `node-base`'s apt layer, not into a
+`RUN apt-get` after `FROM node-base`.

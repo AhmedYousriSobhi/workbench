@@ -64,6 +64,7 @@ See [docs/architecture/08-repository-and-migration.md](docs/architecture/08-repo
 - `./scripts/benchctl compose --profile X`: generates `compose/generated/docker-compose.yml` (gitignored) from `sim.yaml` + `profiles/X.yaml` (`groups`, `compute_nodes`, `extends`). Add components in `CATALOG` in `benchctl/compose.py`; never hand-edit the output.
 - `./scripts/benchctl measure run <label> [--duration S]`, then `measure report <idle> [<loaded>]`: Phase 0 read-only memory sampling (host, containers, PSS by process, VMs). Results go to `docs/measurements/` (gitignored); copy the suggested budgets into docs/architecture/04-memory-and-profiles.md (section 5), the README profile table and `profiles/*.yaml`.
 
+- Images: put OS packages in `images/node-base`'s single apt layer, never in a `RUN apt-get` after `FROM workbench/node-base` (login, slurm-ctl): any node-base change would re-run it (ADR 0014 addendum, 40 s measured). To time a rebuild, build node-base first, then the derived images (`docker compose build` of both at once builds them against the old base).
 - Containers must stay unprivileged (no `cap_add`, no `apparmor=unconfined`, no Docker socket) and memory-limited; `benchctl doctor` fails otherwise. Slurm is built from source in `images/node-base` (pinned version + SHA256, ADR 0002).
 
 - Generated secrets (DB password) live only in `compose/generated/secrets` (gitignored); never copy them into tracked files or output. REST access to Slurm: JWT via `scontrol token username=<user>` (not root), see ADR 0003.
