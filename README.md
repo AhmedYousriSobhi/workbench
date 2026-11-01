@@ -2,6 +2,15 @@
 
 # workbench
 
+<p align="center">
+  <a href="LICENSE-MIT"><img alt="Licence: MIT or Apache-2.0" src="https://img.shields.io/badge/licence-MIT%20%7C%20Apache--2.0-blue"></a>
+  <img alt="Ubuntu 22.04 or newer" src="https://img.shields.io/badge/Ubuntu-22.04%2B-E95420?logo=ubuntu&logoColor=white">
+  <img alt="Python 3.11 or newer" src="https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white">
+  <img alt="Runs on Docker" src="https://img.shields.io/badge/Docker-compose-2496ED?logo=docker&logoColor=white">
+  <img alt="Slurm built from source" src="https://img.shields.io/badge/Slurm-from%20source-0b7285">
+  <img alt="Memory-governed, 16 GB laptop" src="https://img.shields.io/badge/RAM-16%20GB%20laptop-success">
+</p>
+
 **A pretend HPC cluster for a 16 GB laptop, with a bouncer that keeps it from eating all your RAM.**
 
 Real clusters cost a lot and break at 3 a.m. This one costs about 1 GB, breaks when you ask, and fakes everything an
