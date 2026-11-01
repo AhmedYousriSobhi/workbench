@@ -17,13 +17,26 @@ node and then break something under it, and `--trace` prints what Slurm logged a
 | `slurmctld-restart-mid-job` | restarts the `slurmctld` container with a real job on `cn001` and a simulated GPU job on `gpu001` | the nodes keep the work; slurmctld recovers state from `StateSaveLocation` |
 | `drain-mid-job` | drains `cn001` under a 40 s job | the job finishes; the node shows `draining`, then `drained` |
 
-Two job kinds: a **real** job is a process on `cn001` under a real `slurmstepd` (`sleep`; use a `wrap:` of your own, for
-example a capped `stress-ng`). A **simulated** job is one on `gpu001` with `gres: "gpu:2"`: its GPU figures come from
+Two job kinds, both made like `benchctl submit` (a `sleep` for `duration` seconds): a **real** job is a process on
+`cn001` under a real `slurmstepd`. A **simulated** job is one on `gpu001` with `gpus: 2`: its GPU figures come from
 the exporter following the Slurm allocation ([GPU metrics follow Slurm](client-testing.md)). Keep real jobs inside the
 governor's memory budget.
 
 The command refuses to start when the governor admits no new work (memory level L2 and above, GV-9) and says so; free memory
 and run it again.
+
+## Run one from the web page
+
+Open the scenarios sheet, tick **Slurm trace**, press **Play**. The page has no Docker access (SPEC W-3), so everything
+goes through the governor: the job and daemon steps (`slurm-step`, `submit-job`) and the read-only trace
+(`slurm-trace`, which runs `benchctl get trace`). The governor must have been started with `--workdir` (`benchctl start`
+does that); without it the steps show **skipped** and the Slurm trace box is refused with that reason.
+
+The page's trace has one entry per step, shown under the timeline. Because the governor does the step in the
+background, entry *i* covers everything between running step *i* and running step *i+1* (the last one ends with the run),
+so the first entry appears when the second step starts. The text is the same as in the terminal. Use
+`./scripts/benchctl get trace --node cn001 --since 60` for the raw JSON at any time, and `benchctl set slurmd cn001
+restart|stop|start`, `benchctl set slurmctld restart` and `benchctl remove jobs` to do one step by hand.
 
 ## Reading the trace
 
@@ -68,10 +81,10 @@ disagreement here with the Slurm version and the log lines that show it.
 
 | `do` key | Effect |
 |---|---|
-| `submit: {node, user, partition, gres, wrap}` | `sbatch` as that user (default `alice`), pinned to `node` |
+| `submit: {node, user, gpus, duration}` | the job `benchctl submit` makes: `sleep` for `duration` s as that user (default the first in `sim.yaml`), pinned to `node` |
 | `cancel: true` | cancel every job of `alice` |
 | `slurmd_restart: [nodes]` | kill `slurmd`; the supervisor starts it again |
 | `slurmd_stop: [nodes]` / `slurmd_start: [nodes]` | keep it down / let it start |
 | `slurmctld_restart: true` | restart the `slurmctld` container |
 
-`expect` adds `slurm.job_state: {node, state, within}` and `slurm.stepd: {node, alive, within}`. These steps need the host CLI (the page skips them).
+`expect` adds `slurm.job_state: {node, state, within}` and `slurm.stepd: {node, alive, within}`. From the page they are done by the governor (see above); with no governor `--workdir` they are skipped.

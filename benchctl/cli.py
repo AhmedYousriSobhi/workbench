@@ -1,5 +1,7 @@
 import difflib
+import json
 import sys
+import time
 from pathlib import Path as _Path
 
 import click
@@ -508,6 +510,17 @@ def get_checks(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by: st
         raise typer.Exit(1) from e
 
 
+TRACE_NODES = typer.Option([], "--node", "-n", help="a node to watch (repeat), e.g. cn001")
+TRACE_SINCE = typer.Option(60, "--since", help="log lines from this many seconds ago")
+
+
+@get_app.command("trace")
+def get_trace(node: list[str] = TRACE_NODES, since: float = TRACE_SINCE) -> None:
+    """What Slurm shows now (jobs, slurmd and slurmstepd pids per node) and what slurmctld and the nodes logged lately, as JSON:
+    the data behind `scenario run --trace` and the page's Slurm trace. Read-only."""
+    typer.echo(json.dumps(slurmtrace.collect(node, time.time() - since, lambda c: stack._run(c))))
+
+
 @get_app.command("scenarios")
 def get_scenarios(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
     """The fault and workload scenarios for `benchctl scenario run`."""
@@ -545,7 +558,7 @@ POSITION = typer.Option(None, "--position", help="place in the run order, 1 = fi
 
 add_app = typer.Typer(cls=SuggestingGroup, help="Add something: a health check, a Teleport invite")
 app.add_typer(add_app, name="add")
-remove_app = typer.Typer(cls=SuggestingGroup, help="Remove something: a health check")
+remove_app = typer.Typer(cls=SuggestingGroup, help="Remove something: a health check, the simulated users' jobs")
 app.add_typer(remove_app, name="remove")
 validate_app = typer.Typer(cls=SuggestingGroup, help="Check files without changing anything: the health checks")
 app.add_typer(validate_app, name="validate")
@@ -610,6 +623,33 @@ def add_invite(user: str = typer.Argument(..., help="a user from sim.yaml")) -> 
         raise typer.Exit(1) from e
 
 
+def _daemon(do: dict, what: str) -> None:
+    o = scenario.execute(scenario.Step(0, "slurm", do), host=True, runner=lambda c: stack._run(c))
+    typer.echo(what if o.status == "ok" else f"cannot {what}: {o.detail}", err=o.status != "ok")
+    raise typer.Exit(0 if o.status == "ok" else 1)
+
+
+ACTIONS = {"restart": "restart", "stop": "stop", "start": "start"}
+
+
+@set_app.command("slurmd")
+def set_slurmd(node: str = TARGET, action: str = typer.Argument(..., help="restart (kill it; it starts again), stop (keep it down) or start")) -> None:
+    """`benchctl set slurmd cn001 restart` kills slurmd on the node; running jobs keep their slurmstepd (see the Slurm resilience guide). `stop` keeps it down until `start`."""
+    if action not in ACTIONS:
+        typer.echo("action must be restart, stop or start", err=True)
+        raise typer.Exit(1)
+    _daemon({f"slurmd_{action}": [node]}, f"slurmd on {node}: {action}")
+
+
+@set_app.command("slurmctld")
+def set_slurmctld(action: str = typer.Argument(..., help="restart")) -> None:
+    """`benchctl set slurmctld restart` restarts the controller's container; the nodes keep their jobs."""
+    if action != "restart":
+        typer.echo("action must be restart", err=True)
+        raise typer.Exit(1)
+    _daemon({"slurmctld_restart": True}, "slurmctld: restart")
+
+
 @set_app.command("check")
 def set_check(name: str = CHECK, state: str = typer.Argument(None, help="on or off"), sets: list[str] = SETS, position: int = POSITION) -> None:
     """Switch a check on or off, change its parameters, or move it: `benchctl set check gpu-xid off`, `... set check gpu-hot --set max=90`, `... --position 1`."""
@@ -621,6 +661,12 @@ def set_check(name: str = CHECK, state: str = typer.Argument(None, help="on or o
         raise typer.Exit(2)
     _nhc_run(lambda: nhc.set_check(name, enabled=None if state is None else state == "on", params=nhc.parse_sets(sets), position=position))
     _nhc_done(f"changed check {name}")
+
+
+@remove_app.command("jobs")
+def remove_jobs() -> None:
+    """Cancel every job of the simulated users (scancel); the nodes go back to idle."""
+    _daemon({"cancel": True}, "jobs cancelled")
 
 
 @remove_app.command("check")

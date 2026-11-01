@@ -42,8 +42,8 @@ def node_state() -> str:
     return scenario.node_state(NODE)
 
 
-def submit(wrap: str = "sleep 600", node: str = NODE, **extra) -> str:
-    cmd = scenario.submit_command({"node": node, "wrap": wrap, **extra})
+def submit(duration: int = 600, node: str = NODE, **extra) -> str:
+    cmd = scenario.submit_command({"node": node, "duration": duration, **extra})
     r = sh(*cmd)
     assert r.returncode == 0, r.stderr
     job = r.stdout.split()[-1]
@@ -112,13 +112,13 @@ def test_slurmctld_restart_keeps_jobs_and_nodes():
 
 def test_a_simulated_gpu_job_keeps_its_gpus_busy_across_a_slurmctld_restart():
     assert wait_for(exporter_up, timeout=180), "the GPU exporter never answered"
-    job = submit(node="gpu001", partition="gpu", gres="gpu:2")
+    job = submit(node="gpu001", gpus=2)
     run_steps({"slurmctld_restart": True})
     assert wait_for(lambda: job_state(job) == "RUNNING", timeout=120), job_state(job)
 
 
 def test_drain_under_a_running_job_lets_it_finish():
-    job = submit(wrap="sleep 40")
+    job = submit(duration=40)
     ctl("scontrol", "update", f"nodename={NODE}", "state=drain", "reason=resilience-test")
     assert wait_for(lambda: "drain" in node_state(), timeout=15)
     assert job_state(job) == "RUNNING", "a drain must not touch the running job"
@@ -132,3 +132,16 @@ def test_the_shipped_scenarios_run_and_trace(cluster):
         sc = scenario.load(name)
         report = scenario.run(sc, speed=3, say=lines.append)
         assert report.ok, "\n".join(lines)
+
+
+def test_the_governor_runs_the_steps_and_serves_the_trace_for_the_page(cluster):
+    """The page has no Docker: it asks the governor. Needs a governor with --workdir (benchctl start runs one)."""
+    from benchctl import checks
+    sock = os.environ.get("WORKBENCH_GOV_SOCKET", checks.default_socket())
+    try:
+        res = checks.governor_request({"cmd": "slurm-trace", "nodes": [NODE], "since": 30}, sock)
+    except OSError as e:
+        pytest.skip(f"no governor to ask: {e}")
+    assert res.get("ok"), res
+    data = res["trace"]
+    assert NODE in data["nodes"] and "jobs" in data and "workbench-slurmctld-1" in data["logs"]

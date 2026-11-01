@@ -129,3 +129,15 @@ def test_apply_plan_accepts_an_optional_list_of_bmc_node_names_only():
     assert d(ok)["ok"] and d({**ok, "bmc_nodes": ["cn001", "gpu002"]})["ok"] and d({**ok, "bmc_nodes": []})["ok"]
     for bad in ("cn001", ["cn001; rm -rf /"], ["../x"], [1], ["cn001"] * 81):
         assert d({**ok, "bmc_nodes": bad})["ok"] is False
+
+
+def test_slurm_step_and_trace_accept_only_known_names_and_node_names():
+    d = lambda r: control.dispatch(json.dumps(r).encode(), lambda c, q: {"ok": True}, lambda: {"compute"})
+    assert d({"cmd": "slurm-step", "name": "slurmd-restart", "node": "cn001"})["ok"]
+    assert d({"cmd": "slurm-step", "name": "slurmctld-restart"})["ok"] and d({"cmd": "slurm-step", "name": "cancel-jobs"})["ok"]
+    for bad in ({"name": "slurmd-restart"}, {"name": "slurmd-stop", "node": "cn001; rm"}, {"name": "rm -rf"}, {"node": "cn001"}):
+        assert d({"cmd": "slurm-step", **bad})["ok"] is False
+    assert d({"cmd": "slurm-trace", "nodes": ["cn001"], "since": 12.5})["ok"] and d({"cmd": "slurm-trace", "nodes": [], "since": 1})["ok"]
+    for bad in ({"nodes": ["x;y"], "since": 1}, {"nodes": "cn001", "since": 1}, {"nodes": ["cn001"]}, {"nodes": ["cn001"], "since": True},
+                {"nodes": [f"cn00{i}" for i in range(9)], "since": 1}):
+        assert d({"cmd": "slurm-trace", **bad})["ok"] is False

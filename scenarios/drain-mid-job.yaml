@@ -1,7 +1,7 @@
 name: drain-mid-job
 description: A node is drained under a running job; the job should finish while the node shows draining, then drained after it ends (run with --trace)
 steps:
-  - {at: 0s,  target: slurm, do: {submit: {node: cn001, wrap: "sleep 40"}}}
+  - {at: 0s,  target: slurm, do: {submit: {node: cn001, duration: 40}}}
   - {at: 15s, target: slurm, do: {drain: [cn001], reason: "scenario drain-mid-job"}}
   - {at: 70s, target: slurm, do: {resume: [cn001]}}
 expect:

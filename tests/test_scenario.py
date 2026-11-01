@@ -322,12 +322,12 @@ def test_daemon_steps_become_docker_commands():
     assert ran[0][:2] == ["docker", "restart"] and "scancel" in ran[1]
 
 
-def test_submit_runs_sbatch_as_the_user_on_the_node_and_a_failed_submit_fails_the_step():
+def test_submit_makes_the_same_job_as_benchctl_submit_and_a_failed_submit_fails_the_step():
     ran, runner = _rec()
-    sub = {"node": "gpu001", "partition": "gpu", "gres": "gpu:2", "wrap": "sleep 5"}
+    sub = {"node": "gpu001", "gpus": 2, "duration": 40}
     assert scenario.execute(scenario.Step(0, "slurm", {"submit": sub}), runner=runner).status == "ok"
     assert ran[0][:5] == ["docker", "exec", "-u", "alice", "workbench-login-1"]
-    assert "--nodelist=gpu001" in ran[0] and ran[0][-1] == "--wrap=sleep 5" and "gpu:2" in ran[0]
+    assert "--nodelist=gpu001" in ran[0][-1] and "--gres=gpu:2" in ran[0][-1] and "sleep 40" in ran[0][-1]
     bad = scenario.execute(scenario.Step(0, "slurm", {"submit": {"node": "cn001"}}),
                            runner=lambda c: type("R", (), {"returncode": 1, "stdout": "", "stderr": "invalid account"})())
     assert bad.status == "failed" and "invalid account" in bad.detail
@@ -335,6 +335,19 @@ def test_submit_runs_sbatch_as_the_user_on_the_node_and_a_failed_submit_fails_th
     none = scenario.execute(scenario.Step(0, "slurm", {"slurmd_stop": ["cn001"]}),
                             runner=lambda c: type("R", (), {"returncode": 1 if "pkill" in c else 0, "stdout": "", "stderr": ""})())
     assert none.status == "ok"
+
+
+def test_without_docker_daemon_steps_go_through_the_daemon_callback_and_a_refusal_is_a_skip():
+    asked = []
+    o = scenario.execute(scenario.Step(0, "slurm", {"slurmd_restart": ["cn001"]}), host=False,
+                         daemon=lambda do: asked.append(do) or (True, "asked the governor"))
+    assert o.status == "ok" and asked == [{"slurmd_restart": ["cn001"]}]
+    refused = scenario.execute(scenario.Step(0, "slurm", {"cancel": True}), host=False, daemon=lambda do: (False, "refused at L3"))
+    assert refused.status == "skipped" and "L3" in refused.detail
+    seen = []
+    scenario.run({"name": "x", "steps": [{"at": "0s", "target": "slurm", "do": {"cancel": True}}]}, host=False,
+                 daemon=lambda do: (True, ""), on_before=seen.append, say=lambda m: None)
+    assert len(seen) == 1
 
 
 def test_daemon_steps_need_the_host_and_are_validated():

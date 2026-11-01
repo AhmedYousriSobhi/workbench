@@ -82,9 +82,20 @@ def main(argv: list[str] | None = None) -> None:
             cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]
         return subprocess.run(cmd, cwd=args.workdir, capture_output=True, timeout=600, check=False).returncode
 
+    def tracer(nodes: list[str], since: float) -> dict:
+        cmd = [sys.executable, "-m", "benchctl.cli", "get", "trace", "--since", str(max(1.0, time.time() - since)),
+               *[a for n in nodes for a in ("--node", n)]]
+        owner = Path(args.workdir).stat().st_uid
+        if os.geteuid() == 0 and owner != 0:
+            cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]
+        r = subprocess.run(cmd, cwd=args.workdir, capture_output=True, timeout=60, check=False, text=True)
+        if r.returncode:
+            raise RuntimeError((r.stderr or r.stdout).strip()[:200])
+        return json.loads(r.stdout)
+
     gov = Governor(sampler, ladder, groups, executor, args.dry_run, watchdog, args.watch_interval,
                    annotator, discover_docker, args.refresh_interval,
-                   effector if args.workdir else None)
+                   effector if args.workdir else None, tracer=tracer if args.workdir else None)
     srv = control.serve(args.socket, gov.handle, gov.group_names, gid=args.socket_gid) \
         if args.socket else None
     msrv = None

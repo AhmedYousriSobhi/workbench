@@ -163,8 +163,10 @@ while an older one kept running). Restart it and reload:
 
 Press **▶ Scenarios**, type in *Filter scenarios* if the list is long, pick a speed (one setting for all), press
 **▶ Play**, and watch each step turn ok, skipped or failed. **Stop** aborts. While one runs, the top strip shows it and
-pressing that chip reopens the sheet. Steps that need Docker (the `slurm` target: drain and resume) are **skipped on this
-page**, because the page has no Docker access by design; run those with `./scripts/benchctl scenario run NAME`.
+pressing that chip reopens the sheet. The page has no Docker access by design, so its `slurm` steps (drain, resume, job and daemon steps)
+are done by the governor; one it refuses (memory level L2 and above) or cannot do (started without `--workdir`) shows **skipped** with the reason, and
+`./scripts/benchctl scenario run NAME` does it from the terminal. Tick **Slurm trace** before **▶ Play** to see, under the timeline, what the
+jobs and Slurm's logs did around each step ([Slurm resilience](../guides/slurm-resilience.md)).
 
 ![Run panel showing node-down, step 2 of 6, with each step marked ok or pending and a Stop button (older layout)](img/web-scenario-running.png)
 
