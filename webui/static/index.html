@@ -277,9 +277,27 @@
   .np-card .actions .btn:hover { border-color:var(--accent); } .np-card pre { max-height:180px; font-size:12px; } .np-card dl.kv { font-size:13px; margin:0 0 var(--sp2); }
   @media (max-width:1100px) { .nodeswrap, .nodeswrap.solo { grid-template-columns:minmax(0,1fr); } .nodesmain { max-height:none; } .np-card .actions { grid-template-columns:repeat(2,minmax(0,1fr)); } }
   @media (max-width:520px) { .np-card .actions { grid-template-columns:minmax(0,1fr); } .trafficpanel .legend span:nth-child(3) { display:none; } }
+  /* architecture first (#192): the diagram is the main view; the node list sits beside it and folds away */
+  .nodeswrap { grid-template-columns:minmax(0,1fr) clamp(380px,24vw,460px); gap:var(--sp4); } .nodeswrap.treeoff { grid-template-columns:minmax(0,1fr); } .nodeswrap.treeoff .nodesmain { display:none; }
+  .nodeswrap.solo { grid-template-columns:minmax(0,760px); }
+  .trafficpanel { position:relative !important; top:auto !important; }
+  .nodesmain .er { grid-template-columns:20px 84px minmax(0,1fr); } .nodesmain .er .info { grid-column:2 / -1; white-space:normal; flex-wrap:wrap; } .trafficpanel .row { display:flex; align-items:center; gap:var(--sp3); flex-wrap:wrap; } .trafficpanel .row .grow { flex:1; }
+  .nodesmain { max-height:calc(100vh - 175px); } #flow { max-height:calc(100vh - 300px); } .legendbox { margin-top:var(--sp1); } .trafficpanel { padding-top:var(--sp3); padding-bottom:var(--sp3); } #flow { margin:var(--sp1) 0; } .legendbox > summary { min-height:30px; }
+  #flow text { font-size:20px; } #flow text.sub { font-size:16px; } #flow .ftitle { font-size:15px; } #flow .ndt { font-size:13px; } #flow .ndt.cl { font-size:15px; }
+  #flow text.elab { font:600 13px system-ui,sans-serif; fill:var(--fg); } #flow .elbg { fill:var(--panel); stroke:var(--line); stroke-width:1; }
+  #flow marker path { fill:var(--dim); } #flow .lane.ssh, #flow .lane.teleport, #flow .lane.jump { stroke:var(--dim); stroke-width:2.5; opacity:.9; }
+  #flow .lane.teleport { stroke-dasharray:12 6; } #flow .lane.jump { stroke-dasharray:3 6; stroke-linecap:round; } #flow .elabs { pointer-events:none; }
+  #flow .blk.lgn, #flow .blk.blkacc { stroke:var(--accent); } #flow .blk.blkacc.down { stroke:var(--bad); }
+  .pop { position:fixed; z-index:30; width:min(360px,calc(100% - 16px)); background:var(--panel); border:1px solid var(--accent); border-radius:12px; padding:var(--sp3) var(--sp4); box-shadow:0 14px 40px rgba(0,0,0,.35); font-size:13.5px; }
+  .pop[hidden], .tip[hidden] { display:none; } .pop-h { display:flex; align-items:center; gap:var(--sp2); margin-bottom:var(--sp2); } .pop-h b { font-size:16px; flex:1; } .pop dl.kv { margin:0 0 var(--sp2); font-size:13px; } .pop dd { overflow-wrap:break-word; } .pop dd code { overflow-wrap:anywhere; }
+  .pop-cmd { display:flex; gap:var(--sp2); align-items:flex-start; margin-bottom:var(--sp2); } .pop-cmd code { flex:1; overflow-wrap:anywhere; font-size:12px; } .pop-act { display:flex; gap:var(--sp2); flex-wrap:wrap; }
+  .tip { position:fixed; z-index:40; max-width:320px; background:var(--fg); color:var(--bg); border-radius:8px; padding:6px 10px; font-size:13px; line-height:1.35; pointer-events:none; display:flex; flex-direction:column; }
+  .flowscroll { overflow-x:auto; } @media (max-width:700px) { #flow { min-width:760px; } }
+  @media (max-width:1100px) { .nodeswrap, .nodeswrap.solo { grid-template-columns:minmax(0,1fr); } .nodesmain { max-height:none; } }
 </style>
 </head>
 <body>
+<div id="tip" class="tip" role="tooltip" hidden></div>
 <a class="skip" href="#main">Skip to content</a>
 <header class="top">
   <h1><svg class="logo" viewBox="0 0 120 120" aria-hidden="true"><g>
@@ -323,11 +341,15 @@
   <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/benchctl start</code>.</div>
     <div class="nodeswrap" id="nodeswrap">
   <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 id="traffic-h" style="margin:0">Infrastructure architecture</h2>
-    <button class="btn small" id="flowpause" aria-pressed="false">Pause animation</button></div>
-    <svg id="flow" viewBox="0 0 420 270" role="img" aria-label="Infrastructure architecture: traffic from clients and from injected faults to the services (mocks, Teleport when on) and the nodes of the cluster"></svg>
+    <span class="grow"></span><button class="btn small" id="flowpause" aria-pressed="false">Pause animation</button>
+    <button class="btn small" id="treetoggle" aria-expanded="true" aria-controls="nodesmain">Hide node list</button></div>
+    <div class="flowscroll"><svg id="flow" viewBox="0 0 1120 470" role="img" aria-label="Infrastructure architecture: clients and users, the access layer (login nodes, each direct SSH, Teleport or both, and the Teleport proxy when on), the services, and the nodes. Each part opens its details."></svg></div>
+    <div id="pop" class="pop" role="dialog" aria-labelledby="pop-t" hidden></div>
+    <details class="quiet legendbox"><summary class="small dim">How to read this diagram</summary>
     <p class="legend small dim"><span><b style="color:var(--accent)" aria-hidden="true">●</b> round dot: a request from a client (the app, Prometheus, curl) or an SSH connection through Teleport</span>
       <span><b style="color:var(--warn)" aria-hidden="true">◆</b> diamond: a fault from a scenario or a button, travelling to the node it hits</span>
-      <span>Node tiles: ✓ healthy · ▲ warning · ✗ fault · ⏻ off · ? unknown</span></p>
+      <span>Lines: solid arrow = direct SSH · long dashes = through the Teleport proxy · short dashes = jump host (ssh from a login node) · thin = an API call</span>
+      <span>Hover a part for its state, click it for the address, command and actions. Node tiles: ✓ healthy · ▲ warning · ✗ fault · ⏻ off · ? unknown</span></p></details>
     <p id="flowstate" class="dim small" role="status" style="margin-bottom:0"></p></section>
   <div class="nodesmain" id="nodesmain">
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
@@ -614,9 +636,10 @@ async function drawParts() {  // the options come from the backend registry (/ap
     $('pl-bmcmb').textContent = j.bmc_node_mb;
     $('pl-bmcnodes').innerHTML = j.nodes.map(n => `<label class="tog"><input type="checkbox" value="${esc(n.name)}"${n.bmc ? ' checked' : ''}><span>${esc(n.name)}</span></label>`).join('');
     $('pl-bmcnodes').querySelectorAll('input').forEach(i => i.oninput = i.onchange = () => planInputs());
-    loginModes = [...(j.logins.now || ['ssh'])]; loginMax = j.logins.max; drawLogins(); syncTeleport();
+    const lg = j.logins;  // an older page backend does not send it: the parts above still work, the login rows are hidden
+    $('pl-logins').hidden = !lg; if (lg) { loginModes = [...(lg.now || ['ssh'])]; loginMax = lg.max; drawLogins(); syncTeleport(); }
     showBmcNodes(); partsDrawn = true;
-  } catch (e) { $('pl-parts').textContent = 'Could not load the options.'; }
+  } catch (e) { $('pl-parts').textContent = 'Could not load the options. The page and its backend may be different versions: run ./scripts/benchctl stop, then ./scripts/benchctl start, and reload.'; }
 }
 async function openPlan() {
   await drawParts();
@@ -794,6 +817,7 @@ function closeNode() {
 $('node-back').onclick = closeNode;
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && openNode && !document.querySelector('dialog[open]')) closeNode(); });
 async function showNode(name) {
+  setTree(true);  // the panel lives in the node column: open it if it was folded away
   openNode = name; openerEl = document.activeElement; paintNodeActions(name); $('nodeactmsg').textContent = '';
   $('tree').hidden = true; $('treenote').hidden = true; $('nodepane').hidden = false; $('nodetitle').textContent = name; $('node-back').focus();
   const r = await fetch(`/api/nodes/${name}`), body = r.ok ? await r.json() : null;
@@ -829,63 +853,169 @@ const BASE_SERVICES = [['bmc-farm', 'BMC farm', 'Redfish'], ['bcm-mock', 'BCM mo
 const TELEPORT_BOX = ['teleport', 'Teleport', 'SSH proxy'];
 function hasTeleport() { try { return !!(lastCluster && 'teleport' in JSON.parse(lastCluster).services); } catch (e) { return false; } }
 function svcList() { return hasTeleport() ? [...BASE_SERVICES, TELEPORT_BOX] : BASE_SERVICES; }  // Teleport only when the part is built: no phantom box
-const FW = 760, G = { clients: { x: 8, y: 8, w: 176, h: 208 }, injector: { x: 8, y: 232, w: 176, h: 108 }, cluster: { x: 268, y: 8, w: 484 } };
+const FW = 1008, G = { clients: { x: 8, y: 8, w: 150, h: 272 }, injector: { x: 8, y: 294, w: 150, h: 108 }, cluster: { x: 588, y: 8, w: 412 } };
+let svcOut = {}, svcLane = {};
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 let flowEs = null, flowPaused = false, flowCursor = 0, dots = [], raf = 0, recent = [], flowSnap = null, flowLevel = 0, flowNodes = '', tiles = {}, svcPos = {};
 function sv(tag, attrs, text) { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; }
 const curve = (a, b) => { const dx = (b.x - a.x) * 0.5; return [a, { x: a.x + dx, y: a.y }, { x: b.x - dx, y: b.y }, b]; };
-const at = ([p0, p1, p2, p3], t) => { const u = 1 - t, f = (c) => u ** 3 * p0[c] + 3 * u * u * t * p1[c] + 3 * u * t * t * p2[c] + t ** 3 * p3[c]; return { x: f('x'), y: f('y') }; };
-const dpath = ([p0, p1, p2, p3]) => `M${p0.x} ${p0.y} C${p1.x} ${p1.y} ${p2.x} ${p2.y} ${p3.x} ${p3.y}`;
+const poly = pts => ({ poly: pts });  // straight segments (the service lines run along a channel); position by distance, like a curve by t
+const atPoly = (pts, t) => { const L = pts.slice(1).map((q, i) => Math.hypot(q.x - pts[i].x, q.y - pts[i].y)), tot = L.reduce((a, b) => a + b, 0); let d = Math.min(Math.max(t, 0), 1) * tot, i = 0; while (i < L.length - 1 && d > L[i]) d -= L[i++]; const k = L[i] ? d / L[i] : 0; return { x: pts[i].x + (pts[i + 1].x - pts[i].x) * k, y: pts[i].y + (pts[i + 1].y - pts[i].y) * k }; };
+const at = (b, t) => { if (b.poly) return atPoly(b.poly, t); const [p0, p1, p2, p3] = b; const u = 1 - t, f = (c) => u ** 3 * p0[c] + 3 * u * u * t * p1[c] + 3 * u * t * t * p2[c] + t ** 3 * p3[c]; return { x: f('x'), y: f('y') }; };
+const dpath = b => b.poly ? 'M' + b.poly.map(q => `${q.x} ${q.y}`).join(' L') : `M${b[0].x} ${b[0].y} C${b[1].x} ${b[1].y} ${b[2].x} ${b[2].y} ${b[3].x} ${b[3].y}`;
 function nodeList() { try { return lastCluster ? JSON.parse(lastCluster).nodes : []; } catch (e) { return []; } }
 const SVC_CONN = { 'bmc-farm': 'bmc', 'bcm-mock': 'bcm', 'jira-mock': 'jira', 'gpu-exporter': 'gpu', 'teleport': 'teleport' };  // diagram box -> Connections row
-function asButton(el, name, act) {  // an SVG shape that behaves like a button: click, Enter or Space, announced by name
+// hover tip and click pop-up on every part of the diagram (#192). The tip is one line of state; the pop-up has the address, the command and the actions.
+const tipEl = () => $('tip');
+function showTip(el, lines) {
+  if (!lines || !$('pop').hidden && $('pop').contains(el)) return;
+  const t = tipEl(); t.innerHTML = `<b>${esc(lines[0])}</b><span>${esc(lines[1] || '')}</span>`; t.hidden = false;
+  const r = el.getBoundingClientRect(), w = t.offsetWidth, h = t.offsetHeight;
+  t.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
+  t.style.top = (r.top - h - 8 < 8 ? r.bottom + 8 : r.top - h - 8) + 'px';
+}
+function hideTip() { tipEl().hidden = true; }
+function asButton(el, name, act, tip) {  // an SVG shape that behaves like a button: click, Enter or Space, announced by name; `tip` gives the hover line
   el.setAttribute('class', 'hit'); el.setAttribute('role', 'button'); el.setAttribute('tabindex', '0'); el.setAttribute('aria-label', name);
-  el.addEventListener('click', act); el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act(); } });
+  el.addEventListener('click', e => { e.stopPropagation(); act(); }); el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act(); } });
+  if (tip) { for (const ev of ['pointerenter', 'focus']) el.addEventListener(ev, () => showTip(el, tip())); for (const ev of ['pointerleave', 'blur']) el.addEventListener(ev, hideTip); }
   return el;
 }
+const CLIENT_INFO = {
+  'Monitoring app': 'A desktop client: SSH, Slurm, Grafana, Jira, BMC and BCM over the profile exported from this page.',
+  'Prometheus': 'Scrapes the GPU exporter and the governor; its address is in Connections.',
+  'curl · scripts': 'Anything you run by hand against the services; each request shows as a dot.',
+  'You: ssh · tsh': 'A terminal: ssh to a login node that takes a key, tsh to one behind Teleport.'
+};
+let popOpener = null;
+function hidePop(restore) { $('pop').hidden = true; if (restore && popOpener && document.contains(popOpener)) popOpener.focus(); }
+const clusterNow = () => { try { return JSON.parse(lastCluster); } catch (e) { return { nodes: [], services: {}, logins: [] }; } };
+const bare = s => String(s || '').replace(/`/g, '');
+async function popInfo(kind, id) {
+  const rows = await connections(), row = k => rows.find(r => r.id === k), c = clusterNow(), tp = hasTeleport();
+  const conn = (r, extra = []) => r ? [['Address', `<code>${esc(r.address)}</code>`], ...extra, ['Credential', r.credential ? `<code>${esc(r.credential)}</code>` : 'none']] : [['Details', 'Open Connections']];
+  if (kind === 'node') {
+    const n = c.nodes.find(x => x.name === id) || { name: id, label: '', state: 'unknown', kind: '' }, cx = row('nodes');
+    let ip = ''; try { const b = await (await fetch(`/api/nodes/${id}`)).json(); ip = b.ip || ''; } catch (e) { /* the pop-up still opens */ }
+    return { title: id, badge: `${STATE_ICON[n.state] || '?'} ${n.label}`, cls: n.state, cmd: cx ? cx.command.replace('<node>', id) : '', kv: [['Kind', n.kind === 'gpu' ? 'GPU node' : 'Compute node'], ['Address', ip ? `<code>${esc(ip)}</code> (private, from a login node)` : 'see Connections'],
+      ['Reached by', 'ssh from any login node (jump host)' + (tp ? ', or through the Teleport proxy' : '')]], actions: [{ label: 'Actions and details', fn: () => showNode(id) }, { label: 'Connections', fn: () => openConnection('nodes') }] };
+  }
+  if (kind === 'login') {
+    const l = loginList().find(x => x.name === id) || { mode: 'ssh' }, r = row(id);
+    return { title: id, badge: MODE_TEXT[l.mode], cmd: r ? r.command : '', kv: [['Way in', l.mode === 'teleport' ? 'Teleport only: no published port, a key is refused' : l.mode === 'both' ? 'Direct SSH with a key, or Teleport' : 'Direct SSH with a key'], ...conn(r),
+      ['To the nodes', 'ssh from here (jump host)']], actions: [{ label: 'Connections', fn: () => openConnection(id) }] };
+  }
+  if (kind === 'svc') {
+    const r = row(SVC_CONN[id]), l = svcList().find(x => x[0] === id) || [id, id], up = flowSnap?.reachable[id], t = flowSnap?.totals[id] || 0;
+    return { title: l[1], badge: up ? '✓ up' : flowSnap ? '✗ not reachable' : 'checking', cls: up ? 'ok' : 'fault', cmd: r ? r.command : '', kv: [['Call it with', SVC_METHOD[id] || ''], ['Seen', `${t.toLocaleString()} ${id === 'teleport' ? 'connections' : 'requests'}`], ...conn(r)], actions: [{ label: 'Connections', fn: () => openConnection(SVC_CONN[id]) }] };
+  }
+  return { title: id, badge: '', cmd: '', kv: [['What it is', esc(CLIENT_INFO[id] || '')]], actions: [{ label: 'Connections', fn: () => openConnection(null) }] };
+}
+async function openPop(anchor, kind, id) {
+  hideTip(); popOpener = anchor;
+  const d = await popInfo(kind, id), p = $('pop');
+  p.innerHTML = `<div class="pop-h"><b id="pop-t">${esc(d.title)}</b>${d.badge ? `<span class="pill ${d.cls || ''}">${esc(d.badge)}</span>` : ''}<button class="btn small" id="pop-x" aria-label="Close details">✕</button></div>
+    <dl class="kv">${d.kv.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>
+    ${d.cmd ? `<div class="pop-cmd"><code>${esc(d.cmd)}</code><button class="btn small" id="pop-copy">Copy</button></div>` : ''}
+    <div class="pop-act">${d.actions.map((a, i) => `<button class="btn small" data-a="${i}">${esc(a.label)}</button>`).join('')}</div>`;
+  p.hidden = false;
+  const r = anchor.getBoundingClientRect(), w = p.offsetWidth, h = p.offsetHeight;  // fixed to the window: it always fits on screen, beside the part it describes
+  let left = r.right + 10; if (left + w > innerWidth - 8) left = r.left - w - 10; left = Math.max(8, left);
+  p.style.left = left + 'px'; p.style.top = Math.max(8, Math.min(r.top - 8, innerHeight - h - 8)) + 'px';
+  $('pop-x').onclick = () => hidePop(true);
+  if ($('pop-copy')) $('pop-copy').onclick = async () => { try { await navigator.clipboard.writeText(d.cmd); $('pop-copy').textContent = 'Copied'; } catch (e) { $('pop-copy').textContent = 'Select and copy'; } };
+  p.querySelectorAll('[data-a]').forEach(b => b.onclick = () => { hidePop(false); d.actions[+b.dataset.a].fn(); });
+  $('pop-x').focus();
+}
+document.addEventListener('click', e => { if (!$('pop').hidden && !$('pop').contains(e.target)) hidePop(false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('pop').hidden) { e.stopPropagation(); hidePop(true); } }, true);
+addEventListener('scroll', hideTip, { passive: true });
 async function openConnection(id) {  // the Connections tab, with the row for this part marked
   selectTab('conn'); await paintConnections();
   const row = id && document.querySelector(`#conn-rows tr[data-id="${id}"]`); if (!row) return;
   document.querySelectorAll('#conn-rows tr.focus').forEach(r => r.classList.remove('focus')); row.classList.add('focus'); row.scrollIntoView({ block: 'center' });
 }
-function flowSig(nodes) { return nodes.map(n => n.name).join(',') + (hasTeleport() ? '+teleport' : ''); }
+function flowSig(nodes) { return nodes.map(n => n.name).join(',') + (hasTeleport() ? '+teleport' : '') + '|' + loginList().map(l => l.name + ':' + l.mode).join(','); }
+// ---- the diagram (#192): clients -> services and access (login nodes, Teleport) -> nodes, one labelled line per way in ----
+const SVC_METHOD = { 'bmc-farm': 'HTTPS Redfish', 'bcm-mock': 'HTTP JSON', 'jira-mock': 'HTTP REST', 'gpu-exporter': 'HTTP metrics', teleport: 'tsh · HTTPS' };
+const MODE_TEXT = { ssh: 'Direct SSH', teleport: 'Teleport only', both: 'Direct SSH + Teleport' };
+const LOGIN_ONE = [{ name: 'login', mode: 'ssh', port: 2222 }];
+function loginList() { try { const l = lastCluster && JSON.parse(lastCluster).logins; return l && l.length ? l : LOGIN_ONE; } catch (e) { return LOGIN_ONE; } }
 function buildFlow() {
-  const g = $('flow'), nodes = nodeList(); g.innerHTML = ''; tiles = {}; svcPos = {};
-  flowNodes = flowSig(nodes);
-  const COLS = 4, TW = 52, TH = 38, GAP = 8, nx = 500, groups = ['compute', 'gpu'].map(k => [k, nodes.filter(n => n.kind === k)]).filter(([, r]) => r.length);
+  const g = $('flow'), nodes = nodeList(), lgs = loginList(), svcs = svcList().filter(x => x[0] !== 'teleport'), tpBox = svcList().find(x => x[0] === 'teleport');
+  g.innerHTML = ''; tiles = {}; svcPos = {}; svcOut = {}; svcLane = {}; flowNodes = flowSig(nodes);
+  const BX = 330, BW = 200, BH = 64, PITCH = 72, AX = 232, AW = 300, SW = 170, SPITCH = 188;
+  const CHIPS = [['Monitoring app', lgs[0].name], ['Prometheus', 'prometheus'], ['curl · scripts', null], ['You: ssh · tsh', lgs[0].name]];
+  const acc = [...(tpBox ? [tpBox] : []), ...lgs], accTop = 8, accH = 42 + acc.length * PITCH;
+  G.clients.h = 46 + CHIPS.length * 50 + 24; G.injector.y = G.clients.y + G.clients.h + 14;
+  const COLS = 5, TW = 60, TH = 40, GAP = 8, nx = G.cluster.x + 24, groups = ['compute', 'gpu'].map(k => [k, nodes.filter(n => n.kind === k)]).filter(([, r]) => r.length);
   let y = 50; const layout = [];
   for (const [k, rows] of groups) { layout.push(['label', k, y]); y += 20; rows.forEach((n, i) => layout.push(['node', n, nx + (i % COLS) * (TW + GAP), y + Math.floor(i / COLS) * (TH + GAP)])); y += Math.ceil(rows.length / COLS) * (TH + GAP) + 14; }
-  const H = Math.max(356, y + 12, 50 + svcList().length * 74); g.setAttribute('viewBox', `0 0 ${FW} ${H}`); G.cluster.h = H - 16;
-  const fr = (b, rx) => sv('rect', { class: 'frame', x: b.x, y: b.y, width: b.w, height: b.h, rx });
-  g.append(fr(G.clients, 12), fr(G.injector, 12), fr(G.cluster, 14));
-  g.append(sv('text', { class: 'ftitle', x: 22, y: 34 }, 'Clients'), sv('text', { class: 'ftitle', x: 22, y: 258 }, 'Faults'), sv('text', { class: 'ftitle', x: 284, y: 34 }, 'Cluster'));
-  g.append(sv('text', { class: 'sub', id: 'fc-clients', x: 22, y: 204 }, ''), sv('text', { class: 'sub', id: 'fc-injector', x: 22, y: 328 }, ''));
-  [['Monitoring app', 'login'], ['Prometheus', 'prometheus'], ['curl · scripts', null]].forEach(([t, conn], i) => {
-    const cg = asButton(sv('g', {}), `${t}: how to reach it`, () => openConnection(conn));
-    cg.append(sv('rect', { class: 'chipbg', x: 20, y: 46 + i * 52, width: 152, height: 42, rx: 9 }), sv('text', { class: 'ndt cl', x: 32, y: 72 + i * 52 }, t)); g.append(cg);
+  const topEnd = Math.max(accTop + accH, y + 4), svTop = topEnd + 56, svH = 38 + BH + 34, rightEdge = G.cluster.x + G.cluster.w;  // the band of services sits under the access layer and the nodes
+  const H = Math.max(G.injector.y + G.injector.h + 16, svTop + svH + 16); g.setAttribute('viewBox', `0 0 ${FW} ${H}`); G.cluster.h = topEnd - G.cluster.y;
+  const fr = (x, y0, w, h, rx) => sv('rect', { class: 'frame', x, y: y0, width: w, height: h, rx });
+  const defs = sv('defs', {}), mk = sv('marker', { id: 'arr', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, orient: 'auto' }); mk.append(sv('path', { d: 'M0 0 L10 5 L0 10 z' })); defs.append(mk); g.append(defs);
+  g.append(fr(G.clients.x, G.clients.y, G.clients.w, G.clients.h, 12), fr(G.injector.x, G.injector.y, G.injector.w, G.injector.h, 12), fr(AX, accTop, AW, accH, 14), fr(AX, svTop, rightEdge - AX, svH, 14), fr(G.cluster.x, G.cluster.y, G.cluster.w, G.cluster.h, 14));
+  const jy = G.injector.y;
+  g.append(sv('text', { class: 'ftitle', x: 22, y: 34 }, 'Clients'), sv('text', { class: 'ftitle', x: 22, y: jy + 26 }, 'Faults'), sv('text', { class: 'ftitle', x: AX + 16, y: accTop + 26 }, 'Access: how users get in'), sv('text', { class: 'ftitle', x: AX + 16, y: svTop + svH - 12 }, 'Services: what clients call'), sv('text', { class: 'ftitle', x: G.cluster.x + 16, y: 34 }, 'Cluster nodes'));
+  g.append(sv('text', { class: 'sub', id: 'fc-clients', x: 22, y: G.clients.y + G.clients.h - 12 }, ''), sv('text', { class: 'sub', id: 'fc-injector', x: 22, y: jy + 96 }, ''), sv('text', { class: 'sub', x: 22, y: jy + 54 }, '◆ scenarios'), sv('text', { class: 'sub', x: 22, y: jy + 76 }, '◆ buttons'));
+  const nOut = (tpBox ? 1 : 0) + lgs.filter(l => l.mode !== 'teleport').length + svcs.length; let oi = 0;  // lines leave the client frame spread along its edge, so they do not pile up
+  const out = () => ({ x: G.clients.x + G.clients.w, y: G.clients.y + 40 + (oi++) * ((G.clients.h - 90) / Math.max(nOut - 1, 1)) });
+  const injOut = { x: G.injector.x + G.injector.w, y: G.injector.y + G.injector.h / 2 };
+  const lanes = sv('g', {}), labels = sv('g', { class: 'elabs' }); g.append(lanes);
+  const edge = (kind, bz, text, tt = 0.5, id) => {  // a labelled line: `kind` says the method (ssh, teleport, jump, api), the label says it in words
+    lanes.append(sv('path', { class: 'lane ' + kind, d: dpath(bz), ...(id ? { id } : {}), ...(kind !== 'api' ? { 'marker-end': 'url(#arr)' } : {}) }));
+    const m = at(bz, tt), w = text.length * 7.2 + 14; labels.append(sv('rect', { class: 'elbg', x: m.x - w / 2, y: m.y - 11, width: w, height: 22, rx: 6 }), sv('text', { class: 'elab', x: m.x, y: m.y + 4.5, 'text-anchor': 'middle' }, text));
+    return bz;
+  };
+  const box = (k, label, sub, p, popKind, popId, cls = '') => {
+    svcPos[k] = p;
+    const bg = asButton(sv('g', {}), `${label}: details`, () => openPop(bg, popKind, popId), () => svTip(k));
+    bg.append(sv('rect', { class: 'blk ' + cls, id: 'fb-' + k, x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), sv('text', { class: 'sn', x: p.x + 12, y: p.y + 24 }, label), sv('text', { class: 'sub', id: 'fs-' + k, x: p.x + 12, y: p.y + 42 }, ''), sv('text', { class: 'sub', id: 'fc-' + k, x: p.x + 12, y: p.y + 58 }, sub)); return bg;
+  };
+  const svTip = k => { const l = svcList().find(x => x[0] === k); const up = flowSnap?.reachable[k]; return [l[1] + ' · ' + (up ? 'up' : flowSnap ? 'not reachable' : 'checking'), SVC_METHOD[k] + ' · click for address and command']; };
+  const place = acc.map((a, i) => [a, { x: BX, y: accTop + 46 + i * PITCH, w: BW, h: BH }]);
+  const tpP = tpBox && place[0][1];
+  if (tpBox) { const o = svcOut.teleport = out(); svcLane.teleport = edge('api', curve(o, { x: tpP.x, y: tpP.y + BH / 2 }), SVC_METHOD.teleport, 0.5, 'ln-teleport'); }
+  for (const [l, p] of place) {
+    if (l === tpBox) continue;
+    const mid = p.y + BH / 2;
+    if (l.mode !== 'teleport') edge('ssh', curve(out(), { x: p.x, y: mid - 12 }), 'direct SSH', 0.3);
+    if (l.mode !== 'ssh' && tpBox) { const s = { x: tpP.x, y: tpP.y + BH / 2 + 12 }, e = { x: p.x, y: mid + 12 }; edge('teleport', [s, { x: s.x - 62, y: s.y }, { x: e.x - 62, y: e.y }, e], 'Teleport', 0.5); }
+  }
+  const outs = svcs.map(() => out()).reverse();  // the rightmost box takes the topmost origin: no two service lines cross
+  svcs.forEach(([k], i) => {  // services: a line from the clients runs down the gutter, along the channel above the band, and drops into the top of each box; faults get a dotted one
+    const p = { x: AX + 12 + i * SPITCH, y: svTop + 38, w: SW, h: BH }, o = svcOut[k] = outs[i], top = { x: p.x + p.w / 2, y: p.y }, vx = G.clients.x + G.clients.w + 14 + i * 8, hy = topEnd + 12 + (svcs.length - 1 - i) * 9;
+    svcLane[k] = edge('api', poly([o, { x: vx, y: o.y }, { x: vx, y: hy }, { x: top.x, y: hy }, top]), SVC_METHOD[k], 0.93, 'ln-' + k); svcPos[k] = p;
+    lanes.append(sv('path', { class: 'lane inj', d: dpath(poly([injOut, { x: vx + 40, y: injOut.y }, { x: vx + 40, y: hy + 4 }, { x: top.x + 16, y: hy + 4 }, { x: top.x + 16, y: top.y }])), opacity: 0.3 }));
   });
-  g.append(sv('text', { class: 'sub', x: 22, y: 286 }, '◆ scenarios'), sv('text', { class: 'sub', x: 22, y: 308 }, '◆ buttons'));
-  const clientsOut = { x: G.clients.x + G.clients.w, y: G.clients.y + G.clients.h / 2 }, injOut = { x: G.injector.x + G.injector.w, y: G.injector.y + G.injector.h / 2 };
-  const lanes = sv('g', {}); g.append(lanes);
-  svcList().forEach(([k, label, sub], i) => {
-    const p = { x: 284, y: 50 + i * 74, w: 196, h: 64 }; svcPos[k] = p;
-    lanes.append(sv('path', { class: 'lane', id: 'ln-' + k, d: dpath(curve(clientsOut, { x: p.x, y: p.y + p.h / 2 })) }), sv('path', { class: 'lane inj', d: dpath(curve(injOut, { x: p.x, y: p.y + p.h / 2 + 8 })), opacity: 0.5 }));
-    const bg = asButton(sv('g', {}), `${label}: open its address and credential`, () => openConnection(SVC_CONN[k]));
-    bg.append(sv('rect', { class: 'blk', id: 'fb-' + k, x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), sv('text', { class: 'sn', x: p.x + 12, y: p.y + 24 }, label), sv('text', { class: 'sub', id: 'fs-' + k, x: p.x + 12, y: p.y + 42 }, ''), sv('text', { class: 'sub', id: 'fc-' + k, x: p.x + 12, y: p.y + 58 }, sub)); g.append(bg);
+  for (const [l, p] of place) if (l !== tpBox) edge('jump', curve({ x: p.x + p.w, y: p.y + BH / 2 }, { x: G.cluster.x, y: p.y + BH / 2 }), 'jump host', 0.5);
+  if (tpBox) edge('teleport', curve({ x: tpP.x + BW, y: tpP.y + BH / 2 }, { x: G.cluster.x, y: tpP.y + BH / 2 }), 'Teleport', 0.5);
+  for (const [a, p] of place) {
+    if (a === tpBox) { g.append(box('teleport', tpBox[1], tpBox[2], p, 'svc', 'teleport', 'blkacc')); continue; }
+    const l = a, lt = () => [`${l.name} · ${MODE_TEXT[l.mode]}`, l.mode === 'teleport' ? 'No direct port: only through the Teleport proxy' : `ssh on 127.0.0.1:${l.port} · click for the command`];
+    const bg = asButton(sv('g', { id: 'lg-' + l.name }), `${l.name}: ${MODE_TEXT[l.mode]}. Details`, () => openPop(bg, 'login', l.name), lt);
+    bg.append(sv('rect', { class: 'blk lgn', x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), sv('text', { class: 'sn', x: p.x + 12, y: p.y + 24 }, l.name), sv('text', { class: 'sub', x: p.x + 12, y: p.y + 42 }, MODE_TEXT[l.mode]),
+      sv('text', { class: 'sub', x: p.x + 12, y: p.y + 58 }, l.mode === 'teleport' ? 'no direct port' : `127.0.0.1:${l.port}`)); g.append(bg);
+  }
+  svcs.forEach(([k, label, sub]) => g.append(box(k, label, sub, svcPos[k], 'svc', k)));
+  CHIPS.forEach(([t], i) => {
+    const cg = asButton(sv('g', {}), `${t}: how it connects`, () => openPop(cg, 'client', t), () => [t, CLIENT_INFO[t]]);
+    cg.append(sv('rect', { class: 'chipbg', x: 20, y: 46 + i * 50, width: 126, height: 42, rx: 9 }), sv('text', { class: 'ndt cl', x: 28, y: 72 + i * 50 }, t)); g.append(cg);
   });
   for (const item of layout) {
     if (item[0] === 'label') { g.append(sv('text', { class: 'ftitle', x: nx, y: item[2] + 4 }, item[1] === 'gpu' ? 'GPU nodes' : 'Compute nodes')); continue; }
     const [, n, x, ty] = item, glyph = STATE_ICON[n.state] || '?';
-    const tg = asButton(sv('g', { id: 'nd-' + n.name }), `${n.name}: ${n.label}. Open its panel`, () => showNode(n.name)); tg.append(sv('title', {}, `${n.name}: ${n.label}`), sv('rect', { class: 'nd ' + n.state, x, y: ty, width: TW, height: TH, rx: 7 }),
-      sv('text', { class: 'ndt', x: x + 6, y: ty + 16 }, n.name), sv('text', { class: 'ndt', x: x + 6, y: ty + 31 }, glyph));
+    const tg = asButton(sv('g', { id: 'nd-' + n.name }), `${n.name}: ${n.label}. Details`, () => openPop(tg, 'node', n.name), () => { const c = nodeList().find(m => m.name === n.name) || n; return [`${c.name} · ${c.label}`, 'click for how to reach it and its actions']; });
+    tg.append(sv('rect', { class: 'nd ' + n.state, x, y: ty, width: TW, height: TH, rx: 7 }), sv('text', { class: 'ndt', x: x + 6, y: ty + 17 }, n.name), sv('text', { class: 'ndt', x: x + 6, y: ty + 33 }, glyph));
     g.append(tg); tiles[n.name] = { x, y: ty, w: TW, h: TH, g: tg };
   }
-  g.append(sv('g', { id: 'dots' })); paintBlocks();
+  g.append(labels, sv('g', { id: 'dots' })); paintBlocks();
 }
 function paintTiles() {  // node states change without a rebuild; a different node list does rebuild
   const nodes = nodeList(), sig = flowSig(nodes);
   if (sig !== flowNodes) { buildFlow(); return; }
-  for (const n of nodes) { const t = tiles[n.name]; if (t) { t.g.firstChild.textContent = `${n.name}: ${n.label}`; t.g.setAttribute('aria-label', `${n.name}: ${n.label}. Open its panel`); t.g.children[1].setAttribute('class', 'nd ' + n.state); t.g.children[3].textContent = STATE_ICON[n.state] || '?'; } }
+  for (const n of nodes) { const t = tiles[n.name]; if (t) { t.g.setAttribute('aria-label', `${n.name}: ${n.label}. Details`); t.g.children[0].setAttribute('class', 'nd ' + n.state); t.g.children[2].textContent = STATE_ICON[n.state] || '?'; } }
 }
 function paintBlocks() {
   if (!flowSnap || !svcPos['bmc-farm']) return;
@@ -900,7 +1030,7 @@ function paintBlocks() {
     const si = document.getElementById('si-' + (k === 'gpu-exporter' ? 'gpu-exporter' : k)); if (si) si.textContent = `${rate[k] || 0} ${k === 'teleport' ? 'conn' : 'req'}/min · ${(flowSnap.totals[k] || 0).toLocaleString()} seen`;
     $('fc-' + k).textContent = (flowSnap.totals[k] || 0) ? (flowSnap.totals[k]).toLocaleString() + ((flowSnap.totals[k]) === 1 ? ' request seen' : ' requests seen') : svcList().find(x => x[0] === k)[2];
   }
-  $('fc-clients').textContent = sent.toLocaleString() + ' requests sent';
+  $('fc-clients').textContent = sent.toLocaleString() + ' requests';
   $('fc-injector').textContent = (flowSnap.faults || 0) + (flowSnap.faults === 1 ? ' fault applied' : ' faults applied');
 }
 function flowNote() {
@@ -911,12 +1041,12 @@ function flowNote() {
 function animating() { return !flowPaused && !reduced.matches && flowLevel < 3 && !document.hidden; }
 function launch(ev) {
   if (!svcPos[ev.to]) return;
-  const sp = svcPos[ev.to], fault = ev.from === 'injector', origin = fault ? { x: G.injector.x + G.injector.w, y: G.injector.y + G.injector.h / 2 } : { x: G.clients.x + G.clients.w, y: G.clients.y + G.clients.h / 2 };
-  const targets = fault && ev.nodes?.some(n => tiles[n]) ? ev.nodes.filter(n => tiles[n]).map(n => ({ pt: { x: tiles[n].x, y: tiles[n].y + tiles[n].h / 2 }, node: n })) : [{ pt: { x: sp.x, y: sp.y + sp.h / 2 + (fault ? 6 : 0) }, node: null }];
+  const sp = svcPos[ev.to], fault = ev.from === 'injector', origin = fault ? { x: G.injector.x + G.injector.w, y: G.injector.y + G.injector.h / 2 } : svcOut[ev.to] || { x: G.clients.x + G.clients.w, y: G.clients.y + G.clients.h / 2 };
+  const targets = fault && ev.nodes?.some(n => tiles[n]) ? ev.nodes.filter(n => tiles[n]).map(n => ({ pt: { x: tiles[n].x, y: tiles[n].y + tiles[n].h / 2 }, node: n })) : [{ pt: ev.to === 'teleport' ? { x: sp.x, y: sp.y + sp.h / 2 } : { x: sp.x + sp.w / 2, y: sp.y }, node: null }];
   for (const t of targets) for (let i = 0; i < Math.min(ev.n, 5) && dots.length < 60; i++) {
     const el = fault ? sv('rect', { class: 'pk', width: 14, height: 14, rx: 2 }) : sv('circle', { class: 'pk', r: 7 }), trail = sv('circle', { class: 'pkt', r: 5 });
     $('dots').append(trail, el);
-    dots.push({ el, trail, fault, bez: curve(origin, t.pt), node: t.node, svc: ev.to, t0: performance.now() + i * 130, dur: fault ? 1700 : 1200 });
+    dots.push({ el, trail, fault, bez: !fault && svcLane[ev.to] ? svcLane[ev.to] : curve(origin, t.pt), node: t.node, svc: ev.to, t0: performance.now() + i * 130, dur: fault ? 1700 : 1200 });
   }
   if (!raf) raf = requestAnimationFrame(step);
 }
@@ -951,6 +1081,14 @@ function openFlow() {
 function closeFlow() { if (flowEs) flowEs.close(); flowEs = null; flowCursor = 0; dots.forEach(d => { d.el.remove(); d.trail.remove(); }); dots = []; }
 $('flowpause').onclick = () => { flowPaused = !flowPaused; $('flowpause').setAttribute('aria-pressed', flowPaused); $('flowpause').textContent = flowPaused ? 'Resume animation' : 'Pause animation'; flowNote(); };
 
+// the node list beside the diagram folds away, so the diagram can have the whole width (remembered when storage allows)
+function setTree(open) {
+  $('nodeswrap').classList.toggle('treeoff', !open); $('treetoggle').setAttribute('aria-expanded', open); $('treetoggle').textContent = open ? 'Hide node list' : 'Show node list';
+  try { localStorage.setItem('workbench-tree', open ? 'open' : 'closed'); } catch (e) { /* not remembered */ }
+}
+$('treetoggle').onclick = () => setTree($('treetoggle').getAttribute('aria-expanded') !== 'true');
+let treePref = null; try { treePref = localStorage.getItem('workbench-tree'); } catch (e) { /* default */ }
+if (treePref === 'closed') setTree(false);
 // scenario chip in the status strip, so a running scenario is visible on every page
 let chipTimer;
 async function runChip() {

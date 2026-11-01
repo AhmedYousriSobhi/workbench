@@ -311,7 +311,7 @@ def test_settings_endpoint_serves_the_option_registry_and_the_sheet_draws_from_i
 
 def test_traffic_diagram_shapes_are_buttons_that_open_the_node_or_the_connection(ui):
     page = req(ui, "/")[1].decode()
-    for needle in ("function asButton(", "role', 'button'", "showNode(n.name)", "openConnection(SVC_CONN[k])", "tr[data-id=",
+    for needle in ("function asButton(", "role', 'button'", "openPop(", "showNode(id)", "openConnection(SVC_CONN[id])", "tr[data-id=",
                    "#flow #dots { pointer-events:none; }", "Enter' || e.key === ' '"):
         assert needle in page, needle
 

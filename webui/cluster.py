@@ -52,6 +52,20 @@ def saved_has_teleport() -> bool:
     return bool(spec and "teleport" in spec.parts)
 
 
+def saved_logins() -> list[dict]:
+    """The login nodes of the workbench last built, `[{name, mode, port}]` (`port`: published on 127.0.0.1, `None` for a Teleport-only node) (file only, no Docker). The diagram draws one box per entry
+    and labels how each is reached; with nothing saved it is the single `login` that takes a key, as `sim.yaml` defaults."""
+    from benchctl import compose, logins, workbench
+
+    try:
+        spec = workbench.current({})
+        modes = spec.login_nodes if spec else logins.DEFAULT
+    except (workbench.SpecError, OSError, ValueError):
+        modes = logins.DEFAULT
+    return [{"name": logins.name(i), "mode": m, "port": compose.SSH_PORT + i if m in logins.DIRECT else None}
+            for i, m in enumerate(modes)]
+
+
 def http_json(url: str, body: dict | None = None, timeout: float = 2.0):
     req = urllib.request.Request(url, data=None if body is None else json.dumps(body).encode(),
                                  method="GET" if body is None else "POST",
@@ -165,7 +179,7 @@ class Cluster:
             row["xid"] = xids.get(row["name"], 0)
             row["ib_down"], row["nic_flap"] = ib.get(row["name"], 0), row["name"] in flap
             row["state"], row["label"] = classify(row)
-        return {"services": dict(zip(names, up, strict=True)), "nodes": rows,
+        return {"services": dict(zip(names, up, strict=True)), "nodes": rows, "logins": saved_logins(),
                 "actions": [{"id": a, "label": v[0], "gpu_only": v[1]} for a, v in ACTIONS.items()]}
 
     def act(self, node: str, action: str) -> list[dict]:

@@ -14,7 +14,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent
-SYNTH_CLUSTER = """lastCluster = JSON.stringify({services: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'gpu-exporter': true, 'teleport': true}, actions: [{id: 'power-off', label: 'Power off', gpu_only: false}, {id: 'power-on', label: 'Power on', gpu_only: false}, {id: 'overheat', label: 'Overheat', gpu_only: false}, {id: 'fan-fail', label: 'Fan failure', gpu_only: false}, {id: 'clear', label: 'Clear faults', gpu_only: false}],
+SYNTH_CLUSTER = """lastCluster = JSON.stringify({logins: [{name: 'login', mode: 'both', port: 2222}, {name: 'login2', mode: 'teleport', port: null}], services: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'gpu-exporter': true, 'teleport': true}, actions: [{id: 'power-off', label: 'Power off', gpu_only: false}, {id: 'power-on', label: 'Power on', gpu_only: false}, {id: 'overheat', label: 'Overheat', gpu_only: false}, {id: 'fan-fail', label: 'Fan failure', gpu_only: false}, {id: 'clear', label: 'Clear faults', gpu_only: false}],
                             nodes: ['cn001', 'cn002', 'cn003', 'cn004'].map(n => ({name: n, kind: 'compute', state: 'ok', label: 'Healthy', temp: 45, power: 'On', gpus: 0}))
                               .concat(['gpu001', 'gpu002'].map(n => ({name: n, kind: 'gpu', state: 'ok', label: 'Healthy', temp: 44, power: 'On', gpus: 8})))}); renderCluster(JSON.parse(lastCluster)); clearTimeout(clusterTimer); if (flowEs) flowEs.close(); flowSnap = {reachable: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'gpu-exporter': true, teleport: true}, totals: {'bmc-farm': 42, 'bcm-mock': 17, 'jira-mock': 9, 'gpu-exporter': 120, teleport: 5}, faults: 0}; paintBlocks();"""  # six healthy nodes; stops the poll so the real (stopped) stack does not overwrite them
 VIEWPORTS = {"desktop": (1280, 900), "phone": (390, 800)}
@@ -95,6 +95,23 @@ def capture(out: Path) -> dict:
                     tpath = out / f"architecture-{vp}-{scheme}.png"
                     page.locator("#trafficpanel").screenshot(path=str(tpath))
                     result["shots"].append(str(tpath))
+                    page.click("#lg-login")  # every part opens a pop-up with its details; Escape closes it and gives the focus back
+                    if page.locator("#pop:visible dl").count() != 1:
+                        result["a11y"].append("clicking a login node did not open its pop-up")
+                    page.keyboard.press("Escape")
+                    if page.locator("#pop:visible").count() != 0 or not page.evaluate("document.activeElement.id === 'lg-login'"):
+                        result["a11y"].append("Escape did not close the pop-up and return the focus")
+                    if vp == "desktop":
+                        page.hover("#lg-login")
+                        if page.locator("#tip:visible").count() != 1:
+                            result["a11y"].append("hovering a part showed no tip")
+                        page.mouse.move(2, 2)
+                        page.click("#treetoggle")  # the node list folds away, the diagram keeps the width
+                        if page.locator("#nodesmain:visible").count() != 0:
+                            result["a11y"].append("the node list did not fold away")
+                        page.click("#treetoggle")
+                        if page.locator("#nodesmain:visible").count() != 1:
+                            result["a11y"].append("the node list did not come back")
                     if vp == "phone" and page.evaluate("document.querySelector('#nodeswrap').getBoundingClientRect().width < 300 || getComputedStyle(document.querySelector('#nodeswrap')).gridTemplateColumns.split(' ').length > 1"):
                         result["a11y"].append("phone layout must stack traffic and the list in one column")
                     if vp == "desktop":  # one screen: with six nodes drawn, traffic and tree both fit without page scrolling
