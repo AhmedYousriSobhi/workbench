@@ -89,7 +89,7 @@ def generate(sim: dict, profile: dict) -> dict:
                                   "depends_on": ["slurmctld"] if "slurmctld" in services else []})
     if "teleport" in services:  # auth + proxy (ADR 0020): only the proxy port is published, localhost only
         services["teleport"].update({
-            "image": teleport.image(sim), "command": ["start", "-c", "/etc/teleport/teleport.yaml"],
+            "image": teleport.image(sim),  # its entrypoint already is `teleport start -c /etc/teleport/teleport.yaml`
             "user": f"{os.getuid()}:{os.getgid()}",  # not root; the directories are made by `benchctl up` as this user
             "volumes": ["./teleport:/etc/teleport:ro", "./teleport/data:/var/lib/teleport",
                         f"./secrets/teleport:{teleport.CONTAINER_SECRETS}"],
