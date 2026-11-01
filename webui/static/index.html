@@ -637,7 +637,8 @@ async function drawParts() {  // the options come from the backend registry (/ap
     $('pl-bmcnodes').innerHTML = j.nodes.map(n => `<label class="tog"><input type="checkbox" value="${esc(n.name)}"${n.bmc ? ' checked' : ''}><span>${esc(n.name)}</span></label>`).join('');
     $('pl-bmcnodes').querySelectorAll('input').forEach(i => i.oninput = i.onchange = () => planInputs());
     const lg = j.logins;  // an older page backend does not send it: the parts above still work, the login rows are hidden
-    $('pl-logins').hidden = !lg; if (lg) { loginModes = [...(lg.now || ['ssh'])]; loginMax = lg.max; drawLogins(); syncTeleport(); }
+    if (lg) { loginModes = [...(lg.now || ['ssh'])]; loginMax = lg.max; drawLogins(); syncTeleport(); }
+    else { $('pl-loginadd').disabled = true; $('pl-loginrows').textContent = 'Login nodes need the newer page backend. Run ./scripts/benchctl stop, then ./scripts/benchctl start, and reload.'; }
     showBmcNodes(); partsDrawn = true;
   } catch (e) { $('pl-parts').textContent = 'Could not load the options. The page and its backend may be different versions: run ./scripts/benchctl stop, then ./scripts/benchctl start, and reload.'; }
 }

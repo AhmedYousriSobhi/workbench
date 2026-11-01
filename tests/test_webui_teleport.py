@@ -76,5 +76,5 @@ def test_the_diagram_draws_access_paths_and_every_part_has_a_tip_and_a_pop_up():
 
 def test_the_options_sheet_survives_a_backend_without_logins():
     html = Path("webui/static/index.html").read_text()
-    assert "const lg = j.logins;" in html and "$('pl-logins').hidden = !lg" in html        # parts still listed
+    assert "const lg = j.logins;" in html and "need the newer page backend" in html          # parts still listed, the login rows say why they are off
     assert "./scripts/benchctl stop" in html and "different versions" in html               # and the failure names its cure
