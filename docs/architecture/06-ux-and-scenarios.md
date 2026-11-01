@@ -6,18 +6,22 @@
 
 ```bash
 benchctl doctor                       # host checks + tuning suggestions
-benchctl up --profile std             # pre-flight, then bring everything up
-benchctl status                       # profile, per-class memory vs budget, governor level
-benchctl top                          # live table: groups, PSI, level, actions taken
-benchctl scale compute 24             # change slurmd count (governor-approved)
-benchctl jira mode mock|cloud|dc
+benchctl start                        # one step: machine check, governor, cluster, web page
+benchctl up --profile std             # or: pre-flight, then bring a preset up
+benchctl up --cpu-nodes 2 --gpu-nodes 4 --with jira   # or build a selection
+benchctl status                       # governor level and signals, cluster, web page
+benchctl get nodes                    # nodes, services, profiles, scenarios
+benchctl scale 24                     # change the compute-node count (governor-approved)
 benchctl scenario list
 benchctl scenario run gpu-xid-storm   # trigger an issue
-benchctl workload run ml-peak --duration 30m
-benchctl down
+benchctl set node cn001 off           # power a node off like the page's button
+benchctl load on                      # simulated users submit jobs
+benchctl stop                         # or: benchctl down (cluster only)
 ```
 
-The **Web UI** (section 7.1) mirrors the CLI. Desktop launcher / `make demo` runs `benchctl up --profile std`.
+Not built yet: `benchctl top` (a live governor table; use `benchctl status`), `jira mode` (cloud/dc) and `workload run`.
+
+The **Web UI** (section 7.1) mirrors the CLI. `benchctl start` is the one-command launcher.
 
 ### 7.1 Web UI
 
