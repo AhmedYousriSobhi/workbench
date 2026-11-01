@@ -628,6 +628,20 @@ def set_check(name: str = CHECK, state: str = typer.Argument(None, help="on or o
     _nhc_done(f"changed check {name}")
 
 
+@remove_app.command("teleport-state")
+def remove_teleport_state(yes: bool = typer.Option(False, "-y", "--yes", help="do not ask (a terminal asks; scripts are never asked)")) -> None:
+    """Forget the Teleport cluster: the next `benchctl up` makes a new one (new certificate authority, no passwords), and every
+    client must `tsh logout`, then `benchctl add invite USER`, then log in again. Stop the stack first (`benchctl down`)."""
+    if any(r["name"] == "teleport" and r["state"] == "running" for r in inventory.service_rows()):
+        typer.echo("Teleport is running: run `benchctl down` first (it saves the identity again), then repeat this.", err=True)
+        raise typer.Exit(1)
+    _confirm("This deletes Teleport's data and its saved identity: every Teleport user and password is lost.", yes)
+    gone = teleport.reset()
+    typer.echo("removed: " + ", ".join(str(p) for p in gone) if gone else "nothing to remove: no Teleport state")
+    typer.echo("next: benchctl up --with teleport; then each client: tsh logout --proxy=10.141.255.30:3080 --insecure, "
+               "benchctl add invite USER, log in")
+
+
 @remove_app.command("check")
 def remove_check(name: str = CHECK) -> None:
     """Remove a check and its file from images/node-base/nhc.d (git keeps the old one). To keep it, `set check NAME off` instead."""

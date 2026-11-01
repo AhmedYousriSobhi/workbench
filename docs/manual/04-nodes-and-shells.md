@@ -194,11 +194,12 @@ Do it after `down`, because `down` saves the identity again.
 
 ```bash
 ./scripts/benchctl down
-rm -rf compose/generated/teleport/data compose/generated/secrets/teleport/state
+./scripts/benchctl remove teleport-state     # asks first; -y skips the question; refuses while Teleport runs
 ./scripts/benchctl up --with teleport        # or: ./scripts/benchctl start --addons --login ssh,teleport
 ```
 
-Deleting only `data` brings the old cluster back from `state`. `./scripts/verify.sh --unit teleport --clean` does this deletion itself.
+`remove teleport-state` deletes `compose/generated/teleport/data` and `compose/generated/secrets/teleport/state` (by hand:
+`rm -rf` both; deleting only `data` brings the old cluster back from `state`). `./scripts/verify.sh --unit teleport --clean` does this deletion itself.
 
 **Then every client signs in again** (the new cluster knows nobody):
 

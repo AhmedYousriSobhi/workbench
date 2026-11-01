@@ -159,6 +159,15 @@ def restore(conf: Path, secrets: Path, version: str) -> bool:
     return True
 
 
+def reset(conf: Path = CONF_DIR, secrets: Path = SECRETS_DIR) -> list[Path]:
+    """Forget the cluster: delete its data and the saved identity, so the next `up` makes a new cluster (new CA, no users'
+    passwords). Returns what was removed. The caller makes sure Teleport is stopped: `down` saves the identity again."""
+    gone = [p for p in (conf / "data", secrets / STATE_DIR) if p.exists()]
+    for p in gone:
+        shutil.rmtree(p)
+    return gone
+
+
 def prepare(sim: dict, ips: dict, conf: Path = CONF_DIR, secrets: Path = SECRETS_DIR) -> None:
     """Write the config and resource files and make the directories the container writes to (owned by this user:
     Docker would create them as root, and the container runs as the invoking user)."""

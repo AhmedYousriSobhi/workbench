@@ -281,3 +281,24 @@ def test_benchctl_down_saves_the_cluster_identity_before_stopping(monkeypatch):
     monkeypatch.setattr(stack, "down", lambda **k: order.append("down") or True)
     assert CliRunner().invoke(cli.app, ["down"]).exit_code == 0
     assert order == ["snapshot", "down"]
+
+
+def test_reset_deletes_data_and_the_saved_identity_and_the_command_refuses_while_teleport_runs(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    from benchctl import cli, inventory
+    conf, sec = tmp_path / "conf", tmp_path / "sec"
+    _fake_cluster(conf)
+    teleport.snapshot(conf, sec)
+    assert {p.name for p in teleport.reset(conf, sec)} == {"data", "state"}
+    assert not (conf / "data").exists() and not (sec / "state").exists() and teleport.reset(conf, sec) == []
+
+    runner = CliRunner()
+    monkeypatch.setattr(teleport, "reset", lambda: calls.append(1) or [])
+    calls: list = []
+    monkeypatch.setattr(inventory, "service_rows", lambda: [{"name": "teleport", "state": "running"}])
+    r = runner.invoke(cli.app, ["remove", "teleport-state", "-y"])
+    assert r.exit_code == 1 and "benchctl down" in r.output and calls == []
+    monkeypatch.setattr(inventory, "service_rows", list)
+    r = runner.invoke(cli.app, ["remove", "teleport-state", "-y"])
+    assert r.exit_code == 0 and calls == [1] and "benchctl add invite" in r.output
