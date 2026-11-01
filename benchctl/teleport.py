@@ -17,7 +17,7 @@ from pathlib import Path
 
 import yaml
 
-from . import logins
+from . import addressing, logins
 
 IMAGE = "public.ecr.aws/gravitational/teleport-distroless"
 DEFAULT_VERSION = "18.11.8"   # a Community Edition tag; licence note in ADR 0020. Teleport supports a tsh one major behind it.
@@ -25,6 +25,7 @@ DEFAULT_TTL = "12h"
 CLUSTER = "workbench"
 DIAG_PORT = 3434               # diagnostics (/healthz, /metrics), published on 127.0.0.1 only; the page reads it for status and traffic dots
 PROXY_PORT = 3080              # web UI, the API and (single-port mode, config v3) the SSH proxy
+DNS_NAME = "teleport.workbench.test"  # a container alias on the cluster network; `.test` is reserved (RFC 6761), so it never clashes with a real name
 ROLE = "workbench-user"
 CONF_DIR = Path("compose/generated/teleport")             # mounted read-only at /etc/teleport; data/ is writable
 SECRETS_DIR = Path("compose/generated/secrets/teleport")  # CA key, host certificates, identity files (never tracked)
@@ -66,8 +67,17 @@ def config(sim: dict) -> str:
                              "authentication": {"type": "local", "second_factors": ["otp"]}},
             "ssh_service": {"enabled": False},
             "proxy_service": {"enabled": True, "web_listen_addr": f"0.0.0.0:{PROXY_PORT}",
-                              "public_addr": [f"127.0.0.1:{PROXY_PORT}"]}}
+                              "public_addr": [proxy_addr(sim), f"{DNS_NAME}:{PROXY_PORT}"]}}  # the address and the name clients use, in the certificate and in links
     return yaml.safe_dump(conf, sort_keys=False)
+
+
+def proxy_ip(sim: dict) -> str:
+    """The proxy's fixed private address (ADR 0018): what clients dial, instead of a published localhost port."""
+    return addressing.plan(sim)["services"]["teleport"]
+
+
+def proxy_addr(sim: dict) -> str:
+    return f"{proxy_ip(sim)}:{PROXY_PORT}"
 
 
 def node_id(name: str) -> str:

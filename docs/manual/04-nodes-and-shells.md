@@ -124,7 +124,7 @@ or in the page: **☰ Menu → ▦ Cluster architecture → Login nodes** (**Add
 ```bash
 ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1       # login   (ssh or both)
 ID=compose/generated/secrets/teleport/identity/alice
-tsh --proxy=127.0.0.1:3080 --insecure -i $ID ssh alice@login2                 # login2  (teleport or both)
+tsh --proxy=10.141.255.30:3080 --insecure -i $ID ssh alice@login2                 # login2  (teleport or both)
 ```
 
 A key offered to a `teleport` node is refused (`Permission denied`), and it has no published port. A node set to `ssh` is not registered in Teleport, so `tsh ls` does not list it. Fewer login nodes than before: the extra containers are removed on the next `up`. The client profile export (`benchctl export profile`) uses the first node that takes a key.
@@ -150,8 +150,8 @@ or in the page: **☰ Menu → ▦ Cluster architecture → Access → Teleport 
 
 ```bash
 ID=compose/generated/secrets/teleport/identity/alice
-tsh --proxy=127.0.0.1:3080 --insecure -i $ID ls                          # the Teleport login nodes and every node
-tsh --proxy=127.0.0.1:3080 --insecure -i $ID ssh alice@cn001 hostname    # a command on a node
+tsh --proxy=10.141.255.30:3080 --insecure -i $ID ls                          # the Teleport login nodes and every node
+tsh --proxy=10.141.255.30:3080 --insecure -i $ID ssh alice@cn001 hostname    # a command on a node
 ```
 
 `--insecure` is needed because the proxy's certificate is self-signed. Each `ssh` shows up in the page as a dot from the clients to the Teleport box.
@@ -165,11 +165,11 @@ tsh --proxy=127.0.0.1:3080 --insecure -i $ID ssh alice@cn001 hostname    # a com
 Open the link in a browser (accept the certificate warning), choose a password and scan the QR code with an authenticator app (or keep the secret it shows for `oathtool`). Then:
 
 ```bash
-tsh login --proxy=127.0.0.1:3080 --insecure --user=alice
+tsh login --proxy=10.141.255.30:3080 --insecure --user=alice
 tsh ls
 ```
 
-The web UI is at `https://127.0.0.1:3080` (same login). The page lists the address and the command in **Connections** (the Teleport row), and shows Teleport's traffic in the Infrastructure architecture.
+The web UI is at `https://10.141.255.30:3080` (same login). The proxy has its own private address and the name `teleport.workbench.test` (resolved inside the cluster; on this machine add it once, your sudo, never run for you: `echo '10.141.255.30 teleport.workbench.test' | sudo tee -a /etc/hosts`). `127.0.0.1:3080` stays as a fallback. The page lists the address and the command in **Connections** (the Teleport row), and shows Teleport's traffic in the Infrastructure architecture.
 
 ![The Infrastructure architecture with Teleport: a dot travels from the clients to the Teleport box for each SSH connection](img/web-infrastructure.png)
 

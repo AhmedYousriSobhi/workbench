@@ -105,7 +105,8 @@ def generate(sim: dict, profile: dict) -> dict:
             "user": f"{os.getuid()}:{os.getgid()}",  # not root; the directories are made by `benchctl up` as this user
             "volumes": ["./teleport:/etc/teleport:ro", "./teleport/data:/var/lib/teleport",
                         f"./secrets/teleport:{teleport.CONTAINER_SECRETS}"],
-            "ports": [f"127.0.0.1:{teleport.PROXY_PORT}:{teleport.PROXY_PORT}",
+            "networks": {"default": {"aliases": [teleport.DNS_NAME]}},  # the name resolves inside the cluster network; the IP is added below
+            "ports": [f"127.0.0.1:{teleport.PROXY_PORT}:{teleport.PROXY_PORT}",  # a localhost fallback, the address clients are told is the IP
                       f"127.0.0.1:{teleport.DIAG_PORT}:{teleport.DIAG_PORT}"]})
         for svc in services.values():  # sshd trusts the Teleport CA and presents its host certificate (nodes and login)
             if svc["labels"].get("workbench.node") or any(svc is services.get(n) for n in logins.via_teleport(sim)):

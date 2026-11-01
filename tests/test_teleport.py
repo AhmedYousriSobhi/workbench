@@ -29,7 +29,7 @@ def test_config_is_auth_and_proxy_only_on_one_port():
     c = yaml.safe_load(teleport.config(SIM))
     assert c["auth_service"]["proxy_listener_mode"] == "multiplex" and c["version"] == "v3" and c["ssh_service"] == {"enabled": False}
     assert c["auth_service"]["cluster_name"] == "workbench" and c["auth_service"]["authentication"] == {"type": "local", "second_factors": ["otp"]}
-    assert c["proxy_service"]["web_listen_addr"] == "0.0.0.0:3080" and c["proxy_service"]["public_addr"] == ["127.0.0.1:3080"]
+    assert c["proxy_service"]["web_listen_addr"] == "0.0.0.0:3080" and c["proxy_service"]["public_addr"] == ["10.141.255.30:3080", "teleport.workbench.test:3080"]
 
 
 def test_resources_name_every_node_and_user_with_stable_ids():
@@ -57,6 +57,7 @@ def test_compose_adds_teleport_only_when_selected():
     assert "teleport" not in compose.generate({**SIM, "login": None}, prof)["services"]
     svcs = compose.generate(SIM, {**prof, "groups": [*prof["groups"], "teleport"]})["services"]
     t = svcs["teleport"]
+    assert t["networks"]["default"]["aliases"] == ["teleport.workbench.test"]  # the name resolves inside the cluster; the IP is its address
     assert t["ports"] == ["127.0.0.1:3080:3080", "127.0.0.1:3434:3434"] and "build" not in t and t["mem_limit"] == "256m"
     assert t["labels"]["workbench.class"] == "P2" and "command" not in t  # the image entrypoint starts it
     assert "privileged" not in t and "cap_add" not in t and t["networks"]["default"]["ipv4_address"].endswith(".255.30")
@@ -133,7 +134,7 @@ def test_bootstrap_says_why_it_failed(tmp_path):
 
 
 def test_invite_returns_the_link_or_says_why_not():
-    url = "https://127.0.0.1:3080/web/invite/abc123"
+    url = "https://10.141.255.30:3080/web/invite/abc123"
     assert teleport.invite("alice", lambda c: cp(out=f"User alice has been reset. Share this URL:\n{url}\n"), stack.dc) == url
     with pytest.raises(teleport.TeleportError, match="alice"):
         teleport.invite("alice", lambda c: cp(1, err="container is not running"), stack.dc)
@@ -160,4 +161,4 @@ def test_up_bootstraps_teleport_before_the_nodes_start(tmp_path, monkeypatch):
     assert stack.up(sim, "workbench", runner=runner, say=msgs.append, available=12 * 1024**3, wait=1, prof=prof)
     assert order and all("cn001" not in seen and "login" not in seen and "teleport" in seen for _, seen in order)
     assert (tmp_path / "compose/generated/teleport/teleport.yaml").is_file()
-    assert any(m.startswith("teleport: https://127.0.0.1:3080") for m in msgs)
+    assert any(m.startswith("teleport: https://10.141.255.30:3080") and "teleport.workbench.test" in m for m in msgs) and any("/etc/hosts" in m for m in msgs)

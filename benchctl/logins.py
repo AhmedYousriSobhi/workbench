@@ -12,6 +12,7 @@ import difflib
 MODES = ("ssh", "teleport", "both")
 DIRECT = ("ssh", "both")        # modes with a published SSH port and key login
 VIA_TELEPORT = ("teleport", "both")
+LABEL = {"ssh": "direct SSH", "teleport": "Teleport only", "both": "direct SSH and Teleport"}
 MAX_LOGINS = 8
 DEFAULT = ["ssh"]
 

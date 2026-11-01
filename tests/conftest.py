@@ -10,3 +10,11 @@ def _no_teleport_from_this_machine(monkeypatch):
     except ImportError:
         return
     monkeypatch.setattr(cluster, "teleport_built", lambda: False)
+
+
+@pytest.fixture(autouse=True)
+def _no_saved_workbench_from_this_machine(monkeypatch, tmp_path_factory):
+    """export.configured() and the CLI read the workbench last built; a developer's own selection (login nodes, parts) must not change a test."""
+    from benchctl import workbench
+
+    monkeypatch.setattr(workbench, "SAVED", tmp_path_factory.mktemp("nosaved") / "workbench.yaml")
