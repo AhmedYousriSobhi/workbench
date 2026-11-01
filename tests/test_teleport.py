@@ -227,3 +227,57 @@ def test_bootstrap_says_what_it_forgot(tmp_path):
     (tmp_path / "hosts").mkdir()
     ok, msgs = run_bootstrap(tmp_path, lambda c: cp(out=node_json("login9")) if "nodes" in c else cp())
     assert ok and msgs == ["teleport: forgot login9 (no longer in the workbench)"]
+
+
+def _fake_cluster(conf, user="alice"):
+    import sqlite3
+    (conf / "data" / "backend").mkdir(parents=True)
+    db = sqlite3.connect(conf / "data" / "backend" / "sqlite.db")
+    db.execute("create table kv (k text, v text)")
+    db.execute("insert into kv values ('ca', 'old-ca')")
+    db.execute("insert into kv values ('user', ?)", (user,))
+    db.commit()
+    db.close()
+    (conf / "data" / "host_uuid").write_text("uuid-1")
+    (conf / "cluster-version").write_text(teleport.DEFAULT_VERSION + "\n")
+
+
+def test_an_emptied_data_directory_restores_the_same_cluster_from_the_snapshot(tmp_path):
+    import shutil
+    import sqlite3
+    conf, sec = tmp_path / "conf", tmp_path / "sec"
+    _fake_cluster(conf)
+    assert teleport.snapshot(conf, sec)
+    shutil.rmtree(conf / "data")  # what a clean test or a manual wipe does
+    (sec / "hosts").mkdir(parents=True)
+    (sec / "hosts" / "cn001-cert.pub").write_text("signed by the old CA")
+    teleport.prepare(SIM, IPS, conf, sec)
+    assert (sec / "hosts" / "cn001-cert.pub").is_file(), "same CA: the certificates are still good"
+    assert (conf / "data" / "host_uuid").read_text() == "uuid-1"
+    assert sqlite3.connect(conf / "data" / "backend" / "sqlite.db").execute("select v from kv where k='ca'").fetchone() == ("old-ca",)
+    assert oct((conf / "data" / "backend" / "sqlite.db").stat().st_mode & 0o777) == "0o600"
+
+
+def test_a_snapshot_of_another_version_or_none_means_a_new_cluster(tmp_path):
+    import shutil
+    conf, sec = tmp_path / "conf", tmp_path / "sec"
+    assert not teleport.snapshot(conf, sec)  # nothing to copy yet
+    _fake_cluster(conf)
+    teleport.snapshot(conf, sec)
+    (sec / "state" / "version").write_text("1.0.0\n")  # taken by another Teleport version
+    shutil.rmtree(conf / "data")
+    (sec / "hosts").mkdir(parents=True)
+    (sec / "hosts" / "cn001-cert.pub").write_text("old")
+    teleport.prepare(SIM, IPS, conf, sec)
+    assert not (sec / "hosts" / "cn001-cert.pub").exists() and not (conf / "data" / "backend").exists()
+
+
+def test_benchctl_down_saves_the_cluster_identity_before_stopping(monkeypatch):
+    from typer.testing import CliRunner
+
+    from benchctl import cli
+    order = []
+    monkeypatch.setattr(teleport, "snapshot", lambda *a, **k: order.append("snapshot") or True)
+    monkeypatch.setattr(stack, "down", lambda **k: order.append("down") or True)
+    assert CliRunner().invoke(cli.app, ["down"]).exit_code == 0
+    assert order == ["snapshot", "down"]

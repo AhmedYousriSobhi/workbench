@@ -1,4 +1,5 @@
 import difflib
+import sqlite3
 import sys
 from pathlib import Path as _Path
 
@@ -422,6 +423,10 @@ def down(dry_run: bool = typer.Option(False, "-n", "--dry-run", help="list what 
         return
     if running:
         _confirm(f"This stops {len(running)} containers and ends open shells on the nodes.", yes)
+    try:
+        teleport.snapshot()  # while Teleport still runs: a later rebuild is the same cluster, so clients stay logged in
+    except (OSError, sqlite3.Error) as e:
+        typer.echo(f"note: Teleport's identity was not saved ({e}); a rebuild will be a new cluster", err=True)
     raise typer.Exit(0 if stack.down(say=typer.echo) else 1)
 
 
@@ -604,6 +609,7 @@ def add_invite(user: str = typer.Argument(..., help="a user from sim.yaml")) -> 
         raise typer.Exit(2)
     try:
         typer.echo(teleport.invite(user, stack._run, stack.dc))
+        teleport.snapshot()  # the user's password is chosen in the browser; the next `down` saves that too
     except teleport.TeleportError as e:
         typer.echo(f"{e}\nIs Teleport running? Start it with `benchctl up --with teleport` (see `benchctl get services`).", err=True)
         raise typer.Exit(1) from e
