@@ -95,7 +95,7 @@ you chose, not the numbers in `sim.yaml`.
 
 **☰ Menu → ▦ Cluster architecture** in the top bar of the dashboard opens a panel with the same form (steppers for the counts, toggles for the parts) and a memory bar. Editing the numbers only estimates. **Apply to the
 running workbench** asks the governor to rebuild it to the plan: new nodes start, nodes you no longer want are removed,
-and Slurm's node list is reloaded. Progress shows in the entity list, the traffic diagram and *Governor activity* (in the Governor panel). It needs the governor
+and Slurm's node list is reloaded. Progress shows in the entity list, the Infrastructure architecture and *Governor activity* (in the Governor panel). It needs the governor
 started by `./scripts/benchctl start` (it has the repository path) and calm memory (L0-L1); otherwise the page says why
 in one line. You can always copy the command shown and run it in a terminal instead.
 

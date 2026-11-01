@@ -87,13 +87,14 @@ def generate(sim: dict, profile: dict) -> dict:
         services["login"]["volumes"].append("./secrets/ssh:/run/workbench/ssh:ro")
         services["login"].update({"ports": [f"127.0.0.1:{SSH_PORT}:22"],
                                   "depends_on": ["slurmctld"] if "slurmctld" in services else []})
-    if "teleport" in services:  # auth + proxy (ADR 0020): only the proxy port is published, localhost only
+    if "teleport" in services:  # auth + proxy (ADR 0020): only the proxy and diagnostics ports are published, localhost only
         services["teleport"].update({
             "image": teleport.image(sim),  # its entrypoint already is `teleport start -c /etc/teleport/teleport.yaml`
             "user": f"{os.getuid()}:{os.getgid()}",  # not root; the directories are made by `benchctl up` as this user
             "volumes": ["./teleport:/etc/teleport:ro", "./teleport/data:/var/lib/teleport",
                         f"./secrets/teleport:{teleport.CONTAINER_SECRETS}"],
-            "ports": [f"127.0.0.1:{teleport.PROXY_PORT}:{teleport.PROXY_PORT}"]})
+            "ports": [f"127.0.0.1:{teleport.PROXY_PORT}:{teleport.PROXY_PORT}",
+                      f"127.0.0.1:{teleport.DIAG_PORT}:{teleport.DIAG_PORT}"]})
         for svc in services.values():  # sshd trusts the Teleport CA and presents its host certificate (nodes and login)
             if svc["labels"].get("workbench.node") or svc is services.get("login"):
                 svc["volumes"].append(f"./secrets/teleport:{teleport.CONTAINER_SECRETS}:ro")

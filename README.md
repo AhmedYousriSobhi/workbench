@@ -26,7 +26,7 @@ services and one very watchful memory governor.
 ./scripts/benchctl scenario run node-down        # now break something, politely
 ```
 
-In the web page click a node, press **Power off** under *Actions*, and watch the node turn grey and the traffic diagram react. **Clear faults** makes it all better.
+In the web page click a node, press **Power off** under *Actions*, and watch the node turn grey and the Infrastructure architecture react. **Clear faults** makes it all better.
 
 ## 3. Build your own cluster
 

@@ -51,7 +51,7 @@ Details and the accounting setup: [ADR 0003](../adr/0003-slurmrestd-jwt-and-acco
 | GPU metrics | `curl http://127.0.0.1:9400/metrics` |
 
 What each mock implements, and what it does not, is in [ADR 0005](../adr/0005-bcm-and-jira-mock-surface.md). Each mock
-also counts client requests at `GET /sim/stats`, which feeds the traffic dots on the web page.
+also counts client requests at `GET /sim/stats`, which feeds the dots in the page's Infrastructure architecture.
 
 ## Fault injection by hand
 

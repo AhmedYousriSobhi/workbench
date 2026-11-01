@@ -117,7 +117,7 @@ def test_first_poll_only_baselines_then_a_rise_becomes_an_event():
     f.poll()
     snap = f.since(0)
     assert snap["events"] == [{"id": 1, "from": "clients", "to": "jira-mock", "n": 3, "label": "requests", "nodes": []}]
-    assert snap["totals"]["jira-mock"] == 3 and snap["cursor"] == 1 and all(snap["reachable"].values())
+    assert snap["totals"]["jira-mock"] == 3 and snap["cursor"] == 1 and all(snap["reachable"][k] for k in ("bmc-farm", "bcm-mock", "jira-mock", "gpu-exporter"))
     assert f.since(1)["events"] == []  # a client that has seen id 1 gets nothing new
 
 
@@ -247,3 +247,43 @@ def test_fault_events_carry_the_node_names_they_hit():
     f.note("jira", "outage")
     ev = f.since(0)["events"]
     assert ev[0]["nodes"] == ["cn002"] and ev[1]["nodes"] == []
+
+
+SCRAPE = """# HELP teleport_connect_to_node_attempts_total Number of connection attempts to a node
+# TYPE teleport_connect_to_node_attempts_total counter
+teleport_connect_to_node_attempts_total{type="ssh"} 3
+teleport_connect_to_node_attempts_total{type="web"} 2
+teleport_connect_to_node_attempts_total_extra 99
+teleport_failed_connect_to_node_attempts_total 7
+go_goroutines 41
+"""
+
+
+def test_teleport_traffic_is_the_proxy_connection_counter():
+    from webui.flow import TELEPORT_COUNTER, counter_total
+    assert counter_total(SCRAPE, TELEPORT_COUNTER) == 5  # both samples, not the longer name or the failed counter
+    assert counter_total("go_goroutines 4\n", TELEPORT_COUNTER) == 0  # nothing counted yet
+    with pytest.raises(TypeError):
+        counter_total({"requests": 1}, TELEPORT_COUNTER)
+
+
+def test_a_rise_in_proxy_connections_becomes_a_clients_to_teleport_event():
+    from webui.flow import COUNTERS
+    scrape = {"text": SCRAPE}
+
+    def fetch(url, *a):
+        if url == COUNTERS["teleport"]:
+            return scrape["text"]
+        raise OSError("down")
+    f = make_flow(fetch)
+    f.poll()
+    assert f.since(0)["events"] == [] and f.since(0)["reachable"]["teleport"] is True
+    f.tick()
+    scrape["text"] = SCRAPE.replace('"ssh"} 3', '"ssh"} 6')
+    f.poll()
+    snap = f.since(0)
+    assert snap["events"][0]["to"] == "teleport" and snap["events"][0]["n"] == 3 and snap["totals"]["teleport"] == 3
+    f.tick()
+    scrape["text"] = "not reachable"  # a scrape without the counter is reachable with nothing counted, never a crash
+    f.poll()
+    assert f.since(0)["reachable"]["teleport"] is True

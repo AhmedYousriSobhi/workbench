@@ -91,15 +91,44 @@ The optional **Teleport** part (auth and proxy in one container, about 256 MB li
 lets a client reach the login node and every compute and GPU node through Teleport. Nodes keep their own `sshd` and trust
 the Teleport CA (Teleport's agentless OpenSSH mode); no Teleport process runs on a node. It is off by default.
 
+### Steps
+
+**1. Turn it on** (pick one):
+
 ```bash
-./scripts/benchctl up --with teleport
-ID=compose/generated/secrets/teleport/identity/alice        # one identity file per user in sim.yaml, valid for teleport.cert_ttl
-tsh --proxy=127.0.0.1:3080 --insecure -i $ID ls               # the login node and every node
-tsh --proxy=127.0.0.1:3080 --insecure -i $ID ssh alice@cn001 hostname
+./scripts/benchctl start --access teleport        # from a terminal (adds Teleport to what runs; leaves the page up)
+./scripts/benchctl up --with teleport             # the same on a running cluster, without the page
 ```
 
-For an interactive `tsh login`, set a password and a one-time-code authenticator once (Teleport 18 requires a second factor): `./scripts/benchctl add invite alice` prints a one-time link; open it in a browser
-(the certificate is self-signed), scan the QR code with an authenticator app (or keep the secret it shows for `oathtool`), then `tsh login --proxy=127.0.0.1:3080 --insecure --user=alice`. The identity files need neither a password nor a code.
-Your `tsh` must not be a newer major version than the server (`teleport.version` in `sim.yaml`, default 18.x); use a separate
+or in the page: **☰ Menu → ▦ Cluster architecture → Access → Teleport → Apply** (press twice to confirm), see [the web page](05-web-page.md#teleport-from-the-page). Then check it: the `teleport` card in the entity list says `answering`.
+
+**2. Reach it with an identity file.** Nothing to set up: one file per user in `sim.yaml`, valid for `teleport.cert_ttl` (12 h by default; `benchctl up` writes fresh ones).
+
+```bash
+ID=compose/generated/secrets/teleport/identity/alice
+tsh --proxy=127.0.0.1:3080 --insecure -i $ID ls                          # the login node and every node
+tsh --proxy=127.0.0.1:3080 --insecure -i $ID ssh alice@cn001 hostname    # a command on a node
+```
+
+`--insecure` is needed because the proxy's certificate is self-signed. Each `ssh` shows up in the page as a dot from the clients to the Teleport box.
+
+**3. Or use `tsh login` and the browser** (a password and a one-time code, because Teleport 18 cannot turn the second factor off):
+
+```bash
+./scripts/benchctl add invite alice     # prints a one-time link
+```
+
+Open the link in a browser (accept the certificate warning), choose a password and scan the QR code with an authenticator app (or keep the secret it shows for `oathtool`). Then:
+
+```bash
+tsh login --proxy=127.0.0.1:3080 --insecure --user=alice
+tsh ls
+```
+
+The web UI is at `https://127.0.0.1:3080` (same login). The page lists the address and the command in **Connections** (the Teleport row), and shows Teleport's traffic in the Infrastructure architecture.
+
+![The Infrastructure architecture with Teleport: a dot travels from the clients to the Teleport box for each SSH connection](img/web-infrastructure.png)
+
+**Good to know.** A Teleport container created before the page showed Teleport has no diagnostics port yet, so the card says `not answering` and no dots appear; run `./scripts/benchctl up --with teleport` once to recreate it. Your `tsh` must not be a newer major version than the server (`teleport.version` in `sim.yaml`, default 18.x); use a separate
 `TELEPORT_HOME` if you keep other Teleport profiles. Not simulated: the Teleport agent's extras (dynamic labels, session
 recording that survives a dropped connection, session sharing), Kubernetes, web and database access.
