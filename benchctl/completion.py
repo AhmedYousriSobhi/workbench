@@ -89,6 +89,20 @@ def parts(incomplete: str) -> list[str]:
     return _starts(list(workbench.PARTS), incomplete)
 
 
+def category(name: str):
+    """Completer for a category flag such as --hardware: its items, also after a comma (`bmc,b` -> `bmc,bcm`), without
+    repeating one already typed."""
+    @_safe
+    def complete(incomplete: str) -> list[str]:
+        from . import workbench
+
+        head, _, tail = incomplete.rpartition(",")
+        typed = {t for t in head.split(",") if t}
+        prefix = head + "," if head else ""
+        return [prefix + i for i in workbench.items(name) if i.startswith(tail) and i not in typed]
+    return complete
+
+
 @_safe
 def outputs(incomplete: str) -> list[str]:
     return _starts(OUTPUTS, incomplete)
@@ -152,6 +166,7 @@ def script(shell: str, prog: str = "benchctl") -> str:
         raise typer.BadParameter(f"unknown shell '{shell}'. Valid: {', '.join(SHELLS)}.")
     completion_init()
     text = get_completion_script(prog_name=prog, complete_var=f"_{prog.replace('-', '_').upper()}_COMPLETE", shell=shell)
+    text = text if text.endswith("\n") else text + "\n"  # Typer's bash script has no final newline: appending glued two commands together
     if shell == "bash":
         func = re.search(r"complete [^\n]*-F (\S+) " + re.escape(prog), text).group(1)
         text += "".join(f"complete -o default -F {func} {n}\n" for n in NAMES[1:])

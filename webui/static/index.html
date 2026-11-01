@@ -105,6 +105,7 @@
   dialog { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:10px; max-width:min(92vw,640px); }
   dialog pre { white-space:pre-wrap; font-size:13px; margin:0 0 8px; } .detailbtn { margin-top:6px; }
   .planform { display:flex; flex-wrap:wrap; gap:10px; margin:8px 0; } .planform input[type=number] { width:5em; min-height:40px; }
+  .partgroup { flex-basis:100%; } .partgroup > b { display:inline-block; min-width:6.5rem; text-transform:capitalize; }
   .planparts { border:1px solid var(--line); border-radius:8px; } .planparts label { display:inline-block; min-height:40px; padding:8px 10px 0 0; }
   #pl-bar { width:100%; height:14px; } #pl-cmd { white-space:pre-wrap; margin:4px 0 0; }
   .node dt { color:var(--dim); } .node dd { margin:0; }
@@ -584,7 +585,7 @@ async function drawParts() {  // the options come from the backend registry (/ap
   if (partsDrawn) return;
   try {
     const j = await (await fetch('/api/settings')).json();
-    $('pl-parts').innerHTML = j.parts.map(p => `<label class="tog" title="${esc(p.help)}"><input type="checkbox" value="${esc(p.id)}"${p.on ? ' checked' : ''}><span>${esc(p.label)} <small class="dim">+${p.mb} MB</small></span></label>`).join('');
+    $('pl-parts').innerHTML = [...new Set(j.parts.map(p => p.category))].map(c => `<div class="partgroup" role="group" aria-label="${esc(c)}"><b class="small dim">${esc(c)}</b> ` + j.parts.filter(p => p.category === c).map(p => `<label class="tog" title="${esc(p.help)}"><input type="checkbox" value="${esc(p.id)}"${p.on ? ' checked' : ''}><span>${esc(p.label)} <small class="dim">+${p.mb} MB</small></span></label>`).join('') + '</div>').join('');
     $('pl-parts').querySelectorAll('input').forEach(i => i.oninput = i.onchange = () => { showBmcNodes(); planInputs(); });
     $('pl-bmcmb').textContent = j.bmc_node_mb;
     $('pl-bmcnodes').innerHTML = j.nodes.map(n => `<label class="tog"><input type="checkbox" value="${esc(n.name)}"${n.bmc ? ' checked' : ''}><span>${esc(n.name)}</span></label>`).join('');

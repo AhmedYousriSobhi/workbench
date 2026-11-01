@@ -194,18 +194,48 @@ WITH = typer.Option(None, "--with", autocompletion=completion.parts, help=f"add 
 WITHOUT = typer.Option(None, "--without", autocompletion=completion.parts, help="remove a part (repeat)")
 K8S = typer.Option(None, "--k8s-nodes", help="Kubernetes nodes (not built yet)")
 BMC_NODES = typer.Option(None, "--bmc-nodes", help="nodes that get a BMC address, comma separated (default all); each costs about 32 MB")
+
+def _category_option(cat: str):
+    what = workbench.CATEGORIES[cat][0]
+    return typer.Option(None, f"--{cat}", autocompletion=completion.category(cat), rich_help_panel="Parts by category",
+                        help=f"{what}: {', '.join(workbench.items(cat))} (comma separated or repeated)")
+
+
+WORKLOAD, ACCOUNTING, MONITORING, TICKETING, HARDWARE, ACCESS, SIMULATION = (
+    _category_option(c) for c in ("workload", "accounting", "monitoring", "ticketing", "hardware", "access", "simulation"))
+ADDONS = typer.Option(False, "--addons", rich_help_panel="Parts by category",
+                      help="turn on every optional part (all categories); --without X still removes one")
+
+
+def _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons) -> list[str] | None:
+    """`--with` parts plus the ones the category flags and --addons name, or exit 1 with the one problem. None when
+    nothing was chosen, so `up` can still tell a plain preset from a selection."""
+    picked = {"workload": workload, "accounting": accounting, "monitoring": monitoring, "ticketing": ticketing,
+              "hardware": hardware, "access": access, "simulation": simulation}
+    try:
+        extra = workbench.expand(picked, addons)
+    except workbench.SpecError as e:
+        typer.echo(f"invalid: {e}", err=True)
+        raise typer.Exit(1) from e
+    chosen = with_ is not None or addons or any(v is not None for v in picked.values())
+    return sorted(set(with_ or []) | set(extra)) if chosen else None
+
+
 SAVE = typer.Option(None, "--save", help="write the selection to this workbench file")
 
 
 @app.command()
 def plan(file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS,
          with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, save: str = SAVE,
-         bmc_nodes: str = BMC_NODES) -> None:
+         bmc_nodes: str = BMC_NODES, workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING,
+         monitoring: list[str] = MONITORING, ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE,
+         access: list[str] = ACCESS, simulation: list[str] = SIMULATION, addons: bool = ADDONS) -> None:
     """Estimate the memory a workbench needs against what the host has free; exit 1 if it would not fit."""
     from pathlib import Path
 
     import yaml
 
+    with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons)
     spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes)
     est = workbench.estimate(sim, prof)
     ok, msg = workbench.verdict(est, checks.mem_available() // (1024 * 1024), spec=spec)
@@ -227,8 +257,13 @@ def _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_
 @app.command()
 def up(profile: str = typer.Option(None, "--profile", autocompletion=completion.profiles, callback=_profile_check, help="a size preset (default std); or choose by counts below"),
        file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS,
-       with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, bmc_nodes: str = BMC_NODES) -> None:
-    """Estimate, then start. By preset (--profile) or by selection (--cpu-nodes 2 --gpu-nodes 4 --with jira ...)."""
+       with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, bmc_nodes: str = BMC_NODES,
+       workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING,
+       ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE, access: list[str] = ACCESS,
+       simulation: list[str] = SIMULATION, addons: bool = ADDONS) -> None:
+    """Estimate, then start. By preset (--profile) or by selection (--cpu-nodes 2 --gpu-nodes 4 --with jira,
+    --ticketing jira --hardware bmc,bcm, --addons ...)."""
+    with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons)
     chosen = any(v is not None for v in (file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes))
     if chosen and profile:
         typer.echo("choose one: --profile PRESET, or a selection (--cpu-nodes, --gpu-nodes, --with, -f FILE)", err=True)
@@ -243,8 +278,12 @@ def up(profile: str = typer.Option(None, "--profile", autocompletion=completion.
 @app.command()
 def apply(file: str = typer.Option(..., "-f", "--file", help="workbench file to build"), name: str = NAME,
           cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS, with_: list[str] = WITH,
-          without: list[str] = WITHOUT, k8s_nodes: int = K8S, bmc_nodes: str = BMC_NODES) -> None:
+          without: list[str] = WITHOUT, k8s_nodes: int = K8S, bmc_nodes: str = BMC_NODES,
+          workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING,
+          ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE, access: list[str] = ACCESS,
+          simulation: list[str] = SIMULATION, addons: bool = ADDONS) -> None:
     """Build the workbench a file describes (the same as `up -f FILE`)."""
+    with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons)
     _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes)
 
 
@@ -260,12 +299,19 @@ def _launcher(*args: str) -> None:
 @app.command()
 def start(profile: str = typer.Option(None, "--profile", autocompletion=completion.profiles, callback=_profile_check,
                                       help="a size preset (default min)"),
-          with_: list[str] = WITH, without: list[str] = WITHOUT) -> None:
+          with_: list[str] = WITH, without: list[str] = WITHOUT, workload: list[str] = WORKLOAD,
+          accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING, ticketing: list[str] = TICKETING,
+          hardware: list[str] = HARDWARE, access: list[str] = ACCESS, simulation: list[str] = SIMULATION,
+          addons: bool = ADDONS) -> None:
     """Everything in one step: machine check, governor, cluster, web page (the first run builds images). Add parts
-    with --with (for example `--with accounting`); on a running cluster it adds them and leaves the page up."""
-    if profile and (with_ or without):
-        typer.echo("choose one: --profile PRESET, or parts (--with, --without)", err=True)
+    with --with (`--with accounting`), by category (`--ticketing jira --hardware bmc,bcm`) or all of them (`--addons`);
+    on a running cluster it adds them and leaves the page up."""
+    with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons)
+    if profile and (with_ is not None or without):
+        typer.echo("choose one: --profile PRESET, or parts (--with, --without, category flags, --addons)", err=True)
         raise typer.Exit(1)
+    if with_ == []:  # a flag that adds nothing (--workload slurm) still asks for a selection, not the min preset
+        with_ = list(workbench.DEFAULT_PARTS)
     _offer_completion()
     parts = [x for p in (with_ or []) for x in ("--with", p)] + [x for p in (without or []) for x in ("--without", p)]
     _launcher("start", *(parts or ["--profile", profile or "min"]))

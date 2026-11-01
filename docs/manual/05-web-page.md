@@ -82,7 +82,7 @@ live state.
 
 ## Plan: change the workbench
 
-**▦ Cluster architecture** opens a panel with steppers for CPU nodes, GPU nodes and GPUs per node, toggles for the optional parts (accounting, Jira, BMC, BCM, scenarios, load; each shows the memory limit it adds, and the toggles show what is built now), and a
+**▦ Cluster architecture** opens a panel with steppers for CPU nodes, GPU nodes and GPUs per node, toggles for the optional parts, grouped by category as in the `--ticketing`, `--hardware` flags (accounting, Jira, BMC, BCM, Teleport, scenarios, load; each shows the memory limit it adds, and the toggles show what is built now), and a
 memory bar ("1.7 GB needed of 4.5 GB free"). It shows the change against what runs now ("GPU nodes 2 → 3 (+1)") and the
 `benchctl up ...` command for a terminal. Editing the numbers only estimates. **Apply to the running workbench** (press
 twice: the second press confirms) asks the governor to rebuild it; new nodes start and nodes you no longer want are
