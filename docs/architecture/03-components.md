@@ -5,6 +5,7 @@
 ## 4. Component decisions (what, why, alternatives)
 
 ### 4.1 Slurm: containerized, not VMs
+- **Real daemons, not a mock** (ADR 0025): the scheduler, its node states, command output and `slurmrestd` auth are Slurm's own; GPUs, cgroups and jobs are simulated. The ADR lists what is real, what is not and the cost.
 - Run `slurmctld` + `slurmrestd` in core; `slurmdbd` + MariaDB only in profiles that test accounting/QOS.
 - One container per fake compute node, all from **one shared base image** (shared file-backed pages). Community projects such as `giovtorres/slurm-docker-cluster` already use this pattern (controller, DB, and `c1`/`c2` `slurmd` containers under Docker Compose); use it as a starting point rather than writing from scratch.
 - Container-friendly `slurm.conf` starting points (validate on your Slurm version): `ProctrackType=proctrack/linuxproc`, `TaskPlugin=task/none`, fake `RealMemory`, and GPUs declared as GRES by count (`Name=gpu Type=h200 Count=8`, no device files) so GPU partitions behave like a DGX/HGX fleet.
