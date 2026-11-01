@@ -26,7 +26,7 @@ from starlette.responses import (
 )
 from starlette.routing import Route
 
-from benchctl import checks, scenario
+from benchctl import checks, nhc, scenario
 
 from .cluster import ActionError, Cluster
 from .flow import PAUSE_LEVEL, Flow
@@ -104,7 +104,7 @@ class Runs:
 
 def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Path("scenarios"),
                sim_yaml: Path = Path("sim.yaml"), interval: float = 1.0, docs: Path = DOCS,
-               fetch=None, poster=None) -> Starlette:
+               fetch=None, poster=None, nhc_src: Path = nhc.SRC, nhc_out: Path = nhc.OUT) -> Starlette:
     sim = yaml.safe_load(sim_yaml.read_text())
     flow = Flow()
     runs = Runs(scenarios, sim, flow, slurm=lambda n, s, r: _governed(slurm_state(n, s, r)))
@@ -227,6 +227,44 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         if res.get("dry_run"):
             return JSONResponse({"started": False, "message": "The governor is in dry-run mode or has no --workdir, so nothing was applied. Run the command shown instead."})
         return JSONResponse({"started": True, "message": "Applying. Nodes appear and disappear as they change; progress is in Governor activity."})
+
+    async def nhc_state(request: Request):
+        """The health checks in run order, the templates the page may add from, and any problem with the files."""
+        return JSONResponse(await asyncio.to_thread(nhc.state, nhc_src))
+
+    async def nhc_change(request: Request):
+        """One change to the checks, validated like the CLI's (same module): reorder, toggle, params, remove, add from a
+        template. Custom scripts are not accepted from the page (a CLI or file edit); a refusal changes nothing."""
+        try:
+            body = await request.json()
+        except ValueError as e:
+            raise HTTPException(400, "send JSON") from e
+        op, name = body.get("op"), str(body.get("name", ""))
+        params = {str(k): str(v) for k, v in (body.get("params") or {}).items()}
+        position = body.get("position")
+
+        def apply() -> None:
+            if op == "reorder":
+                nhc.reorder([str(n) for n in body.get("order", [])], nhc_src)
+            elif op == "toggle":
+                nhc.set_check(name, enabled=bool(body.get("enabled")), src=nhc_src)
+            elif op == "params":
+                nhc.set_check(name, params=params, src=nhc_src)
+            elif op == "remove":
+                nhc.remove(name, nhc_src)
+            elif op == "add":
+                nhc.add(name, template=str(body.get("template", "")), params=params,
+                        position=position if isinstance(position, int) else None, src=nhc_src)
+            else:
+                raise nhc.NhcError("op must be reorder, toggle, params, remove or add")
+            if errs := nhc.sync(nhc_src, nhc_out):
+                raise nhc.NhcError("\n".join(errs))
+
+        try:
+            await asyncio.to_thread(apply)
+        except nhc.NhcError as e:
+            raise HTTPException(422, str(e)) from e
+        return JSONResponse(await asyncio.to_thread(nhc.state, nhc_src))
 
     async def node_detail(request: Request):
         from benchctl import describe
@@ -381,6 +419,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/settings", protected(settings)),
             Route("/api/plan", protected(plan)),
             Route("/api/plan/apply", protected(plan_apply, write=True), methods=["POST"]),
+            Route("/api/nhc", protected(nhc_state)),
+            Route("/api/nhc", protected(nhc_change, write=True), methods=["POST"]),
             Route("/api/connections", protected(connections)),
             Route("/api/export/profile", protected(export_profile)),
             Route("/api/nodes/{node}", protected(node_detail)),

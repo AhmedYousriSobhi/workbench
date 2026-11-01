@@ -11,6 +11,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 | `submit NODE [--gpus N] [--cpus N] [--duration S] [--user U]` | submit a `sleep` job pinned to the node as a simulated user (the node panel's Workload buttons, through the governor); `squeue` lists it and its GPUs show busy |
 | `load on [--rate N] [--duration S] [--seed N]` / `load off` | simulated users (`alice`, `bob`) submit cpu jobs and GPU jobs at random (Poisson arrivals, default 6 a minute, about 2 min each) so `squeue` and the node states have a live queue; off by default |
 | `set jira-activity on|off [--every S] [--seed N]` | the Jira mock's background team: moves tickets along the workflow, comments, reassigns, reopens, files new ones (on by default, about every 45 s) |
+| `get checks` / `add check NAME ...` / `set check NAME ...` / `remove check NAME` / `validate checks` / `reload checks` | add, change, remove, validate and deliver the node health checks; see [NHC checks](../guides/nhc-checks.md) |
 | `set node NAME off|on|down|resume` | `off`/`on` do what the page's Power off/on do: the BMC, BCM and GPU metrics follow and the container freezes or thaws so Slurm detects it down or back by itself (through the governor); `down`/`resume` set the Slurm state by hand |
 | `start [--profile P | --with PART ...]` | machine check, venv, governor (as you), cluster, web page; default profile `min` |
 | `stop` | stop the web page, the cluster and your own governor |

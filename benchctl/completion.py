@@ -14,7 +14,8 @@ import typer
 SHELLS = ("bash", "zsh", "fish")
 OUTPUTS = ["table", "json", "name"]
 COLUMNS = {"nodes": ["name", "kind", "state"], "services": ["name", "state"],
-           "profiles": ["name", "compute_nodes", "groups"], "scenarios": ["name", "steps", "description"]}
+           "profiles": ["name", "compute_nodes", "groups"], "scenarios": ["name", "steps", "description"],
+           "checks": ["position", "name", "state", "params", "description"]}
 SELECTOR_VALUES = {"kind": ["compute", "gpu"], "state": ["running", "paused", "exited", "absent"]}
 MARK_OPEN, MARK_CLOSE = "# >>> workbench completion >>>", "# <<< workbench completion <<<"
 NAMES = ("benchctl", "./scripts/benchctl")
@@ -60,6 +61,20 @@ def profiles(incomplete: str) -> list[str]:
 @_safe
 def scenarios(incomplete: str) -> list[str]:
     return _starts(_stems("scenarios"), incomplete)
+
+
+@_safe
+def checks(incomplete: str) -> list[str]:
+    from . import nhc
+
+    return _starts([c.name for c in nhc.load()], incomplete)
+
+
+@_safe
+def check_templates(incomplete: str) -> list[str]:
+    from . import nhc
+
+    return _starts([t["name"] for t in nhc.templates()], incomplete)
 
 
 @_safe

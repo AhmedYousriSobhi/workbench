@@ -203,7 +203,18 @@
   .tog input:checked + span { background:color-mix(in srgb,var(--accent) 14%,var(--panel)); border-color:var(--accent); font-weight:650; } .tog input:checked + span::before { content:'✓'; } .tog input:focus-visible + span { outline:2px solid var(--accent); outline-offset:2px; }
   .fit { padding:var(--sp4); border:1px solid var(--line); border-radius:12px; } .fitnum b { font-size:26px; font-variant-numeric:tabular-nums; } #pl-bar { width:100%; height:10px; margin:var(--sp2) 0; } .fit p { margin:2px 0; }
   .cmdbox summary { cursor:pointer; min-height:36px; display:flex; align-items:center; color:var(--accent); } .cmdbox pre { margin:var(--sp2) 0; }
-  @media (max-width:640px) { dialog.sheet { width:100vw; max-width:100vw; margin:auto 0 0; border-radius:16px 16px 0 0; max-height:92vh; } .steps3 { gap:var(--sp2); } }
+  .nhclist { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:var(--sp2); }
+  .nhcrow { display:grid; grid-template-columns:auto 1fr auto; gap:var(--sp2) var(--sp3); align-items:center; padding:var(--sp2) var(--sp3); border:1px solid var(--line); border-radius:10px; background:var(--panel); }
+  .nhcrow.off { opacity:.75; } .nhcrow.dragging { opacity:.4; } .nhcrow.over { border-color:var(--accent); box-shadow:0 -3px 0 var(--accent); }
+  .nhcgrip { cursor:grab; min-width:40px; min-height:40px; display:inline-flex; align-items:center; justify-content:center; border:1px dashed var(--line); border-radius:8px; background:transparent; color:var(--dim); font:inherit; }
+  .nhcrow .nhcname { font-weight:650; white-space:nowrap; } .nhcrow .nhcdesc { grid-column:2 / 4; } .nhcrow .nhcparams { grid-column:2 / 4; display:flex; flex-wrap:wrap; gap:var(--sp2); align-items:center; }
+  .nhcrow .nhcparams label { display:inline-flex; gap:6px; align-items:center; font-size:13px; } .nhcrow .nhcparams input { min-height:36px; width:11em; }
+  .nhcbtns { display:flex; gap:4px; } .nhcbtns .btn.small { min-width:40px; min-height:40px; padding:0 8px; }
+  .nhcpal { display:flex; flex-wrap:wrap; gap:var(--sp2); } .nhcpal .nhcchip { min-height:40px; padding:0 14px; border:1px dashed var(--accent); border-radius:999px; background:var(--panel); color:var(--fg); font:inherit; cursor:grab; }
+  .nhcnew { display:flex; flex-wrap:wrap; gap:var(--sp2); align-items:end; padding:var(--sp3); border:1px solid var(--accent); border-radius:10px; } .nhcnew label { display:flex; flex-direction:column; font-size:13px; gap:2px; } .nhcnew input { min-height:40px; }
+  .nhclist.drop-end::after { content:''; height:3px; background:var(--accent); border-radius:2px; }
+  @media (max-width:640px) { .nhcrow { grid-template-columns:auto 1fr; } .nhcrow .nhcbtns { grid-column:1 / 3; justify-content:flex-end; } .nhcrow .nhcdesc, .nhcrow .nhcparams { grid-column:1 / 3; } .nhcrow .nhcparams input { width:100%; } .nhcrow .nhcparams label { flex:1 1 100%; justify-content:space-between; }
+    dialog.sheet { width:100vw; max-width:100vw; margin:auto 0 0; border-radius:16px 16px 0 0; max-height:92vh; } .steps3 { gap:var(--sp2); } }
   .cells { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); } .cell .st { overflow-wrap:anywhere; } .cells.small { grid-template-columns:repeat(auto-fill,minmax(112px,1fr)); } .cell { min-height:60px; padding:8px 10px; }
   /* governor panel, tree, bigger traffic (#125) */
   .cols { grid-template-columns:minmax(0,1fr) 340px; max-width:1560px; }
@@ -278,6 +289,7 @@
     <span id="conn" role="status"><i></i><span>connecting…</span></span>
     <button class="pillchip" id="scnbtn" aria-haspopup="dialog">▶ Scenarios</button>
     <button class="pillchip" id="planbtn" aria-haspopup="dialog">⚙ Settings</button>
+    <button class="pillchip" id="nhcbtn" aria-haspopup="dialog">✚ Health checks</button>
     <button class="pillchip" id="expbtn" aria-haspopup="dialog">⇩ Export</button>
     <a class="pillchip" id="helplink" href="/help/" aria-label="Help: the manual, guides and command reference">? Help</a>
     <button class="pillchip" id="theme" aria-label="Colour theme: automatic. Press to change.">◐ Auto</button>
@@ -392,6 +404,18 @@
       <details class="cmdbox"><summary class="small">Command for a terminal</summary><pre id="pl-cmd" class="small"></pre><button class="btn small" id="pl-copy" hidden>Copy command</button></details>
     </div>
     <div class="sheet-f"><p id="pl-apply-msg" role="status" class="small"></p><button class="btn small" id="plan-cancel">Cancel</button><button class="btn" id="pl-apply" hidden>Apply to the running workbench</button></div>
+  </dialog>
+  <dialog id="nhcdlg" class="sheet" aria-labelledby="nhc-h">
+    <div class="sheet-h"><div><h2 id="nhc-h">Node health checks</h2><p class="dim small">What every node's health check looks at, in the order it runs. Drag a block (or use ↑ ↓) to reorder; changes are validated, then reach the nodes within 30 s.</p></div>
+      <button class="btn small" id="nhc-close" aria-label="Close the health checks">✕ Close</button></div>
+    <div class="sheet-b">
+      <ol class="nhclist" id="nhc-list" aria-label="Health checks in run order"></ol>
+      <section aria-labelledby="nhc-add-h"><h3 id="nhc-add-h" class="small dim" style="margin:0 0 var(--sp2)">Add a check: drag a template into the list, or press it</h3>
+        <div class="nhcpal" id="nhc-pal"></div>
+        <form class="nhcnew" id="nhc-new" hidden><label>Name<input id="nhc-new-name" required pattern="[a-z][a-z0-9\-]{0,31}" placeholder="gpu-hot"></label><span id="nhc-new-params" class="nhcparams"></span><button class="btn" id="nhc-new-go">Add check</button><button type="button" class="btn small" id="nhc-new-cancel">Cancel</button></form></section>
+      <p class="small dim">Your own scripts: <code>benchctl add check NAME --script FILE</code> (docs/guides/nhc-checks.md).</p>
+    </div>
+    <div class="sheet-f"><p id="nhc-msg" role="status" class="small"></p><button class="btn small" id="nhc-done">Close</button></div>
   </dialog>
 </main>
 </div>
@@ -568,6 +592,83 @@ $('scnbtn').onclick = () => $('scndlg').showModal(); $('scn-close').onclick = ()
 $('scndlg').addEventListener('click', e => { if (e.target === $('scndlg')) $('scndlg').close(); });
 $('planbtn').onclick = openPlan; $('plan-close').onclick = $('plan-cancel').onclick = () => $('plandlg').close();
 $('plandlg').addEventListener('click', e => { if (e.target === $('plandlg')) $('plandlg').close(); });  // a click on the dim backdrop closes it
+// Health checks: the list comes from /api/nhc; every change is a POST the backend validates (same code as the CLI), then redrawn from its answer.
+let nhcState = null, nhcDrag = null, nhcPending = null;
+const nhcMsg = (t) => { $('nhc-msg').textContent = t; };
+async function nhcCall(method, body) {
+  const r = await fetch('/api/nhc', method === 'GET' ? {} : { method, headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { nhcPaint(true); nhcMsg('✗ Refused, nothing changed: ' + (j.detail || r.status)); return false; }  // redraw from the last good state so a rejected edit does not linger
+  nhcState = j; nhcPaint(); return true;
+}
+function nhcPaint(keepMsg) {
+  const list = $('nhc-list');
+  list.innerHTML = nhcState.checks.map((c, i) => `<li class="nhcrow${c.enabled ? '' : ' off'}" data-name="${esc(c.name)}" draggable="true">
+    <button type="button" class="nhcgrip" aria-hidden="true" tabindex="-1" title="Drag to reorder">⠿</button>
+    <label class="tog"><input type="checkbox" data-act="toggle"${c.enabled ? ' checked' : ''} aria-label="${esc(c.name)} enabled"><span><span class="nhcname">${esc(c.name)}</span> <small class="dim">${c.enabled ? 'on' : 'off'}</small></span></label>
+    <span class="nhcbtns"><button class="btn small" data-act="up" aria-label="Move ${esc(c.name)} up"${i === 0 ? ' disabled' : ''}>↑</button><button class="btn small" data-act="down" aria-label="Move ${esc(c.name)} down"${i === nhcState.checks.length - 1 ? ' disabled' : ''}>↓</button><button class="btn small" data-act="remove" aria-label="Remove ${esc(c.name)}">✕</button></span>
+    <span class="nhcdesc small dim">${esc(c.description || '')}</span>
+    ${c.declared.length ? `<span class="nhcparams">${c.declared.map(k => `<label>${esc(k)}<input data-param="${esc(k)}" value="${esc(c.params[k] || '')}" aria-label="${esc(c.name)} ${esc(k)}"></label>`).join('')}</span>` : ''}</li>`).join('')
+    || '<li class="dim small">No checks: every node counts as healthy.</li>';
+  $('nhc-pal').innerHTML = nhcState.templates.map(t => `<button type="button" class="nhcchip" draggable="true" data-tpl="${esc(t.name)}" title="${esc(t.description)}">✚ ${esc(t.name)}</button>`).join('');
+  if (!keepMsg) nhcMsg(nhcState.problems.length ? '✗ ' + nhcState.problems[0] : '');
+}
+function nhcOrderAfterMove(name, to) {
+  const names = nhcState.checks.map(c => c.name).filter(n => n !== name); names.splice(Math.max(0, Math.min(to, names.length)), 0, name); return names;
+}
+$('nhc-list').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const name = b.closest('.nhcrow').dataset.name, i = nhcState.checks.findIndex(c => c.name === name);
+  const move = (to, word, act) => nhcCall('POST', { op: 'reorder', order: nhcOrderAfterMove(name, to) }).then(ok => {
+    if (!ok) return; nhcMsg(`✓ ${name} moved ${word}`);  // the list was redrawn: keep the keyboard on the same row
+    const row = [...document.querySelectorAll('.nhcrow')].find(r => r.dataset.name === name); const btn = row && (row.querySelector(`[data-act=${act}]:not(:disabled)`) || row.querySelector('[data-act=up]:not(:disabled),[data-act=down]:not(:disabled)')); if (btn) btn.focus();
+  });
+  if (b.dataset.act === 'up') move(i - 1, 'up', 'up');
+  if (b.dataset.act === 'down') move(i + 1, 'down', 'down');
+  if (b.dataset.act === 'remove' && confirm(`Remove check ${name}? Its file is deleted (git keeps the old one). Switch it off instead to keep it.`)) nhcCall('POST', { op: 'remove', name }).then(ok => ok && nhcMsg(`✓ removed ${name}`));
+});
+$('nhc-list').addEventListener('change', e => {
+  const row = e.target.closest('.nhcrow'); if (!row) return; const name = row.dataset.name;
+  if (e.target.dataset.act === 'toggle') nhcCall('POST', { op: 'toggle', name, enabled: e.target.checked }).then(ok => { if (ok) nhcMsg(`✓ ${name} ${e.target.checked ? 'on' : 'off'}`); });
+  if (e.target.dataset.param) { const params = {}; row.querySelectorAll('[data-param]').forEach(i => params[i.dataset.param] = i.value);
+    nhcCall('POST', { op: 'params', name, params }).then(ok => { if (ok) nhcMsg(`✓ ${name} saved`); }); }
+});
+function nhcDropIndex(y) {  // the slot under the pointer: before the first row whose middle is below it
+  const rows = [...$('nhc-list').querySelectorAll('.nhcrow:not(.dragging)')]; let i = rows.findIndex(r => { const b = r.getBoundingClientRect(); return y < b.top + b.height / 2; });
+  return { index: i < 0 ? rows.length : i, rows };
+}
+function nhcMark(y) {
+  document.querySelectorAll('.nhcrow.over').forEach(r => r.classList.remove('over')); const { index, rows } = nhcDropIndex(y);
+  $('nhc-list').classList.toggle('drop-end', index === rows.length); if (rows[index]) rows[index].classList.add('over'); return index;
+}
+document.addEventListener('dragstart', e => {
+  const row = e.target.closest && e.target.closest('.nhcrow'), chip = e.target.closest && e.target.closest('.nhcchip');
+  if (row) { nhcDrag = { name: row.dataset.name }; row.classList.add('dragging'); } else if (chip) nhcDrag = { tpl: chip.dataset.tpl }; else return;
+  e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', nhcDrag.name || nhcDrag.tpl);
+});
+$('nhc-list').addEventListener('dragover', e => { if (nhcDrag) { e.preventDefault(); nhcMark(e.clientY); } });
+$('nhc-list').addEventListener('drop', e => {
+  if (!nhcDrag) return; e.preventDefault(); const index = nhcMark(e.clientY), d = nhcDrag; nhcEndDrag();
+  if (d.name) nhcCall('POST', { op: 'reorder', order: nhcOrderAfterMove(d.name, index) }).then(ok => ok && nhcMsg(`✓ ${d.name} moved`));
+  else nhcAskNew(d.tpl, index + 1);
+});
+function nhcEndDrag() { nhcDrag = null; document.querySelectorAll('.nhcrow').forEach(r => r.classList.remove('dragging', 'over')); $('nhc-list').classList.remove('drop-end'); }
+document.addEventListener('dragend', nhcEndDrag);
+$('nhc-pal').addEventListener('click', e => { const c = e.target.closest('.nhcchip'); if (c) nhcAskNew(c.dataset.tpl, null); });
+function nhcAskNew(tpl, position) {  // a template needs a name and its parameters before it can be validated
+  const t = nhcState.templates.find(x => x.name === tpl); nhcPending = { tpl, position };
+  $('nhc-new-params').innerHTML = t.declared.map(k => `<label>${esc(k)}<input data-newparam="${esc(k)}" required></label>`).join('');
+  $('nhc-new').hidden = false; $('nhc-new-name').value = ''; $('nhc-new-name').focus(); nhcMsg(`New check from ${tpl}: name it and fill in its parameters.`);
+}
+$('nhc-new-cancel').onclick = () => { $('nhc-new').hidden = true; nhcPending = null; nhcMsg(''); };
+$('nhc-new').onsubmit = async e => {
+  e.preventDefault(); const params = {}; document.querySelectorAll('[data-newparam]').forEach(i => params[i.dataset.newparam] = i.value.trim());
+  const name = $('nhc-new-name').value.trim();
+  if (await nhcCall('POST', { op: 'add', template: nhcPending.tpl, name, params, position: nhcPending.position })) { $('nhc-new').hidden = true; nhcPending = null; nhcMsg(`✓ added ${name}`); }
+};
+async function openNhc() { $('nhc-new').hidden = true; try { const r = await fetch('/api/nhc'); nhcState = await r.json(); nhcPaint(); } catch (e) { nhcMsg('✗ Could not load the checks.'); } $('nhcdlg').showModal(); }
+$('nhcbtn').onclick = openNhc; $('nhc-close').onclick = $('nhc-done').onclick = () => $('nhcdlg').close();
+$('nhcdlg').addEventListener('click', e => { if (e.target === $('nhcdlg')) $('nhcdlg').close(); });
 $('expbtn').onclick = () => { $('exp-msg').textContent = ''; $('expdlg').showModal(); };
 $('exp-close').onclick = $('exp-cancel').onclick = () => $('expdlg').close();
 $('expdlg').addEventListener('click', e => { if (e.target === $('expdlg')) $('expdlg').close(); });

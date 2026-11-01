@@ -1,9 +1,10 @@
 """Generate the Docker Compose file from sim.yaml and a profile (SPEC section 3)."""
+import sys
 from pathlib import Path
 
 import yaml
 
-from . import addressing, slurmconf
+from . import addressing, nhc, slurmconf
 from .nodes import node_names
 
 OBSERVABILITY = "../observability.yml"  # static; hosts prometheus, grafana, gpu-exporter-farm
@@ -74,6 +75,7 @@ def generate(sim: dict, profile: dict) -> dict:
         if name in ("slurmctld", "slurmrestd", "login") or svc["labels"].get("workbench.node"):
             svc["volumes"] = [slurm_mount]
             if svc["labels"].get("workbench.node"):  # sshd on every compute node (ADR 0014)
+                svc["volumes"].append("./nhc:/etc/workbench/nhc:ro")  # the health checks, edited live (ADR 0019)
                 svc["volumes"].append("./secrets/ssh:/run/workbench/ssh:ro")
                 svc.setdefault("environment", {})["WORKBENCH_SSHD"] = "1"
             svc["hostname"] = name
@@ -187,6 +189,9 @@ def write(compose: dict, out: Path = Path("compose/generated/docker-compose.yml"
         # workbench or `scale` changed the counts (the repository's sim.yaml is the default, not the running truth).
         shown = {**sim, "compute": {**sim.get("compute", {}), **({"count": compute_nodes} if compute_nodes is not None else {})}}
         (out.parent / "sim.yaml").write_text(yaml.safe_dump(shown, sort_keys=False))
+        (out.parent / "nhc").mkdir(exist_ok=True)  # mounted by every node; filled only with checks that validate (ADR 0019)
+        if errs := nhc.sync(out=out.parent / "nhc"):
+            print(f"WARNING: health checks not delivered, the nodes keep the last good set (benchctl validate checks):\n{errs[0]}", file=sys.stderr)
     out.write_text("# GENERATED from sim.yaml by `benchctl compose`; do not edit.\n"
                    + yaml.safe_dump(compose, sort_keys=False))
     return out

@@ -1,9 +1,9 @@
 # Progress
 
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
-Last updated 2026-10-29. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
+Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**78% built** (35 done, 22 in review, 11 partial, 5 to do, 73 items).
+**78% built** (35 done, 23 in review, 11 partial, 5 to do, 74 items).
 
 ## Roadmap
 
@@ -75,6 +75,8 @@ flowchart TB
     prom -->|"scrape"| gpux
     graf --> prom
     webui -->|"only path to the host"| sock
+    benchctl -->|"NHC check files (mounted read-only)"| slurmd
+    webui -->|"NHC check files (same validation)"| slurmd
     app -->|"REST"| restd
     app -->|"Redfish"| bmc
     app --> bcm
@@ -241,6 +243,7 @@ _What keeps every change safe and debuggable._
 | Describe a node (CLI and page) | 🔍 In review | `benchctl describe node NAME [-o json]` and the Info card of a node's panel on the page show the same text from one gatherer: container (state, image, memory limit, class), Slurm state and jobs, GPUs busy/idle and XID, BMC power/temperature/fans, ssh hint. A source that is down is one note. The page omits Docker and Slurm lines (no Docker access by design). Issue 93. | `benchctl/describe.py`, `benchctl/cli.py`, `webui/app.py`, `webui/static/index.html` | - |
 | Choose the workbench (plan and apply) | 🔍 In review | `benchctl plan --cpu-nodes 2 --gpu-nodes 4 --with jira` prints the memory the selection needs against free memory (exit 1 and a hint when it does not fit); `up` with the same flags, or `apply -f FILE`, admits by that estimate and builds it. Parts: jira, bmc, bcm, accounting, scenarios, load; Kubernetes refused until built. The effective sim is written to compose/generated/sim.yaml so slurm.conf, the BMC farm, the GPU exporter, get, describe and export agree. The page has a Settings sheet (was Plan; estimate only, W-3) whose optional parts, with their memory cost, come from one registry (workbench.PART_INFO, GET /api/settings); accounting is a default part and `benchctl start --with accounting` or the sheet adds it to a running cluster (slurmctld restarts). Power off from the page also marks the node down in Slurm through the governor (node-state, `benchctl set node`; `benchctl set node on|off` does the page's whole power action). `benchctl load on|off` runs simulated users on the login node (images/login/user_sim.py: Poisson arrivals, cpu and GPU jobs, issue 153); `benchctl submit NODE` and the node panel's Workload buttons submit a sleep job pinned to a node, through the governor's submit-job (issue 156). Issues 135-137. Fixed addressing plan (ADR 0018, issue 148): every container has a fixed private IP (10.141.x.x, login 10.141.255.254), the export, Connections tab and docs use them with 127.0.0.1 as the fallback, up refuses a conflicting network; every node's BMC has its own address on the ipmi network (10.148.x.y:443): a 32 MB forwarder per BMC to the farm, which keeps the state; switch BMCs off per node in Settings or with --bmc-nodes (issue 149). Node health check: images/node-base/nhc runs as HealthCheckProgram, Prolog (fails an unhealthy node so the job requeues) and Epilog; it drains on a missing GPU, an XID, a down InfiniBand port or a flapping NIC (exporter farm models both; page actions, scenario ib-port-down) and resumes its own drain; slurmctld's node_watch.py files or comments a Jira ticket when Slurm takes a node out of service (issues 143, 160); a powered-off node stops publishing GPU metrics; up restarts slurmctld when slurm.conf changes (issues 138-141). Verified live: 2 cpu + 3 gpu nodes x 4 GPUs. ADR 0016. Issue 92. | `benchctl/workbench.py`, `benchctl/cli.py`, `benchctl/stack.py`, `benchctl/compose.py`, `webui/app.py` | - |
 | Tab completion | 🔍 In review | `benchctl completion install|remove|bash|zsh|fish`: no sudo, one rc line, a ~/.local/bin/benchctl link; `start` offers it once in a terminal. Completes resources, nodes and services, --profile, scenario names, --user, --with/--without, -o, -l and --sort-by from files only (no Docker). A wrong profile, node or scenario gets Did you mean plus the valid list, exit 2. | `benchctl/completion.py`, `benchctl/cli.py`, `scripts/benchctl`, `tests/test_completion.py`, `tests/real/test_completion_real.py` | - |
+| NHC checks managed three ways | 🔍 In review | The node health check is a runner over files: images/node-base/nhc.d/checks.conf plus one script per check and parameterised templates (metric-above, metric-below); each check runs isolated with a 10 s timeout and prints one line per problem. Change them from the CLI (`benchctl get|add|set|remove|validate|reload check(s)`), by editing the files then `reload checks`, or in the page's Health checks sheet (drag to reorder, toggle, parameters, remove, add from a template; arrow buttons for the keyboard; templates only, never a script). One module validates every change on a copy (grammar, parameters, bash -n, contract, a smoke run on healthy sample metrics) and writes only a valid set, then delivers it to compose/generated/nhc, which nodes mount read-only: live within 30 s, no rebuild. ADR 0019, issue 170. Tests: tests/test_nhc_manage.py, tests/real/test_nhc_browser.py (Chromium, run); tests/real/test_nhc_real.py (live node, to be run with verify.sh). | `benchctl/nhc.py`, `images/node-base/nhc.d`, `images/node-base/nhc`, `benchctl/cli.py`, `webui/app.py`, `webui/static/index.html`, `docs/guides/nhc-checks.md` | - |
 | One-command launcher | 🔍 In review | `./scripts/benchctl start` runs the machine check, creates the venv if missing, notes whether the governor is installed, brings the cluster up and starts the web page in the background, then prints the login link; `stop`, `status`, `open`. Idempotent. Live-tested start, second start, stop. | `scripts/benchctl-launch` | #95 |
 | Initial machine check | 🔍 In review | `./scripts/check-machine.sh` (system python3 only, runs before any build) checks OS, cores, RAM, disk, cgroup v2, Docker daemon and compose, free ports, optional tools, and which profiles fit; READY or NOT READY with a fix per problem. Also `benchctl check`. | `benchctl/machine.py`, `scripts/check-machine.sh` | #87 |
 | benchctl doctor / status / diag | ✅ Done | Environment checks with fixes, governor state, a masked diagnostics tarball, and the container security check. | `benchctl/checks.py`, `benchctl/diag.py` | #26 |
@@ -251,7 +254,7 @@ _What keeps every change safe and debuggable._
 | Verification helpers | ✅ Done | verify.sh runs validate.sh plus real tests (--full adds the live stack lifecycle); tests/real/helpers.py starts a live governor and talks to its socket. | `scripts/verify.sh` | #48 |
 | Progress tracker | ✅ Done | This page, generated from docs/progress.yaml (issue 19). | `benchctl/progress.py` | #42 |
 
-9/20 done
+9/21 done
 
 ## Next up
 

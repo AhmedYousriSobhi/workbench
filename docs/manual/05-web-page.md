@@ -20,7 +20,7 @@ screenshots in this chapter predate the redesign described below; regenerate the
 
 | Area | Shows |
 |---|---|
-| **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **▶ Scenarios**, **⚙ Settings**, help and the theme switch. Pressing the level or memory chip opens the **Governor** panel |
+| **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **▶ Scenarios**, **⚙ Settings**, **✚ Health checks**, help and the theme switch. Pressing the level or memory chip opens the **Governor** panel |
 | **Tabs and Needs attention** | the tabs *Nodes* and *Connections*, and one slim bar next to them with every item that needs you, or "All clear" |
 | **Stage** (Nodes tab) | the **traffic diagram** on the left and the **entity list** on the right |
 
@@ -134,6 +134,16 @@ page. Start with [Which command do I use?](11-which-command.md) when the command
 - The Profile and Budget manager (edit `sim.yaml` in the page) is **not built**; edit the file ([chapter 8](08-configuration.md)).
 - Backend memory stays under 50 MB. Starlette and one static page, no framework, no CDN.
 - Browser debugging for developers: `.venv/bin/python scripts/ui_shots.py` ([reference](10-reference.md)).
+
+## Health checks: what drains a node
+
+**✚ Health checks** opens the list of checks every node's health check runs, in run order. Drag a block by its handle to
+reorder it (the ↑ ↓ buttons do the same from the keyboard), tick it to switch the check on or off, edit a parameter and
+leave the field to save it, ✕ removes it. To add one, drag a template (`metric-above`, `metric-below`) into the list or press
+it, then name it and fill in its parameters. Each change is checked before it is saved (syntax, parameters, a run on healthy
+sample metrics); a refusal shows one line and the list returns to what was saved. Nodes use the change within 30 s, with no
+rebuild. The page adds checks from templates only; your own script goes in with `benchctl add check NAME --script FILE`. See
+[NHC checks](../guides/nhc-checks.md).
 
 ## Export: a profile file for the monitoring client
 

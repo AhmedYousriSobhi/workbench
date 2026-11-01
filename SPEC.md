@@ -45,7 +45,7 @@ Normative requirements for workbench. [README.md](README.md) gives the overview 
 | C-12 | Network chaos | `tc netem` on Docker bridge networks for latency, loss, partition. Toxiproxy only on the Jira HTTP path. |
 | C-14 | Login node | One `login` container (`sshd`, Slurm client tools, key login only, no root, TCP forwarding on, simulated users from `sim.yaml`) on 127.0.0.1:2222, unprivileged and memory-limited, keys generated into `compose/generated/secrets/ssh`; for SSH-based clients that run `squeue`/`sinfo`/`sacct` over SSH (ADR 0011). |
 | C-13 | Time dilation | `time_dilation` scales job durations and arrival rates inversely in user-sim and scenario-engine. |
-| C-15 | Node health check | `slurmd` runs `images/node-base/nhc` every 30 s (`HealthCheckProgram`): it also runs as Slurm `Prolog` and `Epilog` (an unhealthy node fails the job, which requeues). It drains the node (`reason=NHC: ...`) when a GPU is missing against the GRES, reports an XID, an InfiniBand port is down or a NIC is flapping (the exporter farm models both), and resumes only a drain it made. When Slurm takes a node out of service, `slurmctld`'s `node_watch.py` files or comments a Jira ticket (issues 143, 160). `benchctl up` restarts `slurmctld` when `slurm.conf` changes. |
+| C-15 | Node health check | `slurmd` runs `images/node-base/nhc` every 30 s (`HealthCheckProgram`): it also runs as Slurm `Prolog` and `Epilog` (an unhealthy node fails the job, which requeues). It drains the node (`reason=NHC: ...`) when a GPU is missing against the GRES, reports an XID, an InfiniBand port is down or a NIC is flapping (the exporter farm models both), and resumes only a drain it made. When Slurm takes a node out of service, `slurmctld`'s `node_watch.py` files or comments a Jira ticket (issues 143, 160). `benchctl up` restarts `slurmctld` when `slurm.conf` changes. What it checks is a set of files, `images/node-base/nhc.d/` (`checks.conf` plus one script per check), managed three ways that share one validated path: `benchctl add|set|remove|validate|reload check(s)`, editing the files, and the page's Health checks sheet (W-16); a change that fails validation (including a smoke run on healthy metrics) is refused and changes nothing, and reaches running nodes within one health-check interval with no rebuild (ADR 0019, issue 170). |
 
 ## 4a. Component interfaces (summary)
 
@@ -74,7 +74,7 @@ Profiles: `min`, `std`, `full`, `jira-real`, `mac-agent` ([architecture section 
 
 ## 7. CLI (`benchctl`)
 
-`doctor`, `up --profile`, `down`, `status`, `top`, `scale <group> <n>`, `jira mode <mock|cloud|dc>`, `scenario list|run`, `workload run`. All state-changing commands go through the governor.
+`doctor`, `up --profile`, `down`, `status`, `top`, `scale <group> <n>`, `jira mode <mock|cloud|dc>`, `scenario list|run`, `workload run`, `get|add|set|remove|validate|reload check(s)` (C-15). All state-changing commands go through the governor.
 
 ## 8. Web UI
 
@@ -95,6 +95,7 @@ Profiles: `min`, `std`, `full`, `jira-real`, `mac-agent` ([architecture section 
 | W-13 | Applying a plan from the page goes only through the governor (`apply-plan`: bounded counts and allow-listed parts, no free-form arguments), only at L0-L1 (GV-8), and needs the governor's `--workdir`; otherwise the page says why in one line (ADR 0017). |
 | W-14 | **⇩ Export** in the top strip downloads the client profile file for the cluster on disk (saved selection, else the profile `up` started), read fresh per request; no Docker access (W-3), no secret in the file, one message when the client format ID is not set locally. `benchctl export profile` lists the running containers instead (Docker), and only a node that is up gets a BMC target. |
 | W-15 | **⚙ Settings** is the one place for options that change what runs and its memory: node counts and the optional parts (accounting, Jira, BMC, BCM, scenarios, load). The options come from one registry (`benchctl/workbench.py` `PART_INFO`/`PARTS`, served at `/api/settings` with each part's memory limit and whether it is built), so a new option is a registry entry, not page code. Applying is W-13. |
+| W-16 | **✚ Health checks** in the top strip is the page's way to manage the C-15 checks: drag to reorder (with ↑ ↓ buttons for the keyboard), switch on or off, edit parameters, remove, add from a template. Every change is a `POST /api/nhc` validated by the same module as the CLI (`benchctl/nhc.py`), a refusal shows one line and changes nothing, and the page never accepts a script (custom checks come from the CLI or a file edit). It writes only the check files, needs the CSRF header, and has no Docker, root or libvirt access (W-3, ADR 0019). |
 
 ## 9. Non-functional requirements
 

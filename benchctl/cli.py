@@ -17,6 +17,7 @@ from . import (
     inventory,
     machine,
     measure,
+    nhc,
     nodes,
     scenario,
     stack,
@@ -430,6 +431,16 @@ def get_profiles(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by: 
     _get(inventory.profile_rows, output, selector, sort_by, False, 2.0)
 
 
+@get_app.command("checks")
+def get_checks(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
+    """The node health checks (NHC) in the order they run, whether each is on, its parameters. Templates: `-o name` lists the checks; see `add check --help`."""
+    try:
+        _get(inventory.check_rows, output, selector, sort_by, False, 2.0)
+    except nhc.NhcError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+
+
 @get_app.command("scenarios")
 def get_scenarios(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
     """The fault and workload scenarios for `benchctl scenario run`."""
@@ -459,6 +470,99 @@ def set_node(node: str = TARGET, state: str = typer.Argument(..., help="off or o
         o = scenario.execute(slurm_only, poster=post, host=True, runner=run)
     typer.echo(f"{node}: {state}" if o.status == "ok" else f"cannot set {node}: {o.detail}", err=o.status != "ok")
     raise typer.Exit(0 if o.status == "ok" else 1)
+
+
+CHECK = typer.Argument(..., autocompletion=completion.checks, help="check name, see `benchctl get checks`")
+SETS = typer.Option(None, "--set", help="a parameter, key=value (repeat for several)")
+POSITION = typer.Option(None, "--position", help="place in the run order, 1 = first")
+
+add_app = typer.Typer(cls=SuggestingGroup, help="Add something: a health check")
+app.add_typer(add_app, name="add")
+remove_app = typer.Typer(cls=SuggestingGroup, help="Remove something: a health check")
+app.add_typer(remove_app, name="remove")
+validate_app = typer.Typer(cls=SuggestingGroup, help="Check files without changing anything: the health checks")
+app.add_typer(validate_app, name="validate")
+reload_app = typer.Typer(cls=SuggestingGroup, help="Push edited files to the running nodes: the health checks")
+app.add_typer(reload_app, name="reload")
+
+
+def _nhc_done(what: str) -> None:
+    """The change is in the files; deliver it to the nodes' mounted copy and say so (a node reads it at its next run)."""
+    if errs := nhc.sync():
+        typer.echo("\n".join(errs), err=True)
+        raise typer.Exit(1)
+    typer.echo(f"{what}. Running nodes use it at their next health check (within 30 s); `benchctl get checks` shows the order.")
+
+
+def _nhc_run(fn, *args, **kwargs) -> None:
+    try:
+        fn(*args, **kwargs)
+    except nhc.NhcError as e:
+        typer.echo(f"refused, nothing changed:\n{e}", err=True)
+        raise typer.Exit(1) from e
+
+
+@add_app.command("check")
+def add_check(name: str = typer.Argument(..., help="new check name: lower case letters, digits, '-'"),
+              template: str = typer.Option(None, "--template", autocompletion=completion.check_templates, help="a builtin template, e.g. metric-above"),
+              script: str = typer.Option(None, "--script", help="a shell file with your own check (prints one line per problem)"),
+              sets: list[str] = SETS, position: int = POSITION) -> None:
+    """Add a health check. From a template: `benchctl add check gpu-hot --template metric-above --set metric=DCGM_FI_DEV_GPU_TEMP --set max=85`.
+    Your own: `benchctl add check my-check --script ./my-check.sh` (the file prints one line per problem, nothing when healthy). The
+    new check is validated first, including a run on healthy sample metrics, and refused when it fails them."""
+    if template is None and script is None:
+        typer.echo("give --template NAME (see the names with `ls images/node-base/nhc.d/templates`) or --script FILE", err=True)
+        raise typer.Exit(2)
+    if template is not None and script is not None:
+        typer.echo("give --template or --script, not both", err=True)
+        raise typer.Exit(2)
+
+    def go() -> None:
+        body = _Path(script).read_text() if script else None
+        nhc.add(name, template=template, script=body, params=nhc.parse_sets(sets), position=position)
+
+    try:
+        _nhc_run(go)
+    except OSError as e:
+        typer.echo(f"cannot read {script}: {e.strerror}", err=True)
+        raise typer.Exit(1) from e
+    _nhc_done(f"added check {name}")
+
+
+@set_app.command("check")
+def set_check(name: str = CHECK, state: str = typer.Argument(None, help="on or off"), sets: list[str] = SETS, position: int = POSITION) -> None:
+    """Switch a check on or off, change its parameters, or move it: `benchctl set check gpu-xid off`, `... set check gpu-hot --set max=90`, `... --position 1`."""
+    if state not in (None, "on", "off"):
+        typer.echo("state must be on or off", err=True)
+        raise typer.Exit(2)
+    if state is None and not sets and position is None:
+        typer.echo("nothing to change: give on|off, --set key=value or --position N", err=True)
+        raise typer.Exit(2)
+    _nhc_run(lambda: nhc.set_check(name, enabled=None if state is None else state == "on", params=nhc.parse_sets(sets), position=position))
+    _nhc_done(f"changed check {name}")
+
+
+@remove_app.command("check")
+def remove_check(name: str = CHECK) -> None:
+    """Remove a check and its file from images/node-base/nhc.d (git keeps the old one). To keep it, `set check NAME off` instead."""
+    _nhc_run(nhc.remove, name)
+    _nhc_done(f"removed check {name}")
+
+
+@validate_app.command("checks")
+def validate_checks() -> None:
+    """Validate every check file and checks.conf (grammar, parameters, bash syntax, the contract, a run on healthy sample metrics). Changes nothing."""
+    errs = nhc.problems()
+    if errs:
+        typer.echo("\n".join(errs), err=True)
+        raise typer.Exit(1)
+    typer.echo(f"ok: {len(nhc.load())} checks valid")
+
+
+@reload_app.command("checks")
+def reload_checks() -> None:
+    """After editing a check file or images/node-base/nhc.d/checks.conf by hand: validate, then push to the running nodes. Nothing is pushed when a check is invalid."""
+    _nhc_done("validated and delivered")
 
 
 @app.command("submit")
