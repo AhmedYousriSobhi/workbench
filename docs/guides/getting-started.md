@@ -90,7 +90,7 @@ that does. Components not built yet are skipped with a note.
 | Fake Jira | `curl -X POST http://127.0.0.1:8080/rest/api/2/issue -d '{"fields": {"project": {"key": "OPS"}, "summary": "hi"}}'`; failures: `curl -X POST http://127.0.0.1:8080/sim/failure -d '{"mode": "429", "count": 3}'` |
 | Slurm jobs | `docker exec workbench-slurmctld-1 sinfo` / `squeue` / `sbatch` |
 | Slurm REST | token: `docker exec workbench-slurmctld-1 scontrol token username=alice`; see ADR 0003 |
-| Teleport (when on) | `https://127.0.0.1:3080`; `tsh --proxy=127.0.0.1:3080 --insecure -i compose/generated/secrets/teleport/identity/alice ls`; steps in [Nodes and shells](../manual/04-nodes-and-shells.md#teleport-tsh-to-the-login-node-and-the-nodes) |
+| Teleport (when on) | `https://10.141.255.30:3080`; `tsh --proxy=10.141.255.30:3080 --insecure -i compose/generated/secrets/teleport/identity/alice ls`; steps in [Nodes and shells](../manual/04-nodes-and-shells.md#teleport-tsh-to-the-login-node-and-the-nodes) |
 | Build progress and diagrams | `docs/progress.html` |
 
 Inject a fault and watch it show up:

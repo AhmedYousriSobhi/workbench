@@ -316,7 +316,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             raise HTTPException(422, str(e)) from e
         return Response(text, media_type="application/json",
                         headers={"Content-Disposition": 'attachment; filename="bench-profile.json"', "X-Profile": label,
-                                 "X-Warning": " ".join(export.warnings(services))})
+                                 "X-Warning": " ".join(export.warnings(services, sim))})
 
     def _governed(row: dict) -> tuple[bool, str]:
         """(done, why not) from a slurm_state row, for the scenario engine."""

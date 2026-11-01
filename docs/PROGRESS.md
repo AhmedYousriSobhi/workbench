@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**81% built** (35 done, 29 in review, 11 partial, 4 to do, 79 items).
+**81% built** (35 done, 30 in review, 11 partial, 4 to do, 80 items).
 
 ## Roadmap
 
@@ -252,6 +252,7 @@ _What keeps every change safe and debuggable._
 | Decisions as ADRs | ✅ Done | 0001 record decisions, 0002 Slurm from source with no extra privileges, 0003 slurmrestd/JWT and accounting, 0004 slurmrestd keeps its unshare steps disabled, 0011 SSH login node. | `docs/adr` | - |
 | Getting-started guide | ✅ Done | Step-by-step use of the app; tests/test_docs.py fails if a documented command disappears. | `docs/guides/getting-started.md` | #52 |
 | User manual | 🔍 In review | Ten chapters with screenshots of the web page and real terminal output (concepts, install, using the cluster, nodes and shells, web page, scenarios, governor, configuration, troubleshooting, reference). Commands were run against a live min stack; tests/test_docs.py checks that every command, script and node name it uses exists. The guide gained a step for getting a shell on a node (docker exec; nodes have no sshd). | `docs/manual` | - |
+| Export with every login node | 🔍 In review | The client profile has one cluster entry per login node with its own auth (private-key, or a teleport block); the Teleport proxy is reached at its fixed private IP 10.141.255.30:3080 and the name teleport.workbench.test (container alias, optional /etc/hosts line), 127.0.0.1:3080 only a fallback. A Teleport route is the node name plus {proxy, user, insecure}, checked against the client's own importer. Unit-tested; live in tests/real/test_teleport_real.py. Issues 198, 199. | `benchctl/export.py`, `benchctl/teleport.py`, `benchctl/compose.py`, `webui/connections.py` | - |
 | Login nodes with their own auth | 🔍 In review | sim.yaml login: / --login ssh,teleport,both defines 1 to 8 login nodes (login, login2, ...); ssh = key login on a published port, teleport = no port and no key login, both; only Teleport logins are registered in Teleport; sheet row, Connections rows, client profile uses a key login (ADR 0023). Unit-tested; live access matrix in tests/real/test_teleport_real.py. Issue 189. | `benchctl/logins.py`, `benchctl/compose.py`, `images/login/login.sh`, `webui/connections.py` | - |
 | Architecture as the main view | 🔍 In review | The Infrastructure architecture draws every login node with its way in, the Teleport proxy, the services and the nodes, each line labelled direct SSH, Teleport or jump host; hover tip and click pop-up on every part; the node list folds away; the options sheet survives a backend without logins (ADR 0024). Unit-tested; layout, tip, pop-up and fold checked in headless Chromium (ui_shots.py). Issue 192. | `webui/static/index.html`, `webui/cluster.py` | - |
 | Teleport and Infrastructure architecture in the page | 🔍 In review | The diagram is renamed Infrastructure architecture; Teleport is a service box and list card when built (status from its diagnostics /healthz), dots from teleport_connect_to_node_attempts_total, a Connections row, part toggle in Cluster architecture (ADR 0022). Issue 187. | `webui/static/index.html`, `webui/cluster.py`, `webui/flow.py`, `webui/connections.py` | - |
@@ -259,7 +260,7 @@ _What keeps every change safe and debuggable._
 | Verification helpers | ✅ Done | verify.sh runs validate.sh plus real tests (--full adds the live stack lifecycle); tests/real/helpers.py starts a live governor and talks to its socket. `--unit NAME [--clean]` verifies one component (tests/test_NAME*.py then tests/real/test_NAME*.py, optional reset hook scripts/verify.d/NAME.sh; --list-units, -n). Issue 180. | `scripts/verify.sh` | #48 |
 | Progress tracker | ✅ Done | This page, generated from docs/progress.yaml (issue 19). | `benchctl/progress.py` | #42 |
 
-9/26 done
+9/27 done
 
 ## Next up
 

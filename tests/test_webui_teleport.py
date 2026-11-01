@@ -42,7 +42,7 @@ def test_snapshot_lists_teleport_only_when_built(monkeypatch):
 
 def test_connections_row_names_the_proxy_identity_and_invite():
     row = next(e for e in connections.entities(SIM) if e["id"] == "teleport")
-    assert row["address"] == "https://127.0.0.1:3080" and "tsh --proxy=127.0.0.1:3080 --insecure -i" in row["command"]
+    assert row["address"] == "https://10.141.255.30:3080" and "tsh --proxy=10.141.255.30:3080 --insecure -i" in row["command"] and "teleport.workbench.test" in row["how"]
     assert row["credential"].endswith("teleport/identity/alice") and "benchctl add invite" in row["how"]
 
 

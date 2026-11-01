@@ -29,13 +29,13 @@ def test_config_is_auth_and_proxy_only_on_one_port():
     c = yaml.safe_load(teleport.config(SIM))
     assert c["auth_service"]["proxy_listener_mode"] == "multiplex" and c["version"] == "v3" and c["ssh_service"] == {"enabled": False}
     assert c["auth_service"]["cluster_name"] == "workbench" and c["auth_service"]["authentication"] == {"type": "local", "second_factors": ["otp"]}
-    assert c["proxy_service"]["web_listen_addr"] == "0.0.0.0:3080" and c["proxy_service"]["public_addr"] == ["127.0.0.1:3080"]
+    assert c["proxy_service"]["web_listen_addr"] == "0.0.0.0:3080" and c["proxy_service"]["public_addr"] == ["10.141.255.30:3080", "teleport.workbench.test:3080"]
 
 
 def test_resources_name_every_node_and_user_with_stable_ids():
     docs = list(yaml.safe_load_all(teleport.resources(SIM, IPS)))
     kinds = [d["kind"] for d in docs]
-    assert kinds[0] == "role" and kinds.count("user") == len(SIM["users"])
+    assert kinds[0] == "role" and "user" not in kinds   # users are separate files, created only when absent
     nodes = {d["spec"]["hostname"]: d for d in docs if d["kind"] == "node"}
     assert set(nodes) == {"login", "login2", *IPS["nodes"]}
     assert nodes["login"]["spec"]["addr"] == f"{addressing.LOGIN_IP}:22" and nodes["login"]["sub_kind"] == "openssh"
@@ -57,6 +57,7 @@ def test_compose_adds_teleport_only_when_selected():
     assert "teleport" not in compose.generate({**SIM, "login": None}, prof)["services"]
     svcs = compose.generate(SIM, {**prof, "groups": [*prof["groups"], "teleport"]})["services"]
     t = svcs["teleport"]
+    assert t["networks"]["default"]["aliases"] == ["teleport.workbench.test"]  # the name resolves inside the cluster; the IP is its address
     assert t["ports"] == ["127.0.0.1:3080:3080", "127.0.0.1:3434:3434"] and "build" not in t and t["mem_limit"] == "256m"
     assert t["labels"]["workbench.class"] == "P2" and "command" not in t  # the image entrypoint starts it
     assert "privileged" not in t and "cap_add" not in t and t["networks"]["default"]["ipv4_address"].endswith(".255.30")
@@ -117,6 +118,8 @@ def test_bootstrap_loads_resources_signs_hosts_and_identities(tmp_path):
     ids = [c for c in signs if c[2].startswith("--user=")]
     assert [c[2] for c in ids] == [f"--user={u['name']}" for u in SIM["users"]] and "--ttl=12h" in ids[0]
     assert calls[0] == ["status"] and ["create", "-f", "/etc/teleport/resources.yaml"] in calls
+    assert not any(c[0] == "create" and "user-" in c[-1] for c in calls)  # every user exists (get succeeded): none is touched, so no password is lost
+    assert [c for c in calls if c[0] == "get"] == [["get", f"user/{u['name']}"] for u in SIM["users"]]
 
 
 def test_bootstrap_says_why_it_failed(tmp_path):
@@ -133,7 +136,7 @@ def test_bootstrap_says_why_it_failed(tmp_path):
 
 
 def test_invite_returns_the_link_or_says_why_not():
-    url = "https://127.0.0.1:3080/web/invite/abc123"
+    url = "https://10.141.255.30:3080/web/invite/abc123"
     assert teleport.invite("alice", lambda c: cp(out=f"User alice has been reset. Share this URL:\n{url}\n"), stack.dc) == url
     with pytest.raises(teleport.TeleportError, match="alice"):
         teleport.invite("alice", lambda c: cp(1, err="container is not running"), stack.dc)
@@ -160,4 +163,27 @@ def test_up_bootstraps_teleport_before_the_nodes_start(tmp_path, monkeypatch):
     assert stack.up(sim, "workbench", runner=runner, say=msgs.append, available=12 * 1024**3, wait=1, prof=prof)
     assert order and all("cn001" not in seen and "login" not in seen and "teleport" in seen for _, seen in order)
     assert (tmp_path / "compose/generated/teleport/teleport.yaml").is_file()
-    assert any(m.startswith("teleport: https://127.0.0.1:3080") for m in msgs)
+    assert any(m.startswith("teleport: https://10.141.255.30:3080") and "teleport.workbench.test" in m for m in msgs) and any("/etc/hosts" in m for m in msgs)
+
+
+def test_bootstrap_creates_a_missing_user_but_never_replaces_an_existing_one(tmp_path):
+    (tmp_path / "hosts").mkdir()
+    calls = []
+
+    def runner(cmd):
+        c = cmd[cmd.index("tctl") + 1:]
+        calls.append(c)
+        return cp(1) if c[:2] == ["get", "user/bob"] else cp()   # bob is new, the others exist
+
+    ok, msgs = run_bootstrap(tmp_path, runner)
+    creates = [c for c in calls if c[0] == "create" and c[1] != "-f"]
+    assert ok and creates == [["create", "/etc/teleport/user-bob.yaml"]] and "-f" not in creates[0]
+    assert "kind: user" in teleport.user_resource("bob") and teleport.ROLE in teleport.user_resource("bob")
+    ok, msgs = run_bootstrap(tmp_path, lambda c: cp(1, err="denied") if "create" in c and "user-" in c[-1] or "get" in c else cp())
+    assert not ok and "teleport user" in msgs[0]
+
+
+def test_prepare_writes_one_file_per_user(tmp_path):
+    teleport.prepare(SIM, IPS, tmp_path / "conf", tmp_path / "sec")
+    for u in SIM["users"]:
+        assert f"name: {u['name']}" in (tmp_path / "conf" / f"user-{u['name']}.yaml").read_text()

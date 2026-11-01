@@ -1,4 +1,5 @@
 """Login nodes (#189): how many, and how each one authenticates (ssh, teleport, both)."""
+import re
 from pathlib import Path
 
 import pytest
@@ -68,20 +69,29 @@ def test_login_script_gives_a_teleport_login_an_empty_authorized_keys():
     assert 'WORKBENCH_LOGIN_AUTH:-ssh}" = "teleport"' in text and "install -m 644 /dev/null /etc/ssh/authorized_keys" in text
 
 
-def test_client_profile_uses_a_direct_login_and_says_when_there_is_none():
-    services = {"login", "login2", "slurmctld"}
-    body = export.build(sim("teleport", "ssh"), services, "w", False, None)
-    assert body["clusters"][0]["connection"]["host"] == addressing.plan(sim("teleport", "ssh"))["logins"]["login2"]  # the first one that takes a key
-    with pytest.raises(export.ExportError, match="no login node accepts direct SSH"):
-        export.build(sim("teleport"), {"login", "slurmctld"}, "w", False, None)
-    loop = export.build(sim("teleport", "ssh"), services, "w", False, None, loopback=True)
-    assert loop["clusters"][0]["connection"]["port"] == 2223
+def test_client_profile_has_one_entry_per_route_into_each_login():
+    s3 = sim("ssh", "teleport", "both")
+    services = {"login", "login2", "login3", "slurmctld"}
+    cl = export.build(s3, services, "w", False, None)["clusters"]
+    assert [c["name"] for c in cl] == ["w", "w-login3", "w-login2", "w-login3-teleport"]   # key logins first (the first carries Slurm); `both` has two routes
+    assert [c["connection"]["authMethod"] for c in cl] == ["private-key", "private-key", "agent", "agent"]
+    assert cl[0]["teleport"] is None and cl[0]["scheduler"] is not None and cl[1]["scheduler"] is None
+    # a Teleport route is the node's name plus {proxy, user, insecure}: the only fields the client's importer reads (checked against its parser)
+    assert cl[2]["connection"] == {"host": "login2", "port": 22, "username": "alice", "authMethod": "agent"}
+    assert cl[2]["teleport"] == {"proxy": "10.141.255.30:3080", "user": "alice", "insecure": True}
+    assert cl[3]["connection"]["host"] == "login3" and cl[3]["teleport"] == cl[2]["teleport"]
+    assert not re.search(r"identity|privateKeyPath|password|token", export.to_json({"clusters": cl}, ("x", 1)), re.IGNORECASE)  # no credential in the file
+    only = export.build(sim("teleport"), {"login", "slurmctld"}, "w", False, None)["clusters"]
+    assert len(only) == 1 and only[0]["teleport"] is not None                                # Teleport only is still a profile, not an error
+    loop = export.build(sim("teleport", "ssh"), {"login", "login2", "slurmctld"}, "w", False, None, loopback=True)["clusters"]
+    assert loop[0]["connection"]["port"] == 2223 and loop[1]["teleport"]["proxy"] == "127.0.0.1:3080"
+    assert any("Teleport" in w and "Log in" in w for w in export.warnings(services, s3)) and not any("Teleport" in w for w in export.warnings(services, sim("ssh")))
 
 
 def test_connections_has_one_row_per_login_with_the_right_command():
     rows = {e["id"]: e for e in connections.entities(sim("ssh", "teleport", "both"))}
     assert rows["login"]["command"].startswith("ssh -i") and "Teleport only" in rows["login2"]["name"]
-    assert rows["login2"]["command"].startswith("tsh --proxy=127.0.0.1:3080") and rows["login2"]["command"].endswith("ssh alice@login2")
+    assert rows["login2"]["command"].startswith("tsh --proxy=10.141.255.30:3080") and rows["login2"]["command"].endswith("ssh alice@login2")
     assert "No published port" in rows["login2"]["how"] and "accepts Teleport" in rows["login3"]["how"] and "2224" in rows["login3"]["how"]
     only = {e["id"]: e for e in connections.entities(sim("teleport"))}
     assert only["nodes"]["command"].startswith("tsh ")      # no key login anywhere: nodes are reached through Teleport

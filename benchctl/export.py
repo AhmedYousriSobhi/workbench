@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 
-from . import addressing, compose, logins, nodes, stack, workbench
+from . import addressing, compose, logins, nodes, stack, teleport, workbench
 
 LOCAL_FORMAT_FILE = Path(".git/export-format")
 BMC_PORT = 8443
@@ -31,6 +31,33 @@ def format_id(flag: str | None = None, env: dict | None = None, local: Path = LO
     return ident, int(version or 1)
 
 
+def login_routes(sim: dict, plan: dict, index: int, login: str, mode: str, user: str, loopback: bool) -> list[tuple[str, dict, dict | None]]:
+    """The ways into one login node, as (route name, connection, teleport block): `ssh` and `both` connect by key, `teleport` and `both`
+    go through the proxy. A client describes a Teleport route as the node's name plus a `teleport` block (proxy, user, insecure) and
+    signs in itself with `tsh login` (password and one-time code, `benchctl add invite`): no identity file, no key and no port is in the file."""
+    routes = []
+    if mode in logins.DIRECT:
+        host, port = ("127.0.0.1", compose.SSH_PORT + index) if loopback else (addressing.address_of(plan, login), 22)
+        routes.append(("direct", {"host": host, "port": port, "username": user, "authMethod": "private-key"}, None))
+    if mode in logins.VIA_TELEPORT:
+        proxy = f"127.0.0.1:{teleport.PROXY_PORT}" if loopback else teleport.proxy_addr(sim)
+        routes.append(("teleport", {"host": login, "port": 22, "username": user, "authMethod": "agent"},
+                       {"proxy": proxy, "user": user, "insecure": True}))  # self-signed proxy; the node name is the one Teleport registered
+    return routes
+
+
+def login_cluster(name: str, login: str, route: str, mode: str, connection: dict, tele: dict | None) -> dict:
+    return {
+        "name": name,
+        "description": f"Simulated cluster (workbench), login node {login}, {route}"
+                       f"{' (this node accepts both)' if mode == 'both' else ''}. Synthetic data on 127.0.0.1.",
+        "tags": ["simulated", f"login:{login}"],
+        "connection": connection,
+        "grafana": None, "jira": None, "azureTunnel": None, "scheduler": None, "k8s": None, "teleport": tele,
+        "storage": {"paths": ["~"], "autoRefresh": False},
+    }
+
+
 def build(sim: dict, services: set[str], name: str = "workbench", include_bmc: bool = False,
           user: str | None = None, live: bool = False, bmc_via: str = "ip", loopback: bool = False) -> dict:
     """The profile for what the workbench contains. `services` are the compose service names that exist, so a part
@@ -38,27 +65,21 @@ def build(sim: dict, services: set[str], name: str = "workbench", include_bmc: b
     the running containers, so a BMC target is listed only for a node that is up. Addresses are the containers' fixed
     private IPs at their standard ports (ADR 0018); `loopback` writes the published 127.0.0.1 ports instead, for a
     client that cannot route to the Docker network."""
-    ips = addressing.plan(sim)["services"]
-    direct = [(n, i) for n, i in logins.direct(sim) if n in services]  # a client connects by key: Teleport-only logins are no use
-    login = (("127.0.0.1", compose.SSH_PORT + direct[0][1]) if loopback else (addressing.address_of(addressing.plan(sim), direct[0][0]), 22)) \
-        if direct else None
+    plan = addressing.plan(sim)
+    ips = plan["services"]
     web = lambda svc, port: f"http://127.0.0.1:{port}" if loopback else f"http://{ips[svc]}:{port}"
     users = [u["name"] for u in sim.get("users", [])]
     ssh_user = user or (users[0] if users else "alice")
     if user and users and user not in users:
         raise ExportError(f"unknown user {user!r}: sim.yaml has {', '.join(users)}")
-    if "login" not in services:
+    present = [(i, n, m) for i, (n, m) in enumerate(logins.nodes(sim)) if n in services]  # a login that is not built is left out
+    if "login" not in services or not present:
         raise ExportError("this profile has no login node (group 'access'): a client cannot connect by SSH")
-    if login is None:
-        raise ExportError("no login node accepts direct SSH (every one is `teleport` only): add one with --login ssh,teleport")
-    cluster: dict = {
-        "name": name,
-        "description": "Simulated cluster (workbench). Synthetic data on 127.0.0.1.",
-        "tags": ["simulated"],
-        "connection": {"host": login[0], "port": login[1], "username": ssh_user, "authMethod": "private-key"},
-        "grafana": None, "jira": None, "azureTunnel": None, "teleport": None, "scheduler": None, "k8s": None,
-        "storage": {"paths": ["~"], "autoRefresh": False},
-    }
+    routes = [(n, m, r, c, t) for i, n, m in present for r, c, t in login_routes(sim, plan, i, n, m, ssh_user, loopback)]
+    routes.sort(key=lambda x: x[2] == "teleport")  # the first entry (it carries Slurm, Grafana, Jira) is a key login, if there is one
+    names = [name if k == 0 else f"{name}-{n}" + ("-teleport" if r == "teleport" and m == "both" else "") for k, (n, m, r, c, t) in enumerate(routes)]
+    clusters = [login_cluster(nm, n, r, m, c, t) for nm, (n, m, r, c, t) in zip(names, routes, strict=True)]
+    cluster = clusters[0]
     if "slurmctld" in services:
         cluster["scheduler"] = {"kind": "slurm", "scope": "mine", "partitions": [p["name"] for p in sim.get("partitions", [])],
                                 "intervalSec": 60, "autoRefresh": True}
@@ -68,7 +89,7 @@ def build(sim: dict, services: set[str], name: str = "workbench", include_bmc: b
     if "jira-mock" in services:
         cluster["jira"] = {"baseUrl": web("jira-mock", 8080), "authMode": "datacenter", "projectKey": "OPS",
                            "wholeProject": True}
-    out: dict = {"profile": {"name": name}, "clusters": [cluster]}
+    out: dict = {"profile": {"name": name}, "clusters": clusters}
     if include_bmc and "bmc-farm" in services:
         if bmc_via not in ("ip", "name"):
             raise ExportError(f"bad --bmc-via {bmc_via!r}: ip or name")
@@ -83,12 +104,16 @@ def build(sim: dict, services: set[str], name: str = "workbench", include_bmc: b
     return out
 
 
-def warnings(services: set[str]) -> list[str]:
+def warnings(services: set[str], sim: dict | None = None) -> list[str]:
     """One line per condition the client will trip over; the file is still written."""
+    out = []
     if "slurmctld" in services and "slurmdbd" not in services:
-        return [("Slurm accounting is not part of this cluster, so `sacct` says accounting storage is disabled and the "
-                 "client cannot read job history: rebuild with `benchctl up --with accounting`")]
-    return []
+        out.append("Slurm accounting is not part of this cluster, so `sacct` says accounting storage is disabled and the "
+                   "client cannot read job history: rebuild with `benchctl up --with accounting`")
+    if sim and any(m in logins.VIA_TELEPORT for n, m in logins.nodes(sim) if n in services):
+        out.append("a login node is reached through Teleport: sign in from the client (its Log in button, password and one-time code from "
+                   "`benchctl add invite <user>`); the client does not use the identity files, and the file holds no credential")
+    return out
 
 
 def to_json(body: dict, fmt: tuple[str, int]) -> str:

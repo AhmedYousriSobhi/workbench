@@ -235,11 +235,12 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     for lname, idx in logins.direct(sim) if "login" in todo else []:
         say(f"ssh: ssh -i {SSH_DIR}/id_ed25519 -p {compose.SSH_PORT + idx} <user>@127.0.0.1 (users from sim.yaml; {lname})")
     for lname in logins.via_teleport(sim) if "login" in todo else []:
-        say(f"{lname}: reachable through Teleport only: tsh --proxy=127.0.0.1:{teleport.PROXY_PORT} --insecure -i "
+        say(f"{lname}: reachable through Teleport only: tsh --proxy={teleport.proxy_addr(sim)} --insecure -i "
             f"{teleport.SECRETS_DIR}/identity/<user> ssh <user>@{lname}")
     if "teleport" in todo:
-        say(f"teleport: https://127.0.0.1:{teleport.PROXY_PORT} (self-signed); identity files in "
-            f"{teleport.SECRETS_DIR}/identity; password and one-time code for tsh login: ./scripts/benchctl add invite <user>")
+        say(f"teleport: https://{teleport.proxy_addr(sim)} (self-signed; name {teleport.DNS_NAME}, fallback 127.0.0.1:{teleport.PROXY_PORT}); "
+            f"identity files in {teleport.SECRETS_DIR}/identity; password and one-time code for tsh login: ./scripts/benchctl add invite <user>")
+        say(f"teleport name on this machine (optional, needs sudo, run it yourself): echo '{teleport.proxy_ip(sim)} {teleport.DNS_NAME}' | sudo tee -a /etc/hosts")
     say("stack is up")
     return True
 

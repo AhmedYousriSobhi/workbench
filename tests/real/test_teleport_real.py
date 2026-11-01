@@ -17,7 +17,7 @@ from helpers import wait_for
 from benchctl import stack, teleport, workbench
 
 ROOT = Path(__file__).resolve().parents[2]
-PROXY = f"127.0.0.1:{teleport.PROXY_PORT}"
+PROXY = teleport.proxy_addr(yaml.safe_load((ROOT / "sim.yaml").read_text()))  # the private address clients are told, not a localhost port
 
 
 def tsh(home: Path, *args: str, user: str = "alice") -> subprocess.CompletedProcess:
