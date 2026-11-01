@@ -99,13 +99,18 @@ def resources(sim: dict, ips: dict) -> str:
     docs = [{"kind": "role", "version": "v7", "metadata": {"name": ROLE},
              "spec": {"options": {"max_session_ttl": t["cert_ttl"]},
                       "allow": {"logins": users, "node_labels": {"*": "*"}}}}]
-    docs += [{"kind": "user", "version": "v2", "metadata": {"name": u}, "spec": {"roles": [ROLE]}} for u in users]
     for name, ip in targets(sim, ips).items():
         kind = "login" if logins.is_login(name) else "gpu" if name.startswith("gpu") else "compute"
         docs.append({"kind": "node", "version": "v2", "sub_kind": "openssh",
                      "metadata": {"name": node_id(name), "labels": {"kind": kind}},
                      "spec": {"addr": f"{ip}:22", "hostname": name}})
     return yaml.safe_dump_all(docs, sort_keys=False)
+
+
+def user_resource(name: str) -> str:
+    """One user as its own file: a user is created only when it does not exist (`bootstrap`), because `tctl create -f` replaces a user
+    and with it the password and one-time code chosen from an invite."""
+    return yaml.safe_dump({"kind": "user", "version": "v2", "metadata": {"name": name}, "spec": {"roles": [ROLE]}}, sort_keys=False)
 
 
 def prepare(sim: dict, ips: dict, conf: Path = CONF_DIR, secrets: Path = SECRETS_DIR) -> None:
@@ -121,6 +126,8 @@ def prepare(sim: dict, ips: dict, conf: Path = CONF_DIR, secrets: Path = SECRETS
     (secrets / "identity").mkdir(exist_ok=True, mode=0o700)
     (conf / "teleport.yaml").write_text(config(sim))
     (conf / "resources.yaml").write_text(resources(sim, ips))
+    for u in (u["name"] for u in sim.get("users", [])):
+        (conf / f"user-{u}.yaml").write_text(user_resource(u))
 
 
 def _tctl(runner: Callable, dc: Callable, *args: str):
@@ -158,6 +165,12 @@ def bootstrap(sim: dict, ips: dict, runner: Callable, dc: Callable, say: Callabl
     if r.returncode != 0:
         say(f"FAILED teleport resources: {r.stderr.strip()[-300:]}")
         return False
+    for u in (u["name"] for u in sim.get("users", [])):
+        if _tctl(runner, dc, "get", f"user/{u}").returncode != 0:  # absent: create it; present: leave it, its password is the user's
+            r = _tctl(runner, dc, "create", f"/etc/teleport/user-{u}.yaml")
+            if r.returncode != 0:
+                say(f"FAILED teleport user {u}: {r.stderr.strip()[-300:]}")
+                return False
     try:
         (secrets / "openssh_ca.pub").write_text((fetch or fetch_ca)())
     except (OSError, TeleportError) as e:

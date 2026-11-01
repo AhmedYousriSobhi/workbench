@@ -35,7 +35,7 @@ def test_config_is_auth_and_proxy_only_on_one_port():
 def test_resources_name_every_node_and_user_with_stable_ids():
     docs = list(yaml.safe_load_all(teleport.resources(SIM, IPS)))
     kinds = [d["kind"] for d in docs]
-    assert kinds[0] == "role" and kinds.count("user") == len(SIM["users"])
+    assert kinds[0] == "role" and "user" not in kinds   # users are separate files, created only when absent
     nodes = {d["spec"]["hostname"]: d for d in docs if d["kind"] == "node"}
     assert set(nodes) == {"login", "login2", *IPS["nodes"]}
     assert nodes["login"]["spec"]["addr"] == f"{addressing.LOGIN_IP}:22" and nodes["login"]["sub_kind"] == "openssh"
@@ -118,6 +118,8 @@ def test_bootstrap_loads_resources_signs_hosts_and_identities(tmp_path):
     ids = [c for c in signs if c[2].startswith("--user=")]
     assert [c[2] for c in ids] == [f"--user={u['name']}" for u in SIM["users"]] and "--ttl=12h" in ids[0]
     assert calls[0] == ["status"] and ["create", "-f", "/etc/teleport/resources.yaml"] in calls
+    assert not any(c[0] == "create" and "user-" in c[-1] for c in calls)  # every user exists (get succeeded): none is touched, so no password is lost
+    assert [c for c in calls if c[0] == "get"] == [["get", f"user/{u['name']}"] for u in SIM["users"]]
 
 
 def test_bootstrap_says_why_it_failed(tmp_path):
@@ -162,3 +164,26 @@ def test_up_bootstraps_teleport_before_the_nodes_start(tmp_path, monkeypatch):
     assert order and all("cn001" not in seen and "login" not in seen and "teleport" in seen for _, seen in order)
     assert (tmp_path / "compose/generated/teleport/teleport.yaml").is_file()
     assert any(m.startswith("teleport: https://10.141.255.30:3080") and "teleport.workbench.test" in m for m in msgs) and any("/etc/hosts" in m for m in msgs)
+
+
+def test_bootstrap_creates_a_missing_user_but_never_replaces_an_existing_one(tmp_path):
+    (tmp_path / "hosts").mkdir()
+    calls = []
+
+    def runner(cmd):
+        c = cmd[cmd.index("tctl") + 1:]
+        calls.append(c)
+        return cp(1) if c[:2] == ["get", "user/bob"] else cp()   # bob is new, the others exist
+
+    ok, msgs = run_bootstrap(tmp_path, runner)
+    creates = [c for c in calls if c[0] == "create" and c[1] != "-f"]
+    assert ok and creates == [["create", "/etc/teleport/user-bob.yaml"]] and "-f" not in creates[0]
+    assert "kind: user" in teleport.user_resource("bob") and teleport.ROLE in teleport.user_resource("bob")
+    ok, msgs = run_bootstrap(tmp_path, lambda c: cp(1, err="denied") if "create" in c and "user-" in c[-1] or "get" in c else cp())
+    assert not ok and "teleport user" in msgs[0]
+
+
+def test_prepare_writes_one_file_per_user(tmp_path):
+    teleport.prepare(SIM, IPS, tmp_path / "conf", tmp_path / "sec")
+    for u in SIM["users"]:
+        assert f"name: {u['name']}" in (tmp_path / "conf" / f"user-{u['name']}.yaml").read_text()
