@@ -166,6 +166,7 @@ def script(shell: str, prog: str = "benchctl") -> str:
         raise typer.BadParameter(f"unknown shell '{shell}'. Valid: {', '.join(SHELLS)}.")
     completion_init()
     text = get_completion_script(prog_name=prog, complete_var=f"_{prog.replace('-', '_').upper()}_COMPLETE", shell=shell)
+    text = text if text.endswith("\n") else text + "\n"  # Typer's bash script has no final newline: appending glued two commands together
     if shell == "bash":
         func = re.search(r"complete [^\n]*-F (\S+) " + re.escape(prog), text).group(1)
         text += "".join(f"complete -o default -F {func} {n}\n" for n in NAMES[1:])
