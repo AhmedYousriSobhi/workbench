@@ -371,3 +371,47 @@ def test_a_workload_button_asks_the_governor_to_submit_a_job_on_that_node(tmp_pa
     finally:
         server.should_exit = True
         gov.shutdown()
+
+
+def test_a_resilience_scenario_goes_through_the_governor_and_the_page_gets_a_trace(tmp_path):
+    asked = []
+    trace = {"jobs": ["7 RUNNING cn001"], "nodes": {"cn001": {"slurmd": "5", "slurmstepd": "9"}},
+             "logs": {"workbench-slurmctld-1": ["slurmctld: Node cn001 not responding"]}}
+
+    def handle(cmd, request):
+        asked.append((cmd, request))
+        return {"ok": True, "trace": trace} if cmd == "slurm-trace" else {"ok": True, "started": True} if cmd != "status" else STATUS
+
+    sock = str(tmp_path / "g.sock")
+    gov = control.serve(sock, handle, lambda: {"compute"})
+    (tmp_path / "res.yaml").write_text(
+        "name: res\ndescription: d\nsteps:\n  - {at: 0s, target: slurm, do: {submit: {node: cn001, duration: 60}}}\n"
+        "  - {at: 0s, target: slurm, do: {slurmd_restart: [cn001]}}\n")
+    port = free_port()
+    server = uvicorn.Server(uvicorn.Config(create_app(TOKEN, sock, tmp_path, ROOT / "sim.yaml", fetch=no_stack, poster=no_stack),
+                                           host="127.0.0.1", port=port, log_level="error"))
+    threading.Thread(target=server.run, daemon=True).start()
+    while not server.started:
+        time.sleep(0.02)
+    base, h = f"http://127.0.0.1:{port}", {"X-Requested-With": "workbench"}
+    try:
+        assert req(base, "/api/scenarios/res/run?trace=1", "POST", headers=h)[0] == 200
+        state = {}
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            state = json.loads(req(base, "/api/scenarios/run")[1])
+            if not state["running"]:
+                break
+            time.sleep(0.05)
+        assert state["ok"] is True and [s["status"] for s in state["steps"]] == ["ok", "ok"]
+        cmds = [(c, r.get("name") or r.get("node")) for c, r in asked if c in ("submit-job", "slurm-step")]
+        assert cmds == [("slurm-step", "slurmd-restart"), ("submit-job", "cn001")] or cmds == [("submit-job", "cn001"), ("slurm-step", "slurmd-restart")]
+        assert [e["label"][:5] for e in state["trace"]] == ["slurm", "slurm"]
+        assert "Node cn001 not responding" in state["trace"][0]["logs"][0]["line"] and "slurmstepd=9" in state["trace"][0]["after"]
+        # without the flag there is no trace; and with an unreachable governor it is refused up front
+        assert req(base, "/api/scenarios/res/run", "POST", headers=h)[0] == 200
+        time.sleep(1)
+        assert json.loads(req(base, "/api/scenarios/run")[1])["trace"] is None
+    finally:
+        server.should_exit = True
+        gov.shutdown()

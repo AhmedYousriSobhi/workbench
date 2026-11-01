@@ -1,4 +1,5 @@
 """benchctl's commands through Typer's runner: exit codes and what the user is told, with the heavy parts faked."""
+import json
 from pathlib import Path
 
 import pytest
@@ -252,7 +253,7 @@ def test_get_selectors_sort_and_names(monkeypatch):
     assert runner.invoke(cli.app, ["get", "nodes", "-l", "kind=gpu,state=paused", "-o", "name"]).stdout.split() == ["gpu001"]
     order = runner.invoke(cli.app, ["get", "nodes", "--sort-by", "state", "-o", "name"]).stdout.split()
     assert order[:2] == ["cn003", "cn004"]  # "absent" sorts before "paused" and "running"
-    assert runner.invoke(cli.app, ["get", "scenarios", "-o", "name"]).stdout.split()[0] == "drain-ticket"
+    assert runner.invoke(cli.app, ["get", "scenarios", "-o", "name"]).stdout.split()[0] == "drain-mid-job"
 
 
 def test_get_query_mistakes_are_usage_errors_on_stderr(monkeypatch):
@@ -328,3 +329,22 @@ def test_scale_dry_run_and_confirmation_only_when_shrinking(monkeypatch):
     assert runner.invoke(cli.app, ["scale", "2"]).exit_code == 0 and "cn003, cn004" in asked[0]
     asked.clear()
     assert runner.invoke(cli.app, ["scale", "4"]).exit_code == 0 and asked == []  # growing: no question
+
+
+def test_daemon_verbs_run_the_scenario_steps_and_reject_bad_actions(monkeypatch):
+    from benchctl import stack
+    ran = []
+    monkeypatch.setattr(stack, "_run", lambda c: ran.append(c) or type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})())
+    assert runner.invoke(cli.app, ["set", "slurmd", "cn001", "restart"]).exit_code == 0
+    assert ran == [["docker", "exec", "workbench-cn001-1", "pkill", "-x", "slurmd"]]
+    assert runner.invoke(cli.app, ["set", "slurmctld", "restart"]).exit_code == 0 and ran[-1][:2] == ["docker", "restart"]
+    assert runner.invoke(cli.app, ["remove", "jobs"]).exit_code == 0 and "scancel" in ran[-1]
+    assert runner.invoke(cli.app, ["set", "slurmd", "cn001", "explode"]).exit_code == 1
+    assert runner.invoke(cli.app, ["set", "slurmctld", "stop"]).exit_code == 1
+
+
+def test_get_trace_prints_json_for_the_governor(monkeypatch):
+    from benchctl import stack
+    monkeypatch.setattr(stack, "_run", lambda c: type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})())
+    out = json.loads(runner.invoke(cli.app, ["get", "trace", "--node", "cn001", "--since", "5"]).stdout)
+    assert out["jobs"] == ["(no jobs)"] and "cn001" in out["nodes"] and "workbench-slurmctld-1" in out["logs"]

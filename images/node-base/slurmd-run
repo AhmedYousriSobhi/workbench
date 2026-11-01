@@ -1,0 +1,17 @@
+#!/bin/sh
+# Runs slurmd for the node container. With slurmd as PID 1, stopping it would stop the container and every job step
+# with it, so no daemon restart could ever be tested. Here the container lives on while slurmd comes and goes:
+# `benchctl` scenarios stop it by creating the hold file (and killing slurmd), start it by removing the file.
+# slurmstepd is a separate process: whether a job survives its slurmd is what the resilience scenarios measure.
+HOLD=/run/workbench/slurmd.hold
+mkdir -p /run/workbench
+child=""
+trap '[ -n "$child" ] && kill -TERM "$child" 2>/dev/null; exit 0' TERM INT
+while :; do
+  if [ -e "$HOLD" ]; then sleep 1; continue; fi
+  slurmd -D "$@" &
+  child=$!
+  wait "$child"
+  child=""
+  sleep 1
+done
