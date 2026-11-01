@@ -4,10 +4,10 @@ Which open issues the repository already satisfies. Merging to `dev` does not cl
 
 | Verdict | Meaning | Count |
 |---|---|---|
-| shipped | the acceptance criteria are met by merged code or docs; the issue is closed with a comment | 110 |
+| shipped | the acceptance criteria are met by merged code or docs; the issue is closed with a comment | 117 |
 | partial | built, with a named gap; stays open | 4 |
 | not built | no code yet; stays open | 2 |
-| unverified | not enough evidence in the tree; stays open until someone checks it live or by reading | 10 |
+| unverified | not enough evidence in the tree; stays open until someone checks it live or by reading | 3 |
 
 Titles use the current tool names where the old ones were renamed (#111). Issue numbers below 90 come from the repository's earlier history, so their evidence is a file or ADR, not a PR link.
 
@@ -29,7 +29,7 @@ Titles use the current tool names where the old ones were renamed (#111). Issue 
 | #91 | feat: export the running workbench as a client profile file (JSON import) | shipped | merged PR #95 and #134 (benchctl/export.py) |
 | #92 | feat: choose the workbench to build (counts per kind), estimate resources first, then build | shipped | merged PR #97 (choose the workbench, benchctl/workbench.py) |
 | #93 | feat: inspect any node: benchctl describe node <name> and a node detail view in the GUI | shipped | merged PR #96 (benchctl/describe.py) |
-| #98 | chore: benchctl conventions from kubectl, Slurm and CLI guidelines (stderr, typo hints, deprecation notice, verb limits) | unverified | conventions (stderr, typo hints, deprecation notice, version) only partly visible in benchctl/cli.py; needs a checklist pass |
+| #98 | chore: benchctl conventions from kubectl, Slurm and CLI guidelines (stderr, typo hints, deprecation notice, verb limits) | shipped | stderr errors, 'Did you mean' for a mistyped verb or value, docs/guides/benchctl-verbs.md; the old-name notice is moot after #111 |
 | #111 | Remove the old tool names everywhere (benchctl and workbench) | shipped | merged PR #112 |
 | #132 | feat: export the running cluster as a client profile, from the CLI and a button in the UI | shipped | merged PR #95 and #134 (benchctl/export.py) |
 | #162 | verify.sh leaves the cluster on the std profile; keep the user's selection | shipped | merged PR #163 (scripts/lib-selection.sh) |
@@ -41,10 +41,10 @@ Titles use the current tool names where the old ones were renamed (#111). Issue 
 |---|---|---|---|
 | #23 | Getting-started user guide | shipped | docs/guides/getting-started.md |
 | #45 | docs: split README into a short overview plus docs/ architecture pages, add build/run guide | shipped | docs/architecture/ split from README |
-| #47 | docs(readme): add a hands-on 'Try it' walkthrough to the README | unverified | README has no 'Try it' section on dev |
-| #51 | docs: remove stale root-only and two-tab wording | unverified | stale root-only/two-tab wording not re-checked |
+| #47 | docs(readme): add a hands-on 'Try it' walkthrough to the README | shipped | README.md sections 1-5 (start, poke, scenario, point your app, put it back), 83 lines |
+| #51 | docs: remove stale root-only and two-tab wording | shipped | stale wording fixed in docs/manual/11-which-command.md and ADR 0009 (issue 177) |
 | #59 | docs: user manual (book) and a 'get a shell on a node' step in the guide | shipped | docs/manual/ |
-| #67 | chore: remove the monitoring app's lab names from docs and comments | unverified | lab-name removal not re-checked; run a grep pass |
+| #67 | chore: remove the monitoring app's lab names from docs and comments | shipped | git grep for the old lab names finds nothing in tracked files |
 | #76 | feat: in-repo wiki for the tools, browsable from the web page | shipped | webui/wiki.py (/help/) |
 | #77 | feat: publish the manual as the repository's GitHub Wiki, generated from docs/ | shipped | scripts/sync_wiki.py, .github/workflows/wiki.yml |
 | #102 | Wiki: screenshots still show the old repository name | unverified | wiki screenshots still show the old name; needs a visual check |
@@ -87,7 +87,7 @@ Titles use the current tool names where the old ones were renamed (#111). Issue 
 
 | Issue | Title | Verdict | Evidence |
 |---|---|---|---|
-| #2 | Port k8s fixtures from hgate-k8slab | shipped | k8s/fixtures (the k3d/KWOK cluster itself is tracked as partial, not part of this issue) |
+| #2 | Port the Kubernetes test fixtures from the earlier lab | shipped | k8s/fixtures (the k3d/KWOK cluster itself is tracked as partial, not part of this issue) |
 
 ## Network and BMC
 
@@ -114,7 +114,7 @@ Titles use the current tool names where the old ones were renamed (#111). Issue 
 
 | Issue | Title | Verdict | Evidence |
 |---|---|---|---|
-| #3 | Observability: textfile metrics generator and hpc-overview dashboard | unverified | observability/dashboards/hpc-overview.json exists but no textfile metrics generator found |
+| #3 | Observability: textfile metrics generator and hpc-overview dashboard | shipped | components/gpu-exporter-farm/exporter.py (hpc_jobs_* series), observability/dashboards/hpc-overview.json, Grafana provisioning files |
 | #64 | feat: GPU metrics parity for monitoring clients (DCGM_FI_DEV_FB_FREE, datasource UID, host label) | shipped | components/gpu-exporter-farm (real DCGM labels, FB_FREE) |
 
 ## Repo hygiene and release
@@ -174,14 +174,14 @@ Titles use the current tool names where the old ones were renamed (#111). Issue 
 | #152 | fix: scenario fault actions are not reflected on the cluster (power steps, and every Slurm step when played from the page) | shipped | merged PR #150 (slurmd stops answering, scenario faults reach the cluster) |
 | #153 | feat: a minimal Slurm workload (user-sim) so queues, allocations and node faults show up in a job-centric client panel | shipped | merged PR #159 (per-node workload, benchctl submit) |
 | #154 | Slurm marks a powered-off node down after about 60 s; make it about 30 s | shipped | benchctl/slurmconf.py: SlurmdTimeout=15 (about 30 s) |
-| #155 | benchctl set node NAME on/off leaves the page showing the old power state | unverified | no change found for the page keeping a stale power state after benchctl set node on/off; needs a live check |
+| #155 | benchctl set node NAME on/off leaves the page showing the old power state | shipped | benchctl set node off/on runs the page's power step (benchctl/cli.py set_node) |
 | #156 | Submit a workload on a chosen node (button on the node panel and benchctl submit) | shipped | merged PR #159 (per-node workload, benchctl submit) |
 
 ## Tests
 
 | Issue | Title | Verdict | Evidence |
 |---|---|---|---|
-| #55 | test: say why the real-test fixtures could not bring the stack up | unverified | real-test fixtures: reason for a failed stack.up not confirmed |
+| #55 | test: say why the real-test fixtures could not bring the stack up | shipped | tests/real/helpers.py bring_up, tests/test_bring_up.py |
 | #133 | test: two unit tests fail when a workbench stack runs on the host | shipped | merged PR #134 |
 
 ## Web UI
