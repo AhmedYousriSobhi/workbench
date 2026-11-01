@@ -23,7 +23,7 @@
 3. **Jira auth/features needed:** Cloud API tokens and webhooks vs DC; JQL depth; Service Management features. Decides how much `jira-mock` must implement and when `cloud` mode is required.
 4. **Real GPUs:** if you ever attach a real GPU node, it becomes an external target like the Mac, outside the 16 GB budget.
 5. **Mac access:** which of the three external options is realistic for you.
-6. **Teleport access (issue 39):** which access types the app uses (SSH, Kubernetes, web, DB), real Teleport community binary vs mock, auth/cert TTL behaviour, and one agent per node vs one agent in front of sshd. The app must reach the cluster through Teleport, so this is a required component.
+6. **Teleport access (issue 39), resolved by [ADR 0020](../adr/0020-teleport-agentless-openssh.md): SSH only, real Teleport, agentless OpenSSH nodes, one auth+proxy container.** Was: which access types the app uses (SSH, Kubernetes, web, DB), real Teleport community binary vs mock, auth/cert TTL behaviour, and one agent per node vs one agent in front of sshd. The app must reach the cluster through Teleport, so this is a required component.
 
 ## 13. Risks and mitigations
 

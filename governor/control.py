@@ -19,7 +19,7 @@ Handler = Callable[[str, dict], dict]
 
 NODE_RE = re.compile(r"[a-z]{2,8}[0-9]{3}")  # sim.yaml node names: cn001, gpu002
 REASON_RE = re.compile(r"[A-Za-z0-9 .,:_/()+-]{0,60}")  # a drain reason: short, no shell characters
-PLAN_PARTS = {"jira", "bmc", "bcm", "scenarios", "accounting", "load"}  # mirrors benchctl.workbench.PARTS
+PLAN_PARTS = {"jira", "bmc", "bcm", "scenarios", "accounting", "load", "teleport"}  # mirrors benchctl.workbench.PARTS
 
 
 def plan_error(req: dict) -> str | None:

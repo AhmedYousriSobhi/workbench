@@ -19,7 +19,7 @@ FLOOR_MB = 1024                                   # MemAvailable that must remai
 # part -> (compose group, services it adds; None = the whole group)
 PARTS: dict[str, tuple[str, list[str] | None]] = {
     "jira": ("mocks", ["jira-mock"]), "bmc": ("mocks", ["bmc-farm"]), "bcm": ("mocks", ["bcm-mock"]),
-    "accounting": ("accounting", None), "scenarios": ("scenarios", None), "load": ("load", None)}
+    "accounting": ("accounting", None), "teleport": ("teleport", None), "scenarios": ("scenarios", None), "load": ("load", None)}
 # The one registry of options that change what runs and so what memory it needs. The Cluster architecture sheet is drawn from it
 # (`catalog`): a new option is an entry here and in PARTS, not new page code.
 PART_INFO: dict[str, tuple[str, str]] = {
@@ -27,6 +27,7 @@ PART_INFO: dict[str, tuple[str, str]] = {
     "jira": ("Jira", "The Jira mock (REST v2 subset)."),
     "bmc": ("BMC farm", "One Redfish endpoint per node: power, thermals, fans."),
     "bcm": ("BCM", "The BCM mock (CMDaemon JSON) and its device list."),
+    "teleport": ("Teleport", "Teleport auth and proxy: tsh login and ssh to the login node and every node through it (not on by default)."),
     "scenarios": ("Scenarios", "The scenario engine that plays timed faults."),
     "load": ("Load", "User and ticket simulators that generate jobs and tickets."),
 }

@@ -85,9 +85,21 @@ ssh -i .vagrant/machines/fidelity/libvirt/private_key vagrant@<IP>      # plain 
 ./bin/down.sh                      # destroy it
 ```
 
-## Not built: SSH or Teleport to the simulated nodes
+## Teleport: `tsh` to the login node and the nodes
 
-The application under test is meant to reach nodes through Teleport (issue #39). That needs decisions that are still
-open (which access types, real Teleport or a mock) and an `sshd` in the node image. Until then, `docker exec` from the
-host is the way to reach a node; the application under test reaches the cluster through Slurm REST, Redfish and the
-other APIs in [chapter 3](03-using-the-cluster.md).
+The optional **Teleport** part (auth and proxy in one container, about 256 MB limit, [ADR 0020](../adr/0020-teleport-agentless-openssh.md))
+lets a client reach the login node and every compute and GPU node through Teleport. Nodes keep their own `sshd` and trust
+the Teleport CA (Teleport's agentless OpenSSH mode); no Teleport process runs on a node. It is off by default.
+
+```bash
+./scripts/benchctl up --with teleport
+ID=compose/generated/secrets/teleport/identity/alice        # one identity file per user in sim.yaml, valid for teleport.cert_ttl
+tsh --proxy=127.0.0.1:3080 --insecure -i $ID ls               # the login node and every node
+tsh --proxy=127.0.0.1:3080 --insecure -i $ID ssh alice@cn001 hostname
+```
+
+For an interactive `tsh login`, set a password and a one-time-code authenticator once (Teleport 18 requires a second factor): `./scripts/benchctl add invite alice` prints a one-time link; open it in a browser
+(the certificate is self-signed), scan the QR code with an authenticator app (or keep the secret it shows for `oathtool`), then `tsh login --proxy=127.0.0.1:3080 --insecure --user=alice`. The identity files need neither a password nor a code.
+Your `tsh` must not be a newer major version than the server (`teleport.version` in `sim.yaml`, default 18.x); use a separate
+`TELEPORT_HOME` if you keep other Teleport profiles. Not simulated: the Teleport agent's extras (dynamic labels, session
+recording that survives a dropped connection, session sharing), Kubernetes, web and database access.

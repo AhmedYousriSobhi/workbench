@@ -21,6 +21,7 @@ from . import (
     nodes,
     scenario,
     stack,
+    teleport,
     workbench,
 )
 
@@ -476,7 +477,7 @@ CHECK = typer.Argument(..., autocompletion=completion.checks, help="check name, 
 SETS = typer.Option(None, "--set", help="a parameter, key=value (repeat for several)")
 POSITION = typer.Option(None, "--position", help="place in the run order, 1 = first")
 
-add_app = typer.Typer(cls=SuggestingGroup, help="Add something: a health check")
+add_app = typer.Typer(cls=SuggestingGroup, help="Add something: a health check, a Teleport invite")
 app.add_typer(add_app, name="add")
 remove_app = typer.Typer(cls=SuggestingGroup, help="Remove something: a health check")
 app.add_typer(remove_app, name="remove")
@@ -527,6 +528,20 @@ def add_check(name: str = typer.Argument(..., help="new check name: lower case l
         typer.echo(f"cannot read {script}: {e.strerror}", err=True)
         raise typer.Exit(1) from e
     _nhc_done(f"added check {name}")
+
+
+@add_app.command("invite")
+def add_invite(user: str = typer.Argument(..., help="a user from sim.yaml")) -> None:
+    """Make a one-time link to choose USER's Teleport password, for `tsh login`: `benchctl add invite alice`. Open it in a
+    browser once (the page is served with a self-signed certificate). Needs Teleport running (`--with teleport`)."""
+    if user not in [u["name"] for u in _sim().get("users", [])]:
+        typer.echo(f"{user!r} is not a user in sim.yaml", err=True)
+        raise typer.Exit(2)
+    try:
+        typer.echo(teleport.invite(user, stack._run, stack.dc))
+    except teleport.TeleportError as e:
+        typer.echo(f"{e}\nIs Teleport running? Start it with `benchctl up --with teleport` (see `benchctl get services`).", err=True)
+        raise typer.Exit(1) from e
 
 
 @set_app.command("check")
