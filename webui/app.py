@@ -26,7 +26,7 @@ from starlette.responses import (
 )
 from starlette.routing import Route
 
-from benchctl import checks, scenario
+from benchctl import checks, nhc, scenario
 
 from .cluster import ActionError, Cluster
 from .flow import PAUSE_LEVEL, Flow
@@ -104,7 +104,7 @@ class Runs:
 
 def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Path("scenarios"),
                sim_yaml: Path = Path("sim.yaml"), interval: float = 1.0, docs: Path = DOCS,
-               fetch=None, poster=None) -> Starlette:
+               fetch=None, poster=None, nhc_src: Path = nhc.SRC, nhc_out: Path = nhc.OUT) -> Starlette:
     sim = yaml.safe_load(sim_yaml.read_text())
     flow = Flow()
     runs = Runs(scenarios, sim, flow, slurm=lambda n, s, r: _governed(slurm_state(n, s, r)))
@@ -172,7 +172,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         try:
             spec = workbench.from_dict({k: int(q[k]) for k in ("cpu_nodes", "gpu_nodes", "gpus_per_node") if k in q}
                                        | ({"parts": [p for p in q["parts"].split(",") if p]} if "parts" in q else {})
-                                       | ({"bmc_nodes": [n for n in q["bmc_nodes"].split(",") if n]} if "bmc_nodes" in q else {}),
+                                       | ({"bmc_nodes": [n for n in q["bmc_nodes"].split(",") if n]} if "bmc_nodes" in q else {})
+                                       | ({"login_nodes": [m for m in q["logins"].split(",") if m]} if "logins" in q else {}),
                                        workbench.defaults(sim))
         except (ValueError, workbench.SpecError) as e:
             raise HTTPException(422, str(e)) from e
@@ -184,7 +185,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         return spec, est, avail, ok, msg
 
     async def settings(request: Request):
-        """The options the Settings sheet offers, with what each costs; `on` follows the workbench last built."""
+        """The options the Cluster architecture sheet offers, with what each costs; `on` follows the workbench last built."""
         from benchctl import compose, export, workbench
 
         try:
@@ -194,7 +195,16 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             services, built = set(), None  # nothing built to read: offer the defaults
         nodes = [{"name": n, "kind": k, "bmc": f"bmc-{n}" in services if "bmc-farm" in services else True}
                  for n, k in cluster.nodes]
-        return JSONResponse({"parts": workbench.catalog(built), "nodes": nodes, "bmc_node_mb": compose.BMC_FORWARDER_MB,
+        from benchctl import logins
+
+        try:
+            saved = workbench.current(sim)  # the workbench last built, else sim.yaml's `login:`
+        except workbench.SpecError:
+            saved = None
+        return JSONResponse({"parts": workbench.catalog(built),
+                             "logins": {"modes": list(logins.MODES), "max": logins.MAX_LOGINS,
+                                        "now": saved.login_nodes if saved else logins.modes(sim)},
+                             "nodes": nodes, "bmc_node_mb": compose.BMC_FORWARDER_MB,
                              "limits": {k: list(v) for k, v in workbench.LIMITS.items()}})
 
     async def plan(request: Request):
@@ -206,6 +216,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             f" --with {p}" for p in sorted(spec.parts)) + "".join(f" --without {p}" for p in workbench.PARTS if p not in spec.parts)
         if spec.bmc_nodes is not None:
             flags += f" --bmc-nodes {','.join(spec.bmc_nodes)}"
+        flags += f" --login {','.join(spec.login_nodes)}"
         return JSONResponse({"fits": ok, "message": msg, "total_mb": est["total_mb"], "available_mb": avail,
                              "text": workbench.render(spec, est), "command": f"benchctl up {flags}"})
 
@@ -218,6 +229,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
                "gpus_per_node": spec.gpus_per_node, "parts": sorted(spec.parts)}
         if spec.bmc_nodes is not None:
             req["bmc_nodes"] = spec.bmc_nodes
+        req["login_nodes"] = spec.login_nodes
         try:
             res = await asyncio.to_thread(checks.governor_request, req, socket)
         except (OSError, ValueError) as e:
@@ -227,6 +239,44 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         if res.get("dry_run"):
             return JSONResponse({"started": False, "message": "The governor is in dry-run mode or has no --workdir, so nothing was applied. Run the command shown instead."})
         return JSONResponse({"started": True, "message": "Applying. Nodes appear and disappear as they change; progress is in Governor activity."})
+
+    async def nhc_state(request: Request):
+        """The health checks in run order, the templates the page may add from, and any problem with the files."""
+        return JSONResponse(await asyncio.to_thread(nhc.state, nhc_src))
+
+    async def nhc_change(request: Request):
+        """One change to the checks, validated like the CLI's (same module): reorder, toggle, params, remove, add from a
+        template. Custom scripts are not accepted from the page (a CLI or file edit); a refusal changes nothing."""
+        try:
+            body = await request.json()
+        except ValueError as e:
+            raise HTTPException(400, "send JSON") from e
+        op, name = body.get("op"), str(body.get("name", ""))
+        params = {str(k): str(v) for k, v in (body.get("params") or {}).items()}
+        position = body.get("position")
+
+        def apply() -> None:
+            if op == "reorder":
+                nhc.reorder([str(n) for n in body.get("order", [])], nhc_src)
+            elif op == "toggle":
+                nhc.set_check(name, enabled=bool(body.get("enabled")), src=nhc_src)
+            elif op == "params":
+                nhc.set_check(name, params=params, src=nhc_src)
+            elif op == "remove":
+                nhc.remove(name, nhc_src)
+            elif op == "add":
+                nhc.add(name, template=str(body.get("template", "")), params=params,
+                        position=position if isinstance(position, int) else None, src=nhc_src)
+            else:
+                raise nhc.NhcError("op must be reorder, toggle, params, remove or add")
+            if errs := nhc.sync(nhc_src, nhc_out):
+                raise nhc.NhcError("\n".join(errs))
+
+        try:
+            await asyncio.to_thread(apply)
+        except nhc.NhcError as e:
+            raise HTTPException(422, str(e)) from e
+        return JSONResponse(await asyncio.to_thread(nhc.state, nhc_src))
 
     async def node_detail(request: Request):
         from benchctl import describe
@@ -266,7 +316,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             raise HTTPException(422, str(e)) from e
         return Response(text, media_type="application/json",
                         headers={"Content-Disposition": 'attachment; filename="bench-profile.json"', "X-Profile": label,
-                                 "X-Warning": " ".join(export.warnings(services))})
+                                 "X-Warning": " ".join(export.warnings(services, sim))})
 
     def _governed(row: dict) -> tuple[bool, str]:
         """(done, why not) from a slurm_state row, for the scenario engine."""
@@ -381,6 +431,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/settings", protected(settings)),
             Route("/api/plan", protected(plan)),
             Route("/api/plan/apply", protected(plan_apply, write=True), methods=["POST"]),
+            Route("/api/nhc", protected(nhc_state)),
+            Route("/api/nhc", protected(nhc_change, write=True), methods=["POST"]),
             Route("/api/connections", protected(connections)),
             Route("/api/export/profile", protected(export_profile)),
             Route("/api/nodes/{node}", protected(node_detail)),

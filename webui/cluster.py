@@ -5,6 +5,7 @@ click does exactly what the same step in a scenario does. No Docker access: Slur
 """
 import json
 import re
+import socket
 import urllib.error
 import urllib.request
 
@@ -15,6 +16,7 @@ BMC, BCM, JIRA, EXPORTER = ("http://127.0.0.1:8000", "http://127.0.0.1:8081", "h
                             "http://127.0.0.1:9400")
 SERVICES = {"bmc-farm": f"{BMC}/healthz", "bcm-mock": f"{BCM}/healthz", "jira-mock": f"{JIRA}/healthz",
             "gpu-exporter": f"{EXPORTER}/metrics"}
+TELEPORT = "http://127.0.0.1:3434"  # Teleport's diagnostics endpoint (benchctl/teleport.py DIAG_PORT); a service only when the part is built
 HOT_C = 90.0
 # action -> (label, only for gpu nodes, steps as (target, do-template))
 ACTIONS = {
@@ -33,6 +35,47 @@ ACTIONS = {
 
 class ActionError(ValueError):
     pass
+
+
+def teleport_built() -> bool:
+    return saved_has_teleport()
+
+
+def saved_has_teleport() -> bool:
+    """Whether the workbench last built has the Teleport part (read from the saved selection: the page has no Docker, W-3).
+    A page for a cluster without it must not show a Teleport that cannot exist."""
+    from benchctl import workbench
+
+    try:
+        spec = workbench.current({})
+    except (workbench.SpecError, OSError, ValueError):
+        return False
+    return bool(spec and "teleport" in spec.parts)
+
+
+def saved_logins(sim: dict | None = None) -> list[dict]:
+    """The login nodes of the workbench last built, `[{name, mode, port}]` (`port`: published on 127.0.0.1, `None` for a Teleport-only node) (file only, no Docker). The diagram draws one box per entry
+    and labels how each is reached; with nothing saved it is the single `login` that takes a key, as `sim.yaml` defaults."""
+    from benchctl import addressing, compose, logins, workbench
+
+    try:
+        spec = workbench.current({})
+        modes = spec.login_nodes if spec else logins.DEFAULT
+    except (workbench.SpecError, OSError, ValueError):
+        modes = logins.DEFAULT
+    ips = addressing.plan({**sim, "login": list(modes)}, 1)["logins"] if sim else {}  # the private address each box shows
+    return [{"name": logins.name(i), "mode": m, "port": compose.SSH_PORT + i if m in logins.DIRECT else None,
+             **({"ip": ips[logins.name(i)]} if logins.name(i) in ips else {})} for i, m in enumerate(modes)]
+
+
+def port_open(host: str, port: int = 22, timeout: float = 0.3) -> bool:
+    """Whether something accepts a connection there: the page's only way to tell a login node that runs from one that was only
+    selected (it has no Docker, W-3). Short, because an address nobody owns waits for the whole timeout."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
 
 
 def http_json(url: str, body: dict | None = None, timeout: float = 2.0):
@@ -109,6 +152,7 @@ class Cluster:
         self.nodes = node_names(sim)
         self.gpus = sim.get("gpu", {}).get("gpus_per_node", 0)
         self.fetch, self.poster = fetch, poster
+        self.probe = port_open  # replaced in tests
 
     def _try(self, *args):
         try:
@@ -130,8 +174,9 @@ class Cluster:
 
         Sequential on purpose: localhost calls take a few ms, and a thread pool pushed the UI over its 50 MB budget.
         """
-        names = list(SERVICES)
-        up = [self._try(SERVICES[n]) is not None for n in names]
+        probes = {**SERVICES, **({"teleport": f"{TELEPORT}/healthz"} if teleport_built() else {})}
+        names = list(probes)
+        up = [self._try(probes[n]) is not None for n in names]
         rows = [self._node(*nk) for nk in self.nodes]
         devices = self._try(f"{BCM}/json", {"service": "cmdevice", "call": "getDevices"})
         bcm = {d["hostname"]: d["status"] for d in (devices or {}).get("result", [])} if isinstance(devices, dict) else {}
@@ -147,7 +192,7 @@ class Cluster:
             row["xid"] = xids.get(row["name"], 0)
             row["ib_down"], row["nic_flap"] = ib.get(row["name"], 0), row["name"] in flap
             row["state"], row["label"] = classify(row)
-        return {"services": dict(zip(names, up, strict=True)), "nodes": rows,
+        return {"services": dict(zip(names, up, strict=True)), "nodes": rows, "logins": [{**lg, "up": self.probe(lg["ip"])} if lg.get("ip") else lg for lg in saved_logins(self.sim)],
                 "actions": [{"id": a, "label": v[0], "gpu_only": v[1]} for a, v in ACTIONS.items()]}
 
     def act(self, node: str, action: str) -> list[dict]:

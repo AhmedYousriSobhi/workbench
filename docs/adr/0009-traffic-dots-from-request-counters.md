@@ -25,7 +25,7 @@ SPEC W-3), and user-sim does not exist yet, so Slurm job events are not availabl
 - `benchctl up` now builds images (`up --build`), because a stale image would silently lack `/sim/stats`.
 
 ## Update (issue 118)
-The traffic diagram now sits on the Nodes tab beside the entity list and draws every node as a tile. Injection events carry
+The traffic diagram now sits beside the entity list and draws every node as a tile. Injection events carry
 the node names they hit (`nodes` in the `/api/flow` event), so a fault diamond travels to that node and flashes a ring on its
 tile. Client traffic stays per service: the mocks count requests per service, not per client or per node, so round dots go
-from the *Clients* box to a service. The feed still closes when the page is hidden or the Nodes tab is not shown.
+from the *Clients* box to a service. The feed still closes when the page is hidden (the dashboard is one screen since issue 129, there are no tabs).

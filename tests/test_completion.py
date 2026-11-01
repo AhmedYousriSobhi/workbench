@@ -128,3 +128,11 @@ def test_start_offers_completion_only_in_a_terminal_and_only_once(tmp_path, monk
     cli._offer_completion()
     cli._offer_completion()
     assert len(asked) == 1 and completion.asked_flag().exists()
+
+
+@pytest.mark.parametrize("shell", ["bash", "zsh"])
+def test_script_registers_every_name_on_its_own_line(shell):
+    lines = completion.script(shell).splitlines()
+    word = "complete" if shell == "bash" else "compdef"
+    registered = [ln.split()[-1] for ln in lines if ln.startswith(word + " ")]
+    assert registered == list(completion.NAMES)  # a glued line would register "benchctlcomplete" and nothing for benchctl

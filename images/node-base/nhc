@@ -1,12 +1,13 @@
 #!/bin/bash
 # Node health check (a small stand-in for LBNL NHC), run by slurmd three ways: `nhc` every HealthCheckInterval (periodic),
 # `nhc prolog` before a job starts on the node (Slurm Prolog) and `nhc epilog` after it ends (Epilog). It checks what the
-# simulation models, read from the exporter farm: the GPU count against the node's GRES, GPU XID errors, InfiniBand ports
-# that are down and a NIC whose link keeps changing. A failed check drains the node with the reason "NHC: ...".
+# simulation models, read from the exporter farm (by default the GPU count against the node's GRES, GPU XID errors, InfiniBand
+# ports that are down and a NIC whose link keeps changing). A failed check drains the node with the reason "NHC: ...".
 #  periodic: exits 1 when unhealthy; resumes a drain it made itself once the node is healthy again.
 #  prolog:   exits 1 when unhealthy, so Slurm requeues the job instead of running it on a bad node.
 #  epilog:   always exits 0 (the drain is done here): catches a fault the job caused before the next one is scheduled.
-# Test hooks: NHC_METRICS_FILE (instead of the exporter), NHC_SCONTROL, NHC_NODE, NHC_EXPECTED_GPUS, NHC_EXPECTED_IB,
+# What is checked is not in this file: each check is a file in nhc.d/ listed in checks.conf (benchctl add|set|remove check).
+# Test hooks: NHC_CHECKS_DIR (where checks.conf and the checks are), NHC_METRICS_FILE (instead of the exporter), NHC_SCONTROL, NHC_NODE, NHC_EXPECTED_GPUS, NHC_EXPECTED_IB,
 # NHC_STATE_DIR (where the carrier counter is remembered between runs), NHC_ENV_FILE (default /etc/workbench-node.env).
 mode=${1:-periodic}
 # slurmd gives this script a bare environment: what to expect of the node comes from the file the entrypoint wrote.
@@ -16,7 +17,9 @@ expected=${NHC_EXPECTED_GPUS:-${WORKBENCH_GPUS:-0}}
 expected_ib=${NHC_EXPECTED_IB:-${WORKBENCH_IB:-0}}
 scontrol=${NHC_SCONTROL:-scontrol}
 url=${NHC_METRICS_URL:-http://gpu-exporter-farm:9400/metrics}
-state=${NHC_STATE_DIR:-/var/tmp}/nhc-carrier-$node
+state=${NHC_STATE_DIR:-/var/tmp}/nhc-state-$node   # a check keeps what it must remember between runs in "$state-<check name>"
+# Which checks run: the directory the host mounts (live edits), else the one baked into the image, else the source tree.
+for dir in "$NHC_CHECKS_DIR" /etc/workbench/nhc /usr/local/lib/nhc.d "$(dirname "$0")/nhc.d"; do [ -n "$dir" ] && [ -r "$dir/checks.conf" ] && break; done
 
 fetch() {
   if [ -n "$NHC_METRICS_FILE" ]; then cat "$NHC_METRICS_FILE"; return; fi
@@ -30,25 +33,20 @@ metrics=$(fetch) || exit 0                              # exporter unreachable: 
 mine=$(printf '%s\n' "$metrics" | grep -e "Hostname=\"$node\"" -e "node=\"$node\"")
 fail=""
 add() { fail="${fail:+$fail; }$1"; }
-if [ -n "$mine" ]; then                                 # no series at all means the node is off: not a health matter
-  if [ "$expected" -gt 0 ] 2>/dev/null; then
-    seen=$(printf '%s\n' "$mine" | grep -c '^DCGM_FI_DEV_GPU_TEMP{')
-    [ "$seen" -gt 0 ] && [ "$seen" -lt "$expected" ] && add "GPU count $seen of $expected"
-    xid=$(printf '%s\n' "$mine" | grep '^DCGM_FI_DEV_XID_ERRORS{' | awk '$NF != 0 {print $NF; exit}')
-    [ -n "$xid" ] && add "GPU XID $xid"
-  fi
-  if [ "$expected_ib" -gt 0 ] 2>/dev/null; then
-    ports=$(printf '%s\n' "$mine" | grep -c '^node_infiniband_state_id{')
-    down=$(printf '%s\n' "$mine" | grep '^node_infiniband_state_id{' | awk '$NF != 4' | sed -n 's/.*device="\([^"]*\)".*/\1/p' | paste -sd, -)
-    [ "$ports" -gt 0 ] && [ "$ports" -lt "$expected_ib" ] && add "IB ports $ports of $expected_ib"
-    [ -n "$down" ] && add "IB port down: $down"
-  fi
-  carrier=$(printf '%s\n' "$mine" | grep '^node_network_carrier_changes_total{' | awk '{print $NF; exit}')
-  if [ -n "$carrier" ]; then
-    before=$(cat "$state" 2>/dev/null)
-    [ -n "$before" ] && [ "$carrier" -gt "$before" ] && add "NIC eth0 flapping ($((carrier - before)) link changes)"
-    echo "$carrier" > "$state" 2>/dev/null
-  fi
+# Each enabled check in checks.conf runs on its own (a subshell with a timeout), so a broken check cannot stop the others
+# or this script; it prints one line per problem. No series at all for the node means it is off: not a health matter.
+run_check() {
+  local file=$1; shift
+  env "$@" mine="$mine" node="$node" expected="$expected" expected_ib="$expected_ib" state="$state-$(basename "$file" .sh)" NHC_FILE="$file" \
+    timeout 10 bash -c 'add() { printf "%s\n" "$1"; }; . "$NHC_FILE"' </dev/null 2>/dev/null
+}
+if [ -n "$mine" ] && [ -r "$dir/checks.conf" ]; then
+  while read -r name on rest; do
+    case $name in ''|'#'*) continue ;; esac
+    [ "$on" = on ] && [ -r "$dir/$name.sh" ] || continue
+    params=(); for kv in $rest; do case $kv in [a-z]*=*) params+=("P_$kv") ;; esac; done
+    while IFS= read -r line; do [ -n "$line" ] && add "$line"; done < <(run_check "$dir/$name.sh" "${params[@]}")
+  done < "$dir/checks.conf"
 fi
 
 if [ -n "$fail" ]; then

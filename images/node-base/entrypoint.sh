@@ -25,6 +25,7 @@ if [ "$WORKBENCH_SSHD" = 1 ] && [ -f /run/workbench/ssh/ssh_host_node_ed25519_ke
   echo "AllowUsers$names" >> /etc/ssh/sshd_config
   install -m 600 /run/workbench/ssh/ssh_host_node_ed25519_key /etc/ssh/ssh_host_ed25519_key
   install -m 644 /run/workbench/ssh/authorized_keys /etc/ssh/authorized_keys
+  /usr/local/sbin/teleport-ssh
   /usr/sbin/sshd -e
 fi
 exec "$@"

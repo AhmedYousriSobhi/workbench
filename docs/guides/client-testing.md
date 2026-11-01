@@ -16,12 +16,13 @@ never print or commit them).
 
 | Client feature | Endpoint | Credential | Status |
 |---|---|---|---|
-| SSH terminal, Slurm (`squeue`, `sinfo`; `sacct` needs the `accounting` part: on in a default workbench, `--with accounting` otherwise; without it sacct says accounting storage is disabled), port forwarding | `10.141.255.254:22` (fallback `127.0.0.1:2222`) | user `alice` or `bob` (from `sim.yaml`), key `secrets/ssh/id_ed25519` | merged (ADR 0011); compute nodes `cn001`... and `gpu001`... have sshd too, reached from the login node (ADR 0014) |
+| SSH terminal, Slurm (`squeue`, `sinfo`; `sacct` needs the `accounting` part: on in a default workbench, `--with accounting` otherwise; without it sacct says accounting storage is disabled), port forwarding | `10.141.255.254:22` (fallback `127.0.0.1:2222`) | user `alice` or `bob` (from `sim.yaml`), key `secrets/ssh/id_ed25519` | merged (ADR 0011); compute nodes `cn001`... and `gpu001`... have sshd too, reached from the login node (ADR 0014). With several login nodes (`--login ssh,teleport`, ADR 0023) the table row is the first one that takes a key: `login2`... have addresses .252, .251, ... and ports 2223, ...; a `teleport` node takes no key (test the Teleport row against it) |
 | GPU usage through Grafana `/api/ds/query` | Grafana `10.141.255.21:3000` (fallback `127.0.0.1:3000`), datasource uid `prometheus`, host label `Hostname` | Viewer token in `secrets/grafana_viewer_token` | merged |
 | Jira search (`/rest/api/3/search/jql`, fallback `/rest/api/2/search`), `/myself`, `/field` | `http://10.141.255.11:8080` (fallback `127.0.0.1:8080`) | none in mock mode | merged (ADR 0005) |
 | BMC Redfish over TLS, certificate pinning | one address per node, `10.148.0.N:443` / `10.148.100.N:443` (fallback: one listener `127.0.0.1:8443`, node chosen by the `Host: bmc-<node>` header) | `admin` and the password in `secrets/bmc_credentials` | merged (ADR 0012); plain HTTP on `:8000` also remains. Inside the cluster network (login node, containers) the BMCs also answer on the standard `bmc-<node>:443`; on the host only `8443` is published (443 needs root) |
 | BCM (`cmsh` on a head node) | the login node is the head node: `cmsh -c "device; list"` over the same SSH connection | as for SSH | built (ADR 0013, #66); read-only, with a small interactive console (modes, list, status); node state follows bcm-mock and scenarios |
-| Kubernetes, Teleport | not built | | SPEC section 11 |
+| Teleport (`tsh login`, `tsh ssh`, ssh through the proxy) | proxy `10.141.255.30:3080` or `teleport.workbench.test:3080` (self-signed; `--insecure`), optional part: `benchctl up --with teleport` | identity file per user in `secrets/teleport/identity/`, or a password and one-time code set up through `benchctl add invite <user>` | built, review (ADR 0020, #39): agentless OpenSSH nodes; not simulated: agent extras, K8s/web/DB access. Your `tsh` major must not be newer than `teleport.version` |
+| Kubernetes | not built | | SPEC section 11 |
 
 If port 2222 refuses connections, the checkout is probably on a branch without the login node; that is not a client bug.
 
@@ -106,12 +107,12 @@ engine's targets, not in ad hoc `docker exec` commands.
 
 ## Known gaps
 
-Kubernetes and Teleport are not built; the fake `cmsh` console is a read-only subset.
+Kubernetes is not built; Teleport is SSH access only (no dynamic labels, session recording or sharing); the fake `cmsh` console is a read-only subset.
 The full list is the roadmap, issue #69.
 
 ## After the dashboard or the plan changes
 
-When the web page's **⚙ Settings → Apply** rebuilds the workbench under a connected client, check that the client follows: new
+When the web page's **▦ Cluster architecture → Apply** rebuilds the workbench under a connected client, check that the client follows: new
 nodes appear (and `ssh <node>` from the login node works), removed nodes disappear from Slurm and the client without stale
 entries, and GPU metrics for new GPU nodes show in Grafana. Then use a node's **Actions** in the web page (power off,
 overheat, fan failure, GPU error) and confirm the client sees each through BMC, BCM and the GPU metrics. Results of the
@@ -130,7 +131,7 @@ the exporter farm and **drains the node** with a reason starting `NHC:` when:
 | InfiniBand port down (one HCA per GPU, one port on a CPU node) | **InfiniBand port down** | `NHC: IB port down: mlx5_0` |
 | NIC link flapping (`node_network_carrier_changes_total` keeps rising) | **NIC flapping** | `NHC: NIC eth0 flapping (4 link changes)` |
 
-The periodic run drains within about 30 s and resumes a drain it made itself once the fault is cleared (never one an operator
+The list of checks is not fixed: add your own, switch one off or reorder them from the command line, by editing files or in the page's **Health checks** sheet, with every change validated and live within 30 s ([NHC checks](nhc-checks.md)). The periodic run drains within about 30 s and resumes a drain it made itself once the fault is cleared (never one an operator
 set). The **prolog** fails an unhealthy node, so Slurm requeues the job instead of running it there; the **epilog** drains a node
 that a job left unhealthy, so the next job is not scheduled on it. A node that publishes nothing (powered off) and an unreachable
 exporter are not drained. A cluster built before this needs `benchctl up` once: it rebuilds the node image (the prolog and epilog

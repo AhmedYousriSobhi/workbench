@@ -15,11 +15,14 @@ from . import (
     diag,
     export,
     inventory,
+    logins,
     machine,
     measure,
+    nhc,
     nodes,
     scenario,
     stack,
+    teleport,
     workbench,
 )
 
@@ -161,7 +164,7 @@ def _sim() -> dict:
     return workbench.effective(base, spec)[0] if spec else base
 
 
-def _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes=None):
+def _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes=None, login=None):
     """(spec, sim, profile) from a workbench file and/or flags; flags win. Exits 1 with every problem listed."""
     base = _base_sim()
     try:
@@ -176,6 +179,8 @@ def _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, 
     spec.parts = sorted((set(spec.parts) | set(with_ or [])) - set(without or []))
     if bmc_nodes is not None:
         spec.bmc_nodes = [n for n in bmc_nodes.split(",") if n]
+    if login is not None:
+        spec.login_nodes = _login_modes(login)
     if problems := spec.problems():
         for p in problems:
             typer.echo(f"invalid: {p}", err=True)
@@ -192,19 +197,64 @@ WITH = typer.Option(None, "--with", autocompletion=completion.parts, help=f"add 
 WITHOUT = typer.Option(None, "--without", autocompletion=completion.parts, help="remove a part (repeat)")
 K8S = typer.Option(None, "--k8s-nodes", help="Kubernetes nodes (not built yet)")
 BMC_NODES = typer.Option(None, "--bmc-nodes", help="nodes that get a BMC address, comma separated (default all); each costs about 32 MB")
+
+def _login_modes(login) -> list[str]:
+    try:
+        return logins.parse(login)
+    except logins.LoginError as e:
+        typer.echo(f"invalid: {e}", err=True)
+        raise typer.Exit(1) from e
+
+
+LOGIN = typer.Option(None, "--login", autocompletion=completion.login_modes, rich_help_panel="Parts by category",
+                     help=f"login nodes, one auth mode each: {', '.join(logins.MODES)} (comma separated), e.g. ssh,teleport; "
+                          "the first is `login`, then login2, ...")
+
+
+def _category_option(cat: str):
+    what = workbench.CATEGORIES[cat][0]
+    return typer.Option(None, f"--{cat}", autocompletion=completion.category(cat), rich_help_panel="Parts by category",
+                        help=f"{what}: {', '.join(workbench.items(cat))} (comma separated or repeated)")
+
+
+WORKLOAD, ACCOUNTING, MONITORING, TICKETING, HARDWARE, ACCESS, SIMULATION = (
+    _category_option(c) for c in ("workload", "accounting", "monitoring", "ticketing", "hardware", "access", "simulation"))
+ADDONS = typer.Option(False, "--addons", rich_help_panel="Parts by category",
+                      help="turn on every optional part (all categories); --without X still removes one")
+
+
+def _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons, login=None) -> list[str] | None:
+    """`--with` parts plus the ones the category flags and --addons name, or exit 1 with the one problem. None when
+    nothing was chosen, so `up` can still tell a plain preset from a selection."""
+    picked = {"workload": workload, "accounting": accounting, "monitoring": monitoring, "ticketing": ticketing,
+              "hardware": hardware, "access": access, "simulation": simulation}
+    try:
+        extra = workbench.expand(picked, addons)
+    except workbench.SpecError as e:
+        typer.echo(f"invalid: {e}", err=True)
+        raise typer.Exit(1) from e
+    if login is not None and any(m in logins.VIA_TELEPORT for m in _login_modes(login)):
+        extra = sorted({*extra, "teleport"})  # a login node that uses Teleport needs it on
+    chosen = with_ is not None or addons or any(v is not None for v in picked.values()) or (login is not None and "teleport" in extra)
+    return sorted(set(with_ or []) | set(extra)) if chosen else None
+
+
 SAVE = typer.Option(None, "--save", help="write the selection to this workbench file")
 
 
 @app.command()
 def plan(file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS,
          with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, save: str = SAVE,
-         bmc_nodes: str = BMC_NODES) -> None:
+         bmc_nodes: str = BMC_NODES, workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING,
+         monitoring: list[str] = MONITORING, ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE,
+         access: list[str] = ACCESS, simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN) -> None:
     """Estimate the memory a workbench needs against what the host has free; exit 1 if it would not fit."""
     from pathlib import Path
 
     import yaml
 
-    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes)
+    with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons, login)
+    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes, login)
     est = workbench.estimate(sim, prof)
     ok, msg = workbench.verdict(est, checks.mem_available() // (1024 * 1024), spec=spec)
     typer.echo(workbench.render(spec, est) + f"\n\n{msg}")
@@ -214,8 +264,8 @@ def plan(file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: in
     raise typer.Exit(0 if ok else 1)
 
 
-def _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes=None) -> None:
-    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes)
+def _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes=None, login=None) -> None:
+    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes, login)
     typer.echo(workbench.render(spec, workbench.estimate(sim, prof)) + "\n")
     if not stack.up(sim, "workbench", say=typer.echo, prof=prof):
         raise typer.Exit(1)
@@ -225,14 +275,19 @@ def _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_
 @app.command()
 def up(profile: str = typer.Option(None, "--profile", autocompletion=completion.profiles, callback=_profile_check, help="a size preset (default std); or choose by counts below"),
        file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS,
-       with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, bmc_nodes: str = BMC_NODES) -> None:
-    """Estimate, then start. By preset (--profile) or by selection (--cpu-nodes 2 --gpu-nodes 4 --with jira ...)."""
-    chosen = any(v is not None for v in (file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes))
+       with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, bmc_nodes: str = BMC_NODES,
+       workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING,
+       ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE, access: list[str] = ACCESS,
+       simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN) -> None:
+    """Estimate, then start. By preset (--profile) or by selection (--cpu-nodes 2 --gpu-nodes 4 --with jira,
+    --ticketing jira --hardware bmc,bcm, --addons ...)."""
+    with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons, login)
+    chosen = any(v is not None for v in (file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes, login))
     if chosen and profile:
         typer.echo("choose one: --profile PRESET, or a selection (--cpu-nodes, --gpu-nodes, --with, -f FILE)", err=True)
         raise typer.Exit(1)
     if chosen:
-        _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes)
+        _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes, login)
         return
     workbench.forget()
     raise typer.Exit(0 if stack.up(_base_sim(), profile or "std", say=typer.echo) else 1)
@@ -241,9 +296,13 @@ def up(profile: str = typer.Option(None, "--profile", autocompletion=completion.
 @app.command()
 def apply(file: str = typer.Option(..., "-f", "--file", help="workbench file to build"), name: str = NAME,
           cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS, with_: list[str] = WITH,
-          without: list[str] = WITHOUT, k8s_nodes: int = K8S, bmc_nodes: str = BMC_NODES) -> None:
+          without: list[str] = WITHOUT, k8s_nodes: int = K8S, bmc_nodes: str = BMC_NODES,
+          workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING,
+          ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE, access: list[str] = ACCESS,
+          simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN) -> None:
     """Build the workbench a file describes (the same as `up -f FILE`)."""
-    _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes)
+    with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons, login)
+    _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes, login)
 
 
 def _launcher(*args: str) -> None:
@@ -258,14 +317,22 @@ def _launcher(*args: str) -> None:
 @app.command()
 def start(profile: str = typer.Option(None, "--profile", autocompletion=completion.profiles, callback=_profile_check,
                                       help="a size preset (default min)"),
-          with_: list[str] = WITH, without: list[str] = WITHOUT) -> None:
+          with_: list[str] = WITH, without: list[str] = WITHOUT, workload: list[str] = WORKLOAD,
+          accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING, ticketing: list[str] = TICKETING,
+          hardware: list[str] = HARDWARE, access: list[str] = ACCESS, simulation: list[str] = SIMULATION,
+          addons: bool = ADDONS, login: list[str] = LOGIN) -> None:
     """Everything in one step: machine check, governor, cluster, web page (the first run builds images). Add parts
-    with --with (for example `--with accounting`); on a running cluster it adds them and leaves the page up."""
-    if profile and (with_ or without):
-        typer.echo("choose one: --profile PRESET, or parts (--with, --without)", err=True)
+    with --with (`--with accounting`), by category (`--ticketing jira --hardware bmc,bcm`) or all of them (`--addons`);
+    on a running cluster it adds them and leaves the page up."""
+    with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons, login)
+    if profile and (with_ is not None or without or login is not None):
+        typer.echo("choose one: --profile PRESET, or parts (--with, --without, category flags, --addons, --login)", err=True)
         raise typer.Exit(1)
+    if with_ == [] or (with_ is None and login is not None):  # a flag that adds nothing still asks for a selection, not the min preset
+        with_ = list(workbench.DEFAULT_PARTS)
     _offer_completion()
-    parts = [x for p in (with_ or []) for x in ("--with", p)] + [x for p in (without or []) for x in ("--without", p)]
+    modes = [] if login is None else ["--login", ",".join(_login_modes(login))]
+    parts = [x for p in (with_ or []) for x in ("--with", p)] + [x for p in (without or []) for x in ("--without", p)] + modes
     _launcher("start", *(parts or ["--profile", profile or "min"]))
 
 
@@ -430,6 +497,16 @@ def get_profiles(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by: 
     _get(inventory.profile_rows, output, selector, sort_by, False, 2.0)
 
 
+@get_app.command("checks")
+def get_checks(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
+    """The node health checks (NHC) in the order they run, whether each is on, its parameters. Templates: `-o name` lists the checks; see `add check --help`."""
+    try:
+        _get(inventory.check_rows, output, selector, sort_by, False, 2.0)
+    except nhc.NhcError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+
+
 @get_app.command("scenarios")
 def get_scenarios(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
     """The fault and workload scenarios for `benchctl scenario run`."""
@@ -459,6 +536,113 @@ def set_node(node: str = TARGET, state: str = typer.Argument(..., help="off or o
         o = scenario.execute(slurm_only, poster=post, host=True, runner=run)
     typer.echo(f"{node}: {state}" if o.status == "ok" else f"cannot set {node}: {o.detail}", err=o.status != "ok")
     raise typer.Exit(0 if o.status == "ok" else 1)
+
+
+CHECK = typer.Argument(..., autocompletion=completion.checks, help="check name, see `benchctl get checks`")
+SETS = typer.Option(None, "--set", help="a parameter, key=value (repeat for several)")
+POSITION = typer.Option(None, "--position", help="place in the run order, 1 = first")
+
+add_app = typer.Typer(cls=SuggestingGroup, help="Add something: a health check, a Teleport invite")
+app.add_typer(add_app, name="add")
+remove_app = typer.Typer(cls=SuggestingGroup, help="Remove something: a health check")
+app.add_typer(remove_app, name="remove")
+validate_app = typer.Typer(cls=SuggestingGroup, help="Check files without changing anything: the health checks")
+app.add_typer(validate_app, name="validate")
+reload_app = typer.Typer(cls=SuggestingGroup, help="Push edited files to the running nodes: the health checks")
+app.add_typer(reload_app, name="reload")
+
+
+def _nhc_done(what: str) -> None:
+    """The change is in the files; deliver it to the nodes' mounted copy and say so (a node reads it at its next run)."""
+    if errs := nhc.sync():
+        typer.echo("\n".join(errs), err=True)
+        raise typer.Exit(1)
+    typer.echo(f"{what}. Running nodes use it at their next health check (within 30 s); `benchctl get checks` shows the order.")
+
+
+def _nhc_run(fn, *args, **kwargs) -> None:
+    try:
+        fn(*args, **kwargs)
+    except nhc.NhcError as e:
+        typer.echo(f"refused, nothing changed:\n{e}", err=True)
+        raise typer.Exit(1) from e
+
+
+@add_app.command("check")
+def add_check(name: str = typer.Argument(..., help="new check name: lower case letters, digits, '-'"),
+              template: str = typer.Option(None, "--template", autocompletion=completion.check_templates, help="a builtin template, e.g. metric-above"),
+              script: str = typer.Option(None, "--script", help="a shell file with your own check (prints one line per problem)"),
+              sets: list[str] = SETS, position: int = POSITION) -> None:
+    """Add a health check. From a template: `benchctl add check gpu-hot --template metric-above --set metric=DCGM_FI_DEV_GPU_TEMP --set max=85`.
+    Your own: `benchctl add check my-check --script ./my-check.sh` (the file prints one line per problem, nothing when healthy). The
+    new check is validated first, including a run on healthy sample metrics, and refused when it fails them."""
+    if template is None and script is None:
+        typer.echo("give --template NAME (see the names with `ls images/node-base/nhc.d/templates`) or --script FILE", err=True)
+        raise typer.Exit(2)
+    if template is not None and script is not None:
+        typer.echo("give --template or --script, not both", err=True)
+        raise typer.Exit(2)
+
+    def go() -> None:
+        body = _Path(script).read_text() if script else None
+        nhc.add(name, template=template, script=body, params=nhc.parse_sets(sets), position=position)
+
+    try:
+        _nhc_run(go)
+    except OSError as e:
+        typer.echo(f"cannot read {script}: {e.strerror}", err=True)
+        raise typer.Exit(1) from e
+    _nhc_done(f"added check {name}")
+
+
+@add_app.command("invite")
+def add_invite(user: str = typer.Argument(..., help="a user from sim.yaml")) -> None:
+    """Make a one-time link to choose USER's Teleport password, for `tsh login`: `benchctl add invite alice`. Open it in a
+    browser once (the page is served with a self-signed certificate). Needs Teleport running (`--with teleport`)."""
+    if user not in [u["name"] for u in _sim().get("users", [])]:
+        typer.echo(f"{user!r} is not a user in sim.yaml", err=True)
+        raise typer.Exit(2)
+    try:
+        typer.echo(teleport.invite(user, stack._run, stack.dc))
+    except teleport.TeleportError as e:
+        typer.echo(f"{e}\nIs Teleport running? Start it with `benchctl up --with teleport` (see `benchctl get services`).", err=True)
+        raise typer.Exit(1) from e
+
+
+@set_app.command("check")
+def set_check(name: str = CHECK, state: str = typer.Argument(None, help="on or off"), sets: list[str] = SETS, position: int = POSITION) -> None:
+    """Switch a check on or off, change its parameters, or move it: `benchctl set check gpu-xid off`, `... set check gpu-hot --set max=90`, `... --position 1`."""
+    if state not in (None, "on", "off"):
+        typer.echo("state must be on or off", err=True)
+        raise typer.Exit(2)
+    if state is None and not sets and position is None:
+        typer.echo("nothing to change: give on|off, --set key=value or --position N", err=True)
+        raise typer.Exit(2)
+    _nhc_run(lambda: nhc.set_check(name, enabled=None if state is None else state == "on", params=nhc.parse_sets(sets), position=position))
+    _nhc_done(f"changed check {name}")
+
+
+@remove_app.command("check")
+def remove_check(name: str = CHECK) -> None:
+    """Remove a check and its file from images/node-base/nhc.d (git keeps the old one). To keep it, `set check NAME off` instead."""
+    _nhc_run(nhc.remove, name)
+    _nhc_done(f"removed check {name}")
+
+
+@validate_app.command("checks")
+def validate_checks() -> None:
+    """Validate every check file and checks.conf (grammar, parameters, bash syntax, the contract, a run on healthy sample metrics). Changes nothing."""
+    errs = nhc.problems()
+    if errs:
+        typer.echo("\n".join(errs), err=True)
+        raise typer.Exit(1)
+    typer.echo(f"ok: {len(nhc.load())} checks valid")
+
+
+@reload_app.command("checks")
+def reload_checks() -> None:
+    """After editing a check file or images/node-base/nhc.d/checks.conf by hand: validate, then push to the running nodes. Nothing is pushed when a check is invalid."""
+    _nhc_done("validated and delivered")
 
 
 @app.command("submit")
@@ -607,7 +791,7 @@ def export_profile(out: str = typer.Option("bench-profile.json", "-o", "--output
     except export.ExportError as e:
         typer.echo(f"cannot export: {e}", err=True)
         raise typer.Exit(1) from e
-    for w in export.warnings(services):
+    for w in export.warnings(services, sim):
         typer.echo(f"warning: {w}", err=True)
     if out == "-":
         typer.echo(text, nl=False)

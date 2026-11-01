@@ -11,13 +11,25 @@ import threading
 import time
 from collections import deque
 
-from .cluster import BCM, BMC, EXPORTER, JIRA, http_json
+from .cluster import BCM, BMC, EXPORTER, JIRA, TELEPORT, http_json
 
 STATS = {"bmc-farm": f"{BMC}/sim/stats", "bcm-mock": f"{BCM}/sim/stats", "jira-mock": f"{JIRA}/sim/stats",
          "gpu-exporter": f"{EXPORTER}/sim/stats"}
+# Teleport has no request counter of its own: its diagnostics endpoint counts every connection the proxy makes to a node
+# (`tsh ssh`, the web terminal), which is the client traffic this page draws. Absent until the first connection.
+TELEPORT_COUNTER = "teleport_connect_to_node_attempts_total"
+COUNTERS = {"teleport": f"{TELEPORT}/metrics"}
 SCENARIO_TARGETS = {"bmc-farm": "bmc-farm", "bcm-mock": "bcm-mock", "gpu-exporter": "gpu-exporter",
                     "jira": "jira-mock"}  # scenario target name -> block; slurm, k8s, ticket-bot have no block
 PAUSE_LEVEL = 3  # SPEC: the animation is a luxury; from L3 up the governor wants every MB and CPU cycle
+
+
+def counter_total(scrape, name: str) -> int:
+    """Sum of every sample of the Prometheus counter `name` in a text scrape; 0 while it has not been counted yet."""
+    if not isinstance(scrape, str):
+        raise TypeError("not a Prometheus text scrape")
+    return int(sum(float(line.rsplit(" ", 1)[1]) for line in scrape.splitlines()
+                   if line.startswith(name) and line[len(name):len(name) + 1] in (" ", "{")))
 
 
 class Flow:
@@ -26,8 +38,8 @@ class Flow:
         self.events: deque = deque(maxlen=keep)
         self.seq = 0
         self.last: dict[str, int] = {}
-        self.totals = dict.fromkeys(STATS, 0)
-        self.reachable = dict.fromkeys(STATS, False)
+        self.totals = dict.fromkeys([*STATS, *COUNTERS], 0)
+        self.reachable = dict.fromkeys([*STATS, *COUNTERS], False)
         self.polled = float("-inf")
         self.lock = threading.Lock()
 
@@ -49,9 +61,9 @@ class Flow:
             if now - self.polled < self.min_interval:
                 return
             self.polled = now
-            for svc, url in STATS.items():
+            for svc, url in {**STATS, **COUNTERS}.items():
                 try:
-                    got = int(self.fetch(url)["requests"])
+                    got = counter_total(self.fetch(url), TELEPORT_COUNTER) if svc in COUNTERS else int(self.fetch(url)["requests"])
                 except (OSError, ValueError, KeyError, TypeError):
                     self.last.pop(svc, None)
                     self.reachable[svc] = False

@@ -3,11 +3,33 @@
 Addresses are the containers' fixed private IPs at their standard ports (`benchctl/addressing.py`, ADR 0018): the host
 routes the Docker network, so a client on this machine connects to them directly. The ports published on 127.0.0.1 are
 the fallback (`also on`). Credentials are named by path only, never read, so this page cannot leak a secret."""
-from benchctl import addressing, compose
+from benchctl import addressing, compose, logins, teleport
 from benchctl.describe import BMC_TLS_PORT
 
 SECRETS = "compose/generated/secrets"
 SSH_KEY = f"{SECRETS}/ssh/id_ed25519"
+
+
+def login_rows(sim: dict, users: list[str], user: str, ssh_for) -> list[dict]:
+    """One row per login node, the way its mode says to reach it (ADR 0023)."""
+    ips, rows = addressing.plan(sim)["logins"], []
+    for i, (name, mode) in enumerate(logins.nodes(sim)):
+        title = "Login node (head node)" if name == "login" else f"Login node {name}"
+        tsh = (f"tsh --proxy={teleport.proxy_addr(sim)} --insecure -i {SECRETS}/teleport/identity/{user} ssh {user}@{name}")
+        port = compose.SSH_PORT + i
+        if mode == "teleport":
+            rows.append({"id": name, "name": f"{title}, Teleport only", "kind": "teleport", "address": f"via the Teleport proxy {teleport.proxy_addr(sim)}",
+                         "command": tsh, "credential": f"{SECRETS}/teleport/identity/{user}",
+                         "how": f"Users: {', '.join(users) or 'none'}. No published port and no key login: only a Teleport certificate gets in "
+                                f"(a key is refused). An identity file per user, or `tsh login` after `benchctl add invite <user>`."})
+            continue
+        how = (f"Users: {', '.join(users) or 'none'}. Key login only, no password. Also on 127.0.0.1:{port}. "
+               "`benchctl ssh-key install` copies the key to ~/.ssh/workbench_ed25519.")
+        if mode == "both":
+            how += f" It also accepts Teleport: `{tsh}`."
+        rows.append({"id": name, "name": title + (", direct SSH and Teleport" if mode == "both" else ""), "kind": "ssh",
+                     "address": f"{ips[name]}:22", "command": ssh_for(ips[name]), "credential": SSH_KEY, "how": how})
+    return rows
 
 
 def entities(sim: dict) -> list[dict]:
@@ -15,16 +37,25 @@ def entities(sim: dict) -> list[dict]:
     users = [u["name"] for u in sim.get("users", [])]
     user = users[0] if users else "alice"
     ip = addressing.plan(sim)["services"]
-    login = addressing.LOGIN_IP
+    first = logins.direct(sim)  # the nodes are reached from a login node that takes a key; with none, through Teleport
+    login = addressing.plan(sim)["logins"][first[0][0]] if first else addressing.LOGIN_IP
     ssh = f"ssh -i {SSH_KEY} {user}@{login}"
+
+    def ssh_for(ip: str) -> str:
+        return f"ssh -i {SSH_KEY} {user}@{ip}"
     bmc, bcm, jira = ip["bmc-farm"], ip["bcm-mock"], ip["jira-mock"]
     return [
-        {"id": "login", "name": "Login node (head node)", "kind": "ssh", "address": f"{login}:22", "command": ssh,
-         "credential": SSH_KEY, "how": f"Users: {', '.join(users) or 'none'}. Key login only, no password. Also on 127.0.0.1:{compose.SSH_PORT}. "
-                                       "`benchctl ssh-key install` copies the key to ~/.ssh/workbench_ed25519."},
+        *login_rows(sim, users, user, ssh_for),
         {"id": "nodes", "name": "Compute and GPU nodes", "kind": "ssh", "address": "10.141.0.x (compute), 10.141.100.x (GPU)",
-         "command": f"{ssh} ssh <node> hostname", "credential": SSH_KEY,
+         "command": f"{ssh} ssh <node> hostname" if first else f"tsh --proxy={teleport.proxy_addr(sim)} --insecure -i {SECRETS}/teleport/identity/{user} ssh {user}@<node>",
+         "credential": SSH_KEY if first else f"{SECRETS}/teleport/identity/{user}",
          "how": "Same key and users, from the login node. The exact IPs: `benchctl describe node <node>`."},
+        {"id": "teleport", "name": "Teleport (SSH through a proxy)", "kind": "https", "address": f"https://{teleport.proxy_addr(sim)}",
+         "command": f"tsh --proxy={teleport.proxy_addr(sim)} --insecure -i {SECRETS}/teleport/identity/{user} ls",
+         "credential": f"{SECRETS}/teleport/identity/{user}",
+         "how": "Only when the Teleport part is on (`benchctl start --access teleport`). An identity file per user needs no password; for "
+                "`tsh login` or the browser, `benchctl add invite <user>` prints a one-time link (the page cannot run it: no Docker, W-3). "
+                f"Also {teleport.DNS_NAME} (a container alias; on this machine add `{teleport.proxy_ip(sim)} {teleport.DNS_NAME}` to /etc/hosts) and 127.0.0.1:{teleport.PROXY_PORT} as a fallback. Self-signed certificate, hence --insecure."},
         {"id": "bmc", "name": "BMC farm (Redfish)", "kind": "https", "address": f"https://{bmc}:{BMC_TLS_PORT}/redfish/v1",
          "command": f"curl -k -H 'Host: bmc-<node>' -u admin:<password> https://{bmc}:{BMC_TLS_PORT}/redfish/v1/Systems/1",
          "credential": f"{SECRETS}/bmc_credentials", "how": "User admin; the password is the part after `admin:` in that file. One address for "

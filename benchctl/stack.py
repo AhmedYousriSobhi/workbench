@@ -11,7 +11,7 @@ import urllib.error
 from collections.abc import Callable
 from pathlib import Path
 
-from . import addressing, checks, compose, workbench
+from . import addressing, checks, compose, logins, teleport, workbench
 
 COMPOSE_FILE = Path("compose/generated/docker-compose.yml")
 PROJECT = "workbench"
@@ -21,9 +21,10 @@ STAGES = [  # (label, service-name pattern); later stages depend on earlier ones
     ("slurm core", r"slurmctld|mariadb|slurmdbd"),
     ("slurm services", r"slurmrestd|accounting-init"),
     ("mocks", r"bmc-farm|bcm-mock|jira-mock"),
+    ("teleport", r"teleport"),
     ("bmc addresses", r"bmc-(cn|gpu)\d+"),
     ("nodes", r"(cn|gpu)\d+"),
-    ("login node", r"login"),
+    ("login node", r"login\d*"),
     ("scenarios", r"scenario-engine"),
 ]
 
@@ -129,7 +130,11 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     estimate instead of the named profile's budget."""
     chosen = prof
     prof = prof if prof is not None else compose.load_profile(profile)
-    data = compose.generate(sim, prof)
+    try:
+        data = compose.generate(sim, prof)
+    except logins.LoginError as e:
+        say(f"FAILED login nodes: {e}")
+        return False
     conf = COMPOSE_FILE.parent / "slurm" / "slurm.conf"  # a changed file needs a controller restart (it only rereads at start)
     old_conf = conf.read_text() if conf.is_file() else None
     path = compose.write(data, sim=sim, compute_nodes=prof.get("compute_nodes"))
@@ -156,7 +161,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         say(f"skipping (not implemented yet): {', '.join(skip)}")
     if "bmc-farm" in todo:
         ensure_bmc_credentials()
-    if "login" in todo or any(re.fullmatch(r"(cn|gpu)\d+", n) for n in todo):
+    if any(logins.is_login(n) for n in todo) or any(re.fullmatch(r"(cn|gpu)\d+", n) for n in todo):
         try:
             ensure_ssh_keys()
         except OSError as e:
@@ -170,6 +175,10 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     if stale_bmc:
         say(f"removing BMCs no longer wanted: {', '.join(stale_bmc)}")
         remove_services(stale_bmc, runner)
+    stale_login = sorted(s for s in before if logins.is_login(s) and s not in names)  # fewer login nodes than before
+    if stale_login:
+        say(f"removing login nodes no longer wanted: {', '.join(stale_login)}")
+        remove_services(stale_login, runner)
     # accounting added under a running controller: slurm.conf gains AccountingStorageType, which only a restart reads
     acct_added = "slurmdbd" in todo and "slurmdbd" not in before and "slurmctld" in before
     if chosen is not None:  # a selection can shrink or grow a running stack: drop nodes it no longer wants (issue 117)
@@ -187,6 +196,13 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         if r.returncode != 0:
             say(f"FAILED node base image: {r.stderr.strip()[-300:]}")
             return False
+    ips = addressing.plan(sim, prof.get("compute_nodes"))
+    if "teleport" in todo:
+        try:
+            teleport.prepare(sim, ips)
+        except (OSError, teleport.TeleportError) as e:
+            say(f"FAILED teleport setup: {e}")
+            return False
     for label, svcs in stage_services(names):
         say(f"starting {label}: {', '.join(svcs)}")
         r = runner(dc("up", "-d", "--build", "--no-deps", *svcs, file=path))
@@ -195,6 +211,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
             return False
         if (late := wait_running(svcs, runner, wait)):
             say(f"FAILED {label}: not running: {', '.join(late)}")
+            return False
+        if label == "teleport" and not teleport.bootstrap(sim, ips, runner, dc, say):  # before the nodes read their certificates
             return False
     if (changed or acct_added or (conf_changed and "slurmctld" in before)) and "slurmctld" in todo:  # slurm.conf changed under a running controller
         say("restarting slurmctld to pick up the new " + ("accounting setup" if acct_added and not changed else "node list" if changed else "slurm.conf"))
@@ -214,8 +232,15 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
             say(f"WARN no grafana viewer token ({e})")
     if "bmc-farm" in todo:
         say(f"bmc: https://127.0.0.1:8443/redfish/v1 (Host bmc-<node>), user admin, password in {BMC_CREDENTIALS}")
-    if "login" in todo:
-        say(f"ssh: ssh -i {SSH_DIR}/id_ed25519 -p {compose.SSH_PORT} <user>@127.0.0.1 (users from sim.yaml)")
+    for lname, idx in logins.direct(sim) if "login" in todo else []:
+        say(f"ssh: ssh -i {SSH_DIR}/id_ed25519 -p {compose.SSH_PORT + idx} <user>@127.0.0.1 (users from sim.yaml; {lname})")
+    for lname in logins.via_teleport(sim) if "login" in todo else []:
+        say(f"{lname}: reachable through Teleport only: tsh --proxy={teleport.proxy_addr(sim)} --insecure -i "
+            f"{teleport.SECRETS_DIR}/identity/<user> ssh <user>@{lname}")
+    if "teleport" in todo:
+        say(f"teleport: https://{teleport.proxy_addr(sim)} (self-signed; name {teleport.DNS_NAME}, fallback 127.0.0.1:{teleport.PROXY_PORT}); "
+            f"identity files in {teleport.SECRETS_DIR}/identity; password and one-time code for tsh login: ./scripts/benchctl add invite <user>")
+        say(f"teleport name on this machine (optional, needs sudo, run it yourself): echo '{teleport.proxy_ip(sim)} {teleport.DNS_NAME}' | sudo tee -a /etc/hosts")
     say("stack is up")
     return True
 

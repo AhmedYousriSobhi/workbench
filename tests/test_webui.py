@@ -199,7 +199,7 @@ def test_help_wiki_needs_the_token_and_serves_pages_images_and_search(ui):
     assert b"http://" not in body.replace(b"http://127.0.0.1", b"")  # nothing third-party is loaded
     code, body = req(ui, "/help/search?q=governor")
     assert code == 200 and b"/help/manual/07-governor" in body
-    assert req(ui, "/help/files/manual/img/web-overview.png")[0] == 200
+    assert req(ui, "/help/files/manual/img/web-infrastructure.png")[0] == 200
     assert req(ui, "/help/manual/nope")[0] == 404 and req(ui, "/help/files/manual/README.md")[0] == 404
     assert req(ui, "/help/..%2F..%2FSPEC")[0] == 404 and req(ui, "/help/files/..%2F..%2Fsim.yaml")[0] == 404
 
@@ -306,12 +306,12 @@ def test_settings_endpoint_serves_the_option_registry_and_the_sheet_draws_from_i
     assert code == 200 and set(parts) == set(workbench.PARTS) and parts["accounting"]["mb"] > 0 and parts["accounting"]["label"]
     assert req(ui, "/api/settings", auth=False)[0] == 401
     page = req(ui, "/")[1]
-    assert b"/api/settings" in page and b'id="pl-parts"' in page and b"\xe2\x9a\x99 Settings" in page
+    assert b"/api/settings" in page and b'id="pl-parts"' in page and b"Cluster architecture" in page
 
 
 def test_traffic_diagram_shapes_are_buttons_that_open_the_node_or_the_connection(ui):
     page = req(ui, "/")[1].decode()
-    for needle in ("function asButton(", "role', 'button'", "showNode(n.name)", "openConnection(SVC_CONN[k])", "tr[data-id=",
+    for needle in ("function asButton(", "role', 'button'", "openPop(", "showNode(id)", "openConnection(SVC_CONN[id])", "tr[data-id=",
                    "#flow #dots { pointer-events:none; }", "Enter' || e.key === ' '"):
         assert needle in page, needle
 

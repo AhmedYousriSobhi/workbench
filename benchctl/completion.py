@@ -14,7 +14,8 @@ import typer
 SHELLS = ("bash", "zsh", "fish")
 OUTPUTS = ["table", "json", "name"]
 COLUMNS = {"nodes": ["name", "kind", "state"], "services": ["name", "state"],
-           "profiles": ["name", "compute_nodes", "groups"], "scenarios": ["name", "steps", "description"]}
+           "profiles": ["name", "compute_nodes", "groups"], "scenarios": ["name", "steps", "description"],
+           "checks": ["position", "name", "state", "params", "description"]}
 SELECTOR_VALUES = {"kind": ["compute", "gpu"], "state": ["running", "paused", "exited", "absent"]}
 MARK_OPEN, MARK_CLOSE = "# >>> workbench completion >>>", "# <<< workbench completion <<<"
 NAMES = ("benchctl", "./scripts/benchctl")
@@ -63,6 +64,20 @@ def scenarios(incomplete: str) -> list[str]:
 
 
 @_safe
+def checks(incomplete: str) -> list[str]:
+    from . import nhc
+
+    return _starts([c.name for c in nhc.load()], incomplete)
+
+
+@_safe
+def check_templates(incomplete: str) -> list[str]:
+    from . import nhc
+
+    return _starts([t["name"] for t in nhc.templates()], incomplete)
+
+
+@_safe
 def users(incomplete: str) -> list[str]:
     return _starts([u["name"] for u in _sim().get("users", [])], incomplete)
 
@@ -72,6 +87,30 @@ def parts(incomplete: str) -> list[str]:
     from . import workbench
 
     return _starts(list(workbench.PARTS), incomplete)
+
+
+@_safe
+def login_modes(incomplete: str) -> list[str]:
+    """Completer for --login: the auth modes, also after a comma (`ssh,t` -> `ssh,teleport`); a mode may repeat (one per node)."""
+    from . import logins
+
+    head, _, tail = incomplete.rpartition(",")
+    prefix = head + "," if head else ""
+    return [prefix + m for m in logins.MODES if m.startswith(tail)]
+
+
+def category(name: str):
+    """Completer for a category flag such as --hardware: its items, also after a comma (`bmc,b` -> `bmc,bcm`), without
+    repeating one already typed."""
+    @_safe
+    def complete(incomplete: str) -> list[str]:
+        from . import workbench
+
+        head, _, tail = incomplete.rpartition(",")
+        typed = {t for t in head.split(",") if t}
+        prefix = head + "," if head else ""
+        return [prefix + i for i in workbench.items(name) if i.startswith(tail) and i not in typed]
+    return complete
 
 
 @_safe
@@ -137,6 +176,7 @@ def script(shell: str, prog: str = "benchctl") -> str:
         raise typer.BadParameter(f"unknown shell '{shell}'. Valid: {', '.join(SHELLS)}.")
     completion_init()
     text = get_completion_script(prog_name=prog, complete_var=f"_{prog.replace('-', '_').upper()}_COMPLETE", shell=shell)
+    text = text if text.endswith("\n") else text + "\n"  # Typer's bash script has no final newline: appending glued two commands together
     if shell == "bash":
         func = re.search(r"complete [^\n]*-F (\S+) " + re.escape(prog), text).group(1)
         text += "".join(f"complete -o default -F {func} {n}\n" for n in NAMES[1:])

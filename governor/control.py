@@ -19,7 +19,8 @@ Handler = Callable[[str, dict], dict]
 
 NODE_RE = re.compile(r"[a-z]{2,8}[0-9]{3}")  # sim.yaml node names: cn001, gpu002
 REASON_RE = re.compile(r"[A-Za-z0-9 .,:_/()+-]{0,60}")  # a drain reason: short, no shell characters
-PLAN_PARTS = {"jira", "bmc", "bcm", "scenarios", "accounting", "load"}  # mirrors benchctl.workbench.PARTS
+LOGIN_MODES = {"ssh", "teleport", "both"}  # mirrors benchctl.logins.MODES
+PLAN_PARTS = {"jira", "bmc", "bcm", "scenarios", "accounting", "load", "teleport"}  # mirrors benchctl.workbench.PARTS
 
 
 def plan_error(req: dict) -> str | None:
@@ -35,6 +36,9 @@ def plan_error(req: dict) -> str | None:
     if nodes is not None and not (isinstance(nodes, list) and len(nodes) <= 80
                                   and all(isinstance(n, str) and NODE_RE.fullmatch(n) for n in nodes)):
         return "apply-plan bmc_nodes must be a list of node names such as cn001"
+    modes = req.get("login_nodes")  # optional: one auth mode per login node; absent keeps sim.yaml's
+    if modes is not None and not (isinstance(modes, list) and 1 <= len(modes) <= 8 and all(m in LOGIN_MODES for m in modes)):
+        return f"apply-plan login_nodes must be 1 to 8 of: {', '.join(sorted(LOGIN_MODES))}"
     return None
 
 

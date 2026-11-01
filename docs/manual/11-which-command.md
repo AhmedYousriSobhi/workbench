@@ -19,7 +19,7 @@ for, and why. Every command runs from the repository root.
 | break something on purpose | `./scripts/benchctl scenario run NAME` | plays a scripted fault ([chapter 6](06-scenarios.md)) |
 | see what a scenario would do first | `./scripts/benchctl scenario run NAME --dry-run` | prints the steps, touches nothing |
 | list the scenarios | `./scripts/benchctl scenario list` | name, steps, description |
-| click a fault on one node | the web page, Cluster tab | the same steps without the terminal ([chapter 5](05-web-page.md)) |
+| click a fault on one node | the web page, a node's panel | the same steps without the terminal ([chapter 5](05-web-page.md)) |
 | see why a start was refused | `./scripts/benchctl status` and `./scripts/benchctl preflight --profile min` | the governor level and whether the profile fits |
 | check my machine is ready | `./scripts/benchctl check` | OS, RAM, disk, Docker, ports |
 | turn on Tab completion | `./scripts/benchctl completion install` | one line in your rc file, no sudo; `completion remove` undoes it |
@@ -54,6 +54,7 @@ Without `benchctl start` the governor is not started, so nothing protects the ho
 - The **web page** plays the same scenarios, but has no Docker access, so it **skips** Slurm and SSH steps. To
   play those, use the terminal.
 - A **fault action** in a node's panel on the web page (power off, fan failure, XID) is one step applied right now.
+- To add, change or remove a node health check (what drains a node), follow [NHC checks](../guides/nhc-checks.md).
 - To test a client's SSH handling, follow [SSH connection testing](../guides/ssh-connection-testing.md).
 
 ## Checking your own changes

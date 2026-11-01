@@ -5,13 +5,14 @@ an effective `sim` dict (node counts) and a profile dict (compose groups, minus 
 the sum of the container memory limits the generated compose file would set, plus the always-on observability stack:
 an upper bound, which is what the governor's admission also uses."""
 import copy
+import difflib
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
 
-from . import compose
+from . import compose, logins
 
 SAVED = Path("compose/generated/workbench.yaml")  # the spec `apply`/`up` last built; absent after a plain profile `up`
 OBSERVABILITY_MB = 700                            # prometheus 300 + grafana 300 + gpu-exporter 100 (compose/observability.yml)
@@ -19,17 +20,32 @@ FLOOR_MB = 1024                                   # MemAvailable that must remai
 # part -> (compose group, services it adds; None = the whole group)
 PARTS: dict[str, tuple[str, list[str] | None]] = {
     "jira": ("mocks", ["jira-mock"]), "bmc": ("mocks", ["bmc-farm"]), "bcm": ("mocks", ["bcm-mock"]),
-    "accounting": ("accounting", None), "scenarios": ("scenarios", None), "load": ("load", None)}
-# The one registry of options that change what runs and so what memory it needs. The Settings sheet is drawn from it
+    "accounting": ("accounting", None), "teleport": ("teleport", None), "scenarios": ("scenarios", None), "load": ("load", None)}
+# The one registry of options that change what runs and so what memory it needs. The Cluster architecture sheet is drawn from it
 # (`catalog`): a new option is an entry here and in PARTS, not new page code.
 PART_INFO: dict[str, tuple[str, str]] = {
     "accounting": ("Accounting", "slurmdbd and MariaDB. Needed for sacct and job history; without it sacct says accounting storage is disabled."),
     "jira": ("Jira", "The Jira mock (REST v2 subset)."),
     "bmc": ("BMC farm", "One Redfish endpoint per node: power, thermals, fans."),
     "bcm": ("BCM", "The BCM mock (CMDaemon JSON) and its device list."),
+    "teleport": ("Teleport", "Teleport auth and proxy: tsh login and ssh to the login node and every node through it (not on by default)."),
     "scenarios": ("Scenarios", "The scenario engine that plays timed faults."),
     "load": ("Load", "User and ticket simulators that generate jobs and tickets."),
 }
+# What a user picks by name (`--ticketing jira`, `--hardware bmc,bcm`, ...): category -> (what it groups, {item: part it turns on}).
+# An item whose part is None is always on (accepted, nothing to add); NOT_BUILT items are refused with a message.
+# Every optional part is in exactly one category (tested), so a new part is added here and in PARTS.
+CATEGORIES: dict[str, tuple[str, dict[str, str | None]]] = {
+    "workload": ("what runs the jobs", {"slurm": None, "kubernetes": None}),
+    "accounting": ("job history for sacct", {"slurmdbd": "accounting"}),
+    "monitoring": ("metrics and dashboards", {"prometheus": None, "grafana": None}),
+    "ticketing": ("ticket systems", {"jira": "jira"}),
+    "hardware": ("out-of-band management", {"bmc": "bmc", "bcm": "bcm"}),
+    "access": ("how users reach the nodes", {"teleport": "teleport"}),
+    "simulation": ("fault and user simulators", {"scenarios": "scenarios", "load": "load"}),
+}
+NOT_BUILT = {"kubernetes": "Kubernetes is not built yet (SPEC section 11); use --workload slurm"}
+PART_CATEGORY = {part: cat for cat, (_, items) in CATEGORIES.items() for part in items.values() if part}
 DEFAULT_PARTS = ("jira", "bmc", "bcm", "accounting", "scenarios")  # accounting: without slurmdbd, sacct says storage is disabled
 DROP_ORDER = ("load", "accounting", "scenarios", "bcm", "jira", "bmc")  # what to suggest removing first
 LIMITS = {"cpu_nodes": (0, 64), "gpu_nodes": (0, 16), "gpus_per_node": (1, 8)}
@@ -48,6 +64,7 @@ class Spec:
     parts: list[str] = field(default_factory=lambda: list(DEFAULT_PARTS))
     k8s_nodes: int = 0
     bmc_nodes: list[str] | None = None  # nodes that get a BMC address; None = every node (part "bmc")
+    login_nodes: list[str] = field(default_factory=lambda: list(logins.DEFAULT))  # auth mode of each login node (ADR 0023)
 
     def problems(self) -> list[str]:
         out = []
@@ -59,6 +76,11 @@ class Spec:
         out += [f"unknown part {p!r}; parts: {', '.join(PARTS)}" for p in self.parts if p not in PARTS]
         if self.bmc_nodes is not None and not all(isinstance(n, str) and re.fullmatch(r"[a-z]{2,8}[0-9]{3}", n) for n in self.bmc_nodes):
             out.append("bmc_nodes must be node names such as cn001, gpu002")
+        try:
+            modes = logins.parse(self.login_nodes)
+            out += logins.problems({"login": modes}, set(self.parts))
+        except logins.LoginError as e:
+            out.append(str(e))
         if self.k8s_nodes:
             out.append("Kubernetes nodes are not built yet (SPEC section 11): use --k8s-nodes 0")
         return out
@@ -66,13 +88,38 @@ class Spec:
     def to_dict(self) -> dict:
         return {"name": self.name, "cpu_nodes": self.cpu_nodes, "gpu_nodes": self.gpu_nodes,
                 "gpus_per_node": self.gpus_per_node, "parts": sorted(set(self.parts)), "k8s_nodes": self.k8s_nodes,
-                "bmc_nodes": None if self.bmc_nodes is None else sorted(set(self.bmc_nodes))}
+                "bmc_nodes": None if self.bmc_nodes is None else sorted(set(self.bmc_nodes)),
+                "login_nodes": list(self.login_nodes)}
+
+
+def items(category: str) -> list[str]:
+    """The names a category flag accepts (what Tab offers): the buildable items, then `all`."""
+    return [i for i in CATEGORIES[category][1] if i not in NOT_BUILT] + ["all"]
+
+
+def expand(picked: dict[str, list[str] | None], addons: bool = False) -> list[str]:
+    """The parts that category flags (`{"hardware": ["bmc,bcm"], ...}`) and `--addons` turn on. Values may be comma
+    separated; `all` takes every item of the category. Raises SpecError with one message for the first bad item."""
+    parts: list[str] = list(PARTS) if addons else []
+    for cat, values in picked.items():
+        every = [i for i in CATEGORIES[cat][1] if i not in NOT_BUILT]
+        for item in (v.strip() for val in (values or []) for v in val.split(",") if v.strip()):
+            if item in NOT_BUILT:
+                raise SpecError(NOT_BUILT[item])
+            if item != "all" and item not in CATEGORIES[cat][1]:
+                close = difflib.get_close_matches(item, every, n=1)
+                hint = f" Did you mean '{close[0]}'?" if close else ""
+                raise SpecError(f"unknown {cat} item '{item}'.{hint} Valid: {', '.join(items(cat))}.")
+            for i in every if item == "all" else [item]:
+                if part := CATEGORIES[cat][1][i]:
+                    parts.append(part)
+    return sorted(set(parts))
 
 
 def defaults(sim: dict) -> Spec:
     """The workbench sim.yaml describes, so a flag only overrides what it names."""
     return Spec(cpu_nodes=sim.get("compute", {}).get("count", 4), gpu_nodes=sim.get("gpu", {}).get("nodes", 2),
-                gpus_per_node=sim.get("gpu", {}).get("gpus_per_node", 8))
+                gpus_per_node=sim.get("gpu", {}).get("gpus_per_node", 8), login_nodes=logins.modes(sim))
 
 
 def from_dict(data: dict, base: Spec) -> Spec:
@@ -81,7 +128,8 @@ def from_dict(data: dict, base: Spec) -> Spec:
         raise SpecError(f"unknown field(s) in the workbench file: {', '.join(sorted(unknown))}")
     merged = {**base.to_dict(), **data}
     return Spec(**{**merged, "parts": list(merged["parts"]),
-                   "bmc_nodes": None if merged.get("bmc_nodes") is None else list(merged["bmc_nodes"])})
+                   "bmc_nodes": None if merged.get("bmc_nodes") is None else list(merged["bmc_nodes"]),
+                   "login_nodes": list(merged["login_nodes"])})
 
 
 def load_file(path: Path, base: Spec) -> Spec:
@@ -105,9 +153,9 @@ def parts_in(services: set[str]) -> list[str]:
 
 
 def catalog(selected: list[str] | None = None) -> list[dict]:
-    """Every optional part with its label, help, memory limit (MB) and whether it is on, for the Settings sheet."""
+    """Every optional part with its label, help, memory limit (MB) and whether it is on, for the Cluster architecture sheet."""
     on = set(DEFAULT_PARTS if selected is None else selected)
-    return [{"id": p, "label": PART_INFO[p][0], "help": PART_INFO[p][1], "mb": _part_mb(p), "on": p in on} for p in PARTS]
+    return [{"id": p, "category": PART_CATEGORY[p], "label": PART_INFO[p][0], "help": PART_INFO[p][1], "mb": _part_mb(p), "on": p in on} for p in PARTS]
 
 
 def effective(sim: dict, spec: Spec) -> tuple[dict, dict]:
@@ -118,6 +166,7 @@ def effective(sim: dict, spec: Spec) -> tuple[dict, dict]:
     have = {"compute": spec.cpu_nodes, "gpu": spec.gpu_nodes}
     if spec.bmc_nodes is not None:
         s["bmc"] = {**(s.get("bmc") or {}), "nodes": sorted(set(spec.bmc_nodes))}
+    s["login"] = list(spec.login_nodes)
     s["partitions"] = [p for p in s.get("partitions", []) if have.get(p["nodes"], 1) > 0]
     groups, drop = ["core", "access"], []
     for part in spec.parts:
@@ -162,7 +211,8 @@ def verdict(est: dict, available_mb: int, floor_mb: int = FLOOR_MB, spec: Spec |
 def render(spec: Spec, est: dict) -> str:
     rows = [f"Workbench:   {spec.name}",
             f"Nodes:       {spec.cpu_nodes} cpu, {spec.gpu_nodes} gpu x {spec.gpus_per_node} GPUs",
-            f"Parts:       {', '.join(sorted(set(spec.parts))) or 'none'} (always: slurm, login node, Prometheus, Grafana)",
+            "Login nodes: " + ", ".join(f"{n} ({m})" for n, m in logins.nodes({"login": spec.login_nodes})),
+            f"Parts:       {', '.join(sorted(set(spec.parts))) or 'none'} (always: slurm, Prometheus, Grafana)",
             "", "Memory limits (an upper bound, what the governor admits against):",
             f"  {est['node_count']:>3} nodes          {est['nodes_mb']:>6} MB"]
     rows += [f"  {n:<16} {mb:>6} MB" for n, mb in sorted(est["services_mb"].items())]

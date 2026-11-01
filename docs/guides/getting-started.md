@@ -12,7 +12,7 @@ How to run workbench on your workstation and see it working. Keep this page in s
 ./scripts/benchctl stop       # stop the web page and the cluster
 ```
 
-To pick your own mix (for example 2 CPU and 4 GPU nodes with Jira) and see what it costs first, use `benchctl plan` and `benchctl up --cpu-nodes ...` ([choose the workbench](choose-workbench.md)).
+Plain `start` is the small `min` preset. To include the optional parts by category use `./scripts/benchctl start --ticketing jira --hardware bmc,bcm --access teleport` or `./scripts/benchctl start --addons` for all of them (Tab completes the flags). To pick your own mix (for example 2 CPU and 4 GPU nodes with Jira) and see what it costs first, use `benchctl plan` and `benchctl up --cpu-nodes ...` ([choose the workbench](choose-workbench.md)).
 
 Every command has the same shape, like `kubectl`: `benchctl VERB [RESOURCE] [NAME]`, for example `benchctl get nodes`,
 `benchctl exec gpu001 -- nvidia-smi`, `benchctl scenario run node-down`. `benchctl --help` lists the verbs;
@@ -90,6 +90,7 @@ that does. Components not built yet are skipped with a note.
 | Fake Jira | `curl -X POST http://127.0.0.1:8080/rest/api/2/issue -d '{"fields": {"project": {"key": "OPS"}, "summary": "hi"}}'`; failures: `curl -X POST http://127.0.0.1:8080/sim/failure -d '{"mode": "429", "count": 3}'` |
 | Slurm jobs | `docker exec workbench-slurmctld-1 sinfo` / `squeue` / `sbatch` |
 | Slurm REST | token: `docker exec workbench-slurmctld-1 scontrol token username=alice`; see ADR 0003 |
+| Teleport (when on) | `https://10.141.255.30:3080`; `tsh --proxy=10.141.255.30:3080 --insecure -i compose/generated/secrets/teleport/identity/alice ls`; steps in [Nodes and shells](../manual/04-nodes-and-shells.md#teleport-tsh-to-the-login-node-and-the-nodes) |
 | Build progress and diagrams | `docs/progress.html` |
 
 Inject a fault and watch it show up:
@@ -122,7 +123,7 @@ docker exec -it workbench-cn001-1 bash                            # a shell on a
 docker exec -u alice -it workbench-gpu001-1 bash                  # the same, as a simulated user
 ```
 
-For tools that connect over SSH (a desktop monitoring client), `benchctl up` starts a `login` container on `127.0.0.1:2222` with key login only and the Slurm client tools on PATH; the key is `compose/generated/secrets/ssh/id_ed25519` (ADR 0011):
+For tools that connect over SSH (a desktop monitoring client), `benchctl up` starts a `login` container (more login nodes, and Teleport-only ones: `benchctl up --login ssh,teleport`, see [Nodes and shells](../manual/04-nodes-and-shells.md#login-nodes-how-many-and-how-each-one-lets-you-in)) on `127.0.0.1:2222` with key login only and the Slurm client tools on PATH; the key is `compose/generated/secrets/ssh/id_ed25519` (ADR 0011):
 
 ```bash
 ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1 sinfo
@@ -133,7 +134,7 @@ A client that only accepts keys under `~/.ssh` can use `./scripts/benchctl ssh-k
 
 See what the output looks like in [Nodes and shells](../manual/04-nodes-and-shells.md). A shell that hangs may be a node the governor paused under memory pressure (`./scripts/benchctl status`). The other machine
 with a real `sshd` is the optional fidelity VM (`cd fidelity-vm && ./bin/up.sh`, then `vagrant ssh fidelity`). Teleport
-access to the simulated nodes is not built yet (issue 39). More in [Nodes and shells](../manual/04-nodes-and-shells.md).
+access (`./scripts/benchctl up --with teleport`, then `tsh ... ls`) is in [Nodes and shells](../manual/04-nodes-and-shells.md#teleport-tsh-to-the-login-node-and-the-nodes). More in [Nodes and shells](../manual/04-nodes-and-shells.md).
 
 ## 4b. The web page
 
@@ -141,7 +142,7 @@ access to the simulated nodes is not built yet (issue 39). More in [Nodes and sh
 .venv/bin/python -m webui        # prints a login link such as http://127.0.0.1:8088/login?token=...
 ```
 
-Open that link once (it sets a cookie; the token is kept in `compose/generated/secrets/ui_token`). Everything is on one screen. The strip at the top shows the governor level, free memory, how many services and nodes are healthy, any running scenario, and buttons for **▶ Scenarios**, **⚙ Settings**, help and a theme switch (auto, light, dark); press the level or memory chip for the **Governor** panel (level, memory and pressure trends, the governor's log). Under it, *Needs attention* lists anything that needs you. The stage has the **traffic diagram** (a round dot travels from *Clients* to a service for each real request; a diamond travels from *Faults* to the node it hits; *Pause animation* stops them, and they stop by themselves at governor L3 or for reduced motion) next to the **entity list**: one card per node and per service with its status and quick facts. Click a node to open its panel in place of the list: **Actions** to power it off, overheat it, fail its fans or inject a GPU error (then *Recover*), and **Info** for how to reach it. **▶ Scenarios** opens the scenario list (pick a speed, press Play, watch each step turn ok/skipped/failed, press Stop to abort); **⚙ Settings** changes the number of nodes and applies it. Slurm steps are skipped on this page (it has no Docker access by design); use `./scripts/benchctl scenario run` for those. On a phone the panels stack under each other.
+Open that link once (it sets a cookie; the token is kept in `compose/generated/secrets/ui_token`). Everything is on one screen. The strip at the top shows the governor level, free memory, how many services and nodes are healthy, any running scenario, then a **☰ Menu** (**▶ Scenarios**, **▦ Cluster architecture**, **✚ Health checks**, **⇩ Export**), help and a theme switch (auto, light, dark); press the level or memory chip for the **Governor** panel (level, memory and pressure trends, the governor's log). Under it, *Needs attention* lists anything that needs you. The stage has the **Infrastructure architecture** (a round dot travels from *Clients* to a service for each real request; a diamond travels from *Faults* to the node it hits; *Pause animation* stops them, and they stop by themselves at governor L3 or for reduced motion) with the login nodes, the Teleport proxy, the services and every node, one labelled line per way in (*direct SSH*, *Teleport*, *jump host*); hover a part for a tip, click it for a pop-up with its address and command, and **Hide node list** gives the diagram the whole width. Beside it is the **entity list**: one card per node and per service with its status and quick facts. Teleport, when it is on (`./scripts/benchctl start --access teleport`, or tick it under **Access** in **▦ Cluster architecture**), is a box in the diagram and a card in the list. Click a node to open its panel in place of the list: **Actions** to power it off, overheat it, fail its fans or inject a GPU error (then *Recover*), and **Info** for how to reach it. **▶ Scenarios** opens the scenario list (pick a speed, press Play, watch each step turn ok/skipped/failed, press Stop to abort); **▦ Cluster architecture** changes the number of nodes and applies it. Slurm steps are skipped on this page (it has no Docker access by design); use `./scripts/benchctl scenario run` for those. On a phone the panels stack under each other.
 
 ## 5. When something is wrong
 
@@ -163,4 +164,4 @@ To look at the web page without a screen: `pip install -e '.[browser]'`, `.venv/
 
 Once per clone: `./scripts/install-hooks.sh` (no sudo) installs the git hooks: no commits on `main`/`dev`, an issue reference in every commit message, a check that your git identity is your own GitHub noreply address (`./scripts/check-identity.sh`; GitHub credits a commit by the ID in that address, so a placeholder would credit a stranger), `validate.sh` before each commit, and a privacy scan (`./scripts/check-privacy.sh`) so no personal path, email or token is published. The repository is public, and the Claude skills under `.claude/` are symlinks into a home directory, so that folder is gitignored.
 
-`./scripts/verify.sh` (add `--full` for the live stack) before asking for a merge; see CLAUDE.md.
+`./scripts/verify.sh` (add `--full` for the live stack) before asking for a merge; see CLAUDE.md. To check one component, `./scripts/verify.sh --unit teleport --clean` (list them with `--list-units`).

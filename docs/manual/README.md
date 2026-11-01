@@ -10,7 +10,7 @@ The complete guide to using workbench. Read it front to back once, then use it a
 | 2 | [Install and start](02-install-and-start.md) | prerequisites, first start, stop, status |
 | 3 | [Using the cluster](03-using-the-cluster.md) | up, scale, down, Slurm jobs, the mock services, Grafana |
 | 4 | [Nodes and shells](04-nodes-and-shells.md) | **how to open a shell on a node** (`ssh` through the login node, or `docker exec`), users, the fidelity VM |
-| 5 | [The web page](05-web-page.md) | login, layout, the entity list and traffic, node actions, plan, scenarios |
+| 5 | [The web page](05-web-page.md) | login, layout, the entity list, the Infrastructure architecture, Teleport, node actions, plan, scenarios |
 | 6 | [Scenarios and faults](06-scenarios.md) | play, fast-forward, inject by hand, write your own |
 | 7 | [The governor](07-governor.md) | memory protection, levels, what gets paused or stopped |
 | 8 | [Configuration](08-configuration.md) | `sim.yaml`, profiles, changing the topology |
@@ -23,7 +23,7 @@ The same pages open inside the web page: click **? Help** in its header (http://
 
 Screenshots of the web page and of real terminal output are in chapters 3, 4 and 5 (`img/`).
 
-Short on time? [Getting started](../guides/getting-started.md) is the 10-minute version. Want 2 CPU and 4 GPU nodes with Jira, and to see the cost first? See [choose the workbench](../guides/choose-workbench.md). Importing the whole cluster into a monitoring client? See [export a profile](../guides/export-profile.md). Connecting one component at a time (Grafana, Jira, SSH...)? See [client setup by component](../guides/client-setup-by-component.md). Testing tickets (create, note, change status, a node that drains and gets a ticket)? See [tickets and their scenarios](../guides/jira-tickets.md). Testing a client's SSH handling? Follow [SSH connection testing](../guides/ssh-connection-testing.md) (with screenshots).
+Short on time? [Getting started](../guides/getting-started.md) is the 10-minute version. Want 2 CPU and 4 GPU nodes with Jira, and to see the cost first? See [choose the workbench](../guides/choose-workbench.md). Importing the whole cluster into a monitoring client? See [export a profile](../guides/export-profile.md). Connecting one component at a time (Grafana, Jira, SSH...)? See [client setup by component](../guides/client-setup-by-component.md). Testing tickets (create, note, change status, a node that drains and gets a ticket)? See [tickets and their scenarios](../guides/jira-tickets.md). Changing what the node health check looks at (add, edit, remove a check from the command line, a file or the page)? See [NHC checks](../guides/nhc-checks.md). Testing a client's SSH handling? Follow [SSH connection testing](../guides/ssh-connection-testing.md) (with screenshots). Working through the backlog? See the [issue triage](../guides/issue-triage.md).
 
 ## Conventions
 

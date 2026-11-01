@@ -85,9 +85,94 @@ ssh -i .vagrant/machines/fidelity/libvirt/private_key vagrant@<IP>      # plain 
 ./bin/down.sh                      # destroy it
 ```
 
-## Not built: SSH or Teleport to the simulated nodes
+## Login nodes: how many, and how each one lets you in
 
-The application under test is meant to reach nodes through Teleport (issue #39). That needs decisions that are still
-open (which access types, real Teleport or a mock) and an `sshd` in the node image. Until then, `docker exec` from the
-host is the way to reach a node; the application under test reaches the cluster through Slurm REST, Redfish and the
-other APIs in [chapter 3](03-using-the-cluster.md).
+By default there is one login node, `login`, reached by direct SSH. You can have 1 to 8, each with its own way in, so you can
+test Teleport against a login node that has no direct SSH at all.
+
+| Mode | What it means | Published port | Key login | Teleport |
+|---|---|---|---|---|
+| `ssh` | direct SSH with the cluster key (the default) | `127.0.0.1:2222`, then 2223, ... by position | yes | no |
+| `teleport` | only a Teleport certificate gets in | none | refused | yes |
+| `both` | either | yes | yes | yes |
+
+The first node is `login`, then `login2`, `login3`, ... (addresses 10.141.255.254, .252, .251, ...).
+
+**1. Choose the layout** (pick one):
+
+```bash
+./scripts/benchctl start --login ssh,teleport          # login = direct SSH, login2 = Teleport only
+./scripts/benchctl up --login both,teleport,ssh        # three login nodes
+```
+
+`--login` takes one mode per node, comma separated; Tab completes the modes. A `teleport` or `both` node turns the Teleport part on by itself. To keep a layout, set it in `sim.yaml`:
+
+```yaml
+login: [ssh, teleport]
+```
+
+or in the page: **☰ Menu → ▦ Cluster architecture → Login nodes** (**Add login node**, pick *Direct SSH*, *Teleport only* or *Direct SSH and Teleport* for each, **Apply**).
+
+![The Cluster architecture sheet: three login nodes, each with its own way in](img/web-login-nodes.png)
+
+**2. See how to reach each one.** The page's **Connections** tab has one row per login node with the exact command, and `./scripts/benchctl up` prints them:
+
+![Connections: login (direct SSH), login2 (Teleport only), login3 (both)](img/web-login-connections.png)
+
+**3. Use them.**
+
+```bash
+ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1       # login   (ssh or both)
+ID=compose/generated/secrets/teleport/identity/alice
+tsh --proxy=10.141.255.30:3080 --insecure -i $ID ssh alice@login2                 # login2  (teleport or both)
+```
+
+A key offered to a `teleport` node is refused (`Permission denied`), and it has no published port. A node set to `ssh` is not registered in Teleport, so `tsh ls` does not list it. Fewer login nodes than before: the extra containers are removed on the next `up`. The client profile export (`benchctl export profile`) uses the first node that takes a key.
+
+## Teleport: `tsh` to the login nodes and the nodes
+
+The optional **Teleport** part (auth and proxy in one container, about 256 MB limit, [ADR 0020](../adr/0020-teleport-agentless-openssh.md))
+lets a client reach the login nodes that use Teleport (`teleport` or `both`, see above) and every compute and GPU node through Teleport. Nodes keep their own `sshd` and trust
+the Teleport CA (Teleport's agentless OpenSSH mode); no Teleport process runs on a node. It is off by default.
+
+### Steps
+
+**1. Turn it on** (pick one; add `--login both` or `--login teleport` to make a login node reachable through it):
+
+```bash
+./scripts/benchctl start --access teleport        # from a terminal (adds Teleport to what runs; leaves the page up)
+./scripts/benchctl up --with teleport             # the same on a running cluster, without the page
+```
+
+or in the page: **☰ Menu → ▦ Cluster architecture → Access → Teleport → Apply** (press twice to confirm), see [the web page](05-web-page.md#teleport-from-the-page). Then check it: the `teleport` card in the entity list says `answering`.
+
+**2. Reach it with an identity file.** Nothing to set up: one file per user in `sim.yaml`, valid for `teleport.cert_ttl` (12 h by default; `benchctl up` writes fresh ones).
+
+```bash
+ID=compose/generated/secrets/teleport/identity/alice
+tsh --proxy=10.141.255.30:3080 --insecure -i $ID ls                          # the Teleport login nodes and every node
+tsh --proxy=10.141.255.30:3080 --insecure -i $ID ssh alice@cn001 hostname    # a command on a node
+```
+
+`--insecure` is needed because the proxy's certificate is self-signed. Each `ssh` shows up in the page as a dot from the clients to the Teleport box.
+
+**3. Or use `tsh login` and the browser** (a password and a one-time code, because Teleport 18 cannot turn the second factor off):
+
+```bash
+./scripts/benchctl add invite alice     # prints a one-time link
+```
+
+Open the link in a browser (accept the certificate warning), choose a password and scan the QR code with an authenticator app (or keep the secret it shows for `oathtool`). Then:
+
+```bash
+tsh login --proxy=10.141.255.30:3080 --insecure --user=alice
+tsh ls
+```
+
+The web UI is at `https://10.141.255.30:3080` (same login). The proxy has its own private address and the name `teleport.workbench.test` (resolved inside the cluster; on this machine add it once, your sudo, never run for you: `echo '10.141.255.30 teleport.workbench.test' | sudo tee -a /etc/hosts`). `127.0.0.1:3080` stays as a fallback. The page lists the address and the command in **Connections** (the Teleport row), and shows Teleport's traffic in the Infrastructure architecture.
+
+![The Infrastructure architecture with Teleport: a dot travels from the clients to the Teleport box for each SSH connection](img/web-infrastructure.png)
+
+**A login or compute node you drop is forgotten.** `benchctl up` removes the Teleport registration and the host certificate of every node the workbench no longer has, so `tsh ls` lists only what exists (before this, a dropped `login2` stayed registered and a dial failed with *no route to host*). **Your password survives `up`.** `benchctl up` creates a Teleport user only when it does not exist yet, so the password and one-time code you chose from an invite stay. (Before this fix every `up` replaced the users and `tsh login` then said *invalid username or password*; run `benchctl add invite <user>` once to set them again.) **Good to know.** A Teleport container created before the page showed Teleport has no diagnostics port yet, so the card says `not answering` and no dots appear; run `./scripts/benchctl up --with teleport` once to recreate it. Your `tsh` must not be a newer major version than the server (`teleport.version` in `sim.yaml`, default 18.x); use a separate
+`TELEPORT_HOME` if you keep other Teleport profiles. Not simulated: the Teleport agent's extras (dynamic labels, session
+recording that survives a dropped connection, session sharing), Kubernetes, web and database access.
