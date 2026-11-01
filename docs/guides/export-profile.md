@@ -29,10 +29,10 @@ Open **☰ Menu → ⇩ Export** in the top strip, tick *One BMC target per node
 
 ## What is in the file
 
-Only parts the chosen profile builds: one **cluster entry per login node**, each with its own way in (`login` direct SSH: `10.141.255.254:22`, user `alice`, private-key auth; a Teleport login: a `teleport` block with the proxy `10.141.255.30:3080`, the DNS name `teleport.workbench.test`, the node and the user; the first entry is a key login and carries Slurm, Grafana and Jira), Slurm (partitions from
+Only parts the chosen profile builds: one **cluster entry per login node**, each with its own way in (`login` direct SSH: `10.141.255.254:22`, user `alice`, private-key auth; a Teleport route: the node's name (`login2`) as the host plus a `teleport` block with the proxy `10.141.255.30:3080`, the user and `insecure` (self-signed proxy); a `both` login gets two entries, direct and `-teleport`; the first entry is a key login and carries Slurm, Grafana and Jira), Slurm (partitions from
 `sim.yaml`), Grafana (`http://10.141.255.21:3000`, dashboard `hpc-overview`, GPU datasource `prometheus`, label
 `Hostname`), Jira (`http://10.141.255.11:8080`, project `OPS`), storage (`~`) and, with `--bmc`, a target per node
-(its own `10.148.x.y:443`, user `admin`). `--loopback` writes `127.0.0.1` and the published ports instead (all BMCs then share `127.0.0.1:8443`) (a client that cannot route to the cluster network, or that insists on HTTPS for non-local Jira). It has no password, token or key path; the Teleport identity file is never in it (`compose/generated/secrets/teleport/identity/<user>`: set it in the client). The `teleport` block uses the workbench's own field names (`proxy`, `dnsName`, `clusterName`, `insecure`, `node`, `username`); the client may name them differently, and the export says so in a warning. Kubernetes and BCM are not
+(its own `10.148.x.y:443`, user `admin`). `--loopback` writes `127.0.0.1` and the published ports instead (all BMCs then share `127.0.0.1:8443`) (a client that cannot route to the cluster network, or that insists on HTTPS for non-local Jira). It has no password, token or key path; the client signs in to Teleport itself (its **Log in** button, password and one-time code from `benchctl add invite alice`); it does not use the identity files. The shape was checked against the client's own importer. Kubernetes and BCM are not
 exported: Kubernetes is not built, and BCM is configured in the client over the SSH connection
 ([by component](client-setup-by-component.md)).
 
@@ -52,7 +52,7 @@ the client once and copy the first two fields of its file.
 
 - **`cannot export: the profile format identifier is not set`**: do the one-time setting above.
 - **`no login node`**: the profile has no `access` group; use `min`, `std` or `full`.
-- **A Teleport-only login is in the file, but the client cannot import it**: the importer does not know the `teleport` block's names. Type the values from the **Connections** tab by hand and tell us the client's names, so the export can match them.
+- **A Teleport entry says Login needed**: run `./scripts/benchctl add invite alice`, open the link, choose a password and scan the code, then press **Log in** in the client. The proxy must be reachable: `tsh --proxy=10.141.255.30:3080 --insecure ls` shows it from a terminal.
 - **The client says the file is not a profile or is version N**: the ID or version in `.git/export-format` does not
   match the client; copy them again from an export of the client.
 - **Import works but Grafana shows 401**: the token expired when you ran `up` again; paste the current one.

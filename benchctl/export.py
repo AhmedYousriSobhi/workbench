@@ -31,21 +31,29 @@ def format_id(flag: str | None = None, env: dict | None = None, local: Path = LO
     return ident, int(version or 1)
 
 
-def login_cluster(sim: dict, plan: dict, index: int, login: str, mode: str, name: str, user: str, loopback: bool) -> dict:
-    """One entry per login node, the way its mode says to reach it (ADR 0023): `ssh` and `both` connect by key, `teleport` and `both`
-    carry a `teleport` block (proxy, cluster, node: no credential, a file never holds one). Teleport-only has no port to dial, so its
-    connection points at the proxy."""
-    keyed = mode in logins.DIRECT
-    host, port = (("127.0.0.1", compose.SSH_PORT + index) if loopback else (addressing.address_of(plan, login), 22)) if keyed \
-        else ("127.0.0.1" if loopback else teleport.proxy_ip(sim), teleport.PROXY_PORT)
+def login_routes(sim: dict, plan: dict, index: int, login: str, mode: str, user: str, loopback: bool) -> list[tuple[str, dict, dict | None]]:
+    """The ways into one login node, as (route name, connection, teleport block): `ssh` and `both` connect by key, `teleport` and `both`
+    go through the proxy. A client describes a Teleport route as the node's name plus a `teleport` block (proxy, user, insecure) and
+    signs in itself with `tsh login` (password and one-time code, `benchctl add invite`): no identity file, no key and no port is in the file."""
+    routes = []
+    if mode in logins.DIRECT:
+        host, port = ("127.0.0.1", compose.SSH_PORT + index) if loopback else (addressing.address_of(plan, login), 22)
+        routes.append(("direct", {"host": host, "port": port, "username": user, "authMethod": "private-key"}, None))
+    if mode in logins.VIA_TELEPORT:
+        proxy = f"127.0.0.1:{teleport.PROXY_PORT}" if loopback else teleport.proxy_addr(sim)
+        routes.append(("teleport", {"host": login, "port": 22, "username": user, "authMethod": "agent"},
+                       {"proxy": proxy, "user": user, "insecure": True}))  # self-signed proxy; the node name is the one Teleport registered
+    return routes
+
+
+def login_cluster(name: str, login: str, route: str, mode: str, connection: dict, tele: dict | None) -> dict:
     return {
         "name": name,
-        "description": f"Simulated cluster (workbench), login node {login}: {logins.LABEL[mode]}. Synthetic data on 127.0.0.1.",
-        "tags": ["simulated", f"login:{mode}"],
-        "connection": {"host": host, "port": port, "username": user, "authMethod": "private-key" if keyed else "teleport"},
-        "grafana": None, "jira": None, "azureTunnel": None, "scheduler": None, "k8s": None,
-        "teleport": {"proxy": f"127.0.0.1:{teleport.PROXY_PORT}" if loopback else teleport.proxy_addr(sim), "dnsName": teleport.DNS_NAME,
-                     "clusterName": teleport.CLUSTER, "insecure": True, "node": login, "username": user} if mode in logins.VIA_TELEPORT else None,
+        "description": f"Simulated cluster (workbench), login node {login}, {route}"
+                       f"{' (this node accepts both)' if mode == 'both' else ''}. Synthetic data on 127.0.0.1.",
+        "tags": ["simulated", f"login:{login}"],
+        "connection": connection,
+        "grafana": None, "jira": None, "azureTunnel": None, "scheduler": None, "k8s": None, "teleport": tele,
         "storage": {"paths": ["~"], "autoRefresh": False},
     }
 
@@ -67,8 +75,10 @@ def build(sim: dict, services: set[str], name: str = "workbench", include_bmc: b
     present = [(i, n, m) for i, (n, m) in enumerate(logins.nodes(sim)) if n in services]  # a login that is not built is left out
     if "login" not in services or not present:
         raise ExportError("this profile has no login node (group 'access'): a client cannot connect by SSH")
-    present.sort(key=lambda t: t[2] == "teleport")  # the first entry (it carries Slurm, Grafana, Jira) is one that takes a key, if any
-    clusters = [login_cluster(sim, plan, i, n, m, name if k == 0 else f"{name}-{n}", ssh_user, loopback) for k, (i, n, m) in enumerate(present)]
+    routes = [(n, m, r, c, t) for i, n, m in present for r, c, t in login_routes(sim, plan, i, n, m, ssh_user, loopback)]
+    routes.sort(key=lambda x: x[2] == "teleport")  # the first entry (it carries Slurm, Grafana, Jira) is a key login, if there is one
+    names = [name if k == 0 else f"{name}-{n}" + ("-teleport" if r == "teleport" and m == "both" else "") for k, (n, m, r, c, t) in enumerate(routes)]
+    clusters = [login_cluster(nm, n, r, m, c, t) for nm, (n, m, r, c, t) in zip(names, routes, strict=True)]
     cluster = clusters[0]
     if "slurmctld" in services:
         cluster["scheduler"] = {"kind": "slurm", "scope": "mine", "partitions": [p["name"] for p in sim.get("partitions", [])],
@@ -101,9 +111,8 @@ def warnings(services: set[str], sim: dict | None = None) -> list[str]:
         out.append("Slurm accounting is not part of this cluster, so `sacct` says accounting storage is disabled and the "
                    "client cannot read job history: rebuild with `benchctl up --with accounting`")
     if sim and any(m in logins.VIA_TELEPORT for n, m in logins.nodes(sim) if n in services):
-        out.append("a login node uses Teleport: its `teleport` block (proxy, clusterName, insecure, node, username) is the workbench's own "
-                   "naming and the client may name these differently. The identity file is never in the profile: "
-                   f"{teleport.SECRETS_DIR}/identity/<user>")
+        out.append("a login node is reached through Teleport: sign in from the client (its Log in button, password and one-time code from "
+                   "`benchctl add invite <user>`); the client does not use the identity files, and the file holds no credential")
     return out
 
 

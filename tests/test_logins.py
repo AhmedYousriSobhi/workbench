@@ -1,4 +1,5 @@
 """Login nodes (#189): how many, and how each one authenticates (ssh, teleport, both)."""
+import re
 from pathlib import Path
 
 import pytest
@@ -68,22 +69,23 @@ def test_login_script_gives_a_teleport_login_an_empty_authorized_keys():
     assert 'WORKBENCH_LOGIN_AUTH:-ssh}" = "teleport"' in text and "install -m 644 /dev/null /etc/ssh/authorized_keys" in text
 
 
-def test_client_profile_has_one_cluster_per_login_with_its_auth_method():
+def test_client_profile_has_one_entry_per_route_into_each_login():
     s3 = sim("ssh", "teleport", "both")
     services = {"login", "login2", "login3", "slurmctld"}
     cl = export.build(s3, services, "w", False, None)["clusters"]
-    assert [c["name"] for c in cl] == ["w", "w-login3", "w-login2"]            # a key login first (it carries Slurm), Teleport only last
-    assert [c["connection"]["authMethod"] for c in cl] == ["private-key", "private-key", "teleport"]
+    assert [c["name"] for c in cl] == ["w", "w-login3", "w-login2", "w-login3-teleport"]   # key logins first (the first carries Slurm); `both` has two routes
+    assert [c["connection"]["authMethod"] for c in cl] == ["private-key", "private-key", "agent", "agent"]
     assert cl[0]["teleport"] is None and cl[0]["scheduler"] is not None and cl[1]["scheduler"] is None
-    assert cl[1]["teleport"] == {"proxy": "10.141.255.30:3080", "dnsName": "teleport.workbench.test", "clusterName": "workbench", "insecure": True, "node": "login3", "username": "alice"}
-    assert cl[2]["connection"]["port"] == 3080 and cl[2]["connection"]["host"] == "10.141.255.30" and cl[2]["teleport"]["node"] == "login2"
-    assert "identity" not in export.to_json({"clusters": cl}, ("x", 1))         # no credential in the file
+    # a Teleport route is the node's name plus {proxy, user, insecure}: the only fields the client's importer reads (checked against its parser)
+    assert cl[2]["connection"] == {"host": "login2", "port": 22, "username": "alice", "authMethod": "agent"}
+    assert cl[2]["teleport"] == {"proxy": "10.141.255.30:3080", "user": "alice", "insecure": True}
+    assert cl[3]["connection"]["host"] == "login3" and cl[3]["teleport"] == cl[2]["teleport"]
+    assert not re.search(r"identity|privateKeyPath|password|token", export.to_json({"clusters": cl}, ("x", 1)), re.IGNORECASE)  # no credential in the file
     only = export.build(sim("teleport"), {"login", "slurmctld"}, "w", False, None)["clusters"]
-    assert len(only) == 1 and only[0]["connection"]["authMethod"] == "teleport"  # Teleport only is still a profile, not an error
+    assert len(only) == 1 and only[0]["teleport"] is not None                                # Teleport only is still a profile, not an error
     loop = export.build(sim("teleport", "ssh"), {"login", "login2", "slurmctld"}, "w", False, None, loopback=True)["clusters"]
-    assert loop[0]["connection"]["port"] == 2223 and loop[1]["connection"]["port"] == 3080
-    assert any("Teleport" in w for w in export.warnings(services, s3)) and export.warnings(services, sim("ssh")) == [
-        "Slurm accounting is not part of this cluster, so `sacct` says accounting storage is disabled and the client cannot read job history: rebuild with `benchctl up --with accounting`"]
+    assert loop[0]["connection"]["port"] == 2223 and loop[1]["teleport"]["proxy"] == "127.0.0.1:3080"
+    assert any("Teleport" in w and "Log in" in w for w in export.warnings(services, s3)) and not any("Teleport" in w for w in export.warnings(services, sim("ssh")))
 
 
 def test_connections_has_one_row_per_login_with_the_right_command():
