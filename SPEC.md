@@ -45,7 +45,7 @@ Normative requirements for workbench. [README.md](README.md) gives the overview 
 | C-12 | Network chaos | `tc netem` on Docker bridge networks for latency, loss, partition. Toxiproxy only on the Jira HTTP path. |
 | C-14 | Login node | One `login` container (`sshd`, Slurm client tools, key login only, no root, TCP forwarding on, simulated users from `sim.yaml`) on 127.0.0.1:2222, unprivileged and memory-limited, keys generated into `compose/generated/secrets/ssh`; for SSH-based clients that run `squeue`/`sinfo`/`sacct` over SSH (ADR 0011). |
 | C-13 | Time dilation | `time_dilation` scales job durations and arrival rates inversely in user-sim and scenario-engine. |
-| C-15 | Node health check | `slurmd` runs `images/node-base/nhc` every 30 s (`HealthCheckProgram`): on a GPU node it drains the node (`reason=NHC: ...`) when a GPU is missing against the GRES or reports an XID, and resumes only a drain it made. NIC flapping and IB port checks wait for their simulation (issue 143). `benchctl up` restarts `slurmctld` when `slurm.conf` changes. |
+| C-15 | Node health check | `slurmd` runs `images/node-base/nhc` every 30 s (`HealthCheckProgram`): it also runs as Slurm `Prolog` and `Epilog` (an unhealthy node fails the job, which requeues). It drains the node (`reason=NHC: ...`) when a GPU is missing against the GRES, reports an XID, an InfiniBand port is down or a NIC is flapping (the exporter farm models both), and resumes only a drain it made. When Slurm takes a node out of service, `slurmctld`'s `node_watch.py` files or comments a Jira ticket (issues 143, 160). `benchctl up` restarts `slurmctld` when `slurm.conf` changes. |
 
 ## 4a. Component interfaces (summary)
 
