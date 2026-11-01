@@ -252,7 +252,7 @@ def test_get_selectors_sort_and_names(monkeypatch):
     assert runner.invoke(cli.app, ["get", "nodes", "-l", "kind=gpu,state=paused", "-o", "name"]).stdout.split() == ["gpu001"]
     order = runner.invoke(cli.app, ["get", "nodes", "--sort-by", "state", "-o", "name"]).stdout.split()
     assert order[:2] == ["cn003", "cn004"]  # "absent" sorts before "paused" and "running"
-    assert runner.invoke(cli.app, ["get", "scenarios", "-o", "name"]).stdout.split()[0] == "drain-ticket"
+    assert runner.invoke(cli.app, ["get", "scenarios", "-o", "name"]).stdout.split()[0] == "drain-mid-job"
 
 
 def test_get_query_mistakes_are_usage_errors_on_stderr(monkeypatch):

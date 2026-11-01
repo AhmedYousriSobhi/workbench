@@ -21,6 +21,7 @@ from . import (
     nhc,
     nodes,
     scenario,
+    slurmtrace,
     stack,
     teleport,
     workbench,
@@ -860,7 +861,8 @@ def scenario_list() -> None:
 @scenario_app.command("run")
 def scenario_run(name: str = typer.Argument(..., autocompletion=completion.scenarios, help="see `scenario list`"),
                  speed: float = typer.Option(1.0, help="fast-forward: 10 plays it ten times faster"),
-                 dry_run: bool = typer.Option(False, "--dry-run", help="validate and show the timeline only")) -> None:
+                 dry_run: bool = typer.Option(False, "--dry-run", help="validate and show the timeline only"),
+                 trace: bool = typer.Option(False, "--trace", help="after each step print job states and the new Slurm log lines")) -> None:
     """Play a scenario against the running stack; exit 1 if a step or expectation fails."""
     sim = _sim()
     try:
@@ -877,7 +879,14 @@ def scenario_run(name: str = typer.Argument(..., autocompletion=completion.scena
         for s in scenario.plan(sc):
             typer.echo(f"[{s.at:6.1f}s] {s.target} {s.do}")
         raise typer.Exit(0)
-    report = scenario.run(sc, speed=speed, dilation=float(sim.get("time_dilation", 1.0)), say=typer.echo)
+    if scenario.disruptive(sc) and not stack.governor_admits(0, typer.echo):  # GV-9: nothing starts at L2 and above
+        typer.echo("not run: the governor admits no new work at this memory level (see `benchctl status`)", err=True)
+        raise typer.Exit(1)
+    hooks = {}
+    if trace:
+        tracer = slurmtrace.Tracer(slurmtrace.nodes_of(sc), say=typer.echo)
+        hooks["on_step"] = tracer.step
+    report = scenario.run(sc, speed=speed, dilation=float(sim.get("time_dilation", 1.0)), say=typer.echo, **hooks)
     typer.echo("scenario " + ("passed" if report.ok else "FAILED"))
     raise typer.Exit(0 if report.ok else 1)
 

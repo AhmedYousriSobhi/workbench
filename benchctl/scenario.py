@@ -120,9 +120,23 @@ def validate(sc: dict, sim: dict) -> list[str]:
             problems += [f"step {i}: {m}" for m in ssh_problems(do)]
         if t == "jira" and "tickets" in do:
             problems += [f"step {i}: {m}" for m in jira_ticket_problems(do["tickets"])]
-        names = [n for key in ("nodes", "drain", "down", "resume", "power_off", "power_on") for n in do.get(key) or []]
+        if t == "slurm":
+            problems += [f"step {i}: {m}" for m in daemon_problems(do)]
+        names = [n for key in ("nodes", "drain", "down", "resume", "power_off", "power_on", "slurmd_stop", "slurmd_start",
+                               "slurmd_restart") for n in do.get(key) or []]
+        if isinstance(do.get("submit"), dict) and do["submit"].get("node"):
+            names.append(do["submit"]["node"])
         problems += [f"step {i}: unknown node {n!r}" for n in names if n not in nodes]
     return problems
+
+
+def daemon_problems(do: dict) -> list[str]:
+    sub = do.get("submit")
+    if sub is None:
+        return []
+    if not isinstance(sub, dict) or not sub.get("node"):
+        return ["submit needs a mapping with `node`"]
+    return [f"submit: unknown key {k!r}" for k in sorted(set(sub) - SUBMIT_KEYS)]
 
 
 def jira_ticket_problems(tk) -> list[str]:
@@ -192,7 +206,44 @@ def post(url: str, body: dict, timeout: float = 10) -> None:
     urllib.request.urlopen(req, timeout=timeout).close()
 
 
+HOLD = "/run/workbench/slurmd.hold"  # images/node-base/slurmd-run waits while this file exists
+DAEMON_KEYS = ("slurmd_stop", "slurmd_start", "slurmd_restart", "slurmctld_restart", "submit", "cancel")
+SUBMIT_KEYS = {"node", "user", "partition", "gres", "wrap"}
 SLURM_STATES = {"drain": "drain", "down": "down", "resume": "resume", "power_off": "off", "power_on": "on"}
+
+
+def disruptive(sc: dict) -> bool:
+    """True when a step restarts or stops a Slurm daemon or starts a job: the governor must admit that first (GV-9)."""
+    return any(set(s.get("do") or {}) & set(DAEMON_KEYS) for s in sc.get("steps", []))
+
+
+def submit_command(sub: dict) -> list[str]:
+    """`sbatch` as a simulated user on the login node: a real job pinned to one node (a `sleep`, or whatever `wrap` says)."""
+    cmd = ["docker", "exec", "-u", sub.get("user", "alice"), LOGIN, "sbatch", "-D", "/tmp", f"--nodelist={sub['node']}"]
+    for flag, key in (("-p", "partition"), ("--gres", "gres")):
+        if sub.get(key):
+            cmd += [flag, str(sub[key])]
+    return cmd + [f"--wrap={sub.get('wrap', 'sleep 600')}"]
+
+
+def daemon_commands(do: dict) -> list[list[str]]:
+    """Docker commands for the resilience steps. A stop creates the hold file first so the supervisor does not bring
+    slurmd back; `pkill -x slurmd` stops only the daemon (slurmstepd, the job's step process, is a different name)."""
+    cmds: list[list[str]] = []
+    for n in do.get("slurmd_stop", []):
+        c = f"workbench-{n}-1"
+        cmds += [["docker", "exec", c, "touch", HOLD], ["docker", "exec", c, "pkill", "-x", "slurmd"]]
+    for n in do.get("slurmd_restart", []):  # no hold file: the supervisor starts slurmd again by itself
+        cmds.append(["docker", "exec", f"workbench-{n}-1", "pkill", "-x", "slurmd"])
+    for n in do.get("slurmd_start", []):
+        cmds.append(["docker", "exec", f"workbench-{n}-1", "rm", "-f", HOLD])
+    if do.get("slurmctld_restart"):  # slurmctld is the container's main process, so restarting it is restarting the container
+        cmds.append(["docker", "restart", "-t", "10", SLURMCTLD])
+    if do.get("submit"):
+        cmds.append(submit_command(do["submit"]))
+    if do.get("cancel"):
+        cmds.append(["docker", "exec", SLURMCTLD, "scancel", "--quiet", "-u", "alice"])
+    return cmds
 
 
 def side_effects(step: Step) -> list[Step]:
@@ -264,7 +315,7 @@ def _apply(step: Step, poster, runner, host: bool, slurm) -> Outcome:
     label = f"{step.target} {json.dumps(step.do, sort_keys=True)}"
     if step.target in NOT_BUILT:
         return Outcome(label, "skipped", f"{step.target} is not built yet")
-    if step.target == "slurm" and not host and slurm:  # no Docker here: the governor does it
+    if step.target == "slurm" and not host and slurm and not set(step.do) & set(DAEMON_KEYS):  # no Docker: the governor does it
         for key, state in SLURM_STATES.items():
             for n in step.do.get(key, []):
                 ok, detail = slurm(n, state, step.do.get("reason"))
@@ -300,6 +351,10 @@ def _apply(step: Step, poster, runner, host: bool, slurm) -> Outcome:
             for n in step.do.get("resume", []):
                 r = runner(["docker", "exec", SLURMCTLD, "scontrol", "update", f"nodename={n}", "state=resume"])
                 if r.returncode:
+                    return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+            for cmd in daemon_commands(step.do):
+                r = runner(cmd)
+                if r.returncode and cmd[3:4] != ["pkill"]:  # pkill exits 1 when slurmd is already down: that is the goal
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip())
         elif step.target == "jira":
             if "tickets" in step.do:  # {tickets: {action: create|transition|comment|reset, ...}}
@@ -348,6 +403,15 @@ def jira_status(jql: str, status: str, count: int | None = None) -> bool:
     return bool(found) and all(i["fields"]["status"]["name"] == status for i in found) and count in (None, len(found))
 
 
+def job_states(node: str, runner=checks.run) -> list[str]:
+    r = runner(["docker", "exec", SLURMCTLD, "squeue", "-h", "-w", node, "-o", "%T"])
+    return r.stdout.split() if r.returncode == 0 else []
+
+
+def stepd_alive(node: str, runner=checks.run) -> bool:
+    return runner(["docker", "exec", f"workbench-{node}-1", "pgrep", "-x", "slurmstepd"]).returncode == 0
+
+
 def expectation(exp: dict, runner=checks.run, host: bool = True):
     """(label, holds(), within seconds) for one assertion; holds is None when it cannot be evaluated here."""
     (kind, args), = exp.items()
@@ -355,6 +419,10 @@ def expectation(exp: dict, runner=checks.run, host: bool = True):
     within = parse_duration(args.get("within", "0s"))
     if kind == "slurm.node_state" and host:
         return label, lambda: args["state"] in node_state(args["node"], runner), within
+    if kind == "slurm.job_state" and host:  # a job on `node` is in `state` (RUNNING, PENDING, ...)
+        return label, lambda: args["state"] in job_states(args["node"], runner), within
+    if kind == "slurm.stepd" and host:  # a slurmstepd runs on `node` (alive: true) or none does (alive: false)
+        return label, lambda: stepd_alive(args["node"], runner) == bool(args.get("alive", True)), within
     if kind == "jira.issue_created":
         return label, lambda: jira_labels(args["labels"]), within
     if kind == "jira.issue_status":

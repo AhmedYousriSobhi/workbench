@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**81% built** (35 done, 31 in review, 11 partial, 4 to do, 81 items).
+**82% built** (35 done, 32 in review, 11 partial, 4 to do, 82 items).
 
 ## Roadmap
 
@@ -13,7 +13,7 @@ flowchart LR
     p1["Governor<br/>86%"]:::partial
     p2["Slurm<br/>100%"]:::review
     p3["Mocks<br/>83%"]:::partial
-    p4["People and chaos<br/>0%"]:::partial
+    p4["People and chaos<br/>25%"]:::partial
     p5["Kubernetes<br/>50%"]:::partial
     p6["Fidelity VM<br/>0%"]:::partial
     p7["Web UI and profiles<br/>73%"]:::partial
@@ -164,17 +164,18 @@ _Fake BMC, BCM and Jira so the app's integrations can be exercised._
 
 5/12 done
 
-### People and chaos (0%)
+### People and chaos (25%)
 
 _Simulated users and engineers, scripted faults._
 
 | Part | Status | How it is built | Where | PR |
 |---|---|---|---|---|
 | Scenario files | 🟡 Partial | Twelve scenarios: ib-port-down, gpu-xid-storm, node-down, fan-failure, jira-429, jira-outage, jira-flap, ticket-lifecycle, drain-ticket and ticket-wave run now; pod-crashloop and k8s-node-notready need k3d/KWOK. | `scenarios` | #73 |
+| Slurm resilience scenarios and trace | 🔍 In review | Four scenarios start a real job (and a simulated GPU job) and restart or stop slurmd, restart slurmctld or drain under it; `scenario run NAME --trace` prints job states, slurmstepd pids and the new Slurm log lines per step. slurmd now runs under slurmd-run instead of as PID 1 so it can restart without the container. Steps: submit, cancel, slurmd_restart|stop|start, slurmctld_restart; expect slurm.job_state, slurm.stepd. Unit tests run; live test written, NOT yet run (observed behaviour to be recorded). Issue 220. | `scenarios/slurmd-*.yaml`, `scenarios/slurmctld-restart-mid-job.yaml`, `scenarios/drain-mid-job.yaml`, `benchctl/slurmtrace.py`, `images/node-base/slurmd-run`, `tests/real/test_slurmresilience_real.py`, `docs/guides/slurm-resilience.md` | - |
 | user-sim and ticket-bot | ⬜ To do | Personas with Poisson arrivals and engineers working tickets. | - | - |
 | scenario-engine | 🟡 Partial | `benchctl scenario list|run NAME [--speed N] [--dry-run]`: steps drive bmc-farm, bcm-mock, gpu-exporter, jira-mock, Slurm (scontrol) and the login node's sshd (ssh target: down, hung, up, rotate_host_key, max_sessions, reject_auth, node_sshd + nodes, reset; scenarios ssh-host-key-changed, login-node-down, login-node-hung, ssh-session-limit, ssh-key-refused, ssh-node-sshd-down; tests/real/test_ssh_faults_real.py); ramps; expect (slurm.node_state, jira.issue_created) watched from the start; k8s and ticket-bot steps skipped. Runs in the host CLI, not a container (ADR 0006). Verified live. | `benchctl/scenario.py` | #73 |
 
-0/3 done
+0/4 done
 
 ### Kubernetes (50%)
 

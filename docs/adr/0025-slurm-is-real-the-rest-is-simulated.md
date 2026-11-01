@@ -37,3 +37,11 @@ client depends on behaviour that emerges from state and timing, and the real sof
   against corruption, not a compromised mirror. A rebuild takes a few minutes.
 - If memory or build time forces a cut, order of removal: `slurmdbd`/MariaDB (already optional), then `slurmd` count.
   Replacing the scheduler with a mock is not on that list.
+
+## Addendum: resilience tests (issue 220)
+The expectation that `slurmstepd` survives a `slurmd` restart and the job reattaches is tested, not assumed:
+`scenarios/slurmd-restart-mid-job.yaml` and three siblings, with a log trace ([guide](../guides/slurm-resilience.md)) and
+`tests/real/test_slurm_resilience_real.py`. Making this testable changed one thing: `slurmd` no longer runs as the node
+container's PID 1 (it would take the container and every step with it) but under `images/node-base/slurmd-run`, a
+loop that restarts it unless a hold file exists. `slurmctld` stays PID 1, so its restart is a container restart. The
+observed behaviour, including any disagreement with Slurm's documentation, is recorded in the guide after the first live run.
