@@ -1,0 +1,59 @@
+# Ported from the earlier Kubernetes lab bin/fixtures-signals.sh: workload signals for monitor features.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: stuck, namespace: team-a}
+spec:
+  replicas: 1
+  progressDeadlineSeconds: 10
+  selector: {matchLabels: {app: stuck}}
+  template:
+    metadata: {labels: {app: stuck}}
+    spec:
+      containers: [{name: c, image: "example.invalid/none:1"}]
+---
+apiVersion: batch/v1
+kind: Job
+metadata: {name: fails, namespace: team-b}
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers: [{name: c, image: "rancher/mirrored-library-busybox:1.36.1", command: ["sh","-c","exit 1"]}]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: data, namespace: team-b}
+spec:
+  storageClassName: does-not-exist
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 1Gi}}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata: {name: agent, namespace: team-a}
+spec:
+  selector: {matchLabels: {app: agent}}
+  template:
+    metadata: {labels: {app: agent}}
+    spec:
+      containers: [{name: c, image: "example.invalid/agent:1"}]
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: sized, namespace: team-a}
+spec:
+  containers: [{name: c, image: "rancher/mirrored-pause:3.6", resources: {requests: {cpu: 500m, memory: 256Mi}}}]
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: privileged, namespace: team-b}
+spec:
+  hostNetwork: true
+  containers: [{name: c, image: "rancher/mirrored-pause:3.6", securityContext: {privileged: true}}]
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata: {name: pods, namespace: team-a}
+spec:
+  hard: {pods: "8"}

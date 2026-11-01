@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="workbench logo: servers linked in a W on a bench">
+<style>.m{fill:#0b8f80}.i{fill:#14211f}.l{fill:none;stroke:#14211f;stroke-linecap:round;stroke-linejoin:round}.a{fill:none;stroke:#b86e00;stroke-dasharray:7 6;stroke-linecap:round}@media (prefers-color-scheme:dark){.m{fill:#2fc4b2}.i{fill:#e5eeec}.l{stroke:#e5eeec}.a{stroke:#f0a030}}</style>
+<g>
+<polyline class="l" points="16,20 38,74 51.4,54" stroke-width="11"/><polyline class="l" points="68.6,54 82,74 104,20" stroke-width="11"/>
+<rect class="m" x="2" y="6" width="28" height="28" rx="7"/><rect class="m" x="24" y="60" width="28" height="28" rx="7"/>
+<rect class="m" x="68" y="60" width="28" height="28" rx="7"/><rect class="m" x="90" y="6" width="28" height="28" rx="7"/>
+<rect class="a" x="46" y="26" width="28" height="28" rx="7" stroke-width="6"/>
+<rect class="i" x="6" y="95" width="108" height="14" rx="4"/>
+</g>
+</svg>

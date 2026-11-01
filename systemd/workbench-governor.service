@@ -1,0 +1,20 @@
+[Unit]
+Description=workbench memory governor
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -m governor --socket /run/workbench/gov.sock --require-lock
+WorkingDirectory=/opt/workbench
+Slice=workbench-governor.slice
+OOMScoreAdjust=-900
+MemoryLow=64M
+LimitMEMLOCK=infinity
+Restart=always
+RestartSec=2
+# Web UI group (user workbench) reaches the socket through its group
+RuntimeDirectory=workbench
+RuntimeDirectoryMode=0750
+
+[Install]
+WantedBy=multi-user.target

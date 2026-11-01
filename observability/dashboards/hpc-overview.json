@@ -1,0 +1,136 @@
+{
+  "uid": "hpc-overview",
+  "title": "HPC Cluster Overview (workbench)",
+  "schemaVersion": 39,
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "GPU utilization",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "avg by (node) (DCGM_FI_DEV_GPU_UTIL)",
+          "legendFormat": "{{node}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "GPU temperature",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "max by (node) (DCGM_FI_DEV_GPU_TEMP)",
+          "legendFormat": "{{node}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Jobs running",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "sum(hpc_jobs_running)"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Jobs pending",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "sum(hpc_jobs_pending)"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "GPU XID errors",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "sum(DCGM_FI_DEV_XID_ERRORS > 0)"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "/mnt/lustre free",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 18,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "node_filesystem_free_bytes{mountpoint=\"/mnt/lustre\"} / node_filesystem_size_bytes{mountpoint=\"/mnt/lustre\"}",
+          "legendFormat": "{{node}}"
+        }
+      ]
+    }
+  ]
+}

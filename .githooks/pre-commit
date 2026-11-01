@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Installed by ./scripts/install-hooks.sh. Order: cheap guards first, the full gate last.
+set -u
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+branch=$(git symbolic-ref --short -q HEAD || echo detached)
+case "$branch" in
+  main|dev)
+    if [ "${ALLOW_PROTECTED_BRANCH:-}" != 1 ]; then
+      echo "Refusing to commit on '$branch': branch from dev (feat/ fix/ docs/ chore/) and open a PR (CLAUDE.md)." >&2
+      exit 1
+    fi ;;
+esac
+
+./scripts/check-identity.sh || exit 1  # a wrong identity credits the commit to a stranger on GitHub
+./scripts/check-privacy.sh --staged || exit 1
+
+[ -x .venv/bin/python ] && export PATH="$PWD/.venv/bin:$PATH"  # validate.sh needs pytest and coverage from the venv
+exec ./scripts/validate.sh

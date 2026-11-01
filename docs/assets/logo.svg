@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="workbench logo: servers linked in a W on a bench">
+<style>.m{fill:#0b8f80}.i{fill:#14211f}.l{fill:none;stroke:#14211f;stroke-linecap:round;stroke-linejoin:round}.a{fill:none;stroke:#b86e00;stroke-dasharray:7 6;stroke-linecap:round}@media (prefers-color-scheme:dark){.m{fill:#2fc4b2}.i{fill:#e5eeec}.l{stroke:#e5eeec}.a{stroke:#f0a030}}</style>
+<g>
+<polyline class="l" points="16,22 38,78 53,55" stroke-width="8"/><polyline class="l" points="67,55 82,78 104,22" stroke-width="8"/>
+<rect class="m" x="5" y="11" width="22" height="22" rx="6"/><rect class="m" x="27" y="67" width="22" height="22" rx="6"/>
+<rect class="m" x="71" y="67" width="22" height="22" rx="6"/><rect class="m" x="93" y="11" width="22" height="22" rx="6"/>
+<rect class="a" x="49" y="33" width="22" height="22" rx="6" stroke-width="4.5"/>
+<rect class="i" x="8" y="94" width="104" height="10" rx="3.5"/><rect class="i" x="18" y="104" width="9" height="12" rx="2"/><rect class="i" x="93" y="104" width="9" height="12" rx="2"/>
+</g>
+</svg>

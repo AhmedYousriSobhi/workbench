@@ -1,0 +1,13 @@
+name: jira-flap
+description: "Jira is switched off and on while tickets exist (refused, rate limited, unavailable), then healthy again"
+steps:
+  - {at: 0s,  target: jira, do: {tickets: {action: create, project: OPS, summary: "Flap: ticket that exists before the outage", labels: [workbench, flap]}}}
+  - {at: 10s, target: jira, do: {failure: {mode: "401", count: 4}}}
+  - {at: 30s, target: jira, do: {failure: {mode: null}}}
+  - {at: 40s, target: jira, do: {failure: {mode: "429", count: 4}}}
+  - {at: 60s, target: jira, do: {failure: {mode: null}}}
+  - {at: 70s, target: jira, do: {failure: {mode: "503", count: 6}}}
+  - {at: 90s, target: jira, do: {failure: {mode: null}}}
+  - {at: 100s, target: jira, do: {tickets: {action: create, project: OPS, summary: "Flap: ticket filed after Jira came back", labels: [workbench, flap]}}}
+expect:
+  - jira.issue_count: {jql: 'labels = flap', count: 2, within: 110s}

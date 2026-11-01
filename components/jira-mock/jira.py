@@ -1,0 +1,887 @@
+"""Fake Jira (mode "mock"): a REST v2/v3 subset with a workflow, a JQL subset, webhooks and failure modes.
+
+POST /rest/api/{2,3}/issue                        {"fields": {"project": {"key"}, "summary", ...}}
+GET  /rest/api/{2,3}/issue/KEY
+POST /rest/api/{2,3}/issue/KEY/comment            {"body": "..."}
+GET  /rest/api/{2,3}/issue/KEY/transitions
+POST /rest/api/{2,3}/issue/KEY/transitions        {"transition": {"id"}, "fields": {...}}  (400 with a per-field error)
+GET  /rest/api/{2,3}/search?jql=project = OPS AND status in (Open, "In Progress") ORDER BY created
+POST /rest/api/{2,3}/search      {"jql", "maxResults", "startAt", "fields"}        (v2 paging: startAt, total)
+GET|POST /rest/api/{2,3}/search/jql  {"jql", "maxResults", "nextPageToken", "fields"}  (Cloud paging: token, isLast)
+PUT  /rest/api/{2,3}/issue/KEY                    {"fields": {summary, description, priority, labels, assignee}, "update": {"labels": [{"add": x}]}}
+GET  /rest/api/{2,3}/issue/KEY/comment            PUT|DELETE .../comment/ID
+GET|POST|DELETE /rest/api/{2,3}/issue/KEY/watchers
+GET|POST /rest/api/{2,3}/issue/KEY/worklog        {"timeSpent": "1h 30m", "comment"}
+PUT  /rest/api/{2,3}/issue/KEY/assignee           {"name"} or {"accountId"}, null to unassign
+GET  /rest/api/{2,3}/user/search | user/assignable/search   ?query= or ?username=
+GET  /rest/api/{2,3}/{myself,serverInfo,field,project,project/search}
+JQL: AND OR NOT ( ), = != ~ !~ in, not in, is [not] EMPTY, < > <= >= (dates, -7d), currentUser(), ORDER BY created|updated|key; fields incl. watcher (reporter, assignee); dates as 2026-10-30 14:00 or 2026/10/30 14:00
+POST /rest/webhooks/1.0/webhook                   {"url": "...", "events": ["jira:issue_created", ...]}
+GET|POST /sim/activity {"on": true, "every": 30, "seed": 1}   (background changes by a team, #158; JIRA_ACTIVITY_EVERY sets it at start)
+POST /sim/failure  {"mode": "401|429|503|slow", "count": 3, "delay": 2}   (applies to the next /rest requests)
+GET|POST /sim/tickets   {"action": "create|transition|comment|fault|reset", ...}: tickets without a client (scenarios, #107)
+GET  /rest/api/{2,3}/issue/KEY/editmeta            (priority, labels, description, summary: what an edit form draws)
+GET  /healthz
+Workflow: Open -> In Progress -> Resolved (needs "resolution") -> Closed; Reopen from any later state.
+"""
+import base64
+import calendar
+import json
+import os
+import random
+import re
+import sys
+import threading
+import time
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
+
+# status -> [(transition id, name, target, required fields)]
+WORKFLOW = {
+    "Open": [("11", "Start Progress", "In Progress", []), ("31", "Resolve", "Resolved", ["resolution"])],
+    "In Progress": [("21", "Stop Progress", "Open", []), ("31", "Resolve", "Resolved", ["resolution"])],
+    "Resolved": [("41", "Close", "Closed", []), ("51", "Reopen", "Open", [])],
+    "Closed": [("51", "Reopen", "Open", [])],
+}
+COOLDOWN = 20  # seconds a ticket is left alone after any change
+ENGINEERS = ("bob", "carol", "dave", "erin")
+CHATTER = ("Looking into this now.", "Can someone confirm this is still happening?", "Checked the node, nothing obvious yet.",
+           "Restarted the service, watching it.", "Vendor case opened, waiting on a reply.", "Seen this before, same cause as last week.",
+           "Moving this up, users are asking.", "Not reproducible on my side, will retry after the next job.")
+NEW_TICKETS = (("Job stuck in CG state on the CPU partition", "Medium"), ("Request: more scratch quota for a project", "Low"),
+               ("InfiniBand port flapping on a rack switch", "High"), ("Login node slow, high load", "Medium"),
+               ("Reservation needed for a training run next week", "Low"), ("Lustre mount stale on a compute node", "High"),
+               ("Grafana dashboard shows no GPU data", "Medium"), ("License server unreachable from the cluster", "High"))
+FAULTS = {"power": ("node is down (powered off)", "Highest"), "xid": ("GPU error", "High"),
+          "overheat": ("node is overheating", "High"), "fan": ("fan failure", "Medium"),
+          "ib": ("InfiniBand port down", "High"), "nic": ("NIC link flapping", "Medium"),
+          "slurm": ("Slurm took the node out of service", "High")}  # kind: (summary, priority)
+RESOLUTIONS = ("Done", "Won't Do", "Duplicate", "Cannot Reproduce")
+PRIORITIES = ("Highest", "High", "Medium", "Low", "Lowest")
+SCREEN = {  # what a form needs to draw a field: the shape of Jira's own transition and edit screens
+    "resolution": {"name": "Resolution", "schema": {"type": "resolution"},
+                   "allowedValues": [{"id": str(10000 + n), "name": r} for n, r in enumerate(RESOLUTIONS)]},
+    "priority": {"name": "Priority", "schema": {"type": "priority"}, "operations": ["set"],
+                 "allowedValues": [{"id": str(n + 1), "name": p} for n, p in enumerate(PRIORITIES)]},
+    "labels": {"name": "Labels", "schema": {"type": "array", "items": "string"}, "operations": ["add", "set", "remove"]},
+    "description": {"name": "Description", "schema": {"type": "string"}, "operations": ["set"]},
+    "summary": {"name": "Summary", "schema": {"type": "string"}, "operations": ["set"]},
+}
+QUERYABLE = ("project", "status", "assignee", "labels", "issuetype", "key")
+
+
+def resolution_of(value):
+    """A resolution given as a name, {"name": ...} or {"id": ...} (a form sends the id), as the name Jira would store."""
+    if isinstance(value, dict):
+        by_id = {str(10000 + n): r for n, r in enumerate(RESOLUTIONS)}
+        value = value.get("name") or by_id.get(str(value.get("id")), "Done")
+    return {"name": value} if isinstance(value, str) else value
+
+
+class JiraError(Exception):
+    def __init__(self, code: int, messages: list[str] | None = None, errors: dict | None = None, headers=None):
+        self.code, self.headers = code, headers or {}
+        self.body = {"errorMessages": messages or [], "errors": errors or {}}
+
+
+def post_webhook(url: str, payload: dict) -> None:
+    try:
+        req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=3).close()
+    except OSError:
+        pass  # a dead receiver must not break the API
+
+
+def stamp() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%S.000+0000", time.gmtime())
+
+
+def touch(issue: dict) -> None:
+    issue["fields"]["updated"] = stamp()
+
+
+DURATION = re.compile(r"(\d+)\s*([wdhm])")
+
+
+def duration_seconds(text: str) -> int:
+    """`1h 30m` as seconds (w = 5 days of 8 hours as in Jira, d = 8 hours); 0 when the text is not a duration."""
+    if not text or re.sub(DURATION, "", text).strip():
+        return 0
+    return sum(int(n) * {"w": 144000, "d": 28800, "h": 3600, "m": 60}[u] for n, u in DURATION.findall(text))
+
+
+def route(source: str, target: str) -> list[tuple[str, list[str]]] | None:
+    """Shortest list of (transition id, required fields) from one status to another; [] when already there."""
+    seen, queue = {source}, [(source, [])]
+    while queue:
+        here, path = queue.pop(0)
+        if here == target:
+            return path
+        for tid, _name, to, req in WORKFLOW[here]:
+            if to not in seen:
+                seen.add(to)
+                queue.append((to, [*path, (tid, req)]))
+    return None
+
+
+class Jira:
+    def __init__(self, deliver=post_webhook, sleep=time.sleep):
+        self.issues: dict[str, dict] = {}
+        self.counters: dict[str, int] = {}
+        self.webhooks: list[dict] = []
+        self.watching: dict[str, set[str]] = {}
+        self.failure = {"mode": None, "count": 0, "delay": 0.0}
+        self.deliver, self.sleep = deliver, sleep
+        self.lock = threading.Lock()
+        self.activity = {"on": False, "every": 30.0, "seed": None, "changes": 0}
+        self.stop = threading.Event()
+        self.rng = random.Random()
+
+    def set_failure(self, req: dict) -> None:
+        if req.get("mode") not in ("401", "429", "503", "slow", None):
+            raise JiraError(400, ["mode must be 401, 429, 503, slow or null"])
+        self.failure = {"mode": req.get("mode"), "count": int(req.get("count", 1)), "delay": float(req.get("delay", 2))}
+
+    def gate(self) -> None:
+        """Apply the configured failure to one API request."""
+        with self.lock:
+            f = self.failure
+            if not f["mode"] or f["count"] <= 0:
+                return
+            f["count"] -= 1
+            mode, delay = f["mode"], f["delay"]
+        if mode == "slow":
+            self.sleep(delay)
+        elif mode == "401":
+            raise JiraError(401, ["You are not authenticated. Authentication required to perform this operation."])
+        elif mode == "429":
+            raise JiraError(429, ["Rate limit exceeded"], headers={"Retry-After": "1"})
+        else:
+            raise JiraError(503, ["Service temporarily unavailable"])
+
+    def fire(self, event: str, issue: dict, extra: dict | None = None) -> None:
+        payload = {"webhookEvent": event, "issue": issue, **(extra or {})}
+        for hook in self.webhooks:
+            if event in hook["events"]:
+                threading.Thread(target=self.deliver, args=(hook["url"], payload), daemon=True).start()
+
+    def create(self, body: dict) -> dict:
+        f = body.get("fields") or {}
+        errors = {}
+        project = (f.get("project") or {}).get("key")
+        if not project:
+            errors["project"] = "project is required"
+        if not f.get("summary"):
+            errors["summary"] = "You must specify a summary of the issue."
+        if errors:
+            raise JiraError(400, errors=errors)
+        with self.lock:
+            self.counters[project] = self.counters.get(project, 0) + 1
+            n = self.counters[project]
+            key = f"{project}-{n}"
+            now = stamp()
+            issue = {"id": str(10000 + sum(self.counters.values())), "key": key, "fields": {
+                "project": {"key": project}, "summary": f["summary"], "description": f.get("description"),
+                "issuetype": {"name": (f.get("issuetype") or {}).get("name", "Task")},
+                "status": status_of("Open"), "labels": f.get("labels") or [], "assignee": person(f.get("assignee")),
+                "reporter": person(f.get("reporter") or ME), "priority": {"name": (f.get("priority") or {}).get("name", "Medium")},
+                "resolution": None, "created": now, "updated": now, "comment": {"comments": []},
+                "watches": {"watchCount": 0, "isWatching": False}}}
+            self.issues[key] = issue
+        self.fire("jira:issue_created", issue)
+        return {"id": issue["id"], "key": key, "self": f"/rest/api/2/issue/{key}"}
+
+    def get(self, key: str) -> dict:
+        if key not in self.issues:
+            raise JiraError(404, ["Issue Does Not Exist"])
+        return self.issues[key]
+
+    def comments(self, key: str) -> dict:
+        found = self.get(key)["fields"]["comment"]["comments"]
+        return {"startAt": 0, "maxResults": len(found), "total": len(found), "comments": found}
+
+    def comment(self, key: str, body: dict, author: str = "") -> dict:
+        issue = self.get(key)
+        if not body.get("body"):
+            raise JiraError(400, errors={"comment": "Comment body can not be empty!"})
+        found = issue["fields"]["comment"]["comments"]
+        now = stamp()
+        c = {"id": str(max((int(x["id"]) for x in found), default=0) + 1), "body": body["body"], "author": person(author or ME),
+             "created": now, "updated": now, **({"visibility": body["visibility"]} if body.get("visibility") else {})}
+        found.append(c)
+        touch(issue)
+        self.fire("comment_created", issue, {"comment": c})
+        return c
+
+    def find_comment(self, key: str, cid: str) -> dict:
+        for c in self.get(key)["fields"]["comment"]["comments"]:
+            if c["id"] == cid:
+                return c
+        raise JiraError(404, ["Can not find comment"])
+
+    def edit_comment(self, key: str, cid: str, body: dict) -> dict:
+        c = self.find_comment(key, cid)
+        if not body.get("body"):
+            raise JiraError(400, errors={"comment": "Comment body can not be empty!"})
+        c["body"], c["updated"] = body["body"], stamp()
+        self.fire("comment_updated", self.get(key), {"comment": c})
+        return c
+
+    def delete_comment(self, key: str, cid: str) -> None:
+        issue = self.get(key)
+        issue["fields"]["comment"]["comments"].remove(self.find_comment(key, cid))
+        self.fire("comment_deleted", issue)
+
+    def edit(self, key: str, body: dict) -> None:
+        issue = self.get(key)
+        f, given, items = issue["fields"], body.get("fields") or {}, []
+        if "summary" in given and not given["summary"]:
+            raise JiraError(400, errors={"summary": "You must specify a summary of the issue."})
+        for name in ("summary", "description"):
+            if name in given:
+                f[name] = given[name]
+                items.append({"field": name})
+        if "priority" in given:
+            asked = given["priority"] or {}  # a form sends the id, a script the name
+            by_id = {str(n + 1): name for n, name in enumerate(PRIORITIES)}
+            f["priority"] = {"name": asked.get("name") or by_id.get(str(asked.get("id")), "Medium")}
+            items.append({"field": "priority", "toString": f["priority"]["name"]})
+        if "labels" in given:
+            f["labels"] = list(given["labels"] or [])
+            items.append({"field": "labels"})
+        for op in (body.get("update") or {}).get("labels", []):
+            if "add" in op and op["add"] not in f["labels"]:
+                f["labels"].append(op["add"])
+            if "remove" in op and op["remove"] in f["labels"]:
+                f["labels"].remove(op["remove"])
+            items.append({"field": "labels"})
+        if "assignee" in given:
+            f["assignee"] = person(given["assignee"])
+            items.append({"field": "assignee"})
+        touch(issue)
+        self.fire("jira:issue_updated", issue, {"changelog": {"items": items}})
+
+    def assign(self, key: str, body: dict | None) -> None:
+        self.edit(key, {"fields": {"assignee": body or None}})
+
+    def watchers(self, key: str) -> dict:
+        self.get(key)
+        names = sorted(self.watching.get(key, set()))
+        return {"watchCount": len(names), "isWatching": ME in names, "watchers": [person(n) for n in names]}
+
+    def watch(self, key: str, name: str | None, on: bool) -> None:
+        issue = self.get(key)
+        who = self.watching.setdefault(key, set())
+        (who.add if on else who.discard)(name or ME)
+        issue["fields"]["watches"] = {"watchCount": len(who), "isWatching": ME in who}
+
+    def log_work(self, key: str, body: dict) -> dict:
+        issue = self.get(key)
+        seconds = duration_seconds(str(body.get("timeSpent") or ""))
+        if not seconds:
+            raise JiraError(400, errors={"timeLogged": "Worklog must not be 0 or empty, e.g. 1h 30m."})
+        log = issue["fields"].setdefault("worklog", {"startAt": 0, "maxResults": 1000, "total": 0, "worklogs": []})
+        entry = {"id": str(len(log["worklogs"]) + 1), "author": person(ME), "comment": body.get("comment", ""),
+                 "timeSpent": body["timeSpent"], "timeSpentSeconds": seconds, "started": stamp()}
+        log["worklogs"].append(entry)
+        log["total"] = len(log["worklogs"])
+        issue["fields"]["timespent"] = sum(w["timeSpentSeconds"] for w in log["worklogs"])
+        touch(issue)
+        return entry
+
+    def worklog(self, key: str) -> dict:
+        return self.get(key)["fields"].get("worklog") or {"startAt": 0, "maxResults": 1000, "total": 0, "worklogs": []}
+
+    def users(self, query: str) -> list[dict]:
+        names = {ME, "bob"}
+        for i in self.issues.values():
+            names |= {p["name"] for p in (i["fields"].get("assignee"), i["fields"].get("reporter")) if p}
+        return [person(n) for n in sorted(names) if query.lower() in n.lower()]
+
+    def move_to(self, issue: dict, target: str, resolution: str = "Done") -> None:
+        """Walk the workflow from the issue's status to `target` (shortest path), as a person clicking Move to would."""
+        path = route(issue["fields"]["status"]["name"], target)
+        if path is None:
+            raise JiraError(400, [f"No workflow path from {issue['fields']['status']['name']} to {target}"])
+        for tid, req in path:
+            self.transition(issue["key"], {"transition": {"id": tid},
+                                           "fields": {f: {"name": resolution} for f in req}})
+
+    def sim_tickets(self, body: dict) -> dict:
+        """Ticket control for scenarios: create (with an optional target status), transition, comment, reset."""
+        action = body.get("action")
+        if action == "reset":
+            with self.lock:
+                self.issues.clear(), self.counters.clear(), self.watching.clear()
+            return {"reset": True}
+        if action == "create":
+            made = []
+            for n in range(1, min(int(body.get("count", 1)), 200) + 1):
+                text = {k: body[k].replace("{n}", str(n)) if isinstance(body.get(k), str) else body.get(k)
+                        for k in ("summary", "description")}
+                key = self.create({"fields": {
+                    "project": {"key": body.get("project", "OPS")}, "summary": text["summary"] or "",
+                    "description": text["description"], "labels": body.get("labels"),
+                    "issuetype": {"name": body.get("issuetype", "Task")}, "priority": {"name": body.get("priority", "Medium")},
+                    "assignee": body.get("assignee"), "reporter": body.get("reporter")}})["key"]
+                if body.get("status", "Open") != "Open":
+                    self.move_to(self.issues[key], body["status"], body.get("resolution", "Done"))
+                made.append(key)
+            return {"created": made}
+        if action in ("transition", "comment"):
+            hits = self.search(str(body.get("jql") or ""), 0, 1000, [])["issues"]
+            for hit in hits:
+                if action == "comment":
+                    self.comment(hit["key"], {"body": body.get("body", "")})
+                elif body.get("to") not in CATEGORY:
+                    raise JiraError(400, [f"to must be one of {', '.join(CATEGORY)}"])
+                elif self.issues[hit["key"]]["fields"]["status"]["name"] != body["to"]:
+                    self.move_to(self.issues[hit["key"]], body["to"], body.get("resolution", "Done"))
+            return {"matched": [h["key"] for h in hits]}
+        if action == "fault":
+            return self.fault(body)
+        raise JiraError(400, ["action must be create, transition, comment, fault or reset"])
+
+    def set_activity(self, req: dict) -> dict:
+        """Background activity (#158): every `every` seconds (a little jittered) one change a team would make: a ticket moves
+        along the workflow, gets a comment or a new owner, is reopened, or a new one is filed. Tickets touched in the last
+        COOLDOWN seconds are left alone, so a client's own edit is not undone under it."""
+        every = float(req.get("every", self.activity["every"]))
+        if every < 1:
+            raise JiraError(400, ["every must be at least 1 second"])
+        self.stop.set()  # ends a running loop; a new one starts below when it is on
+        self.stop = stop = threading.Event()
+        self.activity = {"on": bool(req.get("on", True)), "every": every, "seed": req.get("seed"),
+                         "changes": self.activity["changes"]}
+        self.rng = random.Random(req.get("seed"))
+        if self.activity["on"]:
+            threading.Thread(target=self._run_activity, args=(stop,), daemon=True).start()
+        return dict(self.activity)
+
+    def seed_backlog(self) -> None:
+        """A project that already has history: tickets in every status, some on the default user, so a client's first look
+        is not an empty list. Only when there are none."""
+        if self.issues:
+            return
+        for n, (summary, priority) in enumerate(NEW_TICKETS):
+            status = ("Open", "Open", "In Progress", "Resolved", "Closed", "Open", "In Progress", "Open")[n % 8]
+            key = self.create({"fields": {"project": {"key": "OPS"}, "summary": summary, "priority": {"name": priority},
+                                          "issuetype": {"name": "Task"}, "reporter": ENGINEERS[n % 4], "labels": ["backlog"],
+                                          "assignee": ME if n % 2 == 0 else ENGINEERS[n % 4]}})["key"]
+            if status != "Open":
+                self.move_to(self.issues[key], status)
+
+    def _run_activity(self, stop: threading.Event) -> None:
+        stop.wait(5)  # the first change comes soon, not after a whole interval
+        while not stop.is_set():
+            try:
+                self.tick()
+            except JiraError:
+                pass
+            stop.wait(self.activity["every"] * self.rng.uniform(0.7, 1.3))
+
+    def tick(self) -> str | None:
+        """One background change; what was done, or None when nothing was fit to change."""
+        r = self.rng
+        now = time.time()
+        quiet = [i for i in self.issues.values() if now - calendar.timegm(time.strptime(i["fields"]["updated"][:19], "%Y-%m-%dT%H:%M:%S")) >= COOLDOWN]
+        live = [i for i in quiet if i["fields"]["status"]["name"] in ("Open", "In Progress")]
+        done = [i for i in quiet if i["fields"]["status"]["name"] == "Resolved"]
+        choice = r.choices(["advance", "comment", "assign", "create", "reopen"], [45, 25, 10, 12, 8])[0]
+        if choice == "create" and sum(i["fields"]["status"]["name"] != "Closed" for i in self.issues.values()) >= 30:
+            choice = "advance"
+        who = r.choice(ENGINEERS)
+        if choice == "create":
+            summary, priority = r.choice(NEW_TICKETS)
+            key = self.create({"fields": {"project": {"key": "OPS"}, "summary": summary, "priority": {"name": priority},
+                                          "issuetype": {"name": "Task"}, "reporter": r.choice(ENGINEERS), "labels": ["activity"]}})["key"]
+            self.changes(1)
+            return f"created {key}"
+        pool = {"advance": live + done, "comment": live, "assign": live, "reopen": done}[choice]
+        if not pool:
+            return None
+        issue = r.choice(pool)
+        key, status = issue["key"], issue["fields"]["status"]["name"]
+        if choice == "comment":
+            self.comment(key, {"body": r.choice(CHATTER)}, who)
+        elif choice == "assign":
+            self.assign(key, {"name": who})
+        elif choice == "reopen":
+            self.move_to(issue, "Open")
+        elif status == "Open":
+            if not issue["fields"].get("assignee"):
+                self.assign(key, {"name": who})
+            self.move_to(issue, "In Progress")
+        elif status == "In Progress":
+            self.move_to(issue, "Resolved", r.choices(RESOLUTIONS, [80, 8, 6, 6])[0])
+        else:
+            self.move_to(issue, "Closed")
+        self.changes(1)
+        return f"{choice} {key}"
+
+    def changes(self, n: int) -> None:
+        self.activity["changes"] += n
+
+    def fault(self, body: dict) -> dict:
+        """What an ops integration does about a node fault: `open` files one ticket per node and kind (a repeat of the same
+        report comments instead, and an identical comment is not added twice); otherwise the node's open tickets of that kind
+        (every kind when `kind` is empty) get a recovery comment and are resolved."""
+        node, kind, detail = body.get("node"), body.get("kind") or "", str(body.get("detail") or "")
+        if not node or (body.get("open", True) and kind not in FAULTS):
+            raise JiraError(400, ["fault needs node and, to open one, kind: " + ", ".join(FAULTS)])
+        merge = bool(body.get("merge")) and body.get("open", True)  # any open ticket for the node takes the report
+        with self.lock:
+            mine = [i for i in self.issues.values() if f"node-{node}" in i["fields"]["labels"]
+                    and i["fields"]["status"]["name"] not in ("Resolved", "Closed")
+                    and (merge or not kind or f"fault-{kind}" in i["fields"]["labels"])]
+        if not body.get("open", True):
+            for i in mine:
+                self.comment(i["key"], {"body": f"Recovered. {detail}".strip()})
+                self.move_to(i, "Resolved", "Done")
+            return {"resolved": [i["key"] for i in mine]}
+        if mine:
+            text = f"{'Slurm reports: ' if kind == 'slurm' else 'Still failing. '}{detail}".strip()
+            last = (mine[0]["fields"]["comment"]["comments"] or [{}])[-1].get("body")
+            if last != text:
+                self.comment(mine[0]["key"], {"body": text})
+            return {"existing": mine[0]["key"]}
+        title, priority = FAULTS[kind]
+        key = self.create({"fields": {
+            "project": {"key": body.get("project", "OPS")}, "summary": f"{node}: {title}", "description": detail or title,
+            "labels": [f"node-{node}", f"fault-{kind}", "auto"], "issuetype": {"name": "Incident"},
+            "priority": {"name": priority}, "reporter": "ops-bot"}})["key"]
+        return {"created": key}
+
+    def overview(self) -> dict:
+        by: dict[str, int] = {}
+        for i in self.issues.values():
+            by[i["fields"]["status"]["name"]] = by.get(i["fields"]["status"]["name"], 0) + 1
+        return {"total": len(self.issues), "by_status": by, "keys": sorted(self.issues, key=lambda k: int(self.issues[k]["id"]))}
+
+    def transitions(self, key: str) -> dict:
+        status = self.get(key)["fields"]["status"]["name"]
+        return {"transitions": [
+            {"id": i, "name": name, "to": {"name": to},
+             "fields": {f: {"required": True, **SCREEN.get(f, {})} for f in req}} for i, name, to, req in WORKFLOW[status]]}
+
+    def editmeta(self, key: str) -> dict:
+        self.get(key)
+        return {"fields": {f: {"required": f == "summary", **SCREEN[f]} for f in ("summary", "priority", "labels", "description")}}
+
+    def transition(self, key: str, body: dict) -> None:
+        issue = self.get(key)
+        tid = str((body.get("transition") or {}).get("id"))
+        match = [t for t in WORKFLOW[issue["fields"]["status"]["name"]] if t[0] == tid]
+        if not match:
+            raise JiraError(400, [f"Transition {tid} is not valid for this issue's current status"])
+        _, _, target, required = match[0]
+        given = body.get("fields") or {}
+        missing = {f: f"{f.capitalize()} is required." for f in required if not given.get(f)}
+        if missing:
+            raise JiraError(400, errors=missing)
+        issue["fields"]["status"] = status_of(target)
+        issue["fields"]["resolution"] = resolution_of(given.get("resolution")) if target == "Resolved" else None
+        touch(issue)
+        self.fire("jira:issue_updated", issue, {"changelog": {"items": [{"field": "status", "toString": target}]}})
+
+    def projects(self) -> list[dict]:
+        return [{"key": k, "name": k, "id": str(10000 + n)} for n, k in enumerate(sorted(self.counters or {"OPS": 0}))]
+
+    def add_webhook(self, body: dict) -> dict:
+        if not body.get("url"):
+            raise JiraError(400, errors={"url": "url is required"})
+        hook = {"url": body["url"], "events": body.get("events") or ["jira:issue_created", "jira:issue_updated",
+                                                                      "comment_created"]}
+        self.webhooks.append(hook)
+        return hook
+
+    def search(self, jql: str, start: int = 0, limit: int = 50, fields: list[str] | None = None) -> dict:
+        """One page of matches. Everything is returned when `fields` is None, else only those fields."""
+        q = Query(jql)
+        hits = [i for i in self.issues.values() if q.pred(i)]
+        if q.order and q.order[0].lower() in ("created", "updated", "key"):
+            by = q.order[0].lower()  # ties (one-second timestamps) fall back to creation order
+            hits.sort(key=lambda i: (i["key"] if by == "key" else i["fields"][by], int(i["id"])),
+                      reverse=len(q.order) > 1 and q.order[1].lower() == "desc")
+        page = hits[start:start + limit]
+        if fields is not None:
+            page = [{"id": i["id"], "key": i["key"], "fields": {k: v for k, v in i["fields"].items() if k in fields}}
+                    for i in page]
+        return {"total": len(hits), "startAt": start, "maxResults": limit, "issues": page}
+
+
+FIELDS = ("project", "status", "statuscategory", "assignee", "reporter", "labels", "issuetype", "key", "summary",
+          "description", "text", "priority", "resolution", "created", "updated", "watcher")
+CATEGORY = {"Open": ("new", "To Do"), "In Progress": ("indeterminate", "In Progress"),
+            "Resolved": ("done", "Done"), "Closed": ("done", "Done")}
+ME = "alice"  # what currentUser() and a Bearer token mean
+TOKEN = re.compile(r"""\s*(?:("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(!=|!~|<=|>=|[=~<>(),])|([^\s=!~<>(),"']+))""")
+RELATIVE = re.compile(r"-(\d+)([mhdw])")
+
+
+def bad_jql(why: str) -> JiraError:
+    return JiraError(400, [f"Error in the JQL Query: {why}"])
+
+
+def tokens(jql: str) -> list[tuple[str, str]]:
+    """[(kind, text)]: kind is "str" (quoted, unescaped), "op" or "word"."""
+    out, pos = [], 0
+    while pos < len(jql.rstrip()):
+        m = TOKEN.match(jql, pos)
+        if not m:
+            raise bad_jql(f"unexpected character near '{jql[pos:pos + 10].strip()}'")
+        pos = m.end()
+        if m.group(1):
+            out.append(("str", re.sub(r"\\(.)", r"\1", m.group(1)[1:-1])))
+        elif m.group(2):
+            out.append(("op", m.group(2)))
+        else:
+            out.append(("word", m.group(3)))
+    return out
+
+
+def person(name: str | dict | None) -> dict | None:
+    if not name:
+        return None
+    if isinstance(name, dict):
+        name = name.get("name") or name.get("accountId", "").removesuffix("-id") or name.get("displayName", "")
+    return {"name": name, "accountId": f"{name}-id", "displayName": f"{name.title()} Example",
+            "emailAddress": f"{name}@example.org", "active": True}
+
+
+def status_of(name: str) -> dict:
+    key, label = CATEGORY[name]
+    return {"name": name, "statusCategory": {"key": key, "name": label}}
+
+
+def instant(value: str) -> str:
+    """An absolute date, or a relative one such as -7d, as a sortable ISO string."""
+    m = RELATIVE.fullmatch(value)
+    if not m:
+        return value.replace("/", "-") if re.fullmatch(r"\d{4}/\d\d/\d\d.*", value) else value  # Jira reads both
+    secs = int(m.group(1)) * {"m": 60, "h": 3600, "d": 86400, "w": 604800}[m.group(2)]
+    return time.strftime("%Y-%m-%d %H:%M", time.gmtime(time.time() - secs))
+
+
+def field_values(issue: dict, field: str) -> list[str]:
+    f = issue["fields"]
+    if field == "key":
+        return [issue["key"]]
+    if field == "project":
+        return [f["project"]["key"]]
+    if field == "statuscategory":
+        return [f["status"]["statusCategory"]["name"], f["status"]["statusCategory"]["key"]]
+    if field in ("status", "issuetype", "priority"):
+        return [(f.get(field) or {}).get("name", "")]
+    if field in ("assignee", "reporter", "watcher"):
+        # Jira makes the reporter and the assignee watchers of a ticket
+        people = [f.get(n) for n in ("assignee", "reporter")] if field == "watcher" else [f.get(field)]
+        return [v for p in people if p for v in (p["name"], p["accountId"], p["displayName"], p["emailAddress"])]
+    if field == "labels":
+        return list(f["labels"])
+    if field == "resolution":
+        r = f.get("resolution")
+        return [r.get("name", "") if isinstance(r, dict) else str(r)] if r else []
+    if field in ("created", "updated"):
+        return [f[field].replace("T", " ")[:16]]
+    if field == "text":
+        return [f["summary"], f.get("description") or "", *(c["body"] for c in f["comment"]["comments"])]
+    return [f.get(field) or ""] if f.get(field) else []  # summary, description
+
+
+class Query:
+    """A JQL expression: AND, OR, NOT, parentheses, =, !=, ~, !~, in, not in, is [not] EMPTY, < > <= >=, ORDER BY."""
+
+    def __init__(self, jql: str):
+        head, *tail = re.split(r"(?i)(?:^|\s+)order\s+by\s+", jql.strip(), maxsplit=1)
+        self.toks, self.i = tokens(head), 0
+        self.order = tail[0].split()[:2] if tail and tail[0].strip() else []
+        self.pred = (lambda _i: True) if not self.toks else self.expr()
+        if self.i != len(self.toks):
+            raise bad_jql(f"unexpected '{self.toks[self.i][1]}'")
+
+    def peek(self, *words: str) -> bool:
+        return self.i < len(self.toks) and self.toks[self.i][1].lower() in words and self.toks[self.i][0] != "str"
+
+    def take(self) -> tuple[str, str]:
+        if self.i >= len(self.toks):
+            raise bad_jql("unexpected end of the query")
+        self.i += 1
+        return self.toks[self.i - 1]
+
+    def expr(self):
+        parts = [self.conj()]
+        while self.peek("or"):
+            self.i += 1
+            parts.append(self.conj())
+        return lambda x: any(p(x) for p in parts)
+
+    def conj(self):
+        parts = [self.neg()]
+        while self.peek("and"):
+            self.i += 1
+            parts.append(self.neg())
+        return lambda x: all(p(x) for p in parts)
+
+    def neg(self):
+        if self.peek("not"):
+            self.i += 1
+            inner = self.neg()
+            return lambda x: not inner(x)
+        if self.peek("("):
+            self.i += 1
+            inner = self.expr()
+            if not self.peek(")"):
+                raise bad_jql("missing ')'")
+            self.i += 1
+            return inner
+        return self.clause()
+
+    def value(self) -> str:
+        kind, text = self.take()
+        if kind == "word" and text.lower() == "currentuser" and self.peek("("):
+            self.i += 1
+            self.take()
+            return ME
+        return text
+
+    def clause(self):
+        kind, name = self.take()
+        field = name.lower()
+        if kind != "word" or field not in FIELDS:
+            raise bad_jql(f"unsupported clause '{name}'")
+        _, op = self.take()
+        op = op.lower()
+        if op == "not":
+            self.take()
+            op = "not in"
+        if op == "is" and self.peek("not"):
+            self.i += 1
+            op = "is not"
+        if op not in ("=", "!=", "~", "!~", "<", ">", "<=", ">=", "in", "not in", "is", "is not"):
+            raise bad_jql(f"unsupported operator '{op}' for '{name}'")
+        if op in ("in", "not in"):
+            if not self.peek("("):
+                raise bad_jql("a list is expected after 'in'")
+            self.i += 1
+            vals = [self.value()]
+            while self.peek(","):
+                self.i += 1
+                vals.append(self.value())
+            if not self.peek(")"):
+                raise bad_jql("missing ')'")
+            self.i += 1
+        else:
+            vals = [self.value()]
+        empty = vals[0].lower() in ("empty", "null")
+        return lambda issue: self.test(issue, field, op, vals, empty)
+
+    @staticmethod
+    def test(issue: dict, field: str, op: str, vals: list[str], empty: bool) -> bool:
+        have = field_values(issue, field)
+        low = [h.lower() for h in have]
+        want = [v.lower() for v in vals]
+        if op in ("is", "=") and empty:
+            return not [h for h in have if h]
+        if op in ("is not", "!=") and empty:
+            return bool([h for h in have if h])
+        if op in ("~", "!~"):
+            needle = re.sub(r"\\(.)", r"\1", vals[0]).lower()
+            hit = any(needle in h for h in low)
+            return hit if op == "~" else not hit
+        if op in ("<", ">", "<=", ">=") and have:
+            a, b = have[0], instant(vals[0])
+            return {"<": a < b, ">": a > b, "<=": a <= b, ">=": a >= b}[op]
+        hit = any(h in want for h in low)
+        return hit if op in ("=", "in", "is") else not hit
+
+
+FIELD_LIST = [{"id": i, "name": n, "custom": False, "navigable": True, "orderable": True}
+              for i, n in (("summary", "Summary"), ("description", "Description"), ("status", "Status"),
+                           ("priority", "Priority"), ("assignee", "Assignee"), ("reporter", "Reporter"),
+                           ("labels", "Labels"), ("resolution", "Resolution"), ("issuetype", "Issue Type"),
+                           ("created", "Created"), ("updated", "Updated"), ("comment", "Comment"),
+                           ("project", "Project"))]
+
+API = re.compile(r"^/rest/api/[23]/(.*)$")
+
+
+PROBE = "x-workbench-probe"  # the web UI sets this on its own polls so they are not drawn as client traffic
+
+
+def counted(path: str, headers) -> bool:
+    """A real client request: not a health check, not /sim control, not a UI probe."""
+    return not (path.startswith(("/healthz", "/sim/")) or headers.get(PROBE))
+
+
+def make_handler(jira: Jira):
+    stats, lock = {"requests": 0}, threading.Lock()
+
+    class Handler(BaseHTTPRequestHandler):
+        def _send(self, code: int, obj=None, headers=None) -> None:
+            if counted(self.path, self.headers):
+                with lock:
+                    stats["requests"] += 1
+            data = b"" if obj is None else json.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            for k, v in (headers or {}).items():
+                self.send_header(k, v)
+            self.end_headers()
+            self.wfile.write(data)
+
+        def _body(self) -> dict:
+            try:
+                return json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            except ValueError:
+                raise JiraError(400, ["Invalid JSON"]) from None
+
+        def _route(self, method: str):
+            url = urlparse(self.path)
+            if url.path == "/healthz":
+                return 200, {"issues": len(jira.issues)}
+            if url.path == "/sim/stats":
+                return 200, dict(stats)
+            if url.path == "/sim/failure" and method == "POST":
+                jira.set_failure(self._body())
+                return 200, {"ok": True}
+            if url.path == "/sim/activity":
+                return 200, jira.set_activity(self._body()) if method == "POST" else dict(jira.activity)
+            if url.path == "/sim/tickets":
+                return 200, jira.sim_tickets(self._body()) if method == "POST" else jira.overview()
+            api = API.match(url.path)
+            if not (api or url.path == "/rest/webhooks/1.0/webhook"):
+                raise JiraError(404, ["Not found"])
+            jira.gate()
+            if not api:
+                return 201, jira.add_webhook(self._body())
+            parts = api.group(1).split("/")
+            if parts == ["issue"] and method == "POST":
+                return 201, jira.create(self._body())
+            if parts in (["search"], ["search", "jql"]) and method in ("GET", "POST"):
+                return 200, self._search(parts, method, url.query)
+            if parts == ["myself"] and method == "GET":
+                return 200, self._myself()
+            if parts == ["serverInfo"] and method == "GET":
+                return 200, {"baseUrl": f"http://{self.headers.get('Host', 'localhost')}", "version": "9.12.0",
+                             "versionNumbers": [9, 12, 0], "deploymentType": "Server", "serverTitle": "workbench jira-mock"}
+            if parts == ["field"] and method == "GET":
+                return 200, FIELD_LIST
+            if parts == ["project"] and method == "GET":
+                return 200, jira.projects()
+            if parts == ["project", "search"] and method == "GET":
+                found = jira.projects()
+                return 200, {"values": found, "total": len(found), "isLast": True, "startAt": 0, "maxResults": 50}
+            if parts[0] == "issue" and len(parts) == 2 and method == "GET":
+                return 200, jira.get(parts[1])
+            if parts[0] == "issue" and len(parts) == 2 and method == "PUT":
+                jira.edit(parts[1], self._body())
+                return 204, None
+            if parts[0] == "user" and parts[-1] == "search" and method == "GET":
+                asked = parse_qs(url.query)
+                return 200, jira.users((asked.get("query") or asked.get("username") or [""])[0])
+            if parts[0] == "issue" and len(parts) == 4 and parts[2] == "comment":
+                if method == "PUT":
+                    return 200, jira.edit_comment(parts[1], parts[3], self._body())
+                if method == "DELETE":
+                    jira.delete_comment(parts[1], parts[3])
+                    return 204, None
+            if parts[0] == "issue" and len(parts) == 3:
+                if (parts[2], method) == ("comment", "GET"):
+                    return 200, jira.comments(parts[1])
+                if (parts[2], method) == ("watchers", "GET"):
+                    return 200, jira.watchers(parts[1])
+                if (parts[2], method) in (("watchers", "POST"), ("watchers", "DELETE")):
+                    who = parse_qs(url.query).get("username") or parse_qs(url.query).get("accountId")
+                    body = self._body() if method == "POST" else {}
+                    jira.watch(parts[1], who[0] if who else (body if isinstance(body, str) else None), method == "POST")
+                    return 204, None
+                if (parts[2], method) == ("worklog", "POST"):
+                    return 201, jira.log_work(parts[1], self._body())
+                if (parts[2], method) == ("worklog", "GET"):
+                    return 200, jira.worklog(parts[1])
+                if (parts[2], method) == ("editmeta", "GET"):
+                    return 200, jira.editmeta(parts[1])
+                if (parts[2], method) == ("assignee", "PUT"):
+                    jira.assign(parts[1], self._body())
+                    return 204, None
+                if (parts[2], method) == ("comment", "POST"):
+                    return 201, jira.comment(parts[1], self._body())
+                if (parts[2], method) == ("transitions", "GET"):
+                    return 200, jira.transitions(parts[1])
+                if (parts[2], method) == ("transitions", "POST"):
+                    jira.transition(parts[1], self._body())
+                    return 204, None
+            raise JiraError(404, ["Not found"])
+
+        def _search(self, parts: list[str], method: str, query: str) -> dict:
+            """GET (query string) or POST (JSON body); /search/jql pages by token and has no total, /search by offset."""
+            asked = parse_qs(query)
+            args = self._body() if method == "POST" else {k: v[0] for k, v in asked.items()}
+            fields = args.get("fields")
+            if isinstance(fields, str):
+                fields = [f.strip() for f in fields.split(",") if f.strip()]
+            if not fields or fields[0].startswith("*"):
+                fields = None
+            try:
+                limit, token = int(args.get("maxResults") or 50), args.get("nextPageToken")
+                start = int(token) if token else int(args.get("startAt") or 0)
+            except ValueError:
+                raise JiraError(400, ["maxResults, startAt and nextPageToken must be numbers"]) from None
+            found = jira.search(str(args.get("jql") or ""), start, limit, fields)
+            if parts == ["search"]:
+                return found
+            more = start + limit < found["total"]
+            return {"issues": found["issues"], "isLast": not more, **({"nextPageToken": str(start + limit)} if more else {})}
+
+        def _myself(self) -> dict:
+            """Basic auth names the account by its email (Cloud style); anything else is the default user."""
+            auth = self.headers.get("Authorization", "")
+            if auth.startswith("Basic "):
+                try:
+                    email = base64.b64decode(auth[6:]).decode().partition(":")[0]
+                except ValueError:
+                    email = ""
+                if "@" in email:
+                    me = person(email.split("@")[0])
+                    return {**me, "emailAddress": email}
+            return person(ME)
+
+        def _handle(self, method: str) -> None:
+            try:
+                self._send(*self._route(method))
+            except JiraError as e:
+                self._send(e.code, e.body, e.headers)
+
+        def do_GET(self):
+            self._handle("GET")
+
+        def do_POST(self):
+            self._handle("POST")
+
+        def do_PUT(self):
+            self._handle("PUT")
+
+        def do_DELETE(self):
+            self._handle("DELETE")
+
+        def log_message(self, *args):
+            pass
+
+    return Handler
+
+
+def main() -> None:
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
+    jira = Jira()
+    every = float(os.environ.get("JIRA_ACTIVITY_EVERY") or 0)  # compose sets it; 0 leaves the project still until /sim/activity
+    if every:
+        jira.seed_backlog()
+        jira.set_activity({"on": True, "every": every})
+    ThreadingHTTPServer(("0.0.0.0", port), make_handler(jira)).serve_forever()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,65 @@
+#!/bin/bash
+# Node health check (a small stand-in for LBNL NHC), run by slurmd three ways: `nhc` every HealthCheckInterval (periodic),
+# `nhc prolog` before a job starts on the node (Slurm Prolog) and `nhc epilog` after it ends (Epilog). It checks what the
+# simulation models, read from the exporter farm: the GPU count against the node's GRES, GPU XID errors, InfiniBand ports
+# that are down and a NIC whose link keeps changing. A failed check drains the node with the reason "NHC: ...".
+#  periodic: exits 1 when unhealthy; resumes a drain it made itself once the node is healthy again.
+#  prolog:   exits 1 when unhealthy, so Slurm requeues the job instead of running it on a bad node.
+#  epilog:   always exits 0 (the drain is done here): catches a fault the job caused before the next one is scheduled.
+# Test hooks: NHC_METRICS_FILE (instead of the exporter), NHC_SCONTROL, NHC_NODE, NHC_EXPECTED_GPUS, NHC_EXPECTED_IB,
+# NHC_STATE_DIR (where the carrier counter is remembered between runs), NHC_ENV_FILE (default /etc/workbench-node.env).
+mode=${1:-periodic}
+# slurmd gives this script a bare environment: what to expect of the node comes from the file the entrypoint wrote.
+[ -r "${NHC_ENV_FILE:-/etc/workbench-node.env}" ] && . "${NHC_ENV_FILE:-/etc/workbench-node.env}"
+node=${NHC_NODE:-$(hostname -s)}
+expected=${NHC_EXPECTED_GPUS:-${WORKBENCH_GPUS:-0}}
+expected_ib=${NHC_EXPECTED_IB:-${WORKBENCH_IB:-0}}
+scontrol=${NHC_SCONTROL:-scontrol}
+url=${NHC_METRICS_URL:-http://gpu-exporter-farm:9400/metrics}
+state=${NHC_STATE_DIR:-/var/tmp}/nhc-carrier-$node
+
+fetch() {
+  if [ -n "$NHC_METRICS_FILE" ]; then cat "$NHC_METRICS_FILE"; return; fi
+  local hp=${url#http://}; hp=${hp%%/*}
+  exec 3<>"/dev/tcp/${hp%%:*}/${hp##*:}" || return 1
+  printf 'GET %s HTTP/1.0\r\nHost: %s\r\nX-Workbench-Probe: 1\r\n\r\n' "/${url#http://*/}" "$hp" >&3
+  cat <&3; exec 3<&-
+}
+
+metrics=$(fetch) || exit 0                              # exporter unreachable: cannot judge, do not drain
+mine=$(printf '%s\n' "$metrics" | grep -e "Hostname=\"$node\"" -e "node=\"$node\"")
+fail=""
+add() { fail="${fail:+$fail; }$1"; }
+if [ -n "$mine" ]; then                                 # no series at all means the node is off: not a health matter
+  if [ "$expected" -gt 0 ] 2>/dev/null; then
+    seen=$(printf '%s\n' "$mine" | grep -c '^DCGM_FI_DEV_GPU_TEMP{')
+    [ "$seen" -gt 0 ] && [ "$seen" -lt "$expected" ] && add "GPU count $seen of $expected"
+    xid=$(printf '%s\n' "$mine" | grep '^DCGM_FI_DEV_XID_ERRORS{' | awk '$NF != 0 {print $NF; exit}')
+    [ -n "$xid" ] && add "GPU XID $xid"
+  fi
+  if [ "$expected_ib" -gt 0 ] 2>/dev/null; then
+    ports=$(printf '%s\n' "$mine" | grep -c '^node_infiniband_state_id{')
+    down=$(printf '%s\n' "$mine" | grep '^node_infiniband_state_id{' | awk '$NF != 4' | sed -n 's/.*device="\([^"]*\)".*/\1/p' | paste -sd, -)
+    [ "$ports" -gt 0 ] && [ "$ports" -lt "$expected_ib" ] && add "IB ports $ports of $expected_ib"
+    [ -n "$down" ] && add "IB port down: $down"
+  fi
+  carrier=$(printf '%s\n' "$mine" | grep '^node_network_carrier_changes_total{' | awk '{print $NF; exit}')
+  if [ -n "$carrier" ]; then
+    before=$(cat "$state" 2>/dev/null)
+    [ -n "$before" ] && [ "$carrier" -gt "$before" ] && add "NIC eth0 flapping ($((carrier - before)) link changes)"
+    echo "$carrier" > "$state" 2>/dev/null
+  fi
+fi
+
+if [ -n "$fail" ]; then
+  "$scontrol" update "nodename=$node" state=drain "reason=NHC: $fail"
+  echo "NHC ($mode): $node unhealthy: $fail"
+  [ "$mode" = epilog ] && exit 0
+  exit 1
+fi
+# healthy again: lift only a drain this script made, and only from the periodic run (a job start does not heal a node)
+if [ "$mode" = periodic ] && "$scontrol" show node "$node" 2>/dev/null | grep -q 'Reason=NHC: '; then
+  "$scontrol" update "nodename=$node" state=resume
+  echo "NHC: $node healthy again, resumed"
+fi
+exit 0

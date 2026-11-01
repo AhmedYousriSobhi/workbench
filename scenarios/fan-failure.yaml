@@ -1,0 +1,6 @@
+name: fan-failure
+description: Fans fail on a GPU node and it runs hot; the BMC event log shows critical entries
+steps:
+  - {at: 0s,  target: bmc-farm, do: {nodes: [gpu002], fan_fail: 3}}
+  - {at: 10s, target: bmc-farm, do: {nodes: [gpu002], ramp: {to: 88, over: 60s}}}
+  - {at: 90s, target: bmc-farm, do: {nodes: [gpu002], clear: true}}
