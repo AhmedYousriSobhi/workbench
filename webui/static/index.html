@@ -851,7 +851,7 @@ async function nodeAction(name, action, label) {
 // ---- traffic (#74, #118): real request counters from the mocks plus injected faults, over SSE, drawn with the nodes in the cluster ----
 const SVGNS = 'http:' + '//www.w3.org/2000/svg';  // an XML namespace name, not a fetch; split so the no-external-URL test stays strict
 const BASE_SERVICES = [['bmc-farm', 'BMC farm', 'Redfish'], ['bcm-mock', 'BCM mock', 'CMDaemon'], ['jira-mock', 'Jira mock', 'tickets'], ['gpu-exporter', 'GPU exporter', 'DCGM metrics']];
-const TELEPORT_BOX = ['teleport', 'Teleport', 'SSH proxy'];
+const TELEPORT_BOX = ['teleport', 'Teleport proxy', 'gateway, not a node'];
 function hasTeleport() { try { return !!(lastCluster && 'teleport' in JSON.parse(lastCluster).services); } catch (e) { return false; } }
 function svcList() { return hasTeleport() ? [...BASE_SERVICES, TELEPORT_BOX] : BASE_SERVICES; }  // Teleport only when the part is built: no phantom box
 const FW = 1180, G = { clients: { x: 8, y: 8, w: 164, h: 272 }, injector: { x: 8, y: 300, w: 164, h: 124 }, cluster: { x: 668, y: 8, w: 504 } };
@@ -941,6 +941,7 @@ function flowSig(nodes) { return nodes.map(n => n.name).join(',') + (hasTeleport
 const SVC_METHOD = { 'bmc-farm': 'HTTPS Redfish', 'bcm-mock': 'HTTP JSON', 'jira-mock': 'HTTP REST', 'gpu-exporter': 'HTTP metrics', teleport: 'tsh · HTTPS' };
 const MODE_TEXT = { ssh: 'Direct SSH', teleport: 'Teleport only', both: 'Direct SSH + Teleport' };
 const LOGIN_ONE = [{ name: 'login', mode: 'ssh', port: 2222 }];
+const loginAddr = l => (l.ip || l.name) + (l.mode === 'teleport' ? ' · no port' : ` · :${l.port}`);  // the address a client dials (private IP; the published port is on 127.0.0.1)
 function loginList() { try { const l = lastCluster && JSON.parse(lastCluster).logins; return l && l.length ? l : LOGIN_ONE; } catch (e) { return LOGIN_ONE; } }
 function buildFlow() {
   const g = $('flow'), nodes = nodeList(), lgs = loginList(), svcs = svcList().filter(x => x[0] !== 'teleport'), tpBox = svcList().find(x => x[0] === 'teleport');
@@ -994,10 +995,10 @@ function buildFlow() {
   if (tpBox) edge('teleport', curve({ x: tpP.x + BW, y: tpP.y + BH / 2 }, { x: G.cluster.x, y: tpP.y + BH / 2 }), 'Teleport', 0.5);
   for (const [a, p] of place) {
     if (a === tpBox) { g.append(box('teleport', tpBox[1], tpBox[2], p, 'svc', 'teleport', 'blkacc')); continue; }
-    const l = a, lt = () => [`${l.name} · ${MODE_TEXT[l.mode]}`, l.mode === 'teleport' ? 'No direct port: only through the Teleport proxy' : `ssh on 127.0.0.1:${l.port} · click for the command`];
+    const l = a, lt = () => [`${l.name} · ${MODE_TEXT[l.mode]}`, l.mode === 'teleport' ? 'No direct port: only through the Teleport proxy' : `${l.ip || l.name} (also 127.0.0.1:${l.port}) · click for the command`];
     const bg = asButton(sv('g', { id: 'lg-' + l.name }), `${l.name}: ${MODE_TEXT[l.mode]}. Details`, () => openPop(bg, 'login', l.name), lt);
     bg.append(sv('rect', { class: 'blk lgn', x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), sv('text', { class: 'sn', x: p.x + 12, y: p.y + 24 }, l.name), sv('text', { class: 'sub', x: p.x + 12, y: p.y + 42 }, MODE_TEXT[l.mode]),
-      sv('text', { class: 'sub', x: p.x + 12, y: p.y + 58 }, l.mode === 'teleport' ? 'no direct port' : `127.0.0.1:${l.port}`)); g.append(bg);
+      sv('text', { class: 'sub', x: p.x + 12, y: p.y + 58 }, loginAddr(l))); g.append(bg);
   }
   svcs.forEach(([k, label, sub]) => g.append(box(k, label, sub, svcPos[k], 'svc', k)));
   CHIPS.forEach(([t], i) => {

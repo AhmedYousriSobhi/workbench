@@ -15,7 +15,7 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parent.parent; OUT = ROOT / "docs/manual/img"
 nodes = [{"name": n, "kind": "compute", "state": "ok", "label": "Healthy", "temp": 45 + i, "power": "On", "gpus": 0, "bcm": "UP"} for i, n in enumerate(["cn001", "cn002", "cn003", "cn004"])] + \
         [{"name": n, "kind": "gpu", "state": "ok", "label": "Healthy", "temp": 44 + i, "power": "On", "gpus": 8, "gpu_util": 3 + i, "gpus_busy": 0, "bcm": "UP"} for i, n in enumerate(["gpu001", "gpu002"])]
-cluster = {"logins": [{"name": "login", "mode": "ssh", "port": 2222}, {"name": "login2", "mode": "teleport", "port": None}, {"name": "login3", "mode": "both", "port": 2224}], "services": {"bmc-farm": True, "bcm-mock": True, "jira-mock": True, "gpu-exporter": True, "teleport": True}, "nodes": nodes,
+cluster = {"logins": [{"name": "login", "mode": "ssh", "port": 2222, "ip": "10.141.255.254"}, {"name": "login2", "mode": "teleport", "port": None, "ip": "10.141.255.252"}, {"name": "login3", "mode": "both", "port": 2224, "ip": "10.141.255.251"}], "services": {"bmc-farm": True, "bcm-mock": True, "jira-mock": True, "gpu-exporter": True, "teleport": True}, "nodes": nodes,
            "actions": [{"id": "power-off", "label": "Power off", "gpu_only": False}, {"id": "clear", "label": "Clear faults", "gpu_only": False}]}
 sys.path.insert(0, str(ROOT))
 import yaml
@@ -40,12 +40,12 @@ try:
             j = r.fetch().json(); j["logins"]["now"] = ["ssh", "teleport", "both"]; r.fulfill(json=j)
         pg.route("**/api/settings", settings)
         pg.goto(url); pg.wait_for_selector("#flow rect.blk"); pg.wait_for_timeout(1200)
-        pg.evaluate(FLOW)
+        pg.evaluate("setTree(true, false)"); pg.evaluate(FLOW)
         pg.wait_for_timeout(500)
         pg.screenshot(path=str(OUT / "web-infrastructure.png"))
         pg.hover("#lg-login2"); pg.wait_for_timeout(250); pg.screenshot(path=str(OUT / "web-architecture-hover.png")); pg.mouse.move(2, 2)
         pg.click("#nd-gpu001"); pg.wait_for_selector("#pop dl"); pg.wait_for_timeout(500); pg.screenshot(path=str(OUT / "web-architecture-popup.png")); pg.keyboard.press("Escape")
-        pg.click("#treetoggle"); pg.wait_for_timeout(400); pg.screenshot(path=str(OUT / "web-architecture-wide.png")); pg.click("#treetoggle"); pg.wait_for_timeout(300)
+        pg.evaluate("setTree(false, false)"); pg.wait_for_timeout(400); pg.screenshot(path=str(OUT / "web-architecture-wide.png")); pg.evaluate("setTree(true, false)"); pg.wait_for_timeout(300)
         pg.click("#tb-conn"); pg.wait_for_selector("#conn-rows tr td code"); pg.wait_for_timeout(300)
         pg.locator("#conn-rows tr[data-id='teleport']").scroll_into_view_if_needed()
         pg.evaluate("document.querySelector('#conn-rows tr[data-id=teleport]').classList.add('focus')")
