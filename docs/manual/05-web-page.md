@@ -11,7 +11,7 @@ One dashboard over everything: governor, cluster, scenarios. It fits one screen 
 Open the link once: it sets a cookie. The token lives in `compose/generated/secrets/ui_token`; anyone with the link on
 this machine can use the page, so keep it private. The page listens on `127.0.0.1` only.
 
-![The dashboard: the Infrastructure architecture on the left, the entity list on the right](img/web-infrastructure.png)
+![The dashboard: the Infrastructure architecture on the left with the login nodes, services and nodes, the node list on the right](img/web-infrastructure.png)
 
 *A healthy cluster with Teleport on: L0 Normal, 5 of 5 services answering, 6 of 6 nodes healthy, "All clear" under Needs attention (sample data; the numbers on your page are live). Some older screenshots further down predate the redesign; `scripts/ui_shots.py` regenerates fresh ones.*
 
@@ -21,7 +21,7 @@ this machine can use the page, so keep it private. The page listens on `127.0.0.
 |---|---|
 | **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **☰ Menu**, help and the theme switch. The strip is for status only. **☰ Menu** lists the actions in three groups, each with a one-line hint: *Run* (**▶ Scenarios**), *Configure* (**▦ Cluster architecture**: nodes, GPUs per node, optional parts and the plan; **✚ Health checks**) and *Share* (**⇩ Export**). Esc closes it. Pressing the level or memory chip opens the **Governor** panel |
 | **Tabs and Needs attention** | the tabs *Nodes* and *Connections*, and one slim bar next to them with every item that needs you, or "All clear" |
-| **Stage** (Nodes tab) | the **Infrastructure architecture** on the left and the **entity list** on the right |
+| **Stage** (Nodes tab) | the **Infrastructure architecture** on the left and the **node list** on the right (its three groups, Compute, GPU and Services, stacked one under the other). **Hide node list** folds the list away and gives the diagram the whole width; the choice is remembered (windows between 1100 and 1500 px start with the list folded, press **Show node list**) |
 
 Three panels open on top of the page from the top strip or its **☰ Menu** and close with **✕ Close**, Esc or a click outside: **Scenarios**,
 **Plan** and **Governor**. A node is different: it opens *in place of the list* (below), so the Infrastructure architecture stays in view.
@@ -48,18 +48,56 @@ states and CPU load are not shown, because the page has no Docker access by desi
 
 ## Infrastructure architecture
 
-The **Infrastructure architecture** panel draws the *Clients* (monitoring app, Prometheus, curl), the *Faults* box (scenarios and buttons)
-and the *Cluster*: the mock services, **Teleport when that part is on**, and **every node as a tile** with its state. (It was called
-*Traffic*; the name changed because the tool will grow to several clusters. The **Cluster architecture** sheet below is a different
-thing: it changes what runs.) A round dot travels from the clients to a service for each real request; a diamond travels from
-*Faults* to the **node it hits** and a ring flashes on that tile. Lines light up while a service is being used, and each service
-shows its rate per minute. *Pause animation* stops the dots. They stop by themselves at governor L3 and under reduced motion, and the
-live feed runs only while the page is visible and the Nodes tab is open.
+The **Infrastructure architecture** is the main view: everything on it is a part you can point at.
 
-**Teleport in the diagram.** The box appears only when the Teleport part is built, and the entity list gets a `teleport` card with it
-(`answering` or `not answering`). Its rate is **connections per minute**: every `tsh ssh` or web terminal session makes the proxy
-connect to a node, and Teleport counts that (`teleport_connect_to_node_attempts_total` on its diagnostics port, 127.0.0.1:3434). Nothing is
-invented: with no connections there are no dots. Click the box to open its row in **Connections**.
+![Infrastructure architecture: clients, the access layer with three login nodes, the services and the nodes, every line labelled](img/web-infrastructure.png)
+
+Read it from left to right:
+
+| Box | What it is |
+|---|---|
+| **Clients** | the monitoring app, Prometheus, curl and scripts, and *You: ssh · tsh* (a terminal) |
+| **Faults** | scenarios and buttons; a diamond travels from here to the node it hits |
+| **Access: how users get in** | the **login nodes** (one box each, with how it authenticates: *Direct SSH*, *Teleport only* or *Direct SSH + Teleport*) and the **Teleport proxy** when that part is on |
+| **Cluster nodes** | every compute and GPU node as a tile with its state |
+| **Services: what clients call** | BMC farm, BCM mock, Jira mock, GPU exporter |
+
+Every line says **how** it connects:
+
+| Line | Meaning |
+|---|---|
+| `direct SSH` (solid, arrow) | a client with the cluster key connects to a login node on its published port (login nodes set to *Direct SSH* or *both*) |
+| `Teleport` between the Teleport box and a login node (long dashes) | the login node is reached through the Teleport proxy (*Teleport only* or *both*) |
+| `jump host` (short dashes) | from a login node you `ssh` on to the nodes: the login node is the jump host |
+| `Teleport` from the Teleport box to the nodes (long dashes) | the nodes are also reachable through the proxy (agentless OpenSSH) |
+| `HTTP …` and `tsh · HTTPS` (thin) | an API call from a client to a service, or the `tsh` connection to the proxy |
+
+A round dot travels along a line for each real request; a diamond travels from *Faults* to the node it hits and a ring flashes on that
+tile. *Pause animation* stops the dots; they also stop at governor L3 and under reduced motion, and the live feed runs only while
+the page is visible and the Nodes tab is open. **How to read this diagram** (under the picture) repeats the legend.
+
+**Hover** a part for a one-line tip (its state and how it is reached). **Click** it (or Tab to it and press Enter) for a pop-up window
+next to it with its address, the credential file, a command to copy, and buttons for the details:
+
+![Hovering login2 shows a tip: Teleport only, no direct port](img/web-architecture-hover.png)
+
+![Clicking gpu001 opens a pop-up: address, how it is reached, the ssh command, and the actions](img/web-architecture-popup.png)
+
+Esc closes the pop-up and returns the focus to the part. For a node, **Actions and details** opens its panel (below); **Connections**
+opens the row for that part in the Connections tab.
+
+**Fold the list away.** The list beside the diagram is a second way to the same parts. **Hide node list** gives the diagram the
+whole width, which is the best view when the diagram is your main way in:
+
+![The Infrastructure architecture with the node list folded away](img/web-architecture-wide.png)
+
+On a phone the diagram scrolls sideways inside its panel and the list sits below it.
+
+**Teleport in the diagram.** The Teleport box and the Teleport lines appear only when the Teleport part is built, and the node list
+gets a `teleport` card with it (`answering` or `not answering`). Its rate is **connections per minute**: every `tsh ssh` or web
+terminal session makes the proxy connect to a node, and Teleport counts that (`teleport_connect_to_node_attempts_total` on its
+diagnostics port, 127.0.0.1:3434). Nothing is invented: with no connections there are no dots. The login nodes come from the saved
+workbench (`benchctl start --login ssh,teleport,both`, or the Login nodes rows of the sheet).
 
 ## Teleport from the page
 
@@ -79,7 +117,7 @@ To turn it off, untick it and apply again. Two things stay in a terminal because
 
 ## A node: actions and info
 
-Click a node card. Its panel **replaces the list in place** (it is not a pop-up), so you can watch the Infrastructure architecture
+Click a node card, or a node tile in the diagram and then **Actions and details**. Its panel **replaces the list in place** (it is not a pop-up), so you can watch the Infrastructure architecture
 while you act. The panel has two cards and a header with **← All nodes** (Esc does the same), the node's name and its
 live state.
 
@@ -110,6 +148,14 @@ memory bar ("1.7 GB needed of 4.5 GB free"). It shows the change against what ru
 `benchctl up ...` command for a terminal. Editing the numbers only estimates. **Apply to the running workbench** (press
 twice: the second press confirms) asks the governor to rebuild it; new nodes start and nodes you no longer want are
 removed. See [choose the workbench](../guides/choose-workbench.md).
+
+**If the sheet says "Could not load the options".** The page and the process behind it are different versions (the page was updated
+while an older one kept running). Restart it and reload:
+
+```bash
+./scripts/benchctl stop
+./scripts/benchctl start
+```
 
 ## Scenarios
 
@@ -187,9 +233,8 @@ A node set `down` by hand (`benchctl set node NAME down`) stays down until `resu
 by itself (`ReturnToService=1`). A cluster built before this setting keeps the old behaviour until its `slurm.conf` is regenerated
 and reloaded: `./scripts/benchctl up`, then `./scripts/benchctl exec slurmctld -- scontrol reconfigure`.
 
-**The Infrastructure architecture is clickable.** A node tile opens that node's panel; a service box (BMC farm, BCM mock, Jira mock,
-GPU exporter, Teleport) or the *Monitoring app* and *Prometheus* chips open the Connections tab with that part's row marked. Tab to
-a shape and press Enter or Space for the same.
+**The Infrastructure architecture is clickable.** Every box, tile and chip opens a pop-up with the part's details (see above); its
+**Connections** button opens that part's row in the Connections tab. Tab to a shape and press Enter or Space for the same.
 
 **BMCs per node.** In **▦ Cluster architecture**, switching *BMC* on shows the nodes that get a BMC address (all by default). Each
 BMC is its own small container with its own address (`10.148.x.y:443`) and costs about 32 MB, shown in the memory bar; switch off
