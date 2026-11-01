@@ -25,7 +25,7 @@ Jira and storage already filled in. A file never holds secrets, so set these thr
 
 ### From the page
 
-Press **⇩ Export** in the top strip, tick *One BMC target per node* if you want it, and **Download**. The page has no Docker access, so it lists the cluster on disk (the workbench last built, else the profile `up` started) instead of probing containers. If the format ID below is not set it says so in one line.
+Open **☰ Menu → ⇩ Export** in the top strip, tick *One BMC target per node* if you want it, and **Download**. The page has no Docker access, so it lists the cluster on disk (the workbench last built, else the profile `up` started) instead of probing containers. If the format ID below is not set it says so in one line.
 
 ## What is in the file
 

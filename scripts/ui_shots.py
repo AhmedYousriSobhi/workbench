@@ -102,6 +102,19 @@ def capture(out: Path) -> dict:
                         page.wait_for_timeout(300)
                         if page.evaluate("document.documentElement.scrollHeight > window.innerHeight + 2"):
                             result["a11y"].append("dashboard needs page scrolling at desktop size")
+                    page.click("#menubtn")  # the top menu: opens as a disclosure, stays on screen, Escape closes it and returns focus
+                    if page.get_attribute("#menubtn", "aria-expanded") != "true" or page.locator("#menu:visible").count() != 1:
+                        result["a11y"].append("menu did not open")
+                    mbox = page.locator("#menu").bounding_box() or {"x": -1, "y": -1, "width": 0, "height": 0}
+                    if mbox["x"] < 0 or mbox["x"] + mbox["width"] > w + 1 or mbox["y"] + mbox["height"] > h + 1:
+                        result["a11y"].append(f"menu does not fit the {vp} screen")
+                    mpath = out / f"menu-{vp}-{scheme}.png"
+                    page.screenshot(path=str(mpath))
+                    result["shots"].append(str(mpath))
+                    page.keyboard.press("Escape")
+                    if page.locator("#menu:visible").count() or page.evaluate("document.activeElement.id") != "menubtn":
+                        result["a11y"].append("Escape must close the menu and return focus to the Menu button")
+                    page.click("#menubtn")
                     page.click("#scnbtn")  # scenarios sheet: list, filter, play buttons
                     page.wait_for_selector("#list .btn")
                     spath = out / f"scenarios-{vp}-{scheme}.png"
@@ -110,6 +123,7 @@ def capture(out: Path) -> dict:
                     page.click("#scn-close")
                     if page.locator("#scndlg[open]").count():
                         result["a11y"].append("scenarios sheet did not close")
+                    page.click("#menubtn")
                     page.click("#planbtn")  # planner sheet: opens, estimates, reacts to a stepper press, shows the command
                     page.wait_for_function("document.querySelector('#pl-msg').textContent.length > 5")
                     page.click("[data-step=pl-cpu][data-d='-1']")

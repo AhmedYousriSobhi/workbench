@@ -130,7 +130,7 @@ Press **Test BCM Connection** (save the cluster first). You can check by hand wh
 Each BMC is a small container on the BMC network (`10.148.0.0/16`) with its own fixed IP at the standard port 443
 ([ADR 0018](../adr/0018-fixed-addressing-plan.md)). The address works from this machine and from the login node (the jump
 host is also on that network). `benchctl export profile --bmc` writes one target per node with its own address.
-A node can have no BMC: switch it off in **⚙ Settings** (the BMC part lists the nodes) or with `--bmc-nodes cn001,gpu001`;
+A node can have no BMC: switch it off in **▦ Cluster architecture** (the BMC part lists the nodes) or with `--bmc-nodes cn001,gpu001`;
 each BMC costs about 32 MB. A client that cannot route to the cluster network uses the old single listener,
 `127.0.0.1:8443` with the Host header `bmc-<node>` (`--loopback`).
 

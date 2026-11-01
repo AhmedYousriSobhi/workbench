@@ -28,7 +28,7 @@ between starts, and `cmsh` listed made-up addresses. A real cluster has distinct
   on the farm (9000 + the node's index), which keeps all BMC state; the farm picks the node by that port, so the Host header
   is not needed. A separate state container per BMC was rejected: it would have touched every tool path (scenario injection,
   the page, the traffic counters). The farm and the login node (the jump host) are on both networks. A node's BMC is switched
-  on or off per node (`bmc_nodes` in the workbench selection, `--bmc-nodes`, the Settings sheet): no forwarder, no address,
+  on or off per node (`bmc_nodes` in the workbench selection, `--bmc-nodes`, the Cluster architecture sheet): no forwarder, no address,
   no export target, 32 MB saved. 127.0.0.1:8000/8443 on the farm stays for the tool and as the fallback.
 
 ## Consequences
