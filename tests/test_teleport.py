@@ -8,7 +8,7 @@ import yaml
 from benchctl import addressing, compose, stack, teleport, workbench
 
 ROOT = Path(__file__).resolve().parents[1]
-SIM = yaml.safe_load((ROOT / "sim.yaml").read_text())
+SIM = {**yaml.safe_load((ROOT / "sim.yaml").read_text()), "login": ["both", "teleport"]}  # login: direct SSH and Teleport; login2: Teleport only
 IPS = addressing.plan(SIM, 2)
 
 
@@ -37,8 +37,9 @@ def test_resources_name_every_node_and_user_with_stable_ids():
     kinds = [d["kind"] for d in docs]
     assert kinds[0] == "role" and kinds.count("user") == len(SIM["users"])
     nodes = {d["spec"]["hostname"]: d for d in docs if d["kind"] == "node"}
-    assert set(nodes) == {"login", *IPS["nodes"]}
+    assert set(nodes) == {"login", "login2", *IPS["nodes"]}
     assert nodes["login"]["spec"]["addr"] == f"{addressing.LOGIN_IP}:22" and nodes["login"]["sub_kind"] == "openssh"
+    assert nodes["login2"]["spec"]["addr"] == f"{IPS['logins']['login2']}:22"
     assert nodes["cn001"]["metadata"]["name"] == teleport.node_id("cn001") != teleport.node_id("cn002")
     assert nodes["gpu001"]["metadata"]["labels"] == {"kind": "gpu"}
     role = docs[0]["spec"]
@@ -53,7 +54,7 @@ def test_fetch_ca_strips_the_prefix_and_rejects_anything_else():
 
 def test_compose_adds_teleport_only_when_selected():
     prof = compose.load_profile("min")
-    assert "teleport" not in compose.generate(SIM, prof)["services"]
+    assert "teleport" not in compose.generate({**SIM, "login": None}, prof)["services"]
     svcs = compose.generate(SIM, {**prof, "groups": [*prof["groups"], "teleport"]})["services"]
     t = svcs["teleport"]
     assert t["ports"] == ["127.0.0.1:3080:3080", "127.0.0.1:3434:3434"] and "build" not in t and t["mem_limit"] == "256m"
@@ -111,7 +112,7 @@ def test_bootstrap_loads_resources_signs_hosts_and_identities(tmp_path):
     assert ok and not msgs and (tmp_path / "openssh_ca.pub").read_text() == "ssh-ed25519 AAAA\n"
     signs = [c for c in calls if c[:2] == ["auth", "sign"]]
     hosts = [c for c in signs if "--format=openssh" in c]
-    assert len(hosts) == len(teleport.targets(IPS)) - 1 and not any("cn001," in c[2] for c in hosts)
+    assert len(hosts) == len(teleport.targets(SIM, IPS)) - 1 and not any("cn001," in c[2] for c in hosts)
     assert any(f"--host={addressing.LOGIN_IP},login,{teleport.node_id('login')}" == c[2] for c in hosts)
     ids = [c for c in signs if c[2].startswith("--user=")]
     assert [c[2] for c in ids] == [f"--user={u['name']}" for u in SIM["users"]] and "--ttl=12h" in ids[0]

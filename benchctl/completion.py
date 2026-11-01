@@ -89,6 +89,16 @@ def parts(incomplete: str) -> list[str]:
     return _starts(list(workbench.PARTS), incomplete)
 
 
+@_safe
+def login_modes(incomplete: str) -> list[str]:
+    """Completer for --login: the auth modes, also after a comma (`ssh,t` -> `ssh,teleport`); a mode may repeat (one per node)."""
+    from . import logins
+
+    head, _, tail = incomplete.rpartition(",")
+    prefix = head + "," if head else ""
+    return [prefix + m for m in logins.MODES if m.startswith(tail)]
+
+
 def category(name: str):
     """Completer for a category flag such as --hardware: its items, also after a comma (`bmc,b` -> `bmc,bcm`), without
     repeating one already typed."""

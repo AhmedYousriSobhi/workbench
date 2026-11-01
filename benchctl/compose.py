@@ -1,11 +1,12 @@
 """Generate the Docker Compose file from sim.yaml and a profile (SPEC section 3)."""
+import copy
 import os
 import sys
 from pathlib import Path
 
 import yaml
 
-from . import addressing, nhc, slurmconf, teleport
+from . import addressing, logins, nhc, slurmconf, teleport
 from .nodes import node_names
 
 OBSERVABILITY = "../observability.yml"  # static; hosts prometheus, grafana, gpu-exporter-farm
@@ -63,6 +64,12 @@ def generate(sim: dict, profile: dict) -> dict:
             img = image.split("/")[-1].split(":")[0]
             build = next((f"../../{d}/{n}" for n in (name, img) for d in ("components", "images") if (Path(d) / n).is_dir()), None)
             services[name] = _service(image, mem, prio, build)
+    if "login" in services:  # more login nodes are copies of the first (ADR 0023); the image is built once, by `login`
+        for i, (lname, _) in enumerate(logins.nodes(sim)):
+            if i:
+                services[lname] = {k: v for k, v in copy.deepcopy(services["login"]).items() if k != "build"}
+    if problems := logins.problems(sim, {"teleport"} if "teleport" in services else set()):
+        raise logins.LoginError("; ".join(problems))
     for name, kind in node_names(sim, profile.get("compute_nodes")):
         svc = _service("workbench/node-base:dev", SLURMD_MB, SLURMD_PRIO, "../../images/node-base")
         svc["hostname"] = name
@@ -75,7 +82,7 @@ def generate(sim: dict, profile: dict) -> dict:
         services[name] = svc
     slurm_mount = "./slurm:/etc/slurm:ro"
     for name, svc in services.items():
-        if name in ("slurmctld", "slurmrestd", "login") or svc["labels"].get("workbench.node"):
+        if name in ("slurmctld", "slurmrestd") or logins.is_login(name) or svc["labels"].get("workbench.node"):
             svc["volumes"] = [slurm_mount]
             if svc["labels"].get("workbench.node"):  # sshd on every compute node (ADR 0014)
                 svc["volumes"].append("./nhc:/etc/workbench/nhc:ro")  # the health checks, edited live (ADR 0019)
@@ -83,10 +90,15 @@ def generate(sim: dict, profile: dict) -> dict:
                 svc.setdefault("environment", {})["WORKBENCH_SSHD"] = "1"
             svc["hostname"] = name
             svc.setdefault("environment", {})["WORKBENCH_USERS"] = users_env(sim)
-    if "login" in services:  # SSH for clients such as a monitoring app: localhost only, keys from ./secrets/ssh
-        services["login"]["volumes"].append("./secrets/ssh:/run/workbench/ssh:ro")
-        services["login"].update({"ports": [f"127.0.0.1:{SSH_PORT}:22"],
-                                  "depends_on": ["slurmctld"] if "slurmctld" in services else []})
+    for i, (lname, mode) in enumerate(logins.nodes(sim) if "login" in services else []):
+        # SSH for clients such as a monitoring app: localhost only, keys from ./secrets/ssh. A `teleport` login publishes
+        # no port and takes no key (login.sh): the proxy is its only way in (ADR 0023)
+        svc = services[lname]
+        svc["volumes"].append("./secrets/ssh:/run/workbench/ssh:ro")
+        svc.setdefault("environment", {})["WORKBENCH_LOGIN_AUTH"] = mode
+        svc.update({"depends_on": ["slurmctld"] if "slurmctld" in services else []})
+        if mode in logins.DIRECT:
+            svc["ports"] = [f"127.0.0.1:{SSH_PORT + i}:22"]
     if "teleport" in services:  # auth + proxy (ADR 0020): only the proxy and diagnostics ports are published, localhost only
         services["teleport"].update({
             "image": teleport.image(sim),  # its entrypoint already is `teleport start -c /etc/teleport/teleport.yaml`
@@ -96,7 +108,7 @@ def generate(sim: dict, profile: dict) -> dict:
             "ports": [f"127.0.0.1:{teleport.PROXY_PORT}:{teleport.PROXY_PORT}",
                       f"127.0.0.1:{teleport.DIAG_PORT}:{teleport.DIAG_PORT}"]})
         for svc in services.values():  # sshd trusts the Teleport CA and presents its host certificate (nodes and login)
-            if svc["labels"].get("workbench.node") or svc is services.get("login"):
+            if svc["labels"].get("workbench.node") or any(svc is services.get(n) for n in logins.via_teleport(sim)):
                 svc["volumes"].append(f"./secrets/teleport:{teleport.CONTAINER_SECRETS}:ro")
     if "bmc-farm" in services:  # Redfish endpoints for every node in sim.yaml, localhost only
         # :8443 is TLS at the standard /redfish/v1, the node chosen by Host: clients reach it as bmc-<node>
@@ -142,8 +154,9 @@ def _bmc_forwarders(services: dict, sim: dict, profile: dict) -> None:
                     "networks": {"ipmi": {"ipv4_address": p["bmc"][n]}}})
         services[f"bmc-{n}"] = svc
     services["bmc-farm"]["networks"] = {"default": {}, "ipmi": {"ipv4_address": addressing.IPMI_FARM_IP}}
-    if "login" in services:  # the head node reaches the BMC network: it is the jump host
-        services["login"]["networks"] = {"default": {}, "ipmi": {"ipv4_address": addressing.IPMI_LOGIN_IP}}
+    for lname, ip in p["ipmi_logins"].items():  # the head nodes reach the BMC network: they are the jump hosts
+        if lname in services:
+            services[lname]["networks"] = {"default": {}, "ipmi": {"ipv4_address": ip}}
 
 
 def users_env(sim: dict) -> str:

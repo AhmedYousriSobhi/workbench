@@ -172,7 +172,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         try:
             spec = workbench.from_dict({k: int(q[k]) for k in ("cpu_nodes", "gpu_nodes", "gpus_per_node") if k in q}
                                        | ({"parts": [p for p in q["parts"].split(",") if p]} if "parts" in q else {})
-                                       | ({"bmc_nodes": [n for n in q["bmc_nodes"].split(",") if n]} if "bmc_nodes" in q else {}),
+                                       | ({"bmc_nodes": [n for n in q["bmc_nodes"].split(",") if n]} if "bmc_nodes" in q else {})
+                                       | ({"login_nodes": [m for m in q["logins"].split(",") if m]} if "logins" in q else {}),
                                        workbench.defaults(sim))
         except (ValueError, workbench.SpecError) as e:
             raise HTTPException(422, str(e)) from e
@@ -194,7 +195,16 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             services, built = set(), None  # nothing built to read: offer the defaults
         nodes = [{"name": n, "kind": k, "bmc": f"bmc-{n}" in services if "bmc-farm" in services else True}
                  for n, k in cluster.nodes]
-        return JSONResponse({"parts": workbench.catalog(built), "nodes": nodes, "bmc_node_mb": compose.BMC_FORWARDER_MB,
+        from benchctl import logins
+
+        try:
+            saved = workbench.current(sim)  # the workbench last built, else sim.yaml's `login:`
+        except workbench.SpecError:
+            saved = None
+        return JSONResponse({"parts": workbench.catalog(built),
+                             "logins": {"modes": list(logins.MODES), "max": logins.MAX_LOGINS,
+                                        "now": saved.login_nodes if saved else logins.modes(sim)},
+                             "nodes": nodes, "bmc_node_mb": compose.BMC_FORWARDER_MB,
                              "limits": {k: list(v) for k, v in workbench.LIMITS.items()}})
 
     async def plan(request: Request):
@@ -206,6 +216,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             f" --with {p}" for p in sorted(spec.parts)) + "".join(f" --without {p}" for p in workbench.PARTS if p not in spec.parts)
         if spec.bmc_nodes is not None:
             flags += f" --bmc-nodes {','.join(spec.bmc_nodes)}"
+        flags += f" --login {','.join(spec.login_nodes)}"
         return JSONResponse({"fits": ok, "message": msg, "total_mb": est["total_mb"], "available_mb": avail,
                              "text": workbench.render(spec, est), "command": f"benchctl up {flags}"})
 
@@ -218,6 +229,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
                "gpus_per_node": spec.gpus_per_node, "parts": sorted(spec.parts)}
         if spec.bmc_nodes is not None:
             req["bmc_nodes"] = spec.bmc_nodes
+        req["login_nodes"] = spec.login_nodes
         try:
             res = await asyncio.to_thread(checks.governor_request, req, socket)
         except (OSError, ValueError) as e:

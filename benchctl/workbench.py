@@ -12,7 +12,7 @@ from pathlib import Path
 
 import yaml
 
-from . import compose
+from . import compose, logins
 
 SAVED = Path("compose/generated/workbench.yaml")  # the spec `apply`/`up` last built; absent after a plain profile `up`
 OBSERVABILITY_MB = 700                            # prometheus 300 + grafana 300 + gpu-exporter 100 (compose/observability.yml)
@@ -64,6 +64,7 @@ class Spec:
     parts: list[str] = field(default_factory=lambda: list(DEFAULT_PARTS))
     k8s_nodes: int = 0
     bmc_nodes: list[str] | None = None  # nodes that get a BMC address; None = every node (part "bmc")
+    login_nodes: list[str] = field(default_factory=lambda: list(logins.DEFAULT))  # auth mode of each login node (ADR 0023)
 
     def problems(self) -> list[str]:
         out = []
@@ -75,6 +76,11 @@ class Spec:
         out += [f"unknown part {p!r}; parts: {', '.join(PARTS)}" for p in self.parts if p not in PARTS]
         if self.bmc_nodes is not None and not all(isinstance(n, str) and re.fullmatch(r"[a-z]{2,8}[0-9]{3}", n) for n in self.bmc_nodes):
             out.append("bmc_nodes must be node names such as cn001, gpu002")
+        try:
+            modes = logins.parse(self.login_nodes)
+            out += logins.problems({"login": modes}, set(self.parts))
+        except logins.LoginError as e:
+            out.append(str(e))
         if self.k8s_nodes:
             out.append("Kubernetes nodes are not built yet (SPEC section 11): use --k8s-nodes 0")
         return out
@@ -82,7 +88,8 @@ class Spec:
     def to_dict(self) -> dict:
         return {"name": self.name, "cpu_nodes": self.cpu_nodes, "gpu_nodes": self.gpu_nodes,
                 "gpus_per_node": self.gpus_per_node, "parts": sorted(set(self.parts)), "k8s_nodes": self.k8s_nodes,
-                "bmc_nodes": None if self.bmc_nodes is None else sorted(set(self.bmc_nodes))}
+                "bmc_nodes": None if self.bmc_nodes is None else sorted(set(self.bmc_nodes)),
+                "login_nodes": list(self.login_nodes)}
 
 
 def items(category: str) -> list[str]:
@@ -112,7 +119,7 @@ def expand(picked: dict[str, list[str] | None], addons: bool = False) -> list[st
 def defaults(sim: dict) -> Spec:
     """The workbench sim.yaml describes, so a flag only overrides what it names."""
     return Spec(cpu_nodes=sim.get("compute", {}).get("count", 4), gpu_nodes=sim.get("gpu", {}).get("nodes", 2),
-                gpus_per_node=sim.get("gpu", {}).get("gpus_per_node", 8))
+                gpus_per_node=sim.get("gpu", {}).get("gpus_per_node", 8), login_nodes=logins.modes(sim))
 
 
 def from_dict(data: dict, base: Spec) -> Spec:
@@ -121,7 +128,8 @@ def from_dict(data: dict, base: Spec) -> Spec:
         raise SpecError(f"unknown field(s) in the workbench file: {', '.join(sorted(unknown))}")
     merged = {**base.to_dict(), **data}
     return Spec(**{**merged, "parts": list(merged["parts"]),
-                   "bmc_nodes": None if merged.get("bmc_nodes") is None else list(merged["bmc_nodes"])})
+                   "bmc_nodes": None if merged.get("bmc_nodes") is None else list(merged["bmc_nodes"]),
+                   "login_nodes": list(merged["login_nodes"])})
 
 
 def load_file(path: Path, base: Spec) -> Spec:
@@ -158,6 +166,7 @@ def effective(sim: dict, spec: Spec) -> tuple[dict, dict]:
     have = {"compute": spec.cpu_nodes, "gpu": spec.gpu_nodes}
     if spec.bmc_nodes is not None:
         s["bmc"] = {**(s.get("bmc") or {}), "nodes": sorted(set(spec.bmc_nodes))}
+    s["login"] = list(spec.login_nodes)
     s["partitions"] = [p for p in s.get("partitions", []) if have.get(p["nodes"], 1) > 0]
     groups, drop = ["core", "access"], []
     for part in spec.parts:
@@ -202,7 +211,8 @@ def verdict(est: dict, available_mb: int, floor_mb: int = FLOOR_MB, spec: Spec |
 def render(spec: Spec, est: dict) -> str:
     rows = [f"Workbench:   {spec.name}",
             f"Nodes:       {spec.cpu_nodes} cpu, {spec.gpu_nodes} gpu x {spec.gpus_per_node} GPUs",
-            f"Parts:       {', '.join(sorted(set(spec.parts))) or 'none'} (always: slurm, login node, Prometheus, Grafana)",
+            "Login nodes: " + ", ".join(f"{n} ({m})" for n, m in logins.nodes({"login": spec.login_nodes})),
+            f"Parts:       {', '.join(sorted(set(spec.parts))) or 'none'} (always: slurm, Prometheus, Grafana)",
             "", "Memory limits (an upper bound, what the governor admits against):",
             f"  {est['node_count']:>3} nodes          {est['nodes_mb']:>6} MB"]
     rows += [f"  {n:<16} {mb:>6} MB" for n, mb in sorted(est["services_mb"].items())]

@@ -4,11 +4,12 @@ standard ports instead of 127.0.0.1 (ADR 0018, issues 147-149).
 The Docker bridge subnets are routed on the host, so no port publishing is needed to reach them. Two /16 networks follow
 Bright Cluster Manager's habit: `internalnet` (10.141.0.0/16) for nodes and services, `ipminet` (10.148.0.0/16) for BMCs.
 Compute nodes get 10.141.<i // 254>.<i % 254 + 1> and GPU nodes 10.141.<100 + i // 254>.<i % 254 + 1> (i counts within
-the kind, so scaling one kind never renumbers the other); the head node (login) is 10.141.255.254 and the services live in
+the kind, so scaling one kind never renumbers the other); the head node (login) is 10.141.255.254, further login nodes (login2, ...) are .252, .251, ... and the services live in
 10.141.255.0/24. components/bcm-mock/bcm.py repeats the node formula (it is stdlib-only and cannot
 import this file); tests/test_addressing.py keeps the two equal."""
 import ipaddress
 
+from . import logins as logins_mod
 from .nodes import node_names
 
 INTERNAL = "10.141.0.0/16"
@@ -18,6 +19,7 @@ GATEWAY = "10.141.255.253"
 IPMI_GATEWAY = "10.148.255.253"
 LOGIN_IP = "10.141.255.254"
 IPMI_LOGIN_IP = "10.148.255.254"  # the head node is also on the BMC network (the jump host)
+
 IPMI_FARM_IP = "10.148.255.12"    # the farm that owns every BMC's state
 BMC_NODE_PORT_BASE = 9000          # the farm's per-node TLS port: 9000 + index in node order (components/bmc-farm/bmc.py)
 # service -> last octet in 10.141.255.0/24. observability.yml (a static file) repeats the three observability ones.
@@ -28,6 +30,13 @@ SERVICE_HOSTS = {"slurmctld": 1, "slurmrestd": 2, "slurmdbd": 3, "mariadb": 4, "
 
 class AddressingError(Exception):
     pass
+
+
+def login_ip(index: int, subnet: str = INTERNAL) -> str:
+    """The first login node keeps .255.254; the next ones count down from .252 (.253 is the network gateway), clear of
+    the service block (hosts 1 to 30)."""
+    a, b = _prefix(subnet)
+    return f"{a}.{b}.255.{254 if index == 0 else 253 - index}"
 
 
 def _prefix(subnet: str) -> tuple[int, int]:
@@ -53,14 +62,15 @@ def plan(sim: dict, compute_override: int | None = None) -> dict:
     for name, kind in node_names(sim, compute_override):
         nodes[name], bmc[name] = host_ip(INTERNAL, seen[kind], kind), host_ip(IPMI, seen[kind], kind)
         seen[kind] += 1
-    return {"internal": INTERNAL, "ipmi": IPMI, "login": LOGIN_IP, "nodes": nodes, "bmc": bmc,
+    logins = {logins_mod.name(i): login_ip(i) for i, _ in enumerate(logins_mod.modes(sim))}
+    return {"internal": INTERNAL, "ipmi": IPMI, "login": LOGIN_IP, "logins": logins, "ipmi_logins": {n: login_ip(i, IPMI) for i, n in enumerate(logins)}, "nodes": nodes, "bmc": bmc,
             "bmc_port": {n: BMC_NODE_PORT_BASE + i for i, (n, _) in enumerate(node_names(sim, compute_override))},
             "services": {s: f"{a}.{b}.255.{h}" for s, h in SERVICE_HOSTS.items()}}
 
 
 def address_of(p: dict, name: str) -> str | None:
     """The internalnet IP of a node or service (the login node included), or None."""
-    return LOGIN_IP if name == "login" else p["nodes"].get(name) or p["services"].get(name)
+    return p["logins"].get(name) or p["nodes"].get(name) or p["services"].get(name)
 
 
 def overlaps(routes_text: str, subnets: tuple[str, ...] = (INTERNAL, IPMI)) -> list[str]:

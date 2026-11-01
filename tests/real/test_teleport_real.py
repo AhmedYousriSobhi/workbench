@@ -1,5 +1,6 @@
-"""Teleport access (ADR 0020, issue 39): the proxy answers, the nodes are registered, and `tsh ssh` reaches the login
-node and a compute node with a certificate from the user's identity file. Needs `tsh` on the host (same major as the
+"""Teleport access (ADR 0020, issue 39) and login nodes (ADR 0023, issue 189): the proxy answers, the nodes are registered,
+and `tsh ssh` reaches the login nodes that use Teleport and a compute node with a certificate from the user's identity
+file; a `teleport` login takes no key, an `ssh` login is not registered, a `both` login does either. Needs `tsh` on the host (same major as the
 server, sim.yaml teleport.version) and Docker; uses its own TELEPORT_HOME so a developer's ~/.tsh is never touched."""
 import json
 import os
@@ -32,7 +33,8 @@ def tele(tmp_path_factory):
         pytest.skip("tsh is not installed on this host")
     os.chdir(ROOT)
     sim, prof = workbench.effective(yaml.safe_load((ROOT / "sim.yaml").read_text()),
-                                    workbench.Spec(parts=["teleport"], cpu_nodes=2, gpu_nodes=0))
+                                    workbench.Spec(parts=["teleport"], cpu_nodes=2, gpu_nodes=0,
+                                                    login_nodes=["both", "teleport", "ssh"]))  # login, login2, login3
     said: list[str] = []
     if not stack.up(sim, "workbench", say=said.append, available=64 * 1024**3, prof=prof):
         why = " | ".join(said[-4:])
@@ -52,14 +54,14 @@ def test_the_proxy_answers_with_the_cluster_name(tele):
     assert ping["cluster_name"] == teleport.CLUSTER and ping["server_version"].count(".") == 2
 
 
-def test_every_node_and_the_login_node_are_registered(tele):
+def test_every_node_and_the_teleport_logins_are_registered(tele):
     r = tsh(tele, "ls", "--format=json")
     names = {n["spec"]["hostname"] for n in json.loads(r.stdout)}
-    assert {"login", "cn001", "cn002"} <= names, r.stderr
+    assert {"login", "login2", "cn001", "cn002"} <= names and "login3" not in names, r.stderr  # login3 is direct SSH only
 
 
-def test_tsh_ssh_reaches_the_login_node_and_a_compute_node(tele):
-    for node in ("login", "cn001"):
+def test_tsh_ssh_reaches_the_teleport_logins_and_a_compute_node(tele):
+    for node in ("login", "login2", "cn001"):
         r = tsh(tele, "ssh", f"alice@{node}", "hostname; id -un")
         assert r.returncode == 0 and r.stdout.split() == [node, "alice"], r.stderr
 
@@ -72,3 +74,22 @@ def test_a_login_the_role_does_not_allow_is_refused(tele):
 def test_an_invite_link_can_be_made_for_a_user(tele):
     url = teleport.invite("alice", stack._run, stack.dc)
     assert url.startswith(f"https://{PROXY}/web/")
+
+
+KEY = ROOT / "compose/generated/secrets/ssh/id_ed25519"
+
+
+def key_login(host: str, port: int) -> subprocess.CompletedProcess:
+    return subprocess.run(["ssh", "-i", str(KEY), "-p", str(port), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no",
+                           "-o", "UserKnownHostsFile=/dev/null", "-o", "ConnectTimeout=10", f"alice@{host}", "hostname"],
+                          capture_output=True, text=True, timeout=30, check=False)
+
+
+def test_direct_key_login_works_where_the_mode_allows_it_and_is_refused_otherwise(tele):
+    from benchctl import addressing
+    sim_ips = addressing.plan({**yaml.safe_load((ROOT / "sim.yaml").read_text()), "login": ["both", "teleport", "ssh"]}, 2)["logins"]
+    assert key_login("127.0.0.1", 2222).stdout.strip() == "login"     # both: the published port
+    assert key_login("127.0.0.1", 2224).stdout.strip() == "login3"    # ssh: the third node's port
+    refused = key_login(sim_ips["login2"], 22)                         # teleport only: reachable on the network, but no key is accepted
+    assert refused.returncode != 0 and "Permission denied" in refused.stderr, refused.stderr
+    assert key_login("127.0.0.1", 2223).returncode != 0                # and no port is published for it

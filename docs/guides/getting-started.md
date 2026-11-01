@@ -123,7 +123,7 @@ docker exec -it workbench-cn001-1 bash                            # a shell on a
 docker exec -u alice -it workbench-gpu001-1 bash                  # the same, as a simulated user
 ```
 
-For tools that connect over SSH (a desktop monitoring client), `benchctl up` starts a `login` container on `127.0.0.1:2222` with key login only and the Slurm client tools on PATH; the key is `compose/generated/secrets/ssh/id_ed25519` (ADR 0011):
+For tools that connect over SSH (a desktop monitoring client), `benchctl up` starts a `login` container (more login nodes, and Teleport-only ones: `benchctl up --login ssh,teleport`, see [Nodes and shells](../manual/04-nodes-and-shells.md#login-nodes-how-many-and-how-each-one-lets-you-in)) on `127.0.0.1:2222` with key login only and the Slurm client tools on PATH; the key is `compose/generated/secrets/ssh/id_ed25519` (ADR 0011):
 
 ```bash
 ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1 sinfo

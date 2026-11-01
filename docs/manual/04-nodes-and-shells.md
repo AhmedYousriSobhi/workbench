@@ -85,15 +85,59 @@ ssh -i .vagrant/machines/fidelity/libvirt/private_key vagrant@<IP>      # plain 
 ./bin/down.sh                      # destroy it
 ```
 
-## Teleport: `tsh` to the login node and the nodes
+## Login nodes: how many, and how each one lets you in
+
+By default there is one login node, `login`, reached by direct SSH. You can have 1 to 8, each with its own way in, so you can
+test Teleport against a login node that has no direct SSH at all.
+
+| Mode | What it means | Published port | Key login | Teleport |
+|---|---|---|---|---|
+| `ssh` | direct SSH with the cluster key (the default) | `127.0.0.1:2222`, then 2223, ... by position | yes | no |
+| `teleport` | only a Teleport certificate gets in | none | refused | yes |
+| `both` | either | yes | yes | yes |
+
+The first node is `login`, then `login2`, `login3`, ... (addresses 10.141.255.254, .252, .251, ...).
+
+**1. Choose the layout** (pick one):
+
+```bash
+./scripts/benchctl start --login ssh,teleport          # login = direct SSH, login2 = Teleport only
+./scripts/benchctl up --login both,teleport,ssh        # three login nodes
+```
+
+`--login` takes one mode per node, comma separated; Tab completes the modes. A `teleport` or `both` node turns the Teleport part on by itself. To keep a layout, set it in `sim.yaml`:
+
+```yaml
+login: [ssh, teleport]
+```
+
+or in the page: **☰ Menu → ▦ Cluster architecture → Login nodes** (**Add login node**, pick *Direct SSH*, *Teleport only* or *Direct SSH and Teleport* for each, **Apply**).
+
+![The Cluster architecture sheet: three login nodes, each with its own way in](img/web-login-nodes.png)
+
+**2. See how to reach each one.** The page's **Connections** tab has one row per login node with the exact command, and `./scripts/benchctl up` prints them:
+
+![Connections: login (direct SSH), login2 (Teleport only), login3 (both)](img/web-login-connections.png)
+
+**3. Use them.**
+
+```bash
+ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1       # login   (ssh or both)
+ID=compose/generated/secrets/teleport/identity/alice
+tsh --proxy=127.0.0.1:3080 --insecure -i $ID ssh alice@login2                 # login2  (teleport or both)
+```
+
+A key offered to a `teleport` node is refused (`Permission denied`), and it has no published port. A node set to `ssh` is not registered in Teleport, so `tsh ls` does not list it. Fewer login nodes than before: the extra containers are removed on the next `up`. The client profile export (`benchctl export profile`) uses the first node that takes a key.
+
+## Teleport: `tsh` to the login nodes and the nodes
 
 The optional **Teleport** part (auth and proxy in one container, about 256 MB limit, [ADR 0020](../adr/0020-teleport-agentless-openssh.md))
-lets a client reach the login node and every compute and GPU node through Teleport. Nodes keep their own `sshd` and trust
+lets a client reach the login nodes that use Teleport (`teleport` or `both`, see above) and every compute and GPU node through Teleport. Nodes keep their own `sshd` and trust
 the Teleport CA (Teleport's agentless OpenSSH mode); no Teleport process runs on a node. It is off by default.
 
 ### Steps
 
-**1. Turn it on** (pick one):
+**1. Turn it on** (pick one; add `--login both` or `--login teleport` to make a login node reachable through it):
 
 ```bash
 ./scripts/benchctl start --access teleport        # from a terminal (adds Teleport to what runs; leaves the page up)
@@ -106,7 +150,7 @@ or in the page: **☰ Menu → ▦ Cluster architecture → Access → Teleport 
 
 ```bash
 ID=compose/generated/secrets/teleport/identity/alice
-tsh --proxy=127.0.0.1:3080 --insecure -i $ID ls                          # the login node and every node
+tsh --proxy=127.0.0.1:3080 --insecure -i $ID ls                          # the Teleport login nodes and every node
 tsh --proxy=127.0.0.1:3080 --insecure -i $ID ssh alice@cn001 hostname    # a command on a node
 ```
 

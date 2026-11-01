@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 
-from . import addressing, compose, nodes, stack, workbench
+from . import addressing, compose, logins, nodes, stack, workbench
 
 LOCAL_FORMAT_FILE = Path(".git/export-format")
 BMC_PORT = 8443
@@ -39,7 +39,9 @@ def build(sim: dict, services: set[str], name: str = "workbench", include_bmc: b
     private IPs at their standard ports (ADR 0018); `loopback` writes the published 127.0.0.1 ports instead, for a
     client that cannot route to the Docker network."""
     ips = addressing.plan(sim)["services"]
-    login = ("127.0.0.1", compose.SSH_PORT) if loopback else (addressing.LOGIN_IP, 22)
+    direct = [(n, i) for n, i in logins.direct(sim) if n in services]  # a client connects by key: Teleport-only logins are no use
+    login = (("127.0.0.1", compose.SSH_PORT + direct[0][1]) if loopback else (addressing.address_of(addressing.plan(sim), direct[0][0]), 22)) \
+        if direct else None
     web = lambda svc, port: f"http://127.0.0.1:{port}" if loopback else f"http://{ips[svc]}:{port}"
     users = [u["name"] for u in sim.get("users", [])]
     ssh_user = user or (users[0] if users else "alice")
@@ -47,6 +49,8 @@ def build(sim: dict, services: set[str], name: str = "workbench", include_bmc: b
         raise ExportError(f"unknown user {user!r}: sim.yaml has {', '.join(users)}")
     if "login" not in services:
         raise ExportError("this profile has no login node (group 'access'): a client cannot connect by SSH")
+    if login is None:
+        raise ExportError("no login node accepts direct SSH (every one is `teleport` only): add one with --login ssh,teleport")
     cluster: dict = {
         "name": name,
         "description": "Simulated cluster (workbench). Synthetic data on 127.0.0.1.",
