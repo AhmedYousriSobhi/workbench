@@ -50,8 +50,8 @@ def image(sim: dict) -> str:
 
 
 def config(sim: dict) -> str:
-    """teleport.yaml for auth + proxy only (no ssh_service: nodes are agentless). Config v3 serves everything on one
-    port, so only 3080 is published. A self-signed certificate (no https_keypairs), local users with
+    """teleport.yaml for auth + proxy only (no ssh_service: nodes are agentless). `proxy_listener_mode: multiplex` (auth_service) serves
+    everything on one port, so only 3080 is published; without it tsh finds no SSH proxy address. A self-signed certificate (no https_keypairs), local users with
     one-time codes (OTP): Teleport 18 cannot turn MFA off (`second_factor: off` makes auth exit with "cannot disable
     multi-factor authentication"), and `second_factors` is its documented setting. Identity files need no code."""
     settings(sim)
@@ -59,6 +59,7 @@ def config(sim: dict) -> str:
             "teleport": {"nodename": "teleport", "data_dir": "/var/lib/teleport",
                          "log": {"output": "stderr", "severity": "INFO"}},
             "auth_service": {"enabled": True, "cluster_name": CLUSTER, "listen_addr": "0.0.0.0:3025",
+                             "proxy_listener_mode": "multiplex",  # tells tsh to use the web port for SSH too (ping said tls_routing false without it)
                              "authentication": {"type": "local", "second_factors": ["otp"]}},
             "ssh_service": {"enabled": False},
             "proxy_service": {"enabled": True, "web_listen_addr": f"0.0.0.0:{PROXY_PORT}",
@@ -96,8 +97,13 @@ def resources(sim: dict, ips: dict) -> str:
 def prepare(sim: dict, ips: dict, conf: Path = CONF_DIR, secrets: Path = SECRETS_DIR) -> None:
     """Write the config and resource files and make the directories the container writes to (owned by this user:
     Docker would create them as root, and the container runs as the invoking user)."""
-    (conf / "data").mkdir(parents=True, exist_ok=True)
+    data = conf / "data"
+    fresh = not data.is_dir() or not any(data.iterdir())  # a new cluster has a new CA: what the old one signed is useless
+    data.mkdir(parents=True, exist_ok=True)
     (secrets / "hosts").mkdir(parents=True, exist_ok=True, mode=0o700)
+    if fresh:
+        for old in (*(secrets / "hosts").iterdir(), secrets / "openssh_ca.pub"):
+            old.unlink(missing_ok=True)
     (secrets / "identity").mkdir(exist_ok=True, mode=0o700)
     (conf / "teleport.yaml").write_text(config(sim))
     (conf / "resources.yaml").write_text(resources(sim, ips))

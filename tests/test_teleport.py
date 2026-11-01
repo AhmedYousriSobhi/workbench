@@ -27,7 +27,7 @@ def test_settings_default_and_validated():
 
 def test_config_is_auth_and_proxy_only_on_one_port():
     c = yaml.safe_load(teleport.config(SIM))
-    assert c["version"] == "v3" and c["ssh_service"] == {"enabled": False}
+    assert c["auth_service"]["proxy_listener_mode"] == "multiplex" and c["version"] == "v3" and c["ssh_service"] == {"enabled": False}
     assert c["auth_service"]["cluster_name"] == "workbench" and c["auth_service"]["authentication"] == {"type": "local", "second_factors": ["otp"]}
     assert c["proxy_service"]["web_listen_addr"] == "0.0.0.0:3080" and c["proxy_service"]["public_addr"] == ["127.0.0.1:3080"]
 
@@ -75,6 +75,20 @@ def test_prepare_writes_files_and_directories(tmp_path):
     assert (tmp_path / "conf" / "data").is_dir() and (tmp_path / "sec" / "hosts").is_dir()
     assert yaml.safe_load((tmp_path / "conf" / "teleport.yaml").read_text())["version"] == "v3"
     assert "kind: node" in (tmp_path / "conf" / "resources.yaml").read_text()
+
+
+def test_prepare_drops_certificates_signed_by_a_cluster_that_no_longer_exists(tmp_path):
+    conf, sec = tmp_path / "conf", tmp_path / "sec"
+    (sec / "hosts").mkdir(parents=True)
+    (sec / "hosts" / "cn001-cert.pub").write_text("old")
+    (sec / "openssh_ca.pub").write_text("old")
+    (conf / "data").mkdir(parents=True)
+    (conf / "data" / "proc").write_text("state")  # data exists: the certificates still belong to it
+    teleport.prepare(SIM, IPS, conf, sec)
+    assert (sec / "hosts" / "cn001-cert.pub").is_file()
+    (conf / "data" / "proc").unlink()  # data wiped: new CA on the next start
+    teleport.prepare(SIM, IPS, conf, sec)
+    assert not (sec / "hosts" / "cn001-cert.pub").exists() and not (sec / "openssh_ca.pub").exists()
 
 
 def run_bootstrap(tmp_path, runner, **kw):
