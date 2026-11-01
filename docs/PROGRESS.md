@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**82% built** (35 done, 32 in review, 11 partial, 4 to do, 82 items).
+**82% built** (35 done, 33 in review, 11 partial, 4 to do, 83 items).
 
 ## Roadmap
 
@@ -139,9 +139,10 @@ _A real scheduler the app can read, built from sim.yaml._
 | slurmrestd with JWT | ✅ Done | JWT-only REST on the internal network, own user, no privileges; skips two unshare steps instead of loosening seccomp (ADR 0003, ADR 0004). Verified live: no token 401, bad tokens get no data. | `benchctl/compose.py` | #38 |
 | Accounting | ✅ Done | MariaDB on a capped tmpfs plus slurmdbd; sacctmgr bootstrap creates cluster, QOS and users from sim.yaml; secrets stay in a gitignored folder. Verified live: a job as alice appears in sacct and the REST slurmdb endpoint. | `benchctl/slurmconf.py` | #38 |
 | Real-Slurm decision record | 🔍 In review | One ADR: what is real (scheduler, output, REST auth, node death timing), what is simulated (GPUs, cgroups, jobs), cost and what to cut first; linked from architecture 4.1 and client-testing. Issue 218. | `docs/adr/0025-slurm-is-real-the-rest-is-simulated.md` | - |
+| Faster image rebuilds | 🔍 In review | python3 moved into node-base's apt layer; login and slurm-ctl run no apt step, so a node-base change no longer re-installs packages twice: login + slurmctld rebuild 39.9 s before, 0.6 s after (one-time 22 s). Compute nodes carry an unused python3. Issue 225. | `images/node-base/Dockerfile`, `images/login/Dockerfile`, `images/slurm-ctl/Dockerfile` | - |
 | benchctl up / down / scale | ✅ Done | Pre-flight, staged start (observability, slurm, nodes), skips unbuilt mocks, scale regenerates slurm.conf, Grafana token created once (0600). Verified live with min; scale really stops containers. | `benchctl/stack.py` | #45 |
 
-6/7 done
+6/8 done
 
 ### Mocks (83%)
 
