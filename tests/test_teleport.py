@@ -1,3 +1,4 @@
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -119,7 +120,7 @@ def test_bootstrap_loads_resources_signs_hosts_and_identities(tmp_path):
     assert [c[2] for c in ids] == [f"--user={u['name']}" for u in SIM["users"]] and "--ttl=12h" in ids[0]
     assert calls[0] == ["status"] and ["create", "-f", "/etc/teleport/resources.yaml"] in calls
     assert not any(c[0] == "create" and "user-" in c[-1] for c in calls)  # every user exists (get succeeded): none is touched, so no password is lost
-    assert [c for c in calls if c[0] == "get"] == [["get", f"user/{u['name']}"] for u in SIM["users"]]
+    assert [c for c in calls if c[0] == "get" and c[1] != "nodes"] == [["get", f"user/{u['name']}"] for u in SIM["users"]]
 
 
 def test_bootstrap_says_why_it_failed(tmp_path):
@@ -187,3 +188,42 @@ def test_prepare_writes_one_file_per_user(tmp_path):
     teleport.prepare(SIM, IPS, tmp_path / "conf", tmp_path / "sec")
     for u in SIM["users"]:
         assert f"name: {u['name']}" in (tmp_path / "conf" / f"user-{u['name']}.yaml").read_text()
+
+
+def node_json(*names, kind="openssh"):
+    return json.dumps([{"kind": "node", "sub_kind": kind, "metadata": {"name": teleport.node_id(n)}, "spec": {"hostname": n}} for n in names])
+
+
+def test_prune_forgets_nodes_the_workbench_no_longer_has_and_their_certificates(tmp_path):
+    hosts = tmp_path / "hosts"
+    hosts.mkdir()
+    for n in ("login", "login3", "cn001"):
+        (hosts / f"{n}-cert.pub").write_text("c")
+        (hosts / n).write_text("k")
+    calls = []
+
+    def runner(cmd):
+        c = cmd[cmd.index("tctl") + 1:]
+        calls.append(c)
+        if c[:2] == ["get", "nodes"]:
+            return cp(out=node_json("login", "login3", "cn001", "cn999", "somebody-elses", kind="openssh"))
+        return cp()
+
+    sim = {**SIM, "login": ["both"]}                                   # only `login`; login3 was dropped, cn999 is not in the cluster
+    gone = teleport.prune(sim, addressing.plan(sim, 1), runner, stack.dc, tmp_path)
+    assert sorted(gone) == ["cn999", "login3"]                           # a name this tool does not register is never touched
+    assert [c for c in calls if c[0] == "rm"] == [["rm", f"node/{teleport.node_id(n)}"] for n in ("login3", "cn999")]
+    assert not (hosts / "login3-cert.pub").exists() and not (hosts / "login3").exists()      # its certificate and key go too
+    assert (hosts / "login-cert.pub").exists() and (hosts / "cn001-cert.pub").exists()
+
+
+def test_prune_never_fails_up_on_an_unreadable_list(tmp_path):
+    sim = {**SIM, "login": ["both"]}
+    for out, code in (("not json", 0), ("", 0), ("[]", 1), ('{"a": 1}', 0)):
+        assert teleport.prune(sim, addressing.plan(sim, 1), lambda c, o=out, k=code: cp(k, out=o), stack.dc, tmp_path) == []
+
+
+def test_bootstrap_says_what_it_forgot(tmp_path):
+    (tmp_path / "hosts").mkdir()
+    ok, msgs = run_bootstrap(tmp_path, lambda c: cp(out=node_json("login9")) if "nodes" in c else cp())
+    assert ok and msgs == ["teleport: forgot login9 (no longer in the workbench)"]

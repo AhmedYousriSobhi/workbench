@@ -7,6 +7,7 @@ node's address. Registration needs no Teleport binary on a node: a `kind: node, 
 
 Everything here is derived from sim.yaml and the addressing plan; `bootstrap` runs after the container is up and
 before the nodes start, because each node's sshd reads its host certificate when it starts."""
+import json
 import re
 import ssl
 import time
@@ -142,6 +143,36 @@ def wait_ready(runner: Callable, dc: Callable, timeout: float = 90, sleep: Calla
     return False
 
 
+_OURS = re.compile(r"(login[0-9]*|cn[0-9]+|gpu[0-9]+)")  # only names this tool registers are ever removed
+
+
+def prune(sim: dict, ips: dict, runner: Callable, dc: Callable, secrets: Path = SECRETS_DIR) -> list[str]:
+    """Forget what the selection no longer has: a login node or compute node that was dropped stays registered in Teleport (`tsh ls`
+    lists it, a dial fails with `no route to host`), and keeps its host certificate. Returns the names removed. Never fails `up`:
+    an unreadable list just removes nothing."""
+    keep = {node_id(n): n for n in targets(sim, ips)}
+    removed: list[str] = []
+    r = _tctl(runner, dc, "get", "nodes", "--format=json")
+    try:
+        found = json.loads(r.stdout or "[]") if r.returncode == 0 else []
+    except ValueError:
+        found = []
+    for item in found if isinstance(found, list) else []:
+        meta, spec = item.get("metadata", {}), item.get("spec", {})
+        host = str(spec.get("hostname", ""))
+        stale = meta.get("name") not in keep and item.get("sub_kind") == "openssh" and _OURS.fullmatch(host)
+        if stale and _tctl(runner, dc, "rm", f"node/{meta['name']}").returncode == 0:
+            removed.append(host)
+    hosts = secrets / "hosts"
+    for f in hosts.glob("*-cert.pub") if hosts.is_dir() else []:
+        name = f.name.removesuffix("-cert.pub")
+        if name not in set(keep.values()) and _OURS.fullmatch(name):
+            f.unlink(missing_ok=True)
+            (hosts / name).unlink(missing_ok=True)
+            (hosts / f"{name}.pub").unlink(missing_ok=True)
+    return removed
+
+
 def fetch_ca(port: int = PROXY_PORT, opener: Callable | None = None) -> str:
     """The OpenSSH user CA public key from the proxy (Teleport's documented source for `TrustedUserCAKeys`)."""
     ctx = ssl.create_default_context()
@@ -165,6 +196,9 @@ def bootstrap(sim: dict, ips: dict, runner: Callable, dc: Callable, say: Callabl
     if r.returncode != 0:
         say(f"FAILED teleport resources: {r.stderr.strip()[-300:]}")
         return False
+    gone = prune(sim, ips, runner, dc, secrets)
+    if gone:
+        say(f"teleport: forgot {', '.join(sorted(gone))} (no longer in the workbench)")
     for u in (u["name"] for u in sim.get("users", [])):
         if _tctl(runner, dc, "get", f"user/{u}").returncode != 0:  # absent: create it; present: leave it, its password is the user's
             r = _tctl(runner, dc, "create", f"/etc/teleport/user-{u}.yaml")

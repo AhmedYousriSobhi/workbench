@@ -5,6 +5,7 @@ click does exactly what the same step in a scenario does. No Docker access: Slur
 """
 import json
 import re
+import socket
 import urllib.error
 import urllib.request
 
@@ -65,6 +66,16 @@ def saved_logins(sim: dict | None = None) -> list[dict]:
     ips = addressing.plan({**sim, "login": list(modes)}, 1)["logins"] if sim else {}  # the private address each box shows
     return [{"name": logins.name(i), "mode": m, "port": compose.SSH_PORT + i if m in logins.DIRECT else None,
              **({"ip": ips[logins.name(i)]} if logins.name(i) in ips else {})} for i, m in enumerate(modes)]
+
+
+def port_open(host: str, port: int = 22, timeout: float = 0.3) -> bool:
+    """Whether something accepts a connection there: the page's only way to tell a login node that runs from one that was only
+    selected (it has no Docker, W-3). Short, because an address nobody owns waits for the whole timeout."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
 
 
 def http_json(url: str, body: dict | None = None, timeout: float = 2.0):
@@ -141,6 +152,7 @@ class Cluster:
         self.nodes = node_names(sim)
         self.gpus = sim.get("gpu", {}).get("gpus_per_node", 0)
         self.fetch, self.poster = fetch, poster
+        self.probe = port_open  # replaced in tests
 
     def _try(self, *args):
         try:
@@ -180,7 +192,7 @@ class Cluster:
             row["xid"] = xids.get(row["name"], 0)
             row["ib_down"], row["nic_flap"] = ib.get(row["name"], 0), row["name"] in flap
             row["state"], row["label"] = classify(row)
-        return {"services": dict(zip(names, up, strict=True)), "nodes": rows, "logins": saved_logins(self.sim),
+        return {"services": dict(zip(names, up, strict=True)), "nodes": rows, "logins": [{**lg, "up": self.probe(lg["ip"])} if lg.get("ip") else lg for lg in saved_logins(self.sim)],
                 "actions": [{"id": a, "label": v[0], "gpu_only": v[1]} for a, v in ACTIONS.items()]}
 
     def act(self, node: str, action: str) -> list[dict]:

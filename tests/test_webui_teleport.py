@@ -89,3 +89,23 @@ def test_login_boxes_carry_the_private_address(tmp_path, monkeypatch):
     rows = cluster.saved_logins(SIM)
     assert rows[0]["ip"] == "10.141.255.254" and rows[1]["ip"] == "10.141.255.252" and rows[1]["port"] is None
     assert "ip" not in cluster.saved_logins()[0]
+
+
+def test_snapshot_marks_a_login_node_that_nothing_answers_for(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    f = tmp_path / "compose" / "generated" / "workbench.yaml"
+    f.parent.mkdir(parents=True)
+    f.write_text(yaml.safe_dump({"name": "w", "cpu_nodes": 1, "gpu_nodes": 0, "gpus_per_node": 8, "parts": ["jira", "teleport"],
+                                 "k8s_nodes": 0, "bmc_nodes": None, "login_nodes": ["ssh", "teleport"]}))
+    c = cluster.Cluster(SIM, fetch=lambda *a: None)
+    seen = []
+    c.probe = lambda host: seen.append(host) or host.endswith(".254")      # login answers, login2 does not
+    logins = c.snapshot()["logins"]
+    assert [(lg["name"], lg["up"]) for lg in logins] == [("login", True), ("login2", False)] and seen == ["10.141.255.254", "10.141.255.252"]
+    assert cluster.port_open("127.0.0.1", 1) is False                       # nothing listens there
+
+
+def test_the_diagram_draws_a_login_that_is_not_running_dashed_and_says_so():
+    html = Path("webui/static/index.html").read_text()
+    for needle in ("loginRuns(l)", "'✗ not running'", "#flow .blk.lgn.down", "stackUp()", "l.up === false"):
+        assert needle in html, needle

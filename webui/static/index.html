@@ -287,7 +287,7 @@
   #flow text.elab { font:600 15px system-ui,sans-serif; fill:var(--fg); } #flow .elbg { fill:var(--panel); stroke:var(--line); stroke-width:1; }
   #flow marker path { fill:var(--dim); } #flow .lane.ssh, #flow .lane.teleport, #flow .lane.jump { stroke:var(--dim); stroke-width:2.5; opacity:.9; }
   #flow .lane.teleport { stroke-dasharray:12 6; } #flow .lane.jump { stroke-dasharray:3 6; stroke-linecap:round; } #flow .elabs { pointer-events:none; }
-  #flow .blk.lgn, #flow .blk.blkacc { stroke:var(--accent); } #flow .blk.blkacc.down { stroke:var(--bad); }
+  #flow .blk.lgn, #flow .blk.blkacc { stroke:var(--accent); } #flow .blk.lgn.down { stroke:var(--bad); stroke-dasharray:5 4; } #flow .blk.lgn.off { stroke:var(--line); stroke-dasharray:3 5; opacity:.8; } #flow .blk.blkacc.down { stroke:var(--bad); }
   .pop { position:fixed; z-index:30; width:min(360px,calc(100% - 16px)); background:var(--panel); border:1px solid var(--accent); border-radius:12px; padding:var(--sp3) var(--sp4); box-shadow:0 14px 40px rgba(0,0,0,.35); font-size:13.5px; }
   .pop[hidden], .tip[hidden] { display:none; } .pop-h { display:flex; align-items:center; gap:var(--sp2); margin-bottom:var(--sp2); } .pop-h b { font-size:16px; flex:1; } .pop dl.kv { margin:0 0 var(--sp2); font-size:13px; } .pop dd { overflow-wrap:break-word; } .pop dd code { overflow-wrap:anywhere; }
   .pop-cmd { display:flex; gap:var(--sp2); align-items:flex-start; margin-bottom:var(--sp2); } .pop-cmd code { flex:1; overflow-wrap:anywhere; font-size:12px; } .pop-act { display:flex; gap:var(--sp2); flex-wrap:wrap; }
@@ -903,7 +903,7 @@ async function popInfo(kind, id) {
   }
   if (kind === 'login') {
     const l = loginList().find(x => x.name === id) || { mode: 'ssh' }, r = row(id);
-    return { title: id, badge: MODE_TEXT[l.mode], cmd: r ? r.command : '', kv: [['Way in', l.mode === 'teleport' ? 'Teleport only: no published port, a key is refused' : l.mode === 'both' ? 'Direct SSH with a key, or Teleport' : 'Direct SSH with a key'], ...conn(r),
+    return { title: id, badge: loginRuns(l) ? MODE_TEXT[l.mode] : '✗ not running', cls: loginRuns(l) ? '' : 'fault', cmd: r ? r.command : '', kv: [['Status', loginRuns(l) ? 'running (answers on port 22)' : 'not running: it is in the selection, but nothing answers on its port 22. Build it with ./scripts/benchctl up'], ['Way in', l.mode === 'teleport' ? 'Teleport only: no published port, a key is refused' : l.mode === 'both' ? 'Direct SSH with a key, or Teleport' : 'Direct SSH with a key'], ...conn(r),
       ['To the nodes', 'ssh from here (jump host)']], actions: [{ label: 'Connections', fn: () => openConnection(id) }] };
   }
   if (kind === 'svc') {
@@ -936,11 +936,13 @@ async function openConnection(id) {  // the Connections tab, with the row for th
   const row = id && document.querySelector(`#conn-rows tr[data-id="${id}"]`); if (!row) return;
   document.querySelectorAll('#conn-rows tr.focus').forEach(r => r.classList.remove('focus')); row.classList.add('focus'); row.scrollIntoView({ block: 'center' });
 }
-function flowSig(nodes) { return nodes.map(n => n.name).join(',') + (hasTeleport() ? '+teleport' : '') + '|' + loginList().map(l => l.name + ':' + l.mode).join(','); }
+function flowSig(nodes) { return nodes.map(n => n.name).join(',') + (hasTeleport() ? '+teleport' : '') + '|' + loginList().map(l => l.name + ':' + l.mode + (l.up === false ? ':down' : '')).join(','); }
 // ---- the diagram (#192): clients -> services and access (login nodes, Teleport) -> nodes, one labelled line per way in ----
 const SVC_METHOD = { 'bmc-farm': 'HTTPS Redfish', 'bcm-mock': 'HTTP JSON', 'jira-mock': 'HTTP REST', 'gpu-exporter': 'HTTP metrics', teleport: 'tsh · HTTPS' };
 const MODE_TEXT = { ssh: 'Direct SSH', teleport: 'Teleport only', both: 'Direct SSH + Teleport' };
 const LOGIN_ONE = [{ name: 'login', mode: 'ssh', port: 2222 }];
+const stackUp = () => { try { return Object.values(JSON.parse(lastCluster).services).some(Boolean); } catch (e) { return false; } };
+const loginRuns = l => l.up !== false;  // nothing answers on its port 22: it was selected, but it is not built or not running
 const loginAddr = l => (l.ip || l.name) + (l.mode === 'teleport' ? ' · no port' : ` · :${l.port}`);  // the address a client dials (private IP; the published port is on 127.0.0.1)
 function loginList() { try { const l = lastCluster && JSON.parse(lastCluster).logins; return l && l.length ? l : LOGIN_ONE; } catch (e) { return LOGIN_ONE; } }
 function buildFlow() {
@@ -995,10 +997,10 @@ function buildFlow() {
   if (tpBox) edge('teleport', curve({ x: tpP.x + BW, y: tpP.y + BH / 2 }, { x: G.cluster.x, y: tpP.y + BH / 2 }), 'Teleport', 0.5);
   for (const [a, p] of place) {
     if (a === tpBox) { g.append(box('teleport', tpBox[1], tpBox[2], p, 'svc', 'teleport', 'blkacc')); continue; }
-    const l = a, lt = () => [`${l.name} · ${MODE_TEXT[l.mode]}`, l.mode === 'teleport' ? 'No direct port: only through the Teleport proxy' : `${l.ip || l.name} (also 127.0.0.1:${l.port}) · click for the command`];
-    const bg = asButton(sv('g', { id: 'lg-' + l.name }), `${l.name}: ${MODE_TEXT[l.mode]}. Details`, () => openPop(bg, 'login', l.name), lt);
-    bg.append(sv('rect', { class: 'blk lgn', x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), sv('text', { class: 'sn', x: p.x + 12, y: p.y + 24 }, l.name), sv('text', { class: 'sub', x: p.x + 12, y: p.y + 42 }, MODE_TEXT[l.mode]),
-      sv('text', { class: 'sub', x: p.x + 12, y: p.y + 58 }, loginAddr(l))); g.append(bg);
+    const l = a, lt = () => !loginRuns(l) ? [`${l.name} · not running`, stackUp() ? 'Selected, but nothing answers on its port 22: build it with benchctl up' : 'The stack is not running'] : [`${l.name} · ${MODE_TEXT[l.mode]}`, l.mode === 'teleport' ? 'No direct port: only through the Teleport proxy' : `${l.ip || l.name} (also 127.0.0.1:${l.port}) · click for the command`];
+    const bg = asButton(sv('g', { id: 'lg-' + l.name }), `${l.name}: ${MODE_TEXT[l.mode]}${loginRuns(l) ? '' : ', not running'}. Details`, () => openPop(bg, 'login', l.name), lt);
+    bg.append(sv('rect', { class: 'blk lgn' + (loginRuns(l) ? '' : stackUp() ? ' down' : ' off'), x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), sv('text', { class: 'sn', x: p.x + 12, y: p.y + 24 }, l.name), sv('text', { class: 'sub', x: p.x + 12, y: p.y + 42 }, MODE_TEXT[l.mode]),
+      sv('text', { class: 'sub', x: p.x + 12, y: p.y + 58 }, loginRuns(l) ? loginAddr(l) : '✗ not running')); g.append(bg);
   }
   svcs.forEach(([k, label, sub]) => g.append(box(k, label, sub, svcPos[k], 'svc', k)));
   CHIPS.forEach(([t], i) => {
