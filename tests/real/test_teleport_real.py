@@ -80,16 +80,19 @@ KEY = ROOT / "compose/generated/secrets/ssh/id_ed25519"
 
 
 def key_login(host: str, port: int) -> subprocess.CompletedProcess:
-    return subprocess.run(["ssh", "-i", str(KEY), "-p", str(port), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no",
-                           "-o", "UserKnownHostsFile=/dev/null", "-o", "ConnectTimeout=10", f"alice@{host}", "hostname"],
+    # IdentitiesOnly and no agent: a developer's ssh-agent offers its keys first and sshd gives up after MaxAuthTries (6)
+    return subprocess.run(["ssh", "-i", str(KEY), "-p", str(port), "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
+                           "-o", "IdentityAgent=none", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+                           "-o", "ConnectTimeout=10", f"alice@{host}", "hostname"],
                           capture_output=True, text=True, timeout=30, check=False)
 
 
 def test_direct_key_login_works_where_the_mode_allows_it_and_is_refused_otherwise(tele):
     from benchctl import addressing
     sim_ips = addressing.plan({**yaml.safe_load((ROOT / "sim.yaml").read_text()), "login": ["both", "teleport", "ssh"]}, 2)["logins"]
-    assert key_login("127.0.0.1", 2222).stdout.strip() == "login"     # both: the published port
-    assert key_login("127.0.0.1", 2224).stdout.strip() == "login3"    # ssh: the third node's port
+    for port, node in ((2222, "login"), (2224, "login3")):             # both: the first node's port; ssh: the third node's
+        r = key_login("127.0.0.1", port)
+        assert r.stdout.strip() == node, f"{node} on {port}: rc={r.returncode} {r.stderr.strip()}"
     refused = key_login(sim_ips["login2"], 22)                         # teleport only: reachable on the network, but no key is accepted
     assert refused.returncode != 0 and "Permission denied" in refused.stderr, refused.stderr
     assert key_login("127.0.0.1", 2223).returncode != 0                # and no port is published for it
