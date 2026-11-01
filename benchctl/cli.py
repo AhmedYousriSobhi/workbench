@@ -15,6 +15,7 @@ from . import (
     diag,
     export,
     inventory,
+    logins,
     machine,
     measure,
     nhc,
@@ -163,7 +164,7 @@ def _sim() -> dict:
     return workbench.effective(base, spec)[0] if spec else base
 
 
-def _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes=None):
+def _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes=None, login=None):
     """(spec, sim, profile) from a workbench file and/or flags; flags win. Exits 1 with every problem listed."""
     base = _base_sim()
     try:
@@ -178,6 +179,8 @@ def _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, 
     spec.parts = sorted((set(spec.parts) | set(with_ or [])) - set(without or []))
     if bmc_nodes is not None:
         spec.bmc_nodes = [n for n in bmc_nodes.split(",") if n]
+    if login is not None:
+        spec.login_nodes = _login_modes(login)
     if problems := spec.problems():
         for p in problems:
             typer.echo(f"invalid: {p}", err=True)
@@ -195,6 +198,19 @@ WITHOUT = typer.Option(None, "--without", autocompletion=completion.parts, help=
 K8S = typer.Option(None, "--k8s-nodes", help="Kubernetes nodes (not built yet)")
 BMC_NODES = typer.Option(None, "--bmc-nodes", help="nodes that get a BMC address, comma separated (default all); each costs about 32 MB")
 
+def _login_modes(login) -> list[str]:
+    try:
+        return logins.parse(login)
+    except logins.LoginError as e:
+        typer.echo(f"invalid: {e}", err=True)
+        raise typer.Exit(1) from e
+
+
+LOGIN = typer.Option(None, "--login", autocompletion=completion.login_modes, rich_help_panel="Parts by category",
+                     help=f"login nodes, one auth mode each: {', '.join(logins.MODES)} (comma separated), e.g. ssh,teleport; "
+                          "the first is `login`, then login2, ...")
+
+
 def _category_option(cat: str):
     what = workbench.CATEGORIES[cat][0]
     return typer.Option(None, f"--{cat}", autocompletion=completion.category(cat), rich_help_panel="Parts by category",
@@ -207,7 +223,7 @@ ADDONS = typer.Option(False, "--addons", rich_help_panel="Parts by category",
                       help="turn on every optional part (all categories); --without X still removes one")
 
 
-def _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons) -> list[str] | None:
+def _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons, login=None) -> list[str] | None:
     """`--with` parts plus the ones the category flags and --addons name, or exit 1 with the one problem. None when
     nothing was chosen, so `up` can still tell a plain preset from a selection."""
     picked = {"workload": workload, "accounting": accounting, "monitoring": monitoring, "ticketing": ticketing,
@@ -217,7 +233,9 @@ def _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, ac
     except workbench.SpecError as e:
         typer.echo(f"invalid: {e}", err=True)
         raise typer.Exit(1) from e
-    chosen = with_ is not None or addons or any(v is not None for v in picked.values())
+    if login is not None and any(m in logins.VIA_TELEPORT for m in _login_modes(login)):
+        extra = sorted({*extra, "teleport"})  # a login node that uses Teleport needs it on
+    chosen = with_ is not None or addons or any(v is not None for v in picked.values()) or (login is not None and "teleport" in extra)
     return sorted(set(with_ or []) | set(extra)) if chosen else None
 
 
@@ -229,14 +247,14 @@ def plan(file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: in
          with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, save: str = SAVE,
          bmc_nodes: str = BMC_NODES, workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING,
          monitoring: list[str] = MONITORING, ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE,
-         access: list[str] = ACCESS, simulation: list[str] = SIMULATION, addons: bool = ADDONS) -> None:
+         access: list[str] = ACCESS, simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN) -> None:
     """Estimate the memory a workbench needs against what the host has free; exit 1 if it would not fit."""
     from pathlib import Path
 
     import yaml
 
-    with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons)
-    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes)
+    with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons, login)
+    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes, login)
     est = workbench.estimate(sim, prof)
     ok, msg = workbench.verdict(est, checks.mem_available() // (1024 * 1024), spec=spec)
     typer.echo(workbench.render(spec, est) + f"\n\n{msg}")
@@ -246,8 +264,8 @@ def plan(file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: in
     raise typer.Exit(0 if ok else 1)
 
 
-def _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes=None) -> None:
-    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes)
+def _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes=None, login=None) -> None:
+    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes, login)
     typer.echo(workbench.render(spec, workbench.estimate(sim, prof)) + "\n")
     if not stack.up(sim, "workbench", say=typer.echo, prof=prof):
         raise typer.Exit(1)
@@ -260,16 +278,16 @@ def up(profile: str = typer.Option(None, "--profile", autocompletion=completion.
        with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, bmc_nodes: str = BMC_NODES,
        workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING,
        ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE, access: list[str] = ACCESS,
-       simulation: list[str] = SIMULATION, addons: bool = ADDONS) -> None:
+       simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN) -> None:
     """Estimate, then start. By preset (--profile) or by selection (--cpu-nodes 2 --gpu-nodes 4 --with jira,
     --ticketing jira --hardware bmc,bcm, --addons ...)."""
-    with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons)
-    chosen = any(v is not None for v in (file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes))
+    with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons, login)
+    chosen = any(v is not None for v in (file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes, login))
     if chosen and profile:
         typer.echo("choose one: --profile PRESET, or a selection (--cpu-nodes, --gpu-nodes, --with, -f FILE)", err=True)
         raise typer.Exit(1)
     if chosen:
-        _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes)
+        _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes, login)
         return
     workbench.forget()
     raise typer.Exit(0 if stack.up(_base_sim(), profile or "std", say=typer.echo) else 1)
@@ -281,10 +299,10 @@ def apply(file: str = typer.Option(..., "-f", "--file", help="workbench file to 
           without: list[str] = WITHOUT, k8s_nodes: int = K8S, bmc_nodes: str = BMC_NODES,
           workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING,
           ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE, access: list[str] = ACCESS,
-          simulation: list[str] = SIMULATION, addons: bool = ADDONS) -> None:
+          simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN) -> None:
     """Build the workbench a file describes (the same as `up -f FILE`)."""
-    with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons)
-    _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes)
+    with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons, login)
+    _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes, login)
 
 
 def _launcher(*args: str) -> None:
@@ -302,18 +320,19 @@ def start(profile: str = typer.Option(None, "--profile", autocompletion=completi
           with_: list[str] = WITH, without: list[str] = WITHOUT, workload: list[str] = WORKLOAD,
           accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING, ticketing: list[str] = TICKETING,
           hardware: list[str] = HARDWARE, access: list[str] = ACCESS, simulation: list[str] = SIMULATION,
-          addons: bool = ADDONS) -> None:
+          addons: bool = ADDONS, login: list[str] = LOGIN) -> None:
     """Everything in one step: machine check, governor, cluster, web page (the first run builds images). Add parts
     with --with (`--with accounting`), by category (`--ticketing jira --hardware bmc,bcm`) or all of them (`--addons`);
     on a running cluster it adds them and leaves the page up."""
-    with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons)
-    if profile and (with_ is not None or without):
-        typer.echo("choose one: --profile PRESET, or parts (--with, --without, category flags, --addons)", err=True)
+    with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons, login)
+    if profile and (with_ is not None or without or login is not None):
+        typer.echo("choose one: --profile PRESET, or parts (--with, --without, category flags, --addons, --login)", err=True)
         raise typer.Exit(1)
-    if with_ == []:  # a flag that adds nothing (--workload slurm) still asks for a selection, not the min preset
+    if with_ == [] or (with_ is None and login is not None):  # a flag that adds nothing still asks for a selection, not the min preset
         with_ = list(workbench.DEFAULT_PARTS)
     _offer_completion()
-    parts = [x for p in (with_ or []) for x in ("--with", p)] + [x for p in (without or []) for x in ("--without", p)]
+    modes = [] if login is None else ["--login", ",".join(_login_modes(login))]
+    parts = [x for p in (with_ or []) for x in ("--with", p)] + [x for p in (without or []) for x in ("--without", p)] + modes
     _launcher("start", *(parts or ["--profile", profile or "min"]))
 
 

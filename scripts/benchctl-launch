@@ -76,8 +76,8 @@ cmd_start() {
   profile=min; sel=()
   while [ $# -gt 0 ]; do case "$1" in
     --profile) profile="$2"; shift ;;
-    --with|--without) sel+=("$1" "$2"); shift ;;
-    *) echo "usage: $0 start [--profile P | --with PART ... --without PART ...]" >&2; exit 2 ;; esac; shift; done
+    --with|--without|--login) sel+=("$1" "$2"); shift ;;
+    *) echo "usage: $0 start [--profile P | --with PART ... --without PART ... --login MODES]" >&2; exit 2 ;; esac; shift; done
   echo "== 1/4 checking the machine"
   out=$(./scripts/check-machine.sh); rc=$?
   printf '%s\n' "$out" | grep -E "WARN|FAIL|fix:|READY"

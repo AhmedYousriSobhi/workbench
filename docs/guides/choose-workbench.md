@@ -36,6 +36,7 @@ nothing) when the estimate does not fit. Check: `benchctl get nodes`, `benchctl 
 | `--with PART` / `--without PART` | add or remove a part (repeat the flag): `jira`, `bmc`, `bcm`, `accounting`, `teleport`, `scenarios`, `load` |
 | `--ticketing jira`, `--hardware bmc,bcm`, `--access teleport`, ... | the same parts by category, see below |
 | `--addons` | every optional part (`--without teleport` still removes one) |
+| `--login ssh,teleport,both` | the login nodes, one auth mode each (`login`, `login2`, ...; 1 to 8); a Teleport mode turns Teleport on. See [login nodes](../manual/04-nodes-and-shells.md#login-nodes-how-many-and-how-each-one-lets-you-in) |
 | `--k8s-nodes N` | Kubernetes nodes: not built yet, so any value above 0 is refused |
 | `--name NAME` | name of the workbench (also the cluster's name in an exported client profile) |
 | `-f FILE` | read the selection from a workbench file; flags override it |

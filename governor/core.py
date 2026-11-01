@@ -221,5 +221,7 @@ class Governor:
                     args += ["--with" if part in req["parts"] else "--without", part]
                 if req.get("bmc_nodes") is not None:
                     args += ["--bmc-nodes", ",".join(req["bmc_nodes"])]
+                if req.get("login_nodes") is not None:
+                    args += ["--login", ",".join(req["login_nodes"])]
                 return self._change(f"apply-plan={req['cpu_nodes']}cpu+{req['gpu_nodes']}gpu", args)
         return {"ok": False, "error": "unhandled"}

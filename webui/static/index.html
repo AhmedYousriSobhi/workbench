@@ -106,6 +106,7 @@
   dialog pre { white-space:pre-wrap; font-size:13px; margin:0 0 8px; } .detailbtn { margin-top:6px; }
   .planform { display:flex; flex-wrap:wrap; gap:10px; margin:8px 0; } .planform input[type=number] { width:5em; min-height:40px; }
   .partgroup { flex-basis:100%; } .partgroup > b { display:inline-block; min-width:6.5rem; text-transform:capitalize; }
+  .loginrow { display:flex; gap:var(--sp3); align-items:center; flex-wrap:wrap; margin-bottom:var(--sp2); } .loginrow .nm { min-width:4.5rem; } .loginrow select { min-height:40px; }
   .planparts { border:1px solid var(--line); border-radius:8px; } .planparts label { display:inline-block; min-height:40px; padding:8px 10px 0 0; }
   #pl-bar { width:100%; height:14px; } #pl-cmd { white-space:pre-wrap; margin:4px 0 0; }
   .node dt { color:var(--dim); } .node dd { margin:0; }
@@ -411,7 +412,11 @@
       <fieldset class="planparts"><legend class="small dim">Optional parts (memory limit each adds)</legend>
         <div class="toggles" id="pl-parts"></div>
         <fieldset class="bmcnodes" id="pl-bmcbox" hidden><legend class="small dim">Nodes that get a BMC (<span id="pl-bmcmb"></span> MB each)</legend><div class="toggles" id="pl-bmcnodes"></div></fieldset>
-        <p class="small dim" style="margin:8px 0 0">Slurm, the login node, Prometheus and Grafana are always on.</p></fieldset>
+        <p class="small dim" style="margin:8px 0 0">Slurm, Prometheus and Grafana are always on.</p></fieldset>
+      <fieldset class="planparts" id="pl-logins"><legend class="small dim">Login nodes: how each one authenticates (<span id="pl-loginmb"></span>)</legend>
+        <div id="pl-loginrows"></div>
+        <button type="button" class="btn small" id="pl-loginadd">＋ Add login node</button>
+        <p class="small dim" id="pl-loginnote" style="margin:8px 0 0"></p></fieldset>
       <section class="fit" aria-label="Does it fit"><div class="fitnum"><b id="pl-need">–</b><span class="dim small" id="pl-free"></span></div>
         <progress id="pl-bar" max="100" value="0" aria-label="Memory needed as a share of free memory"></progress>
         <p id="pl-msg" role="status" class="small"></p><p id="pl-diff" class="small"></p></section>
@@ -558,6 +563,7 @@ let planTimer, planQuery = '';
 async function loadPlan() {
   const parts = [...document.querySelectorAll('#pl-parts input:checked')].map(i => i.value).join(',');
   const q = new URLSearchParams({ cpu_nodes: $('pl-cpu').value, gpu_nodes: $('pl-gpu').value, gpus_per_node: $('pl-gpus').value, parts });
+  if (loginModes.length) q.set('logins', loginModes.join(','));
   if (!$('pl-bmcbox').hidden) q.set('bmc_nodes', [...document.querySelectorAll('#pl-bmcnodes input:checked')].map(i => i.value).join(','));
   const r = await fetch('/api/plan?' + q);
   if (!r.ok) { $('pl-msg').textContent = '✗ ' + (await r.json()).detail; $('pl-cmd').textContent = ''; $('pl-bar').value = 0; $('pl-need').textContent = '–'; $('pl-free').textContent = ''; $('pl-apply').hidden = true; return; }
@@ -579,6 +585,24 @@ function currentSize() {
   const nodes = nodeList(), g = nodes.find(n => n.kind === 'gpu');
   return { cpu: nodes.filter(n => n.kind === 'compute').length, gpu: nodes.filter(n => n.kind === 'gpu').length, gpus: g ? g.gpus : null };
 }
+// Login nodes: one row per node, each with its own way in. The first is `login`, then login2, ... (benchctl/logins.py)
+let loginModes = [], loginMax = 8;
+const LOGIN_LABEL = { ssh: 'Direct SSH', teleport: 'Teleport only', both: 'Direct SSH and Teleport' };
+const loginName = i => i === 0 ? 'login' : 'login' + (i + 1);
+function drawLogins() {
+  $('pl-loginrows').innerHTML = loginModes.map((m, i) => `<div class="loginrow"><b class="nm">${loginName(i)}</b><select data-i="${i}" aria-label="How ${loginName(i)} authenticates">${Object.entries(LOGIN_LABEL).map(([k, v]) => `<option value="${k}"${k === m ? ' selected' : ''}>${v}</option>`).join('')}</select>${i === loginModes.length - 1 && i > 0 ? `<button type="button" class="btn small" data-rm="${i}" aria-label="Remove ${loginName(i)}">Remove</button>` : ''}</div>`).join('');
+  $('pl-loginrows').querySelectorAll('select').forEach(el => el.onchange = () => { loginModes[+el.dataset.i] = el.value; loginsChanged(); });
+  $('pl-loginrows').querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { loginModes.splice(+b.dataset.rm, 1); drawLogins(); loginsChanged(); });
+  $('pl-loginadd').disabled = loginModes.length >= loginMax;
+  $('pl-loginmb').textContent = `${loginModes.length} × 40 MB`;
+}
+function syncTeleport() {  // a Teleport login needs the Teleport part: tick it, and say so
+  const tp = document.querySelector('#pl-parts input[value="teleport"]'), need = loginModes.some(m => m !== 'ssh');
+  if (tp && need && !tp.checked) tp.checked = true;
+  $('pl-loginnote').textContent = need ? 'A Teleport login turns the Teleport part on. A "Teleport only" node publishes no port and refuses key login.' : '';
+}
+function loginsChanged() { syncTeleport(); planInputs(); }
+$('pl-loginadd').onclick = () => { if (loginModes.length < loginMax) { loginModes.push('ssh'); drawLogins(); loginsChanged(); } };
 function showBmcNodes() { $('pl-bmcbox').hidden = !document.querySelector('#pl-parts input[value="bmc"]:checked'); }
 let partsDrawn = false;
 async function drawParts() {  // the options come from the backend registry (/api/settings), so a new one needs no page change
@@ -590,6 +614,7 @@ async function drawParts() {  // the options come from the backend registry (/ap
     $('pl-bmcmb').textContent = j.bmc_node_mb;
     $('pl-bmcnodes').innerHTML = j.nodes.map(n => `<label class="tog"><input type="checkbox" value="${esc(n.name)}"${n.bmc ? ' checked' : ''}><span>${esc(n.name)}</span></label>`).join('');
     $('pl-bmcnodes').querySelectorAll('input').forEach(i => i.oninput = i.onchange = () => planInputs());
+    loginModes = [...(j.logins.now || ['ssh'])]; loginMax = j.logins.max; drawLogins(); syncTeleport();
     showBmcNodes(); partsDrawn = true;
   } catch (e) { $('pl-parts').textContent = 'Could not load the options.'; }
 }

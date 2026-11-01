@@ -17,6 +17,8 @@ from pathlib import Path
 
 import yaml
 
+from . import logins
+
 IMAGE = "public.ecr.aws/gravitational/teleport-distroless"
 DEFAULT_VERSION = "18.11.8"   # a Community Edition tag; licence note in ADR 0020. Teleport supports a tsh one major behind it.
 DEFAULT_TTL = "12h"
@@ -74,9 +76,10 @@ def node_id(name: str) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{name}.{CLUSTER}.workbench"))
 
 
-def targets(ips: dict) -> dict[str, str]:
-    """node name -> address of everything a user can reach through Teleport: the login node and every node."""
-    return {"login": ips["login"], **ips["nodes"]}
+def targets(sim: dict, ips: dict) -> dict[str, str]:
+    """node name -> address of everything a user can reach through Teleport: the login nodes whose mode says so
+    (`teleport` or `both`, ADR 0023) and every node."""
+    return {n: ips["logins"][n] for n in logins.via_teleport(sim)} | dict(ips["nodes"])
 
 
 def resources(sim: dict, ips: dict) -> str:
@@ -87,8 +90,8 @@ def resources(sim: dict, ips: dict) -> str:
              "spec": {"options": {"max_session_ttl": t["cert_ttl"]},
                       "allow": {"logins": users, "node_labels": {"*": "*"}}}}]
     docs += [{"kind": "user", "version": "v2", "metadata": {"name": u}, "spec": {"roles": [ROLE]}} for u in users]
-    for name, ip in targets(ips).items():
-        kind = "login" if name == "login" else "gpu" if name.startswith("gpu") else "compute"
+    for name, ip in targets(sim, ips).items():
+        kind = "login" if logins.is_login(name) else "gpu" if name.startswith("gpu") else "compute"
         docs.append({"kind": "node", "version": "v2", "sub_kind": "openssh",
                      "metadata": {"name": node_id(name), "labels": {"kind": kind}},
                      "spec": {"addr": f"{ip}:22", "hostname": name}})
@@ -150,7 +153,7 @@ def bootstrap(sim: dict, ips: dict, runner: Callable, dc: Callable, say: Callabl
     except (OSError, TeleportError) as e:
         say(f"FAILED teleport CA key: {e}")
         return False
-    for name, ip in targets(ips).items():
+    for name, ip in targets(sim, ips).items():
         if (secrets / "hosts" / f"{name}-cert.pub").is_file():
             continue
         r = _tctl(runner, dc, "auth", "sign", f"--host={ip},{name},{node_id(name)}", "--format=openssh",
