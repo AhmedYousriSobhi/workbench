@@ -363,121 +363,160 @@ Done in PR 239: the addendum (table of real candidates, cost, status, issue; and
 (BSD-3), the kind privilege conflict as the blocker for 232, the mock NVML finding for 231, the host-wide memory caveat for 227 and
 the shape-comparison choice for 229. **Estimate: see the summary table (agent time), including commit, PR and progress file.**
 
-## Multiple clusters and the identity plane (issues 240 to 250)
+## Multiple clusters and the identity plane (issues 240 to 251)
 
 Status: investigation only, nothing implemented. Evidence tags as above.
 
+**Independence principle (owner, 2026-11-02).** Clusters are independent entities and usually unrelated to each other. They share no
+accounting, no users, no keys and no network, and one never sees or affects another. An earlier draft of this section coupled them
+(one `slurmdbd` for all, one login running `squeue -M`, one directory with group access); that is withdrawn. Coupling is allowed only
+where the owner asks for it (a shared jump host, a federated pair), and is then an explicit option, never the default.
+
+The design rule that follows: **share processes, never data.** The simulator can run one process for many clusters to save memory,
+but each cluster gets its own endpoints, credentials and data, and a test proves one cannot read another (issue 251).
+
 ### Today
 
-One cluster by design: `ClusterName=workbench`, one `slurmctld`, one network `10.141.0.0/16`, fixed service octets, the login
-nodes of ADR 0023 are several doors to the same cluster. The single-cluster assumption is in about 40 files (`slurmctld`),
-72 (`cn001`/`gpu001`), 17 (`10.141`) and 55 test files. The client profile's `clusters` list is one entry per login route, and its
-`k8s` slot is always empty.
+One cluster by design: `ClusterName=workbench`, one `slurmctld`, one network `10.141.0.0/16`, fixed service octets, one compose
+project named `workbench`; the login nodes of ADR 0023 are several doors to the same cluster. The single-cluster assumption is in
+about 40 files (`slurmctld`), 72 (`cn001`/`gpu001`), 17 (`10.141`) and 55 test files. The client profile's `clusters` list is one
+entry per login route, and its `k8s` slot is always empty.
 
-### Topologies for jump hosts [judgement, spike 241 confirms]
+### Two planes
 
-| Topology | Shape | Memory | Tests |
+- **Cluster plane (per cluster, isolated):** Slurm or Kubernetes, its nodes, its login or head node, its own network and subnet, its
+  users, its accounting if on, its keys.
+- **Simulator plane (the workbench's own tooling, may serve every cluster from one process):** governor, scenario engine, the
+  exporter and BMC farms, the mocks, Prometheus and Grafana. It reaches into each cluster the way a hypervisor does; clusters never
+  reach into each other. [judgement]
+
+### Names and projects [judgement, decide in issues 240 and 242]
+
+Independent sites reuse names (every site has a `cn001`). One compose project per cluster (`workbench-alpha`) would allow that, make
+`up` and `down` per cluster natural, and keep fault domains separate; the simulator plane would be its own project attached to
+every cluster network. The cost: the code assumes one project named `workbench` (`compose.generate`, `stack.down`, the governor's
+label discovery). The alternative, one project with cluster-prefixed names, keeps one project but loses name reuse. Subnets must
+differ either way (Docker refuses two bridge networks with the same subnet), with no route between cluster networks.
+
+### Jump hosts
+
+By default each cluster has its own login or jump host on its own network, so the clusters stay independent. A shared bastion is an
+opt-in that models one site gateway in front of several clusters: it is multi-homed on their networks and is the only thing that
+touches more than one; nodes still cannot reach each other's networks. Slurm's `-M` multi-cluster mode depends on `slurmdbd`,
+shared authentication keys and `ClusterName` registration [verified: slurm.schedmd.com/multi_cluster.html], so it would couple the
+clusters; support it only as an explicit "federated" option if ever asked.
+
+| Topology | Default | Memory | Tests |
 |---|---|---|---|
-| Separate | own network and own jump or login per cluster | one more login container per cluster | isolation, wrong-jump-host errors |
-| Shared bastion | one thin sshd on every cluster network, a login per cluster behind it | slightly more containers | two-hop `ProxyJump` |
-| Shared login | one login holds several clusters' `slurm.conf`; Kubernetes reached by SSH forwarding | cheapest | the "one gateway, many clusters" site |
-
-Slurm's multi-cluster documentation says the feature depends on `slurmdbd`, each cluster's `slurm.conf` using the slurmdbd
-accounting plugin, authentication keys shared so each cluster can reach the database, clusters identified by `ClusterName`, and `-M`
-accepted by most client commands (`squeue -M a,b`); `salloc`, `srun` and `sstat` are cluster-specific. [verified:
-slurm.schedmd.com/multi_cluster.html] Whether our baked munge key satisfies the shared-key requirement is for spike 241.
+| Separate jump or login per cluster | yes | one login container per cluster (about 10 MB RSS estimate plus about 12 MB shim) | isolation, wrong-jump-host errors |
+| Shared bastion, opt-in | no | one more container, saves nothing | two-hop `ProxyJump`, a gateway outage hitting several clusters |
+| Federated Slurm (`-M`), opt-in | no | shared `slurmdbd` | multi-cluster commands |
 
 ### sim.yaml shape (sketch)
 
 ```yaml
 clusters:
-  - {name: alpha, kind: slurm, compute: {count: 4}, gpu: {nodes: 2}, jump: gw, access_group: cluster-alpha}
-  - {name: beta,  kind: slurm, compute: {count: 8}, jump: gw, access_group: cluster-beta}
-  - {name: kube1, kind: k8s, real_agents: 1, kwok_nodes: 50, jump: gw, access_group: cluster-kube1}
-access:
-  - {name: gw, auth: ssh, reaches: [alpha, beta, kube1]}
-identity:
-  provider: static            # static (today) | ldap | ad
-  users: [{name: alice, groups: [cluster-alpha]}, {name: bob, groups: [cluster-beta, cluster-kube1]}]
+  - name: alpha
+    kind: slurm
+    compute: {count: 4}
+    gpu: {nodes: 2}
+    users: [{name: alice}, {name: bob}]        # this cluster's users; another cluster has others
+    identity: {provider: static}               # static (today) | ldap | ad
+    access: {auth: ssh}
+  - name: beta
+    kind: slurm
+    compute: {count: 8}
+    users: [{name: carol}]
+    identity: {provider: ldap}
+    access: {auth: teleport}
+  - {name: kube1, kind: k8s, real_agents: 1, kwok_nodes: 50, users: [{name: dave}]}
+shared_access:                                  # optional: one gateway in front of several clusters
+  - {name: gw, auth: ssh, reaches: [alpha, kube1]}
 ```
 
 `login:` with no `clusters:` stays one cluster named `workbench`.
 
 ### Identity plane
 
-Users differ per cluster, so a user list per cluster does not scale and does not model a real site. Proposal: one directory for
-the whole workbench, and per-cluster access by **group membership**.
+Users belong to a cluster, so each cluster declares its own users and its own identity provider; nothing assumes the same person
+exists in two clusters.
 
 | Question | Finding | Evidence |
 |---|---|---|
 | Real AD protocol | Samba AD DC is the real AD-compatible server; OpenLDAP and 389-ds give LDAP only | [judgement] |
-| Memory | no current figures found; one 2014 thread measured about 41 MB for Samba's parent process and suggested 64 MB; 389-ds autotunes from the container's cgroup limit when it can see it; FreeIPA is likely much larger | [reported, dated, no benchmark]; measure in issue 246 |
-| Node login | real `sssd` in a container needs an explicit `services` list (otherwise only the backend starts and `getent` fails), and `getent passwd` is the check | [reported: a Docker fixture and image notes] |
-| Per-node cost | `sssd` on every node would add a daemon per node on top of about 12 MB shim each; instead use real `sssd` only on login or jump hosts and generate flat NSS files for the nodes from the directory at `up` time | [judgement]; confirm in issue 246 |
-| Teleport | Community Edition SSO is GitHub only; OIDC, SAML and Google are Enterprise; so an AD-backed identity cannot federate into Teleport, and Teleport users stay local (roles from `sim.yaml`) | [reported: Teleport feature matrix and FAQ] |
+| One domain per cluster | a Samba AD DC instance is one domain, so an AD cluster costs one more instance; an LDAP server can hold separate base DNs per cluster in one process | [judgement], measure in issue 246 |
+| Memory | no current figures found; one 2014 thread measured about 41 MB for Samba's parent process and suggested 64 MB; 389-ds autotunes from the container's cgroup limit when it can see it; FreeIPA is likely much larger | [reported, dated, no benchmark] |
+| Node login | real `sssd` in a container needs an explicit `services` list (otherwise only the backend starts and `getent` fails); `getent passwd` is the check | [reported: a Docker fixture and image notes] |
+| Per-node cost | real `sssd` only on a cluster's login or jump host, flat NSS files generated from that cluster's directory for its nodes (no per-node daemon) | [judgement], confirm in issue 246 |
+| Teleport | Community Edition SSO is GitHub only; OIDC, SAML and Google are Enterprise; an AD-backed identity cannot federate into it, so Teleport users stay local | [reported: Teleport feature matrix and FAQ] |
 | Teleport license | the editions page lists the Community license as commercial since version 16; another source says AGPLv3; sources disagree | [reported, unreconciled]; issue 249 |
-| Keycloak in front | federates LDAP or AD, validates credentials against the directory, creates a local user record; Quarkus build uses less RAM than the old one (no figure) | [reported]; only if a client needs OIDC |
-| Kubernetes OIDC | not researched | to verify in 246 |
+| Keycloak in front | federates LDAP or AD and creates a local user record; Quarkus build uses less RAM than the old one (no figure) | [reported]; only if a client needs OIDC |
+| Kubernetes OIDC | not researched | to verify in issue 246 |
 
-Where users matter: SSH on login and nodes, Slurm accounts (`sacctmgr` per cluster, from group membership), Jira assignees,
-Grafana users and tokens, Teleport roles, Kubernetes RBAC, `user-sim` personas. Scenarios worth having: user offboarded with
-running jobs, group change, locked account.
+Where a cluster's users matter: SSH on its login and nodes, its Slurm accounts (`sacctmgr` if accounting is on), Jira assignees,
+Grafana, Teleport roles, Kubernetes RBAC, `user-sim` personas. Scenarios worth having: user offboarded with running jobs, locked
+account, directory outage on one cluster while the others stay up.
 
 ### Ecosystem scope map
 
-| Component | Scope | Memory consequence |
+| Component | Plane and scope | Memory consequence |
 |---|---|---|
-| slurmctld, slurmrestd | per Slurm cluster | about 14 to 23 MB and 7 MB RSS measured; limits 200 and 60 MB |
-| slurmd nodes | per cluster | 5 to 7 MB RSS plus about 12 MB shim each (measured, one run) |
-| slurmdbd and MariaDB | shared, one `ClusterName` per cluster | MariaDB 179 MB measured once, not per cluster |
-| login or jump hosts | per access entry, many-to-many with clusters | about 10 MB RSS estimate plus shim; sharing saves little |
-| Teleport | shared; agentless nodes of every cluster registered; local users | one 256 MB limit |
-| Prometheus, Grafana | shared, with a `cluster` label | 21 MB and 58 MB measured once |
-| gpu-exporter-farm | shared, nodes from every cluster | 18 MB measured once |
-| bmc-farm and forwarders | farm shared; forwarders per node today | consolidate (issue 247) |
-| bcm-mock and the fake `cmsh` | shared, with a cluster parameter (real BCM has one head node per cluster) | no new process |
-| jira-mock | shared; project per cluster optional | no new process |
-| Kubernetes | per K8s cluster | the largest item, 0.5 to 1 GB per real server (estimate); extra clusters KWOK-only (issue 248) |
-| Directory and user management | shared identity plane | one more container, to measure |
-| scenario-engine, user-sim, ticket-bot | shared; targets take a cluster qualifier; personas per cluster | no new process |
-| NHC checks | per cluster file set | files only |
-| Governor | host; acts per cluster by label (issue 243) | admission by measured memory |
+| slurmctld, slurmrestd | cluster, per Slurm cluster | about 14 to 23 MB and 7 MB RSS measured; limits 200 and 60 MB |
+| slurmd nodes | cluster | 5 to 7 MB RSS plus about 12 MB shim each (measured, one run) |
+| slurmdbd and MariaDB | cluster, optional, off by default; if on, one MariaDB process with a database per cluster and one `slurmdbd` per cluster | MariaDB 179 MB measured once; `slurmdbd` about 5 MB each [judgement, spike 241] |
+| login or jump host | cluster, one per cluster by default | about 10 MB RSS estimate plus shim |
+| Teleport | per cluster is the independent choice; one process with per-cluster roles is the cheap choice | 256 MB limit per instance; owner decides |
+| Prometheus, Grafana | simulator plane, per-cluster endpoint and credentials | Prometheus 21 MB, Grafana 58 MB measured; Prometheus per cluster is affordable, Grafana per cluster is the larger cost (separate orgs are an option to verify) |
+| gpu-exporter-farm | simulator plane, one process, per-cluster series and endpoint | 18 MB measured once |
+| bmc-farm and forwarders | farm in the simulator plane; forwarders per cluster network | consolidate (issue 247) |
+| bcm-mock and the fake `cmsh` | simulator plane, one process, one head node per cluster as in real BCM | no new process |
+| jira-mock | simulator plane, per-cluster project and credentials | no new process |
+| Kubernetes | cluster | the largest item, 0.5 to 1 GB per real server (estimate); extra clusters KWOK-only (issue 248) |
+| Directory and user management | cluster (per-cluster provider and base DN) | to measure (issue 246) |
+| scenario-engine, user-sim, ticket-bot | simulator plane; targets take a cluster qualifier; personas per cluster | no new process |
+| NHC checks | cluster, per-cluster file set | files only |
+| Governor | host; acts per cluster by label, independent fault domains | admission by measured memory (issue 243) |
 | Web page and export | cluster selector; one export entry per cluster (issue 245) | none |
 | Storage and network chaos | per cluster network | none |
 
 ### Memory rules for the design [judgement, measured baseline above]
 
-1. Share every service already data-driven from `sim.yaml`; one instance, cluster-aware.
-2. Per Slurm cluster add only the controller and nodes, about 55 to 70 MB of RSS plus shim.
-3. Declare many clusters, run few (cold clusters, issue 244); the governor freezes a whole cluster as a unit.
-4. At most one real Kubernetes control plane; others KWOK-only (issue 248, and the privilege question in 232).
-5. Admission on measured memory, not on the sum of limits (issue 243).
-6. Fewer containers: forwarders per cluster (issue 247).
+1. Share processes, never data: one process for the simulator-plane services, with per-cluster endpoints, credentials and data.
+2. Per Slurm cluster add only the controller, nodes and one login, about 55 to 70 MB of RSS plus shim.
+3. Accounting off by default per cluster; when on, one MariaDB process with a database per cluster.
+4. Declare many clusters, run few: independent lifecycle (cold clusters, issue 244), and the governor freezes one cluster without touching
+   another.
+5. At most one real Kubernetes control plane; others KWOK-only (issue 248, and the privilege question in 232).
+6. Admission on measured memory, not on the sum of limits (issue 243).
+7. Fewer containers: forwarders per cluster (issue 247).
+8. Prove isolation (issue 251) whenever a process is shared.
 
 ### Issues and agent time
 
 | Issue | Topic | Agent time |
 |---|---|---|
-| 240 | design and ADR: clusters, access, sim.yaml shape | 2 sessions |
-| 241 | spike: multi-cluster Slurm on one slurmdbd, shared login, measure shim, login, KWOK | 1 session plus a live run |
-| 242 | per-cluster address plan and unique names | 2 sessions (after 240, 241) |
-| 243 | governor and admission per cluster | 2 sessions |
+| 240 | design and ADR: independent clusters, planes, project model, sim.yaml shape | 2 sessions |
+| 241 | spike: two independent Slurm clusters (same node names, separate projects), shared MariaDB with a database each, measure shim, login, KWOK | 1 session plus a live run |
+| 242 | per-cluster address plan; unique subnets, names unique per project | 2 sessions (after 240, 241) |
+| 243 | governor and admission per cluster, independent fault domains | 2 sessions |
 | 244 | cold clusters, `up --cluster` | 1 to 2 sessions |
 | 245 | export with one entry per real cluster | 1 session |
-| 246 | identity plane design and directory spike | 2 sessions plus a live run |
-| 247 | one BMC forwarder per cluster | 1 session (spike first) |
+| 246 | per-cluster identity (directory per cluster, user management) design and spike | 2 sessions plus a live run |
+| 247 | BMC forwarders per cluster | 1 session (spike first) |
 | 248 | extra Kubernetes clusters footprint | 1 session plus a live run |
 | 249 | Teleport license and SSO limits | half a session |
 | 250 | this section | done in PR 239 |
+| 251 | isolation tests between clusters | 1 session plus a live run |
 
-Order: 241 and 249 first (cheap, they decide the rest), then 240, then 242 and 243, then 244, 245, 247, with 246 and 248 in
-parallel. Owner decisions added: which topologies to support, the identity provider (static, LDAP or AD), and whether the Teleport
-edition question blocks anything.
+Order: 241 and 249 first (cheap, they decide the rest), then 240, then 242 and 243, then 244, 245, 247, 251, with 246 and 248 in
+parallel. Owner decisions added: the isolation level per service (logical sharing of one process or a process per cluster), Teleport per
+cluster or shared, one compose project per cluster or one project with prefixed names, the identity provider per cluster.
 
 ### Still to verify
 
-Kubernetes API server OIDC settings; real RSS of the directory servers, `sssd`, a second `slurmctld`, a login node and the shim
-under more containers; whether our munge key is shared across cluster images; the Teleport license text.
+Kubernetes API server OIDC settings; real RSS of the directory servers, `sssd`, a second `slurmctld`, a login node and the shim under
+more containers; whether two clusters can share one MariaDB process with a database each under Slurm's `slurmdbd`; whether Grafana
+organisations isolate datasources and tokens well enough; the Teleport license text.
 
 ## Sources
 
