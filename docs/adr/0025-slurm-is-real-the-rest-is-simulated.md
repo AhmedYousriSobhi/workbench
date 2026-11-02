@@ -45,3 +45,25 @@ The expectation that `slurmstepd` survives a `slurmd` restart and the job reatta
 container's PID 1 (it would take the container and every step with it) but under `images/node-base/slurmd-run`, a
 loop that restarts it unless a hold file exists. `slurmctld` stays PID 1, so its restart is a container restart. The
 observed behaviour, including any disagreement with Slurm's documentation, is recorded in the guide after the first live run.
+
+## Addendum: proposed real-entity alternatives (issue 238)
+The table above says what is simulated. This one records, for each simulated layer, the real entity that could replace or
+back it, so the question is not re-argued. Nothing here is decided except where the status says so; each row has its own
+issue. The rule for new components still applies: run the real software when the client depends on behaviour that emerges
+from state and timing and it fits the memory budget.
+
+| Simulated layer | Real candidate | Cost and caveat | Status |
+|---|---|---|---|
+| Host metrics (CPU, memory, disk, NIC) | `node_exporter` in every node | Small; DCGM and InfiniBand series stay synthetic | proposed, #227; inside a container it reports host-wide memory and CPU, so scope it to network, disk and load |
+| Node health check runner | Upstream LBNL NHC | Inputs stay simulated; the runner and check semantics become real | to evaluate, #228; BSD-3 licensed, needs Bash 4.3; its GPU and IB checks need hardware, so ours stay custom scripts |
+| Jira (mock) | Real Jira Cloud/DC through the existing `cloud`/`dc` modes | Too heavy to run by default; use it to record responses for contract tests (SPEC NF-2) | proposed, #229; compare recorded response shapes, not replayed cassettes |
+| BMC (bmc-farm) | DMTF Redfish-Service-Validator against bmc-farm | Does not replace the mock; adds conformance evidence. The DMTF emulator and sushy-tools lack per-node addresses and fault injection | proposed, #230 |
+| GPU metrics (hand-written exporter) | Real DCGM with fake GPU entities | Unverified that it runs without hardware and serves the labels the client reads | research, #231; NVIDIA's mock NVML (Apache-2.0, up to 8 GPUs) lets the real dcgm-exporter run without a GPU, memory per node to measure |
+| Kubernetes (not built) | k3d/kind plus KWOK (SPEC C-2) | Real from the start; memory budget to declare | blocked on a decision, #232; kind and k3d nodes are privileged by default, which conflicts with the unprivileged-container rule |
+| Jobs (`sleep`) | Bounded `stress-ng` | Real CPU and memory load; opt-in | proposed, #233 |
+
+Cannot be real, with the reason:
+- **BCM**: proprietary and licensed; only the `cmsh` and CMDaemon surface can be offered (ADR 0005, 0013).
+- **NFS/Lustre**: excluded by SPEC C-11.
+- **GPUs and GPU binding**: real GPUs are a non-goal (SPEC section 1).
+- **cgroup enforcement, link-down and InfiniBand port injection**: need privileges that ADR 0002 rejected.
