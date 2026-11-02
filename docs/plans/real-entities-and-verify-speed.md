@@ -363,6 +363,122 @@ Done in PR 239: the addendum (table of real candidates, cost, status, issue; and
 (BSD-3), the kind privilege conflict as the blocker for 232, the mock NVML finding for 231, the host-wide memory caveat for 227 and
 the shape-comparison choice for 229. **Estimate: see the summary table (agent time), including commit, PR and progress file.**
 
+## Multiple clusters and the identity plane (issues 240 to 250)
+
+Status: investigation only, nothing implemented. Evidence tags as above.
+
+### Today
+
+One cluster by design: `ClusterName=workbench`, one `slurmctld`, one network `10.141.0.0/16`, fixed service octets, the login
+nodes of ADR 0023 are several doors to the same cluster. The single-cluster assumption is in about 40 files (`slurmctld`),
+72 (`cn001`/`gpu001`), 17 (`10.141`) and 55 test files. The client profile's `clusters` list is one entry per login route, and its
+`k8s` slot is always empty.
+
+### Topologies for jump hosts [judgement, spike 241 confirms]
+
+| Topology | Shape | Memory | Tests |
+|---|---|---|---|
+| Separate | own network and own jump or login per cluster | one more login container per cluster | isolation, wrong-jump-host errors |
+| Shared bastion | one thin sshd on every cluster network, a login per cluster behind it | slightly more containers | two-hop `ProxyJump` |
+| Shared login | one login holds several clusters' `slurm.conf`; Kubernetes reached by SSH forwarding | cheapest | the "one gateway, many clusters" site |
+
+Slurm's multi-cluster documentation says the feature depends on `slurmdbd`, each cluster's `slurm.conf` using the slurmdbd
+accounting plugin, authentication keys shared so each cluster can reach the database, clusters identified by `ClusterName`, and `-M`
+accepted by most client commands (`squeue -M a,b`); `salloc`, `srun` and `sstat` are cluster-specific. [verified:
+slurm.schedmd.com/multi_cluster.html] Whether our baked munge key satisfies the shared-key requirement is for spike 241.
+
+### sim.yaml shape (sketch)
+
+```yaml
+clusters:
+  - {name: alpha, kind: slurm, compute: {count: 4}, gpu: {nodes: 2}, jump: gw, access_group: cluster-alpha}
+  - {name: beta,  kind: slurm, compute: {count: 8}, jump: gw, access_group: cluster-beta}
+  - {name: kube1, kind: k8s, real_agents: 1, kwok_nodes: 50, jump: gw, access_group: cluster-kube1}
+access:
+  - {name: gw, auth: ssh, reaches: [alpha, beta, kube1]}
+identity:
+  provider: static            # static (today) | ldap | ad
+  users: [{name: alice, groups: [cluster-alpha]}, {name: bob, groups: [cluster-beta, cluster-kube1]}]
+```
+
+`login:` with no `clusters:` stays one cluster named `workbench`.
+
+### Identity plane
+
+Users differ per cluster, so a user list per cluster does not scale and does not model a real site. Proposal: one directory for
+the whole workbench, and per-cluster access by **group membership**.
+
+| Question | Finding | Evidence |
+|---|---|---|
+| Real AD protocol | Samba AD DC is the real AD-compatible server; OpenLDAP and 389-ds give LDAP only | [judgement] |
+| Memory | no current figures found; one 2014 thread measured about 41 MB for Samba's parent process and suggested 64 MB; 389-ds autotunes from the container's cgroup limit when it can see it; FreeIPA is likely much larger | [reported, dated, no benchmark]; measure in issue 246 |
+| Node login | real `sssd` in a container needs an explicit `services` list (otherwise only the backend starts and `getent` fails), and `getent passwd` is the check | [reported: a Docker fixture and image notes] |
+| Per-node cost | `sssd` on every node would add a daemon per node on top of about 12 MB shim each; instead use real `sssd` only on login or jump hosts and generate flat NSS files for the nodes from the directory at `up` time | [judgement]; confirm in issue 246 |
+| Teleport | Community Edition SSO is GitHub only; OIDC, SAML and Google are Enterprise; so an AD-backed identity cannot federate into Teleport, and Teleport users stay local (roles from `sim.yaml`) | [reported: Teleport feature matrix and FAQ] |
+| Teleport license | the editions page lists the Community license as commercial since version 16; another source says AGPLv3; sources disagree | [reported, unreconciled]; issue 249 |
+| Keycloak in front | federates LDAP or AD, validates credentials against the directory, creates a local user record; Quarkus build uses less RAM than the old one (no figure) | [reported]; only if a client needs OIDC |
+| Kubernetes OIDC | not researched | to verify in 246 |
+
+Where users matter: SSH on login and nodes, Slurm accounts (`sacctmgr` per cluster, from group membership), Jira assignees,
+Grafana users and tokens, Teleport roles, Kubernetes RBAC, `user-sim` personas. Scenarios worth having: user offboarded with
+running jobs, group change, locked account.
+
+### Ecosystem scope map
+
+| Component | Scope | Memory consequence |
+|---|---|---|
+| slurmctld, slurmrestd | per Slurm cluster | about 14 to 23 MB and 7 MB RSS measured; limits 200 and 60 MB |
+| slurmd nodes | per cluster | 5 to 7 MB RSS plus about 12 MB shim each (measured, one run) |
+| slurmdbd and MariaDB | shared, one `ClusterName` per cluster | MariaDB 179 MB measured once, not per cluster |
+| login or jump hosts | per access entry, many-to-many with clusters | about 10 MB RSS estimate plus shim; sharing saves little |
+| Teleport | shared; agentless nodes of every cluster registered; local users | one 256 MB limit |
+| Prometheus, Grafana | shared, with a `cluster` label | 21 MB and 58 MB measured once |
+| gpu-exporter-farm | shared, nodes from every cluster | 18 MB measured once |
+| bmc-farm and forwarders | farm shared; forwarders per node today | consolidate (issue 247) |
+| bcm-mock and the fake `cmsh` | shared, with a cluster parameter (real BCM has one head node per cluster) | no new process |
+| jira-mock | shared; project per cluster optional | no new process |
+| Kubernetes | per K8s cluster | the largest item, 0.5 to 1 GB per real server (estimate); extra clusters KWOK-only (issue 248) |
+| Directory and user management | shared identity plane | one more container, to measure |
+| scenario-engine, user-sim, ticket-bot | shared; targets take a cluster qualifier; personas per cluster | no new process |
+| NHC checks | per cluster file set | files only |
+| Governor | host; acts per cluster by label (issue 243) | admission by measured memory |
+| Web page and export | cluster selector; one export entry per cluster (issue 245) | none |
+| Storage and network chaos | per cluster network | none |
+
+### Memory rules for the design [judgement, measured baseline above]
+
+1. Share every service already data-driven from `sim.yaml`; one instance, cluster-aware.
+2. Per Slurm cluster add only the controller and nodes, about 55 to 70 MB of RSS plus shim.
+3. Declare many clusters, run few (cold clusters, issue 244); the governor freezes a whole cluster as a unit.
+4. At most one real Kubernetes control plane; others KWOK-only (issue 248, and the privilege question in 232).
+5. Admission on measured memory, not on the sum of limits (issue 243).
+6. Fewer containers: forwarders per cluster (issue 247).
+
+### Issues and agent time
+
+| Issue | Topic | Agent time |
+|---|---|---|
+| 240 | design and ADR: clusters, access, sim.yaml shape | 2 sessions |
+| 241 | spike: multi-cluster Slurm on one slurmdbd, shared login, measure shim, login, KWOK | 1 session plus a live run |
+| 242 | per-cluster address plan and unique names | 2 sessions (after 240, 241) |
+| 243 | governor and admission per cluster | 2 sessions |
+| 244 | cold clusters, `up --cluster` | 1 to 2 sessions |
+| 245 | export with one entry per real cluster | 1 session |
+| 246 | identity plane design and directory spike | 2 sessions plus a live run |
+| 247 | one BMC forwarder per cluster | 1 session (spike first) |
+| 248 | extra Kubernetes clusters footprint | 1 session plus a live run |
+| 249 | Teleport license and SSO limits | half a session |
+| 250 | this section | done in PR 239 |
+
+Order: 241 and 249 first (cheap, they decide the rest), then 240, then 242 and 243, then 244, 245, 247, with 246 and 248 in
+parallel. Owner decisions added: which topologies to support, the identity provider (static, LDAP or AD), and whether the Teleport
+edition question blocks anything.
+
+### Still to verify
+
+Kubernetes API server OIDC settings; real RSS of the directory servers, `sssd`, a second `slurmctld`, a login node and the shim
+under more containers; whether our munge key is shared across cluster images; the Teleport license text.
+
 ## Sources
 
 - node_exporter: https://github.com/prometheus/node_exporter
@@ -376,3 +492,7 @@ the shape-comparison choice for 229. **Estimate: see the summary table (agent ti
 - kind rootless support: https://github.com/kubernetes-sigs/kind/pull/1935
 - pytest Docker fixtures: https://github.com/avast/pytest-docker and https://github.com/pytest-docker-compose/pytest-docker-compose
 - Dockerfile practice: https://depot.dev/blog/dockerfile-linting-issues
+- Slurm multi-cluster: https://slurm.schedmd.com/multi_cluster.html
+- Teleport editions and feature matrix: https://goteleport.com/docs/choose-an-edition/introduction/
+- Teleport license discussion: https://github.com/gravitational/teleport/discussions/39158
+- Samba AD DC requirements thread (2014): https://lists.samba.org/archive/samba/2014-October/185988.html
