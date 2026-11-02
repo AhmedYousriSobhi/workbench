@@ -363,7 +363,7 @@ Done in PR 239: the addendum (table of real candidates, cost, status, issue; and
 (BSD-3), the kind privilege conflict as the blocker for 232, the mock NVML finding for 231, the host-wide memory caveat for 227 and
 the shape-comparison choice for 229. **Estimate: see the summary table (agent time), including commit, PR and progress file.**
 
-## Multiple clusters and the identity plane (issues 240 to 251)
+## Multiple clusters and the identity plane (issues 240 to 252)
 
 Status: investigation only, nothing implemented. Evidence tags as above.
 
@@ -466,7 +466,8 @@ account, directory outage on one cluster while the others stay up.
 | slurmdbd and MariaDB | cluster, optional, off by default; if on, one MariaDB process with a database per cluster and one `slurmdbd` per cluster | MariaDB 179 MB measured once; `slurmdbd` about 5 MB each [judgement, spike 241] |
 | login or jump host | cluster, one per cluster by default | about 10 MB RSS estimate plus shim |
 | Teleport | per cluster is the independent choice; one process with per-cluster roles is the cheap choice | 256 MB limit per instance; owner decides |
-| Prometheus, Grafana | simulator plane, per-cluster endpoint and credentials | Prometheus 21 MB, Grafana 58 MB measured; Prometheus per cluster is affordable, Grafana per cluster is the larger cost (separate orgs are an option to verify) |
+| Grafana | simulator plane, **one central instance (owner decision, 2026-11-02)**, one organization per cluster, each with its own viewer token and datasource | 58 MB measured once; a separate Grafana for a cluster only when a test needs it (issue 252) |
+| Prometheus | cluster-scoped data: one small instance per cluster is the safe default (about 21 MB measured each) | one shared Prometheus would let one organization's datasource query another cluster's series, so sharing it needs label enforcement (an extra proxy process); decide in issue 252 |
 | gpu-exporter-farm | simulator plane, one process, per-cluster series and endpoint | 18 MB measured once |
 | bmc-farm and forwarders | farm in the simulator plane; forwarders per cluster network | consolidate (issue 247) |
 | bcm-mock and the fake `cmsh` | simulator plane, one process, one head node per cluster as in real BCM | no new process |
@@ -479,9 +480,29 @@ account, directory outage on one cluster while the others stay up.
 | Web page and export | cluster selector; one export entry per cluster (issue 245) | none |
 | Storage and network chaos | per cluster network | none |
 
+### Decision log
+
+| Date | Decision | Source |
+|---|---|---|
+| 2026-11-02 | Clusters are independent entities, unrelated to each other | owner |
+| 2026-11-02 | Grafana is centralised (one instance, one organization per cluster); a separate Grafana only when a test requires it | owner |
+
+**Grafana organizations, validated.** An organization isolates dashboards, annotations, folders, data sources and service accounts;
+users are the one thing shared across organizations; a service account acts only in the organization it was created in, so each
+cluster needs its own service account and token. [reported: Grafana access-management and organization docs, via search] Datasource
+uids need only be unique within an organization (a code comment in a charm patch; the docs mirror's provisioning sample is per
+`orgId`), so every cluster can keep the client-facing uid `prometheus`; [reported, test on our version] provisioning takes a numeric
+`orgId` that is not predictable, so organizations, tokens and datasources are created through the API at `up`, as the tokens are today
+(`provision_token` in `benchctl/stack.py`). Grafana's own docs advise against organizations as the default way to group users at scale;
+the cap here is about 8 clusters, so that does not bite. [reported]
+
+**What this does not isolate.** An organization's datasource still points at a Prometheus. With one shared Prometheus, an
+organization could query another cluster's series, so Prometheus stays per cluster (about 21 MB each) unless label enforcement is added.
+The cost saved by centralising is the 58 MB Grafana per extra cluster, not the Prometheus.
+
 ### Memory rules for the design [judgement, measured baseline above]
 
-1. Share processes, never data: one process for the simulator-plane services, with per-cluster endpoints, credentials and data.
+1. Share processes, never data: one process for the simulator-plane services, with per-cluster endpoints, credentials and data. Grafana is central, with an organization per cluster (owner decision).
 2. Per Slurm cluster add only the controller, nodes and one login, about 55 to 70 MB of RSS plus shim.
 3. Accounting off by default per cluster; when on, one MariaDB process with a database per cluster.
 4. Declare many clusters, run few: independent lifecycle (cold clusters, issue 244), and the governor freezes one cluster without touching
@@ -507,16 +528,17 @@ account, directory outage on one cluster while the others stay up.
 | 249 | Teleport license and SSO limits | half a session |
 | 250 | this section | done in PR 239 |
 | 251 | isolation tests between clusters | 1 session plus a live run |
+| 252 | central Grafana: organization, viewer token and datasource per cluster | 1 to 2 sessions plus a live run |
 
 Order: 241 and 249 first (cheap, they decide the rest), then 240, then 242 and 243, then 244, 245, 247, 251, with 246 and 248 in
-parallel. Owner decisions added: the isolation level per service (logical sharing of one process or a process per cluster), Teleport per
+parallel. Owner decisions added: the isolation level for the other services (Grafana is decided: central, one organization per cluster, a separate instance only when required), Teleport per
 cluster or shared, one compose project per cluster or one project with prefixed names, the identity provider per cluster.
 
 ### Still to verify
 
 Kubernetes API server OIDC settings; real RSS of the directory servers, `sssd`, a second `slurmctld`, a login node and the shim under
-more containers; whether two clusters can share one MariaDB process with a database each under Slurm's `slurmdbd`; whether Grafana
-organisations isolate datasources and tokens well enough; the Teleport license text.
+more containers; whether two clusters can share one MariaDB process with a database each under Slurm's `slurmdbd`; whether a Grafana
+datasource with the same uid in two organizations works on our version (reported, not confirmed in the docs); the Teleport license text.
 
 ## Sources
 
