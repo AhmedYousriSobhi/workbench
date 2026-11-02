@@ -534,8 +534,9 @@ The cost saved by centralising is the 58 MB Grafana per extra cluster, not the P
 | 253 | Teleport shared by default, one per cluster on demand | 2 sessions plus a live run (after 240 and 249) |
 
 Order: 241 and 249 first (cheap, they decide the rest), then 240, then 242 and 243, then 244, 245, 247, 251, with 246 and 248 in
-parallel. Owner decisions added (Teleport is decided: shared by default, one per cluster on demand): the isolation level for the other services (Grafana is decided: central, one organization per cluster, a separate instance only when required), Teleport per
-cluster or shared, one compose project per cluster or one project with prefixed names, the identity provider per cluster.
+parallel. Decided by the owner (see the decision log): clusters are independent, Grafana central with an organization per cluster,
+Prometheus per cluster, Teleport shared by default and one per cluster on demand. Still open: one compose project per cluster or one
+project with prefixed names (recommended: per cluster, pending spike 241), and the identity provider per cluster.
 
 ### Still to verify
 
