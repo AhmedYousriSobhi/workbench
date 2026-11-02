@@ -363,7 +363,7 @@ Done in PR 239: the addendum (table of real candidates, cost, status, issue; and
 (BSD-3), the kind privilege conflict as the blocker for 232, the mock NVML finding for 231, the host-wide memory caveat for 227 and
 the shape-comparison choice for 229. **Estimate: see the summary table (agent time), including commit, PR and progress file.**
 
-## Multiple clusters and the identity plane (issues 240 to 252)
+## Multiple clusters and the identity plane (issues 240 to 253)
 
 Status: investigation only, nothing implemented. Evidence tags as above.
 
@@ -465,7 +465,7 @@ account, directory outage on one cluster while the others stay up.
 | slurmd nodes | cluster | 5 to 7 MB RSS plus about 12 MB shim each (measured, one run) |
 | slurmdbd and MariaDB | cluster, optional, off by default; if on, one MariaDB process with a database per cluster and one `slurmdbd` per cluster | MariaDB 179 MB measured once; `slurmdbd` about 5 MB each [judgement, spike 241] |
 | login or jump host | cluster, one per cluster by default | about 10 MB RSS estimate plus shim |
-| Teleport | per cluster is the independent choice; one process with per-cluster roles is the cheap choice | 256 MB limit per instance; owner decides |
+| Teleport | **default: one shared instance** with per-cluster roles and node labels (owner, 2026-11-02); **on demand: one instance per cluster** for a test that needs a fully independent access system | 256 MB limit per instance, so each on-demand instance adds that; a shared instance links clusters through one access system, which the owner accepted as the default (issue 253) |
 | Grafana | simulator plane, **one central instance (owner decision, 2026-11-02)**, one organization per cluster, each with its own viewer token and datasource | 58 MB measured once; a separate Grafana for a cluster only when a test needs it (issue 252) |
 | Prometheus | cluster-scoped data: one small instance per cluster is the safe default (about 21 MB measured each) | one shared Prometheus would let one organization's datasource query another cluster's series, so sharing it needs label enforcement (an extra proxy process); decide in issue 252 |
 | gpu-exporter-farm | simulator plane, one process, per-cluster series and endpoint | 18 MB measured once |
@@ -487,6 +487,7 @@ account, directory outage on one cluster while the others stay up.
 | 2026-11-02 | Clusters are independent entities, unrelated to each other | owner |
 | 2026-11-02 | Grafana is centralised (one instance, one organization per cluster); a separate Grafana only when a test requires it | owner |
 | 2026-11-02 | Every cluster has its own Prometheus (about 21 MB each); no shared Prometheus, so no label-enforcement proxy | owner |
+| 2026-11-02 | Teleport: both modes supported. Default is one shared Teleport with per-cluster roles and labels; one Teleport per cluster is on demand, never the default | owner |
 
 **Grafana organizations, validated.** An organization isolates dashboards, annotations, folders, data sources and service accounts;
 users are the one thing shared across organizations; a service account acts only in the organization it was created in, so each
@@ -530,9 +531,10 @@ The cost saved by centralising is the 58 MB Grafana per extra cluster, not the P
 | 250 | this section | done in PR 239 |
 | 251 | isolation tests between clusters | 1 session plus a live run |
 | 252 | central Grafana: organization, viewer token and datasource per cluster | 1 to 2 sessions plus a live run |
+| 253 | Teleport shared by default, one per cluster on demand | 2 sessions plus a live run (after 240 and 249) |
 
 Order: 241 and 249 first (cheap, they decide the rest), then 240, then 242 and 243, then 244, 245, 247, 251, with 246 and 248 in
-parallel. Owner decisions added: the isolation level for the other services (Grafana is decided: central, one organization per cluster, a separate instance only when required), Teleport per
+parallel. Owner decisions added (Teleport is decided: shared by default, one per cluster on demand): the isolation level for the other services (Grafana is decided: central, one organization per cluster, a separate instance only when required), Teleport per
 cluster or shared, one compose project per cluster or one project with prefixed names, the identity provider per cluster.
 
 ### Still to verify
