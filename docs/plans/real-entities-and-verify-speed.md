@@ -395,7 +395,7 @@ entry per login route, and its `k8s` slot is always empty.
 Independent sites reuse names (every site has a `cn001`). One compose project per cluster (`workbench-alpha`) would allow that, make
 `up` and `down` per cluster natural, and keep fault domains separate; the simulator plane would be its own project attached to
 every cluster network. The cost: the code assumes one project named `workbench` (`compose.generate`, `stack.down`, the governor's
-label discovery). The alternative, one project with cluster-prefixed names, keeps one project but loses name reuse. Subnets must
+label discovery). The alternative, one project with cluster-prefixed names, keeps one project and one compose file (`depends_on` works everywhere), and the client-visible names can still repeat because the container `hostname` and per-network aliases are separate from the service name, but `up`, `down` and pause per cluster become service-list operations on one shared project, and one failed command touches every cluster. Recommendation: one project per cluster, because independence and cold clusters (issue 244) are the point; spike 241 confirms it. Subnets must
 differ either way (Docker refuses two bridge networks with the same subnet), with no route between cluster networks.
 
 ### Jump hosts
@@ -486,6 +486,7 @@ account, directory outage on one cluster while the others stay up.
 |---|---|---|
 | 2026-11-02 | Clusters are independent entities, unrelated to each other | owner |
 | 2026-11-02 | Grafana is centralised (one instance, one organization per cluster); a separate Grafana only when a test requires it | owner |
+| 2026-11-02 | Every cluster has its own Prometheus (about 21 MB each); no shared Prometheus, so no label-enforcement proxy | owner |
 
 **Grafana organizations, validated.** An organization isolates dashboards, annotations, folders, data sources and service accounts;
 users are the one thing shared across organizations; a service account acts only in the organization it was created in, so each
@@ -497,7 +498,7 @@ uids need only be unique within an organization (a code comment in a charm patch
 the cap here is about 8 clusters, so that does not bite. [reported]
 
 **What this does not isolate.** An organization's datasource still points at a Prometheus. With one shared Prometheus, an
-organization could query another cluster's series, so Prometheus stays per cluster (about 21 MB each) unless label enforcement is added.
+organization could query another cluster's series, so Prometheus stays per cluster (about 21 MB each), which the owner confirmed on 2026-11-02; label enforcement is not needed.
 The cost saved by centralising is the 58 MB Grafana per extra cluster, not the Prometheus.
 
 ### Memory rules for the design [judgement, measured baseline above]
