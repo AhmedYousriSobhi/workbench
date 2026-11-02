@@ -2,6 +2,20 @@
 
 Status: research done, nothing implemented. Written so each issue can be picked up cold.
 
+## Start here (next session)
+
+- **Tracking epics:** #254 real entities instead of mocks, #255 faster `verify.sh`, #256 multiple independent clusters and per-cluster
+  identity. Each lists its issues in order as a task list; tracking only.
+- **State at the end of the 2026-11-02 session:** research and planning only; nothing built, no behaviour changed. Open decisions:
+  one compose project per cluster (recommended) or one project with prefixed names; the identity provider per cluster; the owner
+  decisions listed per epic.
+- **Suggested first picks, cheapest and most decisive:** #235 (10 min), #237 first step (per-step timing), then spikes #241 and #249.
+- **Working rules for these issues:** one issue, one branch from `dev`, a PR with `Closes #N`, the definition of done in CLAUDE.md;
+  the owner runs live tests and `verify.sh` (agent time excludes them, see the time model below); report a governor refusal as the
+  environment (NF-6). Nothing here is to be built until the owner says so for that issue.
+- **Memory figures:** only the Phase 0 baseline and the `validate.sh` timing are measured; every other number is an estimate tagged as
+  such, and each issue's first step measures it.
+
 **Budget (owner, 2026-11-02 session): 30 minutes in total for all sessions.** About 5 h of agent work is planned below, so
 the 30 minutes covers only: 238 (PR 239, done), then 235 (10 min) and the first step of 237 (per-step timing, 10 min). The rest waits
 for further sessions; nothing outside this list is started.
