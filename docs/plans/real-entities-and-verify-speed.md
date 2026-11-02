@@ -3,7 +3,7 @@
 Status: research done, nothing implemented. Written so each issue can be picked up cold.
 
 **Budget (owner, 2026-11-02 session): 30 minutes in total for all sessions.** About 5 h of agent work is planned below, so
-the 30 minutes covers only: 238 (this PR), then 235 (10 min) and the first step of 237 (per-step timing, 10 min). The rest waits
+the 30 minutes covers only: 238 (PR 239, done), then 235 (10 min) and the first step of 237 (per-step timing, 10 min). The rest waits
 for further sessions; nothing outside this list is started.
 
 **Time model.** Estimates are agent working time in sessions capped at 30 minutes (reading, code, tests, docs, the PR). They
@@ -19,7 +19,7 @@ How to read the evidence tags: **[verified]** a primary source was read; **[repo
 
 | Issue | Topic | Recommendation | Agent time | Needs from the owner |
 |---|---|---|---|---|
-| 238 | ADR 0025 addendum | Written; add this research | 10 min | review |
+| 238 | ADR 0025 addendum | Done in PR 239 (research findings included) | done | review of the PR |
 | 235 | Bake pyyaml into the exporter | Do it; trivial | 10 min | 1 live run (exporter start time) |
 | 233 | stress-ng jobs | Opt-in, total memory below the node limit | 25 min | 1 live run |
 | 230 | Redfish validator | Run it, document the command, triage | 30 min (fixing findings may need a 2nd session) | none |
@@ -41,6 +41,114 @@ loop), then 230, 233, 227, 229, then the spikes 228 and 231, and 232 last.
 
 A measurement already in hand: `validate.sh` on this branch ran in 119.9 s (725 passed, 118 skipped, coverage 96%).
 
+## Targets and baseline (proposed; confirm after the first measurement)
+
+Nothing here is measured for `verify.sh` yet; the only number in hand is `validate.sh` at about 100 to 120 s (101 s and 120 s on two
+runs of the same tree). Targets are proposals for the owner to accept or change once issue 234's baseline exists.
+
+| Metric | Baseline | Proposed target | How measured |
+|---|---|---|---|
+| Default `verify.sh` wall time | not measured | at least 40% lower than baseline | per-step seconds (issue 237) |
+| Stack cold starts per default run | about 25 (one per module with a stack fixture) | 3 or fewer | `--setup-show` count (issue 234) |
+| Longest single wait in the live tests | up to 300 s | 120 s or less with test timers | `--durations` (issues 234, 236) |
+| Exporter start to first scrape | not measured, waits allowed up to 180 s | under 15 s | issue 235 |
+| `validate.sh` | 101 to 120 s | unchanged (coverage floor 90% stays; 96% now) | existing output |
+
+## Dependencies between issues
+
+- 235 and 236 shorten waits that 234 would otherwise work around; do them first.
+- 237's per-step timing is what makes 234's "before and after" credible; do its first step before 234.
+- 227 (real metrics) and 233 (real job load) pair: a job's load only shows in real metrics if both exist.
+- 231 must keep the Slurm-allocation-following behaviour of issue 83 and the label set of issue 64.
+- 228 must keep the three NHC management paths (CLI, files, page, ADR 0019) and the 30 s live reload.
+- 232 is blocked by the privilege decision; 227 and 231 add per-node memory that matters for 232's headroom (next section).
+
+## Memory impact (measured baseline, estimated additions)
+
+**Measured.** Phase 0 samples in `docs/measurements/` (taken 2026-10-29, under the project's former container-name prefix) show,
+resident per container: a `slurmd` node 5.0 MB idle and 7.0 MB under load; a GPU node 5.1 to 5.6 MB; gpu-exporter-farm 18 MB;
+bmc-farm 12 MB; Prometheus 21 to 22 MB; Grafana 57 to 59 MB; slurmctld 14 MB idle and 23 MB loaded; slurmrestd 7 MB; MariaDB 179 MB
+with the accounting part. That sums to about 0.17 GB for `min`, matching the profile comment (budget 1 GB of limits).
+**Host now (2026-11-02, cluster stopped):** 15.7 GB total, about 6.7 GB available, swap 1994 of 2047 MB used. Swap is nearly full
+before any workbench container starts (the IDE and browser use several GB), so live runs of 227, 231 or 232 may be refused by the
+governor (GV-9, NF-6); that would be the environment, not a defect.
+
+**Estimated.** No number below for a new component has been measured; each is the first step of its issue (`benchctl measure`).
+Source tag: [judgement] from typical figures for these programs, with a wide range, not a vendor number.
+
+| Issue | Added per instance | Instances (min / std / full) | Added total (min / std / full) | Verdict |
+|---|---|---|---|---|
+| 227 node_exporter | 10 to 20 MB resident [judgement] | 6 / 18 / 34 nodes | 60 to 120 / 180 to 360 / 340 to 680 MB | Fits, but it roughly triples a node's 5 to 7 MB; the node limit is `SLURMD_MB` = 60, so check it |
+| 231 real dcgm-exporter (mock NVML) | 50 to 300 MB [judgement, widest uncertainty] | 2 / 2 / 2 GPU nodes (default `sim.yaml`) | 100 to 600 MB in every profile | Versus 18 MB for all GPUs in the farm today; the spike must measure it, this is the main reason to expect "keep the farm" |
+| 232 k3d or kind server | 500 to 1000 MB [judgement] | 1 / 1 / 1 | 0.5 to 1.0 GB | `std` and `full` already include "k3d + KWOK" in the architecture budget; not in `min` |
+| 232 KWOK controller | 20 to 50 MB [judgement] | 1 | small; fake nodes cost API-server objects, not RAM per node | Fits |
+| 233 stress-ng | at most `--vm-bytes` per running job | running jobs per node | bounded by the node limit (60 MB) minus slurmd, so keep `--vm-bytes` at or below about 25 MB | Memory is bounded; CPU is the real cost |
+| 235 baked pyyaml | none steady; removes the transient `pip install` peak | 1 | slightly lower peak | Exporter limit stays 100 MB (18 MB steady) |
+| 228, 229, 230, 234, 236, 237 | no resident process | | 0 (NHC runs for a moment per check; the validator and the Jira recorder run on the host in a throwaway environment) | None |
+
+**Reading the table.** `min` has about 0.83 GB of headroom against its 1 GB budget at the measured 0.17 GB. 227 fits comfortably;
+231 could consume most of that headroom on its own at the high end, which is the strongest argument for the spike to be
+decision-focused (measure RSS first, stop if it exceeds the exporter-farm cost by an order of magnitude). 232 does not belong in
+`min`. Update `profiles/*.yaml`, `docs/architecture/04-memory-and-profiles.md` section 5 and the README table with measured numbers
+when each part lands (CLAUDE.md, measure run).
+
+## Client features each issue could touch
+
+| Issue | Client feature at risk | Check |
+|---|---|---|
+| 227 | Grafana panels reading node metrics | metric names and labels unchanged for existing series |
+| 228 | Slurm node-issues view (drain reasons) | reasons keep the `NHC:` prefix, `sinfo -R` text unchanged |
+| 229 | Jira search and ticket views | shapes only; no behaviour change |
+| 230 | BMC over TLS, certificate pinning | the validator is read-only; a fix could change a field the client parses |
+| 231 | GPU usage through `/api/ds/query` | labels `Hostname`, `gpu`, `UUID`, `device`, `modelName`; `FB_USED + FB_FREE` |
+| 232 | Kubernetes view | new surface; the client-testing row changes from "not built" |
+| 233 | Running and pending jobs panel | jobs still show as `sleep`-like in `squeue` |
+| 234 to 237 | none (test harness only) | state "not exercised against the client" in each PR |
+
+## Spec, progress and docs to update when each lands
+
+C-6 (231), C-15 and ADR 0019 (228), C-2 (232), NF-2 evidence (229), C-3 and ADR 0012 (230), C-11 or C-7 (227); `docs/progress.yaml`
+and the regenerated `docs/PROGRESS.md` and `docs/progress.html` for every issue that changes what is built; `client-testing.md`,
+`getting-started.md` when a command changes, the wiki after the merge, and the CLAUDE.md lines that mention the exporter's pip
+install (235), the timers (236) and `verify.sh` timings (237).
+
+## Supply chain and security checklist
+
+- Pin exact versions with SHA256 for each new binary (node_exporter, upstream NHC tarball, stress-ng package, validator), as ADR 0002
+  does for Slurm; never `latest`.
+- New listeners bind to 127.0.0.1 or the bridge, never 0.0.0.0; no new `cap_add`, no `apparmor=unconfined`, no Docker socket;
+  `benchctl doctor` must still pass.
+- NHC runs as root on nodes (Slurm `HealthCheckProgram`); keep the page's "never a script" rule (W-16).
+- No tokens or site names in recorded fixtures (229); the privacy scan must pass.
+
+## Flakiness policy (for 234 and 236)
+
+- A change is stable after 3 consecutive passes of the touched modules alone and 2 of the full default run.
+- A failure whose output says the governor refused `up` is the environment (NF-6); it is reported as such and is not a pass.
+- A test that fails twice for timing is not retried silently; it gets a longer wait with a comment on why, or a marker, and an issue.
+
+## Owner decisions in one place
+
+1. 232: allow privileged kind or k3d node containers (an ADR exception), use rootless Docker for this part, or go KWOK-only.
+2. 229: create a Jira Cloud free site and supply a token through an environment variable.
+3. 228: adopt upstream NHC after the spike, or keep the stand-in.
+4. 231: adopt real DCGM after the spike, or keep the farm.
+5. The verify targets above.
+
+## Still to verify (not read in this research)
+
+- kind's own rootless page and whether its node containers need `--privileged`.
+- The official `kwokctl` docs for node templates, and whether KWOK can run a real API server without kind.
+- The official DMTF validator README (certificate handling for a self-signed BMC).
+- Whether `dcgm-exporter --fake-gpus` needs a driver, and the real RSS of exporter plus mock NVML.
+- The `slurm.conf` text for `SlurmdTimeout` minimums.
+- Settled: the only workflow is `.github/workflows/wiki.yml`; CI does not run `verify.sh` or `validate.sh`, so 237 only serves local runs and the hooks.
+
+## Out of scope
+
+Real NFS or Lustre (SPEC C-11), a macOS VM, real GPUs, replacing Slurm with a mock, running real training jobs, and any step that
+needs sudo on the start, build or stop path (NF-5).
+
 ---
 
 ## 227 node_exporter on every node
@@ -48,8 +156,8 @@ A measurement already in hand: `validate.sh` on this branch ran in 119.9 s (725 
 **Validated.** Upstream documents `--path.rootfs` plus a read-only root bind mount, but that is for monitoring the host from a
 container; here each node monitors itself, so no host mount is needed. Collectors are switched off with
 `--no-collector.<name>` or `--collector.disable-defaults` plus the wanted ones; the docs warn some collectors are high
-cardinality or slow, so watch `scrape_duration_seconds`. [verified: node_exporter README via search summary] The upstream docs give no
-memory figure, so it must be measured with `benchctl measure`.
+cardinality or slow, so watch `scrape_duration_seconds`. [reported: node_exporter README, seen through a search summary] The upstream docs give no
+memory figure, so it must be measured with `benchctl measure` (see Memory impact below for the planning figure).
 
 **Caveat that changes the scope [judgement, check in step 1].** Inside a container `/proc/meminfo` and `/proc/stat` show the
 host's values, not the container's limit, so a stock `node_exporter` would report the same memory and CPU on every node. That is
@@ -251,9 +359,9 @@ hook stages, so the skip rule below is [judgement] and needs a safe invalidation
 
 ## 238 ADR 0025 addendum
 
-The addendum is written (table of real candidates, cost, status, issue; and what cannot be real) and `validate.sh` passed on it.
-To add from this research once the owner agrees: NHC license (BSD-3), the kind privilege conflict as the blocker for 232, the
-mock NVML finding for 231, and the shape-comparison choice for 229. **Estimate: see the summary table (agent time), including commit, PR and progress file.**
+Done in PR 239: the addendum (table of real candidates, cost, status, issue; and what cannot be real) now carries the NHC license
+(BSD-3), the kind privilege conflict as the blocker for 232, the mock NVML finding for 231, the host-wide memory caveat for 227 and
+the shape-comparison choice for 229. **Estimate: see the summary table (agent time), including commit, PR and progress file.**
 
 ## Sources
 
