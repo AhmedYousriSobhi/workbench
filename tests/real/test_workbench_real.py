@@ -23,7 +23,7 @@ def built():
     out = benchctl("up", "--cpu-nodes", "2", "--gpu-nodes", "3", "--gpus-per-node", "4", "--with", "jira", "--without", "bcm")
     assert out.returncode == 0, out.stdout + out.stderr
     assert wait_for(lambda: "gpu003" in benchctl("exec", "login", "--", "sinfo", "-h", "-N", "-o", "%N", timeout=60).stdout, timeout=90)
-    assert wait_for(exporter_up, timeout=180), "the GPU exporter (it installs pyyaml at start) never answered"
+    assert wait_for(exporter_up, timeout=60), "the GPU exporter never answered"
     yield out.stdout
     stack.down(say=lambda m: None)
     workbench.forget()

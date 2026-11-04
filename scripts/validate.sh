@@ -93,5 +93,8 @@ fi
 step "governor smoke"
 python3 -m governor --dry-run --once >/dev/null 2>&1 || bad "governor dry-run --once"
 
-if [ $fail -eq 0 ]; then echo "ALL CHECKS PASSED"; else echo "VALIDATION FAILED"; fi
+if [ $fail -eq 0 ]; then
+  . scripts/lib-stamp.sh && stamp_write  # lets verify.sh skip a second run on this exact tree
+  echo "ALL CHECKS PASSED"
+else echo "VALIDATION FAILED"; fi
 exit $fail

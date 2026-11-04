@@ -24,3 +24,9 @@ webui = ["static/*"]
 
 [tool.ruff]
 line-length = 100
+
+[tool.pytest.ini_options]
+markers = [
+  "live: needs Docker or a live stack (every test under tests/real; set WORKBENCH_REAL=1)",
+  "browser: runs headless Chromium (playwright); leave out with verify.sh --skip-browser",
+]

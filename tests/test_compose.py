@@ -123,3 +123,12 @@ def test_login_node_is_local_only_with_keys_mounted():
 def test_the_jira_mock_starts_with_a_team_working_the_project():
     svc = compose.generate(SIM, compose.load_profile("std"))["services"]["jira-mock"]
     assert svc["environment"]["JIRA_ACTIVITY_EVERY"] == "45"
+
+
+def test_exporter_image_has_its_dependency_baked_in_and_pinned():
+    """Issue 235: no `pip install` at container start; every Dockerfile that needs pyyaml pins the same version."""
+    root = Path(__file__).resolve().parents[1]
+    obs = yaml.safe_load((root / "compose/observability.yml").read_text())["services"]["gpu-exporter-farm"]
+    assert "build" in obs and "pip" not in str(obs.get("command", ""))
+    pins = {(root / f"components/{c}/Dockerfile").read_text().count("pyyaml==6.0.3") for c in ("gpu-exporter-farm", "bmc-farm", "bcm-mock")}
+    assert pins == {1}

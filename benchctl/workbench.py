@@ -234,6 +234,19 @@ def current(sim: dict, path: Path = SAVED) -> Spec | None:
     return load_file(path, defaults(sim)) if path.is_file() else None
 
 
+def start_line(saved: Spec | None, profile: str | None, parts: bool) -> str:
+    """The one line `benchctl start` prints first: what it starts, and what saved workbench that replaces (issue 215).
+
+    A start with parts builds the default workbench plus those parts; one without builds the size preset (default min).
+    Either way it does not reuse the saved workbench, it forgets it; the plain default is `start --profile min`."""
+    what = "the default workbench plus the parts you named" if parts else f"the {profile or 'min'} size preset"
+    if saved is None:
+        return f"Starting {what}."
+    mine = f"{saved.cpu_nodes} compute + {saved.gpu_nodes} GPU nodes, parts {', '.join(saved.parts) or 'none'}"
+    return (f"Starting {what}. This replaces the workbench last built ({mine}); "
+            "to rebuild that one, run `benchctl apply -f FILE` or `benchctl up` with its counts.")
+
+
 def live_sim_path(base: Path = Path("sim.yaml"), generated: Path = Path("compose/generated/sim.yaml")) -> Path:
     """The sim file describing what is built: the generated copy while a workbench is in use, else sim.yaml."""
     return generated if SAVED.is_file() and generated.is_file() else base
