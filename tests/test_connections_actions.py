@@ -45,10 +45,20 @@ def test_validator_refuses_bad_actions():
 
 def test_a_direct_login_gets_an_ssh_uri_and_the_nodes_a_jump_command():
     by = {e["id"]: e for e in rows()}
-    assert by["login"]["actions"][0]["value"].startswith("ssh://") and ":2222" in by["login"]["actions"][0]["value"]
+    copy_, uri = by["login"]["actions"]  # Copy first: it works everywhere (#281)
+    assert copy_["kind"] == "copy" and copy_["value"] == "benchctl ssh alice@login"
+    assert uri["kind"] == "uri" and uri["value"].startswith("ssh://") and ":2222" in uri["value"]
+    assert "needs a handler" in uri["label"]
     jump = by["nodes"]["actions"][0]
     assert jump["kind"] == "copy" and jump["value"] == "benchctl ssh alice@<node>"
 
 
 def test_a_part_with_no_localhost_port_has_no_link():
     assert [a for e in rows() if e["id"] == "bcm" for a in e["actions"]] == []
+
+
+def test_api_links_say_they_open_json_and_the_bmc_goes_to_the_redfish_root():
+    by = {e["id"]: e for e in rows()}
+    for part in ("jira", "bmc"):
+        assert "API (JSON" in by[part]["actions"][0]["label"], part
+    assert by["bmc"]["actions"][0]["value"].endswith("/redfish/v1")
