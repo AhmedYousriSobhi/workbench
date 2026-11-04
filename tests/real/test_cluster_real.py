@@ -95,6 +95,8 @@ def test_screenshot_of_a_faulted_cluster(ui, tmp_path):
         browser = p.chromium.launch()
         for vp, size in (("desktop", (1280, 900)), ("phone", (390, 800))):
             page = browser.new_page(viewport={"width": size[0], "height": size[1]})
+            # 1280 px is a mid-size window: the page folds the node list by default (the diagram gets the width), so open it
+            page.add_init_script("try { localStorage.setItem('workbench-tree', 'open'); } catch (e) { /* default */ }")
             page.goto(f"{base}/login?token={token}")
             page.wait_for_selector(".node.fault")
             assert page.locator(".node.down").count() == 1 and page.locator(".node.warn").count() == 1

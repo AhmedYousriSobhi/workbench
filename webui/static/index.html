@@ -152,7 +152,7 @@
     .rail.left { position:static; }
     .top { padding:var(--sp3) var(--sp4); } .top h1 { width:100%; }
     .status { flex-wrap:wrap; width:100%; }
-    .menu { position:fixed; left:16px; right:16px; top:auto; width:auto; margin-top:6px; }
+    .menuwrap .menu { position:fixed; left:16px; right:16px; top:auto; width:auto; margin-top:6px; max-height:calc(100vh - 120px); overflow-y:auto; }  /* beats the desktop `.menu` rule below; the script sets top under the button (#182) */
   }
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
   /* calm pass (#121): more space, fewer boxes, one primary action per area */
