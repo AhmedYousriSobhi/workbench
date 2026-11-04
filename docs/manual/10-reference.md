@@ -50,7 +50,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 | `scripts/install-governor.sh [--uninstall\|--print]` | optional root governor service (sudo) |
 | `scripts/install-hooks.sh` | git hooks for contributors (no sudo) |
 | `scripts/validate.sh` | lint, tests, privacy scan: run before every commit |
-| `scripts/verify.sh [--full]` | validate plus real-host tests: run before asking for a merge |
+| `scripts/verify.sh [--full] [--revalidate] [--skip-browser]` | validate (skipped when it passed for this exact tree) plus real-host tests, with seconds per step: run before asking for a merge |
 | `scripts/real-test.sh` | real-host tests |
 | `scripts/ui_shots.py [OUTDIR]` | screenshots and checks of the web page |
 | `scripts/check-privacy.sh` | scan for personal data before publishing |

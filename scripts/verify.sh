@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # One command to verify a change before asking for a merge. Runs the static checks, then the
 # real-host tests, and prints a summary you can paste into the PR.
-#   ./scripts/verify.sh           validate.sh + real tests that touch the governor/Docker (fast, ~1 min)
-#   ./scripts/verify.sh --full    also the live stack lifecycle (up/scale/down, ~3 min, ~3 GB)
+#   ./scripts/verify.sh           validate.sh (~2 min) + real tests that touch the governor/Docker; every step prints its seconds.
+#                                 validate.sh is skipped when it already passed for this exact tree (the commit hook ran it);
+#                                 the step line says so. Durations: see the per-step seconds in your own run (issue 237).
+#   ./scripts/verify.sh --full    also the live stack lifecycle (up/scale/down, ~3 GB)
 #   ./scripts/verify.sh --only X  run only real tests matching pytest -k X (skips validate.sh)
+#        --revalidate             run validate.sh even when a fresh pass is recorded
+#        --skip-browser           leave out the Chromium tests (pytest marker `browser`)
 #   ./scripts/verify.sh --unit X  verify one component: tests/test_X*.py (fast), then tests/real/test_X*.py (live)
 #        --clean                  with --unit: stop the cluster first and run scripts/verify.d/X.sh (reset that unit's state)
 #        --list-units             the units there are tests for;  -n / --dry-run  print what would run, run nothing
@@ -11,16 +15,18 @@
 # Your workbench selection (compose/generated/workbench.yaml, profile, sim.yaml) is saved first and put back on exit.
 set -u
 cd "$(dirname "$0")/.."
-full=0 only="" unit="" unit_given=0 clean=0 list=0 dry=0
+full=0 revalidate=0 nobrowser=0 only="" unit="" unit_given=0 clean=0 list=0 dry=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --full) full=1 ;;
     --only) only="$2"; shift ;;
     --unit) unit="${2:-}"; unit_given=1; shift ;;
     --clean) clean=1 ;;
+    --revalidate) revalidate=1 ;;
+    --skip-browser) nobrowser=1 ;;
     --list-units) list=1 ;;
     -n|--dry-run) dry=1 ;;
-    *) echo "usage: $0 [--full] [--only KEYWORD] [--unit NAME [--clean]] [--list-units] [-n]" >&2; exit 2 ;;
+    *) echo "usage: $0 [--full] [--only KEYWORD] [--revalidate] [--skip-browser] [--unit NAME [--clean]] [--list-units] [-n]" >&2; exit 2 ;;
   esac
   shift
 done
@@ -48,10 +54,13 @@ log=$(mktemp)
 selection_save  # the real tests build and forget their own selections: keep yours, so the next `up` is your cluster, not std
 trap 'rm -f "$log"; selection_restore' EXIT
 status=0
-step() {  # step NAME CMD...: run, record, keep the output only if it failed
-  local name="$1"; shift
-  if "$@" >"$log" 2>&1; then echo "PASS  $name  ($(tail -1 "$log"))"; else
-    echo "FAIL  $name"; tail -30 "$log"; status=1; fi
+. scripts/lib-stamp.sh
+timings=()
+step() {  # step NAME CMD...: run, record, keep the output only if it failed; every line says how long it took
+  local name="$1" t0 secs; shift; t0=$SECONDS
+  if "$@" >"$log" 2>&1; then secs=$((SECONDS - t0)); echo "PASS  $name  [${secs}s]  ($(tail -1 "$log"))"; else
+    secs=$((SECONDS - t0)); echo "FAIL  $name  [${secs}s]"; tail -30 "$log"; status=1; fi
+  timings+=("${secs}s $name")
 }
 if [ "$unit_given" = 1 ]; then
   if [ "$clean" = 1 ]; then
@@ -62,13 +71,18 @@ if [ "$unit_given" = 1 ]; then
   if [ ${#live[@]} -gt 0 ]; then step "$unit live tests" env WORKBENCH_REAL=1 python3 -m pytest -q "${live[@]}"
   else echo "NOTE  $unit has no live tests (tests/real/test_${unit}*.py)"; fi
 else
-  if [ -z "$only" ]; then step "validate.sh" ./scripts/validate.sh; fi
+  if [ -z "$only" ]; then
+    if [ "$revalidate" = 0 ] && age=$(stamp_fresh); then echo "SKIP  validate.sh  (passed ${age}s ago for this exact tree; --revalidate runs it again)"
+    else step "validate.sh" ./scripts/validate.sh; fi
+  fi
   sel=(); [ -n "$only" ] && sel=(-k "$only") || { [ "$full" = 0 ] && sel=(-k "not stack"); }
+  [ "$nobrowser" = 1 ] && sel+=(-m "not browser")
   step "real tests ${sel[*]:-}" ./scripts/real-test.sh -q "${sel[@]}"
   [ "$full" = 0 ] && [ -z "$only" ] && echo "NOTE  live stack lifecycle skipped; run --full when stack/compose/slurm changed"
 fi
 case "$selection_kept" in *workbench.yaml*)
   echo "NOTE  your workbench selection was kept; the tests stopped the cluster, so bring it back with ./scripts/benchctl up (or start)" ;;
 esac
+echo "TIME  total ${SECONDS}s: ${timings[*]:-no steps}"
 echo "NOTE  root-only checks: sudo ./scripts/real-test-root.sh (when governor cgroup/systemd code changed)"
 exit $status
