@@ -191,7 +191,7 @@ phases:
       - {name: benchctl doctor / status / diag, status: done, pr: 26, where: "benchctl/checks.py, benchctl/diag.py",
          how: "Environment checks with fixes, governor state, a masked diagnostics tarball, and the container security check."}
       - {name: Observability stack, status: done, where: compose/observability.yml,
-         how: "Prometheus (2 d, tmpfs), Grafana with provisioned dashboard, fake GPU exporter."}
+         how: "Prometheus (2 d, tmpfs), Grafana with provisioned dashboard, fake GPU exporter (its own image with pyyaml==6.0.3 baked in, no pip at start, runs as nobody; issue 235)."}
       - {name: Decisions as ADRs, status: done, where: docs/adr,
          how: "0001 record decisions, 0002 Slurm from source with no extra privileges, 0003 slurmrestd/JWT and accounting, 0004 slurmrestd keeps its unshare steps disabled, 0011 SSH login node."}
       - {name: Getting-started guide, status: done, pr: 52, where: docs/guides/getting-started.md,
