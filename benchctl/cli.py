@@ -337,6 +337,11 @@ def start(profile: str = typer.Option(None, "--profile", autocompletion=completi
     _offer_completion()
     modes = [] if login is None else ["--login", ",".join(_login_modes(login))]
     parts = [x for p in (with_ or []) for x in ("--with", p)] + [x for p in (without or []) for x in ("--without", p)] + modes
+    try:
+        saved = workbench.current(_base_sim())
+    except workbench.SpecError:
+        saved = None
+    typer.echo(workbench.start_line(saved, profile, bool(parts)))
     _launcher("start", *(parts or ["--profile", profile or "min"]))
 
 
