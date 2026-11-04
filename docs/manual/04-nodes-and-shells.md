@@ -41,6 +41,9 @@ design).
 ./scripts/benchctl exec gpu001                 # a GPU node (fake GPU device files /dev/workbench-gpu0..7)
 ./scripts/benchctl exec cn001 -u alice         # the same node as a simulated user
 ./scripts/benchctl exec cn001 -- hostname      # one command, no shell
+./scripts/benchctl ssh cn001                   # a root shell (same as exec, shorter)
+./scripts/benchctl ssh alice@cn001             # a real SSH login as alice, through the login node
+./scripts/benchctl ssh alice@gpu001 -- nvidia-smi   # one command over SSH
 # the long form, same result: docker exec -it workbench-cn001-1 bash
 ```
 
