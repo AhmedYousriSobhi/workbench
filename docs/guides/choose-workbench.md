@@ -66,7 +66,7 @@ Name the parts by what they are for. Values are comma separated or repeated, `al
 ./scripts/benchctl start --addons --without teleport              # everything except one
 ```
 
-Category flags add to the default parts (`jira`, `bmc`, `bcm`, `accounting`, `scenarios`); `--without` removes. A typo gets a hint: `unknown ticketing item 'jirra'. Did you mean 'jira'?`. A plain `benchctl start` with no flags is the `min` preset, which has none of the optional parts.
+Category flags add to the default parts (`jira`, `bmc`, `bcm`, `accounting`, `scenarios`); `--without` removes. A typo gets a hint: `unknown ticketing item 'jirra'. Did you mean 'jira'?`. A plain `benchctl start` with no flags is the `min` preset, which has none of the optional parts. `start` never reuses the workbench you last built: its first line names what it starts and, if one was saved, what it replaces (`Starting the min size preset. This replaces the workbench last built (2 compute + 3 GPU nodes, parts ...)`). `benchctl start --profile min` is the plain default, spelled out, and `start` with parts builds the default workbench plus those parts.
 
 ## A workbench file
 
