@@ -191,8 +191,8 @@ The last column, **Open**, has one-click actions for the parts that have one:
   ports published on `127.0.0.1`, so they work without the Docker network route.
 - **Open ssh:// link** on a login node that takes a key hands the address to the terminal your desktop registered for
   `ssh://`. Not every desktop has one: then use the **Copy** button of the row.
-- **Copy ssh through the login node** gives `ssh -J ... <node>`; a node's panel has the same command with the node filled in.
-  The button says "Copied" and the page announces it to screen readers.
+- **Copy benchctl ssh** gives `benchctl ssh alice@<node>`, a real SSH login as that user through the login node (`benchctl ssh <node>`
+  without a user is a root shell). A node's panel has the same command with the node filled in. The button says "Copied" and the page announces it to screen readers.
 
 The page never opens a terminal itself (it has no Docker or root access, W-3). A part with nothing to open shows "none".
 

@@ -63,7 +63,7 @@ def actions_for(e: dict, sim: dict, user: str) -> list[dict]:
     """The one-click actions of a row, from its id and kind. A part that publishes no localhost port gets no link."""
     i, k = e["id"], e["kind"]
     if k == "ssh" and i == "nodes":
-        return [copy("Copy ssh through the login node", f"ssh -J {user}@{LOCAL}:{compose.SSH_PORT} -i {SSH_KEY} {user}@<node>")]
+        return [copy("Copy benchctl ssh", f"benchctl ssh {user}@<node>")]  # benchctl adds the key and the jump (#275)
     if k == "ssh":
         port = compose.SSH_PORT + [n for n, _ in logins.nodes(sim)].index(i)
         return [{"kind": "uri", "label": "Open ssh:// link", "value": f"ssh://{user}@{LOCAL}:{port}"}]

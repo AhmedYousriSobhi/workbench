@@ -841,7 +841,7 @@ async function showNode(name) {
   const cx = (await connections()).find(e => e.id === 'nodes'), kv = [];
   if (cx) kv.push(['SSH', `<code>${esc(cx.command.replace('<node>', name))}</code>`], ['User and key', esc(cx.how.split('.')[0]) + ` · key file <code>${esc(cx.credential)}</code>`]);
   const jump = cx && (cx.actions || []).find(a => a.kind === 'copy');
-  if (jump) kv.push(['Through the login node', `<button class="btn small copy" data-copy="${esc(jump.value.replace('<node>', name))}" aria-label="Copy the ssh command for ${esc(name)}">Copy ssh -J command</button>`]);
+  if (jump) kv.push(['As a user, from a terminal', `<button class="btn small copy" data-copy="${esc(jump.value.replace('<node>', name))}" aria-label="Copy the ssh command for ${esc(name)}">Copy benchctl ssh command</button>`]);
   const bm = (await connections()).find(e => e.id === 'bmc');
   kv.push(['BMC', `<code>${esc(bm ? bm.address : '')}</code> (HTTPS) with Host header <code>bmc-${esc(name)}</code>, user admin, password in <code>compose/generated/secrets/bmc_credentials</code>`],
     ['IP address', body && body.ip ? `<code>${esc(body.ip)}</code> (fixed; reach it from the login node)` : `run <code>./scripts/benchctl describe node ${esc(name)}</code>`]);
