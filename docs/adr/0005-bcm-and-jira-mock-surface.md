@@ -31,6 +31,14 @@ and on. Expectations `jira.issue_status` and `jira.issue_count` query the real s
 tickets by itself stays unbuilt: scenario steps do it deterministically next to the Slurm drain. Not simulated: Teams and
 Assets fields, attachments, links, transition screens with extra fields.
 
+## Addendum: contract tests against real Jira Cloud (issue 229)
+
+`scripts/record_jira_shapes.py` records the shapes of real Cloud responses (read-only; keys and types only) into
+`tests/fixtures/jira/cloud/`, and `tests/test_jira_contract.py` fails when the mock drifts. Gaps found are listed with a reason in
+`tests/fixtures/jira/known-gaps.yaml` and summarised here once the owner has recorded. Status: the tooling is built; no real
+response is recorded yet (it needs the owner's own Jira Cloud site and token), so no gap is listed. Writes and Data Center are not covered.
+See docs/guides/jira-contract.md.
+
 ## Revisit when
 The app's real BCM or Jira calls are known: replace the call list or surface, and record real responses as
 fixtures (architecture section 13, contract tests).
