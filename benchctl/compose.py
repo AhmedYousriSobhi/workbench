@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from . import addressing, logins, nhc, slurmconf, teleport
+from . import addressing, jira_real, logins, nhc, slurmconf, teleport
 from .nodes import node_names
 
 OBSERVABILITY = "../observability.yml"  # static; hosts prometheus, grafana, gpu-exporter-farm
@@ -22,6 +22,8 @@ CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {
         "bcm-mock": ("workbench/bcm-mock:dev", 100, 2),
         "jira-mock": ("workbench/jira-mock:dev", 100, 2),
     },
+    # real Jira Data Center and its Postgres (ADR 0026): off by default, about 3 GB, P6 (the first thing the governor stops)
+    "jira-real": {"jira-db": (jira_real.DB_IMAGE, 256, 6), "jira-real": (jira_real.IMAGE, 3072, 6)},
     "access": {"login": ("workbench/login:dev", 40, 2)},
     # the tag is replaced from sim.yaml teleport.version (benchctl/teleport.py); the limit is a planning estimate until measured
     "teleport": {"teleport": (f"{teleport.IMAGE}:{teleport.DEFAULT_VERSION}", 256, 2)},
@@ -122,6 +124,8 @@ def generate(sim: dict, profile: dict) -> dict:
     if "jira-mock" in services:
         # a team works the project in the background, one change about every 45 s (benchctl set jira-activity off to stop it, #158)
         services["jira-mock"].update({"ports": ["127.0.0.1:8080:8080"], "environment": {"JIRA_ACTIVITY_EVERY": "45"}})
+    if "jira-real" in services:
+        _wire_jira_real(services)
     _wire_slurm_services(services)
     ips = addressing.plan(sim, profile.get("compute_nodes"))
     for name, svc in services.items():  # a fixed address for everything (ADR 0018)
@@ -130,10 +134,29 @@ def generate(sim: dict, profile: dict) -> dict:
     nets = {"default": {"ipam": {"config": [{"subnet": addressing.INTERNAL, "gateway": addressing.GATEWAY}]}}}
     if "bmc-farm" in services:
         nets["ipmi"] = {"ipam": {"config": [{"subnet": addressing.IPMI, "gateway": addressing.IPMI_GATEWAY}]}}
-    return {"name": "workbench", "include": [OBSERVABILITY], "networks": nets, "services": services}
+    out = {"name": "workbench", "include": [OBSERVABILITY], "networks": nets, "services": services}
+    if "jira-real" in services:  # named volumes: the data survives `down`; `benchctl reset jira-real` removes them
+        out["volumes"] = {v: {} for v in jira_real.VOLUMES}
+    return out
 
 
 BMC_FORWARDER_MB = 32
+
+
+def _wire_jira_real(services: dict) -> None:
+    """The official Jira image on 127.0.0.1 only, with Postgres (Jira 10's wizard has no built-in database). Unprivileged
+    and memory-limited like everything else; the heap is capped below the container limit so the JVM is not OOM-killed."""
+    services["jira-real"].update({
+        "ports": [f"127.0.0.1:{jira_real.PORT}:8080"],
+        "environment": {"JVM_MINIMUM_MEMORY": "1024m", "JVM_MAXIMUM_MEMORY": "2048m"},
+        "volumes": ["jira-home:/var/atlassian/application-data/jira"],
+        "depends_on": {"jira-db": {"condition": "service_healthy"}}})
+    services["jira-db"].update({
+        "env_file": ["./secrets/jira-db.env"],
+        "environment": {"POSTGRES_INITDB_ARGS": "--encoding=UTF8 --lc-collate=C --lc-ctype=C"},  # Jira refuses any other collation
+        "command": ["-c", "shared_buffers=64MB", "-c", "max_connections=60"],
+        "volumes": ["jira-db:/var/lib/postgresql/data"],
+        "healthcheck": {"test": ["CMD-SHELL", f"pg_isready -U {jira_real.DB_USER} -d {jira_real.DB_NAME}"], "interval": "3s", "timeout": "3s", "retries": 30}})
 
 
 def bmc_nodes(sim: dict, profile: dict | None = None) -> list[str]:
