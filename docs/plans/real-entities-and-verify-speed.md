@@ -149,7 +149,7 @@ install (235), the timers (236) and `verify.sh` timings (237).
 4. 231: adopt real DCGM after the spike, or keep the farm.
 5. The verify targets above.
 6. GUI access (section "GUI access to every component"): accept or reject the optional `webterm` browser terminal; the default is
-   copy commands, `ssh://` links and `benchctl open terminal`, which add no privilege.
+   copy commands, `ssh://` links and `benchctl ssh`, which add no privilege.
 
 ## Still to verify (not read in this research)
 
@@ -562,7 +562,7 @@ datasource with the same uid in two organizations works on our version (reported
 
 ## GUI access to every component (proposed, issue number assigned on creation)
 
-Status: proposal, nothing implemented. Evidence tags as above.
+Status: step 1 (registry with link, copy and uri actions in Connections) implemented in issue 273; steps 2 to 5 not started. Evidence tags as above.
 
 **Goal.** From the page, reach each component in one click: open a terminal on a node, open Grafana, Prometheus, Alertmanager,
 the Teleport web UI, the Jira mock, or the owner's real Jira Cloud site (issue 229), and see the command for anything that is not a
@@ -590,9 +590,9 @@ Each component declares its actions in one registry (a sibling of `PART_INFO` in
    sit behind the login node, ADR 0011 and 0018) and an `ssh://` link, using the key already generated under
    `compose/generated/secrets/ssh`. For a Teleport cluster it shows `tsh ssh <user>@<node>` instead (ADR 0020). It reuses existing
    access, so it adds no privilege. [judgement]
-2. **`benchctl open terminal NODE`** (grammar `VERB RESOURCE NAME`, ADR 0015). It runs on the host, as the user, and starts the
-   user's terminal emulator with the command from level 1. It needs a desktop session, so it prints the command when none is
-   found (one message per condition, W-10). The page shows it as a copy action; the page itself never runs it.
+2. **`benchctl ssh [USER@]NODE`** (built, issue 275; the owner's wording replaced `open terminal`). `benchctl ssh cn001` is a root
+   shell (docker exec), `benchctl ssh alice@cn001` a real SSH login through the login node. It runs on the host, as the user; the
+   page shows it as a copy action and never runs it.
 3. **Optional part `webterm` (off by default, `benchctl up --with webterm`).** One small container that serves a browser terminal
    and connects over SSH to the login node, so the shell is a normal SSH session and not a Docker exec. It binds 127.0.0.1 only,
    needs the page's token, is unprivileged and memory-limited, and holds a key valid only for the simulated users. Candidate
@@ -617,7 +617,7 @@ container and breaks W-3; the governor's allow-list stays closed (SPEC 4a).
 
 | Component | Actions |
 |---|---|
-| Login node, each node | copy `ssh` (with `-J`), `ssh://` link, `open terminal` command, `webterm` when built |
+| Login node, each node | copy `benchctl ssh alice@NODE`, `ssh://` link, `webterm` when built |
 | slurmctld, slurmrestd | copy `scontrol`, `sinfo`, JWT `curl` example (token command, not the token) |
 | Grafana | link; copy the viewer-token path; after issue 252, one link per cluster organization |
 | Prometheus, Alertmanager | link (per cluster after issue 252) |
@@ -642,7 +642,7 @@ container and breaks W-3; the governor's allow-list stays closed (SPEC 4a).
 
 1. Registry and `copy`/`link`/`uri` actions in the Connections view, for every component that already has an address
    (30 min, no new process, no live run beyond the page screenshots `scripts/ui_shots.py`).
-2. `benchctl open terminal NODE` and the Jira Cloud link with the unset-variable message (30 min; pairs with 229).
+2. `benchctl ssh [USER@]NODE` (done, issue 275, the owner's wording) and the Jira Cloud link with the unset-variable message (30 min; pairs with 229).
 3. Spike for `webterm` (RSS, licence, vendored widget); ADR; build only if the owner accepts (about 2 sessions plus a live run).
 4. Tests: a unit test that every registry entry has a valid scheme and no secret; a `tests/real` test that each `link` target
    answers and the `ssh` command in a `copy` action logs in; `ui_shots.py` for layout.
