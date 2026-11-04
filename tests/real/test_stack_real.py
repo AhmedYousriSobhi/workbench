@@ -3,6 +3,7 @@
 Slow (about two minutes) and heavy (~3 GB); needs Docker and the built workbench images.
 """
 import json
+import re
 import subprocess
 import urllib.request
 from pathlib import Path
@@ -86,6 +87,7 @@ def post_json(url: str, body: dict) -> dict:
 @pytest.fixture
 def sim(monkeypatch):
     monkeypatch.chdir(ROOT)
+    monkeypatch.delenv("WORKBENCH_TEST_TIMERS", raising=False)  # this module checks the default timings
     s = yaml.safe_load((ROOT / "sim.yaml").read_text())
     yield s
     stack.down(say=lambda m: None)
@@ -95,6 +97,8 @@ def test_stack_lifecycle(sim):
     say = lambda m: None
     assert stack.up(sim, "min", say=say, available=ROOMY)
     assert sinfo() == "cn[001-004],gpu[001-002]"
+    cfg = subprocess.run(["docker", "exec", "workbench-slurmctld-1", "scontrol", "show", "config"], capture_output=True, text=True, check=False).stdout
+    assert re.search(r"SlurmdTimeout\s*=\s*15 sec", cfg) and re.search(r"HealthCheckInterval\s*=\s*30 sec", cfg), cfg  # defaults (about 30 s)
     token = stack.TOKEN_FILE.read_text().strip()
     assert oct(stack.TOKEN_FILE.stat().st_mode)[-3:] == "600"
     assert annotate(token) == 200  # the governor's token really works
