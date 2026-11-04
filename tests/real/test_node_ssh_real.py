@@ -71,3 +71,20 @@ def test_node_sshd_refuses_root_unknown_users_and_passwords(stack_up):
 def test_nodes_share_one_host_key_the_login_node_trusts(stack_up):
     keys = {login("ssh-keyscan", "-t", "ed25519", n).stdout.split()[-1] for n in ("cn001", "cn004", "gpu002")}
     assert len(keys) == 1 and keys != {""}
+
+
+def benchctl_ssh(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run([str(ROOT / "scripts/benchctl"), "ssh", *args], capture_output=True, text=True, timeout=90, check=False, stdin=subprocess.DEVNULL)
+
+
+def test_benchctl_ssh_a_bare_node_is_a_root_shell_and_user_at_node_is_that_user(stack_up):
+    """#275: `benchctl ssh cn001 -- id -un` is root (docker exec); `benchctl ssh alice@cn001 -- id -un` is a real SSH login."""
+    root = benchctl_ssh("cn001", "--", "id", "-un")
+    assert root.returncode == 0 and root.stdout.strip() == "root", root.stderr
+    user = benchctl_ssh("alice@gpu001", "--", "sh", "-c", "hostname; id -un")
+    assert user.returncode == 0 and user.stdout.split() == ["gpu001", "alice"], user.stderr
+
+
+def test_benchctl_ssh_says_one_plain_thing_for_an_unknown_node_or_user(stack_up):
+    assert "unknown node" in benchctl_ssh("nope001").stderr
+    assert "no simulated user" in benchctl_ssh("carol@cn001").stderr

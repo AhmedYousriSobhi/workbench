@@ -148,6 +148,8 @@ install (235), the timers (236) and `verify.sh` timings (237).
 3. 228: adopt upstream NHC after the spike, or keep the stand-in.
 4. 231: adopt real DCGM after the spike, or keep the farm.
 5. The verify targets above.
+6. GUI access (section "GUI access to every component"): accept or reject the optional `webterm` browser terminal; the default is
+   copy commands, `ssh://` links and `benchctl ssh`, which add no privilege.
 
 ## Still to verify (not read in this research)
 
@@ -557,6 +559,102 @@ project with prefixed names (recommended: per cluster, pending spike 241), and t
 Kubernetes API server OIDC settings; real RSS of the directory servers, `sssd`, a second `slurmctld`, a login node and the shim under
 more containers; whether two clusters can share one MariaDB process with a database each under Slurm's `slurmdbd`; whether a Grafana
 datasource with the same uid in two organizations works on our version (reported, not confirmed in the docs); the Teleport license text.
+
+## GUI access to every component (proposed, issue number assigned on creation)
+
+Status: step 1 (registry with link, copy and uri actions in Connections) implemented in issue 273; steps 2 to 5 not started. Evidence tags as above.
+
+**Goal.** From the page, reach each component in one click: open a terminal on a node, open Grafana, Prometheus, Alertmanager,
+the Teleport web UI, the Jira mock, or the owner's real Jira Cloud site (issue 229), and see the command for anything that is not a
+web page. Today the Connections view (W-12) lists each part's address, a command to try and the credential path; this turns that
+list into actions.
+
+**Constraint that shapes the design.** The page never gets root, Docker or libvirt access and talks only to the governor socket
+(W-3). So "open a terminal" cannot be `docker exec` from the page backend. [judgement, from SPEC W-3]
+
+### Action kinds (one registry, like W-15)
+
+Each component declares its actions in one registry (a sibling of `PART_INFO` in `benchctl/workbench.py`, served with
+`/api/settings`), so a new component adds a registry entry and no page code.
+
+| Kind | What the user gets | Fits |
+|---|---|---|
+| `link` | a button that opens an `http(s)` URL in a new tab (`rel="noopener noreferrer"`) | Grafana, Prometheus, Alertmanager, Teleport web UI, jira-mock, the web page's own help, Jira Cloud |
+| `copy` | a button that copies a ready command (never a secret; the credential path stays a path) | `ssh`, `scontrol`, `sinfo`, `curl` Redfish, `tsh login` |
+| `uri` | an `ssh://user@127.0.0.1:2222` link; the operating system opens it in whatever terminal the user registered for `ssh://` | login node, and a node through `ProxyJump` |
+| `terminal` | an in-page terminal (optional part, below) | any node, for users who want no local setup |
+
+### Open a terminal for a node: three levels, cheapest first
+
+1. **Copy and URI (default, no new process).** For each node the page shows `ssh -J <user>@127.0.0.1:2222 <user>@cn001` (nodes
+   sit behind the login node, ADR 0011 and 0018) and an `ssh://` link, using the key already generated under
+   `compose/generated/secrets/ssh`. For a Teleport cluster it shows `tsh ssh <user>@<node>` instead (ADR 0020). It reuses existing
+   access, so it adds no privilege. [judgement]
+2. **`benchctl ssh [USER@]NODE`** (built, issue 275; the owner's wording replaced `open terminal`). `benchctl ssh cn001` is a root
+   shell (docker exec), `benchctl ssh alice@cn001` a real SSH login through the login node. It runs on the host, as the user; the
+   page shows it as a copy action and never runs it.
+3. **Optional part `webterm` (off by default, `benchctl up --with webterm`).** One small container that serves a browser terminal
+   and connects over SSH to the login node, so the shell is a normal SSH session and not a Docker exec. It binds 127.0.0.1 only,
+   needs the page's token, is unprivileged and memory-limited, and holds a key valid only for the simulated users. Candidate
+   programs (ttyd, wetty, or a small stdlib WebSocket relay with a vendored terminal widget) are compared in a spike for resident
+   memory and licence before any is chosen; a heavy JS framework is excluded (W-1), and the widget must be vendored with no CDN.
+   Estimate: tens of MB resident [judgement, measure with `benchctl measure`]. It adds a new SPEC component line and an ADR,
+   because it is a new way in.
+
+Not chosen: a governor `exec` command or a Docker-socket mount for the page. Either would let the page run commands in any
+container and breaks W-3; the governor's allow-list stays closed (SPEC 4a).
+
+### Jira Cloud (pairs with issue 229)
+
+- The site URL and token are the owner's and are personal data in a public repo. The URL comes from a local setting
+  (`$WORKBENCH_JIRA_CLOUD_URL` or a gitignored file), never from tracked files, an issue or a PR. The token stays in its
+  environment variable and is never sent to the page.
+- With `jira mode cloud` and the variable set, the Jira entry shows **Open Jira Cloud** (a `link`) next to **Open jira-mock API (JSON)**; with
+  the variable unset it shows one line saying how to set it. It must not show a dead button (W-10).
+- The link opens the site the user already has a session for; the page does not log in for them.
+
+### Per-component actions (first cut)
+
+| Component | Actions |
+|---|---|
+| Login node, each node | copy `benchctl ssh alice@NODE`, `ssh://` link, `webterm` when built |
+| slurmctld, slurmrestd | copy `scontrol`, `sinfo`, JWT `curl` example (token command, not the token) |
+| Grafana | link; copy the viewer-token path; after issue 252, one link per cluster organization |
+| Prometheus, Alertmanager | link (per cluster after issue 252) |
+| Teleport | link to the web UI (`teleport.workbench.test` or the 127.0.0.1 fallback), copy `tsh login` |
+| bmc-farm | copy `curl` for a node's Redfish; link to `/redfish/v1` on 127.0.0.1:8443 (browser warns on the self-signed certificate; the page says so) |
+| bcm-mock | copy `cmsh -c ...` through the login node, copy the `POST /json` example |
+| jira-mock, Jira Cloud | link each; copy `curl` search example |
+| Kubernetes (issue 232) | copy `kubectl --kubeconfig ...`; no web link |
+| Governor | existing panel; copy `benchctl status` |
+
+### Security and accessibility
+
+- Links come only from the registry, which is built on the host; the page never builds a URL from user input. Allowed schemes:
+  `http`, `https`, `ssh`. Nothing is opened automatically. No secret in a link, a button label or a copied command.
+- Web links bind or point to 127.0.0.1 or the bridge, never 0.0.0.0 (checklist above). `webterm` also needs the CSRF header on
+  its control endpoint and the page's token.
+- Buttons follow the UI rules: at least 40 px tap target, status never by colour alone, a text label (not an icon alone), keyboard
+  reachable, and the result of Copy announced to screen readers (`aria-live`).
+- One message per condition: stack down shows one notice and hides actions that cannot work.
+
+### How I would do it
+
+1. Registry and `copy`/`link`/`uri` actions in the Connections view, for every component that already has an address
+   (30 min, no new process, no live run beyond the page screenshots `scripts/ui_shots.py`).
+2. `benchctl ssh [USER@]NODE` (done, issue 275, the owner's wording) and the Jira Cloud link with the unset-variable message (30 min; pairs with 229).
+3. Spike for `webterm` (RSS, licence, vendored widget); ADR; build only if the owner accepts (about 2 sessions plus a live run).
+4. Tests: a unit test that every registry entry has a valid scheme and no secret; a `tests/real` test that each `link` target
+   answers and the `ssh` command in a `copy` action logs in; `ui_shots.py` for layout.
+5. Update `docs/guides/client-testing.md` (where each endpoint is), getting-started, the manual's Connections section and its
+   screenshots (`scripts/doc_shots.py`), SPEC W-12 and W-15, `docs/progress.yaml`, and the wiki after merge.
+
+**Risk:** the `ssh://` handler is not registered on every desktop, so `copy` stays the dependable path; `webterm` is a new way in
+and a new memory cost. **Client features at risk:** none, it adds page actions only; state "not exercised against the client"
+unless the client's own SSH-hop profile is used to check the copied commands.
+
+**Agent time:** steps 1 and 2 about 60 min (two sessions); step 3 about 2 sessions. **Needs from the owner:** accept or reject
+`webterm`; the Jira Cloud URL kept locally.
 
 ## Sources
 

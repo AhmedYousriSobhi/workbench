@@ -337,6 +337,11 @@ def start(profile: str = typer.Option(None, "--profile", autocompletion=completi
     _offer_completion()
     modes = [] if login is None else ["--login", ",".join(_login_modes(login))]
     parts = [x for p in (with_ or []) for x in ("--with", p)] + [x for p in (without or []) for x in ("--without", p)] + modes
+    try:
+        saved = workbench.current(_base_sim())
+    except workbench.SpecError:
+        saved = None
+    typer.echo(workbench.start_line(saved, profile, bool(parts)))
     _launcher("start", *(parts or ["--profile", profile or "min"]))
 
 
@@ -795,6 +800,28 @@ def exec_cmd(ctx: typer.Context, node: str = TARGET,
     cmd = ctx.args or ["bash"]
     tty = ["-it"] if sys.stdin.isatty() and not ctx.args else []
     os.execvp("docker", ["docker", "exec", *tty, *(["-u", user] if user else []), f"{stack.PROJECT}-{node}-1", *cmd])
+
+
+@app.command("ssh", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def ssh_cmd(ctx: typer.Context, target: str = typer.Argument(..., help="NODE for a root shell, USER@NODE for a login as that user, e.g. cn001 or alice@cn001")) -> None:
+    """Open a shell on a node: `benchctl ssh cn001` (root), `benchctl ssh alice@cn001` (that user over SSH). A command after `--` runs instead."""
+    import os
+    import sys
+
+    from . import nodeshell
+
+    try:
+        node = nodeshell.split(target)[1]
+        known = completion.targets("")
+        if not known:
+            raise ValueError("the cluster is not running; start it with ./scripts/benchctl start")
+        if node not in known:
+            raise ValueError(f"unknown node {node!r}; try `benchctl get nodes`")
+        cmd = nodeshell.argv(target, _sim(), str(stack.SSH_DIR / "id_ed25519"), ctx.args, sys.stdin.isatty())
+    except ValueError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    os.execvp(cmd[0], cmd)
 
 
 @app.command()

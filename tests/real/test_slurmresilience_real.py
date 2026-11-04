@@ -26,12 +26,12 @@ def ctl(*cmd: str) -> str:
     return sh("docker", "exec", scenario.SLURMCTLD, *cmd).stdout.strip()
 
 
-def on_node(*cmd: str) -> subprocess.CompletedProcess:
-    return sh("docker", "exec", f"workbench-{NODE}-1", *cmd)
+def on_node(*cmd: str, node: str = NODE) -> subprocess.CompletedProcess:
+    return sh("docker", "exec", f"workbench-{node}-1", *cmd)
 
 
-def pids(name: str) -> list[str]:
-    return on_node("pgrep", "-x", name).stdout.split()
+def pids(name: str, node: str = NODE) -> list[str]:
+    return on_node("pgrep", "-x", name, node=node).stdout.split()
 
 
 def job_state(job: str) -> str:
@@ -48,7 +48,7 @@ def submit(duration: int = 600, node: str = NODE, **extra) -> str:
     assert r.returncode == 0, r.stderr
     job = r.stdout.split()[-1]
     assert wait_for(lambda: job_state(job) == "RUNNING", timeout=60), f"job {job} never ran: {ctl('squeue')}"
-    assert wait_for(lambda: pids("slurmstepd"), timeout=20), "no slurmstepd for the running job"
+    assert wait_for(lambda: pids("slurmstepd", node), timeout=20), f"no slurmstepd on {node} for the running job"
     return job
 
 

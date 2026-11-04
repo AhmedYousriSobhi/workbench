@@ -67,6 +67,11 @@ def test_real_freeze_throttle_reclaim(hog_cgroup):
 
 
 def test_real_mlockall_in_subprocess():
+    import resource
+
+    _, hard = resource.getrlimit(resource.RLIMIT_MEMLOCK)
+    if hard != resource.RLIM_INFINITY and hard < 128 * 1024 * 1024:  # a rootless process cannot raise the hard limit (ADR 0010)
+        pytest.skip(f"hard RLIMIT_MEMLOCK is {hard // 1024} kB: mlockall needs more; the root service sets it (GV-8)")
     code = (
         "from governor.memlock import lock_memory, locked_kb, raise_memlock_limit\n"
         "raise_memlock_limit(); lock_memory(); print(locked_kb())"
