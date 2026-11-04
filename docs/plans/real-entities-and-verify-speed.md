@@ -609,7 +609,7 @@ container and breaks W-3; the governor's allow-list stays closed (SPEC 4a).
 - The site URL and token are the owner's and are personal data in a public repo. The URL comes from a local setting
   (`$WORKBENCH_JIRA_CLOUD_URL` or a gitignored file), never from tracked files, an issue or a PR. The token stays in its
   environment variable and is never sent to the page.
-- With `jira mode cloud` and the variable set, the Jira entry shows **Open Jira Cloud** (a `link`) next to **Open jira-mock**; with
+- With `jira mode cloud` and the variable set, the Jira entry shows **Open Jira Cloud** (a `link`) next to **Open jira-mock API (JSON)**; with
   the variable unset it shows one line saying how to set it. It must not show a dead button (W-10).
 - The link opens the site the user already has a session for; the page does not log in for them.
 

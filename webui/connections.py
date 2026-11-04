@@ -66,11 +66,13 @@ def actions_for(e: dict, sim: dict, user: str) -> list[dict]:
         return [copy("Copy benchctl ssh", f"benchctl ssh {user}@<node>")]  # benchctl adds the key and the jump (#275)
     if k == "ssh":
         port = compose.SSH_PORT + [n for n, _ in logins.nodes(sim)].index(i)
-        return [{"kind": "uri", "label": "Open ssh:// link", "value": f"ssh://{user}@{LOCAL}:{port}"}]
+        # Copy first: it works everywhere; ssh:// needs a handler the desktop may not have registered (#281)
+        return [copy("Copy benchctl ssh", f"benchctl ssh {user}@{i}"),
+                {"kind": "uri", "label": "Open in SSH app (needs a handler)", "value": f"ssh://{user}@{LOCAL}:{port}"}]
     return {
         "teleport": [link("Open the Teleport web UI", f"https://{LOCAL}:{teleport.PROXY_PORT}")],
-        "bmc": [link("Open Redfish (certificate warning)", f"https://{LOCAL}:{BMC_TLS_PORT}/redfish/v1")],
-        "jira": [link("Open jira-mock", f"http://{LOCAL}:8080")],
+        "bmc": [link("Open Redfish API (JSON, certificate warning)", f"https://{LOCAL}:{BMC_TLS_PORT}/redfish/v1")],
+        "jira": [link("Open jira-mock API (JSON)", f"http://{LOCAL}:8080")],
         "gpu": [link("Open the metrics", f"http://{LOCAL}:9400/metrics")],
         "prometheus": [link("Open Prometheus", f"http://{LOCAL}:9090")],
         "grafana": [link("Open Grafana", f"http://{LOCAL}:3000")],
