@@ -47,7 +47,7 @@ def test_a_direct_login_gets_an_ssh_uri_and_the_nodes_a_jump_command():
     by = {e["id"]: e for e in rows()}
     assert by["login"]["actions"][0]["value"].startswith("ssh://") and ":2222" in by["login"]["actions"][0]["value"]
     jump = by["nodes"]["actions"][0]
-    assert jump["kind"] == "copy" and "-J" in jump["value"] and "<node>" in jump["value"]
+    assert jump["kind"] == "copy" and jump["value"] == "benchctl ssh alice@<node>"
 
 
 def test_a_part_with_no_localhost_port_has_no_link():
