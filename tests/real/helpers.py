@@ -23,8 +23,8 @@ def wait_for(pred, timeout: float = 15) -> bool:
 
 
 def exporter_up() -> bool:
-    """True once the GPU exporter serves metrics. It `pip install`s pyyaml at container start, so for a while after
-    `up` the port answers with a reset or nothing; tests that read it must wait (this was the cause of flaky failures)."""
+    """True once the GPU exporter serves metrics. pyyaml is baked into its image (issue 235), so this is a few seconds after
+    `up`; until then the port answers with a reset or nothing, so tests that read it still wait."""
     import urllib.request
     try:
         return b"DCGM_FI_DEV_GPU_UTIL" in urllib.request.urlopen("http://127.0.0.1:9400/metrics", timeout=3).read()

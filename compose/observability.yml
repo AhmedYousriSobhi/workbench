@@ -37,10 +37,9 @@ services:
     networks:
       default:
         ipv4_address: 10.141.255.22  # benchctl/addressing.py SERVICE_HOSTS
-    image: python:3.12-slim
-    command: sh -c "pip install -q pyyaml && python /app/exporter.py /sim.yaml 9400"
+    image: workbench/gpu-exporter-farm
+    build: ../components/gpu-exporter-farm  # pyyaml is baked in (issue 235); `benchctl up` passes --build
     volumes:
-      - ../components/gpu-exporter-farm/exporter.py:/app/exporter.py:ro
       - ./generated/sim.yaml:/sim.yaml:ro
     ports: ["127.0.0.1:9400:9400"]  # scenario engine injects faults here
     mem_limit: 100m

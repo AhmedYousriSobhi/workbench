@@ -111,7 +111,7 @@ def test_slurmctld_restart_keeps_jobs_and_nodes():
 
 
 def test_a_simulated_gpu_job_keeps_its_gpus_busy_across_a_slurmctld_restart():
-    assert wait_for(exporter_up, timeout=180), "the GPU exporter never answered"
+    assert wait_for(exporter_up, timeout=60), "the GPU exporter never answered"
     job = submit(node="gpu001", gpus=2)
     run_steps({"slurmctld_restart": True})
     assert wait_for(lambda: job_state(job) == "RUNNING", timeout=120), job_state(job)
