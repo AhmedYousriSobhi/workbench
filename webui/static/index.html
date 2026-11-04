@@ -120,6 +120,7 @@
   #flow text { fill:var(--fg); font:600 12px system-ui,sans-serif; } #flow text.sub { fill:var(--dim); font-weight:400; font-size:10.5px; }
   #flow line { stroke:var(--line); stroke-width:1.5; } #flow .dotc { fill:var(--accent); } #flow .dotf { fill:var(--warn); stroke:var(--fg); stroke-width:1; }
   .legend { display:flex; flex-wrap:wrap; gap:4px 18px; margin:4px 0 0; }
+  a.btn { display:inline-flex; align-items:center; text-decoration:none; } a.btn.small { min-height:40px; }
   .btn.small { min-height:36px; padding:0 12px; font-weight:500; background:var(--panel); color:var(--fg); border:1px solid var(--line); }
   .rail.right { position:sticky; top:72px; max-height:calc(100vh - 88px); overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; }
   .nodeswrap { display:flex; flex-direction:column; gap:var(--sp4); } .nodesmain { min-width:0; order:2; } .trafficpanel { order:1; margin:0; }
@@ -375,7 +376,7 @@
   <div id="tab-conn" role="tabpanel" aria-labelledby="tb-conn" hidden>
     <div class="panel"><h2>How to reach each part</h2>
       <p class="dim small">Addresses are the cluster's fixed private IPs, reachable from this machine; 127.0.0.1 is the fallback where a row says so. Credentials are never shown here: the last column is the file that holds them. A node's own address is in its details.</p>
-      <div class="tablewrap"><table class="conn"><thead><tr><th>Part</th><th>Address</th><th>Try it</th><th>Credential</th></tr></thead><tbody id="conn-rows"><tr><td colspan="4" class="skel">Loading…</td></tr></tbody></table></div></div>
+      <div class="tablewrap"><table class="conn"><thead><tr><th>Part</th><th>Address</th><th>Try it</th><th>Credential</th><th>Open</th></tr></thead><tbody id="conn-rows"><tr><td colspan="5" class="skel">Loading…</td></tr></tbody></table></div></div>
   </div>
   <dialog id="scndlg" class="sheet" aria-labelledby="scn-h">
     <div class="sheet-h"><div><h2 id="scn-h">Scenarios</h2><p class="dim small">Timed incidents against the running stack.</p></div>
@@ -769,12 +770,25 @@ async function connections() {
   try { connCache = (await (await fetch('/api/connections')).json()).entities; } catch (e) { return []; }
   return connCache;
 }
+function actionHtml(a) {  // link and uri open from a registry entry built on the host (never from user input); copy puts a command on the clipboard
+  if (a.kind === 'copy') return `<button class="btn small copy" data-copy="${esc(a.value)}" aria-label="${esc(a.label)}">${esc(a.label)}</button>`;
+  const ext = a.kind === 'link' ? ' target="_blank" rel="noopener noreferrer"' : '';
+  return `<a class="btn small" href="${esc(a.value)}"${ext}>${esc(a.label)}${a.kind === 'link' ? ' ↗' : ''}</a>`;
+}
+function bindCopy() {  // Copy buttons: the label comes back after the click, and the toast announces it (aria-live)
+  document.querySelectorAll('.copy').forEach(b => b.onclick = async () => {
+    const label = b.dataset.label || (b.dataset.label = b.textContent);
+    try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Copied'; toast('Copied: ' + b.getAttribute('aria-label')); } catch (e) { b.textContent = 'Select and copy'; }
+    setTimeout(() => { b.textContent = label; }, 1500);
+  });
+}
 async function paintConnections() {
   const rows = await connections();
   $('conn-rows').innerHTML = rows.map(e => `<tr data-id="${esc(e.id)}"><td data-h="Part"><b>${esc(e.name)}</b><div class="small dim">${esc(e.how).replace(/`([^`]+)`/g, '<code>$1</code>')}</div></td>
     <td data-h="Address"><code>${esc(e.address)}</code></td><td data-h="Try it"><code>${esc(e.command)}</code><button class="btn small copy" data-copy="${esc(e.command)}" aria-label="Copy the command for ${esc(e.name)}">Copy</button></td>
-    <td data-h="Credential">${e.credential ? `<code>${esc(e.credential)}</code>` : '<span class="dim">none</span>'}</td></tr>`).join('') || '<tr><td colspan="4">Could not load.</td></tr>';
-  document.querySelectorAll('.copy').forEach(b => b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Copied'; } catch (e) { b.textContent = 'Select and copy'; } setTimeout(() => { b.textContent = 'Copy'; }, 1500); });
+    <td data-h="Credential">${e.credential ? `<code>${esc(e.credential)}</code>` : '<span class="dim">none</span>'}</td>
+    <td data-h="Open">${(e.actions || []).map(actionHtml).join(' ') || '<span class="dim">none</span>'}</td></tr>`).join('') || '<tr><td colspan="5">Could not load.</td></tr>';
+  bindCopy();
 }
 $('pl-apply').onclick = async () => {
   if (!armed) {  // first press asks; the second one (within 8 s) applies
@@ -826,11 +840,13 @@ async function showNode(name) {
   $('nodetitle').textContent = name;
   const cx = (await connections()).find(e => e.id === 'nodes'), kv = [];
   if (cx) kv.push(['SSH', `<code>${esc(cx.command.replace('<node>', name))}</code>`], ['User and key', esc(cx.how.split('.')[0]) + ` · key file <code>${esc(cx.credential)}</code>`]);
+  const jump = cx && (cx.actions || []).find(a => a.kind === 'copy');
+  if (jump) kv.push(['Through the login node', `<button class="btn small copy" data-copy="${esc(jump.value.replace('<node>', name))}" aria-label="Copy the ssh command for ${esc(name)}">Copy ssh -J command</button>`]);
   const bm = (await connections()).find(e => e.id === 'bmc');
   kv.push(['BMC', `<code>${esc(bm ? bm.address : '')}</code> (HTTPS) with Host header <code>bmc-${esc(name)}</code>, user admin, password in <code>compose/generated/secrets/bmc_credentials</code>`],
     ['IP address', body && body.ip ? `<code>${esc(body.ip)}</code> (fixed; reach it from the login node)` : `run <code>./scripts/benchctl describe node ${esc(name)}</code>`]);
   if (body) kv[kv.findIndex(r => r[0] === 'BMC')] = ['BMC', body.bmc_ip ? `<code>${esc(body.bmc_ip)}:443</code> (HTTPS), user admin, password in <code>compose/generated/secrets/bmc_credentials</code>` : 'none for this node (switched off in Cluster architecture)'];
-  $('nodeconn').innerHTML = kv.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+  $('nodeconn').innerHTML = kv.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join(''); bindCopy();
   $('nodetext').textContent = body ? body.text : `Could not read ${name}: ${(await r.json()).detail}`;
 }
 async function nodeJob(name, gpus, dur) {

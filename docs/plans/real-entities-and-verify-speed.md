@@ -562,7 +562,7 @@ datasource with the same uid in two organizations works on our version (reported
 
 ## GUI access to every component (proposed, issue number assigned on creation)
 
-Status: proposal, nothing implemented. Evidence tags as above.
+Status: step 1 (registry with link, copy and uri actions in Connections) implemented in issue 273; steps 2 to 5 not started. Evidence tags as above.
 
 **Goal.** From the page, reach each component in one click: open a terminal on a node, open Grafana, Prometheus, Alertmanager,
 the Teleport web UI, the Jira mock, or the owner's real Jira Cloud site (issue 229), and see the command for anything that is not a

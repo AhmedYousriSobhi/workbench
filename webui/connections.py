@@ -32,7 +32,63 @@ def login_rows(sim: dict, users: list[str], user: str, ssh_for) -> list[dict]:
     return rows
 
 
+# What a row may offer besides its command (the GUI-access registry, #273). Built here on the host; the page renders
+# `kind` and never builds a URL itself, so nothing typed in the browser can become a link (W-3).
+ACTION_KINDS = {"link": ("http", "https"), "copy": (), "uri": ("ssh",)}
+LOCAL = "127.0.0.1"  # links use the published localhost ports: they work without the Docker network route
+
+
+def link(label: str, url: str) -> dict:
+    return {"kind": "link", "label": label, "value": url}
+
+
+def copy(label: str, command: str) -> dict:
+    return {"kind": "copy", "label": label, "value": command}
+
+
+def valid_action(a: dict) -> bool:
+    """A known kind, a text label, and for link/uri an allowed scheme on localhost or a cluster address; never 0.0.0.0."""
+    from urllib.parse import urlsplit
+
+    if a.get("kind") not in ACTION_KINDS or not a.get("label") or not a.get("value"):
+        return False
+    schemes = ACTION_KINDS[a["kind"]]
+    if not schemes:
+        return True
+    u = urlsplit(a["value"])
+    return u.scheme in schemes and bool(u.hostname) and u.hostname != "0.0.0.0" and not u.password
+
+
+def actions_for(e: dict, sim: dict, user: str) -> list[dict]:
+    """The one-click actions of a row, from its id and kind. A part that publishes no localhost port gets no link."""
+    i, k = e["id"], e["kind"]
+    if k == "ssh" and i == "nodes":
+        return [copy("Copy ssh through the login node", f"ssh -J {user}@{LOCAL}:{compose.SSH_PORT} -i {SSH_KEY} {user}@<node>")]
+    if k == "ssh":
+        port = compose.SSH_PORT + [n for n, _ in logins.nodes(sim)].index(i)
+        return [{"kind": "uri", "label": "Open ssh:// link", "value": f"ssh://{user}@{LOCAL}:{port}"}]
+    return {
+        "teleport": [link("Open the Teleport web UI", f"https://{LOCAL}:{teleport.PROXY_PORT}")],
+        "bmc": [link("Open Redfish (certificate warning)", f"https://{LOCAL}:{BMC_TLS_PORT}/redfish/v1")],
+        "jira": [link("Open jira-mock", f"http://{LOCAL}:8080")],
+        "gpu": [link("Open the metrics", f"http://{LOCAL}:9400/metrics")],
+        "prometheus": [link("Open Prometheus", f"http://{LOCAL}:9090")],
+        "grafana": [link("Open Grafana", f"http://{LOCAL}:3000")],
+        "slurm": [copy("Copy sinfo", "benchctl exec slurmctld -- sinfo")],
+        "ui": [link("Open this page", f"http://{LOCAL}:8088")],
+    }.get(i, [])
+
+
 def entities(sim: dict) -> list[dict]:
+    """The rows of `_rows`, each with its `actions`."""
+    users = [u["name"] for u in sim.get("users", [])]
+    rows = _rows(sim)
+    for e in rows:
+        e["actions"] = actions_for(e, sim, users[0] if users else "alice")
+    return rows
+
+
+def _rows(sim: dict) -> list[dict]:
     """One row per entity: name, what it is, how to reach it, and where its credential is (or `None`)."""
     users = [u["name"] for u in sim.get("users", [])]
     user = users[0] if users else "alice"
