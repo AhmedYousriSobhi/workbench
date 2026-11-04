@@ -187,10 +187,12 @@ paths, never secrets.
 The last column, **Open**, has one-click actions for the parts that have one:
 
 - **Open ... ↗** opens a web page in a new tab: Grafana, Prometheus, jira-mock, the GPU metrics, the Teleport web UI, the
-  Redfish endpoint (the browser warns about the self-signed certificate; that is expected) and this page. The links use the
+  Redfish endpoint and this page. Links to an API say so (**Open jira-mock API (JSON)**, **Open Redfish API (JSON, certificate
+  warning)**): you get raw JSON, not a page, and the browser warns about the Redfish self-signed certificate; both are expected. The links use the
   ports published on `127.0.0.1`, so they work without the Docker network route.
-- **Open ssh:// link** on a login node that takes a key hands the address to the terminal your desktop registered for
-  `ssh://`. Not every desktop has one: then use the **Copy** button of the row.
+- **Open in SSH app (needs a handler)** on a login node that takes a key hands the address to the terminal your desktop
+  registered for `ssh://`. Not every desktop has one (the browser then asks which app to use): **Copy benchctl ssh**, the
+  first action of the row, works everywhere.
 - **Copy benchctl ssh** gives `benchctl ssh alice@<node>`, a real SSH login as that user through the login node (`benchctl ssh <node>`
   without a user is a root shell). A node's panel has the same command with the node filled in. The button says "Copied" and the page announces it to screen readers.
 
