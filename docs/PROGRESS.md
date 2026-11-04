@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**82% built** (35 done, 34 in review, 11 partial, 4 to do, 84 items).
+**82% built** (35 done, 35 in review, 11 partial, 4 to do, 85 items).
 
 ## Roadmap
 
@@ -259,12 +259,13 @@ _What keeps every change safe and debuggable._
 | Login nodes with their own auth | 🔍 In review | sim.yaml login: / --login ssh,teleport,both defines 1 to 8 login nodes (login, login2, ...); ssh = key login on a published port, teleport = no port and no key login, both; only Teleport logins are registered in Teleport; sheet row, Connections rows, client profile uses a key login (ADR 0023). Unit-tested; live access matrix in tests/real/test_teleport_real.py. Issue 189. | `benchctl/logins.py`, `benchctl/compose.py`, `images/login/login.sh`, `webui/connections.py` | - |
 | Architecture as the main view | 🔍 In review | The Infrastructure architecture draws every login node with its way in, the Teleport proxy, the services and the nodes, each line labelled direct SSH, Teleport or jump host; hover tip and click pop-up on every part; the node list folds away; the options sheet survives a backend without logins (ADR 0024). Unit-tested; layout, tip, pop-up and fold checked in headless Chromium (ui_shots.py). Issue 192. | `webui/static/index.html`, `webui/cluster.py` | - |
 | GUI access registry in Connections | 🔍 In review | Each Connections row has actions built on the host (link to a localhost web page, copy of a command, ssh:// uri for a direct login), rendered in an Open column; schemes http, https, ssh only, no secret in a value, validated by valid_action and a unit test. The node panel copies the ssh -J command through the login node. Step 1 of the GUI-access plan; benchctl open terminal, the Jira Cloud link and the optional webterm are later steps. Issue 273. | `webui/connections.py`, `webui/static/index.html`, `tests/test_connections_actions.py` | - |
+| benchctl ssh [USER@]NODE | 🔍 In review | benchctl ssh cn001 is a root shell (docker exec); benchctl ssh alice@cn001 is a real SSH login with the generated key through the first key-login node (a ProxyCommand); a command after -- runs instead of a shell. One plain message for an unknown node, an unknown user, a stopped cluster or a Teleport-only cluster. Runs on the host, never from the page (W-3). Issue 275. | `benchctl/nodeshell.py`, `benchctl/cli.py`, `tests/test_node_ssh.py`, `tests/real/test_node_ssh_real.py` | - |
 | Teleport and Infrastructure architecture in the page | 🔍 In review | The diagram is renamed Infrastructure architecture; Teleport is a service box and list card when built (status from its diagnostics /healthz), dots from teleport_connect_to_node_attempts_total, a Connections row, part toggle in Cluster architecture (ADR 0022). Issue 187. | `webui/static/index.html`, `webui/cluster.py`, `webui/flow.py`, `webui/connections.py` | - |
 | Parts by category | 🔍 In review | --workload/--accounting/--monitoring/--ticketing/--hardware/--access/--simulation and --addons on start, up, apply, plan; one registry drives flags, Tab completion, errors and the sheet's grouping (ADR 0021). Issue 184. | `benchctl/workbench.py (CATEGORIES)`, `benchctl/cli.py`, `benchctl/completion.py` | - |
 | Verification helpers | ✅ Done | verify.sh runs validate.sh plus real tests (--full adds the live stack lifecycle); tests/real/helpers.py starts a live governor and talks to its socket. `--unit NAME [--clean]` verifies one component (tests/test_NAME*.py then tests/real/test_NAME*.py, optional reset hook scripts/verify.d/NAME.sh; --list-units, -n). Issue 180. | `scripts/verify.sh` | #48 |
 | Progress tracker | ✅ Done | This page, generated from docs/progress.yaml (issue 19). | `benchctl/progress.py` | #42 |
 
-9/28 done
+9/29 done
 
 ## Next up
 
