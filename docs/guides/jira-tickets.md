@@ -118,3 +118,22 @@ Every node fault files a ticket and every recovery resolves it, like an ops inte
 One ticket stays open per node and kind: the same fault again adds a comment (`Still failing.`) instead of a second ticket. Power on or Clear faults adds `Recovered.` and moves the ticket to Resolved; a fault after that opens a new one. Tickets have the labels `node-<name>`, `fault-<kind>` and `auto`, type Incident, reporter `ops-bot`.
 
 `POST /sim/tickets {"action": "fault", "node": "cn002", "kind": "power", "detail": "..."}` does the same by hand (`"open": false` resolves; leave `kind` out to resolve every kind for the node).
+
+## Ticket traffic through the standard REST API (driver, issue 262)
+
+The simulator's own ticket traffic (a node fault opening a ticket, recovery resolving it, the team moving tickets along) uses the
+mock's private `/sim/tickets` and `/sim/activity`. A real Jira has neither. `benchctl/jira_driver.py` does the same through calls any
+Jira accepts (`search/jql`, issue, comment, transitions, assignee), so the same behaviour can later run against Jira Cloud:
+
+```python
+from benchctl.jira_driver import JiraDriver
+d = JiraDriver("http://127.0.0.1:8080")          # the mock; JiraDriver.from_env() reads a Cloud site from the environment
+d.fault("cn003", "power", "powered off")          # opens one ticket for the node (a repeat comments)
+d.fault("cn003", "", "back", open=False)          # recovery: comment and resolve
+d.tick()                                          # one change a team would make
+```
+
+Every ticket the driver files has the label `workbench`. Status: built and checked against the mock (the same tickets as
+`/sim/tickets` for the same sequence, a unit test proves it); not yet wired into `node_watch.py`, scenarios or `jira.mode`, and not
+yet run against a real Cloud site: that needs the shapes recorded for issue 229 (comment bodies are ADF documents there; the driver
+has the helpers, unchecked).

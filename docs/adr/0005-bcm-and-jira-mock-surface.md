@@ -39,6 +39,13 @@ Assets fields, attachments, links, transition screens with extra fields.
 response is recorded yet (it needs the owner's own Jira Cloud site and token), so no gap is listed. Writes and Data Center are not covered.
 See docs/guides/jira-contract.md.
 
+## Addendum: ticket traffic over the standard API (issue 262)
+
+`jira.mode: cloud|dc` is declared but no code reads it, and the simulator's ticket traffic (`node_watch.py`, scenario `jira tickets`
+steps, background activity) uses the mock's `/sim/*`. `benchctl/jira_driver.py` performs the same actions through the standard REST
+API (step 1, verified against the mock); wiring it to `jira.mode`, the Cloud specifics (ADF, account ids, 429 backoff, cleanup of
+`workbench`-labelled tickets) and the export are step 2, after the shapes of issue 229 are recorded.
+
 ## Revisit when
 The app's real BCM or Jira calls are known: replace the call list or surface, and record real responses as
 fixtures (architecture section 13, contract tests).
