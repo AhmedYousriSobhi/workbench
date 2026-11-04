@@ -184,6 +184,18 @@ The **Connections** tab lists every part (login node, nodes, BMC, BCM, Jira, Slu
 Grafana, this page) with its address, a command you can copy, and the **file that holds its credential**. The page shows
 paths, never secrets.
 
+The last column, **Open**, has one-click actions for the parts that have one:
+
+- **Open ... ↗** opens a web page in a new tab: Grafana, Prometheus, jira-mock, the GPU metrics, the Teleport web UI, the
+  Redfish endpoint (the browser warns about the self-signed certificate; that is expected) and this page. The links use the
+  ports published on `127.0.0.1`, so they work without the Docker network route.
+- **Open ssh:// link** on a login node that takes a key hands the address to the terminal your desktop registered for
+  `ssh://`. Not every desktop has one: then use the **Copy** button of the row.
+- **Copy benchctl ssh** gives `benchctl ssh alice@<node>`, a real SSH login as that user through the login node (`benchctl ssh <node>`
+  without a user is a root shell). A node's panel has the same command with the node filled in. The button says "Copied" and the page announces it to screen readers.
+
+The page never opens a terminal itself (it has no Docker or root access, W-3). A part with nothing to open shows "none".
+
 ## One message per condition
 
 If the cluster is down the page shows one notice and one *Needs attention* entry, hides data that cannot exist (the entity

@@ -12,10 +12,10 @@ How to run workbench on your workstation and see it working. Keep this page in s
 ./scripts/benchctl stop       # stop the web page and the cluster
 ```
 
-Plain `start` is the small `min` preset. To include the optional parts by category use `./scripts/benchctl start --ticketing jira --hardware bmc,bcm --access teleport` or `./scripts/benchctl start --addons` for all of them (Tab completes the flags). To pick your own mix (for example 2 CPU and 4 GPU nodes with Jira) and see what it costs first, use `benchctl plan` and `benchctl up --cpu-nodes ...` ([choose the workbench](choose-workbench.md)).
+Plain `start` is the small `min` preset, and its first line says what it starts. It does not reuse a workbench you built earlier with `up --cpu-nodes ...`: it forgets it and says so, naming the counts and parts it replaces. `./scripts/benchctl start --profile min` is the plain default, spelled out. To include the optional parts by category use `./scripts/benchctl start --ticketing jira --hardware bmc,bcm --access teleport` or `./scripts/benchctl start --addons` for all of them (Tab completes the flags). To pick your own mix (for example 2 CPU and 4 GPU nodes with Jira) and see what it costs first, use `benchctl plan` and `benchctl up --cpu-nodes ...` ([choose the workbench](choose-workbench.md)).
 
 Every command has the same shape, like `kubectl`: `benchctl VERB [RESOURCE] [NAME]`, for example `benchctl get nodes`,
-`benchctl exec gpu001 -- nvidia-smi`, `benchctl scenario run node-down`. `benchctl --help` lists the verbs;
+`benchctl exec gpu001 -- nvidia-smi`, `benchctl ssh alice@cn001`, `benchctl scenario run node-down`. `benchctl --help` lists the verbs;
 The first start builds the images (a few minutes). After an update that touches an image, `start` rebuilds only what changed: the first rebuild of the shared base takes about 20 s, later ones under a second. `benchctl start` offers Tab completion once in a terminal (or run `./scripts/benchctl completion install`, then open a new terminal; `completion remove` undoes it). A mistyped verb gets a `Did you mean` hint and is never run; the limits of every verb are in [the verbs guide](benchctl-verbs.md).
 
 The numbered sections below are the same steps one at a time, for when you want to see or change each.
