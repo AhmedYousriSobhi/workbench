@@ -34,7 +34,8 @@ def login_rows(sim: dict, users: list[str], user: str, ssh_for) -> list[dict]:
 
 # What a row may offer besides its command (the GUI-access registry, #273). Built here on the host; the page renders
 # `kind` and never builds a URL itself, so nothing typed in the browser can become a link (W-3).
-ACTION_KINDS = {"link": ("http", "https"), "copy": (), "uri": ("ssh",)}
+ACTION_KINDS = {"link": ("http", "https"), "copy": (), "uri": ("ssh",), "post": ()}
+POST_ACTIONS = {"/api/jira-real/refresh"}  # a button that asks the governor; the page never builds the path itself
 LOCAL = "127.0.0.1"  # links use the published localhost ports: they work without the Docker network route
 
 
@@ -52,6 +53,8 @@ def valid_action(a: dict) -> bool:
 
     if a.get("kind") not in ACTION_KINDS or not a.get("label") or not a.get("value"):
         return False
+    if a["kind"] == "post":
+        return a["value"] in POST_ACTIONS
     schemes = ACTION_KINDS[a["kind"]]
     if not schemes:
         return True
@@ -73,7 +76,8 @@ def actions_for(e: dict, sim: dict, user: str) -> list[dict]:
         "teleport": [link("Open the Teleport web UI", f"https://{LOCAL}:{teleport.PROXY_PORT}")],
         "bmc": [link("Open Redfish API (JSON, certificate warning)", f"https://{LOCAL}:{BMC_TLS_PORT}/redfish/v1")],
         "jira": [link("Open jira-mock API (JSON)", f"http://{LOCAL}:8080")],
-        "jira-real": [link("Open Jira (real)", f"http://{LOCAL}:{jira_real.PORT}")],
+        "jira-real": [link("Open Jira (real)", f"http://{LOCAL}:{jira_real.PORT}"),
+                      {"kind": "post", "label": "Refresh licence (restarts Jira)", "value": "/api/jira-real/refresh"}],
         "gpu": [link("Open the metrics", f"http://{LOCAL}:9400/metrics")],
         "prometheus": [link("Open Prometheus", f"http://{LOCAL}:9090")],
         "grafana": [link("Open Grafana", f"http://{LOCAL}:3000")],

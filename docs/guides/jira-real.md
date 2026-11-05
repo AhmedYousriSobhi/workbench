@@ -2,7 +2,7 @@
 
 `jira-mock` is the default and answers on `http://127.0.0.1:8080`. When you need Atlassian's own code (to see how a
 client behaves against real validation, JQL and workflows), start the **real Jira Data Center** next to it. It is a
-session tool: the test licence lasts **3 hours**, then the server is read-only and you reset it. About 2.4 GB of memory (2.1 GB for Jira, the smallest limit that worked, plus Postgres)
+session tool: the test licence lasts **3 hours** from each start of Jira, then the server is read-only; `benchctl refresh jira-real-licence` (or the button) renews it. About 2.4 GB of memory (2.1 GB for Jira, the smallest limit that worked, plus Postgres)
 (ADR 0026, SPEC C-19). It is Data Center, not Cloud.
 
 ## Once: get the test licence
@@ -68,10 +68,30 @@ saves memory, and the part does not offer one.
 
 ## When the 3 hours are up
 
-Jira turns read-only. Start from nothing; the same key gives a new 3 hours, counted from the setup (as in the lab this part was ported from):
+The 3 hours count from the **start of Jira**, not from the setup: measured on this part, the licence end moved from 14:30 to
+15:35 (UTC) when the container was restarted at 12:35. So a restart renews it, and your users, tickets and tokens stay:
 
 ```bash
-./scripts/benchctl remove jira-real-state      # removes the containers and data; the mock is untouched
+./scripts/benchctl refresh jira-real-licence   # restarts Jira, waits until it answers, prints the new end time
+```
+
+The same is a button: **☰ Menu → Connections**, row *Jira (real, Data Center)*, **Refresh licence (restarts Jira)**. It asks the
+governor (the page has no Docker access) and needs calm memory (L0-L1); the progress shows in *Governor activity*. Jira is
+unreachable for about a minute while it starts. Do it before the 3 hours end (Jira warns when under 24 hours are left) or after: it
+works either way.
+
+**Automatic.** While the web page runs (`benchctl start`), it reads the licence end once a minute (over HTTP, no Docker) and shows it
+in the Connections row (`licence: valid until 17:42 (in 2 h 55 min)`); `benchctl status` prints the same line. When less than
+**15 minutes** are left, or the licence has already ended, it asks the governor for the same refresh, at most once per 15 minutes,
+and the row says `licence: renewing now`. Change the threshold with `WORKBENCH_JIRA_AUTO_REFRESH=MINUTES` (0 turns it off) in the
+environment of `benchctl start`. It needs the governor at calm levels (L0-L1); otherwise it waits and asks again. Jira restarts
+once about every 2 h 45 min, so a client talking to it sees about a minute of downtime then; turn it off if that matters.
+
+If the refresh says the licence is still not valid, the key file itself has a fixed end date: save a fresh published key in
+`compose/generated/secrets/jira.license`, then start from nothing (this deletes users, tickets and tokens; the mock is untouched):
+
+```bash
+./scripts/benchctl remove jira-real-state
 ./scripts/benchctl start --with jira-real && ./scripts/benchctl setup jira-real
 ```
 

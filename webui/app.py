@@ -6,6 +6,7 @@ Built on Starlette (FastAPI's base) rather than FastAPI itself: FastAPI's pydant
 budget (ADR 0008).
 """
 import asyncio
+import contextlib
 import hmac
 import json
 import re
@@ -226,6 +227,18 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         return JSONResponse({"fits": ok, "message": msg, "total_mb": est["total_mb"], "available_mb": avail,
                              "text": workbench.render(spec, est), "command": f"benchctl up {flags}"})
 
+    async def jira_refresh(request: Request):
+        """The Refresh licence button: ask the governor to restart the real Jira (its test licence counts from its start)."""
+        try:
+            res = await asyncio.to_thread(checks.governor_request, {"cmd": "refresh-jira-licence"}, socket)
+        except (OSError, ValueError) as e:
+            raise HTTPException(503, "the governor is not reachable: start it with ./scripts/benchctl start") from e
+        if not res.get("ok"):
+            raise HTTPException(409, res.get("error", "the governor refused"))
+        if res.get("dry_run"):
+            return JSONResponse({"started": False, "message": "The governor is in dry-run mode or has no --workdir. Run: benchctl refresh jira-real-licence"})
+        return JSONResponse({"started": True, "message": "Restarting the real Jira: ready in about a minute with 3 more hours. Progress is in Governor activity."})
+
     async def plan_apply(request: Request):
         """Ask the governor to rebuild the workbench to this plan (it runs `benchctl up` as the user, calm levels only)."""
         spec, _, _, ok, msg = build_plan(request.query_params)
@@ -301,10 +314,26 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         return JSONResponse({"info": info, "text": describe.render(info), "ip": plan["nodes"].get(node),
                              "bmc_ip": plan["bmc"].get(node) if f"bmc-{node}" in services else None})
 
+    licence = {"text": "", "asked": 0.0}  # the real Jira's licence as the watcher last saw it, and when it last asked for a renewal
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app):
+        from webui import licence as licence_mod
+
+        task = asyncio.create_task(licence_mod.watch(licence, socket))
+        try:
+            yield
+        finally:
+            task.cancel()
+
     async def connections(request: Request):
         from webui import connections as conn
 
-        return JSONResponse({"entities": conn.entities(cluster.sim)})
+        rows = conn.entities(cluster.sim)
+        for e in rows:
+            if e["id"] == "jira-real" and licence["text"]:
+                e["status"] = licence["text"]
+        return JSONResponse({"entities": rows})
 
     async def export_profile(request: Request):
         """The client profile file for the cluster on disk now. Read fresh per request (the page has no Docker, W-3),
@@ -449,6 +478,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
     return Starlette(
+        lifespan=lifespan,
         routes=[
             Route("/login", login),
             Route("/", protected(index)),
@@ -464,6 +494,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/settings", protected(settings)),
             Route("/api/plan", protected(plan)),
             Route("/api/plan/apply", protected(plan_apply, write=True), methods=["POST"]),
+            Route("/api/jira-real/refresh", protected(jira_refresh, write=True), methods=["POST"]),
             Route("/api/nhc", protected(nhc_state)),
             Route("/api/nhc", protected(nhc_change, write=True), methods=["POST"]),
             Route("/api/connections", protected(connections)),

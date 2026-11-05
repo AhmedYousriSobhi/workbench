@@ -130,6 +130,8 @@ def _cluster_and_page() -> None:
     link = next((ln.split("workbench UI: ", 1)[1].strip() for ln in reversed(log.read_text().splitlines())
                  if "workbench UI: " in ln), "") if log.is_file() else ""
     typer.echo(f"web page: {link}" if link and Path("compose/generated/ui.pid").is_file() else "web page: stopped")
+    if any(r["name"] == "jira-real" for r in running):
+        typer.echo(f"jira (real): {jira_real.licence_text(jira_real.licence_status())}")
 
 
 @app.command("diag")
@@ -717,6 +719,21 @@ def remove_jira_real_state(yes: bool = typer.Option(False, "-y", "--yes", help="
     jira_real.reset()
     typer.echo("removed the real Jira's containers and data")
     typer.echo("next: benchctl start --with jira-real; benchctl setup jira-real")
+
+
+refresh_app = typer.Typer(cls=SuggestingGroup, help="Renew something that runs out: the real Jira's test licence")
+app.add_typer(refresh_app, name="refresh")
+
+
+@refresh_app.command("jira-real-licence")
+def refresh_jira_real_licence() -> None:
+    """Give the real Jira another 3 hours: the test key counts from the start of Jira, so this restarts it (users, tickets and
+    tokens stay) and prints the new end time. No sudo, no key to paste."""
+    try:
+        jira_real.refresh_licence(say=lambda m: typer.echo(m))
+    except jira_real.JiraRealError as e:
+        typer.echo(f"FAILED: {e}", err=True)
+        raise typer.Exit(1) from e
 
 
 setup_app = typer.Typer(cls=SuggestingGroup, help="Finish a started part: the real Jira")
