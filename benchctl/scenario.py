@@ -4,6 +4,7 @@ A scenario is `steps` (`at`, `target`, `do`) and optional `expect` assertions. E
 mock's /sim/inject (or a `scontrol` call in slurmctld). `ramp` steps expand into a series of temperature steps.
 Targets whose component is not built yet (k8s, ticket-bot) are reported as skipped, not failed.
 """
+import base64
 import json
 import re
 import time
@@ -24,7 +25,11 @@ ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "ht
 JIRA_ACTIONS = ("create", "transition", "comment", "fault", "reset")
 SLURMCTLD = "workbench-slurmctld-1"
 LOGIN = "workbench-login-1"
-HOST_TARGETS = ("slurm", "ssh")  # steps that need Docker on the host
+JIRA_REAL = "workbench-jira-real-1"
+JIRA_DB = "workbench-jira-db-1"
+JIRA_REAL_URL = "http://127.0.0.1:8083"
+JIRA_REAL_MODES = ("outage", "restore", "bad_logins", "clear_logins", "rate_limit", "rate_limit_off")  # real faults on the real Jira, no proxy (issue 303)
+HOST_TARGETS = ("slurm", "ssh", "jira-real")  # steps that need Docker on the host
 SSH_STATES = ("down", "up", "hung")
 NODE_SSHD_STATES = ("down", "up")
 NOT_BUILT = ("k8s", "ticket-bot")
@@ -75,13 +80,25 @@ class Report:
 
 def load(name: str, root: Path = SCENARIOS) -> dict:
     path = root / f"{name}.yaml"
-    if not path.is_file():
-        raise ScenarioError(f"no scenario {name!r} (see: benchctl scenario list)")
+    if not path.is_file():  # a reference number works too: SC-02 or sc-2
+        m = re.fullmatch(r"(?i)sc-?0*(\d+)", name.strip())
+        hit = [s for s in list_all(root) if m and s.get("ref") == f"SC-{int(m.group(1)):02d}"]
+        if not hit:
+            raise ScenarioError(f"no scenario {name!r} (see: benchctl scenario list)")
+        return hit[0]
     return yaml.safe_load(path.read_text())
 
 
+def summary(sc: dict) -> str:
+    """One header line before a run: reference, name, steps, length, what it touches."""
+    steps = sc.get("steps", [])
+    length = max((parse_duration(s["at"]) for s in steps), default=0)
+    targets = ", ".join(sorted({s["target"] for s in steps}))
+    return f"{sc.get('ref', '-')} {sc['name']}: {len(steps)} steps, {length:.0f} s, targets {targets}"
+
+
 def list_all(root: Path = SCENARIOS) -> list[dict]:
-    return [yaml.safe_load(p.read_text()) for p in sorted(root.glob("*.yaml"))]
+    return sorted((yaml.safe_load(p.read_text()) for p in root.glob("*.yaml")), key=lambda s: s["name"])
 
 
 def plan(sc: dict) -> list[Step]:
@@ -122,6 +139,8 @@ def validate(sc: dict, sim: dict) -> list[str]:
             problems += [f"step {i}: {m}" for m in jira_ticket_problems(do["tickets"])]
         if t == "slurm":
             problems += [f"step {i}: {m}" for m in daemon_problems(do)]
+        if t == "jira-real" and do.get("fault") not in JIRA_REAL_MODES:
+            problems.append(f"step {i}: jira-real needs fault: one of {', '.join(JIRA_REAL_MODES)}")
         names = [n for key in ("nodes", "drain", "down", "resume", "power_off", "power_on", "slurmd_stop", "slurmd_start",
                                "slurmd_restart") for n in do.get(key) or []]
         if isinstance(do.get("submit"), dict) and do["submit"].get("node"):
@@ -359,6 +378,8 @@ def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcom
                 r = runner(cmd)
                 if r.returncode and cmd[3:4] != ["pkill"]:  # pkill exits 1 when slurmd is already down: that is the goal
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+        elif step.target == "jira-real":
+            return jira_real_fault(step, label, runner)
         elif step.target == "jira":
             if "tickets" in step.do:  # {tickets: {action: create|transition|comment|reset, ...}}
                 poster(ENDPOINTS["jira-tickets"], step.do["tickets"])
@@ -379,6 +400,51 @@ def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcom
 def node_state(node: str, runner=checks.run) -> str:
     r = runner(["docker", "exec", SLURMCTLD, "sinfo", "-h", "-N", "-n", node, "-o", "%T"])
     return r.stdout.strip().split("\n")[0] if r.returncode == 0 else ""
+
+
+def jira_real_fault(step: Step, label: str, runner) -> Outcome:
+    """Real faults on the real Jira (no fault proxy, issue 303): `outage` pauses its container (clients time out, as with a
+    hung node), `restore` unpauses it, `bad_logins` sends wrong-password logins until Jira's own CAPTCHA lock answers 403
+    (the 401 then 403 pattern the Atlassian community reports); `clear_logins` resets the failed-login count (as an admin does in User management)."""
+    fault = step.do["fault"]
+    if fault in ("outage", "restore"):
+        r = runner(["docker", "pause" if fault == "outage" else "unpause", JIRA_REAL])
+        if r.returncode and "already" not in r.stderr and "is not paused" not in r.stderr:
+            return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+        return Outcome(label, "ok")
+    if fault == "clear_logins":  # what an admin does in User management ("reset failed login count"): zero it in Jira's own table
+        r = runner(["docker", "exec", JIRA_DB, "psql", "-U", "jira", "-d", "jira", "-qc",
+                    "update cwd_user_attributes set attribute_value='0' where attribute_name='login.currentFailedCount'"])
+        return Outcome(label, "failed", (r.stderr or r.stdout).strip()) if r.returncode else Outcome(label, "ok")
+    if fault in ("rate_limit", "rate_limit_off"):
+        return jira_real_rate_limit(step, label, runner)
+    user, n = str(step.do.get("user", "alice")), int(step.do.get("count", 5))
+    for _ in range(n):
+        req = urllib.request.Request(f"{JIRA_REAL_URL}/rest/api/2/myself", headers={
+            "Authorization": "Basic " + base64.b64encode(f"{user}:wrong-password".encode()).decode()})
+        try:
+            urllib.request.urlopen(req, timeout=10)
+        except urllib.error.HTTPError:
+            pass  # 401, then 403 once the CAPTCHA lock is on: both are the goal
+        except OSError as e:
+            return Outcome(label, "failed", str(e))
+    return Outcome(label, "ok")
+
+
+def rate_limit_sql(on: bool, capacity: int = 3, fill_rate: int = 1) -> str:
+    """Jira's own rate limiting (admin Rate limiting page) set in its tables, then the settings version is bumped so the
+    running Jira reloads it (no restart; the reload job runs about once a minute, issue 303)."""
+    mode = "ON" if on else "OFF"
+    return (f"update \"AO_AC3877_SYSTEM_RL_SETTINGS\" set \"MODE\"='{mode}', \"CAPACITY\"={capacity}, \"FILL_RATE\"={fill_rate}, "
+            "\"INTERVAL_FREQUENCY\"=1, \"INTERVAL_TIME_UNIT\"='SECONDS'; "
+            "update \"AO_AC3877_SETTINGS_VERSION\" set \"VERSION\"=\"VERSION\"+1;")
+
+
+def jira_real_rate_limit(step: Step, label: str, runner) -> Outcome:
+    on = step.do["fault"] == "rate_limit"
+    sql = rate_limit_sql(on, int(step.do.get("capacity", 3)), int(step.do.get("fill_rate", 1)))
+    r = runner(["docker", "exec", JIRA_DB, "psql", "-U", "jira", "-d", "jira", "-qc", sql])
+    return Outcome(label, "failed", (r.stderr or r.stdout).strip()) if r.returncode else Outcome(label, "ok")
 
 
 def jira_search(jql: str) -> list[dict]:

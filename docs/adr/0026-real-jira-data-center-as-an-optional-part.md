@@ -17,7 +17,7 @@ Add `jira-real`, an **optional part, off by default**, that runs the official `a
 | Choice | Why |
 |---|---|
 | Postgres, collation C | Jira 10's wizard has no built-in database; Jira refuses any other collation. |
-| 3072 MB for Jira (heap 1 to 2 GB), 256 MB for Postgres, class P6 | About 3 GB measured by the lab; P6 so the governor stops it first. Counted in the estimate and in governor admission like every part. |
+| 2176 MB for Jira (heap 512 to 768 MB, code cache 128 MB, `JVM_ARGS`: Serial GC, C1-only, 512 KB stacks), 256 MB for Postgres, class P6 | The smallest limit that passed setup and a ticket run twice, peak about 2040 MiB (issues 287 and 289; table in docs/guides/jira-real.md). Without the JVM flags the floor was 2560 MB; the lab's 1 to 2 GB heap needs about 3 GB. P6 so the governor stops it first. Counted in the estimate and in governor admission like every part. |
 | Named volumes, removed by `benchctl remove jira-real-state` | The data survives `down`; a fresh start is a reset, not a rebuild of the image. |
 | Setup by code (`benchctl setup jira-real`, `benchctl/jira_real.py`) | The wizard (database, properties, licence, administrator, no mail) is five form posts; then it waits until REST really answers (`/status` says RUNNING first), seeds users alice to erin (the mock team's names), project `OPS` (the key the mock and the exported profile use) and tickets, and makes a personal access token per user. Safe to repeat. |
 | Localhost only | The setup refuses any base URL that is not 127.0.0.1, localhost or ::1, so a typo cannot seed a real site. |
@@ -30,9 +30,12 @@ not Cloud (Cloud's ADF comment bodies, `accountId`, `search/jql` paging stay che
 229); one node, no clustering; the licence is a test key; no webhooks are wired to the stack.
 
 ## Consequences
-- Memory: the `jira-real` profile and the part add about 3.3 GB. With both Jiras on, the min preset no longer fits a 16 GB host
+- Memory: the `jira-real` profile and the part add about 2.4 GB (measured). With both Jiras on, the min preset no longer fits a 16 GB host
   comfortably; the estimate says so before `up`.
 - Everything that talks to Jira must work against both: the ticket driver (issue 262) is tested against the mock and the real one.
 - Atlassian ended new Data Center sales on 30 March 2026 and ends Data Center in 2029; the test key and the image still
   work today. If either disappears the part is dropped and this ADR superseded.
 - Not exercised here: Jira Cloud, a licensed Jira, clustering, the Marketplace.
+
+## Addendum (issue 303): faults on the real Jira
+The real Jira has no `/sim/failure`. Scenarios reach it through the `jira-real` target with real faults only: `outage`/`restore` (`docker pause`), `bad_logins` (wrong-password Basic logins, which really give 401 then 403 `CAPTCHA_CHALLENGE`) and `clear_logins` (failed-login count set to 0 in Jira's database). Measured on the pinned image: six bad logins lock the user, a pause makes calls time out, the SQL reset unlocks at once. Chosen first because they cost no memory and no new component. Real 429 (also in this issue): the plugin's REST path could not be found, so the scenario writes `AO_AC3877_SYSTEM_RL_SETTINGS` (mode, capacity, fill rate) and bumps `AO_AC3877_SETTINGS_VERSION`; a running Jira reloads it within about a minute, no restart (measured 40 s). It answers 429 with the real `X-RateLimit-*` headers. Deferred: a real slow or 503 answer needs a tiny stdlib fault proxy in front of Jira (the client would point at the proxy's address, ADR 0018); decide when a client test needs it. Writing Jira's tables is test-only and tied to the pinned image's plugin.

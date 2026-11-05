@@ -58,7 +58,7 @@ def run_steps(do: dict) -> None:
 
 
 @pytest.fixture(scope="module")
-def cluster():
+def cluster(test_timers):
     os.chdir(ROOT)
     bring_up(yaml.safe_load((ROOT / "sim.yaml").read_text()))
     assert wait_for(lambda: "idle" in node_state(), timeout=90)

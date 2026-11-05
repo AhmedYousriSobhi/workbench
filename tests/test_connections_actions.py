@@ -69,3 +69,10 @@ def test_the_real_jira_has_a_row_with_a_link_and_only_the_path_of_its_secrets():
     row = by["jira-real"]
     assert row["actions"][0]["kind"] == "link" and row["actions"][0]["value"] == "http://127.0.0.1:8083"
     assert row["credential"].endswith("jira-real.env") and "PAT_" not in str(row)
+
+
+def test_the_real_jira_row_offers_a_post_button_for_one_known_path_only():
+    post = [a for e in rows() if e["id"] == "jira-real" for a in e["actions"] if a["kind"] == "post"]
+    assert post == [{"kind": "post", "label": "Refresh licence (restarts Jira)", "value": "/api/jira-real/refresh"}]
+    assert connections.valid_action(post[0])
+    assert not connections.valid_action({"kind": "post", "label": "x", "value": "/api/anything"})

@@ -1,4 +1,5 @@
 name: drain-ticket
+ref: SC-04
 description: A node drains in Slurm and gets a ticket naming the cluster and the node; resuming it resolves the ticket
 steps:
   - {at: 0s,  target: slurm, do: {drain: [cn003], reason: "scenario: failing disk"}}

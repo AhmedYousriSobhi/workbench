@@ -14,9 +14,9 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent
-SYNTH_CLUSTER = """lastCluster = JSON.stringify({logins: [{name: 'login', mode: 'both', port: 2222}, {name: 'login2', mode: 'teleport', port: null}], services: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'gpu-exporter': true, 'teleport': true}, actions: [{id: 'power-off', label: 'Power off', gpu_only: false}, {id: 'power-on', label: 'Power on', gpu_only: false}, {id: 'overheat', label: 'Overheat', gpu_only: false}, {id: 'fan-fail', label: 'Fan failure', gpu_only: false}, {id: 'clear', label: 'Clear faults', gpu_only: false}],
+SYNTH_CLUSTER = """lastCluster = JSON.stringify({logins: [{name: 'login', mode: 'both', port: 2222}, {name: 'login2', mode: 'teleport', port: null}], services: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'jira-real': true, 'gpu-exporter': true, 'teleport': true}, actions: [{id: 'power-off', label: 'Power off', gpu_only: false}, {id: 'power-on', label: 'Power on', gpu_only: false}, {id: 'overheat', label: 'Overheat', gpu_only: false}, {id: 'fan-fail', label: 'Fan failure', gpu_only: false}, {id: 'clear', label: 'Clear faults', gpu_only: false}],
                             nodes: ['cn001', 'cn002', 'cn003', 'cn004'].map(n => ({name: n, kind: 'compute', state: 'ok', label: 'Healthy', temp: 45, power: 'On', gpus: 0}))
-                              .concat(['gpu001', 'gpu002'].map(n => ({name: n, kind: 'gpu', state: 'ok', label: 'Healthy', temp: 44, power: 'On', gpus: 8})))}); renderCluster(JSON.parse(lastCluster)); clearTimeout(clusterTimer); if (flowEs) flowEs.close(); flowSnap = {reachable: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'gpu-exporter': true, teleport: true}, totals: {'bmc-farm': 42, 'bcm-mock': 17, 'jira-mock': 9, 'gpu-exporter': 120, teleport: 5}, faults: 0}; paintBlocks();"""  # six healthy nodes; stops the poll so the real (stopped) stack does not overwrite them
+                              .concat(['gpu001', 'gpu002'].map(n => ({name: n, kind: 'gpu', state: n === 'gpu002' ? 'fault' : 'ok', label: n === 'gpu002' ? 'GPU error' : 'Healthy', temp: 44, power: 'On', gpus: 8, gpus_busy: 4})))}); renderCluster(JSON.parse(lastCluster)); clearTimeout(clusterTimer); if (flowEs) flowEs.close(); flowSnap = {reachable: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'jira-real': true, 'gpu-exporter': true, teleport: true}, totals: {'bmc-farm': 42, 'bcm-mock': 17, 'jira-mock': 9, 'jira-real': 0, 'gpu-exporter': 120, teleport: 5}, faults: 0}; recent = [{t: Date.now(), to: 'jira-mock', n: 4, fault: true}, {t: Date.now(), to: 'jira-real', n: 0, fault: true}, {t: Date.now(), to: 'bmc-farm', n: 6, fault: false}]; paintBlocks();"""  # six healthy nodes; stops the poll so the real (stopped) stack does not overwrite them
 VIEWPORTS = {"desktop": (1280, 900), "phone": (390, 800)}
 
 
@@ -89,7 +89,7 @@ def capture(out: Path) -> dict:
                         result["a11y"].append("Infrastructure architecture is missing the node tiles or the clients")
                     page.evaluate("""onFlow({level: 0, cursor: 9, events: [{from: 'clients', to: 'bmc-farm', n: 3, label: 'requests', nodes: []},
                         {from: 'clients', to: 'jira-mock', n: 2, label: 'requests', nodes: []}, {from: 'clients', to: 'teleport', n: 2, label: 'requests', nodes: []}, {from: 'injector', to: 'bmc-farm', n: 1, label: 'x', nodes: ['cn002']}],
-                        totals: {'bmc-farm': 3, 'bcm-mock': 0, 'jira-mock': 2, 'gpu-exporter': 0, teleport: 2}, reachable: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'gpu-exporter': true, teleport: true}})""")
+                        totals: {'bmc-farm': 3, 'bcm-mock': 0, 'jira-mock': 2, 'gpu-exporter': 0, teleport: 2}, reachable: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'jira-real': true, 'gpu-exporter': true, teleport: true}})""")
                     page.wait_for_timeout(450)  # packets in flight
                     if not page.evaluate("flowPaused || reduced.matches") and page.locator("#dots .pk").count() < 1:
                         result["a11y"].append("traffic animation drew no packets for synthetic events")
@@ -107,7 +107,8 @@ def capture(out: Path) -> dict:
                         if page.locator("#tip:visible").count() != 1:
                             result["a11y"].append("hovering a part showed no tip")
                         page.mouse.move(2, 2)
-                        page.evaluate(SYNTH_CLUSTER)  # with the stack down the real page hides the node list (W-10): draw the six sample nodes first
+                        page.evaluate(SYNTH_CLUSTER)  # with the stack down (a --full run, after the other modules tore theirs down) the list is hidden for want of nodes
+                        page.wait_for_timeout(300)
                         page.click("#treetoggle")  # the node list folds away, the diagram keeps the width
                         if page.locator("#nodesmain:visible").count() != 0:
                             result["a11y"].append("the node list did not fold away")

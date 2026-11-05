@@ -372,3 +372,67 @@ def test_job_and_stepd_expectations():
     assert holds()  # pgrep found nothing
     _, holds, _ = scenario.expectation({"slurm.stepd": {"node": "cn001"}}, runner)
     assert not holds()
+
+
+def test_jira_real_outage_pauses_and_restores_the_container():
+    calls = []
+    runner = lambda cmd: calls.append(cmd) or CP()
+    scenario.execute(scenario.Step(0, "jira-real", {"fault": "outage"}), runner=runner)
+    scenario.execute(scenario.Step(0, "jira-real", {"fault": "restore"}), runner=runner)
+    assert calls == [["docker", "pause", scenario.JIRA_REAL], ["docker", "unpause", scenario.JIRA_REAL]]
+    assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "outage"}), runner=lambda c: CP(code=1, err="boom")).detail == "boom"
+    assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "outage"}), host=False).status == "skipped"
+
+
+def test_jira_real_bad_logins_send_wrong_passwords(monkeypatch):
+    seen = []
+
+    def fake(req, timeout=0):
+        seen.append(req.full_url)
+        raise scenario.urllib.error.HTTPError(req.full_url, 401, "no", {}, None)
+
+    monkeypatch.setattr(scenario.urllib.request, "urlopen", fake)
+    out = scenario.execute(scenario.Step(0, "jira-real", {"fault": "bad_logins", "count": 3}))
+    assert out.status == "ok" and len(seen) == 3 and all(u.startswith("http://127.0.0.1:8083/") for u in seen)
+
+    def down(req, timeout=0):
+        raise OSError("refused")
+
+    monkeypatch.setattr(scenario.urllib.request, "urlopen", down)
+    assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "bad_logins"})).status == "failed"
+
+
+def test_jira_real_step_needs_a_known_fault():
+    sc = {"steps": [{"at": "0s", "target": "jira-real", "do": {"fault": "explode"}}]}
+    assert any("jira-real needs fault" in p for p in scenario.validate(sc, {"compute_nodes": 1}))
+
+
+def test_jira_real_clear_logins_zeroes_the_failed_count():
+    calls = []
+    scenario.execute(scenario.Step(0, "jira-real", {"fault": "clear_logins"}), runner=lambda c: calls.append(c) or CP())
+    assert calls[0][:3] == ["docker", "exec", scenario.JIRA_DB] and "login.currentFailedCount" in calls[0][-1]
+    assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "clear_logins"}), runner=lambda c: CP(code=1, err="x")).status == "failed"
+
+
+def test_jira_real_rate_limit_sets_the_table_and_bumps_the_version():
+    calls = []
+    runner = lambda c: calls.append(c) or CP()
+    scenario.execute(scenario.Step(0, "jira-real", {"fault": "rate_limit", "capacity": 5, "fill_rate": 2}), runner=runner)
+    scenario.execute(scenario.Step(0, "jira-real", {"fault": "rate_limit_off"}), runner=runner)
+    on, off = calls[0][-1], calls[1][-1]
+    assert "'ON'" in on and '"CAPACITY"=5' in on and '"FILL_RATE"=2' in on and "AO_AC3877_SETTINGS_VERSION" in on
+    assert "'OFF'" in off and calls[0][:3] == ["docker", "exec", scenario.JIRA_DB]
+    assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "rate_limit"}), runner=lambda c: CP(code=1, err="no")).detail == "no"
+
+
+def test_every_scenario_has_a_unique_reference_and_loads_by_it():
+    import re
+    rows = scenario.list_all()
+    refs = [s.get("ref") for s in rows]
+    assert all(r and re.fullmatch(r"SC-\d\d", r) for r in refs) and len(set(refs)) == len(refs)
+    first = rows[0]
+    for spelled in (first["ref"], first["ref"].lower(), "sc-" + str(int(first["ref"][3:]))):
+        assert scenario.load(spelled)["name"] == first["name"]
+    with __import__("pytest").raises(scenario.ScenarioError):
+        scenario.load("SC-99")
+    assert scenario.summary(first).startswith(f"{first['ref']} {first['name']}: ")

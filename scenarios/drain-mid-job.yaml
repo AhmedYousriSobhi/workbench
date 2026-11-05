@@ -1,4 +1,5 @@
 name: drain-mid-job
+ref: SC-03
 description: A node is drained under a running job; the job should finish while the node shows draining, then drained after it ends (run with --trace)
 steps:
   - {at: 0s,  target: slurm, do: {submit: {node: cn001, duration: 40}}}

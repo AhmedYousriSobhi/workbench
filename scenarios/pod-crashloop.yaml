@@ -1,4 +1,5 @@
 name: pod-crashloop
+ref: SC-18
 description: A pod enters CrashLoopBackOff and another is OOMKilled; the app should surface both
 steps:
   - {at: 0s,  target: k8s, do: {apply: [k8s/fixtures/10-workloads.yaml]}}

@@ -1,5 +1,6 @@
 import difflib
 import json
+import os
 import sqlite3
 import sys
 import time
@@ -22,6 +23,7 @@ from . import (
     logins,
     machine,
     measure,
+    memory,
     nhc,
     nodes,
     scenario,
@@ -128,6 +130,8 @@ def _cluster_and_page() -> None:
     link = next((ln.split("workbench UI: ", 1)[1].strip() for ln in reversed(log.read_text().splitlines())
                  if "workbench UI: " in ln), "") if log.is_file() else ""
     typer.echo(f"web page: {link}" if link and Path("compose/generated/ui.pid").is_file() else "web page: stopped")
+    if any(r["name"] == "jira-real" for r in running):
+        typer.echo(f"jira (real): {jira_real.licence_text(jira_real.licence_status())}")
 
 
 @app.command("diag")
@@ -225,6 +229,17 @@ def _category_option(cat: str):
 
 WORKLOAD, ACCOUNTING, MONITORING, TICKETING, HARDWARE, ACCESS, SIMULATION = (
     _category_option(c) for c in ("workload", "accounting", "monitoring", "ticketing", "hardware", "access", "simulation"))
+def _app_mb_set(value: int | None) -> int | None:
+    """--app-mb N: the memory reserved for the app under test in the plan (0 leaves it out; it is already running)."""
+    if value is not None:
+        os.environ[memory.APP_ENV] = str(value)
+    return value
+
+
+APP_MB_OPT = typer.Option(None, "--app-mb", min=0, callback=_app_mb_set,
+                          help=f"MB the plan reserves for the app under test (default ${memory.APP_ENV}, else the saved `measure app --save`, else {memory.APP_MB}); 0 when it already runs")
+
+
 ADDONS = typer.Option(False, "--addons", rich_help_panel="Parts by category",
                       help="turn on every optional part (all categories); --without X still removes one")
 
@@ -253,7 +268,7 @@ def plan(file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: in
          with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, save: str = SAVE,
          bmc_nodes: str = BMC_NODES, workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING,
          monitoring: list[str] = MONITORING, ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE,
-         access: list[str] = ACCESS, simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN) -> None:
+         access: list[str] = ACCESS, simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN, app_mb: int = APP_MB_OPT) -> None:
     """Estimate the memory a workbench needs against what the host has free; exit 1 if it would not fit."""
     from pathlib import Path
 
@@ -261,7 +276,7 @@ def plan(file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: in
 
     with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons, login)
     spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes, login)
-    est = workbench.estimate(sim, prof)
+    est = workbench.estimate(sim, prof, running=workbench.running_services())
     ok, msg = workbench.verdict(est, checks.mem_available() // (1024 * 1024), spec=spec)
     typer.echo(workbench.render(spec, est) + f"\n\n{msg}")
     if save:
@@ -284,7 +299,7 @@ def up(profile: str = typer.Option(None, "--profile", autocompletion=completion.
        with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, bmc_nodes: str = BMC_NODES,
        workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING,
        ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE, access: list[str] = ACCESS,
-       simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN) -> None:
+       simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN, app_mb: int = APP_MB_OPT) -> None:
     """Estimate, then start. By preset (--profile) or by selection (--cpu-nodes 2 --gpu-nodes 4 --with jira,
     --ticketing jira --hardware bmc,bcm, --addons ...)."""
     with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons, login)
@@ -305,7 +320,7 @@ def apply(file: str = typer.Option(..., "-f", "--file", help="workbench file to 
           without: list[str] = WITHOUT, k8s_nodes: int = K8S, bmc_nodes: str = BMC_NODES,
           workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING,
           ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE, access: list[str] = ACCESS,
-          simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN) -> None:
+          simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN, app_mb: int = APP_MB_OPT) -> None:
     """Build the workbench a file describes (the same as `up -f FILE`)."""
     with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons, login)
     _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes, login)
@@ -326,7 +341,7 @@ def start(profile: str = typer.Option(None, "--profile", autocompletion=completi
           with_: list[str] = WITH, without: list[str] = WITHOUT, workload: list[str] = WORKLOAD,
           accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING, ticketing: list[str] = TICKETING,
           hardware: list[str] = HARDWARE, access: list[str] = ACCESS, simulation: list[str] = SIMULATION,
-          addons: bool = ADDONS, login: list[str] = LOGIN) -> None:
+          addons: bool = ADDONS, login: list[str] = LOGIN, app_mb: int = APP_MB_OPT) -> None:
     """Everything in one step: machine check, governor, cluster, web page (the first run builds images). Add parts
     with --with (`--with accounting`), by category (`--ticketing jira --hardware bmc,bcm`) or all of them (`--addons`);
     on a running cluster it adds them and leaves the page up."""
@@ -706,6 +721,21 @@ def remove_jira_real_state(yes: bool = typer.Option(False, "-y", "--yes", help="
     typer.echo("next: benchctl start --with jira-real; benchctl setup jira-real")
 
 
+refresh_app = typer.Typer(cls=SuggestingGroup, help="Renew something that runs out: the real Jira's test licence")
+app.add_typer(refresh_app, name="refresh")
+
+
+@refresh_app.command("jira-real-licence")
+def refresh_jira_real_licence() -> None:
+    """Give the real Jira another 3 hours: the test key counts from the start of Jira, so this restarts it (users, tickets and
+    tokens stay) and prints the new end time. No sudo, no key to paste."""
+    try:
+        jira_real.refresh_licence(say=lambda m: typer.echo(m))
+    except jira_real.JiraRealError as e:
+        typer.echo(f"FAILED: {e}", err=True)
+        raise typer.Exit(1) from e
+
+
 setup_app = typer.Typer(cls=SuggestingGroup, help="Finish a started part: the real Jira")
 app.add_typer(setup_app, name="setup")
 
@@ -1016,9 +1046,9 @@ app.add_typer(scenario_app, name="scenario")
 
 @scenario_app.command("list")
 def scenario_list() -> None:
-    """Name, step count and description of every scenario."""
+    """Reference (SC-nn), name, step count and description of every scenario; `run` takes the name or the reference."""
     for sc in scenario.list_all():
-        typer.echo(f"{sc['name']:22} {len(sc.get('steps', [])):2} steps  {sc.get('description', '')}")
+        typer.echo(f"{sc.get('ref', '-'):6} {sc['name']:26} {len(sc.get('steps', [])):2} steps  {sc.get('description', '')}")
 
 
 @scenario_app.command("run")
@@ -1038,6 +1068,7 @@ def scenario_run(name: str = typer.Argument(..., autocompletion=completion.scena
         typer.echo(f"invalid: {p}", err=True)
     if problems:
         raise typer.Exit(1)
+    typer.echo(scenario.summary(sc))
     if dry_run:
         for s in scenario.plan(sc):
             typer.echo(f"[{s.at:6.1f}s] {s.target} {s.do}")
@@ -1065,6 +1096,42 @@ def measure_run(label: str = typer.Argument(..., help="e.g. idle, loaded"),
     """Sample host, containers, processes (PSS) and VMs; save docs/measurements/<label>.json."""
     snaps = measure.sample(duration, interval)
     typer.echo(f"{len(snaps)} samples -> {measure.save(label, snaps)}")
+
+
+APP_MATCH = typer.Option(None, "--match", help="process name or command-line text of the app (repeatable)")
+APP_PID = typer.Option(None, "--pid", help="a process id of the app (repeatable)")
+APP_SAVE = typer.Option(False, "--save", help="keep the suggested reserve as this machine's default (compose/generated, gitignored)")
+
+
+@measure_app.command("app")
+def measure_app_cmd(match: list[str] = APP_MATCH, pid: list[int] = APP_PID,
+                    duration: float = typer.Option(120, help="seconds to sample; 0 runs until Ctrl-C"),
+                    interval: float = typer.Option(2, min=0.1, help="seconds between samples"),
+                    save: bool = APP_SAVE) -> None:
+    """Measure the app under test (PSS of all its processes): peak, typical use and a suggested --app-mb."""
+    if not match and not pid:
+        typer.echo("give the app with --match NAME or --pid N (repeatable); the app must be running", err=True)
+        raise typer.Exit(2)
+    if not measure.app_bytes(match or [], pid or [])[1]:
+        typer.echo(f"no running process matches {', '.join(match or [])} {' '.join(map(str, pid or []))}; start the app and retry", err=True)
+        raise typer.Exit(1)
+    caught = measure.app_breakdown(match or [], pid or [])
+    typer.echo("matched: " + ", ".join(f"{n} x{c} ({b // 1024**2} MB)" for n, (b, c) in list(caught.items())[:6]) + (" ..." if len(caught) > 6 else ""))
+    if len(caught) > measure.APP_MAX_NAMES:
+        typer.echo(f"warning: {len(caught)} different programs match; a loose --match counts other programs' memory. Narrow it (a path or full name) before using --save", err=True)
+    typer.echo("sampling" + (f" for {duration:g} s" if duration else " until Ctrl-C") + "; use the app as you normally would ...")
+    stats = measure.app_summary(measure.sample_app(match or [], pid or [], duration, interval))
+    if not stats:
+        typer.echo("the app exited before the first sample; start it and retry", err=True)
+        raise typer.Exit(1)
+    mib = 1024**2
+    typer.echo(f"{stats['samples']} samples, up to {stats['processes']} process(es)\n"
+               f"  peak     {stats['peak'] // mib:>7} MB\n  typical  {stats['typical'] // mib:>7} MB (median)\n"
+               f"  suggested --app-mb {stats['suggested_mb']} (peak + 10%, rounded up to 100 MB)")
+    if save:
+        typer.echo(f"saved {stats['suggested_mb']} MB as the default reserve: {memory.save_app(stats['suggested_mb'])} (delete the file to return to {memory.APP_MB})")
+    else:
+        typer.echo("keep it as this machine's default: rerun with --save")
 
 
 @measure_app.command("report")

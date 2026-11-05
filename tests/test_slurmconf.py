@@ -113,6 +113,20 @@ def test_a_node_set_down_by_an_admin_stays_down_until_resumed():
     assert "ReturnToService=1\n" in slurmconf.slurm_conf(SIM, 4)  # 2 returns any DOWN node that answers (issue 138)
 
 
+def test_test_timers_are_opt_in_and_shorter(monkeypatch):
+    monkeypatch.delenv(slurmconf.TEST_TIMERS_ENV, raising=False)
+    off = slurmconf.slurm_conf(SIM, 4)
+    assert "SlurmdTimeout=15\n" in off and "HealthCheckInterval=30\n" in off and "TEST TIMERS" not in off
+    monkeypatch.setenv(slurmconf.TEST_TIMERS_ENV, "0")
+    assert slurmconf.slurm_conf(SIM, 4) == off  # only the exact value 1 switches it on
+    monkeypatch.setenv(slurmconf.TEST_TIMERS_ENV, "1")
+    on = slurmconf.slurm_conf(SIM, 4)
+    assert "SlurmdTimeout=10\n" in on and "HealthCheckInterval=15\n" in on and "TEST TIMERS ON" in on
+    assert all(v < slurmconf.DEFAULT_TIMERS[k] for k, v in slurmconf.TEST_TIMERS.items())
+    changed = [a for a, b in zip(on.splitlines(), off.splitlines(), strict=True) if a != b]
+    assert len(changed) == 3 and any(c.startswith("SlurmdTimeout=") for c in changed)  # the header and the two timers, nothing else
+
+
 def test_a_node_that_stops_answering_is_marked_down_within_about_half_a_minute():
     conf = slurmconf.slurm_conf(SIM, 4)
     assert "SlurmdTimeout=15\n" in conf and "MessageTimeout=5\n" in conf and "ReturnToService=1\n" in conf

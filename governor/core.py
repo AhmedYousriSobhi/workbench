@@ -227,6 +227,8 @@ class Governor:
                 args = ["submit", req["node"], "--gpus", str(req["gpus"]), "--duration", str(req["duration"])] + (
                     ["--user", req["user"]] if req.get("user") else [])
                 return self._change(f"submit-job={req['node']}:{req['gpus']}gpu", args)
+            if cmd == "refresh-jira-licence":  # the page's button: restart the real Jira, whose test licence counts from its start
+                return self._change("refresh-jira-licence", ["refresh", "jira-real-licence"])
             if cmd == "slurm-step":
                 what = req["name"]
                 args = (["set", "slurmd", req["node"], what.removeprefix("slurmd-")] if what.startswith("slurmd-")
@@ -234,7 +236,7 @@ class Governor:
                 return self._change(f"slurm-step={what}" + (f":{req['node']}" if req.get("node") else ""), args)
             if cmd == "apply-plan":
                 args = ["up", "--cpu-nodes", str(req["cpu_nodes"]), "--gpu-nodes", str(req["gpu_nodes"]),
-                        "--gpus-per-node", str(req["gpus_per_node"])]
+                        "--gpus-per-node", str(req["gpus_per_node"]), "--app-mb", "0"]  # the page is used while the app runs
                 for part in sorted(PLAN_PARTS):
                     args += ["--with" if part in req["parts"] else "--without", part]
                 if req.get("bmc_nodes") is not None:

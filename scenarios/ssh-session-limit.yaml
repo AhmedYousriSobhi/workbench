@@ -1,4 +1,5 @@
 name: ssh-session-limit
+ref: SC-25
 description: The login node allows one session per connection (OpenSSH MaxSessions), so a client that opens several channels is refused the extra ones
 steps:
   - {at: 0s,  target: ssh, do: {max_sessions: 1}}

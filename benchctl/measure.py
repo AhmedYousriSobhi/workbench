@@ -1,6 +1,7 @@
 """Phase 0 measurement: read-only memory sampling of host, containers, processes and VMs."""
 import json
 import math
+import os
 import re
 import time
 from collections import defaultdict
@@ -139,3 +140,93 @@ def report(idle: dict, loaded: dict | None = None) -> str:
         p = loaded["stats"].get(key, {}).get("peak", 0)
         rows.append(f"| {key} | {i // 1024**2} | {p // 1024**2} | {suggest_budget_mb(max(i, p))} |")
     return "\n".join(rows)
+
+
+APP_HEADROOM = 1.1
+APP_ROUND_MB = 100
+APP_MAX_NAMES = 4  # more distinct process names than this usually means a loose --match
+
+
+def _ancestors() -> set[int]:
+    """This process and its parents (the `benchctl` wrapper whose command line holds the --match text)."""
+    out, pid = set(), os.getpid()
+    while pid > 1 and pid not in out:
+        out.add(pid)
+        try:
+            pid = int(Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            break
+    return out
+
+
+def app_pids(matches: list[str], pids: list[int], proc: Path = Path("/proc"), skip: set[int] | None = None) -> list[int]:
+    """Pids whose name or command line contains a --match text (case-insensitive), plus the given --pid values."""
+    skip = _ancestors() if skip is None else skip
+    found = {p for p in pids if (proc / str(p)).is_dir()}
+    needles = [m.lower() for m in matches if m]
+    for d in proc.iterdir():
+        if not d.name.isdigit() or int(d.name) in skip or not needles:
+            continue
+        try:
+            text = ((d / "comm").read_text() + " " + (d / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")).lower()
+        except OSError:
+            continue
+        if any(n in text for n in needles):
+            found.add(int(d.name))
+    return sorted(found - skip)
+
+
+def app_bytes(matches: list[str], pids: list[int], proc: Path = Path("/proc")) -> tuple[int, int]:
+    """(PSS bytes summed over the app's processes, how many processes)."""
+    total, count = 0, 0
+    for pid in app_pids(matches, pids, proc):
+        kb = pss_kb(proc / str(pid))
+        if kb:
+            total, count = total + kb * 1024, count + 1
+    return total, count
+
+
+def app_breakdown(matches: list[str], pids: list[int], proc: Path = Path("/proc")) -> dict[str, tuple[int, int]]:
+    """Per process name: (PSS bytes, processes), largest first; shows what a --match really caught."""
+    out: dict[str, list[int]] = {}
+    for pid in app_pids(matches, pids, proc):
+        kb = pss_kb(proc / str(pid))
+        if not kb:
+            continue
+        try:
+            name = (proc / str(pid) / "comm").read_text().strip()
+        except OSError:
+            continue
+        cur = out.setdefault(name, [0, 0])
+        cur[0], cur[1] = cur[0] + kb * 1024, cur[1] + 1
+    return {k: (v[0], v[1]) for k, v in sorted(out.items(), key=lambda kv: -kv[1][0])}
+
+
+def sample_app(matches: list[str], pids: list[int], duration: float, interval: float, take=None,
+               sleep=time.sleep, proc: Path = Path("/proc")) -> list[tuple[int, int]]:
+    """One (bytes, processes) sample now and one every interval; duration 0 runs until Ctrl-C."""
+    take = take or app_bytes
+    out = [take(matches, pids, proc)]
+    try:
+        for _ in range(int(duration // interval)) if duration else iter(int, 1):
+            sleep(interval)
+            out.append(take(matches, pids, proc))
+    except KeyboardInterrupt:
+        pass
+    return out
+
+
+def suggest_app_mb(peak_bytes: int) -> int:
+    """The peak plus about 10 percent, rounded up to 100 MB."""
+    return math.ceil(peak_bytes * APP_HEADROOM / 1024**2 / APP_ROUND_MB) * APP_ROUND_MB
+
+
+def app_summary(samples: list[tuple[int, int]]) -> dict[str, int]:
+    """Peak and typical (median) bytes over the samples that saw the app, the most processes at once, the suggested reserve."""
+    seen = [(b, n) for b, n in samples if n]
+    if not seen:
+        return {}
+    sizes = sorted(b for b, _ in seen)
+    peak = sizes[-1]
+    return {"samples": len(samples), "peak": peak, "typical": sizes[len(sizes) // 2],
+            "processes": max(n for _, n in seen), "suggested_mb": suggest_app_mb(peak)}

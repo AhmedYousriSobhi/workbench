@@ -1,4 +1,5 @@
 name: slurmctld-restart-mid-job
+ref: SC-19
 description: slurmctld restarts (its container) while a real job and a simulated GPU job run; the nodes keep the work and slurmctld recovers its state (run with --trace)
 steps:
   - {at: 0s,  target: slurm, do: {submit: {node: cn001, duration: 600}}}

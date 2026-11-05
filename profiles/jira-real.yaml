@@ -1,5 +1,5 @@
 # Profile: jira-real
 name: jira-real
-budget_gb: 7.5   # planning estimate: std plus the real Jira (3 GB, ADR 0026); replace with a measured value
+budget_gb: 3.6   # expected use of what is built today (3642 MB: measured + 15 percent, benchctl/memory.py, issue 287); the app under test is added on top by the pre-flight
 extends: [std]
 groups: [jira-real]

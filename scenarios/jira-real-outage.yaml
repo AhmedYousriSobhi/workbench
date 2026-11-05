@@ -1,0 +1,6 @@
+name: jira-real-outage
+ref: SC-13
+description: The real Jira (127.0.0.1:8083) hangs for 60 s (container paused, clients time out), then answers again
+steps:
+  - {at: 0s,  target: jira-real, do: {fault: outage}}
+  - {at: 60s, target: jira-real, do: {fault: restore}}

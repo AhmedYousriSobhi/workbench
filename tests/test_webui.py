@@ -222,6 +222,7 @@ def test_plan_endpoint_estimates_without_side_effects(ui):
     data = json.loads(body)
     assert code == 200 and "2 cpu, 4 gpu" in data["text"] and data["total_mb"] > 700
     assert data["command"].startswith("benchctl up --cpu-nodes 2 --gpu-nodes 4") and "--without bmc" in data["command"]
+    assert data["command"].endswith("--app-mb 0") and "app under test" not in data["text"]  # the app already runs: no reserve, so Apply can show
     assert req(ui, "/api/plan?cpu_nodes=999")[0] == 422 and req(ui, "/api/plan?cpu_nodes=x")[0] == 422
     assert req(ui, "/api/plan", auth=False)[0] == 401
     assert b'id="plandlg"' in req(ui, "/")[1] and b"loadPlan" in req(ui, "/")[1]
@@ -245,6 +246,13 @@ def test_plan_apply_needs_csrf_validates_and_asks_the_governor(ui):
     code, body = req(ui, q, "POST", headers={"X-Requested-With": "workbench"})
     assert code == 200 and json.loads(body)["started"] is True
     assert b"pl-apply" in req(ui, "/")[1]
+
+
+def test_jira_refresh_button_needs_csrf_and_asks_the_governor(ui):
+    assert req(ui, "/api/jira-real/refresh", "POST")[0] == 403
+    code, body = req(ui, "/api/jira-real/refresh", "POST", headers={"X-Requested-With": "workbench"})
+    assert code == 200 and json.loads(body)["started"] is True
+    assert b"data-post" in req(ui, "/")[1] and req(ui, "/api/jira-real/refresh", "POST", auth=False)[0] == 401
 
 
 def test_export_button_downloads_the_profile_and_explains_a_missing_format(ui, monkeypatch, tmp_path):
@@ -415,3 +423,49 @@ def test_a_resilience_scenario_goes_through_the_governor_and_the_page_gets_a_tra
     finally:
         server.should_exit = True
         gov.shutdown()
+
+
+def test_licence_watch_reads_and_renews_once_when_the_end_is_near(monkeypatch):
+    """Detect (read the end over HTTP) and renew through the governor, once per cooldown, only when under the threshold (issue 293)."""
+    import asyncio
+    import time
+
+    from benchctl import checks, jira_real
+    from webui import licence
+
+    asked = []
+    monkeypatch.setattr(checks, "governor_request", lambda req, sock: asked.append(req) or {"ok": True, "started": True})
+    st = {"valid": True, "expires": int(time.time()) + 3 * 3600}
+    monkeypatch.setattr(jira_real, "licence_status", lambda *a, **k: st)
+    state = {}
+    asyncio.run(licence.watch(state, "sock", every=0, rounds=2))
+    assert asked == [] and "valid until" in state["text"]  # 3 h left: only detected
+    st = {"valid": True, "expires": int(time.time()) + 300}  # 5 min left
+    asyncio.run(licence.watch(state, "sock", every=0, rounds=3))
+    assert asked == [{"cmd": "refresh-jira-licence"}] and "renewing" in state["text"]  # asked once in three rounds
+    monkeypatch.setenv(jira_real.AUTO_ENV, "0")
+    state["asked"] = 0.0
+    asyncio.run(licence.watch(state, "sock", every=0, rounds=1))
+    assert len(asked) == 1  # automatic renewal off
+    monkeypatch.setattr(jira_real, "licence_status", lambda *a, **k: None)
+    asyncio.run(licence.watch(state, "sock", every=0, rounds=1))
+    assert state["text"] == "" and len(asked) == 1  # Jira down: quiet
+
+
+def test_plan_reports_the_admitted_number_next_to_the_caps(ui):
+    data = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=4&gpus_per_node=8&parts=jira")[1])
+    assert data["need_mb"] == data["expected_mb"] - data["running_mb"] < data["total_mb"]  # no app reserve on the page; expected is below the caps
+    assert b"p.need_mb" in req(ui, "/")[1]
+
+
+def test_diagram_has_a_colour_legend_and_combinable_overlays(ui):
+    """Kind is colour (simulated vs real), state is the border, traffic and fault are overlays that combine (issue 297)."""
+    page = req(ui, "/")[1]
+    for needle in (b'id="ckey"', b"simulated (dashed stripe)", b"real (solid stripe)", b"a fault applied in the last 30 s",
+                   b"They combine", b"const REAL_SERVICES", b"'ff-' + k", b"'fx-' + k", b"'fa-' + k"):
+        assert needle in page, needle
+    assert b"'Jira mock'" not in page and b"'BCM mock'" not in page  # the word is not in the boxes: colour says it
+
+
+def test_state_update_keeps_the_kind_class_of_a_service_box(ui):
+    assert b"(k === 'teleport' ? '' : REAL_SERVICES.has(k) ? ' real' : ' sim')" in req(ui, "/")[1]  # repainting the state must not drop the colour of the kind

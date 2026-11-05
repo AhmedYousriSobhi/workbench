@@ -2,7 +2,7 @@
 
 `jira-mock` is the default and answers on `http://127.0.0.1:8080`. When you need Atlassian's own code (to see how a
 client behaves against real validation, JQL and workflows), start the **real Jira Data Center** next to it. It is a
-session tool: the test licence lasts **3 hours**, then the server is read-only and you reset it. About 3 GB of memory
+session tool: the test licence lasts **3 hours** from each start of Jira, then the server is read-only; `benchctl refresh jira-real-licence` (or the button) renews it. About 2.4 GB of memory (2.1 GB for Jira, the smallest limit that worked, plus Postgres)
 (ADR 0026, SPEC C-19). It is Data Center, not Cloud.
 
 ## Once: get the test licence
@@ -35,19 +35,83 @@ The first start pulls about 1 GB. `setup` prints one line per step and ends with
   Resolved, Closed): tools must read the transitions Jira offers, not assume names.
 - The page's Connections tab has an **Open Jira (real)** link.
 
+### Why 2.1 GB (measured, issues 287 and 289)
+
+A JVM holds more than its heap: metaspace, a code cache, thread stacks, compiler threads and the plugin system. Measured on the live
+stack with the same procedure each time (setup wizard, seeding, 20 ticket changes, no Docker restart allowed):
+
+| Heap | JVM flags | Limit | Result | Peak |
+|---|---|---|---|---|
+| 768 MB | default | 1536 MB | failed, killed 4 times | 1513 MiB |
+| 768 MB | default | 2048 MB | failed, setup lost the connection | 2024 MiB |
+| 768 MB | default | 2304 MB | finished, killed once | 2302 MiB |
+| 768 MB | default | 2560 MB | passed | 2363 MiB |
+| 768 MB | `JVM_ARGS` below, metaspace capped at 192 MB | 2304 MB | failed: `OutOfMemoryError: Metaspace` | |
+| 768 MB | `JVM_ARGS` | 2304 MB | passed | 2043 MiB |
+| 768 MB | `JVM_ARGS` | **2176 MB** | **passed twice** | **2039 and 2045 MiB** |
+
+`JVM_ARGS` is `-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss512k -XX:CICompilerCount=1` (one collector thread, C1-only compilation,
+smaller thread stacks, one compiler thread): it takes about 320 MiB off the peak. Capping metaspace does not work: Jira's 273
+plugins need it. The peak stays near 2040 MiB whatever the limit, so the limit is that peak plus about 6 percent. The constants
+are `HEAP_MIN_MB`, `HEAP_MAX_MB`, `CODE_CACHE_MB`, `LIMIT_MB`, `JVM_ARGS` in `benchctl/jira_real.py`; change one only after repeating
+the trial and the numbers in [memory](memory.md). The cost of C1-only compilation is a slower Jira under heavy load, which a
+simulation does not generate.
+
+### Switching plugins off does not help (measured, issue 289)
+
+The image ships 273 plugins, 239 of them bundled. I switched groups off through the plugin manager API, one group at a time,
+restarted Jira and measured: all plugins on, 1.80 to 1.92 GiB after the restart; 44 language packs off, 1.80 GiB; 18 extras
+(onboarding, credits, help tips, feedback, quick search, ...) off, 1.86 GiB. Analytics and the integrations (DVCS, streams,
+importers, automation, mobile) cannot go: with either group off, Jira's own REST, project and issue-navigator plugins did not
+start (`/status` says `ERROR`; the way back is `delete from pluginstate` in the Postgres container). So there is no plugin set that
+saves memory, and the part does not offer one.
+
+## On the page
+
+With the part built, the Infrastructure architecture draws a **Jira DC** box next to **Jira** (the simulated one) under *Services: what
+clients call*. The word "mock" is not in the boxes: **colour says it**, and the colour legend under the diagram explains it.
+
+- **What it is:** violet with a dashed stripe = simulated; blue with a solid stripe = real. (Hover or click for the words.)
+- **State (the border):** green = up, red dashed = not reachable, grey dotted = off.
+- **On top, and they combine:** a pulsing blue dot = traffic now (for a node: GPU work running); a red ring with a red triangle = a
+  fault applied in the last 30 seconds. One box can be up, busy and faulted at the same time.
+
+The real Jira has **no request counter** (only the simulated parts count requests), so its box shows up or down and says
+`no counter`; its dot never pulses. Click a box for its address, the command to test it and the licence line (Connections).
+Without the part the box is not drawn.
+
 ## When the 3 hours are up
 
-Jira turns read-only. Start from nothing; the same key gives a new 3 hours, counted from the setup (as in the lab this part was ported from):
+The 3 hours count from the **start of Jira**, not from the setup: measured on this part, the licence end moved from 14:30 to
+15:35 (UTC) when the container was restarted at 12:35. So a restart renews it, and your users, tickets and tokens stay:
 
 ```bash
-./scripts/benchctl remove jira-real-state      # removes the containers and data; the mock is untouched
+./scripts/benchctl refresh jira-real-licence   # restarts Jira, waits until it answers, prints the new end time
+```
+
+The same is a button: **☰ Menu → Connections**, row *Jira (real, Data Center)*, **Refresh licence (restarts Jira)**. It asks the
+governor (the page has no Docker access) and needs calm memory (L0-L1); the progress shows in *Governor activity*. Jira is
+unreachable for about a minute while it starts. Do it before the 3 hours end (Jira warns when under 24 hours are left) or after: it
+works either way.
+
+**Automatic.** While the web page runs (`benchctl start`), it reads the licence end once a minute (over HTTP, no Docker) and shows it
+in the Connections row (`licence: valid until 17:42 (in 2 h 55 min)`); `benchctl status` prints the same line. When less than
+**15 minutes** are left, or the licence has already ended, it asks the governor for the same refresh, at most once per 15 minutes,
+and the row says `licence: renewing now`. Change the threshold with `WORKBENCH_JIRA_AUTO_REFRESH=MINUTES` (0 turns it off) in the
+environment of `benchctl start`. It needs the governor at calm levels (L0-L1); otherwise it waits and asks again. Jira restarts
+once about every 2 h 45 min, so a client talking to it sees about a minute of downtime then; turn it off if that matters.
+
+If the refresh says the licence is still not valid, the key file itself has a fixed end date: save a fresh published key in
+`compose/generated/secrets/jira.license`, then start from nothing (this deletes users, tickets and tokens; the mock is untouched):
+
+```bash
+./scripts/benchctl remove jira-real-state
 ./scripts/benchctl start --with jira-real && ./scripts/benchctl setup jira-real
 ```
 
 ## Memory
 
-`benchctl plan --with jira-real` shows the estimate before anything starts (the part adds 3.3 GB: Jira 3 GB, Postgres
-0.25 GB). The governor treats it as class P6, the first thing it stops under pressure. `--addons` and `all` never turn it
+`benchctl plan --with jira-real` shows the estimate before anything starts (the part is expected to use about 2.3 GB: Jira at its 2.1 GB cap, Postgres about 0.15 GB; both are capped at 2.4 GB). The governor treats it as class P6, the first thing it stops under pressure. `--addons` and `all` never turn it
 on: only its name does.
 
 ## What is real and what is not
@@ -56,6 +120,18 @@ Real: Atlassian's code, REST v2, workflow, JQL, custom fields, validation. Not r
 `accountId`), it is one node, and the licence is a test key. Cloud shapes are checked by the recorded contract tests
 (Jira contract tests (issue 229)).
 
+## Faults on the real Jira (scenarios)
+The scenario target `jira-real` makes the real Jira fail in the ways integrations meet (Atlassian's rate-limit page and the community's usual failures), with real behaviour and no proxy. `fault:` is one of:
+
+| fault | what happens | what a client sees |
+|---|---|---|
+| `outage` / `restore` | `docker pause` / `unpause` of the Jira container | calls hang, then time out; then work again |
+| `bad_logins` (`user`, `count`) | wrong-password Basic logins | 401, then 403 with `X-Authentication-Denied-Reason: CAPTCHA_CHALLENGE` (REST cannot solve a CAPTCHA; a personal access token is not affected) |
+| `clear_logins` | zeroes every user's failed-login count in Jira's own table (what an admin's "reset failed login count" does) | the user can log in again |
+| `rate_limit` (`capacity`, `fill_rate`) / `rate_limit_off` | turns Jira's own rate limiting (Administration, Rate limiting) on or off in its tables and bumps the settings version | 429 with `X-RateLimit-Limit/Remaining/FillRate/Interval-Seconds` and `Retry-After`; Jira reloads about once a minute, so the change shows 30 to 60 s later (measured: about 40 s); `myself`, `serverInfo` and `search` are not counted, `project`, `field` and `issue` are |
+
+Run `benchctl scenario run jira-real-outage` or `jira-real-429` or `jira-real-captcha` (needs `jira-real` up). Not built: a real slow or 503 answer, which would need a fault proxy in front of Jira; the mock's `jira` target covers those. A client should send authenticated requests (Basic or session): rate limiting counts per user.
+
 ## Test it
 
 ```bash
@@ -63,7 +139,7 @@ Real: Atlassian's code, REST v2, workflow, JQL, custom fields, validation. Not r
 ./scripts/verify.sh --unit jira_dc --clean    # first remove the real Jira's data
 ```
 
-The live part skips and says where to put the licence when it is missing; with it, it needs about 3.3 GB free and a few minutes.
+The live part skips and says where to put the licence when it is missing; with it, it needs about 2.4 GB free and a few minutes.
 
 ## Ticket automation on both Jiras
 

@@ -159,3 +159,20 @@ Two host-side commands run the automation on either (`--target mock` is the defa
 The mock keeps its own in-process versions (`set jira-activity`, `node_watch.py` in slurmctld); `ticket-watch` reuses
 `node_watch`'s parsing, so the same node states give the same tickets. A test proves the mock and a Data Center shaped fake give
 the same results; the live test `./scripts/verify.sh --unit jira_dc` runs the driver on both real services.
+
+## Confluence pages (issue 289)
+
+The client's Confluence section searches pages by a cluster's tags: a page labelled with the tag's slug, or titled with the tag
+(`type = page AND (label in ("cluster-a") OR title ~ "Cluster A") ORDER BY lastmodified DESC`). The mock answers it on the Jira
+address, `GET /rest/api/search?cql=...` (Data Center style) and `GET /wiki/rest/api/search?cql=...` (Cloud style), with seven
+seeded runbook pages (labels `simulated` - the tag the exported cluster profile carries - `workbench`, `runbook`, ...). Add pages for your own cluster tags:
+
+```bash
+curl -s -X POST 127.0.0.1:8080/sim/pages -d '{"action":"add","title":"cn001 maintenance","labels":["cluster-a"],"space":"OPS","body":"kernel update"}'
+curl -s -X POST 127.0.0.1:8080/sim/pages -d '{"action":"clear"}'   # or "reset" for the seeded set
+```
+
+Supported CQL: `type`, `label`, `title`, `text`, `space`, `lastmodified`, `AND OR NOT ( )`, `=`, `~`, `in`, `ORDER BY lastmodified`.
+Paging is `limit` and `start`; the answer has `_links.base` and, when there is more, `_links.next`. The failure modes of the Jira mock
+(401, 429, 503, slow) apply to it. The real Jira part has no Confluence: it is a separate product (about 2+ GB more) and the client
+only searches pages.

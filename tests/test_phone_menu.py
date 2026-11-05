@@ -1,12 +1,12 @@
-"""The phone menu rule must win over the desktop `.menu` rule that comes later in the stylesheet (#182)."""
+"""The phone menu rule must come after the desktop `.menu` rule, or it never applies (#182, #310)."""
 import re
 from pathlib import Path
 
 HTML = Path("webui/static/index.html").read_text()
 
 
-def test_the_phone_menu_rule_is_more_specific_than_the_desktop_one():
-    phone = re.search(r"@media \(max-width:860px\) \{.*?\n  \}", HTML, re.DOTALL).group(0)
-    assert ".menuwrap .menu {" in phone and "position:fixed" in phone and "overflow-y:auto" in phone
+def test_the_phone_menu_rule_comes_after_the_desktop_one():
     desktop = re.search(r"\n  \.menu \{ position:absolute;[^\n]*", HTML).group(0)
-    assert HTML.index(desktop) > HTML.index(phone), "the plain .menu rule is later: only specificity keeps the phone rule"
+    phone = re.search(r"@media \(max-width:860px\) \{ \.menu \{[^\n]*", HTML).group(0)
+    assert "position:fixed" in phone and "overflow-y:auto" in phone and "max-height" in phone
+    assert HTML.index(phone) > HTML.index(desktop), "an equal-weight rule that comes first loses to the desktop rule"

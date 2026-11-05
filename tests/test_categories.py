@@ -28,7 +28,7 @@ def test_expand_names_items_with_commas_repeats_and_all():
     assert workbench.expand({"simulation": ["all"]}) == ["load", "scenarios"]
     assert workbench.expand({"accounting": ["slurmdbd"]}) == ["accounting"]
     assert workbench.expand({"workload": ["slurm"], "monitoring": ["grafana,prometheus"]}) == []  # always on: nothing to add
-    assert workbench.expand({}, addons=True) == sorted(set(workbench.PARTS) - set(workbench.BY_NAME_ONLY))  # the 3 GB real Jira is not an add-on
+    assert workbench.expand({}, addons=True) == sorted(set(workbench.PARTS) - set(workbench.BY_NAME_ONLY))  # the real Jira is not an add-on
 
 
 def test_expand_says_why_an_item_is_refused():

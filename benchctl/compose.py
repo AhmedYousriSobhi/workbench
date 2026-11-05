@@ -22,8 +22,8 @@ CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {
         "bcm-mock": ("workbench/bcm-mock:dev", 100, 2),
         "jira-mock": ("workbench/jira-mock:dev", 100, 2),
     },
-    # real Jira Data Center and its Postgres (ADR 0026): off by default, about 3 GB, P6 (the first thing the governor stops)
-    "jira-real": {"jira-db": (jira_real.DB_IMAGE, 256, 6), "jira-real": (jira_real.IMAGE, 3072, 6)},
+    # real Jira Data Center and its Postgres (ADR 0026): off by default, about 2.4 GB, P6 (the first thing the governor stops)
+    "jira-real": {"jira-db": (jira_real.DB_IMAGE, jira_real.DB_LIMIT_MB, 6), "jira-real": (jira_real.IMAGE, jira_real.LIMIT_MB, 6)},
     "access": {"login": ("workbench/login:dev", 40, 2)},
     # the tag is replaced from sim.yaml teleport.version (benchctl/teleport.py); the limit is a planning estimate until measured
     "teleport": {"teleport": (f"{teleport.IMAGE}:{teleport.DEFAULT_VERSION}", 256, 2)},
@@ -148,7 +148,8 @@ def _wire_jira_real(services: dict) -> None:
     and memory-limited like everything else; the heap is capped below the container limit so the JVM is not OOM-killed."""
     services["jira-real"].update({
         "ports": [f"127.0.0.1:{jira_real.PORT}:8080"],
-        "environment": {"JVM_MINIMUM_MEMORY": "1024m", "JVM_MAXIMUM_MEMORY": "2048m"},
+        "environment": {"JVM_MINIMUM_MEMORY": f"{jira_real.HEAP_MIN_MB}m", "JVM_MAXIMUM_MEMORY": f"{jira_real.HEAP_MAX_MB}m",
+                        "JVM_RESERVED_CODE_CACHE_SIZE": f"{jira_real.CODE_CACHE_MB}m", "JVM_SUPPORT_RECOMMENDED_ARGS": jira_real.JVM_ARGS},
         "volumes": ["jira-home:/var/atlassian/application-data/jira"],
         "depends_on": {"jira-db": {"condition": "service_healthy"}}})
     services["jira-db"].update({

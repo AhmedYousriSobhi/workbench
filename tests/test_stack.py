@@ -62,6 +62,18 @@ def test_up_starts_in_order_and_waits(tmp_path, monkeypatch):
     assert built == ["cn001"] and started.index("<build>") < started.index("prometheus")  # node-base before its dependants
 
 
+def test_down_passes_the_stop_timeout_only_when_set(monkeypatch):
+    seen = []
+    run = lambda c: seen.append(c) or cp(0)
+    monkeypatch.delenv("WORKBENCH_STOP_TIMEOUT", raising=False)
+    stack.down(runner=run, say=lambda m: None)
+    monkeypatch.setenv("WORKBENCH_STOP_TIMEOUT", "2")
+    stack.down(runner=run, say=lambda m: None)
+    monkeypatch.setenv("WORKBENCH_STOP_TIMEOUT", "x; rm")
+    stack.down(runner=run, say=lambda m: None)
+    assert "-t" not in seen[0] and seen[1][-2:] == ["-t", "2"] and "-t" not in seen[2]
+
+
 def test_down_reports_failure():
     assert not stack.down(runner=lambda c: cp(1, err="boom"), say=lambda m: None)
 
