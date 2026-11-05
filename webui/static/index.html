@@ -360,24 +360,23 @@
   #flow .lane.on { filter:drop-shadow(0 0 4px currentColor); }
   @media (prefers-reduced-motion:reduce) { #flow .lane.on { filter:none; } }
 
-  /* 2.5D game style (#320): the same SVG, drawn as raised slabs on a tiled floor. CSS only (filters + gradients), no WebGL;
-     flat view stays one click away and is the default under reduced motion and on phones. */
-  #trafficpanel[data-view="iso"] { --ext:color-mix(in srgb,var(--bg) 55%,#000); --glow:var(--accent); background:radial-gradient(120% 90% at 50% 40%,color-mix(in srgb,var(--accent) 9%,var(--panel)),var(--bg)); }
+  /* 2.5D game style (#320), kept calm: a faint floor, one short side face per slab, soft shadows, glow only where something is live or wrong.
+     CSS only (filters + gradients), no WebGL; flat view stays one click away and is the default under reduced motion. */
+  #trafficpanel[data-view="iso"] { --ext:color-mix(in srgb,var(--bg) 78%,var(--line)); --glow:var(--accent); }
   #trafficpanel[data-view="iso"] .flowscroll { border-radius:12px; background:
-      linear-gradient(30deg,transparent 47%,color-mix(in srgb,var(--accent) 16%,transparent) 48.5%,transparent 50%) 0 0/64px 37px,
-      linear-gradient(-30deg,transparent 47%,color-mix(in srgb,var(--accent) 16%,transparent) 48.5%,transparent 50%) 0 0/64px 37px,
-      radial-gradient(90% 80% at 50% 45%,transparent 40%,rgba(0,0,0,.35)); }
-  #trafficpanel[data-view="iso"] #flow .frame { fill:color-mix(in srgb,var(--panel) 82%,var(--accent)); stroke:color-mix(in srgb,var(--accent) 45%,var(--line)); stroke-width:2;
-      filter:drop-shadow(2px 2px 0 var(--ext)) drop-shadow(4px 4px 0 var(--ext)) drop-shadow(5px 5px 0 var(--ext)) drop-shadow(10px 12px 10px rgba(0,0,0,.5)); }
+      linear-gradient(30deg,transparent 48%,color-mix(in srgb,var(--line) 45%,transparent) 49.2%,transparent 50.4%) 0 0/72px 42px,
+      linear-gradient(-30deg,transparent 48%,color-mix(in srgb,var(--line) 45%,transparent) 49.2%,transparent 50.4%) 0 0/72px 42px,
+      color-mix(in srgb,var(--bg) 70%,var(--panel)); }
+  #trafficpanel[data-view="iso"] #flow .frame { fill:color-mix(in srgb,var(--panel) 92%,var(--accent)); stroke:color-mix(in srgb,var(--line) 80%,var(--accent)); stroke-width:1.5;
+      filter:drop-shadow(3px 3px 0 var(--ext)) drop-shadow(6px 8px 8px rgba(0,0,0,.22)); }
   #trafficpanel[data-view="iso"] #flow .blk, #trafficpanel[data-view="iso"] #flow .nd, #trafficpanel[data-view="iso"] #flow .chipbg {
-      filter:drop-shadow(1px 1px 0 var(--ext)) drop-shadow(2px 2px 0 var(--ext)) drop-shadow(3px 3px 0 var(--ext)) drop-shadow(4px 4px 0 var(--ext)) drop-shadow(6px 8px 6px rgba(0,0,0,.55)); }
-  #trafficpanel[data-view="iso"] #flow .blk.up, #trafficpanel[data-view="iso"] #flow .nd.ok { filter:drop-shadow(1px 1px 0 var(--ext)) drop-shadow(2px 2px 0 var(--ext)) drop-shadow(3px 3px 0 var(--ext)) drop-shadow(4px 4px 0 var(--ext)) drop-shadow(0 0 7px color-mix(in srgb,var(--ok) 70%,transparent)); }
-  #trafficpanel[data-view="iso"] #flow .blk.down, #trafficpanel[data-view="iso"] #flow .nd.fault { filter:drop-shadow(1px 1px 0 var(--ext)) drop-shadow(2px 2px 0 var(--ext)) drop-shadow(3px 3px 0 var(--ext)) drop-shadow(4px 4px 0 var(--ext)) drop-shadow(0 0 9px color-mix(in srgb,var(--bad) 80%,transparent)); }
-  #trafficpanel[data-view="iso"] #flow .lane { stroke-width:3; filter:drop-shadow(0 5px 0 rgba(0,0,0,.45)); }
-  #trafficpanel[data-view="iso"] #flow .lane.on { stroke-width:4.5; filter:drop-shadow(0 5px 0 rgba(0,0,0,.45)) drop-shadow(0 0 6px currentColor); }
-  #trafficpanel[data-view="iso"] #flow .pk, #trafficpanel[data-view="iso"] #flow .dotc, #trafficpanel[data-view="iso"] #flow .dotf { filter:drop-shadow(0 0 5px var(--glow)) drop-shadow(0 6px 3px rgba(0,0,0,.5)); }
-  #trafficpanel[data-view="iso"] #flow .hit:hover rect, #trafficpanel[data-view="iso"] #flow .hit:focus-visible rect { stroke-width:3.5; }
-  #trafficpanel[data-view="iso"] #flow .kbar { filter:drop-shadow(0 0 4px currentColor); }
+      filter:drop-shadow(2px 2px 0 var(--ext)) drop-shadow(3px 5px 4px rgba(0,0,0,.25)); }
+  #trafficpanel[data-view="iso"] #flow .blk.up, #trafficpanel[data-view="iso"] #flow .nd.ok { filter:drop-shadow(2px 2px 0 var(--ext)) drop-shadow(3px 5px 4px rgba(0,0,0,.25)); }
+  #trafficpanel[data-view="iso"] #flow .blk.down, #trafficpanel[data-view="iso"] #flow .nd.fault { filter:drop-shadow(2px 2px 0 var(--ext)) drop-shadow(0 0 6px color-mix(in srgb,var(--bad) 55%,transparent)); }
+  #trafficpanel[data-view="iso"] #flow .lane { filter:none; }
+  #trafficpanel[data-view="iso"] #flow .lane.on { filter:drop-shadow(0 0 3px currentColor); }
+  #trafficpanel[data-view="iso"] #flow .pk, #trafficpanel[data-view="iso"] #flow .dotc, #trafficpanel[data-view="iso"] #flow .dotf { filter:drop-shadow(0 0 3px var(--glow)); }
+  #trafficpanel[data-view="iso"] #flow .hit:hover rect, #trafficpanel[data-view="iso"] #flow .hit:focus-visible rect { stroke-width:3; }
 </style>
 </head>
 <body>
