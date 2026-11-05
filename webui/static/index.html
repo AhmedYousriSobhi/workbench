@@ -326,6 +326,13 @@
   #flow[data-fit] text { font-size:calc(var(--u,1.5) * 14px); font-weight:600; } #flow[data-fit] text.sub { font-size:calc(var(--u,1.5) * 11.5px); font-weight:400; } #flow[data-fit] .ftitle { font-size:calc(var(--u,1.5) * 11px); font-weight:700; }
   #flow[data-fit] .ndt { font-size:calc(var(--u,1.5) * 11px); } #flow[data-fit] .ndt.cl { font-size:calc(var(--u,1.5) * 13px); } #flow[data-fit=n] .ndt.cl { font-size:calc(var(--u,1.5) * 10.5px); } #flow[data-fit] text.elab { font-size:calc(var(--u,1.5) * 11.5px); } #flow[data-fit] .badge { font-size:calc(var(--u,1.5) * 12px); }
   .node.sel { outline:2px solid var(--accent); outline-offset:-2px; }
+  /* a closer look at a wiring diagram: plain labels, status in a circle on the tile, tinted status pills, one line per node, a segmented switch (#319) */
+  #flow .elbg { stroke:none; opacity:.92; } #flow[data-fit] text.elab { font-weight:500; }
+  #flow .ndc { fill:none; stroke-width:1.6; stroke:var(--dim); } #flow .ndc.ok { stroke:var(--ok); } #flow .ndc.fault { stroke:var(--bad); } #flow .ndc.warn { stroke:var(--warn); } #flow .ndg { fill:var(--fg); font-weight:700; }
+  #flow[data-fit] .ndg { font-size:calc(var(--u,1.5) * 10px); }
+  .pillchip.good { background:color-mix(in srgb,var(--ok) 13%,transparent); border-color:color-mix(in srgb,var(--ok) 45%,transparent); } .pillchip.warn { background:color-mix(in srgb,var(--warn) 13%,transparent); border-color:color-mix(in srgb,var(--warn) 45%,transparent); } .pillchip.bad { background:color-mix(in srgb,var(--bad) 13%,transparent); border-color:color-mix(in srgb,var(--bad) 45%,transparent); }
+  .itabs { background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:3px; gap:2px; width:fit-content; } .itabs .btn { border:0; background:transparent; border-radius:8px; } .itabs .btn[aria-pressed=true] { background:var(--panel); box-shadow:0 1px 3px rgba(0,0,0,.25); }
+  @media (min-width:1100px) { .nodesmain .er.node { grid-template-columns:20px minmax(64px,auto) minmax(0,1fr) auto; min-height:34px; } .nodesmain .er.node .st { grid-column:3; } .nodesmain .er.node .info { grid-column:4; white-space:nowrap; text-align:right; justify-content:flex-end; } .nodesmain .er.node .info .meter { display:none; } }
   #trafficpanel { order:0; } #nodesmain { order:2; } #inspector { order:3; } .ipane#dock { display:block; } .ipane#dock[hidden] { display:block; }  /* narrow: one column, the timeline under the list */
   @media (min-width:1100px) {
     #nodeswrap { display:grid; grid-template-columns:minmax(0,1.75fr) minmax(0,1fr); grid-template-rows:minmax(0,1fr) minmax(0,1fr); grid-template-areas:"canvas list" "canvas side"; gap:var(--sp4); height:calc(100vh - 168px); min-height:600px; align-items:stretch; }
@@ -969,7 +976,17 @@ const curve = (a, b) => { const dx = (b.x - a.x) * 0.5; return [a, { x: a.x + dx
 const poly = pts => ({ poly: pts });  // straight segments (the service lines run along a channel); position by distance, like a curve by t
 const atPoly = (pts, t) => { const L = pts.slice(1).map((q, i) => Math.hypot(q.x - pts[i].x, q.y - pts[i].y)), tot = L.reduce((a, b) => a + b, 0); let d = Math.min(Math.max(t, 0), 1) * tot, i = 0; while (i < L.length - 1 && d > L[i]) d -= L[i++]; const k = L[i] ? d / L[i] : 0; return { x: pts[i].x + (pts[i + 1].x - pts[i].x) * k, y: pts[i].y + (pts[i + 1].y - pts[i].y) * k }; };
 const at = (b, t) => { if (b.poly) return atPoly(b.poly, t); const [p0, p1, p2, p3] = b; const u = 1 - t, f = (c) => u ** 3 * p0[c] + 3 * u * u * t * p1[c] + 3 * u * t * t * p2[c] + t ** 3 * p3[c]; return { x: f('x'), y: f('y') }; };
-const dpath = b => b.poly ? 'M' + b.poly.map(q => `${q.x} ${q.y}`).join(' L') : `M${b[0].x} ${b[0].y} C${b[1].x} ${b[1].y} ${b[2].x} ${b[2].y} ${b[3].x} ${b[3].y}`;
+function roundedPoly(pts, r = 16) {  // straight segments joined by small arcs, like a wiring diagram
+  let d = `M${pts[0].x} ${pts[0].y}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const a = pts[i - 1], b = pts[i], c = pts[i + 1], l1 = Math.hypot(b.x - a.x, b.y - a.y), l2 = Math.hypot(c.x - b.x, c.y - b.y);
+    if (!l1 || !l2) { d += ` L${b.x} ${b.y}`; continue; }
+    const k = Math.min(r, l1 / 2, l2 / 2);
+    d += ` L${b.x + (a.x - b.x) * k / l1} ${b.y + (a.y - b.y) * k / l1} Q${b.x} ${b.y} ${b.x + (c.x - b.x) * k / l2} ${b.y + (c.y - b.y) * k / l2}`;
+  }
+  const z = pts[pts.length - 1]; return d + ` L${z.x} ${z.y}`;
+}
+const dpath = b => b.poly ? roundedPoly(b.poly) : `M${b[0].x} ${b[0].y} C${b[1].x} ${b[1].y} ${b[2].x} ${b[2].y} ${b[3].x} ${b[3].y}`;
 function nodeList() { try { return lastCluster ? JSON.parse(lastCluster).nodes : []; } catch (e) { return []; } }
 const SVC_CONN = { 'bmc-farm': 'bmc', 'bcm-mock': 'bcm', 'jira-mock': 'jira', 'jira-real': 'jira-real', 'gpu-exporter': 'gpu', 'teleport': 'teleport' };  // diagram box -> Connections row
 // hover tip and click pop-up on every part of the diagram (#192). The tip is one line of state; the pop-up has the address, the command and the actions.
@@ -1112,8 +1129,8 @@ function tileGrid(nodes, cols, tw, th, top = 52) {  // node tiles by group, rela
 }
 function flowGeom(nodes, acc, svcs, a, col, u) {
   const M = 8, nS = svcs.length, P = { col, u, tb: 26 }, W = (t, k, w) => textW(t, k, u, w);
-  const tw0 = Math.max(64, Math.ceil(Math.max(0, ...nodes.map(n => W(n.name, 'tile', 600))) + 16)), tn = UF.tile * u;
-  const th0 = Math.ceil(10 + tn * 0.9 + tn * 1.3 + 10), thFacts = Math.ceil(th0 + tn * 1.35), twFacts = Math.ceil(W('99 °C · 8/8 GPU', 'sub') + 14);
+  const tn = UF.tile * u, tw0 = Math.max(64, Math.ceil(Math.max(0, ...nodes.map(n => W(n.name, 'tile', 600))) + 16 + tn * 1.7));  // room for the name and the status circle
+  const th0 = Math.ceil(10 + tn * 0.9 + tn * 1.3 + 10), thFacts = Math.ceil(th0 + tn * 1.35), twFacts = Math.ceil(W('8/8 GPU', 'sub') + 16);
   P.tileM = { y1: 8 + tn * 0.9, y2: 8 + tn * 0.9 + tn * 1.3, y3: 8 + tn * 0.9 + tn * 2.6 };
   if (col) {  // top to bottom: Clients row, Access row, Cluster nodes; the Services column sits at the right and its lines run down a gutter and enter from the left
     const tb = 10 + UF.title * u * 0.95, chipH = Math.ceil(UF.chip * u * 1.3 + 22), R1 = Math.ceil(tb + 12 + chipH + 14), GAPY = 64, GW = 110;
@@ -1260,17 +1277,19 @@ function buildFlow() {
     if (item[0] === 'label') { g.append(sv('text', { class: 'ftitle', x: P.cluster.x + 24, y: P.cluster.y + item[2] + 4 }, item[1] === 'gpu' ? 'GPU nodes' : 'Compute nodes')); continue; }
     const [, n, rx, ry] = item, x = P.cluster.x + rx, ty = P.cluster.y + ry, glyph = STATE_ICON[n.state] || '?';
     const tg = asButton(sv('g', { id: 'nd-' + n.name }), `${n.name}: ${n.label}. Details`, () => openPop(tg, 'node', n.name), () => { const c = nodeList().find(m => m.name === n.name) || n; return [`${c.name} · ${c.label}`, 'click for how to reach it and its actions']; });
-    tg.append(sv('rect', { class: 'nd ' + n.state, x, y: ty, width: P.tw, height: P.th, rx: 7 }), sv('text', { class: 'ndt', x: x + 8, y: ty + tm.y1 }, n.name), sv('text', { class: 'ndt', x: x + 8, y: ty + tm.y2 }, glyph), sv('circle', { class: 'busy' + (n.gpus_busy > 0 ? ' on' : ''), cx: x + P.tw - 10, cy: ty + 12, r: 4.5 }));
-    if (P.th >= tm.y3 + 10) tg.append(sv('text', { class: 'sub', x: x + 8, y: ty + tm.y3 }, tileFacts(n)));  // a large tile has room for real numbers from the snapshot
+    const [temp, gpu] = tileFacts(n), cr = UF.tile * u * 0.8, ccx = x + P.tw - 8 - cr, ccy = ty + tm.y1 - UF.tile * u * 0.3;
+    tg.append(sv('rect', { class: 'nd ' + n.state, x, y: ty, width: P.tw, height: P.th, rx: 7 }), sv('text', { class: 'ndt', x: x + 8, y: ty + tm.y1 }, n.name), sv('text', { class: 'ndg', x: ccx, y: ccy + UF.tile * u * 0.36, 'text-anchor': 'middle' }, glyph),
+      sv('circle', { class: 'busy' + (n.gpus_busy > 0 ? ' on' : ''), cx: x + P.tw - 11, cy: ty + P.th - 11, r: 4.5 }), sv('text', { class: 'sub', x: x + 8, y: ty + tm.y2 }, temp), sv('circle', { class: 'ndc ' + n.state, cx: ccx, cy: ccy, r: cr }));
+    if (P.th >= tm.y3 + 10) tg.append(sv('text', { class: 'sub', x: x + 8, y: ty + tm.y3 }, gpu));  // a tall tile has room for the GPU load
     g.append(tg); tiles[n.name] = { x, y: ty, w: P.tw, h: P.th, g: tg };
   }
   g.append(labels, sv('g', { id: 'dots' })); paintBlocks();
 }
-const tileFacts = n => [n.temp != null ? `${n.temp} °C` : '', n.gpus ? `${n.gpus_busy || 0}/${n.gpus} GPU` : ''].filter(Boolean).join(' · ');
+const tileFacts = n => [n.temp != null ? `${n.temp} °C` : '', n.gpus ? `${n.gpus_busy || 0}/${n.gpus} GPU` : ''];
 function paintTiles() {  // node states change without a rebuild; a different node list does rebuild
   const nodes = nodeList(), sig = flowSig(nodes);
   if (sig !== flowNodes || fitKey() !== flowFitKey) { buildFlow(); return; }
-  for (const n of nodes) { const t = tiles[n.name]; if (t) { t.g.setAttribute('aria-label', `${n.name}: ${n.label}. Details`); t.g.children[0].setAttribute('class', 'nd ' + n.state); t.g.children[2].textContent = STATE_ICON[n.state] || '?'; t.g.children[3].setAttribute('class', 'busy' + (n.gpus_busy > 0 ? ' on' : '')); if (t.g.children[4]) t.g.children[4].textContent = tileFacts(n); } }
+  for (const n of nodes) { const t = tiles[n.name]; if (t) { t.g.setAttribute('aria-label', `${n.name}: ${n.label}. Details`); t.g.children[0].setAttribute('class', 'nd ' + n.state); t.g.children[2].textContent = STATE_ICON[n.state] || '?'; t.g.children[3].setAttribute('class', 'busy' + (n.gpus_busy > 0 ? ' on' : '')); const [fa, fb] = tileFacts(n); t.g.children[4].textContent = fa; if (t.g.children[6]) t.g.children[6].textContent = fb; t.g.children[5].setAttribute('class', 'ndc ' + n.state); } }
 }
 function paintBlocks() {
   if (!flowSnap || !svcPos['bmc-farm']) return;
