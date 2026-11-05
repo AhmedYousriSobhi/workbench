@@ -164,7 +164,7 @@
     .rail.left { position:static; }
     .top { padding:var(--sp3) var(--sp4); } .top h1 { width:100%; }
     .status { flex-wrap:wrap; width:100%; }
-    .menu { position:fixed; left:16px; right:16px; top:auto; width:auto; margin-top:6px; }
+    .menu { position:fixed; left:16px; right:16px; top:auto; bottom:16px; width:auto; margin-top:0; max-height:calc(100vh - 32px); overflow-y:auto; }  /* a sheet on the phone: always on screen, however tall the top bar wraps (issue 310) */
   }
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
   /* calm pass (#121): more space, fewer boxes, one primary action per area */
