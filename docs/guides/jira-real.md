@@ -66,6 +66,20 @@ importers, automation, mobile) cannot go: with either group off, Jira's own REST
 start (`/status` says `ERROR`; the way back is `delete from pluginstate` in the Postgres container). So there is no plugin set that
 saves memory, and the part does not offer one.
 
+## On the page
+
+With the part built, the Infrastructure architecture draws a **Jira DC** box next to **Jira** (the simulated one) under *Services: what
+clients call*. The word "mock" is not in the boxes: **colour says it**, and the colour legend under the diagram explains it.
+
+- **What it is:** violet with a dashed stripe = simulated; teal with a solid stripe = real. (Hover or click for the words.)
+- **State (the border):** green = up, red dashed = not reachable, grey dotted = off.
+- **On top, and they combine:** a pulsing blue dot = traffic now (for a node: GPU work running); a red ring with a red triangle = a
+  fault applied in the last 30 seconds. One box can be up, busy and faulted at the same time.
+
+The real Jira has **no request counter** (only the simulated parts count requests), so its box shows up or down and says
+`no counter`; its dot never pulses. Click a box for its address, the command to test it and the licence line (Connections).
+Without the part the box is not drawn.
+
 ## When the 3 hours are up
 
 The 3 hours count from the **start of Jira**, not from the setup: measured on this part, the licence end moved from 14:30 to

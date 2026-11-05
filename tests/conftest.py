@@ -10,6 +10,7 @@ def _no_teleport_from_this_machine(monkeypatch):
     except ImportError:
         return
     monkeypatch.setattr(cluster, "teleport_built", lambda: False)
+    monkeypatch.setattr(cluster, "jira_real_built", lambda: False)  # same for the real Jira box
 
 
 @pytest.fixture(autouse=True)
