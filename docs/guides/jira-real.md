@@ -71,7 +71,7 @@ saves memory, and the part does not offer one.
 With the part built, the Infrastructure architecture draws a **Jira DC** box next to **Jira** (the simulated one) under *Services: what
 clients call*. The word "mock" is not in the boxes: **colour says it**, and the colour legend under the diagram explains it.
 
-- **What it is:** violet with a dashed stripe = simulated; teal with a solid stripe = real. (Hover or click for the words.)
+- **What it is:** violet with a dashed stripe = simulated; blue with a solid stripe = real. (Hover or click for the words.)
 - **State (the border):** green = up, red dashed = not reachable, grey dotted = off.
 - **On top, and they combine:** a pulsing blue dot = traffic now (for a node: GPU work running); a red ring with a red triangle = a
   fault applied in the last 30 seconds. One box can be up, busy and faulted at the same time.

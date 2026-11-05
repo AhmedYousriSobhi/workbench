@@ -459,3 +459,7 @@ def test_diagram_has_a_colour_legend_and_combinable_overlays(ui):
                    b"They combine", b"const REAL_SERVICES", b"'ff-' + k", b"'fx-' + k", b"'fa-' + k"):
         assert needle in page, needle
     assert b"'Jira mock'" not in page and b"'BCM mock'" not in page  # the word is not in the boxes: colour says it
+
+
+def test_state_update_keeps_the_kind_class_of_a_service_box(ui):
+    assert b"(k === 'teleport' ? '' : REAL_SERVICES.has(k) ? ' real' : ' sim')" in req(ui, "/")[1]  # repainting the state must not drop the colour of the kind

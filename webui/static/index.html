@@ -10,14 +10,14 @@
 <style>
   :root { color-scheme: light dark;
     --bg:#f6f8fa; --panel:#fff; --line:#d0d7de; --fg:#1f2328; --dim:#57606a; --accent:#0969da; --on-accent:#fff;
-    --ok:#1a7f37; --warn:#9a6700; --bad:#cf222e; --pending:#57606a; --brand:#0b8f80; --sim:#8250df; --real:#0a7a8f;
+    --ok:#1a7f37; --warn:#9a6700; --bad:#cf222e; --pending:#57606a; --brand:#0b8f80; --sim:#8250df; --real:#0969da;
     --L0:#1a7f37; --L1:#8a6d0b; --L2:#9a5b00; --L3:#bc4c00; --L4:#cf222e; --L5:#a40e26; --none:#57606a; }
   :root[data-theme=light] { color-scheme: light; }
   :root[data-theme=dark] { color-scheme: dark; }
   @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --bg:#0d1117; --panel:#161b22; --line:#30363d; --fg:#e6edf3; --dim:#9da7b3; --accent:#58a6ff; --on-accent:#0d1117;
-    --ok:#3fb950; --warn:#e3b341; --bad:#ff7b72; --pending:#9da7b3; --brand:#2fc4b2; --sim:#bc8cff; --real:#39c5cf; --L0:#238636; --L1:#9e6a03; --L2:#b35900; --L3:#c2561b; --L4:#da3633; --L5:#b62324; --none:#484f58; } }
+    --ok:#3fb950; --warn:#e3b341; --bad:#ff7b72; --pending:#9da7b3; --brand:#2fc4b2; --sim:#bc8cff; --real:#4493f8; --L0:#238636; --L1:#9e6a03; --L2:#b35900; --L3:#c2561b; --L4:#da3633; --L5:#b62324; --none:#484f58; } }
   :root[data-theme=dark] { --bg:#0d1117; --panel:#161b22; --line:#30363d; --fg:#e6edf3; --dim:#9da7b3; --accent:#58a6ff; --on-accent:#0d1117;
-    --ok:#3fb950; --warn:#e3b341; --bad:#ff7b72; --pending:#9da7b3; --brand:#2fc4b2; --sim:#bc8cff; --real:#39c5cf; --L0:#238636; --L1:#9e6a03; --L2:#b35900; --L3:#c2561b; --L4:#da3633; --L5:#b62324; --none:#484f58; }
+    --ok:#3fb950; --warn:#e3b341; --bad:#ff7b72; --pending:#9da7b3; --brand:#2fc4b2; --sim:#bc8cff; --real:#4493f8; --L0:#238636; --L1:#9e6a03; --L2:#b35900; --L3:#c2561b; --L4:#da3633; --L5:#b62324; --none:#484f58; }
   :root { --sp1:4px; --sp2:8px; --sp3:12px; --sp4:16px; --sp5:24px; --side:208px; --shadow:0 1px 2px rgba(31,35,40,.06); --sel:rgba(9,105,218,.10); }
   :root[data-theme=dark] { --shadow:none; --sel:rgba(88,166,255,.14); }
   @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --shadow:none; --sel:rgba(88,166,255,.14); } }
@@ -117,9 +117,9 @@
   .toast { position:sticky; top:8px; z-index:5; background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--accent); padding:10px 14px; border-radius:6px; margin-bottom:12px; }
   #flow { width:100%; max-width:520px; display:block; margin:6px auto; }
   #flow .blk { fill:var(--panel); stroke:var(--line); stroke-width:2; } #flow .blk.up { stroke:var(--ok); } #flow .blk.down { stroke:var(--bad); stroke-dasharray:5 4; } #flow .blk.off { stroke:var(--line); stroke-dasharray:3 5; opacity:.8; }
-  /* a box says four independent things, so they combine: kind = tint + left stripe (violet simulated, teal real), state = border,
+  /* a box says four independent things, so they combine: kind = tint + left stripe (violet simulated, blue real), state = border,
      traffic = pulsing dot, fault = red ring and triangle (a service can be up, busy and faulted at once) */
-  #flow .blk.sim { fill:color-mix(in srgb,var(--sim) 18%,var(--panel)); } #flow .blk.real { fill:color-mix(in srgb,var(--real) 20%,var(--panel)); }
+  #flow .blk.sim { fill:color-mix(in srgb,var(--sim) 18%,var(--panel)); } #flow .blk.real { fill:color-mix(in srgb,var(--real) 26%,var(--panel)); }
   #flow .kbar { stroke-width:6; stroke-linecap:butt; fill:none; } #flow .kbar.sim { stroke:var(--sim); stroke-dasharray:5 3; } #flow .kbar.real { stroke:var(--real); }
   #flow .fring { fill:none; stroke:var(--bad); stroke-width:2.5; opacity:0; } #flow .fring.on { opacity:1; }
   #flow .badge { font:700 13px system-ui,sans-serif; opacity:0; } #flow .badge.on { opacity:1; } #flow .badge.act { fill:var(--accent); animation:pulse 1.2s ease-in-out infinite; } #flow .badge.flt { fill:var(--bad); }
@@ -1077,7 +1077,7 @@ function paintBlocks() {
   let sent = 0; const allOff = !Object.values(flowSnap.reachable).some(Boolean);
   for (const [k] of svcList()) {
     const up = flowSnap.reachable[k]; sent += flowSnap.totals[k] || 0;
-    $('fb-' + k).setAttribute('class', 'blk ' + (up ? 'up' : allOff ? 'off' : 'down'));  // everything off = stack not running: stay calm, not red
+    $('fb-' + k).setAttribute('class', 'blk ' + (up ? 'up' : allOff ? 'off' : 'down') + (k === 'teleport' ? '' : REAL_SERVICES.has(k) ? ' real' : ' sim'));  // everything off = stack not running: stay calm, not red
     $('fs-' + k).textContent = up ? (k === 'jira-real' ? '✓ up · no counter' : '✓ up · ' + (rate[k] || 0) + (k === 'teleport' ? ' conn/min' : ' req/min')) : allOff ? '– offline' : '✗ not reachable';
     $('ln-' + k).setAttribute('class', 'lane' + (rate[k] ? ' on' : ''));
     const flt = recent.some(r => r.fault && r.to === k && r.t > Date.now() - 30000);  // a fault was applied to it in the last 30 s

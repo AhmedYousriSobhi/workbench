@@ -65,7 +65,7 @@ Read it from left to right:
 A login node that is in the selection but not running (never built, or stopped) is drawn **dashed with "✗ not running"**: the page checks whether anything answers on its port 22, so the diagram shows what runs, not only what you picked. With the whole stack down they all look dim instead.
 
 **Colours.** The boxes do not say *mock*; colour does, and the legend under the diagram repeats it. Violet with a dashed stripe is simulated,
-teal with a solid stripe is real. The **border** is the state (green up, red dashed not reachable, grey dotted off). Two overlays sit on top and
+blue with a solid stripe is real. The **border** is the state (green up, red dashed not reachable, grey dotted off). Two overlays sit on top and
 combine with everything else: a pulsing blue dot means traffic now (on a node tile: GPU work running), a red ring with a red triangle means a fault
 was applied in the last 30 seconds. So one box can be up, busy and faulted at the same time. The real Jira has no request counter, so it shows up or down only.
 
