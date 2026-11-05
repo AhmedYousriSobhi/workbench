@@ -159,6 +159,8 @@ down by not answering, which no page button or scenario step reports.
 
 **Power off** on the page (or `benchctl set node cn001 off`, which does the same) sets the BMC, BCM and GPU metrics and freezes the node's container: its `slurmd` stops answering and
 `slurmctld` marks it `down*` (Not responding) by itself after about 30 s (a client then shows it on its next poll: 60 s with the Slurm section open and the window focused, 5 min otherwise), which is what a monitoring client sees on a real
+
+The timings above (`SlurmdTimeout=15`, health check every 30 s) are the defaults and what you test a client against. The repository's own live tests shorten them (`WORKBENCH_TEST_TIMERS=1`: 10 s and 15 s) to finish sooner; `up` prints a note when that is on. Never set it while testing a client.
 dead node; the BMC reports it off and its GPU metrics disappear. **Power on** (`set node cn001 on`, or the page's button) reverses all of that and thaws it and Slurm returns
 it after its next answer. Use `set node NAME down` only to set the state by hand.
 

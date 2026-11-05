@@ -11,7 +11,7 @@ import urllib.error
 from collections.abc import Callable
 from pathlib import Path
 
-from . import addressing, checks, compose, jira_real, logins, teleport, workbench
+from . import addressing, checks, compose, jira_real, logins, slurmconf, teleport, workbench
 
 COMPOSE_FILE = Path("compose/generated/docker-compose.yml")
 PROJECT = "workbench"
@@ -136,6 +136,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     except logins.LoginError as e:
         say(f"FAILED login nodes: {e}")
         return False
+    if slurmconf.test_timers_on():
+        say(f"NOTE test timers are on ({slurmconf.TEST_TIMERS_ENV}=1): {slurmconf.timers()}; not for client testing")
     conf = COMPOSE_FILE.parent / "slurm" / "slurm.conf"  # a changed file needs a controller restart (it only rereads at start)
     old_conf = conf.read_text() if conf.is_file() else None
     path = compose.write(data, sim=sim, compute_nodes=prof.get("compute_nodes"))

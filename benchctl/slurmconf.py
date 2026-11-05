@@ -1,10 +1,23 @@
 """Generate slurm.conf and gres.conf from sim.yaml so node names agree everywhere (SPEC section 3)."""
+import os
 import secrets
 from pathlib import Path
 
 from .nodes import node_names
 
 CTLD = "slurmctld"
+TEST_TIMERS_ENV = "WORKBENCH_TEST_TIMERS"
+DEFAULT_TIMERS = {"SlurmdTimeout": 15, "HealthCheckInterval": 30}  # a frozen node is down* in about 30 s; NHC drains within 30 s
+TEST_TIMERS = {"SlurmdTimeout": 10, "HealthCheckInterval": 15}  # opt-in, for live tests only (issue 236)
+
+
+def test_timers_on() -> bool:
+    return os.environ.get(TEST_TIMERS_ENV) == "1"
+
+
+def timers() -> dict[str, int]:
+    """The Slurm timers the generated slurm.conf uses. Shorter ones only when WORKBENCH_TEST_TIMERS=1; never for client testing."""
+    return dict(TEST_TIMERS if test_timers_on() else DEFAULT_TIMERS)
 
 
 def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool = False) -> str:
@@ -12,8 +25,9 @@ def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool 
     names = node_names(sim, compute_override)
     compute = [n for n, k in names if k == "compute"]
     gpu = [n for n, k in names if k == "gpu"]
+    t = timers()
     lines = [
-        "# GENERATED from sim.yaml by `benchctl compose`; do not edit.",
+        "# GENERATED from sim.yaml by `benchctl compose`; do not edit." + (" TEST TIMERS ON (WORKBENCH_TEST_TIMERS=1)." if test_timers_on() else ""),
         "ClusterName=workbench",
         f"SlurmctldHost={CTLD}",
         "AuthType=auth/munge",
@@ -32,11 +46,11 @@ def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool 
         "SelectTypeParameters=CR_Core_Memory",
         "ReturnToService=1",  # 2 would return a node set DOWN by an admin (Power off) as soon as slurmd answers a ping
         "SlurmctldTimeout=60",
-        "SlurmdTimeout=15",  # a node that stops answering is DOWN* (Not responding) after about 30 s
+        f"SlurmdTimeout={t['SlurmdTimeout']}",  # a node that stops answering is DOWN* (Not responding) after about twice this
         "MessageTimeout=5",  # the default 10 made each ping to a frozen node block an agent for 21 s: DOWN took ~85 s (#154)
         "GresTypes=gpu",
         # Node health check (images/node-base/nhc): drains a node whose GPU count, XID state, IB ports or NIC are wrong.
-        "HealthCheckProgram=/usr/local/sbin/nhc", "HealthCheckInterval=30", "HealthCheckNodeState=ANY",
+        "HealthCheckProgram=/usr/local/sbin/nhc", f"HealthCheckInterval={t['HealthCheckInterval']}", "HealthCheckNodeState=ANY",
         # The same checks before a job starts (a failure drains the node and requeues the job) and after it ends.
         "Prolog=/usr/local/sbin/nhc-prolog", "Epilog=/usr/local/sbin/nhc-epilog",
         # slurmrestd authenticates callers with JWT; the key is baked into the lab image (ADR 0002).
