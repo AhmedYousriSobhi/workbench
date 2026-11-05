@@ -26,6 +26,8 @@ ticket-bot) are reported as **skipped**, not failed. From the web page ([chapter
 | `jira-429` | Jira rate-limits the next 5 calls (429 with Retry-After); the app must back off |
 | `jira-outage` | Jira answers 503 to the next 20 calls, then recovers |
 | `jira-flap` | Jira is refused, rate limited and unavailable in turn, each time healthy again, with tickets before and after |
+| `jira-real-outage` | the **real** Jira (`jira-real`, part must be running) hangs for 60 s (container paused, calls time out), then answers again |
+| `jira-real-captcha` | six wrong-password logins make the real Jira answer 401 then 403 `CAPTCHA_CHALLENGE` (what an integration meets after a bad password), cleared after 60 s |
 | `ticket-lifecycle` | one ticket: Open, In Progress, a note, Resolved, Closed |
 | `drain-ticket` | Slurm drains `cn003`; a ticket naming the cluster and the node is filed, worked, and resolved when the node resumes |
 | `ticket-wave` | twelve tickets at once in every status and priority (see the [tickets guide](../guides/jira-tickets.md)) |

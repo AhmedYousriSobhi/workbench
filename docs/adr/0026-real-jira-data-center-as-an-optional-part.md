@@ -36,3 +36,6 @@ not Cloud (Cloud's ADF comment bodies, `accountId`, `search/jql` paging stay che
 - Atlassian ended new Data Center sales on 30 March 2026 and ends Data Center in 2029; the test key and the image still
   work today. If either disappears the part is dropped and this ADR superseded.
 - Not exercised here: Jira Cloud, a licensed Jira, clustering, the Marketplace.
+
+## Addendum (issue 303): faults on the real Jira
+The real Jira has no `/sim/failure`. Scenarios reach it through the `jira-real` target with real faults only: `outage`/`restore` (`docker pause`), `bad_logins` (wrong-password Basic logins, which really give 401 then 403 `CAPTCHA_CHALLENGE`) and `clear_logins` (failed-login count set to 0 in Jira's database). Measured on the pinned image: six bad logins lock the user, a pause makes calls time out, the SQL reset unlocks at once. Chosen first because they cost no memory and no new component. Deferred: a real 429/503/slow needs a tiny stdlib fault proxy in front of Jira (the client would point at the proxy's address, ADR 0018), or Jira's rate-limiting setting; decide when a client test needs them.

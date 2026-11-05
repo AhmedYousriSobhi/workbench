@@ -120,6 +120,17 @@ Real: Atlassian's code, REST v2, workflow, JQL, custom fields, validation. Not r
 `accountId`), it is one node, and the licence is a test key. Cloud shapes are checked by the recorded contract tests
 (Jira contract tests (issue 229)).
 
+## Faults on the real Jira (scenarios)
+The scenario target `jira-real` makes the real Jira fail in the ways integrations meet (Atlassian's rate-limit page and the community's usual failures), with real behaviour and no proxy. `fault:` is one of:
+
+| fault | what happens | what a client sees |
+|---|---|---|
+| `outage` / `restore` | `docker pause` / `unpause` of the Jira container | calls hang, then time out; then work again |
+| `bad_logins` (`user`, `count`) | wrong-password Basic logins | 401, then 403 with `X-Authentication-Denied-Reason: CAPTCHA_CHALLENGE` (REST cannot solve a CAPTCHA; a personal access token is not affected) |
+| `clear_logins` | zeroes every user's failed-login count in Jira's own table (what an admin's "reset failed login count" does) | the user can log in again |
+
+Run `benchctl scenario run jira-real-outage` or `jira-real-captcha` (needs `jira-real` up). Not built yet: a real 429 (Jira's own rate limiting is an admin setting) and a slow or 503 answer, which need a fault proxy in front of Jira; the mock's `jira` target still covers those (issue 303).
+
 ## Test it
 
 ```bash

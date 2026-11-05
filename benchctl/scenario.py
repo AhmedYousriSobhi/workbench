@@ -4,6 +4,7 @@ A scenario is `steps` (`at`, `target`, `do`) and optional `expect` assertions. E
 mock's /sim/inject (or a `scontrol` call in slurmctld). `ramp` steps expand into a series of temperature steps.
 Targets whose component is not built yet (k8s, ticket-bot) are reported as skipped, not failed.
 """
+import base64
 import json
 import re
 import time
@@ -24,7 +25,11 @@ ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "ht
 JIRA_ACTIONS = ("create", "transition", "comment", "fault", "reset")
 SLURMCTLD = "workbench-slurmctld-1"
 LOGIN = "workbench-login-1"
-HOST_TARGETS = ("slurm", "ssh")  # steps that need Docker on the host
+JIRA_REAL = "workbench-jira-real-1"
+JIRA_DB = "workbench-jira-db-1"
+JIRA_REAL_URL = "http://127.0.0.1:8083"
+JIRA_REAL_MODES = ("outage", "restore", "bad_logins", "clear_logins")  # real faults on the real Jira, no proxy (issue 303)
+HOST_TARGETS = ("slurm", "ssh", "jira-real")  # steps that need Docker on the host
 SSH_STATES = ("down", "up", "hung")
 NODE_SSHD_STATES = ("down", "up")
 NOT_BUILT = ("k8s", "ticket-bot")
@@ -122,6 +127,8 @@ def validate(sc: dict, sim: dict) -> list[str]:
             problems += [f"step {i}: {m}" for m in jira_ticket_problems(do["tickets"])]
         if t == "slurm":
             problems += [f"step {i}: {m}" for m in daemon_problems(do)]
+        if t == "jira-real" and do.get("fault") not in JIRA_REAL_MODES:
+            problems.append(f"step {i}: jira-real needs fault: one of {', '.join(JIRA_REAL_MODES)}")
         names = [n for key in ("nodes", "drain", "down", "resume", "power_off", "power_on", "slurmd_stop", "slurmd_start",
                                "slurmd_restart") for n in do.get(key) or []]
         if isinstance(do.get("submit"), dict) and do["submit"].get("node"):
@@ -359,6 +366,8 @@ def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcom
                 r = runner(cmd)
                 if r.returncode and cmd[3:4] != ["pkill"]:  # pkill exits 1 when slurmd is already down: that is the goal
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+        elif step.target == "jira-real":
+            return jira_real_fault(step, label, runner)
         elif step.target == "jira":
             if "tickets" in step.do:  # {tickets: {action: create|transition|comment|reset, ...}}
                 poster(ENDPOINTS["jira-tickets"], step.do["tickets"])
@@ -379,6 +388,33 @@ def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcom
 def node_state(node: str, runner=checks.run) -> str:
     r = runner(["docker", "exec", SLURMCTLD, "sinfo", "-h", "-N", "-n", node, "-o", "%T"])
     return r.stdout.strip().split("\n")[0] if r.returncode == 0 else ""
+
+
+def jira_real_fault(step: Step, label: str, runner) -> Outcome:
+    """Real faults on the real Jira (no fault proxy, issue 303): `outage` pauses its container (clients time out, as with a
+    hung node), `restore` unpauses it, `bad_logins` sends wrong-password logins until Jira's own CAPTCHA lock answers 403
+    (the 401 then 403 pattern the Atlassian community reports); `clear_logins` resets the failed-login count (as an admin does in User management)."""
+    fault = step.do["fault"]
+    if fault in ("outage", "restore"):
+        r = runner(["docker", "pause" if fault == "outage" else "unpause", JIRA_REAL])
+        if r.returncode and "already" not in r.stderr and "is not paused" not in r.stderr:
+            return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+        return Outcome(label, "ok")
+    if fault == "clear_logins":  # what an admin does in User management ("reset failed login count"): zero it in Jira's own table
+        r = runner(["docker", "exec", JIRA_DB, "psql", "-U", "jira", "-d", "jira", "-qc",
+                    "update cwd_user_attributes set attribute_value='0' where attribute_name='login.currentFailedCount'"])
+        return Outcome(label, "failed", (r.stderr or r.stdout).strip()) if r.returncode else Outcome(label, "ok")
+    user, n = str(step.do.get("user", "alice")), int(step.do.get("count", 5))
+    for _ in range(n):
+        req = urllib.request.Request(f"{JIRA_REAL_URL}/rest/api/2/myself", headers={
+            "Authorization": "Basic " + base64.b64encode(f"{user}:wrong-password".encode()).decode()})
+        try:
+            urllib.request.urlopen(req, timeout=10)
+        except urllib.error.HTTPError:
+            pass  # 401, then 403 once the CAPTCHA lock is on: both are the goal
+        except OSError as e:
+            return Outcome(label, "failed", str(e))
+    return Outcome(label, "ok")
 
 
 def jira_search(jql: str) -> list[dict]:
