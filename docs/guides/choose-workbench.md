@@ -17,7 +17,7 @@ It prints the nodes and parts, the memory by item (expected use and the cap), th
 
 **Expected** is what each part was measured to use plus 15 percent (never above its cap); **cap** is the container limit the
 governor enforces. Admission compares the expected use plus the app's reserve with free memory, so a start that fits is no longer
-refused because caps are generous. If the app under test already runs, its memory is already out of the free figure: add
+refused because caps are generous. Services of the workbench that already run are left out of what the plan needs, for the same reason (the free figure no longer contains them). If the app under test already runs, its memory is already out of the free figure too: add
 `--app-mb 0` (to `plan`, `up`, `apply` or `start`) or set `WORKBENCH_APP_MB=0`. The numbers and how to re-measure them:
 [memory contract](../architecture/04-memory-and-profiles.md); the per-part table is in [how much memory it uses](memory.md).
 
@@ -101,7 +101,7 @@ you chose, not the numbers in `sim.yaml`.
 running workbench** asks the governor to rebuild it to the plan: new nodes start, nodes you no longer want are removed,
 and Slurm's node list is reloaded. Progress shows in the entity list, the Infrastructure architecture and *Governor activity* (in the Governor panel). It needs the governor
 started by `./scripts/benchctl start` (it has the repository path) and calm memory (L0-L1); otherwise the page says why
-in one line. You can always copy the command shown and run it in a terminal instead.
+in one line. The page counts the app under test as already running (no 4 GB reserve, `--app-mb 0` in the command it shows and in the rebuild). You can always copy the command shown and run it in a terminal instead.
 
 ## Going back
 

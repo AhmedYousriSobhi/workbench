@@ -154,7 +154,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
             ok, msg = admit(profile, available)
         else:
             avail = checks.mem_available() if available is None else available
-            ok, msg = workbench.verdict(workbench.estimate(sim, chosen), avail // (1024 * 1024))
+            ok, msg = workbench.verdict(workbench.estimate(sim, chosen, running=workbench.running_services()), avail // (1024 * 1024))
         say(("admitted: " if ok else "REFUSED: ") + msg)
         if not ok or not governor_admits(missing, say):
             return False
