@@ -412,3 +412,14 @@ def test_jira_real_clear_logins_zeroes_the_failed_count():
     scenario.execute(scenario.Step(0, "jira-real", {"fault": "clear_logins"}), runner=lambda c: calls.append(c) or CP())
     assert calls[0][:3] == ["docker", "exec", scenario.JIRA_DB] and "login.currentFailedCount" in calls[0][-1]
     assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "clear_logins"}), runner=lambda c: CP(code=1, err="x")).status == "failed"
+
+
+def test_jira_real_rate_limit_sets_the_table_and_bumps_the_version():
+    calls = []
+    runner = lambda c: calls.append(c) or CP()
+    scenario.execute(scenario.Step(0, "jira-real", {"fault": "rate_limit", "capacity": 5, "fill_rate": 2}), runner=runner)
+    scenario.execute(scenario.Step(0, "jira-real", {"fault": "rate_limit_off"}), runner=runner)
+    on, off = calls[0][-1], calls[1][-1]
+    assert "'ON'" in on and '"CAPACITY"=5' in on and '"FILL_RATE"=2' in on and "AO_AC3877_SETTINGS_VERSION" in on
+    assert "'OFF'" in off and calls[0][:3] == ["docker", "exec", scenario.JIRA_DB]
+    assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "rate_limit"}), runner=lambda c: CP(code=1, err="no")).detail == "no"

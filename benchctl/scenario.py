@@ -28,7 +28,7 @@ LOGIN = "workbench-login-1"
 JIRA_REAL = "workbench-jira-real-1"
 JIRA_DB = "workbench-jira-db-1"
 JIRA_REAL_URL = "http://127.0.0.1:8083"
-JIRA_REAL_MODES = ("outage", "restore", "bad_logins", "clear_logins")  # real faults on the real Jira, no proxy (issue 303)
+JIRA_REAL_MODES = ("outage", "restore", "bad_logins", "clear_logins", "rate_limit", "rate_limit_off")  # real faults on the real Jira, no proxy (issue 303)
 HOST_TARGETS = ("slurm", "ssh", "jira-real")  # steps that need Docker on the host
 SSH_STATES = ("down", "up", "hung")
 NODE_SSHD_STATES = ("down", "up")
@@ -404,6 +404,8 @@ def jira_real_fault(step: Step, label: str, runner) -> Outcome:
         r = runner(["docker", "exec", JIRA_DB, "psql", "-U", "jira", "-d", "jira", "-qc",
                     "update cwd_user_attributes set attribute_value='0' where attribute_name='login.currentFailedCount'"])
         return Outcome(label, "failed", (r.stderr or r.stdout).strip()) if r.returncode else Outcome(label, "ok")
+    if fault in ("rate_limit", "rate_limit_off"):
+        return jira_real_rate_limit(step, label, runner)
     user, n = str(step.do.get("user", "alice")), int(step.do.get("count", 5))
     for _ in range(n):
         req = urllib.request.Request(f"{JIRA_REAL_URL}/rest/api/2/myself", headers={
@@ -415,6 +417,22 @@ def jira_real_fault(step: Step, label: str, runner) -> Outcome:
         except OSError as e:
             return Outcome(label, "failed", str(e))
     return Outcome(label, "ok")
+
+
+def rate_limit_sql(on: bool, capacity: int = 3, fill_rate: int = 1) -> str:
+    """Jira's own rate limiting (admin Rate limiting page) set in its tables, then the settings version is bumped so the
+    running Jira reloads it (no restart; the reload job runs about once a minute, issue 303)."""
+    mode = "ON" if on else "OFF"
+    return (f"update \"AO_AC3877_SYSTEM_RL_SETTINGS\" set \"MODE\"='{mode}', \"CAPACITY\"={capacity}, \"FILL_RATE\"={fill_rate}, "
+            "\"INTERVAL_FREQUENCY\"=1, \"INTERVAL_TIME_UNIT\"='SECONDS'; "
+            "update \"AO_AC3877_SETTINGS_VERSION\" set \"VERSION\"=\"VERSION\"+1;")
+
+
+def jira_real_rate_limit(step: Step, label: str, runner) -> Outcome:
+    on = step.do["fault"] == "rate_limit"
+    sql = rate_limit_sql(on, int(step.do.get("capacity", 3)), int(step.do.get("fill_rate", 1)))
+    r = runner(["docker", "exec", JIRA_DB, "psql", "-U", "jira", "-d", "jira", "-qc", sql])
+    return Outcome(label, "failed", (r.stderr or r.stdout).strip()) if r.returncode else Outcome(label, "ok")
 
 
 def jira_search(jql: str) -> list[dict]:
