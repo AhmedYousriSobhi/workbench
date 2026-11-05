@@ -38,6 +38,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 | `diag [--out F]` | masked diagnostics tarball |
 | `compose --profile P` | generate `compose/generated/docker-compose.yml` |
 | `benchctl measure run LABEL [--duration S] [--interval S]` | sample memory to `docs/measurements/` |
+| `benchctl measure app --match NAME [--pid N] [--duration S] [--save]` | measure the app under test (PSS of all its processes): peak, typical, suggested `--app-mb`; `--save` keeps it as this machine's reserve |
 | `benchctl measure report IDLE [LOADED]` | markdown table with suggested budgets |
 
 `benchctl COMMAND --help` shows the exact flags. All the planned verbs of ADR 0015 now exist.

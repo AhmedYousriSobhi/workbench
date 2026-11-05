@@ -22,7 +22,9 @@ def _no_saved_workbench_from_this_machine(monkeypatch, tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
-def _no_app_reserve_by_default(monkeypatch):
+def _no_app_reserve_by_default(monkeypatch, tmp_path):
     """The plan reserves memory for the app under test (benchctl/memory.py). Tests that count free memory exactly leave it out;
     a test of the reserve sets WORKBENCH_APP_MB itself."""
+    from benchctl import memory
     monkeypatch.setenv("WORKBENCH_APP_MB", "0")
+    monkeypatch.setattr(memory, "APP_FILE", tmp_path / "app_reserve.json")  # never the machine's real saved measurement

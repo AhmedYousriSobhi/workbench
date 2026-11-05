@@ -237,7 +237,7 @@ def _app_mb_set(value: int | None) -> int | None:
 
 
 APP_MB_OPT = typer.Option(None, "--app-mb", min=0, callback=_app_mb_set,
-                          help=f"MB the plan reserves for the app under test (default ${memory.APP_ENV} or {memory.APP_MB}); 0 when it already runs")
+                          help=f"MB the plan reserves for the app under test (default ${memory.APP_ENV}, else the saved `measure app --save`, else {memory.APP_MB}); 0 when it already runs")
 
 
 ADDONS = typer.Option(False, "--addons", rich_help_panel="Parts by category",
@@ -1095,6 +1095,42 @@ def measure_run(label: str = typer.Argument(..., help="e.g. idle, loaded"),
     """Sample host, containers, processes (PSS) and VMs; save docs/measurements/<label>.json."""
     snaps = measure.sample(duration, interval)
     typer.echo(f"{len(snaps)} samples -> {measure.save(label, snaps)}")
+
+
+APP_MATCH = typer.Option(None, "--match", help="process name or command-line text of the app (repeatable)")
+APP_PID = typer.Option(None, "--pid", help="a process id of the app (repeatable)")
+APP_SAVE = typer.Option(False, "--save", help="keep the suggested reserve as this machine's default (compose/generated, gitignored)")
+
+
+@measure_app.command("app")
+def measure_app_cmd(match: list[str] = APP_MATCH, pid: list[int] = APP_PID,
+                    duration: float = typer.Option(120, help="seconds to sample; 0 runs until Ctrl-C"),
+                    interval: float = typer.Option(2, min=0.1, help="seconds between samples"),
+                    save: bool = APP_SAVE) -> None:
+    """Measure the app under test (PSS of all its processes): peak, typical use and a suggested --app-mb."""
+    if not match and not pid:
+        typer.echo("give the app with --match NAME or --pid N (repeatable); the app must be running", err=True)
+        raise typer.Exit(2)
+    if not measure.app_bytes(match or [], pid or [])[1]:
+        typer.echo(f"no running process matches {', '.join(match or [])} {' '.join(map(str, pid or []))}; start the app and retry", err=True)
+        raise typer.Exit(1)
+    caught = measure.app_breakdown(match or [], pid or [])
+    typer.echo("matched: " + ", ".join(f"{n} x{c} ({b // 1024**2} MB)" for n, (b, c) in list(caught.items())[:6]) + (" ..." if len(caught) > 6 else ""))
+    if len(caught) > measure.APP_MAX_NAMES:
+        typer.echo(f"warning: {len(caught)} different programs match; a loose --match counts other programs' memory. Narrow it (a path or full name) before using --save", err=True)
+    typer.echo("sampling" + (f" for {duration:g} s" if duration else " until Ctrl-C") + "; use the app as you normally would ...")
+    stats = measure.app_summary(measure.sample_app(match or [], pid or [], duration, interval))
+    if not stats:
+        typer.echo("the app exited before the first sample; start it and retry", err=True)
+        raise typer.Exit(1)
+    mib = 1024**2
+    typer.echo(f"{stats['samples']} samples, up to {stats['processes']} process(es)\n"
+               f"  peak     {stats['peak'] // mib:>7} MB\n  typical  {stats['typical'] // mib:>7} MB (median)\n"
+               f"  suggested --app-mb {stats['suggested_mb']} (peak + 10%, rounded up to 100 MB)")
+    if save:
+        typer.echo(f"saved {stats['suggested_mb']} MB as the default reserve: {memory.save_app(stats['suggested_mb'])} (delete the file to return to {memory.APP_MB})")
+    else:
+        typer.echo("keep it as this machine's default: rerun with --save")
 
 
 @measure_app.command("report")

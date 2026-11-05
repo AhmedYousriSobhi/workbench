@@ -44,7 +44,7 @@ def test_the_estimate_is_below_the_caps_and_the_app_is_a_separate_line(monkeypat
     assert 0 < base["expected_mb"] < base["total_mb"] and base["need_mb"] == base["expected_mb"]
     monkeypatch.delenv(memory.APP_ENV)
     est = workbench.estimate(SIM, prof)
-    assert est["app_mb"] == memory.APP_MB == 4096 and est["need_mb"] == est["expected_mb"] + 4096
+    assert est["app_mb"] == memory.APP_MB == 1024 and est["need_mb"] == est["expected_mb"] + 1024
     monkeypatch.setenv(memory.APP_ENV, "1500")
     assert workbench.estimate(SIM, prof)["app_mb"] == 1500
 
@@ -53,7 +53,7 @@ def test_plan_prints_expected_and_cap_and_the_app_line(monkeypatch):
     monkeypatch.delenv(memory.APP_ENV)
     spec = workbench.defaults(SIM)
     text = workbench.render(spec, workbench.estimate(*workbench.effective(SIM, spec)))
-    assert "expected" in text and "cap" in text and "app under test" in text and "4096" in text
+    assert "expected" in text and "cap" in text and "app under test" in text and "1024" in text
     monkeypatch.setenv(memory.APP_ENV, "0")
     assert "app under test" not in workbench.render(spec, workbench.estimate(*workbench.effective(SIM, spec)))
 

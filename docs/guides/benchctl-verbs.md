@@ -55,6 +55,7 @@ its limits, so you do not find them by surprise, and what to use in a script.
 | `preflight --profile P` | would this profile fit in free memory right now | a snapshot: free memory changes; the governor decides at `up` | exit 1 when it would not fit |
 | `diag [--out F]` | one masked tarball of host, Docker and governor state | masks secrets, but read it before sharing | prints the path |
 | `compose --profile P` | writes `compose/generated/docker-compose.yml` | only writes the file; never edit the output by hand | |
+| `measure app` | measures the app under test while it runs and suggests the reserve | `--match NAME` or `--pid N` (repeatable), `--duration S` (0 = until Ctrl-C), `--save` | exit 1 when nothing matches |
 | `measure run\|report` | samples memory (read-only), then suggests budgets | `run` takes `--duration` seconds; results are gitignored | |
 
 ## How this compares with the tools it follows

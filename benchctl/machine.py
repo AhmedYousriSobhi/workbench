@@ -180,6 +180,18 @@ def check_profiles(avail_gb: float, budgets: dict[str, float]) -> Check:
                  f"(largest: {fits[-1]}, budget {budgets[fits[-1]]:g} GB)")
 
 
+def _app_reserve_mb() -> int:
+    """WORKBENCH_APP_MB, else the saved `benchctl measure app --save`, else 1024 (benchctl/memory.py APP_MB)."""
+    raw = os.environ.get("WORKBENCH_APP_MB", "")
+    if raw.strip().isdigit():
+        return int(raw)
+    try:
+        import json
+        return int(json.loads((Path(__file__).resolve().parent.parent / "compose" / "generated" / "app_reserve.json").read_text())["mb"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return 1024
+
+
 def run_all() -> list[Check]:
     total, avail = meminfo_gb() if platform.system() == "Linux" else (0.0, 0.0)
     linux = platform.system() == "Linux"
@@ -189,7 +201,7 @@ def run_all() -> list[Check]:
         out += [check_cgroup_v2()]
     out += [*check_docker(), check_ports(), *check_optional()]
     if linux:
-        app = float(os.environ.get("WORKBENCH_APP_MB", "4096") or 0) / 1024  # the app under test's reserve (benchctl/memory.py; stdlib only here)
+        app = _app_reserve_mb() / 1024  # the app under test's reserve (same precedence as benchctl/memory.py; stdlib only here)
         out.append(check_profiles(avail, {n: b + app for n, b in profile_budgets().items()}))
     return out
 
