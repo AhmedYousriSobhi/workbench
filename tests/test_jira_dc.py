@@ -190,7 +190,7 @@ def test_without_the_part_nothing_changes():
 
 def test_the_part_is_in_the_estimate_and_never_turned_on_by_all_or_addons():
     _, sim, prof = _services(["jira", "jira-real"])
-    assert workbench.estimate(sim, prof)["services_mb"]["jira-real"] == 3072
+    assert workbench.estimate(sim, prof)["services_mb"]["jira-real"] == jira_real.LIMIT_MB
     assert "jira-real" not in workbench.expand({}, addons=True)
     assert "jira-real" not in workbench.expand({"ticketing": ["all"]})
     assert workbench.expand({"ticketing": ["jira-real"]}) == ["jira-real"]

@@ -189,7 +189,8 @@ def run_all() -> list[Check]:
         out += [check_cgroup_v2()]
     out += [*check_docker(), check_ports(), *check_optional()]
     if linux:
-        out.append(check_profiles(avail, profile_budgets()))
+        app = float(os.environ.get("WORKBENCH_APP_MB", "4096") or 0) / 1024  # the app under test's reserve (benchctl/memory.py; stdlib only here)
+        out.append(check_profiles(avail, {n: b + app for n, b in profile_budgets().items()}))
     return out
 
 

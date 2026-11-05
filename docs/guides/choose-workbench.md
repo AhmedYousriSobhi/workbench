@@ -9,14 +9,17 @@ Example: 2 CPU nodes, 4 GPU nodes with Jira.
 ./scripts/benchctl plan --cpu-nodes 2 --gpu-nodes 4 --with jira
 ```
 
-It prints the nodes and parts, the memory limits by item and the total, then one verdict line:
+It prints the nodes and parts, the memory by item (expected use and the cap), the 4 GB reserve for the app under test and the total it needs, then one verdict line:
 
-- `fits: needs 1720 MB, 5340 MB free, 3620 MB would remain (floor 1024 MB)`: exit code 0.
+- `fits: needs 5164 MB (1068 MB expected + 4096 MB for the app), 8000 MB free, 2836 MB would remain (floor 1024 MB)`: exit code 0.
 - `does not fit: ... short by 273 MB ... Try: drop load (100 MB); drop accounting (360 MB); 5 fewer node(s)`: exit code 1,
   and it says what to remove.
 
-The total is the sum of the container memory limits plus Prometheus and Grafana: an upper bound, the same figure the
-memory governor admits against. Real use is lower.
+**Expected** is what each part was measured to use plus 15 percent (never above its cap); **cap** is the container limit the
+governor enforces. Admission compares the expected use plus the app's reserve with free memory, so a start that fits is no longer
+refused because caps are generous. If the app under test already runs, its memory is already out of the free figure: add
+`--app-mb 0` (to `plan`, `up`, `apply` or `start`) or set `WORKBENCH_APP_MB=0`. The numbers and how to re-measure them:
+[memory contract](../architecture/04-memory-and-profiles.md); the per-part table is in [how much memory it uses](memory.md).
 
 ## 2. Build
 

@@ -2,7 +2,7 @@
 
 `jira-mock` is the default and answers on `http://127.0.0.1:8080`. When you need Atlassian's own code (to see how a
 client behaves against real validation, JQL and workflows), start the **real Jira Data Center** next to it. It is a
-session tool: the test licence lasts **3 hours**, then the server is read-only and you reset it. About 3 GB of memory
+session tool: the test licence lasts **3 hours**, then the server is read-only and you reset it. About 2.8 GB of memory (2.5 GB for Jira, the smallest limit that worked, plus Postgres)
 (ADR 0026, SPEC C-19). It is Data Center, not Cloud.
 
 ## Once: get the test licence
@@ -35,6 +35,14 @@ The first start pulls about 1 GB. `setup` prints one line per step and ends with
   Resolved, Closed): tools must read the transitions Jira offers, not assume names.
 - The page's Connections tab has an **Open Jira (real)** link.
 
+### Why 2.5 GB (measured, issue 287)
+
+A JVM holds more than its heap: metaspace, a code cache, thread stacks and the plugin system. The smallest limit that finished
+the setup wizard, the seeding and a ticket run without Jira being killed was **2560 MB with a 768 MB heap** (peak 2363 MiB,
+no restart). At 2304 MB the setup finished but Jira was killed once and restarted by Docker; at 2048 MB and 1536 MB it
+failed (setup lost the connection after kills). The constants are `HEAP_MIN_MB`, `HEAP_MAX_MB`, `CODE_CACHE_MB`, `LIMIT_MB` in
+`benchctl/jira_real.py`; change one only after repeating the trial (`docs/architecture/04-memory-and-profiles.md`).
+
 ## When the 3 hours are up
 
 Jira turns read-only. Start from nothing; the same key gives a new 3 hours, counted from the setup (as in the lab this part was ported from):
@@ -46,8 +54,7 @@ Jira turns read-only. Start from nothing; the same key gives a new 3 hours, coun
 
 ## Memory
 
-`benchctl plan --with jira-real` shows the estimate before anything starts (the part adds 3.3 GB: Jira 3 GB, Postgres
-0.25 GB). The governor treats it as class P6, the first thing it stops under pressure. `--addons` and `all` never turn it
+`benchctl plan --with jira-real` shows the estimate before anything starts (the part is expected to use about 2.7 GB: Jira at its 2.5 GB cap, Postgres about 0.15 GB; both are capped at 2.8 GB). The governor treats it as class P6, the first thing it stops under pressure. `--addons` and `all` never turn it
 on: only its name does.
 
 ## What is real and what is not
@@ -63,7 +70,7 @@ Real: Atlassian's code, REST v2, workflow, JQL, custom fields, validation. Not r
 ./scripts/verify.sh --unit jira_dc --clean    # first remove the real Jira's data
 ```
 
-The live part skips and says where to put the licence when it is missing; with it, it needs about 3.3 GB free and a few minutes.
+The live part skips and says where to put the licence when it is missing; with it, it needs about 2.8 GB free and a few minutes.
 
 ## Ticket automation on both Jiras
 

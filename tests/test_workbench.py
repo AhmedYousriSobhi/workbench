@@ -77,9 +77,9 @@ def test_observability_constant_matches_the_static_compose_file():
 def test_verdict_fits_or_says_what_to_remove():
     s = spec(cpu_nodes=30, gpu_nodes=16, parts=["accounting", "load", "jira"])
     est = workbench.estimate(*workbench.effective(SIM, s))
-    ok, msg = workbench.verdict(est, est["total_mb"] + 2048)
+    ok, msg = workbench.verdict(est, est["need_mb"] + 2048)
     assert ok and "fits" in msg
-    ok, msg = workbench.verdict(est, est["total_mb"] - 200, spec=s)
+    ok, msg = workbench.verdict(est, est["need_mb"] + workbench.FLOOR_MB - 200, spec=s)  # 200 MB short
     assert not ok and "short by" in msg and "fewer node" in msg and "drop load" in msg and "drop accounting" in msg
 
 
