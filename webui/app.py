@@ -185,7 +185,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             raise HTTPException(422, str(e)) from e
         if problems := spec.problems():
             raise HTTPException(422, "; ".join(problems))
-        est = workbench.estimate(*workbench.effective(sim, spec), app_mb=0)  # the page is open next to the app: its memory is already out of the free figure
+        est = workbench.estimate(*workbench.effective(sim, spec), app_mb=0, running=workbench.running_services())  # the page is open next to the app: its memory is already out of the free figure
         avail = checks.mem_available() // (1024 * 1024)
         ok, msg = workbench.verdict(est, avail, spec=spec)
         return spec, est, avail, ok, msg

@@ -251,3 +251,15 @@ def test_each_bmc_adds_its_forwarder_to_the_estimate():
     all_on = workbench.estimate(*workbench.effective(SIM, spec()))["total_mb"]
     two = workbench.estimate(*workbench.effective(SIM, spec(bmc_nodes=["cn001", "cn002"])))["total_mb"]
     assert all_on - two == 4 * compose.BMC_FORWARDER_MB
+
+
+def test_running_services_are_not_counted_twice(tmp_path):
+    """Free memory already excludes running containers: a plan over a running stack asks only for what a start adds."""
+    sim = yaml.safe_load((Path(__file__).resolve().parent.parent / "sim.yaml").read_text())
+    spec = workbench.from_dict({"parts": ["jira"]}, workbench.defaults(sim))
+    prof = workbench.effective(sim, spec)[1]
+    cold = workbench.estimate(sim, prof, app_mb=0)
+    warm = workbench.estimate(sim, prof, app_mb=0, running={"jira-mock", "slurmctld"})
+    assert warm["running_mb"] > 0 and warm["need_mb"] == cold["need_mb"] - warm["running_mb"]
+    assert "already running" in workbench.verdict(warm, 10000)[1]
+    assert workbench.estimate(sim, prof, app_mb=0, running={"nothing"})["need_mb"] == cold["need_mb"]

@@ -7,6 +7,7 @@ an upper bound, which is what the governor's admission also uses."""
 import copy
 import difflib
 import re
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -188,10 +189,21 @@ def _part_mb(part: str) -> int:
     return sum(mb for n, (_, mb, _) in compose.CATALOG[group].items() if services is None or n in services)
 
 
-def estimate(sim: dict, profile: dict, app_mb: int | None = None) -> dict:
+def running_services() -> set[str]:
+    """Service names of the workbench containers running now (empty when Docker does not answer)."""
+    try:
+        r = subprocess.run(["docker", "ps", "--filter", "label=com.docker.compose.project=workbench", "--format",
+                            '{{.Label "com.docker.compose.service"}}'], capture_output=True, text=True, timeout=10, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    return set(r.stdout.split())
+
+
+def estimate(sim: dict, profile: dict, app_mb: int | None = None, running: set[str] | None = None) -> dict:
     """What the selection needs. `total_mb` is the sum of the caps (the container limits); `expected_mb` is what it is expected to
     use (measured plus tolerance, memory.py); `need_mb` is the expected use plus the app under test's reserve, the number that
-    admission compares with free memory."""
+    admission compares with free memory. Services in `running` are already in the host's used memory, so their expected use
+    is left out of `need_mb` (`running_mb`): free memory must cover only what a start would add."""
     data = compose.generate(sim, profile)
     sv = data["services"]
     nodes = {n: int(s["mem_limit"].rstrip("m")) for n, s in sv.items() if s["labels"].get("workbench.node")}
@@ -200,17 +212,19 @@ def estimate(sim: dict, profile: dict, app_mb: int | None = None) -> dict:
     obs = {n: memory.expected_mb(n, mb) for n, mb in OBSERVABILITY.items()}
     expected = sum(seen.values()) + sum(obs.values())
     app = memory.app_mb() if app_mb is None else app_mb
+    up = set(running or ())
+    running_mb = sum(v for n, v in {**seen, **obs}.items() if n in up)
     return {"nodes_mb": sum(nodes.values()), "node_count": len(nodes), "services_mb": services,
             "observability_mb": OBSERVABILITY_MB, "total_mb": sum(nodes.values()) + sum(services.values()) + OBSERVABILITY_MB,
             "expected_mb": expected, "expected_nodes_mb": sum(seen[n] for n in nodes),
             "expected_services_mb": {n: seen[n] for n in services}, "expected_observability_mb": sum(obs.values()),
-            "app_mb": app, "need_mb": expected + app}
+            "app_mb": app, "running_mb": running_mb, "need_mb": expected - running_mb + app}
 
 
 def verdict(est: dict, available_mb: int, floor_mb: int = FLOOR_MB, spec: Spec | None = None) -> tuple[bool, str]:
     """Does it fit, leaving the safety floor? When not, say how much to remove and what that could be."""
     need = est["need_mb"]
-    mix = f"{est['expected_mb']} MB expected" + (f" + {est['app_mb']} MB for the app" if est["app_mb"] else "")
+    mix = f"{est['expected_mb']} MB expected" + (f" - {est['running_mb']} MB already running" if est.get("running_mb") else "") + (f" + {est['app_mb']} MB for the app" if est["app_mb"] else "")
     left = available_mb - need
     if left >= floor_mb:
         return True, f"fits: needs {need} MB ({mix}), {available_mb} MB free, {left} MB would remain (floor {floor_mb} MB)"
@@ -237,8 +251,12 @@ def render(spec: Spec, est: dict) -> str:
     rows += [f"  {n:<18} {est['expected_services_mb'][n]:>8} {mb:>8}" for n, mb in sorted(est["services_mb"].items())]
     rows += [f"  {'observability':<18} {est['expected_observability_mb']:>8} {est['observability_mb']:>8}",
              f"  {'total':<18} {est['expected_mb']:>8} {est['total_mb']:>8}"]
+    if est.get("running_mb"):
+        rows += [f"  {'already running':<18} {-est['running_mb']:>8}   (already in the used memory)"]
     if est["app_mb"]:
-        rows += [f"  {'app under test':<18} {est['app_mb']:>8}", f"  {'needs':<18} {est['need_mb']:>8}   (admitted against this)"]
+        rows += [f"  {'app under test':<18} {est['app_mb']:>8}"]
+    if est["app_mb"] or est.get("running_mb"):
+        rows += [f"  {'needs':<18} {est['need_mb']:>8}   (admitted against this)"]
     return "\n".join(rows)
 
 
