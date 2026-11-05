@@ -234,7 +234,7 @@ class Governor:
                 return self._change(f"slurm-step={what}" + (f":{req['node']}" if req.get("node") else ""), args)
             if cmd == "apply-plan":
                 args = ["up", "--cpu-nodes", str(req["cpu_nodes"]), "--gpu-nodes", str(req["gpu_nodes"]),
-                        "--gpus-per-node", str(req["gpus_per_node"])]
+                        "--gpus-per-node", str(req["gpus_per_node"]), "--app-mb", "0"]  # the page is used while the app runs
                 for part in sorted(PLAN_PARTS):
                     args += ["--with" if part in req["parts"] else "--without", part]
                 if req.get("bmc_nodes") is not None:

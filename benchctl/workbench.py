@@ -188,7 +188,7 @@ def _part_mb(part: str) -> int:
     return sum(mb for n, (_, mb, _) in compose.CATALOG[group].items() if services is None or n in services)
 
 
-def estimate(sim: dict, profile: dict) -> dict:
+def estimate(sim: dict, profile: dict, app_mb: int | None = None) -> dict:
     """What the selection needs. `total_mb` is the sum of the caps (the container limits); `expected_mb` is what it is expected to
     use (measured plus tolerance, memory.py); `need_mb` is the expected use plus the app under test's reserve, the number that
     admission compares with free memory."""
@@ -199,11 +199,12 @@ def estimate(sim: dict, profile: dict) -> dict:
     seen = {n: memory.expected_mb(n, mb, sv[n]["labels"]) for n, mb in {**nodes, **services}.items()}
     obs = {n: memory.expected_mb(n, mb) for n, mb in OBSERVABILITY.items()}
     expected = sum(seen.values()) + sum(obs.values())
+    app = memory.app_mb() if app_mb is None else app_mb
     return {"nodes_mb": sum(nodes.values()), "node_count": len(nodes), "services_mb": services,
             "observability_mb": OBSERVABILITY_MB, "total_mb": sum(nodes.values()) + sum(services.values()) + OBSERVABILITY_MB,
             "expected_mb": expected, "expected_nodes_mb": sum(seen[n] for n in nodes),
             "expected_services_mb": {n: seen[n] for n in services}, "expected_observability_mb": sum(obs.values()),
-            "app_mb": memory.app_mb(), "need_mb": expected + memory.app_mb()}
+            "app_mb": app, "need_mb": expected + app}
 
 
 def verdict(est: dict, available_mb: int, floor_mb: int = FLOOR_MB, spec: Spec | None = None) -> tuple[bool, str]:

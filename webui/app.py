@@ -185,7 +185,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             raise HTTPException(422, str(e)) from e
         if problems := spec.problems():
             raise HTTPException(422, "; ".join(problems))
-        est = workbench.estimate(*workbench.effective(sim, spec))
+        est = workbench.estimate(*workbench.effective(sim, spec), app_mb=0)  # the page is open next to the app: its memory is already out of the free figure
         avail = checks.mem_available() // (1024 * 1024)
         ok, msg = workbench.verdict(est, avail, spec=spec)
         return spec, est, avail, ok, msg
@@ -222,7 +222,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             f" --with {p}" for p in sorted(spec.parts)) + "".join(f" --without {p}" for p in workbench.PARTS if p not in spec.parts)
         if spec.bmc_nodes is not None:
             flags += f" --bmc-nodes {','.join(spec.bmc_nodes)}"
-        flags += f" --login {','.join(spec.login_nodes)}"
+        flags += f" --login {','.join(spec.login_nodes)} --app-mb 0"
         return JSONResponse({"fits": ok, "message": msg, "total_mb": est["total_mb"], "available_mb": avail,
                              "text": workbench.render(spec, est), "command": f"benchctl up {flags}"})
 
