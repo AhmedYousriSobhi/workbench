@@ -165,7 +165,7 @@ the same results; the live test `./scripts/verify.sh --unit jira_dc` runs the dr
 The client's Confluence section searches pages by a cluster's tags: a page labelled with the tag's slug, or titled with the tag
 (`type = page AND (label in ("cluster-a") OR title ~ "Cluster A") ORDER BY lastmodified DESC`). The mock answers it on the Jira
 address, `GET /rest/api/search?cql=...` (Data Center style) and `GET /wiki/rest/api/search?cql=...` (Cloud style), with seven
-seeded runbook pages (label `workbench`, `runbook`, ...). Add pages for your own cluster tags:
+seeded runbook pages (labels `simulated` - the tag the exported cluster profile carries - `workbench`, `runbook`, ...). Add pages for your own cluster tags:
 
 ```bash
 curl -s -X POST 127.0.0.1:8080/sim/pages -d '{"action":"add","title":"cn001 maintenance","labels":["cluster-a"],"space":"OPS","body":"kernel update"}'

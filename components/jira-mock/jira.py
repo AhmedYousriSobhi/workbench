@@ -736,14 +736,14 @@ class Query:
 
 
 PAGE_FIELDS = ("type", "label", "title", "text", "space", "lastmodified", "created", "creator")
-PAGES = [  # what the page search finds out of the box (labels are the cluster slugs a client looks pages up by)
-    ("Runbook: node is down", ["workbench", "runbook", "node-down"], "OPS", "Check the BMC power state, then sinfo, then drain and requeue."),
-    ("GPU error (XID) triage", ["workbench", "runbook", "gpu", "xid"], "OPS", "Read the XID code in dmesg, drain the node, open a vendor case."),
-    ("Slurm drain and resume procedure", ["workbench", "runbook", "slurm"], "OPS", "scontrol update nodename=NODE state=drain reason=TEXT."),
-    ("InfiniBand port down checklist", ["workbench", "runbook", "infiniband"], "OPS", "Check the cable, the port counters and the subnet manager."),
-    ("Fan failure: replace procedure", ["workbench", "runbook", "hardware"], "OPS", "Redfish thermal view, then the vendor part number."),
-    ("workbench cluster overview", ["workbench", "overview"], "HPC", "Partitions cpu and gpu, users alice and bob, Grafana, Jira."),
-    ("On-call handover notes", ["workbench", "oncall"], "HPC", "Open tickets, nodes in drain, the last change window."),
+PAGES = [  # what the page search finds out of the box; `simulated` is the tag `benchctl export` gives the cluster, so its Confluence tab is not empty
+    ("Runbook: node is down", ["simulated", "workbench", "runbook", "node-down"], "OPS", "Check the BMC power state, then sinfo, then drain and requeue."),
+    ("GPU error (XID) triage", ["simulated", "workbench", "runbook", "gpu", "xid"], "OPS", "Read the XID code in dmesg, drain the node, open a vendor case."),
+    ("Slurm drain and resume procedure", ["simulated", "workbench", "runbook", "slurm"], "OPS", "scontrol update nodename=NODE state=drain reason=TEXT."),
+    ("InfiniBand port down checklist", ["simulated", "workbench", "runbook", "infiniband"], "OPS", "Check the cable, the port counters and the subnet manager."),
+    ("Fan failure: replace procedure", ["simulated", "workbench", "runbook", "hardware"], "OPS", "Redfish thermal view, then the vendor part number."),
+    ("workbench cluster overview", ["simulated", "workbench", "overview"], "HPC", "Partitions cpu and gpu, users alice and bob, Grafana, Jira."),
+    ("On-call handover notes", ["simulated", "workbench", "oncall"], "HPC", "Open tickets, nodes in drain, the last change window."),
 ]
 
 

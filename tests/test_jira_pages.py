@@ -100,3 +100,10 @@ def test_jql_still_works_after_the_query_class_was_shared(mock):
     _, base = mock
     out = get(base, "/rest/api/2/search?jql=" + quote("project = OPS ORDER BY created"))
     assert "issues" in out and out["total"] >= 0
+
+
+def test_the_exported_profiles_tag_finds_the_seeded_pages(mock):
+    """benchctl export gives the cluster the tag `simulated`: the client searches pages by it (label or title)."""
+    _, base = mock
+    out = search(base, 'type = page AND (label in ("simulated") OR title ~ "simulated") ORDER BY lastmodified DESC')
+    assert out["totalSize"] == len(jira.PAGES)
