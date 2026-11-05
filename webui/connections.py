@@ -3,7 +3,7 @@
 Addresses are the containers' fixed private IPs at their standard ports (`benchctl/addressing.py`, ADR 0018): the host
 routes the Docker network, so a client on this machine connects to them directly. The ports published on 127.0.0.1 are
 the fallback (`also on`). Credentials are named by path only, never read, so this page cannot leak a secret."""
-from benchctl import addressing, compose, logins, teleport
+from benchctl import addressing, compose, jira_real, logins, teleport
 from benchctl.describe import BMC_TLS_PORT
 
 SECRETS = "compose/generated/secrets"
@@ -73,6 +73,7 @@ def actions_for(e: dict, sim: dict, user: str) -> list[dict]:
         "teleport": [link("Open the Teleport web UI", f"https://{LOCAL}:{teleport.PROXY_PORT}")],
         "bmc": [link("Open Redfish API (JSON, certificate warning)", f"https://{LOCAL}:{BMC_TLS_PORT}/redfish/v1")],
         "jira": [link("Open jira-mock API (JSON)", f"http://{LOCAL}:8080")],
+        "jira-real": [link("Open Jira (real)", f"http://{LOCAL}:{jira_real.PORT}")],
         "gpu": [link("Open the metrics", f"http://{LOCAL}:9400/metrics")],
         "prometheus": [link("Open Prometheus", f"http://{LOCAL}:9090")],
         "grafana": [link("Open Grafana", f"http://{LOCAL}:3000")],
@@ -125,6 +126,9 @@ def _rows(sim: dict) -> list[dict]:
         {"id": "jira", "name": "Jira mock", "kind": "http", "address": f"http://{jira}:8080",
          "command": f"curl -s http://{jira}:8080/rest/api/2/serverInfo", "credential": None,
          "how": "No login; any basic or bearer auth is accepted. Also on 127.0.0.1:8080."},
+        {"id": "jira-real", "name": "Jira (real, Data Center)", "kind": "http", "address": f"http://{LOCAL}:{jira_real.PORT}",
+         "command": f"curl -s http://{LOCAL}:{jira_real.PORT}/status", "credential": str(jira_real.ENV),
+         "how": "Only with `benchctl start --with jira-real` then `benchctl setup jira-real`. Sign in as admin or alice with the password in the file; a 3-hour test licence (docs/guides/jira-real.md)."},
         {"id": "slurm", "name": "Slurm REST (slurmrestd)", "kind": "http", "address": f"http://{ip['slurmrestd']}:6820",
          "command": "benchctl exec slurmctld -- scontrol token username=alice", "credential": None,
          "how": "JWT, minted per user with scontrol token (not root). Reachable on the cluster network only, not on 127.0.0.1."},

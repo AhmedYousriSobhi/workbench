@@ -82,6 +82,8 @@ See [docs/architecture/08-repository-and-migration.md](docs/architecture/08-repo
 
 - **NHC checks** (ADR 0019, SPEC C-15/W-16): the node health check is a runner (`images/node-base/nhc`) over files in `images/node-base/nhc.d/` (`checks.conf` + one `NAME.sh` per check + `templates/`). All changes go through `benchctl/nhc.py` (validated on a copy, written only when valid, then synced to `compose/generated/nhc`, which nodes mount read-only so a change is live within 30 s): `benchctl get|add|set|remove|validate|reload check(s)`, hand edits then `reload checks`, and the page's Health checks sheet (`/api/nhc`, templates only, never a script). Never edit `compose/generated/nhc`; add a new builtin as a template file, not in the runner. See [docs/guides/nhc-checks.md](docs/guides/nhc-checks.md).
 
+- `jira-real` (127.0.0.1:8083, optional, never in `--addons`/`all`; ADR 0026): the official Jira Data Center image and Postgres, 3 GB, P6; `benchctl start --with jira-real`, then `benchctl setup jira-real` (wizard, users, project OPS, tokens; localhost only), `benchctl remove jira-real-state` to start over. The 3-hour Atlassian test licence is a gitignored file (`docs/guides/jira-real.md`); never commit it. `./scripts/verify.sh --unit jira_dc [--clean]`.
+
 - `bcm-mock` (127.0.0.1:8081, CMDaemon-style `POST /json`) and `jira-mock` (127.0.0.1:8080, REST v2 subset, `POST /sim/failure`) are stdlib-only; surfaces and gaps in ADR 0005.
 
 - `./scripts/benchctl scenario list | run NAME [--speed N] [--dry-run]`: scenario engine (`benchctl/scenario.py`, ADR 0006) over `scenarios/*.yaml`; add a target in `execute()` and in `ENDPOINTS`/`validate`. gpu-exporter-farm publishes 127.0.0.1:9400 for injection.
