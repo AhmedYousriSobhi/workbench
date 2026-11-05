@@ -263,3 +263,11 @@ def test_running_services_are_not_counted_twice(tmp_path):
     assert warm["running_mb"] > 0 and warm["need_mb"] == cold["need_mb"] - warm["running_mb"]
     assert "already running" in workbench.verdict(warm, 10000)[1]
     assert workbench.estimate(sim, prof, app_mb=0, running={"nothing"})["need_mb"] == cold["need_mb"]
+
+
+def test_refusal_names_the_reserve_that_fits_when_only_the_app_does_not():
+    est = {"need_mb": 7206, "expected_mb": 3110, "app_mb": 4096, "running_mb": 0, "expected_nodes_mb": 90, "node_count": 6}
+    ok, msg = workbench.verdict(est, 7963)
+    assert not ok and "--app-mb 3800 if the app needs less than 4096 MB" in msg and "--app-mb 0 when the app already runs" in msg
+    ok, msg = workbench.verdict({**est, "need_mb": 9000, "expected_mb": 4904}, 7963)  # the cluster alone does not fit either
+    assert not ok and "--app-mb 3800" not in msg and "--app-mb 0" in msg
