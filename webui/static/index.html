@@ -359,6 +359,25 @@
   .btn.copy::before { content:""; display:inline-block; width:.8em; height:.8em; margin-right:.45em; vertical-align:-1px; border:1.5px solid currentColor; border-radius:2px; box-shadow:2px -2px 0 -0.5px var(--panel),2px -2px 0 0.5px currentColor; }
   #flow .lane.on { filter:drop-shadow(0 0 4px currentColor); }
   @media (prefers-reduced-motion:reduce) { #flow .lane.on { filter:none; } }
+
+  /* 2.5D game style (#320): the same SVG, drawn as raised slabs on a tiled floor. CSS only (filters + gradients), no WebGL;
+     flat view stays one click away and is the default under reduced motion and on phones. */
+  #trafficpanel[data-view="iso"] { --ext:color-mix(in srgb,var(--bg) 55%,#000); --glow:var(--accent); background:radial-gradient(120% 90% at 50% 40%,color-mix(in srgb,var(--accent) 9%,var(--panel)),var(--bg)); }
+  #trafficpanel[data-view="iso"] .flowscroll { border-radius:12px; background:
+      linear-gradient(30deg,transparent 47%,color-mix(in srgb,var(--accent) 16%,transparent) 48.5%,transparent 50%) 0 0/64px 37px,
+      linear-gradient(-30deg,transparent 47%,color-mix(in srgb,var(--accent) 16%,transparent) 48.5%,transparent 50%) 0 0/64px 37px,
+      radial-gradient(90% 80% at 50% 45%,transparent 40%,rgba(0,0,0,.35)); }
+  #trafficpanel[data-view="iso"] #flow .frame { fill:color-mix(in srgb,var(--panel) 82%,var(--accent)); stroke:color-mix(in srgb,var(--accent) 45%,var(--line)); stroke-width:2;
+      filter:drop-shadow(2px 2px 0 var(--ext)) drop-shadow(4px 4px 0 var(--ext)) drop-shadow(5px 5px 0 var(--ext)) drop-shadow(10px 12px 10px rgba(0,0,0,.5)); }
+  #trafficpanel[data-view="iso"] #flow .blk, #trafficpanel[data-view="iso"] #flow .nd, #trafficpanel[data-view="iso"] #flow .chipbg {
+      filter:drop-shadow(1px 1px 0 var(--ext)) drop-shadow(2px 2px 0 var(--ext)) drop-shadow(3px 3px 0 var(--ext)) drop-shadow(4px 4px 0 var(--ext)) drop-shadow(6px 8px 6px rgba(0,0,0,.55)); }
+  #trafficpanel[data-view="iso"] #flow .blk.up, #trafficpanel[data-view="iso"] #flow .nd.ok { filter:drop-shadow(1px 1px 0 var(--ext)) drop-shadow(2px 2px 0 var(--ext)) drop-shadow(3px 3px 0 var(--ext)) drop-shadow(4px 4px 0 var(--ext)) drop-shadow(0 0 7px color-mix(in srgb,var(--ok) 70%,transparent)); }
+  #trafficpanel[data-view="iso"] #flow .blk.down, #trafficpanel[data-view="iso"] #flow .nd.fault { filter:drop-shadow(1px 1px 0 var(--ext)) drop-shadow(2px 2px 0 var(--ext)) drop-shadow(3px 3px 0 var(--ext)) drop-shadow(4px 4px 0 var(--ext)) drop-shadow(0 0 9px color-mix(in srgb,var(--bad) 80%,transparent)); }
+  #trafficpanel[data-view="iso"] #flow .lane { stroke-width:3; filter:drop-shadow(0 5px 0 rgba(0,0,0,.45)); }
+  #trafficpanel[data-view="iso"] #flow .lane.on { stroke-width:4.5; filter:drop-shadow(0 5px 0 rgba(0,0,0,.45)) drop-shadow(0 0 6px currentColor); }
+  #trafficpanel[data-view="iso"] #flow .pk, #trafficpanel[data-view="iso"] #flow .dotc, #trafficpanel[data-view="iso"] #flow .dotf { filter:drop-shadow(0 0 5px var(--glow)) drop-shadow(0 6px 3px rgba(0,0,0,.5)); }
+  #trafficpanel[data-view="iso"] #flow .hit:hover rect, #trafficpanel[data-view="iso"] #flow .hit:focus-visible rect { stroke-width:3.5; }
+  #trafficpanel[data-view="iso"] #flow .kbar { filter:drop-shadow(0 0 4px currentColor); }
 </style>
 </head>
 <body>
@@ -406,7 +425,7 @@
   <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/benchctl start</code>.</div>
     <div class="nodeswrap" id="nodeswrap">
   <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 id="traffic-h" style="margin:0">Infrastructure architecture</h2>
-    <span class="grow"></span><button class="btn small" id="keybtn" aria-expanded="false" aria-controls="ckey">Key</button><button class="btn small" id="flowpause" aria-pressed="false">Pause animation</button>
+    <span class="grow"></span><button class="btn small" id="keybtn" aria-expanded="false" aria-controls="ckey">Key</button><button class="btn small" id="viewtoggle" aria-pressed="true">Flat view</button><button class="btn small" id="flowpause" aria-pressed="false">Pause animation</button>
     <button class="btn small" id="treetoggle" aria-expanded="true" aria-controls="nodesmain">Hide node list</button></div>
     <div class="flowscroll"><svg id="flow" viewBox="0 0 1120 470" role="img" aria-label="Infrastructure architecture: clients and users, the access layer (login nodes, each direct SSH, Teleport or both, and the Teleport proxy when on), the services, and the nodes. Each part opens its details."></svg></div>
     <div class="ckey" id="ckey" role="group" aria-label="Key to the diagram" hidden>
@@ -1384,6 +1403,14 @@ function setTree(open, remember = true) {
   if (remember) try { localStorage.setItem('workbench-tree', open ? 'open' : 'closed'); } catch (e) { /* not remembered */ }
 }
 $('treetoggle').onclick = () => setTree($('treetoggle').getAttribute('aria-expanded') !== 'true');
+
+function setView(iso, remember) {  // 2.5D game style or the flat baseline (#320)
+  $('trafficpanel').dataset.view = iso ? 'iso' : 'flat'; $('viewtoggle').setAttribute('aria-pressed', iso); $('viewtoggle').textContent = iso ? 'Flat view' : '2.5D view';
+  if (remember) try { localStorage.setItem('workbench-view', iso ? 'iso' : 'flat'); } catch (e) { /* not remembered */ }
+}
+$('viewtoggle').onclick = () => setView($('trafficpanel').dataset.view !== 'iso', true);
+let viewPref = null; try { viewPref = localStorage.getItem('workbench-view'); } catch (e) { /* default */ }
+setView(viewPref ? viewPref === 'iso' : !matchMedia('(prefers-reduced-motion: reduce)').matches, false);
 let treePref = null; try { treePref = localStorage.getItem('workbench-tree'); } catch (e) { /* default */ }
 if (treePref === 'closed') setTree(false, false);  // the list sits beside or under the diagram; folding it away is remembered
 if (dockWide()) paintReach();

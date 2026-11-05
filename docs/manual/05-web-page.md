@@ -81,7 +81,7 @@ Every line says **how** it connects:
 
 A round dot travels along a line for each real request; a diamond travels from *Faults* to the node it hits and a ring flashes on that
 tile. *Pause animation* stops the dots; they also stop at governor L3 and under reduced motion, and the live feed runs only while
-the page is visible and the Nodes tab is open. **Key** (top right of the diagram) opens the legend: kinds, states, the dot, diamond and ring, the node marks, and a sample of each line style.
+the page is visible and the Nodes tab is open. **Key** (top right of the diagram) opens the legend: kinds, states, the dot, diamond and ring, the node marks, and a sample of each line style. **Flat view / 2.5D view** switches the drawing style: 2.5D (the default) draws the same diagram as raised slabs on a tiled floor with glowing lines; flat is the plain baseline and is the default under reduced motion. The choice is remembered in the browser.
 
 **Hover** a part for a one-line tip (its state and how it is reached). **Click** it (or Tab to it and press Enter) for a pop-up window
 next to it with its address, the credential file, a command to copy, and buttons for the details:
