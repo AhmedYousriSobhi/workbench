@@ -62,3 +62,10 @@ def test_api_links_say_they_open_json_and_the_bmc_goes_to_the_redfish_root():
     for part in ("jira", "bmc"):
         assert "API (JSON" in by[part]["actions"][0]["label"], part
     assert by["bmc"]["actions"][0]["value"].endswith("/redfish/v1")
+
+
+def test_the_real_jira_has_a_row_with_a_link_and_only_the_path_of_its_secrets():
+    by = {e["id"]: e for e in rows()}
+    row = by["jira-real"]
+    assert row["actions"][0]["kind"] == "link" and row["actions"][0]["value"] == "http://127.0.0.1:8083"
+    assert row["credential"].endswith("jira-real.env") and "PAT_" not in str(row)

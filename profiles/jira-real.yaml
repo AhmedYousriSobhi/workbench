@@ -1,5 +1,5 @@
 # Profile: jira-real
 name: jira-real
-budget_gb: 7.5   # planning estimate; replace with measured value after Phase 0
+budget_gb: 7.5   # planning estimate: std plus the real Jira (3 GB, ADR 0026); replace with a measured value
 extends: [std]
-groups: []
+groups: [jira-real]
