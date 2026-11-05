@@ -5,6 +5,7 @@
 Starts `python -m webui` on a free port, captures every tab at desktop and phone width in light and dark, and reports
 console errors and horizontal overflow. Prints the PNG paths; exit 1 if any check fails.
 """
+import json
 import socket
 import subprocess
 import sys
@@ -14,9 +15,17 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+from webui import graph
+
 SYNTH_CLUSTER = """lastCluster = JSON.stringify({logins: [{name: 'login', mode: 'both', port: 2222}, {name: 'login2', mode: 'teleport', port: null}], services: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'jira-real': true, 'gpu-exporter': true, 'teleport': true}, actions: [{id: 'power-off', label: 'Power off', gpu_only: false}, {id: 'power-on', label: 'Power on', gpu_only: false}, {id: 'overheat', label: 'Overheat', gpu_only: false}, {id: 'fan-fail', label: 'Fan failure', gpu_only: false}, {id: 'clear', label: 'Clear faults', gpu_only: false}],
                             nodes: ['cn001', 'cn002', 'cn003', 'cn004'].map(n => ({name: n, kind: 'compute', state: 'ok', label: 'Healthy', temp: 45, power: 'On', gpus: 0}))
                               .concat(['gpu001', 'gpu002'].map(n => ({name: n, kind: 'gpu', state: n === 'gpu002' ? 'fault' : 'ok', label: n === 'gpu002' ? 'GPU error' : 'Healthy', temp: 44, power: 'On', gpus: 8, gpus_busy: 4})))}); renderCluster(JSON.parse(lastCluster)); clearTimeout(clusterTimer); if (flowEs) flowEs.close(); flowSnap = {reachable: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'jira-real': true, 'gpu-exporter': true, teleport: true}, totals: {'bmc-farm': 42, 'bcm-mock': 17, 'jira-mock': 9, 'jira-real': 0, 'gpu-exporter': 120, teleport: 5}, faults: 0}; recent = [{t: Date.now(), to: 'jira-mock', n: 4, fault: true}, {t: Date.now(), to: 'jira-real', n: 0, fault: true}, {t: Date.now(), to: 'bmc-farm', n: 6, fault: false}]; paintBlocks();"""  # six healthy nodes; stops the poll so the real (stopped) stack does not overwrite them
+SYNTH_GRAPH = graph.build(
+    {k: True for k in ("bmc-farm", "bcm-mock", "jira-mock", "jira-real", "gpu-exporter", "teleport")},
+    [{"name": n, "kind": "compute"} for n in ("cn001", "cn002", "cn003", "cn004")] + [{"name": n, "kind": "gpu"} for n in ("gpu001", "gpu002")],
+    [{"name": "login", "mode": "both"}, {"name": "login2", "mode": "teleport"}])
+SYNTH_CLUSTER = SYNTH_CLUSTER.replace("actions: [", "graph: " + json.dumps(SYNTH_GRAPH) + ", actions: [", 1)
 VIEWPORTS = {"desktop": (1280, 900), "phone": (390, 800)}
 
 
@@ -93,6 +102,10 @@ def capture(out: Path) -> dict:
                     page.wait_for_timeout(450)  # packets in flight
                     if not page.evaluate("flowPaused || reduced.matches") and page.locator("#dots .pk").count() < 1:
                         result["a11y"].append("traffic animation drew no packets for synthetic events")
+                    drawn = set(page.evaluate("[...document.querySelectorAll('#flow [data-edge]')].map(e => e.dataset.edge)"))
+                    declared = set(page.evaluate("JSON.parse(lastCluster).graph.edges.map(e => e.id)"))  # the model the page was given
+                    if drawn != declared:  # the drawing and the declared graph must agree (#312)
+                        result["a11y"].append(f"architecture draws {sorted(drawn ^ declared)} differently from the declared graph")
                     tpath = out / f"architecture-{vp}-{scheme}.png"
                     page.locator("#trafficpanel").screenshot(path=str(tpath))
                     result["shots"].append(str(tpath))

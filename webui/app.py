@@ -31,6 +31,7 @@ from benchctl import checks, nhc, scenario, slurmtrace
 
 from .cluster import ActionError, Cluster
 from .flow import PAUSE_LEVEL, Flow
+from .graph import build as build_graph
 from .wiki import Wiki, WikiError, esc, page
 
 STATIC = Path(__file__).parent / "static"
@@ -171,7 +172,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
     async def cluster_state(request: Request):
-        return JSONResponse(await asyncio.to_thread(cluster.snapshot))
+        snap = await asyncio.to_thread(cluster.snapshot)
+        return JSONResponse({**snap, "graph": build_graph(snap["services"], snap["nodes"], snap["logins"])})
 
     def build_plan(q) -> tuple:
         from benchctl import workbench

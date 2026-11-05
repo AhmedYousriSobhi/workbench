@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**84% built** (35 done, 41 in review, 11 partial, 4 to do, 91 items).
+**84% built** (35 done, 42 in review, 11 partial, 4 to do, 92 items).
 
 ## Roadmap
 
@@ -16,7 +16,7 @@ flowchart LR
     p4["People and chaos<br/>25%"]:::partial
     p5["Kubernetes<br/>50%"]:::partial
     p6["Fidelity VM<br/>0%"]:::partial
-    p7["Web UI and profiles<br/>73%"]:::partial
+    p7["Web UI and profiles<br/>75%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
     p0 --> p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7 --> p8
     classDef done fill:#1a7f37,stroke:#1a7f37,color:#fff
@@ -199,7 +199,7 @@ _One real Ubuntu VM with Redfish power control._
 
 0/1 done
 
-### Web UI and profiles (73%)
+### Web UI and profiles (75%)
 
 _One click from cold start to a busy cluster._
 
@@ -215,9 +215,10 @@ _One click from cold start to a busy cluster._
 | Governor panel | 🔍 In review | The left column is gone: the level banner and memory/pressure open as a Governor panel from the top-strip chips, so the page has two columns. Entities are a tree (Cluster, Services, Compute nodes, GPU nodes) of highlight cells. The traffic drawing is wider (760 units) with bigger text, packets and lanes (issue 125). | `webui/static/index.html` | #126 |
 | Dashboard redesign (one screen) | 🔍 In review | One screen without page scrolling (1280x800, six nodes): the traffic diagram (clients, fault injector, services and every node as a tile; dots curve to services, fault diamonds travel to the node they hit) beside an entity list (Compute nodes, GPU nodes, Services; one card per line with status and quick facts: GPU utilisation meter and busy count, temperature, BCM state, requests per minute). A node opens a panel in place of the list (Actions: faults then recover; Info: connect details and describe text) so the traffic stays visible. Scenarios, Plan and Governor open as sheets from the top strip; Needs attention is a slim bar; a Connections tab lists each part's address, command and credential file path (issues 115, 118, 121, 123, 125, 127, 129; PRs 116, 120, 122, 124, 126, 128). | `webui/static/index.html`, `webui/cluster.py`, `webui/flow.py`, `webui/connections.py`, `scripts/ui_shots.py` | #130 |
 | Animated workload dots | 🔍 In review | Cluster tab Traffic panel: a dot travels from Clients to a mock each time it serves a real request (the mocks count them at /sim/stats; health checks, /sim calls and the UI's own polls are excluded), a diamond from Fault injector when a fault is applied. SSE at /api/flow opened only while the tab shows; pause button; stops at governor L3+ and for reduced motion. Slurm job dots are not drawn (the UI cannot read the scheduler). ADR 0009. | `webui/flow.py`, `components/*/ (GET /sim/stats)`, `webui/static/index.html` | #89 |
+| Declared graph of the Infrastructure architecture | 🔍 In review | /api/cluster now carries `graph`: entities and typed edges (plane, drawn kind, measured or declared) derived from the snapshot in webui/graph.py. An edge is measured only where a counter backs it (mock request counters, Teleport connections, recorded faults); SSH, jump and Teleport hops and the real Jira are declared. The diagram draws only edges named in the model (data-edge, data-plane, data-measured on each line); the fault lane to the real Jira, which no scenario can reach, is no longer drawn. Slice 1 of the depth view (issue 312, epic 317); focus view, error-shape dots, blast radius and lenses follow. | `webui/graph.py`, `webui/app.py`, `webui/static/index.html`, `tests/test_graph.py`, `scripts/ui_shots.py` | - |
 | Budget manager | ⬜ To do | Profile/budget form (W-7). | - | - |
 
-1/11 done
+1/12 done
 
 ### macOS agent and CI (0%)
 
