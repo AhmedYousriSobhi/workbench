@@ -118,3 +118,44 @@ Every node fault files a ticket and every recovery resolves it, like an ops inte
 One ticket stays open per node and kind: the same fault again adds a comment (`Still failing.`) instead of a second ticket. Power on or Clear faults adds `Recovered.` and moves the ticket to Resolved; a fault after that opens a new one. Tickets have the labels `node-<name>`, `fault-<kind>` and `auto`, type Incident, reporter `ops-bot`.
 
 `POST /sim/tickets {"action": "fault", "node": "cn002", "kind": "power", "detail": "..."}` does the same by hand (`"open": false` resolves; leave `kind` out to resolve every kind for the node).
+
+## Ticket traffic through the standard REST API (driver, issue 262)
+
+The simulator's own ticket traffic (a node fault opening a ticket, recovery resolving it, the team moving tickets along) uses the
+mock's private `/sim/tickets` and `/sim/activity`. A real Jira has neither. `benchctl/jira_driver.py` does the same through calls any
+Jira accepts (`search/jql`, issue, comment, transitions, assignee), so the same behaviour can later run against Jira Cloud:
+
+```python
+from benchctl.jira_driver import JiraDriver
+d = JiraDriver("http://127.0.0.1:8080")          # the mock; JiraDriver.from_env() reads a Cloud site from the environment
+d.fault("cn003", "power", "powered off")          # opens one ticket for the node (a repeat comments)
+d.fault("cn003", "", "back", open=False)          # recovery: comment and resolve
+d.tick()                                          # one change a team would make
+```
+
+Every ticket the driver files has the label `workbench`. Status: built and checked against the mock (the same tickets as
+`/sim/tickets` for the same sequence, a unit test proves it) and against a Data Center shaped fake. Not yet run against Jira Cloud:
+that needs the shapes recorded for issue 229 (comment bodies are ADF documents there; the driver has the helpers, unchecked).
+
+### Both Jiras, one script (issue 284)
+
+The mock and the real Data Center part ([real Jira](jira-real.md)) take the same driver: `JiraDriver.for_target("mock")` or
+`for_target("real")` (the admin token comes from `compose/generated/secrets/jira-real.env`). What differs is handled inside:
+
+| | mock | real Data Center | the driver |
+|---|---|---|---|
+| workflow | Open, In Progress, Resolved, Closed | To Do, In Progress, Done | compares status categories (new, indeterminate, done), follows the transitions offered, supplies a required resolution; Closed after Done is already reached |
+| search | `search/jql` and `search` | `search` only (offsets) | `dc` mode uses `search` with `statusCategory != Done` |
+| issue types | Incident, Task | Epic, Task, Bug, Subtask | asks the project; Bug stands in for Incident |
+| users | any name | alice to erin, admin | reporter and assignee by name; no `ops-bot` on the real one |
+
+Two host-side commands run the automation on either (`--target mock` is the default):
+
+```bash
+./scripts/benchctl run ticket-team --target real --every 20       # a team works the tickets; Ctrl-C stops
+./scripts/benchctl run ticket-watch --target real                  # a node going DOWN files a ticket; back in service resolves it
+```
+
+The mock keeps its own in-process versions (`set jira-activity`, `node_watch.py` in slurmctld); `ticket-watch` reuses
+`node_watch`'s parsing, so the same node states give the same tickets. A test proves the mock and a Data Center shaped fake give
+the same results; the live test `./scripts/verify.sh --unit jira_dc` runs the driver on both real services.

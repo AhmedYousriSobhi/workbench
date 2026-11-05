@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.browser
 pytest.importorskip("playwright")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 import ui_shots

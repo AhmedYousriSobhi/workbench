@@ -19,13 +19,14 @@ OBSERVABILITY_MB = 700                            # prometheus 300 + grafana 300
 FLOOR_MB = 1024                                   # MemAvailable that must remain after the start (same floor as preflight)
 # part -> (compose group, services it adds; None = the whole group)
 PARTS: dict[str, tuple[str, list[str] | None]] = {
-    "jira": ("mocks", ["jira-mock"]), "bmc": ("mocks", ["bmc-farm"]), "bcm": ("mocks", ["bcm-mock"]),
+    "jira": ("mocks", ["jira-mock"]), "jira-real": ("jira-real", None), "bmc": ("mocks", ["bmc-farm"]), "bcm": ("mocks", ["bcm-mock"]),
     "accounting": ("accounting", None), "teleport": ("teleport", None), "scenarios": ("scenarios", None), "load": ("load", None)}
 # The one registry of options that change what runs and so what memory it needs. The Cluster architecture sheet is drawn from it
 # (`catalog`): a new option is an entry here and in PARTS, not new page code.
 PART_INFO: dict[str, tuple[str, str]] = {
     "accounting": ("Accounting", "slurmdbd and MariaDB. Needed for sacct and job history; without it sacct says accounting storage is disabled."),
     "jira": ("Jira", "The Jira mock (REST v2 subset)."),
+    "jira-real": ("Jira (real)", "The official Jira Data Center image with Postgres, about 3 GB, a 3-hour test licence (ADR 0026). Next to the mock, not instead of it."),
     "bmc": ("BMC farm", "One Redfish endpoint per node: power, thermals, fans."),
     "bcm": ("BCM", "The BCM mock (CMDaemon JSON) and its device list."),
     "teleport": ("Teleport", "Teleport auth and proxy: tsh login and ssh to the login node and every node through it (not on by default)."),
@@ -39,15 +40,16 @@ CATEGORIES: dict[str, tuple[str, dict[str, str | None]]] = {
     "workload": ("what runs the jobs", {"slurm": None, "kubernetes": None}),
     "accounting": ("job history for sacct", {"slurmdbd": "accounting"}),
     "monitoring": ("metrics and dashboards", {"prometheus": None, "grafana": None}),
-    "ticketing": ("ticket systems", {"jira": "jira"}),
+    "ticketing": ("ticket systems", {"jira": "jira", "jira-real": "jira-real"}),
     "hardware": ("out-of-band management", {"bmc": "bmc", "bcm": "bcm"}),
     "access": ("how users reach the nodes", {"teleport": "teleport"}),
     "simulation": ("fault and user simulators", {"scenarios": "scenarios", "load": "load"}),
 }
 NOT_BUILT = {"kubernetes": "Kubernetes is not built yet (SPEC section 11); use --workload slurm"}
 PART_CATEGORY = {part: cat for cat, (_, items) in CATEGORIES.items() for part in items.values() if part}
+BY_NAME_ONLY = ("jira-real",)  # heavy (about 3 GB): never turned on by `all` or `--addons`, only by its name (ADR 0026)
 DEFAULT_PARTS = ("jira", "bmc", "bcm", "accounting", "scenarios")  # accounting: without slurmdbd, sacct says storage is disabled
-DROP_ORDER = ("load", "accounting", "scenarios", "bcm", "jira", "bmc")  # what to suggest removing first
+DROP_ORDER = ("jira-real", "load", "accounting", "scenarios", "bcm", "jira", "bmc")  # what to suggest removing first
 LIMITS = {"cpu_nodes": (0, 64), "gpu_nodes": (0, 16), "gpus_per_node": (1, 8)}
 
 
@@ -100,9 +102,10 @@ def items(category: str) -> list[str]:
 def expand(picked: dict[str, list[str] | None], addons: bool = False) -> list[str]:
     """The parts that category flags (`{"hardware": ["bmc,bcm"], ...}`) and `--addons` turn on. Values may be comma
     separated; `all` takes every item of the category. Raises SpecError with one message for the first bad item."""
-    parts: list[str] = list(PARTS) if addons else []
+    parts: list[str] = [p for p in PARTS if p not in BY_NAME_ONLY] if addons else []
     for cat, values in picked.items():
         every = [i for i in CATEGORIES[cat][1] if i not in NOT_BUILT]
+        all_of = [i for i in every if CATEGORIES[cat][1][i] not in BY_NAME_ONLY]  # what `all` takes
         for item in (v.strip() for val in (values or []) for v in val.split(",") if v.strip()):
             if item in NOT_BUILT:
                 raise SpecError(NOT_BUILT[item])
@@ -110,7 +113,7 @@ def expand(picked: dict[str, list[str] | None], addons: bool = False) -> list[st
                 close = difflib.get_close_matches(item, every, n=1)
                 hint = f" Did you mean '{close[0]}'?" if close else ""
                 raise SpecError(f"unknown {cat} item '{item}'.{hint} Valid: {', '.join(items(cat))}.")
-            for i in every if item == "all" else [item]:
+            for i in all_of if item == "all" else [item]:
                 if part := CATEGORIES[cat][1][i]:
                     parts.append(part)
     return sorted(set(parts))
@@ -232,6 +235,19 @@ def forget(path: Path = SAVED) -> None:
 def current(sim: dict, path: Path = SAVED) -> Spec | None:
     """The workbench last built by `apply`/`up` with counts, or None when a plain profile is in use."""
     return load_file(path, defaults(sim)) if path.is_file() else None
+
+
+def start_line(saved: Spec | None, profile: str | None, parts: bool) -> str:
+    """The one line `benchctl start` prints first: what it starts, and what saved workbench that replaces (issue 215).
+
+    A start with parts builds the default workbench plus those parts; one without builds the size preset (default min).
+    Either way it does not reuse the saved workbench, it forgets it; the plain default is `start --profile min`."""
+    what = "the default workbench plus the parts you named" if parts else f"the {profile or 'min'} size preset"
+    if saved is None:
+        return f"Starting {what}."
+    mine = f"{saved.cpu_nodes} compute + {saved.gpu_nodes} GPU nodes, parts {', '.join(saved.parts) or 'none'}"
+    return (f"Starting {what}. This replaces the workbench last built ({mine}); "
+            "to rebuild that one, run `benchctl apply -f FILE` or `benchctl up` with its counts.")
 
 
 def live_sim_path(base: Path = Path("sim.yaml"), generated: Path = Path("compose/generated/sim.yaml")) -> Path:

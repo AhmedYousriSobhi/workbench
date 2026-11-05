@@ -18,6 +18,7 @@ from . import (
     diag,
     export,
     inventory,
+    jira_real,
     logins,
     machine,
     measure,
@@ -27,6 +28,7 @@ from . import (
     slurmtrace,
     stack,
     teleport,
+    ticketbot,
     workbench,
 )
 
@@ -337,6 +339,11 @@ def start(profile: str = typer.Option(None, "--profile", autocompletion=completi
     _offer_completion()
     modes = [] if login is None else ["--login", ",".join(_login_modes(login))]
     parts = [x for p in (with_ or []) for x in ("--with", p)] + [x for p in (without or []) for x in ("--without", p)] + modes
+    try:
+        saved = workbench.current(_base_sim())
+    except workbench.SpecError:
+        saved = None
+    typer.echo(workbench.start_line(saved, profile, bool(parts)))
     _launcher("start", *(parts or ["--profile", profile or "min"]))
 
 
@@ -689,6 +696,34 @@ def remove_teleport_state(yes: bool = typer.Option(False, "-y", "--yes", help="d
                "benchctl add invite USER, log in")
 
 
+@remove_app.command("jira-real-state")
+def remove_jira_real_state(yes: bool = typer.Option(False, "-y", "--yes", help="do not ask (a terminal asks; scripts are never asked)")) -> None:
+    """Forget the real Jira: remove its containers and data, so the next start is a fresh one with a fresh 3-hour licence. The
+    mock is not touched."""
+    _confirm("This deletes the real Jira's data: its users, tickets and tokens.", yes)
+    jira_real.reset()
+    typer.echo("removed the real Jira's containers and data")
+    typer.echo("next: benchctl start --with jira-real; benchctl setup jira-real")
+
+
+setup_app = typer.Typer(cls=SuggestingGroup, help="Finish a started part: the real Jira")
+app.add_typer(setup_app, name="setup")
+
+
+@setup_app.command("jira-real")
+def setup_jira_real(licence: str = typer.Option("", "--licence", help="a file with Atlassian's 3-hour Data Center test licence "
+                                                f"(default ${jira_real.LICENSE_VAR} or {jira_real.LICENSE})")) -> None:
+    """Finish the real Jira after `benchctl start --with jira-real`: the setup wizard, users alice to erin, project OPS, tickets,
+    and an access token per user (written to compose/generated/secrets/jira-real.env, never printed). Safe to repeat."""
+    try:
+        text = jira_real.read_license(_Path(licence)) if licence else None
+        jira_real.provision(licence=text, say=lambda m: typer.echo(m))
+    except jira_real.JiraRealError as e:
+        typer.echo(f"FAILED: {e}", err=True)
+        raise typer.Exit(1) from None
+    typer.echo(f"Jira (real): {jira_real.URL}  sign in as admin, alice, bob, carol, dave or erin; passwords and tokens: {jira_real.ENV}")
+
+
 @remove_app.command("check")
 def remove_check(name: str = CHECK) -> None:
     """Remove a check and its file from images/node-base/nhc.d (git keeps the old one). To keep it, `set check NAME off` instead."""
@@ -785,6 +820,46 @@ def set_jira_activity(state: str = typer.Argument(..., help="on or off"),
     typer.echo(f"jira activity: {state}" + (f", a change about every {body['every']:g} s" if state == "on" else ""))
 
 
+run_app = typer.Typer(cls=SuggestingGroup, help="Run ticket automation against the mock or the real Jira")
+app.add_typer(run_app, name="run")
+_TARGET = typer.Option("mock", "--target", help="mock (the Jira mock) or real (the Data Center part)")
+
+
+def _driver(target: str):
+    from .jira_driver import JiraDriver, JiraError
+    try:
+        return JiraDriver.for_target(target)
+    except JiraError as e:
+        typer.echo(f"FAILED: {e}", err=True)
+        raise typer.Exit(1) from None
+
+
+@run_app.command("ticket-team")
+def run_ticket_team(target: str = _TARGET, every: float = typer.Option(45, "--every", help="seconds between changes"),
+                    count: int = typer.Option(0, "--count", help="stop after N changes (default: until Ctrl-C)")) -> None:
+    """A team works the tickets: moves them along, comments, reassigns, reopens, files follow-ups. Same on either Jira."""
+    driver = _driver(target)
+    typer.echo(f"ticket team on the {target} Jira, a change about every {every:g} s (Ctrl-C stops)")
+    try:
+        ticketbot.team(driver, every, count or None, say=typer.echo)
+    except KeyboardInterrupt:
+        typer.echo("stopped")
+    except OSError as e:
+        typer.echo(f"cannot reach the {target} Jira: {e}", err=True)
+        raise typer.Exit(1) from e
+
+
+@run_app.command("ticket-watch")
+def run_ticket_watch(target: str = _TARGET, every: float = typer.Option(10, "--every", help="seconds between polls")) -> None:
+    """Watch Slurm and file a ticket when a node goes out of service, resolve it when it returns (what node_watch does for the mock)."""
+    driver = _driver(target)
+    typer.echo(f"watching sinfo for the {target} Jira, every {every:g} s (Ctrl-C stops)")
+    try:
+        ticketbot.watch_nodes(driver, stack.PROJECT, every, say=typer.echo)
+    except KeyboardInterrupt:
+        typer.echo("stopped")
+
+
 @app.command("exec", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def exec_cmd(ctx: typer.Context, node: str = TARGET,
              user: str = typer.Option(None, "-u", "--user", autocompletion=completion.users, help="run as this simulated user, e.g. alice")) -> None:
@@ -795,6 +870,28 @@ def exec_cmd(ctx: typer.Context, node: str = TARGET,
     cmd = ctx.args or ["bash"]
     tty = ["-it"] if sys.stdin.isatty() and not ctx.args else []
     os.execvp("docker", ["docker", "exec", *tty, *(["-u", user] if user else []), f"{stack.PROJECT}-{node}-1", *cmd])
+
+
+@app.command("ssh", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def ssh_cmd(ctx: typer.Context, target: str = typer.Argument(..., help="NODE for a root shell, USER@NODE for a login as that user, e.g. cn001 or alice@cn001")) -> None:
+    """Open a shell on a node: `benchctl ssh cn001` (root), `benchctl ssh alice@cn001` (that user over SSH). A command after `--` runs instead."""
+    import os
+    import sys
+
+    from . import nodeshell
+
+    try:
+        node = nodeshell.split(target)[1]
+        known = completion.targets("")
+        if not known:
+            raise ValueError("the cluster is not running; start it with ./scripts/benchctl start")
+        if node not in known:
+            raise ValueError(f"unknown node {node!r}; try `benchctl get nodes`")
+        cmd = nodeshell.argv(target, _sim(), str(stack.SSH_DIR / "id_ed25519"), ctx.args, sys.stdin.isatty())
+    except ValueError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    os.execvp(cmd[0], cmd)
 
 
 @app.command()

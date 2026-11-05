@@ -82,8 +82,9 @@ def test_wrong_password_is_refused(farm):
 
 
 def test_every_node_resolves_by_its_network_alias(farm):
+    """Looked up from the farm: the BMC addresses live on the ipmi network, which only the farm and the login nodes join."""
     import subprocess
-    out = subprocess.run(["docker", "exec", "workbench-jira-mock-1", "python", "-c",
+    out = subprocess.run(["docker", "exec", "workbench-bmc-farm-1", "python", "-c",
                           "import socket;print(socket.gethostbyname('bmc-cn001'))"],
                          capture_output=True, text=True, check=False)
     assert out.returncode == 0 and out.stdout.strip() == "10.148.0.1"  # its own address on the ipmi network (ADR 0018)

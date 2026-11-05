@@ -24,7 +24,7 @@ IPMI_FARM_IP = "10.148.255.12"    # the farm that owns every BMC's state
 BMC_NODE_PORT_BASE = 9000          # the farm's per-node TLS port: 9000 + index in node order (components/bmc-farm/bmc.py)
 # service -> last octet in 10.141.255.0/24. observability.yml (a static file) repeats the three observability ones.
 SERVICE_HOSTS = {"slurmctld": 1, "slurmrestd": 2, "slurmdbd": 3, "mariadb": 4, "bcm-mock": 10, "jira-mock": 11,
-                 "bmc-farm": 12, "scenario-engine": 13, "user-sim": 14, "ticket-bot": 15,
+                 "bmc-farm": 12, "scenario-engine": 13, "user-sim": 14, "ticket-bot": 15, "jira-real": 16, "jira-db": 17,
                  "teleport": 30, "prometheus": 20, "grafana": 21, "gpu-exporter-farm": 22}
 
 

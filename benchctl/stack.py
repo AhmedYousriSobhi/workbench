@@ -11,7 +11,7 @@ import urllib.error
 from collections.abc import Callable
 from pathlib import Path
 
-from . import addressing, checks, compose, logins, slurmconf, teleport, workbench
+from . import addressing, checks, compose, jira_real, logins, slurmconf, teleport, workbench
 
 COMPOSE_FILE = Path("compose/generated/docker-compose.yml")
 PROJECT = "workbench"
@@ -21,6 +21,7 @@ STAGES = [  # (label, service-name pattern); later stages depend on earlier ones
     ("slurm core", r"slurmctld|mariadb|slurmdbd"),
     ("slurm services", r"slurmrestd|accounting-init"),
     ("mocks", r"bmc-farm|bcm-mock|jira-mock"),
+    ("jira real", r"jira-db|jira-real"),
     ("teleport", r"teleport"),
     ("bmc addresses", r"bmc-(cn|gpu)\d+"),
     ("nodes", r"(cn|gpu)\d+"),
@@ -163,6 +164,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         say(f"skipping (not implemented yet): {', '.join(skip)}")
     if "bmc-farm" in todo:
         ensure_bmc_credentials()
+    if "jira-real" in todo:
+        jira_real.ensure_secrets()
     if any(logins.is_login(n) for n in todo) or any(re.fullmatch(r"(cn|gpu)\d+", n) for n in todo):
         try:
             ensure_ssh_keys()
