@@ -39,7 +39,6 @@ def capture(out: Path) -> dict:
             for scheme in ("light", "dark"):
                 for vp, (w, h) in VIEWPORTS.items():
                     page = browser.new_page(viewport={"width": w, "height": h}, color_scheme=scheme)
-                    page.add_init_script("localStorage.setItem('workbench-tree', 'open')")  # since #192 the list is folded by default at 1100-1500 px; these checks are about the list
                     page.on("console", lambda m, r=result: r["console_errors"].append(m.text) if m.type == "error" else None)
                     page.on("pageerror", lambda e, r=result: r["console_errors"].append(str(e)))
                     deadline = time.time() + 15
@@ -108,6 +107,8 @@ def capture(out: Path) -> dict:
                         if page.locator("#tip:visible").count() != 1:
                             result["a11y"].append("hovering a part showed no tip")
                         page.mouse.move(2, 2)
+                        page.evaluate(SYNTH_CLUSTER)  # with the stack down (a --full run, after the other modules tore theirs down) the list is hidden for want of nodes
+                        page.wait_for_timeout(300)
                         page.click("#treetoggle")  # the node list folds away, the diagram keeps the width
                         if page.locator("#nodesmain:visible").count() != 0:
                             result["a11y"].append("the node list did not fold away")
