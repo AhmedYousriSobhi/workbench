@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 
 TOLERANCE = 0.15
-APP_MB = 4096
+APP_MB = 1024  # measured once: 664 MB peak for a desktop client under the client-stress scenario (docs/guides/memory.md); rounded up
 APP_ENV = "WORKBENCH_APP_MB"
 APP_FILE = Path(__file__).resolve().parent.parent / "compose" / "generated" / "app_reserve.json"  # gitignored; `benchctl measure app --save`
 MEASURED_ON = "2026-11-05"

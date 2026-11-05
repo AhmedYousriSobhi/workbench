@@ -9,11 +9,11 @@ Example: 2 CPU nodes, 4 GPU nodes with Jira.
 ./scripts/benchctl plan --cpu-nodes 2 --gpu-nodes 4 --with jira
 ```
 
-It prints the nodes and parts, the memory by item (expected use and the cap), the reserve for the app under test (4 GB until you run `benchctl measure app --match NAME --save`, see [memory](memory.md)) and the total it needs, then one verdict line:
+It prints the nodes and parts, the memory by item (expected use and the cap), the reserve for the app under test (1 GB until you run `benchctl measure app --match NAME --save`, see [memory](memory.md)) and the total it needs, then one verdict line:
 
-- `fits: needs 5164 MB (1068 MB expected + 4096 MB for the app), 8000 MB free, 2836 MB would remain (floor 1024 MB)`: exit code 0.
+- `fits: needs 2092 MB (1068 MB expected + 1024 MB for the app (assumed, not measured)), 8000 MB free, 5908 MB would remain (floor 1024 MB)`: exit code 0.
 - `does not fit: ... short by 273 MB ... Try: drop load (100 MB); drop accounting (360 MB); 5 fewer node(s)`: exit code 1,
-  and it says what to remove. When the workbench alone fits and only the app's reserve does not, it names the largest reserve that does (`--app-mb 3800 if the app needs less than 4096 MB`); start the app after the workbench.
+  and it says what to remove. When the workbench alone fits and only the app's reserve does not, it names the largest reserve that does (`--app-mb 700 if the app needs less than 1024 MB`); start the app after the workbench.
 
 **Expected** is what each part was measured to use plus 15 percent (never above its cap); **cap** is the container limit the
 governor enforces. Admission compares the expected use plus the app's reserve with free memory, so a start that fits is no longer

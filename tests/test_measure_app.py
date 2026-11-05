@@ -29,6 +29,12 @@ def test_match_by_name_cmdline_and_pid_and_sum_pss(tmp_path):
     assert measure.app_bytes(["nothing"], [], p) == (0, 0)
 
 
+def test_breakdown_names_what_a_match_caught(tmp_path):
+    p = proc(tmp_path, {10: ("MyApp", "/opt/myapp", 3072), 11: ("MyApp", "/opt/myapp --child", 1024), 12: ("helper", "/opt/myapp/helper", 512)})
+    got = measure.app_breakdown(["myapp"], [], p)
+    assert list(got) == ["MyApp", "helper"] and got["MyApp"] == (4096 * 1024, 2) and got["helper"] == (512 * 1024, 1)
+
+
 def test_summary_peak_typical_and_suggestion():
     s = measure.app_summary([(0, 0), (1000 * MIB, 3), (1200 * MIB, 4), (1100 * MIB, 4)])
     assert s["peak"] == 1200 * MIB and s["typical"] == 1100 * MIB and s["processes"] == 4
@@ -48,7 +54,7 @@ def test_sampler_runs_for_the_duration_and_stops_on_ctrl_c():
 
 def test_precedence_given_then_saved_then_default(monkeypatch, tmp_path):
     monkeypatch.delenv(memory.APP_ENV)
-    assert memory.app_reserve() == (4096, "assumed, not measured")
+    assert memory.app_reserve() == (memory.APP_MB, "assumed, not measured")
     memory.save_app(2500)
     mb, note = memory.app_reserve()
     assert mb == 2500 and note.startswith("measured on 20")
@@ -58,9 +64,9 @@ def test_precedence_given_then_saved_then_default(monkeypatch, tmp_path):
     assert memory.app_mb() == 0
     monkeypatch.delenv(memory.APP_ENV)
     memory.APP_FILE.unlink()  # deleting the file returns to the default
-    assert memory.app_mb() == 4096
+    assert memory.app_mb() == memory.APP_MB
     memory.APP_FILE.write_text("not json")
-    assert memory.app_mb() == 4096
+    assert memory.app_mb() == memory.APP_MB
 
 
 def test_plan_says_where_the_number_comes_from(monkeypatch):

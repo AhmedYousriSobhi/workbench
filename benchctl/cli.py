@@ -1114,6 +1114,10 @@ def measure_app_cmd(match: list[str] = APP_MATCH, pid: list[int] = APP_PID,
     if not measure.app_bytes(match or [], pid or [])[1]:
         typer.echo(f"no running process matches {', '.join(match or [])} {' '.join(map(str, pid or []))}; start the app and retry", err=True)
         raise typer.Exit(1)
+    caught = measure.app_breakdown(match or [], pid or [])
+    typer.echo("matched: " + ", ".join(f"{n} x{c} ({b // 1024**2} MB)" for n, (b, c) in list(caught.items())[:6]) + (" ..." if len(caught) > 6 else ""))
+    if len(caught) > measure.APP_MAX_NAMES:
+        typer.echo(f"warning: {len(caught)} different programs match; a loose --match counts other programs' memory. Narrow it (a path or full name) before using --save", err=True)
     typer.echo("sampling" + (f" for {duration:g} s" if duration else " until Ctrl-C") + "; use the app as you normally would ...")
     stats = measure.app_summary(measure.sample_app(match or [], pid or [], duration, interval))
     if not stats:

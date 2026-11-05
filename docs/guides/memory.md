@@ -4,20 +4,20 @@ Measured on 2026-11-05 with `docker stats` on a live stack (issue 287). The plan
 
 ## What you need free
 
-| You start | Expected use | With the 4 GB app reserve | Free memory it needs (floor 1 GB) |
+| You start | Expected use | With the 1 GB app reserve | Free memory it needs (floor 1 GB) |
 |---|---|---|---|
-| `min` preset (4 nodes, mocks, scenarios) | 0.5 GB | 4.5 GB | 5.5 GB |
-| `std` preset | 1.3 GB | 5.3 GB | 6.3 GB |
-| 2 cpu + 2 gpu nodes, every add-on except the real Jira | 1.1 GB | 5.1 GB | 6.1 GB |
-| the same plus the real Jira (`--with jira-real`) | 3.4 GB | 7.4 GB | 8.4 GB |
+| `min` preset (4 nodes, mocks, scenarios) | 0.5 GB | 1.5 GB | 2.5 GB |
+| `std` preset | 1.3 GB | 2.3 GB | 3.3 GB |
+| 2 cpu + 2 gpu nodes, every add-on except the real Jira | 1.1 GB | 2.1 GB | 3.1 GB |
+| the same plus the real Jira (`--with jira-real`) | 3.4 GB | 4.4 GB | 5.4 GB |
 
-The app under test (your monitoring client) is reserved at **4 GB** until you measure it: the 4 GB is a guess for the client alone, not part of any pod, and the plan prints it as `assumed, not measured`. Measure it once, with the client running and in use:
+The app under test (your monitoring client) is reserved at **1 GB** until you measure it on your machine: the reserve is for the client alone, not part of any pod, and the plan prints it as `assumed, not measured`. The 1 GB default comes from one measured session (below); it was 4 GB, a guess, before. Measure it once, with the client running and in use:
 
 ```bash
 ./scripts/benchctl measure app --match NAME --duration 120 --save
 ```
 
-`NAME` is any part of the client's process name or command line (`--pid N` also works; both repeat). It sums the PSS of every matching process, prints peak, typical use and a suggested reserve (peak + 10%, rounded up to 100 MB), and `--save` keeps it in `compose/generated/app_reserve.json` (gitignored). The plan then says `measured on DATE`. Delete the file to return to 4096. One measured session (a desktop client with one cluster, a terminal, the real Jira and every view opened during the `client-stress` scenario): 469 MB idle, 664 MB peak, so 800 MB; the 4096 default stays until more sessions agree. Precedence: `--app-mb`, then `WORKBENCH_APP_MB`, then the saved measurement, then 4096. If it already runs, its memory is already out of the free figure: add `--app-mb 0` to `plan`, `up`, `apply` or `start` (or set `WORKBENCH_APP_MB=0`).
+`NAME` is any part of the client's process name or command line (`--pid N` also works; both repeat). It first prints which programs matched (`matched: electron x7 (460 MB), ...`) and warns when more than 4 different ones do, because a loose word such as `name` also matches unrelated programs and inflates the result; read that line before `--save`. It sums the PSS of every matching process, prints peak, typical use and a suggested reserve (peak + 10%, rounded up to 100 MB), and `--save` keeps it in `compose/generated/app_reserve.json` (gitignored). The plan then says `measured on DATE`. Delete the file to return to 1024. One measured session (a desktop client with one cluster, a terminal, the real Jira and every view opened during the `client-stress` scenario): 469 MB idle, 664 MB peak, so 800 MB; the default is 1024 (664 MB plus room for a second cluster or terminal), and a session with several clusters should be measured on its own. Precedence: `--app-mb`, then `WORKBENCH_APP_MB`, then the saved measurement, then 1024. If it already runs, its memory is already out of the free figure: add `--app-mb 0` to `plan`, `up`, `apply` or `start` (or set `WORKBENCH_APP_MB=0`).
 
 ## What each part really uses
 
@@ -48,7 +48,7 @@ Memory, MB: expected use (measured + 15%, memory.py) and the cap the container m
     4 nodes                 60      240
   jira-real              2176     2176
   total                  3394     4876
-  app under test         4096
+  app under test         1024   (assumed, not measured)
   needs                  7490   (admitted against this)
 ```
 

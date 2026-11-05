@@ -12,7 +12,7 @@ Host reserve (OS, desktop, IDE, browser): **about 3 GB**, never governed. Page c
 | Prometheus + Alertmanager + Grafana | 0.7 GB | P1 |
 | slurmctld + slurmrestd | 0.2 GB | P1 |
 | slurmdbd + MariaDB (small buffer pool) | 0.2 GB | P2 (profile-gated) |
-| App under test | 4.0 GB assumed until measured (`benchctl measure app --save`, `--app-mb`) | P1 |
+| App under test | 1.0 GB assumed until measured on your machine (664 MB peak in one session) (`benchctl measure app --save`, `--app-mb`) | P1 |
 | bmc-farm + bcm-mock + jira-mock + gpu-exporter-farm | 0.3 GB | P2 |
 | k3d/kind (1 server + 1 agent) + KWOK | 1.2 GB | P3 |
 | slurmd containers | ~60 MB each (16 nodes about 1 GB) | P4 |
@@ -53,7 +53,7 @@ added without a measurement.
 | jira-db (real Jira's Postgres) | 130 | 256 | 150 |
 | jira-real | 2045 (peak, setup plus ticket run, trimmed JVM) | 2176 | 2176 (at the cap by nature: a JVM keeps what it grew) |
 | scenario-engine, user-sim, ticket-bot, accounting-init | not measured (not built or one-shot) | 60 / 60 / 40 / 30 | the cap |
-| **app under test** | | | **4096 (reserve)** |
+| **app under test** | | | **1024 (reserve)** |
 
 The 15 percent tolerance is `memory.TOLERANCE`. Live check on the same selection (plan expected 1068 MB; 190 MB of that is
 components that are not built; 728 MiB in use): the plan sits about 17 percent above use. The app's reserve is part of

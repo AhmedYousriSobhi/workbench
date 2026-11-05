@@ -181,7 +181,7 @@ def check_profiles(avail_gb: float, budgets: dict[str, float]) -> Check:
 
 
 def _app_reserve_mb() -> int:
-    """WORKBENCH_APP_MB, else the saved `benchctl measure app --save`, else 4096."""
+    """WORKBENCH_APP_MB, else the saved `benchctl measure app --save`, else 1024 (benchctl/memory.py APP_MB)."""
     raw = os.environ.get("WORKBENCH_APP_MB", "")
     if raw.strip().isdigit():
         return int(raw)
@@ -189,7 +189,7 @@ def _app_reserve_mb() -> int:
         import json
         return int(json.loads((Path(__file__).resolve().parent.parent / "compose" / "generated" / "app_reserve.json").read_text())["mb"])
     except (OSError, ValueError, KeyError, TypeError):
-        return 4096
+        return 1024
 
 
 def run_all() -> list[Check]:

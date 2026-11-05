@@ -144,6 +144,7 @@ def report(idle: dict, loaded: dict | None = None) -> str:
 
 APP_HEADROOM = 1.1
 APP_ROUND_MB = 100
+APP_MAX_NAMES = 4  # more distinct process names than this usually means a loose --match
 
 
 def _ancestors() -> set[int]:
@@ -183,6 +184,22 @@ def app_bytes(matches: list[str], pids: list[int], proc: Path = Path("/proc")) -
         if kb:
             total, count = total + kb * 1024, count + 1
     return total, count
+
+
+def app_breakdown(matches: list[str], pids: list[int], proc: Path = Path("/proc")) -> dict[str, tuple[int, int]]:
+    """Per process name: (PSS bytes, processes), largest first; shows what a --match really caught."""
+    out: dict[str, list[int]] = {}
+    for pid in app_pids(matches, pids, proc):
+        kb = pss_kb(proc / str(pid))
+        if not kb:
+            continue
+        try:
+            name = (proc / str(pid) / "comm").read_text().strip()
+        except OSError:
+            continue
+        cur = out.setdefault(name, [0, 0])
+        cur[0], cur[1] = cur[0] + kb * 1024, cur[1] + 1
+    return {k: (v[0], v[1]) for k, v in sorted(out.items(), key=lambda kv: -kv[1][0])}
 
 
 def sample_app(matches: list[str], pids: list[int], duration: float, interval: float, take=None,

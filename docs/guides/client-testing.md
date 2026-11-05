@@ -57,14 +57,26 @@ If port 2222 refuses connections, the checkout is probably on a branch without t
 
 ## Stress test: everything at once while the client runs
 
-`benchctl scenario run client-stress` (5 minutes, [scenarios/client-stress.yaml](../../scenarios/client-stress.yaml)) floods five nodes with jobs, raises GPU XID errors and fan failures, heats a GPU node, powers off and drains `cn004`, files 12 tickets, then makes the Jira mock answer 429, slow and 503 before clearing everything. Run it with the client open and measure the client at the same time (use a `--match` that names only the client's own processes; a loose word such as `name` matches unrelated programs and the tool prints how many processes it found):
+`benchctl scenario run client-stress` (5 minutes, [scenarios/client-stress.yaml](../../scenarios/client-stress.yaml)) floods five nodes with jobs, raises GPU XID errors and fan failures, heats a GPU node, powers off and drains `cn004`, files 12 tickets, then makes the Jira mock answer 429, slow and 503 before clearing everything. Run it with the client open and measure the client at the same time (use a `--match` that names only the client's own processes, such as its install path; a loose word such as `name` matches unrelated programs. The tool prints `matched: <program> xN (MB)` before it samples and warns when more than 4 different programs match; read that line before `--save`):
 
 ```bash
 ./scripts/benchctl scenario run client-stress &
 ./scripts/benchctl measure app --match NAME --duration 330 --save
 ```
 
-The Jira faults hit `jira-mock` (8080), not `jira-real`. Measured once (a desktop Electron client, one cluster, a terminal, the real Jira, every view opened in turn): 469 MB idle, 664 MB peak and 555 MB typical during the scenario, 8 processes; the machine reserve was set to 800 MB. One session, one cluster: it is a floor for several clusters or terminals, not a limit.
+**Running it with the real window, step by step (what was done once):**
+
+1. Bring the workbench up with the real Jira (`benchctl start --with jira-real`, then `benchctl setup jira-real` once; `benchctl status` shows the licence end).
+2. `benchctl export profile -o profile.json`, then `benchctl ssh-key install` (the client only accepts a key under `~/.ssh`; run `benchctl ssh-key remove` at the end).
+3. Start the client in its dev mode with a throwaway config directory (`XDG_CONFIG_HOME=<empty dir>`) and `--remote-debugging-port=9222`. A fresh config asks for a local account (any name, no password), then offers to claim the existing profile (choose it, confirm, Continue).
+4. Create the cluster through the client's own API from the profile file: the entry for the login node that takes a key, the key at `~/.ssh/workbench_ed25519`, the Grafana viewer token from `compose/generated/secrets/grafana_viewer_token`, and for the real Jira `http://127.0.0.1:8083` with `PAT_ALICE` from `compose/generated/secrets/jira-real.env`. Read the secrets from the files inside the script; never print them.
+5. In the client, trust the host key and Connect; check SSH, Slurm, Grafana and the Jira section are green.
+6. Measure idle (`measure app --duration 40`), then run the scenario, the measurement and a loop that opens every view (Grafana, Slurm with its Jobs, Nodes, Partitions and GPUs tabs, Storage, Tickets and docs, Notes) together.
+7. Stop the client, remove the throwaway config and the installed key.
+
+Measured this way: 469 MB idle; with every view opened and the scenario running, 664 MB peak, 555 MB typical. A first attempt whose clicks missed (the client only polled) peaked at 539 MB, which is why the views must be opened.
+
+The Jira faults hit `jira-mock` (8080), not `jira-real` (issue 303 adds faults for the real one); the ticket wave also goes to the mock. Measured once (a desktop Electron client, one cluster, a terminal, the real Jira, every view opened in turn): 469 MB idle, 664 MB peak and 555 MB typical during the scenario, 8 processes; the machine reserve was set to 800 MB. One session, one cluster: it is a floor for several clusters or terminals, not a limit.
 
 ## Slurm: what is real and what is not
 
