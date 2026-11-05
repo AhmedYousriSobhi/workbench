@@ -4,4 +4,4 @@
 set -eu
 cd "$(dirname "$0")/.."
 [ -n "${PYLIBS:-}" ] && export PYTHONPATH="$PYLIBS${PYTHONPATH:+:$PYTHONPATH}"
-WORKBENCH_REAL=1 exec python3 -m pytest -v tests/real "$@"
+WORKBENCH_REAL=1 exec python3 -m pytest -v -rfE --durations=25 tests/real "$@"

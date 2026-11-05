@@ -107,6 +107,8 @@ def capture(out: Path) -> dict:
                         if page.locator("#tip:visible").count() != 1:
                             result["a11y"].append("hovering a part showed no tip")
                         page.mouse.move(2, 2)
+                        page.evaluate(SYNTH_CLUSTER)  # with the stack down (a --full run, after the other modules tore theirs down) the list is hidden for want of nodes
+                        page.wait_for_timeout(300)
                         page.click("#treetoggle")  # the node list folds away, the diagram keeps the width
                         if page.locator("#nodesmain:visible").count() != 0:
                             result["a11y"].append("the node list did not fold away")

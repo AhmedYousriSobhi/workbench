@@ -115,7 +115,8 @@ def test_stack_lifecycle(sim):
     assert sinfo() == "cn[001-002],gpu[001-002]"
     assert cn_running() == ["cn001", "cn002"]  # the containers really stopped, not just slurm.conf
     assert stack.scale(sim, "min", 3, say=say)  # grow again
-    assert sinfo() == "cn[001-003],gpu[001-002]"
+    from helpers import wait_for
+    assert wait_for(lambda: sinfo() == "cn[001-003],gpu[001-002]", timeout=30), sinfo()  # slurmctld was just recreated
     assert stack.down(say=say)
     assert project_containers() == []
     # a fresh Grafana invalidates the old token; up must replace it
