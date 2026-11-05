@@ -89,6 +89,7 @@ step() {  # step NAME CMD...: run with a live status line, record, keep the outp
   secs=$((SECONDS - t0))
   if [ $rc = 0 ]; then echo "PASS  $name  [${secs}s]  ($(tail -1 "$log"))"; else
     echo "FAIL  $name  [${secs}s]"; tail -30 "$log"; status=1; fi
+  awk '/slowest .*durations/{f=1} f&&/^=+ .* in [0-9.]+s/{f=0} f' "$log" | sed 's/^/      /'  # where the time went (pytest --durations)
   timings+=("${secs}s $name")
 }
 if [ "$unit_given" = 1 ]; then
@@ -97,7 +98,7 @@ if [ "$unit_given" = 1 ]; then
     [ -n "$hook" ] && step "reset $unit state ($hook)" "$hook"
   fi
   [ ${#fast[@]} -gt 0 ] && step "$unit unit tests" python3 -m pytest -v "${fast[@]}"
-  if [ ${#live[@]} -gt 0 ]; then step "$unit live tests" env WORKBENCH_REAL=1 python3 -m pytest -v "${live[@]}"
+  if [ ${#live[@]} -gt 0 ]; then step "$unit live tests" env WORKBENCH_REAL=1 python3 -m pytest -v --durations=25 "${live[@]}"
   else echo "NOTE  $unit has no live tests (tests/real/test_${unit}*.py)"; fi
 else
   if [ -z "$only" ]; then
