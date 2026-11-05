@@ -1,4 +1,5 @@
 name: client-stress
+ref: SC-01
 description: "Five minutes of everything at once for a monitoring client: job floods, GPU errors on both GPU nodes, a rising temperature, a node that loses power, drains, a ticket wave and Jira refusing then slow, then all clear. Run it while the client is open and measure it (benchctl measure app --match NAME --duration 330)"
 steps:
   - {at: 0s,   target: slurm,        do: {submit: {node: cn001, duration: 120}}}

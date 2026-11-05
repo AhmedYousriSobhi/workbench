@@ -1,4 +1,5 @@
 name: fan-failure
+ref: SC-05
 description: Fans fail on a GPU node and it runs hot; the BMC event log shows critical entries
 steps:
   - {at: 0s,  target: bmc-farm, do: {nodes: [gpu002], fan_fail: 3}}

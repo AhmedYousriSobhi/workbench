@@ -1,4 +1,5 @@
 name: jira-flap
+ref: SC-09
 description: "Jira is switched off and on while tickets exist (refused, rate limited, unavailable), then healthy again"
 steps:
   - {at: 0s,  target: jira, do: {tickets: {action: create, project: OPS, summary: "Flap: ticket that exists before the outage", labels: [workbench, flap]}}}

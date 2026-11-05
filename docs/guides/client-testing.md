@@ -76,7 +76,7 @@ If port 2222 refuses connections, the checkout is probably on a branch without t
 
 Measured this way: 469 MB idle; with every view opened and the scenario running, 664 MB peak, 555 MB typical. A first attempt whose clicks missed (the client only polled) peaked at 539 MB, which is why the views must be opened.
 
-The Jira faults hit `jira-mock` (8080), not `jira-real` (issue 303 adds faults for the real one); the ticket wave also goes to the mock. Measured once (a desktop Electron client, one cluster, a terminal, the real Jira, every view opened in turn): 469 MB idle, 664 MB peak and 555 MB typical during the scenario, 8 processes; the machine reserve was set to 800 MB. One session, one cluster: it is a floor for several clusters or terminals, not a limit.
+`client-stress` hits `jira-mock` (8080) and files its tickets there; `client-stress-real` hits `jira-real`. Measured once (a desktop Electron client, one cluster, a terminal, the real Jira, every view opened in turn): 469 MB idle, 664 MB peak and 555 MB typical during the scenario, 8 processes; the machine reserve was set to 800 MB. One session, one cluster: it is a floor for several clusters or terminals, not a limit.
 
 ## Slurm: what is real and what is not
 
@@ -189,3 +189,12 @@ it after its next answer. Use `set node NAME down` only to set the state by hand
 
 Scenarios behave the same: one `bmc-farm` `power: "Off"` step takes the node down on the BMC, BCM, GPU metrics and in Slurm
 ([scenarios chapter](../manual/06-scenarios.md)), also when the scenario is played from the page.
+
+Results of the run against the real Jira (setup, every number, what was not exercised): [client-test-report-real-jira.md](client-test-report-real-jira.md). A scenario can be run by its reference: `benchctl scenario run SC-02` (the list shows them).
+
+## Open items after the real Jira run
+- [#305](https://github.com/AhmedYousriSobhi/workbench/issues/305) a real slow and 503 answer from Jira (fault proxy)
+- [#306](https://github.com/AhmedYousriSobhi/workbench/issues/306) tickets and a ticket check on the real Jira in `client-stress-real`
+- [#307](https://github.com/AhmedYousriSobhi/workbench/issues/307) token revoke fault (a real 401 for a token)
+- [#308](https://github.com/AhmedYousriSobhi/workbench/issues/308) verify the client's Jira panel under the real faults
+- [#309](https://github.com/AhmedYousriSobhi/workbench/issues/309) script the client stress run

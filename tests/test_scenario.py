@@ -423,3 +423,16 @@ def test_jira_real_rate_limit_sets_the_table_and_bumps_the_version():
     assert "'ON'" in on and '"CAPACITY"=5' in on and '"FILL_RATE"=2' in on and "AO_AC3877_SETTINGS_VERSION" in on
     assert "'OFF'" in off and calls[0][:3] == ["docker", "exec", scenario.JIRA_DB]
     assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "rate_limit"}), runner=lambda c: CP(code=1, err="no")).detail == "no"
+
+
+def test_every_scenario_has_a_unique_reference_and_loads_by_it():
+    import re
+    rows = scenario.list_all()
+    refs = [s.get("ref") for s in rows]
+    assert all(r and re.fullmatch(r"SC-\d\d", r) for r in refs) and len(set(refs)) == len(refs)
+    first = rows[0]
+    for spelled in (first["ref"], first["ref"].lower(), "sc-" + str(int(first["ref"][3:]))):
+        assert scenario.load(spelled)["name"] == first["name"]
+    with __import__("pytest").raises(scenario.ScenarioError):
+        scenario.load("SC-99")
+    assert scenario.summary(first).startswith(f"{first['ref']} {first['name']}: ")

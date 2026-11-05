@@ -32,7 +32,7 @@ def profile_rows() -> list[dict]:
 
 
 def scenario_rows() -> list[dict]:
-    return [{"name": s["name"], "steps": len(s.get("steps", [])), "description": s.get("description", "")}
+    return [{"ref": s.get("ref", "-"), "name": s["name"], "steps": len(s.get("steps", [])), "description": s.get("description", "")}
             for s in scenario.list_all()]
 
 

@@ -80,9 +80,21 @@ class Report:
 
 def load(name: str, root: Path = SCENARIOS) -> dict:
     path = root / f"{name}.yaml"
-    if not path.is_file():
-        raise ScenarioError(f"no scenario {name!r} (see: benchctl scenario list)")
+    if not path.is_file():  # a reference number works too: SC-02 or sc-2
+        m = re.fullmatch(r"(?i)sc-?0*(\d+)", name.strip())
+        hit = [s for s in list_all(root) if m and s.get("ref") == f"SC-{int(m.group(1)):02d}"]
+        if not hit:
+            raise ScenarioError(f"no scenario {name!r} (see: benchctl scenario list)")
+        return hit[0]
     return yaml.safe_load(path.read_text())
+
+
+def summary(sc: dict) -> str:
+    """One header line before a run: reference, name, steps, length, what it touches."""
+    steps = sc.get("steps", [])
+    length = max((parse_duration(s["at"]) for s in steps), default=0)
+    targets = ", ".join(sorted({s["target"] for s in steps}))
+    return f"{sc.get('ref', '-')} {sc['name']}: {len(steps)} steps, {length:.0f} s, targets {targets}"
 
 
 def list_all(root: Path = SCENARIOS) -> list[dict]:

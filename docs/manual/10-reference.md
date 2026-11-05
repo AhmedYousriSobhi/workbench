@@ -28,7 +28,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 | `scale N [--profile P] [-n] [-y]` | change the compute node count; asks before removing nodes in a terminal, `-n` only says what would change |
 | `up --cpu-nodes N --gpu-nodes N [--gpus-per-node N] [--with PART] [--without PART] [-f FILE]` | the same by selection: estimate first, build only if it fits |
 | `apply -f FILE` | build the workbench a file describes |
-| `scenario list` / `scenario run NAME [--speed N] [--dry-run]` | list scenarios; play one, exit 1 on failure |
+| `scenario list` / `scenario run NAME|SC-nn [--speed N] [--dry-run]` | list scenarios; play one, exit 1 on failure |
 | `export profile [-o FILE] [--bmc] [--user U] [--name N] [--format ID] [--configured]` | write the running cluster as a client profile file (also the page's **⇩ Export** button) ([guide](../guides/export-profile.md)) |
 | `ssh-key install\|remove` | put the login key under `~/.ssh` for clients that only read there |
 | `status [--socket S]` | governor level, signals, recent actions, then whether the cluster and the web page run |

@@ -1,4 +1,5 @@
 name: node-down
+ref: SC-17
 description: A compute node loses power; BMC and BCM show it down and Slurm drains it, then it recovers
 steps:
   - {at: 0s,  target: bmc-farm, do: {nodes: [cn002], power: "Off"}}

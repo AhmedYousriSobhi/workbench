@@ -1,4 +1,5 @@
 name: ticket-lifecycle
+ref: SC-26
 description: One ticket goes Open, In Progress, gets a note, is Resolved and Closed; the client should show each move
 steps:
   - {at: 0s,  target: jira, do: {tickets: {action: create, project: OPS, summary: "Scenario: slow login on cn001", labels: [workbench, cn001, lifecycle], priority: High, description: "Users report slow logins on cn001. Opened by the ticket-lifecycle scenario."}}}

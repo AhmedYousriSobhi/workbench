@@ -1,4 +1,5 @@
 name: client-stress-real
+ref: SC-02
 description: "client-stress for a client connected to the REAL Jira (127.0.0.1:8083, part jira-real up): the same five minutes of nodes, GPUs, heat and jobs, with Jira's own rate limit, a CAPTCHA lock and a 30 s hang instead of the mock's faults. Jira reloads rate-limit settings in about 40 s, so the 429s run from about 75 s to 180 s. No tickets are filed (the ticket wave goes to the mock only). Measure the client with benchctl measure app --match NAME --duration 330"
 steps:
   - {at: 0s,   target: slurm,        do: {submit: {node: cn001, duration: 120}}}

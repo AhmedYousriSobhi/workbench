@@ -1,4 +1,5 @@
 name: ticket-wave
+ref: SC-27
 description: A dozen tickets at once, in every status and priority, across the nodes and the cluster, so lists, filters and counts have something to show
 steps:
   - {at: 0s,  target: jira, do: {tickets: {action: create, project: OPS, count: 4, summary: "Wave {n}: job failed on cn002", labels: [workbench, cn002, wave], priority: Medium}}}

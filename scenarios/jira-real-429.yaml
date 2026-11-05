@@ -1,4 +1,5 @@
 name: jira-real-429
+ref: SC-11
 description: The real Jira's own rate limiting turns on (3 requests, refill 1 per second) so bursts get a real 429 with X-RateLimit headers, then off at 120 s; Jira reloads settings about once a minute, so each change takes up to a minute to show
 steps:
   - {at: 0s,   target: jira-real, do: {fault: rate_limit, capacity: 3, fill_rate: 1}}

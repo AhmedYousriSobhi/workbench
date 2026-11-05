@@ -1,4 +1,5 @@
 name: jira-outage
+ref: SC-10
 description: Jira answers 503 to the next 20 calls, then recovers
 steps:
   - {at: 0s,  target: jira, do: {failure: {mode: "503", count: 20}}}
