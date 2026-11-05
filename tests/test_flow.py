@@ -287,3 +287,21 @@ def test_a_rise_in_proxy_connections_becomes_a_clients_to_teleport_event():
     scrape["text"] = "not reachable"  # a scrape without the counter is reachable with nothing counted, never a crash
     f.poll()
     assert f.since(0)["reachable"]["teleport"] is True
+
+
+def test_the_real_jira_is_reachability_only_no_counter():
+    from webui.flow import REACH_ONLY
+    up = {"on": True}
+
+    def fetch(url, *a):
+        if url == REACH_ONLY["jira-real"] and up["on"]:
+            return {"state": "RUNNING"}
+        raise OSError("down")
+    f = make_flow(fetch)
+    f.poll()
+    snap = f.since(0)
+    assert snap["reachable"]["jira-real"] is True and snap["totals"]["jira-real"] == 0 and snap["events"] == []
+    f.tick()
+    up["on"] = False
+    f.poll()
+    assert f.since(0)["reachable"]["jira-real"] is False

@@ -450,3 +450,16 @@ def test_licence_watch_reads_and_renews_once_when_the_end_is_near(monkeypatch):
     monkeypatch.setattr(jira_real, "licence_status", lambda *a, **k: None)
     asyncio.run(licence.watch(state, "sock", every=0, rounds=1))
     assert state["text"] == "" and len(asked) == 1  # Jira down: quiet
+
+
+def test_diagram_has_a_colour_legend_and_combinable_overlays(ui):
+    """Kind is colour (simulated vs real), state is the border, traffic and fault are overlays that combine (issue 297)."""
+    page = req(ui, "/")[1]
+    for needle in (b'id="ckey"', b"simulated (dashed stripe)", b"real (solid stripe)", b"a fault applied in the last 30 s",
+                   b"They combine", b"const REAL_SERVICES", b"'ff-' + k", b"'fx-' + k", b"'fa-' + k"):
+        assert needle in page, needle
+    assert b"'Jira mock'" not in page and b"'BCM mock'" not in page  # the word is not in the boxes: colour says it
+
+
+def test_state_update_keeps_the_kind_class_of_a_service_box(ui):
+    assert b"(k === 'teleport' ? '' : REAL_SERVICES.has(k) ? ' real' : ' sim')" in req(ui, "/")[1]  # repainting the state must not drop the colour of the kind
