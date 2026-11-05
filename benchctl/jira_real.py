@@ -34,6 +34,7 @@ TICKETS = 24
 # Memory (issue 287): the smallest heap and container limit that pass the setup and a ticket run, measured (see ADR 0026).
 HEAP_MIN_MB, HEAP_MAX_MB, CODE_CACHE_MB, LIMIT_MB, DB_LIMIT_MB = 512, 768, 128, 2176, 256
 JVM_ARGS = "-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss512k -XX:CICompilerCount=1"  # smaller JVM footprint: a 2176 MB limit works with them (docs/guides/jira-real.md, issue 289)
+CONTAINER = "workbench-jira-real-1"
 VOLUMES = ("jira-home", "jira-db")  # compose volumes: `reset` removes them
 
 
@@ -100,10 +101,11 @@ class Session:
         status, headers, html = self._send(req, timeout)
         return status, headers.get("Location", ""), html
 
-    def api(self, method: str, path: str, body=None, auth: tuple[str, str] | None = None, timeout: float = 60) -> tuple[int, object, str]:
+    def api(self, method: str, path: str, body=None, auth: tuple[str, str] | None = None, timeout: float = 60,
+            accept: str = "application/json") -> tuple[int, object, str]:
         import base64
 
-        headers = {"Content-Type": "application/json", "Accept": "application/json"}
+        headers = {"Content-Type": "application/json", "Accept": accept}
         if auth:
             headers["Authorization"] = "Basic " + base64.b64encode(f"{auth[0]}:{auth[1]}".encode()).decode()
         req = urllib.request.Request(self.base + path, method=method, headers=headers,
@@ -252,3 +254,53 @@ def reset(runner=subprocess.run, env: Path = ENV) -> None:
     if env.is_file():
         keep = [f"{k}={v}" for k, v in read_env(env).items() if not k.startswith("PAT_") and k != "JIRA_URL"]
         env.write_text("\n".join(keep) + "\n")
+
+
+LICENSE_API = "/rest/plugins/applications/1.0/installed/jira-software/license"
+
+
+def licence_status(base: str = URL, env: Path = ENV) -> dict | None:
+    """The installed licence as Jira reports it: {"valid", "expires" (unix seconds)}; None while Jira does not answer."""
+    pw = read_env(env).get("JIRA_ADMIN_PASSWORD", "")
+    if not pw:
+        return None
+    try:
+        status, data, _ = Session(base).api("GET", LICENSE_API, None, ("admin", pw), timeout=30, accept="*/*")  # the plugin manager answers 406 to application/json
+    except (OSError, JiraRealError):
+        return None
+    if status != 200 or not isinstance(data, dict) or "expiryDate" not in data:
+        return None
+    return {"valid": bool(data.get("valid")) and not data.get("expired"), "expires": int(data["expiryDate"]) // 1000}
+
+
+def _when(ts: int) -> str:
+    left = max(0, ts - int(time.time())) // 60
+    return time.strftime("%H:%M", time.localtime(ts)) + f" (in {left // 60} h {left % 60} min)"
+
+
+def refresh_licence(base: str = URL, say: Callable[[str], None] = print, runner=subprocess.run,
+                    sleep: Callable[[float], None] = time.sleep, env: Path = ENV) -> dict:
+    """Give the real Jira another 3 hours. The test key counts from the start of Jira, so a restart is the renewal: users,
+    tickets and tokens stay (they are in the data volumes). Waits until Jira answers and returns the new licence status."""
+    check_local(base)
+    if runner(["docker", "inspect", "-f", "{{.State.Status}}", CONTAINER], capture_output=True, text=True, check=False).returncode:
+        raise JiraRealError("the real Jira is not created yet: `benchctl start --with jira-real`, then `benchctl setup jira-real`")
+    before = licence_status(base, env)
+    say("licence now: " + (f"valid until {_when(before['expires'])}" if before and before["valid"] else "expired or not readable"))
+    say("restarting Jira (its data stays); the licence period starts again with the start...")
+    r = runner(["docker", "restart", CONTAINER], capture_output=True, text=True, check=False)
+    if r.returncode:
+        raise JiraRealError(f"could not restart {CONTAINER}: {(r.stderr or r.stdout).strip()[:200]}")
+    wait_for(("RUNNING",), 600, base, sleep)
+    for _ in range(60):  # /status says RUNNING before REST answers
+        now = licence_status(base, env)
+        if now:
+            break
+        sleep(5)
+    else:
+        raise JiraRealError("Jira is running but its licence cannot be read yet; try `benchctl refresh jira-real-licence` again in a minute")
+    if not now["valid"]:
+        raise JiraRealError("the licence is still not valid after the restart: the key in compose/generated/secrets/jira.license has a fixed "
+                            "end date. Save a fresh published key there and run `benchctl remove jira-real-state` (docs/guides/jira-real.md)")
+    say(f"licence valid until {_when(now['expires'])}")
+    return now

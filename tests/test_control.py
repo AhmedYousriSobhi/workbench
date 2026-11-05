@@ -141,3 +141,8 @@ def test_slurm_step_and_trace_accept_only_known_names_and_node_names():
     for bad in ({"nodes": ["x;y"], "since": 1}, {"nodes": "cn001", "since": 1}, {"nodes": ["cn001"]}, {"nodes": ["cn001"], "since": True},
                 {"nodes": [f"cn00{i}" for i in range(9)], "since": 1}):
         assert d({"cmd": "slurm-trace", **bad})["ok"] is False
+
+
+def test_refresh_jira_licence_takes_no_arguments():
+    d = lambda r: control.dispatch(json.dumps(r).encode(), lambda c, q: {"ok": True}, lambda: {"compute"})
+    assert d({"cmd": "refresh-jira-licence"})["ok"]

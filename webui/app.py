@@ -226,6 +226,18 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         return JSONResponse({"fits": ok, "message": msg, "total_mb": est["total_mb"], "available_mb": avail,
                              "text": workbench.render(spec, est), "command": f"benchctl up {flags}"})
 
+    async def jira_refresh(request: Request):
+        """The Refresh licence button: ask the governor to restart the real Jira (its test licence counts from its start)."""
+        try:
+            res = await asyncio.to_thread(checks.governor_request, {"cmd": "refresh-jira-licence"}, socket)
+        except (OSError, ValueError) as e:
+            raise HTTPException(503, "the governor is not reachable: start it with ./scripts/benchctl start") from e
+        if not res.get("ok"):
+            raise HTTPException(409, res.get("error", "the governor refused"))
+        if res.get("dry_run"):
+            return JSONResponse({"started": False, "message": "The governor is in dry-run mode or has no --workdir. Run: benchctl refresh jira-real-licence"})
+        return JSONResponse({"started": True, "message": "Restarting the real Jira: ready in about a minute with 3 more hours. Progress is in Governor activity."})
+
     async def plan_apply(request: Request):
         """Ask the governor to rebuild the workbench to this plan (it runs `benchctl up` as the user, calm levels only)."""
         spec, _, _, ok, msg = build_plan(request.query_params)
@@ -464,6 +476,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/settings", protected(settings)),
             Route("/api/plan", protected(plan)),
             Route("/api/plan/apply", protected(plan_apply, write=True), methods=["POST"]),
+            Route("/api/jira-real/refresh", protected(jira_refresh, write=True), methods=["POST"]),
             Route("/api/nhc", protected(nhc_state)),
             Route("/api/nhc", protected(nhc_change, write=True), methods=["POST"]),
             Route("/api/connections", protected(connections)),

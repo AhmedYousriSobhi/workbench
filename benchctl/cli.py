@@ -719,6 +719,21 @@ def remove_jira_real_state(yes: bool = typer.Option(False, "-y", "--yes", help="
     typer.echo("next: benchctl start --with jira-real; benchctl setup jira-real")
 
 
+refresh_app = typer.Typer(cls=SuggestingGroup, help="Renew something that runs out: the real Jira's test licence")
+app.add_typer(refresh_app, name="refresh")
+
+
+@refresh_app.command("jira-real-licence")
+def refresh_jira_real_licence() -> None:
+    """Give the real Jira another 3 hours: the test key counts from the start of Jira, so this restarts it (users, tickets and
+    tokens stay) and prints the new end time. No sudo, no key to paste."""
+    try:
+        jira_real.refresh_licence(say=lambda m: typer.echo(m))
+    except jira_real.JiraRealError as e:
+        typer.echo(f"FAILED: {e}", err=True)
+        raise typer.Exit(1) from e
+
+
 setup_app = typer.Typer(cls=SuggestingGroup, help="Finish a started part: the real Jira")
 app.add_typer(setup_app, name="setup")
 

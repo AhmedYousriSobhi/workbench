@@ -227,6 +227,8 @@ class Governor:
                 args = ["submit", req["node"], "--gpus", str(req["gpus"]), "--duration", str(req["duration"])] + (
                     ["--user", req["user"]] if req.get("user") else [])
                 return self._change(f"submit-job={req['node']}:{req['gpus']}gpu", args)
+            if cmd == "refresh-jira-licence":  # the page's button: restart the real Jira, whose test licence counts from its start
+                return self._change("refresh-jira-licence", ["refresh", "jira-real-licence"])
             if cmd == "slurm-step":
                 what = req["name"]
                 args = (["set", "slurmd", req["node"], what.removeprefix("slurmd-")] if what.startswith("slurmd-")

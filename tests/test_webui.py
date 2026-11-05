@@ -247,6 +247,13 @@ def test_plan_apply_needs_csrf_validates_and_asks_the_governor(ui):
     assert b"pl-apply" in req(ui, "/")[1]
 
 
+def test_jira_refresh_button_needs_csrf_and_asks_the_governor(ui):
+    assert req(ui, "/api/jira-real/refresh", "POST")[0] == 403
+    code, body = req(ui, "/api/jira-real/refresh", "POST", headers={"X-Requested-With": "workbench"})
+    assert code == 200 and json.loads(body)["started"] is True
+    assert b"data-post" in req(ui, "/")[1] and req(ui, "/api/jira-real/refresh", "POST", auth=False)[0] == 401
+
+
 def test_export_button_downloads_the_profile_and_explains_a_missing_format(ui, monkeypatch, tmp_path):
     from benchctl import workbench
     monkeypatch.setattr(workbench, "SAVED", tmp_path / "none.yaml")

@@ -492,3 +492,11 @@ def test_slurm_trace_is_read_only_and_needs_a_tracer(tmp_path):
     assert g.handle("slurm-trace", {"nodes": ["cn001"], "since": 5})["trace"]["asked"] == [["cn001"], 5.0]
     g.tracer = lambda nodes, since: 1 / 0
     assert "trace failed" in g.handle("slurm-trace", {"nodes": [], "since": 1})["error"]
+
+
+def test_refresh_jira_licence_runs_the_benchctl_refresh(tmp_path):
+    import threading
+    calls, done = [], threading.Event()
+    g, _ = _calm_gov(tmp_path, effector=lambda a: calls.append(a) or done.set() or 0)
+    assert g.handle("refresh-jira-licence", {})["started"] and done.wait(5)
+    assert calls[-1] == ["refresh", "jira-real-licence"]

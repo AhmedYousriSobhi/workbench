@@ -194,3 +194,63 @@ def test_the_part_is_in_the_estimate_and_never_turned_on_by_all_or_addons():
     assert "jira-real" not in workbench.expand({}, addons=True)
     assert "jira-real" not in workbench.expand({"ticketing": ["all"]})
     assert workbench.expand({"ticketing": ["jira-real"]}) == ["jira-real"]
+
+
+def test_refresh_licence_restarts_jira_and_reports_the_new_end(tmp_path, monkeypatch):
+    """The test key counts from the start of Jira: the refresh is a restart, then wait until the licence reads again (no Docker)."""
+    import subprocess
+    import time
+
+    from benchctl import jira_real as jr
+
+    calls, lines = [], []
+    seen = iter([{"valid": True, "expires": int(time.time()) + 600}, None, {"valid": True, "expires": int(time.time()) + 10800}])
+
+    def runner(cmd, **kw):
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "running", "")
+
+    monkeypatch.setattr(jr, "licence_status", lambda *a, **k: next(seen))
+    monkeypatch.setattr(jr, "wait_for", lambda *a, **k: "RUNNING")
+    now = jr.refresh_licence(say=lines.append, runner=runner, sleep=lambda s: None, env=tmp_path / "e")
+    assert ["docker", "restart", jr.CONTAINER] in calls and now["valid"] and now["expires"] > time.time() + 10000
+    assert any("valid until" in m for m in lines) and any("restarting" in m for m in lines)
+
+
+def test_refresh_licence_says_what_to_do_when_not_created_or_still_expired(tmp_path, monkeypatch):
+    import subprocess
+    import time
+
+    from benchctl import jira_real as jr
+
+    with pytest.raises(jr.JiraRealError, match="not created yet"):
+        jr.refresh_licence(say=lambda m: None, runner=lambda c, **k: subprocess.CompletedProcess(c, 1, "", ""), env=tmp_path / "e")
+    monkeypatch.setattr(jr, "licence_status", lambda *a, **k: {"valid": False, "expires": int(time.time()) - 5})
+    monkeypatch.setattr(jr, "wait_for", lambda *a, **k: "RUNNING")
+    with pytest.raises(jr.JiraRealError, match="fixed end date"):
+        jr.refresh_licence(say=lambda m: None, runner=lambda c, **k: subprocess.CompletedProcess(c, 0, "", ""), sleep=lambda s: None, env=tmp_path / "e")
+    with pytest.raises(jr.JiraRealError, match="restart"):
+        jr.refresh_licence(say=lambda m: None, runner=lambda c, **k: subprocess.CompletedProcess(c, 0, "", "boom") if c[1] == "inspect" else subprocess.CompletedProcess(c, 1, "", "boom"),
+                           sleep=lambda s: None, env=tmp_path / "e")
+
+
+def test_licence_status_reads_the_expiry_and_hides_failures(tmp_path):
+    from benchctl import jira_real as jr
+
+    assert jr.licence_status(env=tmp_path / "missing") is None  # no password file: nothing to ask with
+
+
+def test_licence_status_asks_the_plugin_manager_with_a_wildcard_accept(tmp_path, monkeypatch):
+    from benchctl import jira_real as jr
+
+    env = tmp_path / "e"
+    env.write_text("JIRA_ADMIN_PASSWORD=pw\n")
+    seen = {}
+
+    def api(self, method, path, body=None, auth=None, timeout=60, accept="application/json"):
+        seen.update(path=path, accept=accept, auth=auth)
+        return 200, {"valid": True, "expired": False, "expiryDate": 1793893363000}, ""
+
+    monkeypatch.setattr(jr.Session, "api", api)
+    assert jr.licence_status(env=env) == {"valid": True, "expires": 1793893363}
+    assert seen["accept"] == "*/*" and seen["path"] == jr.LICENSE_API and seen["auth"] == ("admin", "pw")
