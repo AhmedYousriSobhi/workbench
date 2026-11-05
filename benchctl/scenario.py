@@ -86,7 +86,7 @@ def load(name: str, root: Path = SCENARIOS) -> dict:
 
 
 def list_all(root: Path = SCENARIOS) -> list[dict]:
-    return [yaml.safe_load(p.read_text()) for p in sorted(root.glob("*.yaml"))]
+    return sorted((yaml.safe_load(p.read_text()) for p in root.glob("*.yaml")), key=lambda s: s["name"])
 
 
 def plan(sc: dict) -> list[Step]:
