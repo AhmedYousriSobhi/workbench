@@ -323,6 +323,8 @@
   .reach { list-style:none; margin:var(--sp3) 0 0; padding:0; } .reach li { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:2px var(--sp2); align-items:center; padding:7px 0; border-bottom:1px solid var(--line); } .reach b { grid-column:1 / -1; font-size:13px; color:var(--fg); display:block; margin:0; } .reach code { font-size:12px; overflow-wrap:anywhere; }
   .dock { background:var(--panel); border-radius:14px; padding:var(--sp4) var(--sp5); min-width:0; }
   ul.tl { list-style:none; margin:0; padding:0; max-height:220px; overflow-y:auto; } ul.tl li { display:grid; grid-template-columns:auto minmax(0,1fr); gap:var(--sp3); padding:5px 0; border-bottom:1px solid var(--line); font-size:13px; } ul.tl .ft { color:var(--dim); font-variant-numeric:tabular-nums; } ul.tl b.f { color:var(--warn); } ul.tl b.r { color:var(--accent); }
+  #flow[data-fit] text { font-size:calc(var(--u,1.5) * 14px); font-weight:600; } #flow[data-fit] text.sub { font-size:calc(var(--u,1.5) * 11.5px); font-weight:400; } #flow[data-fit] .ftitle { font-size:calc(var(--u,1.5) * 11px); font-weight:700; }
+  #flow[data-fit] .ndt { font-size:calc(var(--u,1.5) * 11px); } #flow[data-fit] .ndt.cl { font-size:calc(var(--u,1.5) * 13px); } #flow[data-fit=n] .ndt.cl { font-size:calc(var(--u,1.5) * 10.5px); } #flow[data-fit] text.elab { font-size:calc(var(--u,1.5) * 11.5px); } #flow[data-fit] .badge { font-size:calc(var(--u,1.5) * 12px); }
   .node.sel { outline:2px solid var(--accent); outline-offset:-2px; }
   #trafficpanel { order:0; } #nodesmain { order:2; } #inspector { order:3; } .ipane#dock { display:block; } .ipane#dock[hidden] { display:block; }  /* narrow: one column, the timeline under the list */
   @media (min-width:1100px) {
@@ -959,7 +961,7 @@ const JIRA_REAL_BOX = ['jira-real', 'Jira DC', 'Data Center'];
 function hasService(k) { try { return !!(lastCluster && k in JSON.parse(lastCluster).services); } catch (e) { return false; } }
 function svcList() { return [...BASE_SERVICES, ...(hasService('jira-real') ? [JIRA_REAL_BOX] : []), ...(hasTeleport() ? [TELEPORT_BOX] : [])]; }  // Teleport only when the part is built: no phantom box
 const G = { clients: { x: 8, y: 8, w: 164, h: 272 }, injector: { x: 8, y: 300, w: 164, h: 124 }, cluster: { x: 668, y: 8, w: 504 } };  // set by buildFlow from the panel's shape
-let svcOut = {}, svcLane = {};
+let svcOut = {}, svcLane = {}, svcFit = {};  // svcFit: the width a box's text may use
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 let flowEs = null, flowPaused = false, flowCursor = 0, dots = [], raf = 0, recent = [], flowSnap = null, flowLevel = 0, flowNodes = '', tiles = {}, svcPos = {};
 function sv(tag, attrs, text) { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; }
@@ -1070,16 +1072,36 @@ const stackUp = () => { try { return Object.values(JSON.parse(lastCluster).servi
 const loginRuns = l => l.up !== false;  // nothing answers on its port 22: it was selected, but it is not built or not running
 const loginAddr = l => (l.ip || l.name) + (l.mode === 'teleport' ? ' · no port' : ` · :${l.port}`);  // the address a client dials (private IP; the published port is on 127.0.0.1)
 function loginList() { try { const l = lastCluster && JSON.parse(lastCluster).logins; return l && l.length ? l : LOGIN_ONE; } catch (e) { return LOGIN_ONE; } }
-const TW = 68, TH = 46, GAP = 14;
-function flowFit() {  // the shape of the panel the diagram must fill (#319); narrow screens keep the natural 1180-wide drawing
+const GAP = 14;
+// Text has one size on the screen, whatever the scale of the drawing (#319): UF is in screen pixels, `u` is drawing units per pixel
+// (the inverse of the scale), set as --u on the SVG. Every box is sized from its measured text, so nothing spills out of a box.
+const UF = { sn: 14, sub: 11.5, title: 11, tile: 11, chip: 13, lab: 11.5 }, FAM = 'system-ui, sans-serif';
+const measureCtx = document.createElement('canvas').getContext('2d');
+function textW(t, k, u, weight = 400, upper = false) {  // the width of a text in drawing units
+  const str = upper ? String(t).toUpperCase() : String(t); measureCtx.font = `${weight} ${UF[k] * u}px ${FAM}`;
+  return measureCtx.measureText(str).width + (upper ? str.length * UF[k] * u * 0.05 : 0);
+}
+function fitText(text, k, u, maxW, weight = 400) {  // safety net for a name or number longer than any sample: cut with an ellipsis
+  if (textW(text, k, u, weight) <= maxW) return text;
+  let lo = 0, hi = text.length; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (textW(text.slice(0, mid) + '…', k, u, weight) <= maxW) lo = mid; else hi = mid - 1; }
+  return text.slice(0, lo).trimEnd() + '…';
+}
+const LEGACY = { ys: [24, 42, 58, 74], h: 68 };  // the narrow-screen drawing keeps its fixed box
+function boxM(u, lines) {  // baselines and height of a box with a bold name and `lines - 1` detail lines
+  const sn = UF.sn * u, sub = UF.sub * u, ys = [8 + sn * 0.9];
+  for (let n = 1; n < lines; n++) ys.push(ys[n - 1] + sub * (n === 1 ? 1.4 : 1.3));
+  return { ys, h: Math.ceil(ys[lines - 1] + 12) };
+}
+const portLine = l => l.mode === 'teleport' ? 'no direct port' : `port ${l.port}`;
+let unitNow = 1.5, flowFitKey = '';
+function flowFit() {  // the shape of the panel the diagram must fill; narrow screens keep the natural 1180-wide drawing
   if (!dockWide()) return { a: 0, col: false };
   const r = $('flow').getBoundingClientRect(), a = r.width > 80 && r.height > 80 ? r.width / r.height : 0;
   return { a, col: a > 0 };
 }
 const fitKey = () => { const f = flowFit(); return f.a ? 'c' + Math.round(f.a * 6) : 'n'; };
-let flowFitKey = '';
-function tileGrid(nodes, cols, tw = TW, th = TH) {  // node tiles by group, relative to the cluster frame: [label|node, ...], and the height the frame needs
-  let ry = 52; const items = [];
+function tileGrid(nodes, cols, tw, th, top = 52) {  // node tiles by group, relative to the cluster frame: [label|node, ...], and the height the frame needs
+  let ry = top; const items = [];
   for (const k of ['compute', 'gpu']) {
     const rows = nodes.filter(n => n.kind === k); if (!rows.length) continue;
     items.push(['label', k, ry]); ry += 26;
@@ -1088,58 +1110,79 @@ function tileGrid(nodes, cols, tw = TW, th = TH) {  // node tiles by group, rela
   }
   return { items, h: ry + 4 };
 }
-function flowGeom(nodes, acc, nS, a, col) {
-  const M = 8, P = { col };
-  if (col) {  // top to bottom: Clients row, Access row, Cluster nodes; the Services column sits at the right and its lines run down a gutter and enter from the left (#319)
-    const BH = 68, R1 = 100, ACCH = 46 + BH + 14, GAPY = 64, GW = 110, SWD = 222, svW = SWD + 32;
-    let Wm = Math.max(4 * 150 + 54, acc.length * 216 + 32, 444);
+function flowGeom(nodes, acc, svcs, a, col, u) {
+  const M = 8, nS = svcs.length, P = { col, u, tb: 26 }, W = (t, k, w) => textW(t, k, u, w);
+  const tw0 = Math.max(64, Math.ceil(Math.max(0, ...nodes.map(n => W(n.name, 'tile', 600))) + 16)), tn = UF.tile * u;
+  const th0 = Math.ceil(10 + tn * 0.9 + tn * 1.3 + 10), thFacts = Math.ceil(th0 + tn * 1.35), twFacts = Math.ceil(W('99 °C · 8/8 GPU', 'sub') + 14);
+  P.tileM = { y1: 8 + tn * 0.9, y2: 8 + tn * 0.9 + tn * 1.3, y3: 8 + tn * 0.9 + tn * 2.6 };
+  if (col) {  // top to bottom: Clients row, Access row, Cluster nodes; the Services column sits at the right and its lines run down a gutter and enter from the left
+    const tb = 10 + UF.title * u * 0.95, chipH = Math.ceil(UF.chip * u * 1.3 + 22), R1 = Math.ceil(tb + 12 + chipH + 14), GAPY = 64, GW = 110;
+    const mA = boxM(u, 4), mS = boxM(u, 3), ACCH = 46 + mA.h + 14, top = Math.ceil(tb + 34);
+    const needA = Math.max(150, ...acc.map(x => Array.isArray(x) ? Math.max(W(x[1], 'sn', 600) + 44, W('✓ up · 99 conn/min', 'sub'), W('99,999 requests seen', 'sub')) + 24
+      : Math.max(W(x.name, 'sn', 600), W(MODE_TEXT[x.mode], 'sub'), W(x.ip || x.name, 'sub'), W(portLine(x), 'sub')) + 24));
+    const SWD = Math.ceil(Math.max(180, ...svcs.map(([, label, sub]) => Math.max(W(label, 'sn', 600) + 44, W('✓ up · 99,999 req/min', 'sub'), W('99,999 requests seen', 'sub'), W(sub, 'sub')) + 24))), svW = SWD + 32;
+    const chipW = Math.ceil(Math.max(120, ...['Monitoring app', 'Prometheus', 'curl · scripts', 'You: ssh · tsh'].map(t => W(t, 'chip', 600) + 24)));
+    let Wm = Math.max(4 * chipW + 54, acc.length * (Math.ceil(needA) + 14) + 18, 444);
     const make = (w, ex) => {
-      const g1 = GAPY + ex * 0.25, g2 = GAPY + ex * 0.25, pitch = 76 + (ex * 0.75) / Math.max(nS, 1);
+      const g1 = GAPY + ex * 0.25, g2 = GAPY + ex * 0.25, pitch = mS.h + 10 + (ex * 0.75) / Math.max(nS, 1);
       const y2 = M + R1 + g1, svH = 46 + nS * pitch + 8, y3 = y2 + ACCH + g2;
-      let k = 1, tw = TW, th = TH, cols = Math.max(3, Math.floor((w - 48 + GAP) / (tw + GAP))), tg = tileGrid(nodes, cols, tw, th);
+      let tw = tw0, th = th0, cols = Math.max(3, Math.floor((w - 48 + GAP) / (tw + GAP))), tg = tileGrid(nodes, cols, tw, th, top);
       const free = Math.max(y2 + svH - y3, tg.h);  // the tiles grow (up to 2x) into the height the Services column leaves, and then show temperature and GPU load
-      for (let t = 1.1; t <= 2; t += 0.1) { const w2 = Math.round(TW * t), h2 = Math.round(TH * t), c2 = Math.max(3, Math.floor((w - 48 + GAP) / (w2 + GAP))), g = tileGrid(nodes, c2, w2, h2); if (g.h > free) break; k = t; tw = w2; th = h2; cols = c2; tg = g; }
+      for (let t = 1.1; t <= 2; t += 0.1) { const w2 = Math.max(Math.round(tw0 * t), twFacts), h2 = Math.max(Math.round(th0 * t), thFacts), c2 = Math.max(3, Math.floor((w - 48 + GAP) / (w2 + GAP))), g = tileGrid(nodes, c2, w2, h2, top); if (g.h > free) break; tw = w2; th = h2; cols = c2; tg = g; }
       const bottom = Math.max(y2 + svH, y3 + tg.h);
       return { cols, tg, tw, th, pitch, y2, y3, svH, bottom, W: M + w + GW + svW + M, H: bottom + M };
     };
     let L = make(Wm, 0);
     if (a && L.H * a > L.W) { Wm += L.H * a - L.W; L = make(Wm, 0); }  // the panel is wider than the drawing: widen the main column (more tile columns, wider boxes)
     if (a && L.W / L.H > a) L = make(Wm, L.W / a - L.H);               // the panel is taller: spread the extra height over the gaps and the service pitch
-    const n = Math.max(acc.length, 1), bw = Math.min(244, (Wm - 32 - (n - 1) * 14) / n), x0 = M + (Wm - (n * bw + (n - 1) * 14)) / 2;
+    const n = Math.max(acc.length, 1), bw = Math.min(Math.max(280, Math.ceil(needA)), (Wm - 32 - (n - 1) * 14) / n), x0 = M + (Wm - (n * bw + (n - 1) * 14)) / 2;
+    Object.assign(P, { tb, chipH, chipW: Math.min(chipW + 40, (Wm - 24 - 30) / 4), mA, mS });
     P.clients = { x: M, y: M, w: Wm, h: R1 }; P.injector = { x: M + Wm + GW, y: M, w: svW, h: R1 };
     P.access = { x: M, y: L.y2, w: Wm, h: ACCH }; P.cluster = { x: M, y: L.y3, w: Wm, h: L.bottom - L.y3 }; P.svcFrame = { x: M + Wm + GW, y: L.y2, w: svW, h: L.svH };
-    P.place = acc.map((_, i) => ({ x: x0 + i * (bw + 14), y: L.y2 + 46, w: bw, h: BH }));
-    P.svcP = Array.from({ length: nS }, (_, i) => ({ x: P.svcFrame.x + 16, y: L.y2 + 46 + i * L.pitch, w: SWD, h: BH }));
-    Object.assign(P, { tiles: L.tg.items, tw: L.tw, th: L.th, FW: Math.round(L.W), H: Math.round(L.bottom + M), BH, gutter: { x0: M + Wm, x1: M + Wm + GW } });
+    P.place = acc.map((_, i) => ({ x: x0 + i * (bw + 14), y: L.y2 + 46, w: bw, h: mA.h }));
+    P.svcP = Array.from({ length: nS }, (_, i) => ({ x: P.svcFrame.x + 16, y: L.y2 + 46 + i * L.pitch, w: SWD, h: mS.h }));
+    Object.assign(P, { tiles: L.tg.items, tw: L.tw, th: L.th, FW: Math.round(L.W), H: Math.round(L.bottom + M), gutter: { x0: M + Wm, x1: M + Wm + GW } });
     return P;
   }
   const BH = 68, PIT = 92, chipsH = 316, AW = 336;  // narrow screens: Clients and Faults | Access over Services | Cluster nodes
-  const natural = 1180, cwide = 504, cols = Math.max(3, Math.floor((cwide - 48 + GAP) / (TW + GAP))), tg = tileGrid(nodes, cols);
+  const natural = 1180, cwide = 504, cols = Math.max(3, Math.floor((cwide - 48 + GAP) / (tw0 + GAP))), tg = tileGrid(nodes, cols, tw0, th0);
   const accH = 56 + acc.length * PIT, topH = Math.max(accH, tg.h), AX = 252, cx = 668;
   const svTop = 8 + topH + 84, svH = 46 + BH + 40, rightEdge = cx + cwide, H = Math.max(8 + chipsH + 20 + 124 + 20, svTop + svH + 20);
   const SPITCH = Math.min(222, Math.floor((rightEdge - AX - 36) / Math.max(nS, 1)));
+  Object.assign(P, { chipH: 46, chipW: 140, mA: LEGACY, mS: LEGACY });
   P.clients = { x: 8, y: 8, w: 164, h: chipsH }; P.injector = { x: 8, y: 8 + chipsH + 20, w: 164, h: 124 };
   P.access = { x: AX, y: 8, w: AW, h: topH }; P.cluster = { x: cx, y: 8, w: cwide, h: topH }; P.svcFrame = { x: AX, y: svTop, w: rightEdge - AX, h: svH };
   P.place = acc.map((_, i) => ({ x: AX + 114, y: 8 + 56 + i * PIT, w: 216, h: BH }));
   P.svcP = Array.from({ length: nS }, (_, i) => ({ x: AX + 18 + i * SPITCH, y: svTop + 46, w: SPITCH - 26, h: BH }));
-  Object.assign(P, { tiles: tg.items, tw: TW, th: TH, FW: Math.round(Math.max(natural, rightEdge + 8)), H, BH, topEnd: 8 + topH });
+  Object.assign(P, { tiles: tg.items, tw: tw0, th: th0, FW: Math.round(Math.max(natural, rightEdge + 8)), H, topEnd: 8 + topH });
   return P;
 }
 function buildFlow() {
   const g = $('flow'), nodes = nodeList(), lgs = loginList(), svcs = svcList().filter(x => x[0] !== 'teleport'), tpBox = svcList().find(x => x[0] === 'teleport');
   g.innerHTML = ''; dots = []; tiles = {}; svcPos = {}; svcOut = {}; svcLane = {}; flowNodes = flowSig(nodes); flowFitKey = fitKey();
   const CHIPS = [['Monitoring app', lgs[0].name], ['Prometheus', 'prometheus'], ['curl · scripts', null], ['You: ssh · tsh', lgs[0].name]];
-  const acc = [...(tpBox ? [tpBox] : []), ...lgs], fit = flowFit(), col = fit.col, P = flowGeom(nodes, acc, svcs.length, fit.a, col), BH = P.BH, nS = svcs.length;
+  const acc = [...(tpBox ? [tpBox] : []), ...lgs], fit = flowFit(), col = fit.col, nS = svcs.length;
+  let u = unitNow, P;  // drawing units per screen pixel: the drawing is laid out, measured against the panel, and laid out again until the text size settles
+  const r = g.getBoundingClientRect();
+  for (let it = 0; it < 5; it++) {
+    P = flowGeom(nodes, acc, svcs, fit.a, col, u);
+    if (!(r.width > 80)) break;
+    const sc = col ? Math.min(r.width / P.FW, r.height / P.H) : r.width / P.FW, nu = Math.min(2.6, Math.max(0.8, 1 / sc));
+    if (Math.abs(nu - u) < 0.03) break;
+    u += (nu - u) * 0.7;
+  }
+  P = flowGeom(nodes, acc, svcs, fit.a, col, u); unitNow = u; const { mA, mS } = P;  // the last layout uses the size the CSS will use
   G.clients = P.clients; G.injector = P.injector; G.cluster = P.cluster;
-  g.setAttribute('viewBox', `0 0 ${P.FW} ${P.H}`);
-  const fr = (r, rx) => sv('rect', { class: 'frame', x: r.x, y: r.y, width: r.w, height: r.h, rx });
+  g.setAttribute('viewBox', `0 0 ${P.FW} ${P.H}`); g.setAttribute('data-fit', col ? 'c' : 'n'); g.style.setProperty('--u', u.toFixed(3));
+  const fr = (rc, rx) => sv('rect', { class: 'frame', x: rc.x, y: rc.y, width: rc.w, height: rc.h, rx });
   const defs = sv('defs', {}), mk = sv('marker', { id: 'arr', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, orient: 'auto' }); mk.append(sv('path', { d: 'M0 0 L10 5 L0 10 z' })); defs.append(mk); g.append(defs);
   g.append(fr(P.clients, 12), fr(P.injector, 12), fr(P.access, 14), fr(P.svcFrame, 14), fr(P.cluster, 14));
-  const jy = P.injector.y, cy = P.clients.y, ix = P.injector.x + 14;
-  g.append(sv('text', { class: 'ftitle', x: P.clients.x + 14, y: cy + 26 }, 'Clients'), sv('text', { class: 'ftitle', x: ix, y: jy + 26 }, 'Faults'), sv('text', { class: 'ftitle', x: P.access.x + 16, y: P.access.y + 26 }, 'Access: how users get in'),
-    sv('text', { class: 'ftitle', x: P.svcFrame.x + 16, y: col ? P.svcFrame.y + 26 : P.svcFrame.y + P.svcFrame.h - 12 }, col ? 'Services' : 'Services: what clients call'), sv('text', { class: 'ftitle', x: P.cluster.x + 16, y: P.cluster.y + 26 }, 'Cluster nodes'));
-  g.append(sv('text', { class: 'sub', id: 'fc-clients', x: col ? P.clients.x + 110 : 22, y: col ? cy + 26 : P.clients.y + P.clients.h - 12 }, ''), sv('text', { class: 'sub', id: 'fc-injector', x: ix + (col ? 100 : 0), y: col ? jy + 26 : jy + 110 }, ''),
-    sv('text', { class: 'sub', x: ix, y: jy + (col ? 56 : 58) }, '◆ scenarios'), sv('text', { class: 'sub', x: ix + (col ? 120 : 0), y: col ? jy + 56 : jy + 84 }, '◆ buttons'));
+  const jy = P.injector.y, cy = P.clients.y, ix = P.injector.x + 14, tb = P.tb, sub = UF.sub * u, W = (t, k, w, up) => textW(t, k, u, w, up);
+  g.append(sv('text', { class: 'ftitle', x: P.clients.x + 14, y: cy + tb }, 'Clients'), sv('text', { class: 'ftitle', x: ix, y: jy + tb }, 'Faults'), sv('text', { class: 'ftitle', x: P.access.x + 16, y: P.access.y + tb }, 'Access: how users get in'),
+    sv('text', { class: 'ftitle', x: P.svcFrame.x + 16, y: col ? P.svcFrame.y + tb : P.svcFrame.y + P.svcFrame.h - 12 }, col ? 'Services' : 'Services: what clients call'), sv('text', { class: 'ftitle', x: P.cluster.x + 16, y: P.cluster.y + tb }, 'Cluster nodes'));
+  g.append(sv('text', { class: 'sub', id: 'fc-clients', x: col ? P.clients.x + 14 + W('Clients', 'title', 700, true) + 16 : 22, y: col ? cy + tb : P.clients.y + P.clients.h - 12 }, ''),
+    sv('text', { class: 'sub', id: 'fc-injector', x: ix + (col ? W('Faults', 'title', 700, true) + 16 : 0), y: col ? jy + tb : jy + 110 }, ''),
+    sv('text', { class: 'sub', x: ix, y: jy + (col ? tb + sub * 1.9 : 58) }, '◆ scenarios'), sv('text', { class: 'sub', x: ix + (col ? W('◆ scenarios', 'sub') + 18 : 0), y: col ? jy + tb + sub * 1.9 : jy + 84 }, '◆ buttons'));
   const nOut = (col ? 0 : (tpBox ? 1 : 0) + lgs.filter(l => l.mode !== 'teleport').length) + nS; let oi = 0;  // lines leave the client frame spread along its edge, so they do not pile up
   const out = () => col ? { x: P.clients.x + P.clients.w, y: P.clients.y + 30 + (oi++) * ((P.clients.h - 50) / Math.max(nS - 1, 1)) } : { x: P.clients.x + P.clients.w, y: P.clients.y + 44 + (oi++) * ((P.clients.h - 96) / Math.max(nOut - 1, 1)) };
   const injOut = { x: P.injector.x + (col ? 0 : P.injector.w), y: P.injector.y + P.injector.h / 2 };
@@ -1148,34 +1191,36 @@ function buildFlow() {
   const edge = (kind, bz, text, tt = 0.5, id, eid) => {  // a labelled line: `kind` says the method (ssh, teleport, jump, api), the label says it in words; `eid` is its edge in the model
     const me = eid && gedge(eid); if (gr && !me) return bz;
     lanes.append(sv('path', { class: 'lane ' + kind, d: dpath(bz), ...(id ? { id } : {}), ...(me ? { 'data-edge': me.id, 'data-plane': me.plane, 'data-measured': me.measured } : {}), ...(kind !== 'api' ? { 'marker-end': 'url(#arr)' } : {}) }));
-    if (text) { const m = at(bz, tt), w = text.length * 8.4 + 16; labels.append(sv('rect', { class: 'elbg', x: m.x - w / 2, y: m.y - 11, width: w, height: 22, rx: 6 }), sv('text', { class: 'elab', x: m.x, y: m.y + 4.5, 'text-anchor': 'middle' }, text)); }
+    if (text) { const m = at(bz, tt), w = W(text, 'lab', 600) + 16, h = UF.lab * u * 1.6; labels.append(sv('rect', { class: 'elbg', x: m.x - w / 2, y: m.y - h / 2, width: w, height: h, rx: 6 }), sv('text', { class: 'elab', x: m.x, y: m.y + UF.lab * u * 0.36, 'text-anchor': 'middle' }, text)); }
     return bz;
   };
-  const box = (k, label, sub, p, popKind, popId, cls = '') => {
+  const box = (k, label, subtxt, p, popKind, popId, cls = '') => {
     svcPos[k] = Object.assign(svcPos[k] || {}, p);
-    const bg = asButton(sv('g', {}), `${label}${REAL_SERVICES.has(k) ? ' (real)' : cls === 'blkacc' ? '' : ' (simulated)'}: details`, () => openPop(bg, popKind, popId), () => svTip(k));
-    const kind = cls === 'blkacc' ? '' : REAL_SERVICES.has(k) ? 'real' : 'sim';
-    bg.append(sv('rect', { class: 'blk ' + cls + (kind ? ' ' + kind : ''), id: 'fb-' + k, x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), sv('rect', { class: 'fring', id: 'ff-' + k, x: p.x - 4, y: p.y - 4, width: p.w + 8, height: p.h + 8, rx: 13 }), ...(kind ? [sv('path', { class: 'kbar ' + kind, d: `M${p.x + 4} ${p.y + 12} V${p.y + p.h - 12}` })] : []), sv('text', { class: 'badge act', id: 'fa-' + k, x: p.x + p.w - 34, y: p.y + 16 }, '●'), sv('text', { class: 'badge flt', id: 'fx-' + k, x: p.x + p.w - 20, y: p.y + 16 }, '▲'), sv('text', { class: 'sn', x: p.x + 12, y: p.y + p.h - 44 }, label), sv('text', { class: 'sub', id: 'fs-' + k, x: p.x + 12, y: p.y + p.h - 26 }, ''), sv('text', { class: 'sub', id: 'fc-' + k, x: p.x + 12, y: p.y + p.h - 10 }, sub)); return bg;
+    const m = p.h === mS.h ? mS : mA, bg = asButton(sv('g', {}), `${label}${REAL_SERVICES.has(k) ? ' (real)' : cls === 'blkacc' ? '' : ' (simulated)'}: details`, () => openPop(bg, popKind, popId), () => svTip(k));
+    const kind = cls === 'blkacc' ? '' : REAL_SERVICES.has(k) ? 'real' : 'sim', bx = UF.sub * u;
+    bg.append(sv('rect', { class: 'blk ' + cls + (kind ? ' ' + kind : ''), id: 'fb-' + k, x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), sv('rect', { class: 'fring', id: 'ff-' + k, x: p.x - 4, y: p.y - 4, width: p.w + 8, height: p.h + 8, rx: 13 }), ...(kind ? [sv('path', { class: 'kbar ' + kind, d: `M${p.x + 4} ${p.y + 12} V${p.y + p.h - 12}` })] : []),
+      sv('text', { class: 'badge act', id: 'fa-' + k, x: p.x + p.w - bx * 2.4, y: p.y + m.ys[0] }, '●'), sv('text', { class: 'badge flt', id: 'fx-' + k, x: p.x + p.w - bx * 1.2, y: p.y + m.ys[0] }, '▲'),
+      sv('text', { class: 'sn', x: p.x + 12, y: p.y + m.ys[0] }, label), sv('text', { class: 'sub', id: 'fs-' + k, x: p.x + 12, y: p.y + m.ys[1] }, ''), sv('text', { class: 'sub', id: 'fc-' + k, x: p.x + 12, y: p.y + m.ys[2] }, subtxt)); svcFit[k] = p.w - 24; return bg;
   };
   const svTip = k => { const l = svcList().find(x => x[0] === k); const up = flowSnap?.reachable[k]; return [l[1] + (REAL_SERVICES.has(k) ? ' (real)' : k === 'teleport' ? '' : ' (simulated)') + ' · ' + (up ? 'up' : flowSnap ? 'not reachable' : 'checking'), SVC_METHOD[k] + ' · click for address and command']; };
-  const place = acc.map((a, i) => [a, P.place[i]]), tpP = tpBox && place[0][1], cb = P.clients.y + P.clients.h;
+  const place = acc.map((a2, i) => [a2, P.place[i]]), tpP = tpBox && place[0][1], cb = P.clients.y + P.clients.h;
   if (col) {  // Access row: straight lines down from the Clients frame; Teleport to a login runs in a U under the boxes; every box has a short jump line down to the nodes
     if (tpBox) { const o = svcOut.teleport = { x: tpP.x + tpP.w / 2, y: cb }; svcLane.teleport = edge('api', poly([o, { x: o.x, y: tpP.y }]), SVC_METHOD.teleport, 0.5, 'ln-teleport', 'clients>teleport:api'); }
-    let u = 0;
+    let uu = 0;
     for (const [l, p] of place) {
       if (l === tpBox) continue;
       if (l.mode !== 'teleport') edge('ssh', poly([{ x: p.x + p.w / 2, y: cb }, { x: p.x + p.w / 2, y: p.y }]), 'direct SSH', 0.5, null, `clients>${l.name}:ssh`);
-      if (l.mode !== 'ssh' && tpBox) { const by = p.y + BH, uy = by + 14 + (u++) * 9, sx = tpP.x + tpP.w / 2 - 14; edge('teleport', poly([{ x: sx, y: tpP.y + BH }, { x: sx, y: uy }, { x: p.x + p.w / 2 - 14, y: uy }, { x: p.x + p.w / 2 - 14, y: by }]), '', 0.5, null, `teleport>${l.name}:teleport`); }
+      if (l.mode !== 'ssh' && tpBox) { const by = p.y + p.h, uy = by + 14 + (uu++) * 9, sx = tpP.x + tpP.w / 2 - 14; edge('teleport', poly([{ x: sx, y: tpP.y + tpP.h }, { x: sx, y: uy }, { x: p.x + p.w / 2 - 14, y: uy }, { x: p.x + p.w / 2 - 14, y: by }]), '', 0.5, null, `teleport>${l.name}:teleport`); }
     }
-    for (const [l, p] of place) { const jx = p.x + p.w / 2 + 22; if (l !== tpBox) edge('jump', poly([{ x: jx, y: p.y + BH }, { x: jx, y: P.cluster.y }]), 'jump host', 0.5, null, `${l.name}>nodes:jump`); }
-    if (tpBox) edge('teleport', poly([{ x: tpP.x + tpP.w / 2 + 22, y: tpP.y + BH }, { x: tpP.x + tpP.w / 2 + 22, y: P.cluster.y }]), 'Teleport', 0.5, null, 'teleport>nodes:teleport');
+    for (const [l, p] of place) { const jx = p.x + p.w / 2 + 22; if (l !== tpBox) edge('jump', poly([{ x: jx, y: p.y + p.h }, { x: jx, y: P.cluster.y }]), 'jump host', 0.5, null, `${l.name}>nodes:jump`); }
+    if (tpBox) edge('teleport', poly([{ x: tpP.x + tpP.w / 2 + 22, y: tpP.y + tpP.h }, { x: tpP.x + tpP.w / 2 + 22, y: P.cluster.y }]), 'Teleport', 0.5, null, 'teleport>nodes:teleport');
   } else {
-    if (tpBox) { const o = svcOut.teleport = out(); svcLane.teleport = edge('api', curve(o, { x: tpP.x, y: tpP.y + BH / 2 }), SVC_METHOD.teleport, 0.5, 'ln-teleport', 'clients>teleport:api'); }
+    if (tpBox) { const o = svcOut.teleport = out(); svcLane.teleport = edge('api', curve(o, { x: tpP.x, y: tpP.y + tpP.h / 2 }), SVC_METHOD.teleport, 0.5, 'ln-teleport', 'clients>teleport:api'); }
     for (const [l, p] of place) {
       if (l === tpBox) continue;
-      const mid = p.y + BH / 2;
+      const mid = p.y + p.h / 2;
       if (l.mode !== 'teleport') edge('ssh', curve(out(), { x: p.x, y: mid - 12 }), 'direct SSH', 0.3, null, `clients>${l.name}:ssh`);
-      if (l.mode !== 'ssh' && tpBox) { const s = { x: tpP.x, y: tpP.y + BH / 2 + 12 }, e = { x: p.x, y: mid + 12 }; edge('teleport', [s, { x: s.x - 62, y: s.y }, { x: e.x - 62, y: e.y }, e], 'Teleport', 0.5, null, `teleport>${l.name}:teleport`); }
+      if (l.mode !== 'ssh' && tpBox) { const s = { x: tpP.x, y: tpP.y + tpP.h / 2 + 12 }, e = { x: p.x, y: mid + 12 }; edge('teleport', [s, { x: s.x - 62, y: s.y }, { x: e.x - 62, y: e.y }, e], 'Teleport', 0.5, null, `teleport>${l.name}:teleport`); }
     }
   }
   const outs = svcs.map(() => out()); if (!col) outs.reverse();  // stacked: the rightmost box takes the topmost origin; column: the top box does. Either way no two service lines cross
@@ -1194,28 +1239,29 @@ function buildFlow() {
     }
   });
   if (!col) {
-    for (const [l, p] of place) if (l !== tpBox) edge('jump', curve({ x: p.x + p.w, y: p.y + BH / 2 }, { x: P.cluster.x, y: p.y + BH / 2 }), 'jump host', 0.5, null, `${l.name}>nodes:jump`);
-    if (tpBox) edge('teleport', curve({ x: tpP.x + tpP.w, y: tpP.y + BH / 2 }, { x: P.cluster.x, y: tpP.y + BH / 2 }), 'Teleport', 0.5, null, 'teleport>nodes:teleport');
+    for (const [l, p] of place) if (l !== tpBox) edge('jump', curve({ x: p.x + p.w, y: p.y + p.h / 2 }, { x: P.cluster.x, y: p.y + p.h / 2 }), 'jump host', 0.5, null, `${l.name}>nodes:jump`);
+    if (tpBox) edge('teleport', curve({ x: tpP.x + tpP.w, y: tpP.y + tpP.h / 2 }, { x: P.cluster.x, y: tpP.y + tpP.h / 2 }), 'Teleport', 0.5, null, 'teleport>nodes:teleport');
   }
-  for (const [a, p] of place) {
-    if (a === tpBox) { g.append(box('teleport', tpBox[1], tpBox[2], p, 'svc', 'teleport', 'blkacc')); continue; }
-    const l = a, lt = () => !loginRuns(l) ? [`${l.name} · not running`, stackUp() ? 'Selected, but nothing answers on its port 22: build it with benchctl up' : 'The stack is not running'] : [`${l.name} · ${MODE_TEXT[l.mode]}`, l.mode === 'teleport' ? 'No direct port: only through the Teleport proxy' : `${l.ip || l.name} (also 127.0.0.1:${l.port}) · click for the command`];
+  for (const [a2, p] of place) {
+    if (a2 === tpBox) { g.append(box('teleport', tpBox[1], tpBox[2], p, 'svc', 'teleport', 'blkacc')); continue; }
+    const l = a2, lt = () => !loginRuns(l) ? [`${l.name} · not running`, stackUp() ? 'Selected, but nothing answers on its port 22: build it with benchctl up' : 'The stack is not running'] : [`${l.name} · ${MODE_TEXT[l.mode]}`, l.mode === 'teleport' ? 'No direct port: only through the Teleport proxy' : `${l.ip || l.name} (also 127.0.0.1:${l.port}) · click for the command`];
     const bg = asButton(sv('g', { id: 'lg-' + l.name }), `${l.name}: ${MODE_TEXT[l.mode]}${loginRuns(l) ? '' : ', not running'}. Details`, () => openPop(bg, 'login', l.name), lt);
-    bg.append(sv('rect', { class: 'blk lgn' + (loginRuns(l) ? '' : stackUp() ? ' down' : ' off'), x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), sv('text', { class: 'sn', x: p.x + 12, y: p.y + p.h - 44 }, l.name), sv('text', { class: 'sub', x: p.x + 12, y: p.y + p.h - 26 }, MODE_TEXT[l.mode]),
-      sv('text', { class: 'sub', x: p.x + 12, y: p.y + p.h - 10 }, loginRuns(l) ? loginAddr(l) : '✗ not running')); g.append(bg);
+    const lines = col ? [l.name, MODE_TEXT[l.mode], loginRuns(l) ? (l.ip || l.name) : '✗ not running', loginRuns(l) ? portLine(l) : ''] : [l.name, MODE_TEXT[l.mode], loginRuns(l) ? loginAddr(l) : '✗ not running'];
+    bg.append(sv('rect', { class: 'blk lgn' + (loginRuns(l) ? '' : stackUp() ? ' down' : ' off'), x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), ...lines.map((t, n) => t ? [sv('text', { class: n ? 'sub' : 'sn', x: p.x + 12, y: p.y + mA.ys[n] }, fitText(t, n ? 'sub' : 'sn', u, p.w - 24, n ? 400 : 600))] : []).flat()); g.append(bg);
   }
-  svcs.forEach(([k, label, sub], i) => g.append(box(k, label, sub, P.svcP[i], 'svc', k)));
-  const chipW = col ? (P.clients.w - 24 - 3 * 10) / 4 : 140;
+  svcs.forEach(([k, label, sb], i) => g.append(box(k, label, sb, P.svcP[i], 'svc', k)));
+  const chipW = P.chipW, chipFs = UF.chip * u;
   CHIPS.forEach(([t], i) => {
-    const cg = asButton(sv('g', {}), `${t}: how it connects`, () => openPop(cg, 'client', t), () => [t, CLIENT_INFO[t]]), px = col ? P.clients.x + 12 + i * (chipW + 10) : 20, py = col ? cy + 44 : cy + 48 + i * 60;
-    cg.append(sv('rect', { class: 'chipbg', x: px, y: py, width: chipW, height: 46, rx: 9 }), sv('text', { class: 'ndt cl', x: px + 10, y: py + 29 }, t)); g.append(cg);
+    const cg = asButton(sv('g', {}), `${t}: how it connects`, () => openPop(cg, 'client', t), () => [t, CLIENT_INFO[t]]), px = col ? P.clients.x + 12 + i * (chipW + 10) : 20, py = col ? cy + tb + 12 : cy + 48 + i * 60;
+    cg.append(sv('rect', { class: 'chipbg', x: px, y: py, width: chipW, height: P.chipH, rx: 9 }), sv('text', { class: 'ndt cl', x: px + 10, y: py + P.chipH / 2 + chipFs * 0.35 }, t)); g.append(cg);
   });
+  const tm = P.tileM;
   for (const item of P.tiles) {
     if (item[0] === 'label') { g.append(sv('text', { class: 'ftitle', x: P.cluster.x + 24, y: P.cluster.y + item[2] + 4 }, item[1] === 'gpu' ? 'GPU nodes' : 'Compute nodes')); continue; }
     const [, n, rx, ry] = item, x = P.cluster.x + rx, ty = P.cluster.y + ry, glyph = STATE_ICON[n.state] || '?';
     const tg = asButton(sv('g', { id: 'nd-' + n.name }), `${n.name}: ${n.label}. Details`, () => openPop(tg, 'node', n.name), () => { const c = nodeList().find(m => m.name === n.name) || n; return [`${c.name} · ${c.label}`, 'click for how to reach it and its actions']; });
-    tg.append(sv('rect', { class: 'nd ' + n.state, x, y: ty, width: P.tw, height: P.th, rx: 7 }), sv('text', { class: 'ndt', x: x + 6, y: ty + 17 }, n.name), sv('text', { class: 'ndt', x: x + 6, y: ty + 33 }, glyph), sv('circle', { class: 'busy' + (n.gpus_busy > 0 ? ' on' : ''), cx: x + P.tw - 9, cy: ty + P.th - 11, r: 4.5 }));
-    if (P.th >= 52) tg.append(sv('text', { class: 'sub', x: x + 6, y: ty + 50 }, tileFacts(n)));  // a large tile has room for real numbers from the snapshot
+    tg.append(sv('rect', { class: 'nd ' + n.state, x, y: ty, width: P.tw, height: P.th, rx: 7 }), sv('text', { class: 'ndt', x: x + 8, y: ty + tm.y1 }, n.name), sv('text', { class: 'ndt', x: x + 8, y: ty + tm.y2 }, glyph), sv('circle', { class: 'busy' + (n.gpus_busy > 0 ? ' on' : ''), cx: x + P.tw - 10, cy: ty + 12, r: 4.5 }));
+    if (P.th >= tm.y3 + 10) tg.append(sv('text', { class: 'sub', x: x + 8, y: ty + tm.y3 }, tileFacts(n)));  // a large tile has room for real numbers from the snapshot
     g.append(tg); tiles[n.name] = { x, y: ty, w: P.tw, h: P.th, g: tg };
   }
   g.append(labels, sv('g', { id: 'dots' })); paintBlocks();
@@ -1234,12 +1280,13 @@ function paintBlocks() {
   for (const [k] of svcList()) {
     const up = flowSnap.reachable[k]; sent += flowSnap.totals[k] || 0;
     $('fb-' + k).setAttribute('class', 'blk ' + (up ? 'up' : allOff ? 'off' : 'down') + (k === 'teleport' ? '' : REAL_SERVICES.has(k) ? ' real' : ' sim'));  // everything off = stack not running: stay calm, not red
-    $('fs-' + k).textContent = up ? (k === 'jira-real' ? '✓ up · no counter' : '✓ up · ' + (rate[k] || 0) + (k === 'teleport' ? ' conn/min' : ' req/min')) : allOff ? '– offline' : '✗ not reachable';
+    const fitBox = t => fitText(t, 'sub', unitNow, svcFit[k] || 190);
+    $('fs-' + k).textContent = fitBox(up ? (k === 'jira-real' ? '✓ up · no counter' : '✓ up · ' + (rate[k] || 0) + (k === 'teleport' ? ' conn/min' : ' req/min')) : allOff ? '– offline' : '✗ not reachable');
     $('ln-' + k).setAttribute('class', 'lane' + (rate[k] ? ' on' : ''));
     const flt = recent.some(r => r.fault && r.to === k && r.t > Date.now() - 30000);  // a fault was applied to it in the last 30 s
     $('ff-' + k).setAttribute('class', 'fring' + (flt ? ' on' : '')); $('fx-' + k).setAttribute('class', 'badge flt' + (flt ? ' on' : '')); $('fa-' + k).setAttribute('class', 'badge act' + (rate[k] ? ' on' : ''));
     const si = document.getElementById('si-' + (k === 'gpu-exporter' ? 'gpu-exporter' : k)); if (si) si.textContent = k === 'jira-real' ? 'no request counter (the real Jira publishes none)' : `${rate[k] || 0} ${k === 'teleport' ? 'conn' : 'req'}/min · ${(flowSnap.totals[k] || 0).toLocaleString()} seen`;
-    $('fc-' + k).textContent = (flowSnap.totals[k] || 0) ? (flowSnap.totals[k]).toLocaleString() + ((flowSnap.totals[k]) === 1 ? ' request seen' : ' requests seen') : svcList().find(x => x[0] === k)[2];
+    $('fc-' + k).textContent = fitBox((flowSnap.totals[k] || 0) ? (flowSnap.totals[k]).toLocaleString() + ((flowSnap.totals[k]) === 1 ? ' request seen' : ' requests seen') : svcList().find(x => x[0] === k)[2]);
   }
   $('fc-clients').textContent = sent.toLocaleString() + ' requests';
   $('fc-injector').textContent = (flowSnap.faults || 0) + (flowSnap.faults === 1 ? ' fault applied' : ' faults applied');
