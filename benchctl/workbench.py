@@ -235,7 +235,12 @@ def verdict(est: dict, available_mb: int, floor_mb: int = FLOOR_MB, spec: Spec |
     if spec:  # the two biggest cheap-to-lose parts first, then the node count
         hints = [f"drop {p} ({_part_mb(p)} MB)" for p in DROP_ORDER if p in spec.parts][:2] + hints
     if est["app_mb"]:
-        hints.append("--app-mb 0 when the app already runs")
+        fits_app = available_mb - floor_mb - (need - est["app_mb"])  # the largest reserve the free memory leaves after the cluster
+        if fits_app >= 0:  # the cluster alone fits: only the app's reserve does not
+            hints.insert(0, f"--app-mb {fits_app // 100 * 100} if the app needs less than {est['app_mb']} MB, or close other programs; "
+                            "--app-mb 0 when the app already runs")
+        else:
+            hints.append("--app-mb 0 when the app already runs")
     return False, (f"does not fit: needs {need} MB ({mix}), {available_mb} MB free, short by {over} MB "
                    f"(floor {floor_mb} MB). Try: {'; '.join(hints[:3]) or 'free memory first'}")
 

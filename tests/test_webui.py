@@ -456,3 +456,16 @@ def test_plan_reports_the_admitted_number_next_to_the_caps(ui):
     data = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=4&gpus_per_node=8&parts=jira")[1])
     assert data["need_mb"] == data["expected_mb"] - data["running_mb"] < data["total_mb"]  # no app reserve on the page; expected is below the caps
     assert b"p.need_mb" in req(ui, "/")[1]
+
+
+def test_diagram_has_a_colour_legend_and_combinable_overlays(ui):
+    """Kind is colour (simulated vs real), state is the border, traffic and fault are overlays that combine (issue 297)."""
+    page = req(ui, "/")[1]
+    for needle in (b'id="ckey"', b"simulated (dashed stripe)", b"real (solid stripe)", b"a fault applied in the last 30 s",
+                   b"They combine", b"const REAL_SERVICES", b"'ff-' + k", b"'fx-' + k", b"'fa-' + k"):
+        assert needle in page, needle
+    assert b"'Jira mock'" not in page and b"'BCM mock'" not in page  # the word is not in the boxes: colour says it
+
+
+def test_state_update_keeps_the_kind_class_of_a_service_box(ui):
+    assert b"(k === 'teleport' ? '' : REAL_SERVICES.has(k) ? ' real' : ' sim')" in req(ui, "/")[1]  # repainting the state must not drop the colour of the kind

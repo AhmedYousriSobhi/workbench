@@ -10,14 +10,14 @@
 <style>
   :root { color-scheme: light dark;
     --bg:#f6f8fa; --panel:#fff; --line:#d0d7de; --fg:#1f2328; --dim:#57606a; --accent:#0969da; --on-accent:#fff;
-    --ok:#1a7f37; --warn:#9a6700; --bad:#cf222e; --pending:#57606a; --brand:#0b8f80;
+    --ok:#1a7f37; --warn:#9a6700; --bad:#cf222e; --pending:#57606a; --brand:#0b8f80; --sim:#8250df; --real:#0969da;
     --L0:#1a7f37; --L1:#8a6d0b; --L2:#9a5b00; --L3:#bc4c00; --L4:#cf222e; --L5:#a40e26; --none:#57606a; }
   :root[data-theme=light] { color-scheme: light; }
   :root[data-theme=dark] { color-scheme: dark; }
   @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --bg:#0d1117; --panel:#161b22; --line:#30363d; --fg:#e6edf3; --dim:#9da7b3; --accent:#58a6ff; --on-accent:#0d1117;
-    --ok:#3fb950; --warn:#e3b341; --bad:#ff7b72; --pending:#9da7b3; --brand:#2fc4b2; --L0:#238636; --L1:#9e6a03; --L2:#b35900; --L3:#c2561b; --L4:#da3633; --L5:#b62324; --none:#484f58; } }
+    --ok:#3fb950; --warn:#e3b341; --bad:#ff7b72; --pending:#9da7b3; --brand:#2fc4b2; --sim:#bc8cff; --real:#4493f8; --L0:#238636; --L1:#9e6a03; --L2:#b35900; --L3:#c2561b; --L4:#da3633; --L5:#b62324; --none:#484f58; } }
   :root[data-theme=dark] { --bg:#0d1117; --panel:#161b22; --line:#30363d; --fg:#e6edf3; --dim:#9da7b3; --accent:#58a6ff; --on-accent:#0d1117;
-    --ok:#3fb950; --warn:#e3b341; --bad:#ff7b72; --pending:#9da7b3; --brand:#2fc4b2; --L0:#238636; --L1:#9e6a03; --L2:#b35900; --L3:#c2561b; --L4:#da3633; --L5:#b62324; --none:#484f58; }
+    --ok:#3fb950; --warn:#e3b341; --bad:#ff7b72; --pending:#9da7b3; --brand:#2fc4b2; --sim:#bc8cff; --real:#4493f8; --L0:#238636; --L1:#9e6a03; --L2:#b35900; --L3:#c2561b; --L4:#da3633; --L5:#b62324; --none:#484f58; }
   :root { --sp1:4px; --sp2:8px; --sp3:12px; --sp4:16px; --sp5:24px; --side:208px; --shadow:0 1px 2px rgba(31,35,40,.06); --sel:rgba(9,105,218,.10); }
   :root[data-theme=dark] { --shadow:none; --sel:rgba(88,166,255,.14); }
   @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --shadow:none; --sel:rgba(88,166,255,.14); } }
@@ -117,6 +117,18 @@
   .toast { position:sticky; top:8px; z-index:5; background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--accent); padding:10px 14px; border-radius:6px; margin-bottom:12px; }
   #flow { width:100%; max-width:520px; display:block; margin:6px auto; }
   #flow .blk { fill:var(--panel); stroke:var(--line); stroke-width:2; } #flow .blk.up { stroke:var(--ok); } #flow .blk.down { stroke:var(--bad); stroke-dasharray:5 4; } #flow .blk.off { stroke:var(--line); stroke-dasharray:3 5; opacity:.8; }
+  /* a box says four independent things, so they combine: kind = tint + left stripe (violet simulated, blue real), state = border,
+     traffic = pulsing dot, fault = red ring and triangle (a service can be up, busy and faulted at once) */
+  #flow .blk.sim { fill:color-mix(in srgb,var(--sim) 18%,var(--panel)); } #flow .blk.real { fill:color-mix(in srgb,var(--real) 26%,var(--panel)); }
+  #flow .kbar { stroke-width:6; stroke-linecap:butt; fill:none; } #flow .kbar.sim { stroke:var(--sim); stroke-dasharray:5 3; } #flow .kbar.real { stroke:var(--real); }
+  #flow .fring { fill:none; stroke:var(--bad); stroke-width:2.5; opacity:0; } #flow .fring.on { opacity:1; }
+  #flow .badge { font:700 13px system-ui,sans-serif; opacity:0; } #flow .badge.on { opacity:1; } #flow .badge.act { fill:var(--accent); animation:pulse 1.2s ease-in-out infinite; } #flow .badge.flt { fill:var(--bad); }
+  #flow .busy { fill:var(--accent); opacity:0; } #flow .busy.on { opacity:1; }
+  @keyframes pulse { 50% { opacity:.35; } } @media (prefers-reduced-motion: reduce) { #flow .badge.act { animation:none; } }
+  .ckey { display:flex; flex-wrap:wrap; gap:6px 18px; margin:10px 0 0; font-size:13px; } .ckey span { display:inline-flex; align-items:center; gap:6px; }
+  .ckey .sw { width:16px; height:14px; border-radius:3px; border:2px solid var(--line); display:inline-block; } .ckey .sw.sim { background:color-mix(in srgb,var(--sim) 30%,var(--panel)); border-color:var(--sim); border-style:dashed; } .ckey .sw.real { background:color-mix(in srgb,var(--real) 30%,var(--panel)); border-color:var(--real); }
+  .ckey .sw.up { border-color:var(--ok); } .ckey .sw.down { border-color:var(--bad); border-style:dashed; } .ckey .sw.off { border-color:var(--line); border-style:dotted; } .ckey .sw.ring { box-shadow:0 0 0 2px var(--bad); }
+  .ckey b.tri { color:var(--bad); } .ckey b.dot { color:var(--accent); } .ckey .grp { font-weight:650; color:var(--dim); }
   #flow text { fill:var(--fg); font:600 12px system-ui,sans-serif; } #flow text.sub { fill:var(--dim); font-weight:400; font-size:10.5px; }
   #flow line { stroke:var(--line); stroke-width:1.5; } #flow .dotc { fill:var(--accent); } #flow .dotf { fill:var(--warn); stroke:var(--fg); stroke-width:1; }
   .legend { display:flex; flex-wrap:wrap; gap:4px 18px; margin:4px 0 0; }
@@ -346,6 +358,11 @@
     <button class="btn small" id="treetoggle" aria-expanded="true" aria-controls="nodesmain">Hide node list</button></div>
     <div class="flowscroll"><svg id="flow" viewBox="0 0 1120 470" role="img" aria-label="Infrastructure architecture: clients and users, the access layer (login nodes, each direct SSH, Teleport or both, and the Teleport proxy when on), the services, and the nodes. Each part opens its details."></svg></div>
     <div id="pop" class="pop" role="dialog" aria-labelledby="pop-t" hidden></div>
+    <div class="ckey" id="ckey" role="group" aria-label="Colour legend">
+      <span class="grp">What it is</span><span><i class="sw sim" aria-hidden="true"></i>simulated (dashed stripe)</span><span><i class="sw real" aria-hidden="true"></i>real (solid stripe)</span>
+      <span class="grp">State (border)</span><span><i class="sw up" aria-hidden="true"></i>up</span><span><i class="sw down" aria-hidden="true"></i>not reachable (dashed)</span><span><i class="sw off" aria-hidden="true"></i>off (dotted)</span>
+      <span class="grp">On top</span><span><b class="dot" aria-hidden="true">●</b> pulsing: traffic now, or a node running GPU work</span><span><i class="sw ring" aria-hidden="true"></i><b class="tri" aria-hidden="true">▲</b> red ring: a fault applied in the last 30 s</span>
+      <span class="dim">They combine: one box can be up, busy and faulted at once.</span></div>
     <details class="quiet legendbox"><summary class="small dim">How to read this diagram</summary>
     <p class="legend small dim"><span><b style="color:var(--accent)" aria-hidden="true">●</b> round dot: a request from a client (the app, Prometheus, curl) or an SSH connection through Teleport</span>
       <span><b style="color:var(--warn)" aria-hidden="true">◆</b> diamond: a fault from a scenario or a button, travelling to the node it hits</span>
@@ -878,10 +895,13 @@ async function nodeAction(name, action, label) {
 
 // ---- traffic (#74, #118): real request counters from the mocks plus injected faults, over SSE, drawn with the nodes in the cluster ----
 const SVGNS = 'http:' + '//www.w3.org/2000/svg';  // an XML namespace name, not a fetch; split so the no-external-URL test stays strict
-const BASE_SERVICES = [['bmc-farm', 'BMC farm', 'Redfish'], ['bcm-mock', 'BCM mock', 'CMDaemon'], ['jira-mock', 'Jira mock', 'tickets'], ['gpu-exporter', 'GPU exporter', 'DCGM metrics']];
+const BASE_SERVICES = [['bmc-farm', 'BMC farm', 'Redfish'], ['bcm-mock', 'BCM', 'CMDaemon'], ['jira-mock', 'Jira', 'tickets'], ['gpu-exporter', 'GPU exporter', 'DCGM metrics']];
+const REAL_SERVICES = new Set(['jira-real']);  // everything else the page draws is simulated: kind is colour, not a word in the box
 const TELEPORT_BOX = ['teleport', 'Teleport proxy', 'gateway, not a node'];
 function hasTeleport() { try { return !!(lastCluster && 'teleport' in JSON.parse(lastCluster).services); } catch (e) { return false; } }
-function svcList() { return hasTeleport() ? [...BASE_SERVICES, TELEPORT_BOX] : BASE_SERVICES; }  // Teleport only when the part is built: no phantom box
+const JIRA_REAL_BOX = ['jira-real', 'Jira DC', 'Data Center'];
+function hasService(k) { try { return !!(lastCluster && k in JSON.parse(lastCluster).services); } catch (e) { return false; } }
+function svcList() { return [...BASE_SERVICES, ...(hasService('jira-real') ? [JIRA_REAL_BOX] : []), ...(hasTeleport() ? [TELEPORT_BOX] : [])]; }  // Teleport only when the part is built: no phantom box
 const FW = 1180, G = { clients: { x: 8, y: 8, w: 164, h: 272 }, injector: { x: 8, y: 300, w: 164, h: 124 }, cluster: { x: 668, y: 8, w: 504 } };
 let svcOut = {}, svcLane = {};
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
@@ -893,7 +913,7 @@ const atPoly = (pts, t) => { const L = pts.slice(1).map((q, i) => Math.hypot(q.x
 const at = (b, t) => { if (b.poly) return atPoly(b.poly, t); const [p0, p1, p2, p3] = b; const u = 1 - t, f = (c) => u ** 3 * p0[c] + 3 * u * u * t * p1[c] + 3 * u * t * t * p2[c] + t ** 3 * p3[c]; return { x: f('x'), y: f('y') }; };
 const dpath = b => b.poly ? 'M' + b.poly.map(q => `${q.x} ${q.y}`).join(' L') : `M${b[0].x} ${b[0].y} C${b[1].x} ${b[1].y} ${b[2].x} ${b[2].y} ${b[3].x} ${b[3].y}`;
 function nodeList() { try { return lastCluster ? JSON.parse(lastCluster).nodes : []; } catch (e) { return []; } }
-const SVC_CONN = { 'bmc-farm': 'bmc', 'bcm-mock': 'bcm', 'jira-mock': 'jira', 'gpu-exporter': 'gpu', 'teleport': 'teleport' };  // diagram box -> Connections row
+const SVC_CONN = { 'bmc-farm': 'bmc', 'bcm-mock': 'bcm', 'jira-mock': 'jira', 'jira-real': 'jira-real', 'gpu-exporter': 'gpu', 'teleport': 'teleport' };  // diagram box -> Connections row
 // hover tip and click pop-up on every part of the diagram (#192). The tip is one line of state; the pop-up has the address, the command and the actions.
 const tipEl = () => $('tip');
 function showTip(el, lines) {
@@ -966,7 +986,7 @@ async function openConnection(id) {  // the Connections tab, with the row for th
 }
 function flowSig(nodes) { return nodes.map(n => n.name).join(',') + (hasTeleport() ? '+teleport' : '') + '|' + loginList().map(l => l.name + ':' + l.mode + (l.up === false ? ':down' : '')).join(','); }
 // ---- the diagram (#192): clients -> services and access (login nodes, Teleport) -> nodes, one labelled line per way in ----
-const SVC_METHOD = { 'bmc-farm': 'HTTPS Redfish', 'bcm-mock': 'HTTP JSON', 'jira-mock': 'HTTP REST', 'gpu-exporter': 'HTTP metrics', teleport: 'tsh · HTTPS' };
+const SVC_METHOD = { 'bmc-farm': 'HTTPS Redfish', 'bcm-mock': 'HTTP JSON', 'jira-mock': 'HTTP REST', 'jira-real': 'HTTP REST', 'gpu-exporter': 'HTTP metrics', teleport: 'tsh · HTTPS' };
 const MODE_TEXT = { ssh: 'Direct SSH', teleport: 'Teleport only', both: 'Direct SSH + Teleport' };
 const LOGIN_ONE = [{ name: 'login', mode: 'ssh', port: 2222 }];
 const stackUp = () => { try { return Object.values(JSON.parse(lastCluster).services).some(Boolean); } catch (e) { return false; } };
@@ -976,7 +996,7 @@ function loginList() { try { const l = lastCluster && JSON.parse(lastCluster).lo
 function buildFlow() {
   const g = $('flow'), nodes = nodeList(), lgs = loginList(), svcs = svcList().filter(x => x[0] !== 'teleport'), tpBox = svcList().find(x => x[0] === 'teleport');
   g.innerHTML = ''; tiles = {}; svcPos = {}; svcOut = {}; svcLane = {}; flowNodes = flowSig(nodes);
-  const BX = 366, BW = 216, BH = 68, PITCH = 92, AX = 252, AW = 336, SW = 196, SPITCH = 222;
+  const BX = 366, BW = 216, BH = 68, PITCH = 92, AX = 252, AW = 336, SPITCH = Math.min(222, Math.floor(884 / Math.max(svcs.length, 1))), SW = SPITCH - 26;  // five boxes (the real Jira) shrink to fit the band
   const CHIPS = [['Monitoring app', lgs[0].name], ['Prometheus', 'prometheus'], ['curl · scripts', null], ['You: ssh · tsh', lgs[0].name]];
   const acc = [...(tpBox ? [tpBox] : []), ...lgs], accTop = 8, accH = 56 + acc.length * PITCH;
   G.clients.h = 56 + CHIPS.length * 60 + 20; G.injector.y = G.clients.y + G.clients.h + 20;
@@ -1002,10 +1022,11 @@ function buildFlow() {
   };
   const box = (k, label, sub, p, popKind, popId, cls = '') => {
     svcPos[k] = p;
-    const bg = asButton(sv('g', {}), `${label}: details`, () => openPop(bg, popKind, popId), () => svTip(k));
-    bg.append(sv('rect', { class: 'blk ' + cls, id: 'fb-' + k, x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), sv('text', { class: 'sn', x: p.x + 12, y: p.y + 24 }, label), sv('text', { class: 'sub', id: 'fs-' + k, x: p.x + 12, y: p.y + 42 }, ''), sv('text', { class: 'sub', id: 'fc-' + k, x: p.x + 12, y: p.y + 58 }, sub)); return bg;
+    const bg = asButton(sv('g', {}), `${label}${REAL_SERVICES.has(k) ? ' (real)' : cls === 'blkacc' ? '' : ' (simulated)'}: details`, () => openPop(bg, popKind, popId), () => svTip(k));
+    const kind = cls === 'blkacc' ? '' : REAL_SERVICES.has(k) ? 'real' : 'sim';
+    bg.append(sv('rect', { class: 'blk ' + cls + (kind ? ' ' + kind : ''), id: 'fb-' + k, x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), sv('rect', { class: 'fring', id: 'ff-' + k, x: p.x - 4, y: p.y - 4, width: p.w + 8, height: p.h + 8, rx: 13 }), ...(kind ? [sv('path', { class: 'kbar ' + kind, d: `M${p.x + 4} ${p.y + 12} V${p.y + p.h - 12}` })] : []), sv('text', { class: 'badge act', id: 'fa-' + k, x: p.x + p.w - 34, y: p.y + 16 }, '●'), sv('text', { class: 'badge flt', id: 'fx-' + k, x: p.x + p.w - 20, y: p.y + 16 }, '▲'), sv('text', { class: 'sn', x: p.x + 12, y: p.y + 24 }, label), sv('text', { class: 'sub', id: 'fs-' + k, x: p.x + 12, y: p.y + 42 }, ''), sv('text', { class: 'sub', id: 'fc-' + k, x: p.x + 12, y: p.y + 58 }, sub)); return bg;
   };
-  const svTip = k => { const l = svcList().find(x => x[0] === k); const up = flowSnap?.reachable[k]; return [l[1] + ' · ' + (up ? 'up' : flowSnap ? 'not reachable' : 'checking'), SVC_METHOD[k] + ' · click for address and command']; };
+  const svTip = k => { const l = svcList().find(x => x[0] === k); const up = flowSnap?.reachable[k]; return [l[1] + (REAL_SERVICES.has(k) ? ' (real)' : k === 'teleport' ? '' : ' (simulated)') + ' · ' + (up ? 'up' : flowSnap ? 'not reachable' : 'checking'), SVC_METHOD[k] + ' · click for address and command']; };
   const place = acc.map((a, i) => [a, { x: BX, y: accTop + 56 + i * PITCH, w: BW, h: BH }]);
   const tpP = tpBox && place[0][1];
   if (tpBox) { const o = svcOut.teleport = out(); svcLane.teleport = edge('api', curve(o, { x: tpP.x, y: tpP.y + BH / 2 }), SVC_METHOD.teleport, 0.5, 'ln-teleport'); }
@@ -1039,7 +1060,7 @@ function buildFlow() {
     if (item[0] === 'label') { g.append(sv('text', { class: 'ftitle', x: nx, y: item[2] + 4 }, item[1] === 'gpu' ? 'GPU nodes' : 'Compute nodes')); continue; }
     const [, n, x, ty] = item, glyph = STATE_ICON[n.state] || '?';
     const tg = asButton(sv('g', { id: 'nd-' + n.name }), `${n.name}: ${n.label}. Details`, () => openPop(tg, 'node', n.name), () => { const c = nodeList().find(m => m.name === n.name) || n; return [`${c.name} · ${c.label}`, 'click for how to reach it and its actions']; });
-    tg.append(sv('rect', { class: 'nd ' + n.state, x, y: ty, width: TW, height: TH, rx: 7 }), sv('text', { class: 'ndt', x: x + 6, y: ty + 17 }, n.name), sv('text', { class: 'ndt', x: x + 6, y: ty + 33 }, glyph));
+    tg.append(sv('rect', { class: 'nd ' + n.state, x, y: ty, width: TW, height: TH, rx: 7 }), sv('text', { class: 'ndt', x: x + 6, y: ty + 17 }, n.name), sv('text', { class: 'ndt', x: x + 6, y: ty + 33 }, glyph), sv('circle', { class: 'busy' + (n.gpus_busy > 0 ? ' on' : ''), cx: x + TW - 9, cy: ty + TH - 11, r: 4.5 }));
     g.append(tg); tiles[n.name] = { x, y: ty, w: TW, h: TH, g: tg };
   }
   g.append(labels, sv('g', { id: 'dots' })); paintBlocks();
@@ -1047,7 +1068,7 @@ function buildFlow() {
 function paintTiles() {  // node states change without a rebuild; a different node list does rebuild
   const nodes = nodeList(), sig = flowSig(nodes);
   if (sig !== flowNodes) { buildFlow(); return; }
-  for (const n of nodes) { const t = tiles[n.name]; if (t) { t.g.setAttribute('aria-label', `${n.name}: ${n.label}. Details`); t.g.children[0].setAttribute('class', 'nd ' + n.state); t.g.children[2].textContent = STATE_ICON[n.state] || '?'; } }
+  for (const n of nodes) { const t = tiles[n.name]; if (t) { t.g.setAttribute('aria-label', `${n.name}: ${n.label}. Details`); t.g.children[0].setAttribute('class', 'nd ' + n.state); t.g.children[2].textContent = STATE_ICON[n.state] || '?'; t.g.children[3].setAttribute('class', 'busy' + (n.gpus_busy > 0 ? ' on' : '')); } }
 }
 function paintBlocks() {
   if (!flowSnap || !svcPos['bmc-farm']) return;
@@ -1056,10 +1077,12 @@ function paintBlocks() {
   let sent = 0; const allOff = !Object.values(flowSnap.reachable).some(Boolean);
   for (const [k] of svcList()) {
     const up = flowSnap.reachable[k]; sent += flowSnap.totals[k] || 0;
-    $('fb-' + k).setAttribute('class', 'blk ' + (up ? 'up' : allOff ? 'off' : 'down'));  // everything off = stack not running: stay calm, not red
-    $('fs-' + k).textContent = up ? '✓ up · ' + (rate[k] || 0) + (k === 'teleport' ? ' conn/min' : ' req/min') : allOff ? '– offline' : '✗ not reachable';
+    $('fb-' + k).setAttribute('class', 'blk ' + (up ? 'up' : allOff ? 'off' : 'down') + (k === 'teleport' ? '' : REAL_SERVICES.has(k) ? ' real' : ' sim'));  // everything off = stack not running: stay calm, not red
+    $('fs-' + k).textContent = up ? (k === 'jira-real' ? '✓ up · no counter' : '✓ up · ' + (rate[k] || 0) + (k === 'teleport' ? ' conn/min' : ' req/min')) : allOff ? '– offline' : '✗ not reachable';
     $('ln-' + k).setAttribute('class', 'lane' + (rate[k] ? ' on' : ''));
-    const si = document.getElementById('si-' + (k === 'gpu-exporter' ? 'gpu-exporter' : k)); if (si) si.textContent = `${rate[k] || 0} ${k === 'teleport' ? 'conn' : 'req'}/min · ${(flowSnap.totals[k] || 0).toLocaleString()} seen`;
+    const flt = recent.some(r => r.fault && r.to === k && r.t > Date.now() - 30000);  // a fault was applied to it in the last 30 s
+    $('ff-' + k).setAttribute('class', 'fring' + (flt ? ' on' : '')); $('fx-' + k).setAttribute('class', 'badge flt' + (flt ? ' on' : '')); $('fa-' + k).setAttribute('class', 'badge act' + (rate[k] ? ' on' : ''));
+    const si = document.getElementById('si-' + (k === 'gpu-exporter' ? 'gpu-exporter' : k)); if (si) si.textContent = k === 'jira-real' ? 'no request counter (the real Jira publishes none)' : `${rate[k] || 0} ${k === 'teleport' ? 'conn' : 'req'}/min · ${(flowSnap.totals[k] || 0).toLocaleString()} seen`;
     $('fc-' + k).textContent = (flowSnap.totals[k] || 0) ? (flowSnap.totals[k]).toLocaleString() + ((flowSnap.totals[k]) === 1 ? ' request seen' : ' requests seen') : svcList().find(x => x[0] === k)[2];
   }
   $('fc-clients').textContent = sent.toLocaleString() + ' requests';
@@ -1100,7 +1123,7 @@ function step(now) {
 function onFlow(snap) {
   flowLevel = snap.level; flowCursor = snap.cursor;
   snap.faults = (flowSnap?.faults || 0) + snap.events.filter(e => e.from === 'injector').length;
-  snap.events.forEach(e => recent.push({ t: Date.now(), to: e.to, n: e.from === 'clients' ? e.n : 0 }));
+  snap.events.forEach(e => recent.push({ t: Date.now(), to: e.to, n: e.from === 'clients' ? e.n : 0, fault: e.from === 'injector' }));
   flowSnap = snap; paintBlocks(); flowNote();
   if (animating()) snap.events.forEach(launch);
 }

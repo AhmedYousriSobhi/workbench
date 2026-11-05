@@ -11,7 +11,7 @@ import threading
 import time
 from collections import deque
 
-from .cluster import BCM, BMC, EXPORTER, JIRA, TELEPORT, http_json
+from .cluster import BCM, BMC, EXPORTER, JIRA, JIRA_REAL, TELEPORT, http_json
 
 STATS = {"bmc-farm": f"{BMC}/sim/stats", "bcm-mock": f"{BCM}/sim/stats", "jira-mock": f"{JIRA}/sim/stats",
          "gpu-exporter": f"{EXPORTER}/sim/stats"}
@@ -19,6 +19,8 @@ STATS = {"bmc-farm": f"{BMC}/sim/stats", "bcm-mock": f"{BCM}/sim/stats", "jira-m
 # (`tsh ssh`, the web terminal), which is the client traffic this page draws. Absent until the first connection.
 TELEPORT_COUNTER = "teleport_connect_to_node_attempts_total"
 COUNTERS = {"teleport": f"{TELEPORT}/metrics"}
+# The real Jira publishes no request counter: only whether it answers (its /status), so its box shows up/down and says so.
+REACH_ONLY = {"jira-real": f"{JIRA_REAL}/status"}
 SCENARIO_TARGETS = {"bmc-farm": "bmc-farm", "bcm-mock": "bcm-mock", "gpu-exporter": "gpu-exporter",
                     "jira": "jira-mock"}  # scenario target name -> block; slurm, k8s, ticket-bot have no block
 PAUSE_LEVEL = 3  # SPEC: the animation is a luxury; from L3 up the governor wants every MB and CPU cycle
@@ -38,8 +40,8 @@ class Flow:
         self.events: deque = deque(maxlen=keep)
         self.seq = 0
         self.last: dict[str, int] = {}
-        self.totals = dict.fromkeys([*STATS, *COUNTERS], 0)
-        self.reachable = dict.fromkeys([*STATS, *COUNTERS], False)
+        self.totals = dict.fromkeys([*STATS, *COUNTERS, *REACH_ONLY], 0)
+        self.reachable = dict.fromkeys([*STATS, *COUNTERS, *REACH_ONLY], False)
         self.polled = float("-inf")
         self.lock = threading.Lock()
 
@@ -74,6 +76,12 @@ class Flow:
                 if prev is not None and got > prev:  # a restart makes got < prev: just re-baseline
                     self.totals[svc] += got - prev
                     self._add("clients", svc, got - prev, "requests")
+            for svc, url in REACH_ONLY.items():
+                try:
+                    self.fetch(url)
+                    self.reachable[svc] = True
+                except (OSError, ValueError, KeyError, TypeError):
+                    self.reachable[svc] = False
 
     def since(self, after: int) -> dict:
         with self.lock:

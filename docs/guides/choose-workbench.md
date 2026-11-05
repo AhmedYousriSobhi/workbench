@@ -13,7 +13,7 @@ It prints the nodes and parts, the memory by item (expected use and the cap), th
 
 - `fits: needs 5164 MB (1068 MB expected + 4096 MB for the app), 8000 MB free, 2836 MB would remain (floor 1024 MB)`: exit code 0.
 - `does not fit: ... short by 273 MB ... Try: drop load (100 MB); drop accounting (360 MB); 5 fewer node(s)`: exit code 1,
-  and it says what to remove.
+  and it says what to remove. When the workbench alone fits and only the app's reserve does not, it names the largest reserve that does (`--app-mb 3800 if the app needs less than 4096 MB`); start the app after the workbench.
 
 **Expected** is what each part was measured to use plus 15 percent (never above its cap); **cap** is the container limit the
 governor enforces. Admission compares the expected use plus the app's reserve with free memory, so a start that fits is no longer

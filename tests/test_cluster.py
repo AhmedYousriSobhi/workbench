@@ -167,3 +167,15 @@ def test_infiniband_and_nic_faults_show_on_the_node_card():
     sent = []
     cluster.Cluster(SIM, fetch=make_fetch(), poster=lambda url, body: sent.append((url, body))).act("gpu001", "ib-down")
     assert ("http://127.0.0.1:9400/sim/inject", {"node": "gpu001", "ib_down": 1}) in sent
+
+
+def test_snapshot_lists_the_real_jira_only_when_the_part_is_built(monkeypatch):
+    from webui import cluster
+
+    c = cluster.Cluster({}) if hasattr(cluster, "Cluster") else None
+    assert c is not None
+    monkeypatch.setattr(cluster.Cluster, "_try", lambda self, url, body=None: {"x": 1}, raising=False)
+    monkeypatch.setattr(cluster, "jira_real_built", lambda: False)
+    assert "jira-real" not in c.snapshot()["services"]
+    monkeypatch.setattr(cluster, "jira_real_built", lambda: True)
+    assert c.snapshot()["services"]["jira-real"] is True
