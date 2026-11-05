@@ -12,6 +12,7 @@
 #        --clean                  with --unit: stop the cluster first and run scripts/verify.d/X.sh (reset that unit's state)
 #        --list-units             the units there are tests for;  -n / --dry-run  print what would run, run nothing
 # Root-only tests (scripts/real-test-root.sh) still need `sudo`; the summary says when to run them.
+# Each step shows a live status line (elapsed, a tqdm-style bar with the percentage, tests done, the last test) so a long run is visibly alive.
 # Your workbench selection (compose/generated/workbench.yaml, profile, sim.yaml) is saved first and put back on exit.
 set -u
 cd "$(dirname "$0")/.."
@@ -56,10 +57,38 @@ trap 'rm -f "$log"; selection_restore' EXIT
 status=0
 . scripts/lib-stamp.sh
 timings=()
-step() {  # step NAME CMD...: run, record, keep the output only if it failed; every line says how long it took
-  local name="$1" t0 secs; shift; t0=$SECONDS
-  if "$@" >"$log" 2>&1; then secs=$((SECONDS - t0)); echo "PASS  $name  [${secs}s]  ($(tail -1 "$log"))"; else
-    secs=$((SECONDS - t0)); echo "FAIL  $name  [${secs}s]"; tail -30 "$log"; status=1; fi
+bar() {  # bar PCT: a 20-cell tqdm-style bar
+  local p=$1 n=$(($1 / 5)) i out=""
+  for ((i = 0; i < 20; i++)); do [ $i -lt $n ] && out+="#" || out+="."; done
+  printf '[%s] %3d%%' "$out" "$p"
+}
+progress() {  # progress NAME T0 PID: one live status line while PID runs (in place on a terminal, a line per 20 s otherwise)
+  local name="$1" t0="$2" pid="$3" tick=0 chunk pct done_n last line
+  while kill -0 "$pid" 2>/dev/null; do
+    sleep 1; tick=$((tick + 1))
+    if [ -t 1 ] || [ $((tick % 20)) = 0 ]; then
+      chunk=$(tail -c 20000 "$log" 2>/dev/null | tr '\r' '\n')
+      pct=$(printf '%s\n' "$chunk" | grep -o '\[ *[0-9]\{1,3\}%\]' | tail -1 | tr -dc '0-9')
+      done_n=$(grep -cE ' (PASSED|FAILED|SKIPPED|XFAIL|XPASS|ERROR)( |$)' "$log" 2>/dev/null)
+      last=$(printf '%s\n' "$chunk" | grep -v '^[[:space:]]*$' | tail -1 | cut -c1-70)
+      line="RUN   $name  [$((SECONDS - t0))s]"
+      [ -n "$pct" ] && line="$line  $(bar "$pct")"
+      [ "${done_n:-0}" -gt 0 ] && line="$line  ${done_n} tests done"
+      [ -n "$last" ] && line="$line  | $last"
+      if [ -t 1 ]; then printf '\r\033[K%s' "$(printf '%s' "$line" | cut -c1-"$(tput cols 2>/dev/null || echo 120)")"; else echo "$line"; fi
+    fi
+  done
+  [ -t 1 ] && printf '\r\033[K'
+}
+step() {  # step NAME CMD...: run with a live status line, record, keep the output only if it failed; every line says how long it took
+  local name="$1" t0 secs pid rc; shift; t0=$SECONDS
+  echo "START $name"
+  "$@" >"$log" 2>&1 & pid=$!
+  progress "$name" "$t0" "$pid"
+  wait "$pid"; rc=$?
+  secs=$((SECONDS - t0))
+  if [ $rc = 0 ]; then echo "PASS  $name  [${secs}s]  ($(tail -1 "$log"))"; else
+    echo "FAIL  $name  [${secs}s]"; tail -30 "$log"; status=1; fi
   timings+=("${secs}s $name")
 }
 if [ "$unit_given" = 1 ]; then
@@ -67,8 +96,8 @@ if [ "$unit_given" = 1 ]; then
     step "clean start (benchctl down)" ./scripts/benchctl down --yes
     [ -n "$hook" ] && step "reset $unit state ($hook)" "$hook"
   fi
-  [ ${#fast[@]} -gt 0 ] && step "$unit unit tests" python3 -m pytest -q "${fast[@]}"
-  if [ ${#live[@]} -gt 0 ]; then step "$unit live tests" env WORKBENCH_REAL=1 python3 -m pytest -q "${live[@]}"
+  [ ${#fast[@]} -gt 0 ] && step "$unit unit tests" python3 -m pytest -v "${fast[@]}"
+  if [ ${#live[@]} -gt 0 ]; then step "$unit live tests" env WORKBENCH_REAL=1 python3 -m pytest -v "${live[@]}"
   else echo "NOTE  $unit has no live tests (tests/real/test_${unit}*.py)"; fi
 else
   if [ -z "$only" ]; then
@@ -77,7 +106,7 @@ else
   fi
   sel=(); [ -n "$only" ] && sel=(-k "$only") || { [ "$full" = 0 ] && sel=(-k "not stack"); }
   [ "$nobrowser" = 1 ] && sel+=(-m "not browser")
-  step "real tests ${sel[*]:-}" ./scripts/real-test.sh -q "${sel[@]}"
+  step "real tests ${sel[*]:-}" ./scripts/real-test.sh "${sel[@]}"
   [ "$full" = 0 ] && [ -z "$only" ] && echo "NOTE  live stack lifecycle skipped; run --full when stack/compose/slurm changed"
 fi
 case "$selection_kept" in *workbench.yaml*)

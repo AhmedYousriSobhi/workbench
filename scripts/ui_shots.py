@@ -39,6 +39,7 @@ def capture(out: Path) -> dict:
             for scheme in ("light", "dark"):
                 for vp, (w, h) in VIEWPORTS.items():
                     page = browser.new_page(viewport={"width": w, "height": h}, color_scheme=scheme)
+                    page.add_init_script("localStorage.setItem('workbench-tree', 'open')")  # since #192 the list is folded by default at 1100-1500 px; these checks are about the list
                     page.on("console", lambda m, r=result: r["console_errors"].append(m.text) if m.type == "error" else None)
                     page.on("pageerror", lambda e, r=result: r["console_errors"].append(str(e)))
                     deadline = time.time() + 15
