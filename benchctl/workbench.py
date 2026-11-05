@@ -27,7 +27,7 @@ PARTS: dict[str, tuple[str, list[str] | None]] = {
 PART_INFO: dict[str, tuple[str, str]] = {
     "accounting": ("Accounting", "slurmdbd and MariaDB. Needed for sacct and job history; without it sacct says accounting storage is disabled."),
     "jira": ("Jira", "The Jira mock (REST v2 subset)."),
-    "jira-real": ("Jira (real)", "The official Jira Data Center image with Postgres, about 2.8 GB, a 3-hour test licence (ADR 0026). Next to the mock, not instead of it."),
+    "jira-real": ("Jira (real)", "The official Jira Data Center image with Postgres, about 2.4 GB, a 3-hour test licence (ADR 0026). Next to the mock, not instead of it."),
     "bmc": ("BMC farm", "One Redfish endpoint per node: power, thermals, fans."),
     "bcm": ("BCM", "The BCM mock (CMDaemon JSON) and its device list."),
     "teleport": ("Teleport", "Teleport auth and proxy: tsh login and ssh to the login node and every node through it (not on by default)."),
@@ -48,7 +48,7 @@ CATEGORIES: dict[str, tuple[str, dict[str, str | None]]] = {
 }
 NOT_BUILT = {"kubernetes": "Kubernetes is not built yet (SPEC section 11); use --workload slurm"}
 PART_CATEGORY = {part: cat for cat, (_, items) in CATEGORIES.items() for part in items.values() if part}
-BY_NAME_ONLY = ("jira-real",)  # heavy (about 2.8 GB): never turned on by `all` or `--addons`, only by its name (ADR 0026)
+BY_NAME_ONLY = ("jira-real",)  # heavy (about 2.4 GB): never turned on by `all` or `--addons`, only by its name (ADR 0026)
 DEFAULT_PARTS = ("jira", "bmc", "bcm", "accounting", "scenarios")  # accounting: without slurmdbd, sacct says storage is disabled
 DROP_ORDER = ("jira-real", "load", "accounting", "scenarios", "bcm", "jira", "bmc")  # what to suggest removing first
 LIMITS = {"cpu_nodes": (0, 64), "gpu_nodes": (0, 16), "gpus_per_node": (1, 8)}

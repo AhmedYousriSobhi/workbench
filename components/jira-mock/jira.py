@@ -21,6 +21,9 @@ GET|POST /sim/activity {"on": true, "every": 30, "seed": 1}   (background change
 POST /sim/failure  {"mode": "401|429|503|slow", "count": 3, "delay": 2}   (applies to the next /rest requests)
 GET|POST /sim/tickets   {"action": "create|transition|comment|fault|reset", ...}: tickets without a client (scenarios, #107)
 GET  /rest/api/{2,3}/issue/KEY/editmeta            (priority, labels, description, summary: what an edit form draws)
+GET  /rest/api/search?cql=type = page AND (label in ("a") OR title ~ "x")&limit=25&start=0   Confluence page search (issue 289), also at
+     /wiki/rest/api/search (Cloud): results[].title|url|lastModified|resultGlobalContainer.title|content.space.name, _links.base|next
+GET|POST /sim/pages   {"action": "add|reset|clear", "title", "labels", "space", "body"}: the pages that search finds
 GET  /healthz
 Workflow: Open -> In Progress -> Resolved (needs "resolution") -> Closed; Reopen from any later state.
 """
@@ -137,6 +140,39 @@ class Jira:
         self.activity = {"on": False, "every": 30.0, "seed": None, "changes": 0}
         self.stop = threading.Event()
         self.rng = random.Random()
+        self.pages: list[dict] = []
+        self.sim_pages({"action": "reset"})
+
+    def sim_pages(self, req: dict) -> dict:
+        """Pages for the Confluence search: add one, drop them all (`clear`) or go back to the seeded set (`reset`)."""
+        action = req.get("action", "add")
+        with self.lock:
+            if action in ("clear", "reset"):
+                self.pages = []
+            if action == "reset":
+                for n, (title, labels, space, body) in enumerate(PAGES):
+                    self.pages.append(self._page(title, labels, space, body, 100 + n, n))
+            elif action == "add":
+                if not req.get("title"):
+                    raise JiraError(400, ["add needs a title"])
+                self.pages.append(self._page(str(req["title"]), list(req.get("labels") or []), str(req.get("space") or "OPS"),
+                                             str(req.get("body") or ""), 1000 + len(self.pages), 0))
+            elif action != "clear":
+                raise JiraError(400, ["action must be add, reset or clear"])
+            return {"pages": len(self.pages)}
+
+    @staticmethod
+    def _page(title: str, labels: list[str], space: str, body: str, pid: int, age_days: int) -> dict:
+        when = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(time.time() - age_days * 86400))
+        return {"id": str(pid), "title": title, "labels": labels, "body": body, "lastModified": when,
+                "space": {"key": space, "name": "Operations" if space == "OPS" else "HPC platform"}}
+
+    def search_pages(self, cql: str, start: int, limit: int) -> tuple[list[dict], int]:
+        q = CqlQuery(cql)
+        hits = [p for p in self.pages if q.pred(p)]
+        if q.order[:1] and q.order[0].lower() in ("lastmodified", "created"):
+            hits.sort(key=lambda p: p["lastModified"], reverse=(q.order[1:2] or ["desc"])[0].lower() != "asc")
+        return hits[start:start + limit], len(hits)
 
     def set_failure(self, req: dict) -> None:
         if req.get("mode") not in ("401", "429", "503", "slow", None):
@@ -593,6 +629,9 @@ def field_values(issue: dict, field: str) -> list[str]:
 class Query:
     """A JQL expression: AND, OR, NOT, parentheses, =, !=, ~, !~, in, not in, is [not] EMPTY, < > <= >=, ORDER BY."""
 
+    fields = FIELDS
+    values = staticmethod(field_values)
+
     def __init__(self, jql: str):
         head, *tail = re.split(r"(?i)(?:^|\s+)order\s+by\s+", jql.strip(), maxsplit=1)
         self.toks, self.i = tokens(head), 0
@@ -649,7 +688,7 @@ class Query:
     def clause(self):
         kind, name = self.take()
         field = name.lower()
-        if kind != "word" or field not in FIELDS:
+        if kind != "word" or field not in self.fields:
             raise bad_jql(f"unsupported clause '{name}'")
         _, op = self.take()
         op = op.lower()
@@ -677,9 +716,8 @@ class Query:
         empty = vals[0].lower() in ("empty", "null")
         return lambda issue: self.test(issue, field, op, vals, empty)
 
-    @staticmethod
-    def test(issue: dict, field: str, op: str, vals: list[str], empty: bool) -> bool:
-        have = field_values(issue, field)
+    def test(self, issue: dict, field: str, op: str, vals: list[str], empty: bool) -> bool:
+        have = self.values(issue, field)
         low = [h.lower() for h in have]
         want = [v.lower() for v in vals]
         if op in ("is", "=") and empty:
@@ -695,6 +733,40 @@ class Query:
             return {"<": a < b, ">": a > b, "<=": a <= b, ">=": a >= b}[op]
         hit = any(h in want for h in low)
         return hit if op in ("=", "in", "is") else not hit
+
+
+PAGE_FIELDS = ("type", "label", "title", "text", "space", "lastmodified", "created", "creator")
+PAGES = [  # what the page search finds out of the box; `simulated` is the tag `benchctl export` gives the cluster, so its Confluence tab is not empty
+    ("Runbook: node is down", ["simulated", "workbench", "runbook", "node-down"], "OPS", "Check the BMC power state, then sinfo, then drain and requeue."),
+    ("GPU error (XID) triage", ["simulated", "workbench", "runbook", "gpu", "xid"], "OPS", "Read the XID code in dmesg, drain the node, open a vendor case."),
+    ("Slurm drain and resume procedure", ["simulated", "workbench", "runbook", "slurm"], "OPS", "scontrol update nodename=NODE state=drain reason=TEXT."),
+    ("InfiniBand port down checklist", ["simulated", "workbench", "runbook", "infiniband"], "OPS", "Check the cable, the port counters and the subnet manager."),
+    ("Fan failure: replace procedure", ["simulated", "workbench", "runbook", "hardware"], "OPS", "Redfish thermal view, then the vendor part number."),
+    ("workbench cluster overview", ["simulated", "workbench", "overview"], "HPC", "Partitions cpu and gpu, users alice and bob, Grafana, Jira."),
+    ("On-call handover notes", ["simulated", "workbench", "oncall"], "HPC", "Open tickets, nodes in drain, the last change window."),
+]
+
+
+def page_values(page: dict, field: str) -> list[str]:
+    if field == "type":
+        return ["page"]
+    if field == "label":
+        return list(page["labels"])
+    if field == "title":
+        return [page["title"]]
+    if field == "text":
+        return [page["title"], page["body"]]
+    if field == "space":
+        return [page["space"]["key"], page["space"]["name"]]
+    if field in ("lastmodified", "created"):
+        return [page["lastModified"]]
+    return [page.get("creator", "")]
+
+
+class CqlQuery(Query):
+    """A CQL expression over pages: the same grammar as JQL with the page fields (type, label, title, text, space, lastmodified)."""
+    fields = PAGE_FIELDS
+    values = staticmethod(page_values)
 
 
 FIELD_LIST = [{"id": i, "name": n, "custom": False, "navigable": True, "orderable": True}
@@ -751,6 +823,11 @@ def make_handler(jira: Jira):
                 return 200, jira.set_activity(self._body()) if method == "POST" else dict(jira.activity)
             if url.path == "/sim/tickets":
                 return 200, jira.sim_tickets(self._body()) if method == "POST" else jira.overview()
+            if url.path == "/sim/pages":
+                return 200, jira.sim_pages(self._body()) if method == "POST" else {"pages": len(jira.pages)}
+            if url.path in ("/rest/api/search", "/wiki/rest/api/search") and method == "GET":
+                jira.gate()
+                return 200, self._page_search(url.path.startswith("/wiki"), url.query)
             api = API.match(url.path)
             if not (api or url.path == "/rest/webhooks/1.0/webhook"):
                 raise JiraError(404, ["Not found"])
@@ -835,6 +912,28 @@ def make_handler(jira: Jira):
                 return found
             more = start + limit < found["total"]
             return {"issues": found["issues"], "isLast": not more, **({"nextPageToken": str(start + limit)} if more else {})}
+
+        def _page_search(self, cloud: bool, query: str) -> dict:
+            """Confluence's /rest/api/search: results with title, url, lastModified and the space; start and limit page it."""
+            asked = parse_qs(query)
+            try:
+                limit, start = int((asked.get("limit") or ["25"])[0]), int((asked.get("start") or ["0"])[0])
+            except ValueError:
+                raise JiraError(400, ["limit and start must be numbers"]) from None
+            try:
+                found, total = jira.search_pages((asked.get("cql") or [""])[0], start, limit)
+            except JiraError as e:
+                raise JiraError(400, [f"Could not parse cql: {m}" for m in e.body["errorMessages"]]) from None
+            base = f"http://{self.headers.get('Host', 'localhost')}" + ("/wiki" if cloud else "")
+            out = {"results": [{"title": p["title"], "excerpt": "", "lastModified": p["lastModified"],
+                                "url": (f"/spaces/{p['space']['key']}/pages/{p['id']}" if cloud else f"/pages/viewpage.action?pageId={p['id']}"),
+                                "resultGlobalContainer": {"title": p["space"]["name"]}, "content": {"id": p["id"], "type": "page",
+                                                                                                    "space": {"key": p["space"]["key"], "name": p["space"]["name"]}}}
+                               for p in found],
+                   "start": start, "limit": limit, "size": len(found), "totalSize": total, "_links": {"base": base}}
+            if start + limit < total:
+                out["_links"]["next"] = f"/rest/api/search?cql={(asked.get('cql') or [''])[0]}&limit={limit}&start={start + limit}"
+            return out
 
         def _myself(self) -> dict:
             """Basic auth names the account by its email (Cloud style); anything else is the default user."""

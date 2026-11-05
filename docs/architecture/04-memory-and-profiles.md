@@ -18,7 +18,7 @@ Host reserve (OS, desktop, IDE, browser): **about 3 GB**, never governed. Page c
 | slurmd containers | ~60 MB each (16 nodes about 1 GB) | P4 |
 | user-sim + ticket-bot + scenario-engine | 0.15 GB | P5 |
 | Fidelity VM | 2.0 GB cap | P6 |
-| Jira DC (jira-real only) | 2.5 GB cap + Postgres 0.25 GB (measured) | P6 |
+| Jira DC (jira-real only) | 2.1 GB cap + Postgres 0.25 GB (measured, trimmed JVM) | P6 |
 
 **Profiles**
 
@@ -27,7 +27,7 @@ Host reserve (OS, desktop, IDE, browser): **about 3 GB**, never governed. Page c
 | `min` | core, mocks, 4 slurmd, scenarios | 0.5 GB expected (measured use plus 15 percent) |
 | `std` | `min` + accounting, 16 slurmd, k3d + KWOK, load sims | 1.3 GB expected today (k3d and KWOK are not built; they will add their measured size) |
 | `full` | `std` + 32 slurmd, 200 KWOK nodes, fidelity VM | 1.9 GB expected today (32 slurmd; KWOK and the fidelity VM not built) |
-| `jira-real` | `std` minus k3d, plus Jira DC | 4.0 GB expected |
+| `jira-real` | `std` minus k3d, plus Jira DC | 3.6 GB expected |
 | `mac-agent` | `min` + remote macOS agent (external) | 0.5 GB local |
 
 `benchctl up --profile X` runs a **pre-flight**: `MemAvailable` minus the profile's budget and the app under test's reserve must stay above the safety floor, otherwise it refuses and suggests a smaller profile.
@@ -51,7 +51,7 @@ added without a measurement.
 | teleport | 222 | 256 | 256 (at the cap: raise it with the next measurement) |
 | prometheus / grafana / gpu-exporter-farm | 22 / 54 / 19 | 300 / 300 / 100 | 26 / 62 / 22 |
 | jira-db (real Jira's Postgres) | 130 | 256 | 150 |
-| jira-real | 2363 (peak, setup plus ticket run) | 2560 | 2560 (at the cap by nature: a JVM keeps what it grew) |
+| jira-real | 2045 (peak, setup plus ticket run, trimmed JVM) | 2176 | 2176 (at the cap by nature: a JVM keeps what it grew) |
 | scenario-engine, user-sim, ticket-bot, accounting-init | not measured (not built or one-shot) | 60 / 60 / 40 / 30 | the cap |
 | **app under test** | | | **4096 (reserve)** |
 
