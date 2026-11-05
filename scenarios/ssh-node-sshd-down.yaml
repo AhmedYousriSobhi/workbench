@@ -1,4 +1,5 @@
 name: ssh-node-sshd-down
+ref: SC-24
 description: The login node is fine but sshd on cn001 stops, so the hop "ssh cn001" fails while cn002 still works; then sshd is started again
 steps:
   - {at: 0s,  target: ssh, do: {node_sshd: down, nodes: [cn001]}}

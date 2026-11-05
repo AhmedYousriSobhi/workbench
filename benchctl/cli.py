@@ -1046,9 +1046,9 @@ app.add_typer(scenario_app, name="scenario")
 
 @scenario_app.command("list")
 def scenario_list() -> None:
-    """Name, step count and description of every scenario."""
+    """Reference (SC-nn), name, step count and description of every scenario; `run` takes the name or the reference."""
     for sc in scenario.list_all():
-        typer.echo(f"{sc['name']:22} {len(sc.get('steps', [])):2} steps  {sc.get('description', '')}")
+        typer.echo(f"{sc.get('ref', '-'):6} {sc['name']:26} {len(sc.get('steps', [])):2} steps  {sc.get('description', '')}")
 
 
 @scenario_app.command("run")
@@ -1068,6 +1068,7 @@ def scenario_run(name: str = typer.Argument(..., autocompletion=completion.scena
         typer.echo(f"invalid: {p}", err=True)
     if problems:
         raise typer.Exit(1)
+    typer.echo(scenario.summary(sc))
     if dry_run:
         for s in scenario.plan(sc):
             typer.echo(f"[{s.at:6.1f}s] {s.target} {s.do}")

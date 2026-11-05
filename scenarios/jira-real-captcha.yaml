@@ -1,0 +1,6 @@
+name: jira-real-captcha
+ref: SC-12
+description: Wrong-password logins make the real Jira answer 401 then 403 (CAPTCHA lock) for 60 s, then the lock is cleared
+steps:
+  - {at: 0s,  target: jira-real, do: {fault: bad_logins, user: alice, count: 6}}
+  - {at: 60s, target: jira-real, do: {fault: clear_logins}}

@@ -1,4 +1,5 @@
 name: gpu-xid-storm
+ref: SC-06
 description: GPU errors on both GPU nodes, thermal rise, Slurm drain; the app should open tickets
 steps:
   - {at: 0s,  target: gpu-exporter, do: {nodes: [gpu001, gpu002], xid: 79}}

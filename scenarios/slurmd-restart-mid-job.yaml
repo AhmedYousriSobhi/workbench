@@ -1,4 +1,5 @@
 name: slurmd-restart-mid-job
+ref: SC-21
 description: slurmd is killed and restarted on a node while a real job runs; does slurmstepd survive and the job stay RUNNING? (run with --trace)
 steps:
   - {at: 0s,  target: slurm, do: {submit: {node: cn001, duration: 600}}}

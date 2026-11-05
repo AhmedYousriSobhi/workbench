@@ -1,4 +1,5 @@
 name: k8s-node-notready
+ref: SC-14
 description: A KWOK GPU node flips to NotReady; pods on it become Unknown and the app should alert
 steps:
   - {at: 0s,  target: k8s, do: {kwok_node: kwok-gpu-001, ready: false}}
