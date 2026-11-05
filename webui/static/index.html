@@ -351,6 +351,14 @@
     #inspector .np-card .actions { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .cols { max-width:2200px; }
   }
+
+  /* mockup pass 2 (#319): tinted attention bar, copy icon, glowing live lines */
+  .attnbar:has(.ic.bad) { border-color:var(--bad); background:color-mix(in srgb,var(--bad) 12%,var(--panel)); }
+  .attnbar:has(.ic.warn):not(:has(.ic.bad)) { border-color:var(--warn); background:color-mix(in srgb,var(--warn) 12%,var(--panel)); }
+  .attnbar:has(.ic.good):not(:has(.ic.bad)):not(:has(.ic.warn)) { border-color:var(--ok); background:color-mix(in srgb,var(--ok) 10%,var(--panel)); }
+  .btn.copy::before { content:""; display:inline-block; width:.8em; height:.8em; margin-right:.45em; vertical-align:-1px; border:1.5px solid currentColor; border-radius:2px; box-shadow:2px -2px 0 -0.5px var(--panel),2px -2px 0 0.5px currentColor; }
+  #flow .lane.on { filter:drop-shadow(0 0 4px currentColor); }
+  @media (prefers-reduced-motion:reduce) { #flow .lane.on { filter:none; } }
 </style>
 </head>
 <body>
