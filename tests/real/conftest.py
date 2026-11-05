@@ -2,6 +2,9 @@ import os
 
 import pytest
 
+# Containers that ignore SIGTERM cost docker's 10 s grace each, in two waves: about 21 s per module teardown, 7 minutes in a --full run (issue 310).
+os.environ.setdefault("WORKBENCH_STOP_TIMEOUT", "2")
+
 
 @pytest.fixture(scope="module")
 def test_timers():

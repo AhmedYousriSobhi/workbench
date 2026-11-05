@@ -255,7 +255,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
 
 def down(runner: Runner = _run, say: Callable[[str], None] = print) -> bool:
     """Stop and remove only this compose project; the user's own containers/VMs are untouched."""
-    r = runner(dc("down", "--remove-orphans"))
+    t = os.environ.get("WORKBENCH_STOP_TIMEOUT", "")  # seconds before docker kills a container that ignores SIGTERM (default 10; the tests set 2, issue 310)
+    r = runner(dc("down", "--remove-orphans", *(["-t", t] if t.isdigit() else [])))
     say("stack is down" if r.returncode == 0 else f"FAILED: {r.stderr.strip()[-300:]}")
     return r.returncode == 0
 
