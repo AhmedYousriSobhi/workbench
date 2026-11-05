@@ -134,6 +134,28 @@ d.tick()                                          # one change a team would make
 ```
 
 Every ticket the driver files has the label `workbench`. Status: built and checked against the mock (the same tickets as
-`/sim/tickets` for the same sequence, a unit test proves it); not yet wired into `node_watch.py`, scenarios or `jira.mode`, and not
-yet run against a real Cloud site: that needs the shapes recorded for issue 229 (comment bodies are ADF documents there; the driver
-has the helpers, unchecked).
+`/sim/tickets` for the same sequence, a unit test proves it) and against a Data Center shaped fake. Not yet run against Jira Cloud:
+that needs the shapes recorded for issue 229 (comment bodies are ADF documents there; the driver has the helpers, unchecked).
+
+### Both Jiras, one script (issue 284)
+
+The mock and the real Data Center part ([real Jira](jira-real.md)) take the same driver: `JiraDriver.for_target("mock")` or
+`for_target("real")` (the admin token comes from `compose/generated/secrets/jira-real.env`). What differs is handled inside:
+
+| | mock | real Data Center | the driver |
+|---|---|---|---|
+| workflow | Open, In Progress, Resolved, Closed | To Do, In Progress, Done | compares status categories (new, indeterminate, done), follows the transitions offered, supplies a required resolution; Closed after Done is already reached |
+| search | `search/jql` and `search` | `search` only (offsets) | `dc` mode uses `search` with `statusCategory != Done` |
+| issue types | Incident, Task | Epic, Task, Bug, Subtask | asks the project; Bug stands in for Incident |
+| users | any name | alice to erin, admin | reporter and assignee by name; no `ops-bot` on the real one |
+
+Two host-side commands run the automation on either (`--target mock` is the default):
+
+```bash
+./scripts/benchctl run ticket-team --target real --every 20       # a team works the tickets; Ctrl-C stops
+./scripts/benchctl run ticket-watch --target real                  # a node going DOWN files a ticket; back in service resolves it
+```
+
+The mock keeps its own in-process versions (`set jira-activity`, `node_watch.py` in slurmctld); `ticket-watch` reuses
+`node_watch`'s parsing, so the same node states give the same tickets. A test proves the mock and a Data Center shaped fake give
+the same results; the live test `./scripts/verify.sh --unit jira_dc` runs the driver on both real services.

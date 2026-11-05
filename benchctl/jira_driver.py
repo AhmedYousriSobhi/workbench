@@ -4,8 +4,11 @@ The mock's `/sim/tickets` and `/sim/activity` do not exist on a real Jira. This 
 updates one ticket, recovery resolves it, a team moves tickets along) with calls any Jira accepts: search/jql, issue, comment,
 transitions, assignee. It runs on the host, never in the Web UI (SPEC W-3), and reads credentials only from the environment.
 
-Step 1 (this file): verified against jira-mock. Step 2, after the real Cloud shapes are recorded (issue 229): ADF bodies on the
-v3 API (`adf` flag, helpers below, not yet checked against a real site), account ids, 429 backoff, cleanup.
+Targets: jira-mock and the real Jira Data Center part (issue 284, `for_target`), one code path for both. The workflow differs
+(mock: Open / In Progress / Resolved / Closed; real: To Do / In Progress / Done), so statuses are compared by status category
+(new, indeterminate, done), not by name, and `move` follows the transitions Jira offers. Data Center has no `search/jql`
+(`dc` flag: `/search` with offsets), identifies users by name, and has no "ops-bot" or "Incident" type; the driver adapts.
+Jira Cloud (issue 229): ADF bodies on the v3 API (`adf` flag, helpers below, not yet checked against a real site), account ids.
 Every ticket the driver files carries the label `workbench`, so they can be found and removed.
 """
 from __future__ import annotations
@@ -19,14 +22,15 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 LABEL = "workbench"
 FAULTS = {"power": ("node is down (powered off)", "Highest"), "xid": ("GPU error", "High"),
           "overheat": ("node is overheating", "High"), "fan": ("fan failure", "Medium"),
           "ib": ("InfiniBand port down", "High"), "nic": ("NIC link flapping", "Medium"),
           "slurm": ("Slurm took the node out of service", "High")}  # kind: (summary, priority); same table as jira-mock
-OPEN = ("Open", "In Progress")
-ORDER = ("Open", "In Progress", "Resolved", "Closed")
+CATEGORY = {"Open": "new", "To Do": "new", "In Progress": "indeterminate", "Resolved": "done", "Closed": "done", "Done": "done"}
+RANK = {"new": 0, "indeterminate": 1, "done": 2}
 ENGINEERS = ("bob", "carol", "dave", "erin")
 CHATTER = ("Looking into this now.", "Can someone confirm this is still happening?", "Checked the node, nothing obvious yet.",
            "Restarted the service, watching it.", "Vendor case opened, waiting on a reply.", "Seen this before, same cause as last week.")
@@ -54,9 +58,10 @@ def text_of(body) -> str:
 
 
 class JiraDriver:
-    def __init__(self, base_url: str, *, auth: str = "", api: int = 2, project: str = "OPS", adf: bool = False,
+    def __init__(self, base_url: str, *, auth: str = "", api: int = 2, project: str = "OPS", adf: bool = False, dc: bool = False,
                  rng: random.Random | None = None, sleep=time.sleep):
-        self.base, self.auth, self.api, self.project, self.adf = base_url.rstrip("/"), auth, api, project, adf
+        self.base, self.auth, self.api, self.project, self.adf, self.dc = base_url.rstrip("/"), auth, api, project, adf, dc
+        self._types: set[str] | None = None
         self.rng, self.sleep = rng or random.Random(), sleep
 
     @classmethod
@@ -67,6 +72,20 @@ class JiraDriver:
             raise JiraError(0, "set WORKBENCH_JIRA_CLOUD_URL (https://...), JIRA_EMAIL and JIRA_API_TOKEN in the environment")
         auth = "Basic " + base64.b64encode(f"{email}:{token}".encode()).decode()
         return cls(url, auth=auth, api=3, **kw)
+
+    @classmethod
+    def for_target(cls, target: str, environ=os.environ, root: Path | None = None, **kw) -> JiraDriver:
+        """`mock`: the Jira mock on 127.0.0.1:8080 (WORKBENCH_JIRA_MOCK_URL). `real`: the Data Center part, with the admin token that
+        `benchctl setup jira-real` wrote to compose/generated/secrets/jira-real.env."""
+        if target == "mock":
+            return cls(environ.get("WORKBENCH_JIRA_MOCK_URL", "http://127.0.0.1:8080"), **kw)
+        if target != "real":
+            raise JiraError(0, "target must be mock or real")
+        from benchctl import jira_real
+        env = jira_real.read_env((root or Path.cwd()) / jira_real.ENV)
+        if not (env.get("JIRA_URL") and env.get("PAT_ADMIN")):
+            raise JiraError(0, "the real Jira is not set up: benchctl start --with jira-real, then benchctl setup jira-real")
+        return cls(env["JIRA_URL"], auth="Bearer " + env["PAT_ADMIN"], dc=True, project=jira_real.PROJECT, **kw)
 
     # ---- transport ----
     def call(self, method: str, path: str, body=None):
@@ -91,6 +110,12 @@ class JiraDriver:
     # ---- reading ----
     def search(self, jql: str, fields=("summary", "status", "labels", "updated")) -> list[dict]:
         out, token = [], None
+        if self.dc:
+            while True:
+                page = self.call("POST", "/search", {"jql": jql, "fields": list(fields), "maxResults": 100, "startAt": len(out)})
+                out += page["issues"]
+                if not page["issues"] or len(out) >= page["total"]:
+                    return out
         while True:
             page = self.call("POST", "/search/jql", {"jql": jql, "fields": list(fields), "maxResults": 100,
                                                      **({"nextPageToken": token} if token else {})})
@@ -105,30 +130,50 @@ class JiraDriver:
     # ---- writing ----
     def create(self, summary: str, *, description: str = "", labels=(), issuetype: str = "Task", priority: str = "Medium",
                reporter: str | None = None) -> str:
-        fields = {"project": {"key": self.project}, "summary": summary, "issuetype": {"name": issuetype},
+        fields = {"project": {"key": self.project}, "summary": summary, "issuetype": {"name": self.issue_type(issuetype)},
                   "priority": {"name": priority}, "labels": [LABEL, *labels]}
         if description:
             fields["description"] = self.text(description)
-        if reporter:
+        if reporter and (not self.dc or reporter in ENGINEERS):  # the real Jira knows alice to erin, not "ops-bot"
             fields["reporter"] = {"name": reporter}
         return self.call("POST", "/issue", {"fields": fields})["key"]
+
+    def issue_type(self, wanted: str) -> str:
+        """The project's own issue type: the real Jira's basic project has no Incident, so Bug stands in, then Task."""
+        if not self.dc:
+            return wanted
+        if self._types is None:
+            try:
+                self._types = {t["name"] for t in self.call("GET", f"/project/{self.project}")["issueTypes"]}
+            except (JiraError, KeyError):
+                self._types = set()
+        return wanted if wanted in self._types or not self._types else next((t for t in ("Bug", "Task") if t in self._types), wanted)
 
     def comment(self, key: str, text: str) -> None:
         self.call("POST", f"/issue/{key}/comment", {"body": self.text(text)})
 
     def move(self, key: str, target: str, resolution: str = "Done") -> None:
-        """Walk the workflow to `target` through whatever transitions Jira offers; a required resolution is supplied."""
+        """Walk the workflow towards `target` (a name from either workflow) through whatever transitions Jira offers: an exact
+        name first, then any status of the same category (Done for Resolved), else forwards, else back to the start. A target
+        the workflow has no status for (Closed after Done) is reached when the ticket is in the same category. A required
+        resolution is supplied."""
+        goal = CATEGORY.get(target, "done")
         for _ in range(6):
-            now = self.call("GET", f"/issue/{key}?fields=status")["fields"]["status"]["name"]
+            st = self.call("GET", f"/issue/{key}?fields=status")["fields"]["status"]
+            now, cat = st["name"], st.get("statusCategory", {}).get("key") or CATEGORY.get(st["name"], "new")
             if now == target:
                 return
             offered = self.call("GET", f"/issue/{key}/transitions")["transitions"]
-            rank = {n: i for i, n in enumerate(ORDER)}
-            goal = rank.get(target, len(ORDER))
+
+            def to_cat(t):
+                return (t["to"].get("statusCategory") or {}).get("key") or CATEGORY.get(t["to"]["name"], "new")
             direct = [t for t in offered if t["to"]["name"] == target]
-            forward = [t for t in offered if now in rank and t["to"]["name"] in rank and rank[now] < rank[t["to"]["name"]] <= goal]
-            back = [t for t in offered if t["to"]["name"] == ORDER[0]]
-            pick = (direct or sorted(forward, key=lambda t: -rank[t["to"]["name"]]) or back or [None])[0]
+            if not direct and cat == goal:
+                return
+            same = [t for t in offered if to_cat(t) == goal]
+            forward = [t for t in offered if RANK[cat] < RANK[to_cat(t)] <= RANK[goal]]
+            back = [t for t in offered if to_cat(t) == "new"]
+            pick = (direct or same or sorted(forward, key=lambda t: -RANK[to_cat(t)]) or back or [None])[0]
             if pick is None:
                 raise JiraError(400, f"no transition from {now} towards {target}")
             body = {"transition": {"id": pick["id"]}}
@@ -138,6 +183,9 @@ class JiraDriver:
         raise JiraError(400, f"{key} did not reach {target}")
 
     def assign(self, key: str, who: str) -> None:
+        if self.dc:
+            self.call("PUT", f"/issue/{key}/assignee", {"name": who})
+            return
         found = self.call("GET", f"/user/search?query={urllib.parse.quote(who)}")
         pick = next((u for u in found if who in (u.get("name"), u.get("displayName", "").lower())), found[0] if found else None)
         self.call("PUT", f"/issue/{key}/assignee", {"accountId": pick["accountId"]} if pick and pick.get("accountId") else {"name": who})
@@ -149,7 +197,7 @@ class JiraDriver:
         if not node or (open and kind not in FAULTS):
             raise JiraError(400, "fault needs node and, to open one, kind: " + ", ".join(FAULTS))
         merge = merge and open
-        found = self.search(f'project = {self.project} AND labels = "node-{node}" AND status not in (Resolved, Closed) ORDER BY created ASC')
+        found = self.search(f'project = {self.project} AND labels = "node-{node}" AND statusCategory != Done ORDER BY created ASC')
         mine = [i for i in found if merge or not kind or f"fault-{kind}" in i["fields"]["labels"]]
         if not open:
             for i in mine:
@@ -173,10 +221,10 @@ class JiraDriver:
         now = time.time()
         mine = self.search(f'project = {self.project} AND labels = "{LABEL}" ORDER BY updated ASC')
         quiet = [i for i in mine if now - _epoch(i["fields"]["updated"]) >= COOLDOWN]
-        live = [i for i in quiet if i["fields"]["status"]["name"] in OPEN]
-        done = [i for i in quiet if i["fields"]["status"]["name"] == "Resolved"]
+        live = [i for i in quiet if _cat(i) != "done"]
+        done = [i for i in quiet if _cat(i) == "done" and i["fields"]["status"]["name"] != "Closed"]
         choice = r.choices(["advance", "comment", "assign", "create", "reopen"], [45, 25, 10, 12, 8])[0]
-        if choice == "create" and sum(i["fields"]["status"]["name"] != "Closed" for i in mine) >= 30:
+        if choice == "create" and sum(_cat(i) != "done" for i in mine) >= 30:
             choice = "advance"
         who = r.choice(ENGINEERS)
         if choice == "create":
@@ -185,20 +233,25 @@ class JiraDriver:
         if not pool:
             return None
         issue = r.choice(pool)
-        key, status = issue["key"], issue["fields"]["status"]["name"]
+        key, status = issue["key"], _cat(issue)
         if choice == "comment":
             self.comment(key, r.choice(CHATTER))
         elif choice == "assign":
             self.assign(key, who)
         elif choice == "reopen":
             self.move(key, "Open")
-        elif status == "Open":
+        elif status == "new":
             self.move(key, "In Progress")
-        elif status == "In Progress":
+        elif status == "indeterminate":
             self.move(key, "Resolved")
         else:
             self.move(key, "Closed")
         return f"{choice} {key}"
+
+
+def _cat(issue: dict) -> str:
+    st = issue["fields"]["status"]
+    return (st.get("statusCategory") or {}).get("key") or CATEGORY.get(st["name"], "new")
 
 
 def _epoch(stamp: str) -> float:

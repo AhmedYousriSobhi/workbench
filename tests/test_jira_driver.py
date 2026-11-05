@@ -24,11 +24,11 @@ def start():
     return j, f"http://127.0.0.1:{srv.server_port}", srv
 
 
-@pytest.fixture
-def pair():
-    """Two mocks: one driven through /sim/tickets, one through the driver."""
+@pytest.fixture(params=[False, True], ids=["cloud-paging", "dc-paging"])
+def pair(request):
+    """Two mocks: one driven through /sim/tickets, one through the driver (with search/jql paging, and with Data Center's /search)."""
     (ja, ua, sa), (jb, ub, sb) = start(), start()
-    yield ja, ua, jb, jd.JiraDriver(ub, rng=random.Random(1))
+    yield ja, ua, jb, jd.JiraDriver(ub, rng=random.Random(1), dc=request.param)
     sa.shutdown()
     sb.shutdown()
 

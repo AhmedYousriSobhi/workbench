@@ -82,3 +82,21 @@ def test_a_real_ticket_round_trip_create_comment_move_search(live):
 def test_no_token_or_password_is_in_the_connections_row_or_the_services_listing(live):
     out = benchctl("get", "services", "-o", "json", timeout=120).stdout
     assert "jira-real" in out and not any(v in out for v in live.values() if len(v) > 12)
+
+
+def test_the_ticket_driver_does_the_same_on_the_mock_and_the_real_jira(live):
+    """One script, both Jiras: a fault opens one ticket, a repeat adds no ticket, recovery resolves it, the team moves tickets on."""
+    from benchctl import ticketbot
+    from benchctl.jira_driver import JiraDriver
+    node = f"cn{os.getpid() % 900 + 100}"
+    for target in ("mock", "real"):
+        d = JiraDriver.for_target(target, root=ROOT)
+        opened = d.fault(node, "power", "live test: powered off")["created"]
+        assert d.fault(node, "power", "live test: powered off") == {"existing": opened}
+        assert d.fault(node, "", "live test: back", open=False) == {"resolved": [opened]}
+        status = d.call("GET", f"/issue/{opened}?fields=status")["fields"]["status"]
+        assert (status.get("statusCategory") or {}).get("key") == "done" or status["name"] == "Resolved", (target, status)
+        assert any("Recovered" in c for c in d.comments(opened))
+        for i in d.search(f'labels = "node-{node}"'):
+            d.move(i["key"], "Closed")
+        assert ticketbot.team(d, every=0, count=3, say=lambda m: None, sleep=lambda s: None) == 3

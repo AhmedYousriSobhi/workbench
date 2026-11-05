@@ -64,3 +64,14 @@ Real: Atlassian's code, REST v2, workflow, JQL, custom fields, validation. Not r
 ```
 
 The live part skips and says where to put the licence when it is missing; with it, it needs about 3.3 GB free and a few minutes.
+
+## Ticket automation on both Jiras
+
+The same automation runs on the mock and on this Jira, from the host (the real Jira has no private `/sim/*` endpoints):
+
+```bash
+./scripts/benchctl run ticket-team --target real --every 20
+./scripts/benchctl run ticket-watch --target real
+```
+
+Details and the differences between the two workflows: [ticket driver](jira-tickets.md#both-jiras-one-script-issue-284).
