@@ -23,3 +23,7 @@ decides everything. The app under test (the client being tested, 1 GB in the arc
 - A new component must be measured once (docker stats on a running selection) and added to `MEASURED_MB`; until then the plan counts its cap.
 - The governor's own admit (GV-9) is asked for the expected size of what is not yet running, not for the caps.
 - Not measured yet: scenario-engine, user-sim, ticket-bot (not built), Kubernetes and the fidelity VM (not built). Teleport is at its cap and should get a higher one with the next measurement.
+
+## Addendum: the app reserve is measured, not guessed (issue 301)
+
+`benchctl measure app --match NAME [--pid N] --save` samples the PSS of the app's processes and saves the suggested reserve (peak + 10%, rounded up to 100 MB) in `compose/generated/app_reserve.json` (gitignored). `memory.app_reserve()` resolves it: `--app-mb` (sets the env), then `WORKBENCH_APP_MB`, then the saved file, then 4096. The plan says which one it used (`given`, `measured on DATE`, `assumed, not measured`). The 4096 default stays until one real measurement session replaces it; the result and method are then recorded in `docs/guides/memory.md`.

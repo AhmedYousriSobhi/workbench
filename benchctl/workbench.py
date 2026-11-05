@@ -211,20 +211,20 @@ def estimate(sim: dict, profile: dict, app_mb: int | None = None, running: set[s
     seen = {n: memory.expected_mb(n, mb, sv[n]["labels"]) for n, mb in {**nodes, **services}.items()}
     obs = {n: memory.expected_mb(n, mb) for n, mb in OBSERVABILITY.items()}
     expected = sum(seen.values()) + sum(obs.values())
-    app = memory.app_mb() if app_mb is None else app_mb
+    app, app_note = memory.app_reserve() if app_mb is None else (app_mb, "given")
     up = set(running or ())
     running_mb = sum(v for n, v in {**seen, **obs}.items() if n in up)
     return {"nodes_mb": sum(nodes.values()), "node_count": len(nodes), "services_mb": services,
             "observability_mb": OBSERVABILITY_MB, "total_mb": sum(nodes.values()) + sum(services.values()) + OBSERVABILITY_MB,
             "expected_mb": expected, "expected_nodes_mb": sum(seen[n] for n in nodes),
             "expected_services_mb": {n: seen[n] for n in services}, "expected_observability_mb": sum(obs.values()),
-            "app_mb": app, "running_mb": running_mb, "need_mb": expected - running_mb + app}
+            "app_mb": app, "app_note": app_note, "running_mb": running_mb, "need_mb": expected - running_mb + app}
 
 
 def verdict(est: dict, available_mb: int, floor_mb: int = FLOOR_MB, spec: Spec | None = None) -> tuple[bool, str]:
     """Does it fit, leaving the safety floor? When not, say how much to remove and what that could be."""
     need = est["need_mb"]
-    mix = f"{est['expected_mb']} MB expected" + (f" - {est['running_mb']} MB already running" if est.get("running_mb") else "") + (f" + {est['app_mb']} MB for the app" if est["app_mb"] else "")
+    mix = f"{est['expected_mb']} MB expected" + (f" - {est['running_mb']} MB already running" if est.get("running_mb") else "") + (f" + {est['app_mb']} MB for the app ({est.get('app_note', 'given')})" if est["app_mb"] else "")
     left = available_mb - need
     if left >= floor_mb:
         return True, f"fits: needs {need} MB ({mix}), {available_mb} MB free, {left} MB would remain (floor {floor_mb} MB)"
@@ -238,7 +238,7 @@ def verdict(est: dict, available_mb: int, floor_mb: int = FLOOR_MB, spec: Spec |
         fits_app = available_mb - floor_mb - (need - est["app_mb"])  # the largest reserve the free memory leaves after the cluster
         if fits_app >= 0:  # the cluster alone fits: only the app's reserve does not
             hints.insert(0, f"--app-mb {fits_app // 100 * 100} if the app needs less than {est['app_mb']} MB, or close other programs; "
-                            "--app-mb 0 when the app already runs")
+                            "--app-mb 0 when the app already runs; measure it: benchctl measure app --match NAME --save")
         else:
             hints.append("--app-mb 0 when the app already runs")
     return False, (f"does not fit: needs {need} MB ({mix}), {available_mb} MB free, short by {over} MB "
@@ -259,7 +259,7 @@ def render(spec: Spec, est: dict) -> str:
     if est.get("running_mb"):
         rows += [f"  {'already running':<18} {-est['running_mb']:>8}   (already in the used memory)"]
     if est["app_mb"]:
-        rows += [f"  {'app under test':<18} {est['app_mb']:>8}"]
+        rows += [f"  {'app under test':<18} {est['app_mb']:>8}   ({est.get('app_note', 'given')})"]
     if est["app_mb"] or est.get("running_mb"):
         rows += [f"  {'needs':<18} {est['need_mb']:>8}   (admitted against this)"]
     return "\n".join(rows)

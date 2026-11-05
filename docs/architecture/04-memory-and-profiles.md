@@ -12,7 +12,7 @@ Host reserve (OS, desktop, IDE, browser): **about 3 GB**, never governed. Page c
 | Prometheus + Alertmanager + Grafana | 0.7 GB | P1 |
 | slurmctld + slurmrestd | 0.2 GB | P1 |
 | slurmdbd + MariaDB (small buffer pool) | 0.2 GB | P2 (profile-gated) |
-| App under test | 4.0 GB (reserve, `--app-mb`) | P1 |
+| App under test | 4.0 GB assumed until measured (`benchctl measure app --save`, `--app-mb`) | P1 |
 | bmc-farm + bcm-mock + jira-mock + gpu-exporter-farm | 0.3 GB | P2 |
 | k3d/kind (1 server + 1 agent) + KWOK | 1.2 GB | P3 |
 | slurmd containers | ~60 MB each (16 nodes about 1 GB) | P4 |
