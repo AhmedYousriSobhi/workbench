@@ -96,6 +96,7 @@ def capture(out: Path) -> dict:
                     page.wait_for_selector("#flow rect.blk")
                     if page.locator("#flow .nd").count() < 1 or page.locator("#flow text:has-text('Monitoring app')").count() != 1:
                         result["a11y"].append("Infrastructure architecture is missing the node tiles or the clients")
+                    page.wait_for_timeout(450)  # the diagram fits itself to the panel once it has settled (#319); a rebuild would drop packets already in flight
                     page.evaluate("""onFlow({level: 0, cursor: 9, events: [{from: 'clients', to: 'bmc-farm', n: 3, label: 'requests', nodes: []},
                         {from: 'clients', to: 'jira-mock', n: 2, label: 'requests', nodes: []}, {from: 'clients', to: 'teleport', n: 2, label: 'requests', nodes: []}, {from: 'injector', to: 'bmc-farm', n: 1, label: 'x', nodes: ['cn002']}],
                         totals: {'bmc-farm': 3, 'bcm-mock': 0, 'jira-mock': 2, 'gpu-exporter': 0, teleport: 2}, reachable: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'jira-real': true, 'gpu-exporter': true, teleport: true}})""")
@@ -109,6 +110,13 @@ def capture(out: Path) -> dict:
                     tpath = out / f"architecture-{vp}-{scheme}.png"
                     page.locator("#trafficpanel").screenshot(path=str(tpath))
                     result["shots"].append(str(tpath))
+                    page.click("#keybtn")  # the key is a popover under the Key button: opens, shows the line styles, Escape closes it and gives the focus back
+                    if page.locator("#ckey:visible").count() != 1 or page.get_attribute("#keybtn", "aria-expanded") != "true" or page.locator("#ckey .ls").count() != 4:
+                        result["a11y"].append("the key did not open with its four line samples")
+                    page.locator("#trafficpanel").screenshot(path=str(out / f"key-{vp}-{scheme}.png"))  # not in "shots": the count of reviewed screens stays
+                    page.keyboard.press("Escape")
+                    if page.locator("#ckey:visible").count() or page.evaluate("document.activeElement.id") != "keybtn":
+                        result["a11y"].append("Escape did not close the key and return the focus to its button")
                     page.click("#lg-login")  # every part opens a pop-up with its details; Escape closes it and gives the focus back
                     if page.locator("#pop:visible dl").count() != 1:
                         result["a11y"].append("clicking a login node did not open its pop-up")
@@ -186,6 +194,27 @@ def capture(out: Path) -> dict:
                     if not page.locator("#nodepane").is_hidden() or page.locator("#tree").is_hidden():
                         result["a11y"].append("node panel did not close")
                     page.close()
+            for w, h, count in ((1280, 900, 6), (1920, 1080, 50)):  # the architecture is the page (#319): it fills the width, the page itself never scrolls, the rails scroll
+                page = browser.new_page(viewport={"width": w, "height": h})
+                page.goto(url)
+                page.wait_for_selector("#flow rect.blk")
+                page.wait_for_timeout(1200)  # the first real poll has landed: it must not overwrite the sample
+                page.evaluate(SYNTH_CLUSTER)
+                page.evaluate("""n => { const c = JSON.parse(lastCluster); c.nodes = Array.from({length: n}, (_, i) => ({name: 'cn' + String(i + 1).padStart(3, '0'), kind: 'compute', state: 'ok', label: 'Healthy', temp: 45, power: 'On', gpus: 0}));
+                    c.graph.entities = c.graph.entities.filter(e => !e.group).concat(c.nodes.map(x => ({id: x.name, type: 'compute-node', group: 'nodes'}))); lastCluster = JSON.stringify(c); renderCluster(c); buildFlow(); }""", count)
+                page.wait_for_timeout(400)
+                m = page.evaluate("""() => ({scroll: document.documentElement.scrollHeight - innerHeight, flow: document.querySelector('#flow').getBoundingClientRect().width,
+                    list: document.querySelector('#nodesmain').getBoundingClientRect().height, insp: document.querySelector('#inspector').getBoundingClientRect().width,
+                    fit: (() => { const f = document.querySelector('#flow'), v = f.viewBox.baseVal, r = f.getBoundingClientRect(); return (v.width / v.height) / (r.width / r.height); })()})""")
+                if count == 6 and not 0.85 <= m["fit"] <= 1.18:  # the drawing is built from the panel's shape (#319): a ratio far from 1 means bars of empty space beside or above it
+                    result["a11y"].append(f"the diagram does not fit its panel at {w}x{h}: drawing/panel aspect ratio {m['fit']:.2f}")
+                if m["scroll"] > 2:
+                    result["a11y"].append(f"dashboard scrolls the page at {w}x{h} with {count} nodes")
+                if m["flow"] < w * (0.42 if w < 1500 else 0.48):
+                    result["a11y"].append(f"the architecture is only {round(m['flow'])} px wide at {w}x{h}: the canvas should use the free space")
+                if m["list"] < 120 or m["insp"] < 300:
+                    result["a11y"].append(f"node list or inspector too small at {w}x{h}: {m}")
+                page.close()
             browser.close()
     finally:
         proc.terminate()
