@@ -43,6 +43,15 @@ no restart). At 2304 MB the setup finished but Jira was killed once and restarte
 failed (setup lost the connection after kills). The constants are `HEAP_MIN_MB`, `HEAP_MAX_MB`, `CODE_CACHE_MB`, `LIMIT_MB` in
 `benchctl/jira_real.py`; change one only after repeating the trial (`docs/architecture/04-memory-and-profiles.md`).
 
+### Switching plugins off does not help (measured, issue 289)
+
+The image ships 273 plugins, 239 of them bundled. I switched groups off through the plugin manager API, one group at a time,
+restarted Jira and measured: all plugins on, 1.80 to 1.92 GiB after the restart; 44 language packs off, 1.80 GiB; 18 extras
+(onboarding, credits, help tips, feedback, quick search, ...) off, 1.86 GiB. Analytics and the integrations (DVCS, streams,
+importers, automation, mobile) cannot go: with either group off, Jira's own REST, project and issue-navigator plugins did not
+start (`/status` says `ERROR`; the way back is `delete from pluginstate` in the Postgres container). So there is no plugin set that
+saves memory, and the part does not offer one.
+
 ## When the 3 hours are up
 
 Jira turns read-only. Start from nothing; the same key gives a new 3 hours, counted from the setup (as in the lab this part was ported from):

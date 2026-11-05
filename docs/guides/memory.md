@@ -32,6 +32,8 @@ Largest working set seen (MB), the cap the container may reach, and what the pla
 
 The real Jira is more than 90 percent of what the whole stack uses. Its cap of 2560 MB is the smallest that finished the setup and a ticket run: at 2304 MB it was killed once, at 2048 and 1536 MB setup failed. A Java application keeps its heap, its code cache, its plugin system and thread stacks, so the cap cannot go much below 2.5 GB. See [real Jira](jira-real.md#why-25-gb-measured-issue-287).
 
+Switching Jira's plugins off was tried and does not save memory (the safe groups change nothing, the others stop Jira starting): [measured](jira-real.md#switching-plugins-off-does-not-help-measured-issue-289). Untried: JVM flags for the non-heap part (Serial GC, level-1 compilation, smaller thread stacks).
+
 ## Reading `benchctl plan`
 
 ```text

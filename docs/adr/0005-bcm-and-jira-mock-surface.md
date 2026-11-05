@@ -46,6 +46,15 @@ steps, background activity) uses the mock's `/sim/*`. `benchctl/jira_driver.py` 
 API (step 1, verified against the mock); wiring it to `jira.mode`, the Cloud specifics (ADF, account ids, 429 backoff, cleanup of
 `workbench`-labelled tickets) and the export are step 2, after the shapes of issue 229 are recorded.
 
+## Addendum: Confluence page search (issue 289)
+
+The monitoring client's Confluence section is a read-only CQL search, `GET {base}/rest/api/search?cql=...&limit&start&excerpt=none`
+(Cloud: `/wiki/rest/api/search`), on the same base URL and account as the cluster's Jira (checked in its source, and by running its
+own Confluence client against the mock). `jira-mock` answers both paths with a CQL subset (type, label, title, text, space,
+lastmodified, AND OR NOT, `~`, `in`, ORDER BY lastmodified) over seeded runbook pages, `GET|POST /sim/pages` adds, clears or resets
+them, paging uses `start`, `limit` and `_links.next`, and the failure modes (429, 503, 401, slow) apply. No new container (a few
+hundred lines in the same process). A real Confluence is not run: it would cost another 2+ GB and the client only searches pages.
+
 ## Revisit when
 The app's real BCM or Jira calls are known: replace the call list or surface, and record real responses as
 fixtures (architecture section 13, contract tests).

@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**83% built** (35 done, 38 in review, 11 partial, 4 to do, 88 items).
+**83% built** (35 done, 39 in review, 11 partial, 4 to do, 89 items).
 
 ## Roadmap
 
@@ -264,11 +264,12 @@ _What keeps every change safe and debuggable._
 | benchctl start names what it starts | 🔍 In review | start prints one first line: the preset or default-plus-parts it starts and, when a workbench was saved by up or apply, the counts and parts it replaces (start forgets it, it never reuses it); start --profile min is the plain default. Guides updated. Issue 215. | `benchctl/workbench.py`, `benchctl/cli.py`, `tests/test_start_line.py` | - |
 | Teleport and Infrastructure architecture in the page | 🔍 In review | The diagram is renamed Infrastructure architecture; Teleport is a service box and list card when built (status from its diagnostics /healthz), dots from teleport_connect_to_node_attempts_total, a Connections row, part toggle in Cluster architecture (ADR 0022). Issue 187. | `webui/static/index.html`, `webui/cluster.py`, `webui/flow.py`, `webui/connections.py` | - |
 | Measured memory plan and 4 GB app reserve | 🔍 In review | plan, up and the pre-flight admit against measured use plus 15 percent (never above the cap) instead of the container caps (5.1 to 5.8 GB planned for a selection that used 3.0 GiB); plan prints expected and cap per item, a test fails when a component has no measurement; the app under test is a 4 GB reserve in the plan (--app-mb 0 or WORKBENCH_APP_MB=0 when it already runs); profile budgets are the expected use of what is built today. The real Jira limit went from 3072 to 2560 MB (heap 768 MB): the smallest that passed setup and a ticket run, 2304 MB was killed once. Measured live 2026-11-05; user guide docs/guides/memory.md. Issue 287. | `benchctl/memory.py`, `benchctl/workbench.py`, `benchctl/stack.py`, `benchctl/machine.py`, `benchctl/cli.py`, `profiles/*.yaml`, `tests/test_memory.py`, `docs/architecture/04-memory-and-profiles.md` | - |
+| Confluence page search on the Jira mock | 🔍 In review | GET /rest/api/search and /wiki/rest/api/search with a CQL subset (type, label, title, text, space, lastmodified; AND OR NOT, ~, in, ORDER BY), start/limit paging with _links.base and next, seven seeded runbook pages, GET|POST /sim/pages to add, clear or reset, the Jira failure modes apply. The query class is shared with JQL. Checked by running the monitoring client's own Confluence client against it (Data Center and Cloud paths). Plugin trimming of the real Jira was measured and does not save memory (docs/guides/jira-real.md). Issue 289. | `components/jira-mock/jira.py`, `tests/test_jira_pages.py`, `docs/guides/jira-tickets.md`, `docs/adr/0005-bcm-and-jira-mock-surface.md` | - |
 | Parts by category | 🔍 In review | --workload/--accounting/--monitoring/--ticketing/--hardware/--access/--simulation and --addons on start, up, apply, plan; one registry drives flags, Tab completion, errors and the sheet's grouping (ADR 0021). Issue 184. | `benchctl/workbench.py (CATEGORIES)`, `benchctl/cli.py`, `benchctl/completion.py` | - |
 | Verification helpers | ✅ Done | verify.sh runs validate.sh plus real tests (--full adds the live stack lifecycle); tests/real/helpers.py starts a live governor and talks to its socket. `--unit NAME [--clean]` verifies one component (tests/test_NAME*.py then tests/real/test_NAME*.py, optional reset hook scripts/verify.d/NAME.sh; --list-units, -n). Issue 180. Issue 237: seconds per step and a TIME line; validate.sh writes a pass stamp (scripts/lib-stamp.sh, keyed by HEAD, tracked diff, untracked files and COV_FLOOR) so verify.sh skips a second run on the same tree (`--revalidate` forces it); pytest markers `live` and `browser`, `--skip-browser`. Issue 236: WORKBENCH_TEST_TIMERS=1 (opt-in, read by the slurm.conf generator) shortens SlurmdTimeout and HealthCheckInterval for the slow live modules via the test_timers fixture; the default timings stay checked in test_stack_real. | `scripts/verify.sh` | #48 |
 | Progress tracker | ✅ Done | This page, generated from docs/progress.yaml (issue 19). | `benchctl/progress.py` | #42 |
 
-9/32 done
+9/33 done
 
 ## Next up
 
