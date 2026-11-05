@@ -224,7 +224,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         if spec.bmc_nodes is not None:
             flags += f" --bmc-nodes {','.join(spec.bmc_nodes)}"
         flags += f" --login {','.join(spec.login_nodes)} --app-mb 0"
-        return JSONResponse({"fits": ok, "message": msg, "total_mb": est["total_mb"], "available_mb": avail,
+        return JSONResponse({"fits": ok, "message": msg, "total_mb": est["total_mb"], "need_mb": est["need_mb"], "expected_mb": est["expected_mb"],
+                             "running_mb": est["running_mb"], "available_mb": avail,
                              "text": workbench.render(spec, est), "command": f"benchctl up {flags}"})
 
     async def jira_refresh(request: Request):
