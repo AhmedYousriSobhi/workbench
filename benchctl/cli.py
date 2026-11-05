@@ -1,5 +1,6 @@
 import difflib
 import json
+import os
 import sqlite3
 import sys
 import time
@@ -22,6 +23,7 @@ from . import (
     logins,
     machine,
     measure,
+    memory,
     nhc,
     nodes,
     scenario,
@@ -225,6 +227,17 @@ def _category_option(cat: str):
 
 WORKLOAD, ACCOUNTING, MONITORING, TICKETING, HARDWARE, ACCESS, SIMULATION = (
     _category_option(c) for c in ("workload", "accounting", "monitoring", "ticketing", "hardware", "access", "simulation"))
+def _app_mb_set(value: int | None) -> int | None:
+    """--app-mb N: the memory reserved for the app under test in the plan (0 leaves it out; it is already running)."""
+    if value is not None:
+        os.environ[memory.APP_ENV] = str(value)
+    return value
+
+
+APP_MB_OPT = typer.Option(None, "--app-mb", min=0, callback=_app_mb_set,
+                          help=f"MB the plan reserves for the app under test (default ${memory.APP_ENV} or {memory.APP_MB}); 0 when it already runs")
+
+
 ADDONS = typer.Option(False, "--addons", rich_help_panel="Parts by category",
                       help="turn on every optional part (all categories); --without X still removes one")
 
@@ -253,7 +266,7 @@ def plan(file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: in
          with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, save: str = SAVE,
          bmc_nodes: str = BMC_NODES, workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING,
          monitoring: list[str] = MONITORING, ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE,
-         access: list[str] = ACCESS, simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN) -> None:
+         access: list[str] = ACCESS, simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN, app_mb: int = APP_MB_OPT) -> None:
     """Estimate the memory a workbench needs against what the host has free; exit 1 if it would not fit."""
     from pathlib import Path
 
@@ -284,7 +297,7 @@ def up(profile: str = typer.Option(None, "--profile", autocompletion=completion.
        with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, bmc_nodes: str = BMC_NODES,
        workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING,
        ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE, access: list[str] = ACCESS,
-       simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN) -> None:
+       simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN, app_mb: int = APP_MB_OPT) -> None:
     """Estimate, then start. By preset (--profile) or by selection (--cpu-nodes 2 --gpu-nodes 4 --with jira,
     --ticketing jira --hardware bmc,bcm, --addons ...)."""
     with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons, login)
@@ -305,7 +318,7 @@ def apply(file: str = typer.Option(..., "-f", "--file", help="workbench file to 
           without: list[str] = WITHOUT, k8s_nodes: int = K8S, bmc_nodes: str = BMC_NODES,
           workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING,
           ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE, access: list[str] = ACCESS,
-          simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN) -> None:
+          simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN, app_mb: int = APP_MB_OPT) -> None:
     """Build the workbench a file describes (the same as `up -f FILE`)."""
     with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons, login)
     _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes, login)
@@ -326,7 +339,7 @@ def start(profile: str = typer.Option(None, "--profile", autocompletion=completi
           with_: list[str] = WITH, without: list[str] = WITHOUT, workload: list[str] = WORKLOAD,
           accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING, ticketing: list[str] = TICKETING,
           hardware: list[str] = HARDWARE, access: list[str] = ACCESS, simulation: list[str] = SIMULATION,
-          addons: bool = ADDONS, login: list[str] = LOGIN) -> None:
+          addons: bool = ADDONS, login: list[str] = LOGIN, app_mb: int = APP_MB_OPT) -> None:
     """Everything in one step: machine check, governor, cluster, web page (the first run builds images). Add parts
     with --with (`--with accounting`), by category (`--ticketing jira --hardware bmc,bcm`) or all of them (`--addons`);
     on a running cluster it adds them and leaves the page up."""

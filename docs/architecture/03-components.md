@@ -34,7 +34,7 @@ Note: Jira Cloud cannot be self-hosted, and Atlassian ended Jira Server support 
 |---|---|---|
 | `mock` (default) | ~50-100 MB | Daily dev, CI, scenarios. a small stdlib server (built; WireMock was the alternative) implementing the Jira REST endpoints the app uses (issue create/transition/comment, search/JQL subset, webhooks), with failure modes (429, 503, slow). |
 | `cloud` | 0 local | Contract testing against a real **Jira Cloud free site** (small-team free tier; check current limits). Real auth, real rate limits. |
-| `dc` | ~3 GB+ | Only the `jira-real` profile, which suspends K8s + fidelity VM to pay for it. Keep heap at the recommended size; don't starve it. |
+| `dc` | ~2.5 GB cap (measured) | Only the `jira-real` profile, which suspends K8s + fidelity VM to pay for it. Keep heap at the recommended size; don't starve it. |
 
 Put **Toxiproxy** in front of the Jira mode only (an HTTP path, where it is cheap) to inject latency/outages. Do **not** put it in the Slurm RPC path; use `tc netem` there (section 4.9).
 

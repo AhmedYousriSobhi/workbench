@@ -11,7 +11,7 @@ import urllib.error
 from collections.abc import Callable
 from pathlib import Path
 
-from . import addressing, checks, compose, jira_real, logins, slurmconf, teleport, workbench
+from . import addressing, checks, compose, jira_real, logins, memory, slurmconf, teleport, workbench
 
 COMPOSE_FILE = Path("compose/generated/docker-compose.yml")
 PROJECT = "workbench"
@@ -77,15 +77,16 @@ def governor_admits(need_mb: int, say: Callable[[str], None], ask=None) -> bool:
 
 
 def missing_mb(services: dict, runner: Runner, file: Path) -> int:
-    """Memory limits of the services that are not running yet (what a start would add)."""
+    """Expected memory (measured use plus tolerance, never above the cap) of the services not running yet: what a start would add."""
     up_now = set(runner(dc("ps", "--status", "running", "--format", "{{.Service}}", file=file)).stdout.split())
-    return sum(int(s["mem_limit"].rstrip("m")) for n, s in services.items() if n not in up_now)
+    return sum(memory.expected_mb(n, int(s["mem_limit"].rstrip("m")), s.get("labels")) for n, s in services.items() if n not in up_now)
 
 
 def admit(profile: str, available: int | None = None) -> tuple[bool, str]:
     """Pre-flight: refuse unless the profile fits, naming a smaller profile that does."""
     avail = checks.mem_available() if available is None else available
-    return checks.preflight(profile, checks.load_profiles(), avail)
+    app = memory.app_mb() / 1024  # the app under test's reserve, on top of every profile's own expected use
+    return checks.preflight(profile, {n: b + app for n, b in checks.load_profiles().items()}, avail)
 
 
 ONESHOT = {"accounting-init"}  # run once and exit; success is exit code 0, not "running"

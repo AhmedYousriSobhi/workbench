@@ -1,6 +1,6 @@
 """The real Jira next to the mock (ADR 0026, issue 284): start the part, finish its setup, run a real round trip.
 
-Needs Atlassian's published 3-hour Data Center test licence (docs/guides/jira-real.md) and about 3.3 GB of free memory;
+Needs Atlassian's published 3-hour Data Center test licence (docs/guides/jira-real.md) and about 2.8 GB of free memory;
 without the licence file every test here skips and says where to put it. Slow (minutes: image pull, JVM start, wizard)."""
 import json
 import os
