@@ -19,7 +19,7 @@ It prints the nodes and parts, the memory by item (expected use and the cap), th
 governor enforces. Admission compares the expected use plus the app's reserve with free memory, so a start that fits is no longer
 refused because caps are generous. If the app under test already runs, its memory is already out of the free figure: add
 `--app-mb 0` (to `plan`, `up`, `apply` or `start`) or set `WORKBENCH_APP_MB=0`. The numbers and how to re-measure them:
-[memory contract](../architecture/04-memory-and-profiles.md).
+[memory contract](../architecture/04-memory-and-profiles.md); the per-part table is in [how much memory it uses](memory.md).
 
 ## 2. Build
 
