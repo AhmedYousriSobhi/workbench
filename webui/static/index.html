@@ -795,7 +795,7 @@ function bindCopy() {  // Copy buttons: the label comes back after the click, an
 }
 async function paintConnections() {
   const rows = await connections();
-  $('conn-rows').innerHTML = rows.map(e => `<tr data-id="${esc(e.id)}"><td data-h="Part"><b>${esc(e.name)}</b><div class="small dim">${esc(e.how).replace(/`([^`]+)`/g, '<code>$1</code>')}</div></td>
+  $('conn-rows').innerHTML = rows.map(e => `<tr data-id="${esc(e.id)}"><td data-h="Part"><b>${esc(e.name)}</b><div class="small dim">${esc(e.how).replace(/`([^`]+)`/g, '<code>$1</code>')}</div>${e.status ? `<div class="small" role="status">${esc(e.status)}</div>` : ''}</td>
     <td data-h="Address"><code>${esc(e.address)}</code></td><td data-h="Try it"><code>${esc(e.command)}</code><button class="btn small copy" data-copy="${esc(e.command)}" aria-label="Copy the command for ${esc(e.name)}">Copy</button></td>
     <td data-h="Credential">${e.credential ? `<code>${esc(e.credential)}</code>` : '<span class="dim">none</span>'}</td>
     <td data-h="Open">${(e.actions || []).map(actionHtml).join(' ') || '<span class="dim">none</span>'}</td></tr>`).join('') || '<tr><td colspan="5">Could not load.</td></tr>';

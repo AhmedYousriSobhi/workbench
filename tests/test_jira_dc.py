@@ -254,3 +254,20 @@ def test_licence_status_asks_the_plugin_manager_with_a_wildcard_accept(tmp_path,
     monkeypatch.setattr(jr.Session, "api", api)
     assert jr.licence_status(env=env) == {"valid": True, "expires": 1793893363}
     assert seen["accept"] == "*/*" and seen["path"] == jr.LICENSE_API and seen["auth"] == ("admin", "pw")
+
+
+def test_auto_refresh_decision_and_text(monkeypatch):
+    from benchctl import jira_real as jr
+
+    now = 1_000_000.0
+    ok = {"valid": True, "expires": int(now) + 3 * 3600}
+    assert not jr.needs_refresh(ok, 15, now) and not jr.needs_refresh(None, 15, now)
+    assert jr.needs_refresh({"valid": True, "expires": int(now) + 600}, 15, now)  # 10 min left
+    assert jr.needs_refresh({"valid": False, "expires": int(now) - 5}, 15, now)  # expired
+    assert not jr.needs_refresh({"valid": True, "expires": int(now) + 60}, 0, now)  # 0 = off
+    assert "valid until" in jr.licence_text(ok, now) and "EXPIRED" in jr.licence_text({"valid": False, "expires": 1}, now)
+    assert "not readable" in jr.licence_text(None)
+    monkeypatch.setenv(jr.AUTO_ENV, "30")
+    assert jr.auto_minutes() == 30
+    monkeypatch.delenv(jr.AUTO_ENV)
+    assert jr.auto_minutes() == jr.AUTO_MIN

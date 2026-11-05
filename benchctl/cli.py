@@ -130,6 +130,8 @@ def _cluster_and_page() -> None:
     link = next((ln.split("workbench UI: ", 1)[1].strip() for ln in reversed(log.read_text().splitlines())
                  if "workbench UI: " in ln), "") if log.is_file() else ""
     typer.echo(f"web page: {link}" if link and Path("compose/generated/ui.pid").is_file() else "web page: stopped")
+    if any(r["name"] == "jira-real" for r in running):
+        typer.echo(f"jira (real): {jira_real.licence_text(jira_real.licence_status())}")
 
 
 @app.command("diag")

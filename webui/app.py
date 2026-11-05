@@ -6,6 +6,7 @@ Built on Starlette (FastAPI's base) rather than FastAPI itself: FastAPI's pydant
 budget (ADR 0008).
 """
 import asyncio
+import contextlib
 import hmac
 import json
 import re
@@ -313,10 +314,26 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         return JSONResponse({"info": info, "text": describe.render(info), "ip": plan["nodes"].get(node),
                              "bmc_ip": plan["bmc"].get(node) if f"bmc-{node}" in services else None})
 
+    licence = {"text": "", "asked": 0.0}  # the real Jira's licence as the watcher last saw it, and when it last asked for a renewal
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app):
+        from webui import licence as licence_mod
+
+        task = asyncio.create_task(licence_mod.watch(licence, socket))
+        try:
+            yield
+        finally:
+            task.cancel()
+
     async def connections(request: Request):
         from webui import connections as conn
 
-        return JSONResponse({"entities": conn.entities(cluster.sim)})
+        rows = conn.entities(cluster.sim)
+        for e in rows:
+            if e["id"] == "jira-real" and licence["text"]:
+                e["status"] = licence["text"]
+        return JSONResponse({"entities": rows})
 
     async def export_profile(request: Request):
         """The client profile file for the cluster on disk now. Read fresh per request (the page has no Docker, W-3),
@@ -461,6 +478,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
     return Starlette(
+        lifespan=lifespan,
         routes=[
             Route("/login", login),
             Route("/", protected(index)),

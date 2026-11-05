@@ -80,6 +80,13 @@ governor (the page has no Docker access) and needs calm memory (L0-L1); the prog
 unreachable for about a minute while it starts. Do it before the 3 hours end (Jira warns when under 24 hours are left) or after: it
 works either way.
 
+**Automatic.** While the web page runs (`benchctl start`), it reads the licence end once a minute (over HTTP, no Docker) and shows it
+in the Connections row (`licence: valid until 17:42 (in 2 h 55 min)`); `benchctl status` prints the same line. When less than
+**15 minutes** are left, or the licence has already ended, it asks the governor for the same refresh, at most once per 15 minutes,
+and the row says `licence: renewing now`. Change the threshold with `WORKBENCH_JIRA_AUTO_REFRESH=MINUTES` (0 turns it off) in the
+environment of `benchctl start`. It needs the governor at calm levels (L0-L1); otherwise it waits and asks again. Jira restarts
+once about every 2 h 45 min, so a client talking to it sees about a minute of downtime then; turn it off if that matters.
+
 If the refresh says the licence is still not valid, the key file itself has a fixed end date: save a fresh published key in
 `compose/generated/secrets/jira.license`, then start from nothing (this deletes users, tickets and tokens; the mock is untouched):
 

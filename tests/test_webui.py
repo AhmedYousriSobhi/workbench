@@ -422,3 +422,30 @@ def test_a_resilience_scenario_goes_through_the_governor_and_the_page_gets_a_tra
     finally:
         server.should_exit = True
         gov.shutdown()
+
+
+def test_licence_watch_reads_and_renews_once_when_the_end_is_near(monkeypatch):
+    """Detect (read the end over HTTP) and renew through the governor, once per cooldown, only when under the threshold (issue 293)."""
+    import asyncio
+    import time
+
+    from benchctl import checks, jira_real
+    from webui import licence
+
+    asked = []
+    monkeypatch.setattr(checks, "governor_request", lambda req, sock: asked.append(req) or {"ok": True, "started": True})
+    st = {"valid": True, "expires": int(time.time()) + 3 * 3600}
+    monkeypatch.setattr(jira_real, "licence_status", lambda *a, **k: st)
+    state = {}
+    asyncio.run(licence.watch(state, "sock", every=0, rounds=2))
+    assert asked == [] and "valid until" in state["text"]  # 3 h left: only detected
+    st = {"valid": True, "expires": int(time.time()) + 300}  # 5 min left
+    asyncio.run(licence.watch(state, "sock", every=0, rounds=3))
+    assert asked == [{"cmd": "refresh-jira-licence"}] and "renewing" in state["text"]  # asked once in three rounds
+    monkeypatch.setenv(jira_real.AUTO_ENV, "0")
+    state["asked"] = 0.0
+    asyncio.run(licence.watch(state, "sock", every=0, rounds=1))
+    assert len(asked) == 1  # automatic renewal off
+    monkeypatch.setattr(jira_real, "licence_status", lambda *a, **k: None)
+    asyncio.run(licence.watch(state, "sock", every=0, rounds=1))
+    assert state["text"] == "" and len(asked) == 1  # Jira down: quiet

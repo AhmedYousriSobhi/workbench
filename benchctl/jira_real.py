@@ -304,3 +304,29 @@ def refresh_licence(base: str = URL, say: Callable[[str], None] = print, runner=
                             "end date. Save a fresh published key there and run `benchctl remove jira-real-state` (docs/guides/jira-real.md)")
     say(f"licence valid until {_when(now['expires'])}")
     return now
+
+
+AUTO_ENV = "WORKBENCH_JIRA_AUTO_REFRESH"  # minutes left at which the page renews the licence; 0 turns the automatic renewal off
+AUTO_MIN = 15
+
+
+def auto_minutes() -> int:
+    raw = os.environ.get(AUTO_ENV, "")
+    return int(raw) if raw.strip().isdigit() else AUTO_MIN
+
+
+def needs_refresh(st: dict | None, min_left: int, now: float | None = None) -> bool:
+    """True when Jira answers and its licence is expired or has less than `min_left` minutes left (0 = never)."""
+    if not st or min_left <= 0:
+        return False
+    return not st["valid"] or st["expires"] - (time.time() if now is None else now) < min_left * 60
+
+
+def licence_text(st: dict | None, now: float | None = None) -> str:
+    """One line for a row or a status: when the licence ends, or that it cannot be read."""
+    if not st:
+        return "licence: not readable (Jira is down or not set up)"
+    left = int(st["expires"] - (time.time() if now is None else now)) // 60
+    if not st["valid"] or left <= 0:
+        return "licence: EXPIRED (benchctl refresh jira-real-licence)"
+    return f"licence: valid until {time.strftime('%H:%M', time.localtime(st['expires']))} (in {left // 60} h {left % 60} min)"
