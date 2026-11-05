@@ -55,6 +55,17 @@ If port 2222 refuses connections, the checkout is probably on a branch without t
 - **Jira:** base URL `http://10.141.255.11:8080` (a client that refuses plain HTTP for a non-local host: use the fallback `http://127.0.0.1:8080`). `POST /sim/tickets` and the ticket scenarios ([tickets guide](jira-tickets.md)) file and move tickets; **a team changes tickets in the background** (`benchctl set jira-activity off` stops it, [guide](jira-tickets.md)) and **a node fault files one ticket by itself** (project OPS, reporter `ops-bot`, labels `node-<name>`, `fault-<kind>`, `auto`): Power off, GPU error (XID), overheat and fan failure each open one per node and kind (a repeat comments), Power on or Clear faults comments and resolves it, from the page, `benchctl set node` and scenarios alike; `POST /sim/failure` injects 401,
   429, 503 or slow responses.
 
+## Stress test: everything at once while the client runs
+
+`benchctl scenario run client-stress` (5 minutes, [scenarios/client-stress.yaml](../../scenarios/client-stress.yaml)) floods five nodes with jobs, raises GPU XID errors and fan failures, heats a GPU node, powers off and drains `cn004`, files 12 tickets, then makes the Jira mock answer 429, slow and 503 before clearing everything. Run it with the client open and measure the client at the same time (use a `--match` that names only the client's own processes; a loose word such as `name` matches unrelated programs and the tool prints how many processes it found):
+
+```bash
+./scripts/benchctl scenario run client-stress &
+./scripts/benchctl measure app --match NAME --duration 330 --save
+```
+
+The Jira faults hit `jira-mock` (8080), not `jira-real`. Measured once (a desktop Electron client, one cluster, a terminal, the real Jira, every view opened in turn): 469 MB idle, 664 MB peak and 555 MB typical during the scenario, 8 processes; the machine reserve was set to 800 MB. One session, one cluster: it is a floor for several clusters or terminals, not a limit.
+
 ## Slurm: what is real and what is not
 
 Slurm is the real software (ADR 0025), so a client sees real command output and real state changes. Real: `squeue`, `sinfo`,
