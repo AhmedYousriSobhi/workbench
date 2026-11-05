@@ -450,3 +450,9 @@ def test_licence_watch_reads_and_renews_once_when_the_end_is_near(monkeypatch):
     monkeypatch.setattr(jira_real, "licence_status", lambda *a, **k: None)
     asyncio.run(licence.watch(state, "sock", every=0, rounds=1))
     assert state["text"] == "" and len(asked) == 1  # Jira down: quiet
+
+
+def test_plan_reports_the_admitted_number_next_to_the_caps(ui):
+    data = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=4&gpus_per_node=8&parts=jira")[1])
+    assert data["need_mb"] == data["expected_mb"] - data["running_mb"] < data["total_mb"]  # no app reserve on the page; expected is below the caps
+    assert b"p.need_mb" in req(ui, "/")[1]

@@ -592,9 +592,9 @@ async function loadPlan() {
   const r = await fetch('/api/plan?' + q);
   if (!r.ok) { $('pl-msg').textContent = '✗ ' + (await r.json()).detail; $('pl-cmd').textContent = ''; $('pl-bar').value = 0; $('pl-need').textContent = '–'; $('pl-free').textContent = ''; $('pl-apply').hidden = true; return; }
   const p = await r.json();
-  $('pl-bar').value = Math.min(100, Math.round(100 * p.total_mb / Math.max(p.available_mb, 1)));
+  $('pl-bar').value = Math.min(100, Math.round(100 * p.need_mb / Math.max(p.available_mb, 1)));  // the number admission compares with free memory, not the caps
   $('pl-msg').textContent = (p.fits ? '✓ ' : '✗ ') + p.message;
-  $('pl-need').textContent = (p.total_mb / 1024).toFixed(1) + ' GB needed'; $('pl-free').textContent = ` of ${(p.available_mb / 1024).toFixed(1)} GB free`;
+  $('pl-need').textContent = (p.need_mb / 1024).toFixed(1) + ' GB needed'; $('pl-need').title = `expected use ${p.expected_mb} MB` + (p.running_mb ? `, minus ${p.running_mb} MB already running` : '') + `; the containers may reach ${p.total_mb} MB in total (their caps). Your app is counted as already running (0 MB); benchctl reserves 4096 MB for it unless you pass --app-mb 0.`; $('pl-free').textContent = ` of ${(p.available_mb / 1024).toFixed(1)} GB free`;
   const c = currentSize(), d = (name, a, b) => a === b ? `${name} ${b} (no change)` : `${name} ${a} → ${b} (${b > a ? '+' : ''}${b - a})`;
   $('pl-diff').textContent = c.cpu + c.gpu ? d('CPU nodes', c.cpu, +$('pl-cpu').value) + ' · ' + d('GPU nodes', c.gpu, +$('pl-gpu').value) : '';
   $('pl-cmd').textContent = p.fits ? p.command : 'Does not fit. Change the selection, or free memory.';
