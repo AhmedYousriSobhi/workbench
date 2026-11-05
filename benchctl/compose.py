@@ -135,7 +135,7 @@ def generate(sim: dict, profile: dict) -> dict:
     if "bmc-farm" in services:
         nets["ipmi"] = {"ipam": {"config": [{"subnet": addressing.IPMI, "gateway": addressing.IPMI_GATEWAY}]}}
     out = {"name": "workbench", "include": [OBSERVABILITY], "networks": nets, "services": services}
-    if "jira-real" in services:  # named volumes: the data survives `down`; `benchctl reset jira-real` removes them
+    if "jira-real" in services:  # named volumes: the data survives `down`; `benchctl remove jira-real-state` removes them
         out["volumes"] = {v: {} for v in jira_real.VOLUMES}
     return out
 

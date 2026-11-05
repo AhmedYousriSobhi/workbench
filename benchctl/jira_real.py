@@ -5,7 +5,7 @@ The pieces: `ensure_secrets` makes the passwords once; `provision` finishes the 
 administrator, no mail), waits until REST really answers, seeds users, a project and tickets, and makes a personal access
 token per user. Everything talks to localhost only: a Jira that is not on this machine is refused, so a typo can never
 seed a real site. The licence is Atlassian's published 3-hour Data Center test key, read from a file that stays out of git;
-after 3 hours the server is read-only and `benchctl reset jira-real` starts from nothing (the data volumes are removed)."""
+after 3 hours the server is read-only and `benchctl remove jira-real-state` starts from nothing (the data volumes are removed)."""
 import http.cookiejar
 import json
 import os
@@ -230,14 +230,14 @@ def provision(base: str = URL, licence: str | None = None, say: Callable[[str], 
         if status == 200:
             break
         if status == 401:
-            raise JiraRealError("the administrator password does not match this Jira: `benchctl reset jira-real` starts it from nothing")
+            raise JiraRealError("the administrator password does not match this Jira: `benchctl remove jira-real-state` starts it from nothing")
         sleep(5)
     else:
         raise JiraRealError(f"Jira answers /status but not REST yet ({status}); try again in a minute")
     say("signed in as admin; seeding")
     tokens = seed(s, ("admin", admin_pw), user_pw, say)
     write_tokens(tokens, env, base)
-    say(f"done: tokens are in {env} (not printed). The test licence lasts 3 hours; `benchctl reset jira-real` starts over.")
+    say(f"done: tokens are in {env} (not printed). The test licence lasts 3 hours; `benchctl remove jira-real-state` starts over.")
     return tokens
 
 

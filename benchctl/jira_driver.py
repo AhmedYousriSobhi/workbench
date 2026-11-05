@@ -18,6 +18,7 @@ import calendar
 import json
 import os
 import random
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -222,14 +223,15 @@ class JiraDriver:
         mine = self.search(f'project = {self.project} AND labels = "{LABEL}" ORDER BY updated ASC')
         quiet = [i for i in mine if now - _epoch(i["fields"]["updated"]) >= COOLDOWN]
         live = [i for i in quiet if _cat(i) != "done"]
-        done = [i for i in quiet if _cat(i) == "done" and i["fields"]["status"]["name"] != "Closed"]
+        done = [i for i in quiet if _cat(i) == "done" and i["fields"]["status"]["name"] not in ("Closed", "Done")]  # Done is the end
+        reopenable = [i for i in quiet if _cat(i) == "done" and i["fields"]["status"]["name"] != "Closed"]
         choice = r.choices(["advance", "comment", "assign", "create", "reopen"], [45, 25, 10, 12, 8])[0]
         if choice == "create" and sum(_cat(i) != "done" for i in mine) >= 30:
             choice = "advance"
         who = r.choice(ENGINEERS)
         if choice == "create":
             return f"created {self.create('Follow-up from the team', labels=['activity'], reporter=r.choice(ENGINEERS))}"
-        pool = {"advance": live + done, "comment": live, "assign": live, "reopen": done}[choice]
+        pool = {"advance": live + done, "comment": live, "assign": live, "reopen": reopenable}[choice]
         if not pool:
             return None
         issue = r.choice(pool)
@@ -255,4 +257,7 @@ def _cat(issue: dict) -> str:
 
 
 def _epoch(stamp: str) -> float:
-    return calendar.timegm(time.strptime(stamp[:19], "%Y-%m-%dT%H:%M:%S"))
+    """Seconds since the epoch of a Jira timestamp such as 2026-11-05T08:40:04.123+0200 (the offset counts)."""
+    t = calendar.timegm(time.strptime(stamp[:19], "%Y-%m-%dT%H:%M:%S"))
+    m = re.search(r"([+-])(\d\d):?(\d\d)$", stamp[19:])
+    return t - (1 if m.group(1) == "+" else -1) * (int(m.group(2)) * 3600 + int(m.group(3)) * 60) if m else t

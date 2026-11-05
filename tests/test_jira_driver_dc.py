@@ -148,3 +148,16 @@ def test_for_target_mock_needs_nothing_and_real_needs_setup(tmp_path):
     assert d.dc and d.auth == "Bearer abc" and d.base.endswith(":8083")
     with pytest.raises(jd.JiraError):
         jd.JiraDriver.for_target("other")
+
+
+def test_a_done_ticket_is_never_advanced_again_and_the_cooldown_counts_the_time_zone(dc):
+    key = dc.create("finished")
+    dc.move(key, "Done")
+    Fake.issues[key]["updated"] = "2020-01-01T00:00:00.000+0000"
+    for _ in range(40):
+        was = Fake.issues[key]["status"]
+        r = dc.tick()
+        assert not (was == "Done" and r == f"advance {key}"), "Done is the end of the workflow"
+    assert jd._epoch("2026-11-05T08:40:04.123+0200") == jd._epoch("2026-11-05T06:40:04.000+0000")
+    assert jd._epoch("2026-11-05T08:40:04.123-0500") == jd._epoch("2026-11-05T13:40:04.000+0000")
+    assert jd._epoch("2026-11-05T08:40:04") == jd._epoch("2026-11-05T08:40:04.000Z")
