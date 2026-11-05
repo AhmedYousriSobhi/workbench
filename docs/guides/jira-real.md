@@ -2,7 +2,7 @@
 
 `jira-mock` is the default and answers on `http://127.0.0.1:8080`. When you need Atlassian's own code (to see how a
 client behaves against real validation, JQL and workflows), start the **real Jira Data Center** next to it. It is a
-session tool: the test licence lasts **3 hours**, then the server is read-only and you reset it. About 2.8 GB of memory (2.5 GB for Jira, the smallest limit that worked, plus Postgres)
+session tool: the test licence lasts **3 hours**, then the server is read-only and you reset it. About 2.4 GB of memory (2.1 GB for Jira, the smallest limit that worked, plus Postgres)
 (ADR 0026, SPEC C-19). It is Data Center, not Cloud.
 
 ## Once: get the test licence
@@ -35,13 +35,27 @@ The first start pulls about 1 GB. `setup` prints one line per step and ends with
   Resolved, Closed): tools must read the transitions Jira offers, not assume names.
 - The page's Connections tab has an **Open Jira (real)** link.
 
-### Why 2.5 GB (measured, issue 287)
+### Why 2.1 GB (measured, issues 287 and 289)
 
-A JVM holds more than its heap: metaspace, a code cache, thread stacks and the plugin system. The smallest limit that finished
-the setup wizard, the seeding and a ticket run without Jira being killed was **2560 MB with a 768 MB heap** (peak 2363 MiB,
-no restart). At 2304 MB the setup finished but Jira was killed once and restarted by Docker; at 2048 MB and 1536 MB it
-failed (setup lost the connection after kills). The constants are `HEAP_MIN_MB`, `HEAP_MAX_MB`, `CODE_CACHE_MB`, `LIMIT_MB` in
-`benchctl/jira_real.py`; change one only after repeating the trial (`docs/architecture/04-memory-and-profiles.md`).
+A JVM holds more than its heap: metaspace, a code cache, thread stacks, compiler threads and the plugin system. Measured on the live
+stack with the same procedure each time (setup wizard, seeding, 20 ticket changes, no Docker restart allowed):
+
+| Heap | JVM flags | Limit | Result | Peak |
+|---|---|---|---|---|
+| 768 MB | default | 1536 MB | failed, killed 4 times | 1513 MiB |
+| 768 MB | default | 2048 MB | failed, setup lost the connection | 2024 MiB |
+| 768 MB | default | 2304 MB | finished, killed once | 2302 MiB |
+| 768 MB | default | 2560 MB | passed | 2363 MiB |
+| 768 MB | `JVM_ARGS` below, metaspace capped at 192 MB | 2304 MB | failed: `OutOfMemoryError: Metaspace` | |
+| 768 MB | `JVM_ARGS` | 2304 MB | passed | 2043 MiB |
+| 768 MB | `JVM_ARGS` | **2176 MB** | **passed twice** | **2039 and 2045 MiB** |
+
+`JVM_ARGS` is `-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss512k -XX:CICompilerCount=1` (one collector thread, C1-only compilation,
+smaller thread stacks, one compiler thread): it takes about 320 MiB off the peak. Capping metaspace does not work: Jira's 273
+plugins need it. The peak stays near 2040 MiB whatever the limit, so the limit is that peak plus about 6 percent. The constants
+are `HEAP_MIN_MB`, `HEAP_MAX_MB`, `CODE_CACHE_MB`, `LIMIT_MB`, `JVM_ARGS` in `benchctl/jira_real.py`; change one only after repeating
+the trial and the numbers in [memory](memory.md). The cost of C1-only compilation is a slower Jira under heavy load, which a
+simulation does not generate.
 
 ### Switching plugins off does not help (measured, issue 289)
 
@@ -63,7 +77,7 @@ Jira turns read-only. Start from nothing; the same key gives a new 3 hours, coun
 
 ## Memory
 
-`benchctl plan --with jira-real` shows the estimate before anything starts (the part is expected to use about 2.7 GB: Jira at its 2.5 GB cap, Postgres about 0.15 GB; both are capped at 2.8 GB). The governor treats it as class P6, the first thing it stops under pressure. `--addons` and `all` never turn it
+`benchctl plan --with jira-real` shows the estimate before anything starts (the part is expected to use about 2.3 GB: Jira at its 2.1 GB cap, Postgres about 0.15 GB; both are capped at 2.4 GB). The governor treats it as class P6, the first thing it stops under pressure. `--addons` and `all` never turn it
 on: only its name does.
 
 ## What is real and what is not
@@ -79,7 +93,7 @@ Real: Atlassian's code, REST v2, workflow, JQL, custom fields, validation. Not r
 ./scripts/verify.sh --unit jira_dc --clean    # first remove the real Jira's data
 ```
 
-The live part skips and says where to put the licence when it is missing; with it, it needs about 2.8 GB free and a few minutes.
+The live part skips and says where to put the licence when it is missing; with it, it needs about 2.4 GB free and a few minutes.
 
 ## Ticket automation on both Jiras
 

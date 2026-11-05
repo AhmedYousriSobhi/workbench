@@ -13,7 +13,7 @@
 
 **A pretend HPC cluster for a 16 GB laptop, with a bouncer that keeps it from eating all your RAM.**
 
-Real clusters cost a lot and break at 3 a.m. This one costs about 0.5 to 1.5 GB (the real Jira, optional, adds 2.8 GB; [what it uses](docs/guides/memory.md)), breaks when you ask, and fakes everything an
+Real clusters cost a lot and break at 3 a.m. This one costs about 0.5 to 1.5 GB (the real Jira, optional, adds 2.4 GB; [what it uses](docs/guides/memory.md)), breaks when you ask, and fakes everything an
 HPC monitoring app talks to: Slurm, GPUs, Grafana, Jira, BMCs. Built to test a desktop monitoring client, handy for
 anyone who wants a cluster to poke without a data centre.
 

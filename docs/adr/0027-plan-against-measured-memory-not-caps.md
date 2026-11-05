@@ -16,7 +16,7 @@ decides everything. The app under test (the client being tested, 1 GB in the arc
 | Caps stay as they are and the governor still enforces them; `plan` prints expected and cap | Safety does not change, only the forecast |
 | The app under test is a 4 GB reserve in `need` (`--app-mb N`, `WORKBENCH_APP_MB`; 0 when it already runs) | Its memory is real and competes for the same RAM; when it already runs, `MemAvailable` already excludes it, so counting it twice would be wrong |
 | Profile `budget_gb` is the expected use of what is built today; the pre-flight adds the app reserve | One method for the profiles and for selections |
-| The real Jira cap went from 3072 to 2560 MB (heap 768 MB) | Smallest limit that passed setup and a ticket run (2304 MB: killed once, 2048 and 1536: failed) |
+| The real Jira cap went from 3072 to 2560 MB (heap 768 MB), then to 2176 MB with a trimmed JVM (Serial GC, C1-only, 512 KB stacks; issue 289) | Smallest limit that passed setup and a ticket run twice (peak about 2040 MiB); without the flags 2560 MB was the floor |
 
 ## Consequences
 - Selections that fit no longer get refused because caps are large; the verdict names the app reserve and how to leave it out.

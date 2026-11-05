@@ -1,5 +1,5 @@
 # Profile: jira-real
 name: jira-real
-budget_gb: 4.0   # expected use of what is built today (4026 MB: measured + 15 percent, benchctl/memory.py, issue 287); the app under test is added on top by the pre-flight
+budget_gb: 3.6   # expected use of what is built today (3642 MB: measured + 15 percent, benchctl/memory.py, issue 287); the app under test is added on top by the pre-flight
 extends: [std]
 groups: [jira-real]

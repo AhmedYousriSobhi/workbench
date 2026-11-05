@@ -32,7 +32,8 @@ PEOPLE = [("alice", "Alice Example"), ("bob", "Bob Example"), ("carol", "Carol E
           ("dave", "Dave Example"), ("erin", "Erin Example")]  # the names the mock's team uses
 TICKETS = 24
 # Memory (issue 287): the smallest heap and container limit that pass the setup and a ticket run, measured (see ADR 0026).
-HEAP_MIN_MB, HEAP_MAX_MB, CODE_CACHE_MB, LIMIT_MB, DB_LIMIT_MB = 512, 768, 128, 2560, 256
+HEAP_MIN_MB, HEAP_MAX_MB, CODE_CACHE_MB, LIMIT_MB, DB_LIMIT_MB = 512, 768, 128, 2176, 256
+JVM_ARGS = "-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss512k -XX:CICompilerCount=1"  # smaller JVM footprint: a 2176 MB limit works with them (docs/guides/jira-real.md, issue 289)
 VOLUMES = ("jira-home", "jira-db")  # compose volumes: `reset` removes them
 
 

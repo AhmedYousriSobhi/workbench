@@ -17,7 +17,7 @@ Add `jira-real`, an **optional part, off by default**, that runs the official `a
 | Choice | Why |
 |---|---|
 | Postgres, collation C | Jira 10's wizard has no built-in database; Jira refuses any other collation. |
-| 2560 MB for Jira (heap 512 to 768 MB, code cache 128 MB), 256 MB for Postgres, class P6 | The smallest limit that passed setup and a ticket run (2304 MB: killed once; 2048 and 1536 MB: failed), peak 2363 MiB, measured 2026-11-05, issue 287. The lab's 1 to 2 GB heap needs about 3 GB. P6 so the governor stops it first. Counted in the estimate and in governor admission like every part. |
+| 2176 MB for Jira (heap 512 to 768 MB, code cache 128 MB, `JVM_ARGS`: Serial GC, C1-only, 512 KB stacks), 256 MB for Postgres, class P6 | The smallest limit that passed setup and a ticket run twice, peak about 2040 MiB (issues 287 and 289; table in docs/guides/jira-real.md). Without the JVM flags the floor was 2560 MB; the lab's 1 to 2 GB heap needs about 3 GB. P6 so the governor stops it first. Counted in the estimate and in governor admission like every part. |
 | Named volumes, removed by `benchctl remove jira-real-state` | The data survives `down`; a fresh start is a reset, not a rebuild of the image. |
 | Setup by code (`benchctl setup jira-real`, `benchctl/jira_real.py`) | The wizard (database, properties, licence, administrator, no mail) is five form posts; then it waits until REST really answers (`/status` says RUNNING first), seeds users alice to erin (the mock team's names), project `OPS` (the key the mock and the exported profile use) and tickets, and makes a personal access token per user. Safe to repeat. |
 | Localhost only | The setup refuses any base URL that is not 127.0.0.1, localhost or ::1, so a typo cannot seed a real site. |
@@ -30,7 +30,7 @@ not Cloud (Cloud's ADF comment bodies, `accountId`, `search/jql` paging stay che
 229); one node, no clustering; the licence is a test key; no webhooks are wired to the stack.
 
 ## Consequences
-- Memory: the `jira-real` profile and the part add about 2.8 GB (measured). With both Jiras on, the min preset no longer fits a 16 GB host
+- Memory: the `jira-real` profile and the part add about 2.4 GB (measured). With both Jiras on, the min preset no longer fits a 16 GB host
   comfortably; the estimate says so before `up`.
 - Everything that talks to Jira must work against both: the ticket driver (issue 262) is tested against the mock and the real one.
 - Atlassian ended new Data Center sales on 30 March 2026 and ends Data Center in 2029; the test key and the image still
