@@ -104,7 +104,7 @@ Profiles: `min`, `std`, `full`, `jira-real`, `mac-agent` ([architecture section 
 ## 9. Non-functional requirements
 
 - NF-1. A synthetic memory hog MUST be throttled, frozen, then stopped in ladder order, and the system MUST recover without a host OOM.
-- NF-2. Mocks MUST be covered by contract tests against recorded real responses where available.
+- NF-2. Mocks MUST be covered by contract tests against recorded real responses where available (jira-mock: `tests/test_jira_contract.py` over shapes recorded by `scripts/record_jira_shapes.py`, docs/guides/jira-contract.md; recorded shapes hold no values).
 - NF-3. Everything is reproducible from the repository plus `sim.yaml`; no manual per-node setup.
 - NF-4. The repository is public: tracked files, commit messages, issues and pull requests MUST NOT contain personal data (home-directory paths, local usernames, personal emails, hostnames), tokens or keys. Local-only tooling (`.claude/`, whose skills are symlinks into a home directory, and `graphify-out/`) is gitignored and never committed. `scripts/check-privacy.sh` enforces this in the git hooks (`scripts/install-hooks.sh`), in `validate.sh` and before every push; commits are authored with the GitHub noreply address.
 - NF-5. Starting, building and stopping the simulation MUST NOT need sudo (ADR 0010); root is only for the optional boot-time governor service.
