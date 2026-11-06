@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**85% built** (35 done, 50 in review, 11 partial, 4 to do, 100 items).
+**85% built** (35 done, 51 in review, 11 partial, 4 to do, 101 items).
 
 ## Roadmap
 
@@ -16,7 +16,7 @@ flowchart LR
     p4["People and chaos<br/>25%"]:::partial
     p5["Kubernetes<br/>50%"]:::partial
     p6["Fidelity VM<br/>0%"]:::partial
-    p7["Web UI and profiles<br/>85%"]:::partial
+    p7["Web UI and profiles<br/>86%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
     p0 --> p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7 --> p8
     classDef done fill:#1a7f37,stroke:#1a7f37,color:#fff
@@ -199,7 +199,7 @@ _One real Ubuntu VM with Redfish power control._
 
 0/1 done
 
-### Web UI and profiles (85%)
+### Web UI and profiles (86%)
 
 _One click from cold start to a busy cluster._
 
@@ -224,9 +224,10 @@ _One click from cold start to a busy cluster._
 | Blast radius | 🔍 In review | One reviewed table (webui/blast.py): for each node action, the services a client reads that it changes and a plain caption; /api/cluster carries it. When a fault event arrives the page marks those services, their client lines and the node with a dashed outline and shows the caption in Connections, announced to assistive tech, labelled declared-not-measured, cleared after 45 s or by Dismiss. A test checks every action has an entry and every named service has a client edge in the declared graph. Issue 315. | `webui/blast.py`, `webui/app.py`, `webui/static/index.html`, `tests/test_graph.py`, `scripts/ui_shots.py` | - |
 | View switcher | 🔍 In review | One segmented control under the diagram title (2.5D, Flat, Overview) replaces the separate level and style buttons: same look as the Connections / Timeline switch, keyboard operable (aria-pressed), the focus and selection survive a switch; the style is remembered, the level for the session; flat is the default under reduced motion and on a phone. Issue 324. | `webui/static/index.html`, `scripts/ui_shots.py` | - |
 | Plane lenses and the client's eye | 🔍 In review | A Lens menu restyles the same layout by plane (access, management, telemetry, tickets, faults) from the declared edges' plane: the rest dims by attribute, nothing moves. The Client's eye lens lists every client edge to a service with calls, errors, rate per minute and a verdict from the per-mock counters, and says not measured where nothing counts; with the stack down it shows one message. Issue 316. | `webui/static/index.html`, `scripts/ui_shots.py` | - |
+| 2.5D view | 🔍 In review | The 2.5D view is the same SVG restyled with CSS only (raised slabs, gradient faces, tiled floor, glow on live and failed parts); a lens lifts its plane (deeper side face and glow, the rest dims, nothing moves). Flat is the default under reduced motion and on a phone; the view switcher turns it on. Measured in headless Chromium: 19-36 % of one core main thread while animating and a 3.5 MB heap, no measurable cost over flat (ADR 0030). A tilted layered stack and a camera into a layer are not built. Issue 320. | `webui/static/index.html`, `docs/adr/0030-2-5d-view.md` | - |
 | Budget manager | ⬜ To do | Profile/budget form (W-7). | - | - |
 
-1/20 done
+1/21 done
 
 ### macOS agent and CI (0%)
 
