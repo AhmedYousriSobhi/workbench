@@ -19,7 +19,7 @@ from webui.app import create_app, governor_status
 ROOT = Path(__file__).resolve().parent.parent
 TOKEN = "test-token-123"
 STATUS = {"ok": True, "level": 2, "dry_run": False, "mem_available": 3 * 2**30, "psi_some": 4.5, "psi_full": 0.1,
-          "groups": ["compute"], "violations": [], "audit": ["L2: throttle p4"]}
+          "groups": ["compute"], "services": ["jira-mock"], "violations": [], "audit": ["L2: throttle p4"]}
 
 
 def free_port() -> int:
@@ -226,6 +226,32 @@ def test_plan_endpoint_estimates_without_side_effects(ui):
     assert req(ui, "/api/plan?cpu_nodes=999")[0] == 422 and req(ui, "/api/plan?cpu_nodes=x")[0] == 422
     assert req(ui, "/api/plan", auth=False)[0] == 401
     assert b'id="plandlg"' in req(ui, "/")[1] and b"loadPlan" in req(ui, "/")[1]
+
+
+def test_plan_takes_running_services_from_the_governor_not_from_docker(ui, monkeypatch):
+    """The page has no Docker (W-3): what runs now comes from the governor's status (#339)."""
+    from benchctl import workbench
+
+    def boom(*a, **k):
+        raise AssertionError("the web page must not run docker")
+
+    monkeypatch.setattr(workbench, "running_services", boom)
+    monkeypatch.setattr("subprocess.run", boom)
+    code, body = req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8&parts=jira")
+    assert code == 200 and json.loads(body)["running_mb"] > 0  # jira-mock is in the governor's list
+
+
+def test_a_slow_plan_does_not_stall_the_other_requests(ui, monkeypatch):
+    """/api/plan used to run its blocking work on the event loop and froze every feed meanwhile (#340)."""
+    monkeypatch.setattr("webui.app.checks.mem_available", lambda: (time.sleep(1.5), 8 * 2**30)[1])
+    slow = threading.Thread(target=req, args=(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8"))
+    slow.start()
+    time.sleep(0.3)
+    t0 = time.time()
+    assert req(ui, "/api/status")[0] == 200
+    quick = time.time() - t0
+    slow.join()
+    assert quick < 0.8
 
 
 def test_connections_endpoint_lists_every_entity_with_credential_paths_only(ui):

@@ -461,6 +461,12 @@ def test_two_identical_changes_leave_different_lines_so_the_page_sees_the_second
     assert len(ends) == 2 and len(set(ends)) == 2 and ": done (#1 " in ends[0] and ": FAILED (exit 1) (#2 " in ends[1]
 
 
+def test_status_lists_the_compose_services_of_the_governed_containers(tmp_path):
+    g, _ = _calm_gov(tmp_path)
+    g.groups[:] = [Group("workbench-cn001-1", 4, service="cn001"), Group("vm1", 5, "vm")]
+    assert g.handle("status", {})["services"] == ["cn001"]
+
+
 def test_a_change_that_raises_is_recorded_as_failed_with_its_tag(tmp_path):
     def boom(args):
         raise OSError("docker is gone")

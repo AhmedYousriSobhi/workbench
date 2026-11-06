@@ -12,6 +12,7 @@ class Group:
     name: str
     prio: int  # 0..6, higher number = lower priority = acted on first
     kind: str = "container"  # or "vm"
+    service: str = ""  # the compose service the container runs (read by the page through `status`, which has no Docker)
 
 
 @dataclass(frozen=True)
