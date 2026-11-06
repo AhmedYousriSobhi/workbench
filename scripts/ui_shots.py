@@ -214,6 +214,18 @@ def capture(out: Path) -> dict:
                     result["a11y"].append(f"the architecture is only {round(m['flow'])} px wide at {w}x{h}: the canvas should use the free space")
                 if m["list"] < 120 or m["insp"] < 300:
                     result["a11y"].append(f"node list or inspector too small at {w}x{h}: {m}")
+                if count == 6:  # focus view (#313): a part and its neighbours stay, the rest dims, nothing moves, Esc returns
+                    before = page.evaluate("[...document.querySelectorAll('#flow [data-ent]')].map(e => { const r = e.getBoundingClientRect(); return [e.getAttribute('data-ent'), Math.round(r.x), Math.round(r.y)]; })")
+                    page.locator("#flow g[data-ent='login']").dblclick(); page.wait_for_timeout(300)
+                    f = page.evaluate("({dim: document.querySelectorAll('#flow [data-dim]').length, crumb: !!document.querySelector('#crumb:not([hidden])'), rows: document.querySelectorAll('#focuspane tbody tr').length, faulted: document.querySelectorAll('#flow [data-dim] .nd.fault').length})")
+                    after = page.evaluate("[...document.querySelectorAll('#flow [data-ent]')].map(e => { const r = e.getBoundingClientRect(); return [e.getAttribute('data-ent'), Math.round(r.x), Math.round(r.y)]; })")
+                    if f["dim"] < 3 or not f["crumb"] or f["rows"] < 2 or f["faulted"]:
+                        result["a11y"].append(f"focus view: {f}")
+                    if before != after:
+                        result["a11y"].append("focus view moved a part of the diagram")
+                    page.keyboard.press("Escape"); page.wait_for_timeout(200)
+                    if page.evaluate("document.querySelectorAll('#flow [data-dim]').length") or page.evaluate("focusId"):
+                        result["a11y"].append("Esc did not leave the focus view")
                 level = page.evaluate("document.querySelector('#flow .ovcard') ? 'overview' : 'full'")  # the global view (#321): small clusters open at the full diagram, large ones at the overview
                 if level != ("full" if count == 6 else "overview"):
                     result["a11y"].append(f"{count} nodes opened at the {level} level")

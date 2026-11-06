@@ -87,6 +87,8 @@ the page is visible and the Nodes tab is open. **Key** (top right of the diagram
 
 **Flat view / 2.5D view** switches the drawing style: 2.5D (the default) draws the same diagram as raised slabs on a tiled floor with glowing lines; flat is the plain baseline and is the default under reduced motion. The choice is remembered in the browser.
 
+**Focus.** Double-click a part (or Tab to it and press **F**) to focus it: the part and its direct neighbours stay lit, everything else dims, faulted parts stay visible, and nothing moves. Connections then lists what it connects to (plane, kind, and whether the link is *measured* by a counter or only *declared*). Double-click it again, press Esc, or use the breadcrumb under the diagram to leave.
+
 **Hover** a part for a one-line tip (its state and how it is reached). **Click** it (or Tab to it and press Enter) for a pop-up window
 next to it with its address, the credential file, a command to copy, and buttons for the details:
 

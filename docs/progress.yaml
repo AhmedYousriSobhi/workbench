@@ -154,6 +154,8 @@ phases:
          how: "The theme switch cycles Auto, Light, Dark, Midnight (deep navy, neon accents) and Dim (soft slate, low glare); tokens only, remembered in the browser. The 2.5D diagram gets gradient top faces tinted by kind and a decorative icon per service. Issue 325."}
       - {name: Global view (levels of detail), status: review, where: "webui/static/index.html, scripts/ui_shots.py, docs/adr/0029-levels-of-detail-global-view.md",
          how: "The Infrastructure architecture has two levels: `overview` (one card per cluster: clients, access, node groups with a health bar, services, faults) and `full`. Above 24 nodes the page opens at the overview; the Overview / Full diagram button pins a level. Hover or focus shows the design underneath; double-click, Enter or Open full design enters, a breadcrumb and Esc leave; a phone taps once. A table of clusters is in the page for screen readers. Issue 321, ADR 0029; several clusters draw as a grid of cards (issue 327; the backend field is issue 328, tested with synthetic data); the node-group level inside a large cluster follows."}
+      - {name: Focus view, status: review, where: "webui/static/index.html, scripts/ui_shots.py",
+         how: "Double-click a part (or F on a focused part) focuses it and its direct neighbours from the declared graph: the rest dims by an attribute toggle (nothing moves), faulted parts stay visible, Connections lists its edges (plane, kind, measured or declared), a breadcrumb under the diagram and Esc leave. ui_shots checks that no part moves. Issue 313."}
       - {name: Budget manager, status: todo, how: "Profile/budget form (W-7)."}
 
   - id: p8
