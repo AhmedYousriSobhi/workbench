@@ -395,6 +395,20 @@
   #flow .sico { fill:none; stroke:var(--fg); stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; opacity:.22; pointer-events:none; }
   /* where a jump line crosses a Teleport line the Teleport line breaks (a halo in the frame colour under the jump line) */
   #flow .lanehalo { fill:none; stroke:color-mix(in srgb,var(--panel) 70%,var(--bg)); stroke-width:9; pointer-events:none; } #trafficpanel[data-view="iso"] #flow .lanehalo { stroke:color-mix(in srgb,var(--panel) 92%,var(--accent)); }
+
+  /* global view (#321) */
+  #trafficpanel { position:relative; }
+  .crumb { margin-left:var(--sp3); font-size:13px; color:var(--dim); } .linkbtn { background:none; border:0; padding:4px 2px; min-height:32px; color:var(--accent); font:inherit; text-decoration:underline; cursor:pointer; }
+  .srtable { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+  .ovprev { position:absolute; z-index:5; width:min(340px,86%); padding:var(--sp3); background:var(--panel); border:1px solid var(--accent); border-radius:10px; box-shadow:0 8px 28px rgba(0,0,0,.4); font-size:13px; pointer-events:none; }
+  .ovprev .pvrow { display:flex; flex-direction:column; gap:2px; align-items:stretch; margin:var(--sp2) 0; } .ovprev i { font-style:normal; color:var(--dim); text-align:center; font-size:12px; }
+  .ovprev .pvb { display:block; padding:6px 10px; border:1px solid var(--line); border-radius:8px; font-weight:650; } .ovprev .pvb small { display:block; font-weight:400; color:var(--dim); } .ovprev em { display:block; margin-top:var(--sp2); color:var(--dim); font-style:normal; }
+  #flow .ovbg { fill:color-mix(in srgb,var(--panel) 88%,var(--accent)); stroke:var(--accent); stroke-width:1.5; } #flow .ovcard { cursor:pointer; } #flow .ovcard:hover .ovbg, #flow .ovcard:focus-visible .ovbg { stroke-width:3; } #flow .ovcard:focus-visible { outline:none; }
+  #flow .ovbox { fill:var(--panel); stroke:var(--line); stroke-width:1.5; } #flow text.ovt { fill:var(--fg); font-weight:700; } #flow text.ovd { fill:var(--dim); font-weight:400; } #flow text.ovpt { fill:var(--fg); font-weight:600; }
+  #flow .ovarr { stroke:var(--dim); stroke-width:2; fill:none; } #flow .ovseg.ok { fill:var(--ok); } #flow .ovseg.bad { fill:none; stroke:var(--bad); stroke-width:2; }
+  #flow .ovpill { fill:var(--panel); stroke:var(--line); stroke-width:1.5; } #flow .ovpill.up { stroke:var(--ok); } #flow .ovpill.down { stroke:var(--bad); stroke-dasharray:4 3; }
+  #flow .ovopen { cursor:pointer; } #flow .ovopen rect { fill:var(--accent); } #flow text.ovot { fill:var(--on-accent); font-weight:700; } #flow .ovopen:focus-visible rect { stroke:var(--fg); stroke-width:3; }
+  #flow[data-ov] { min-width:0 !important; } @media (max-width:1099px) { #flow[data-ov] { height:auto !important; max-height:none !important; } } #trafficpanel > .row .btn { padding-inline:10px; }
 </style>
 </head>
 <body>
@@ -441,10 +455,11 @@
   <div id="tab-nodes" role="tabpanel" aria-labelledby="tb-nodes">
   <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/benchctl start</code>.</div>
     <div class="nodeswrap" id="nodeswrap">
-  <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 id="traffic-h" style="margin:0">Infrastructure architecture</h2>
-    <span class="grow"></span><button class="btn small" id="keybtn" aria-expanded="false" aria-controls="ckey">Key</button><button class="btn small" id="viewtoggle" aria-pressed="true">Flat view</button><button class="btn small" id="flowpause" aria-pressed="false">Pause animation</button>
+  <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 id="traffic-h" style="margin:0">Infrastructure architecture</h2><nav id="crumb" class="crumb" aria-label="Breadcrumb" hidden><button class="linkbtn" id="crumb-all">All clusters</button> <span aria-hidden="true">›</span> <span aria-current="page">workbench</span></nav>
+    <span class="grow"></span><button class="btn small" id="keybtn" aria-expanded="false" aria-controls="ckey">Key</button><button class="btn small" id="levelbtn" aria-pressed="false">Overview</button><button class="btn small" id="viewtoggle" aria-pressed="true">Flat view</button><button class="btn small" id="flowpause" aria-pressed="false" aria-label="Pause animation">Pause</button>
     <button class="btn small" id="treetoggle" aria-expanded="true" aria-controls="nodesmain">Hide node list</button></div>
     <div class="flowscroll"><svg id="flow" viewBox="0 0 1120 470" role="img" aria-label="Infrastructure architecture: clients and users, the access layer (login nodes, each direct SSH, Teleport or both, and the Teleport proxy when on), the services, and the nodes. Each part opens its details."></svg></div>
+    <div class="ovprev" id="ovprev" role="tooltip" hidden></div><div class="srtable" id="ovtable"></div>
     <div class="ckey" id="ckey" role="group" aria-label="Key to the diagram" hidden>
       <div class="kg"><span class="grp">What it is</span><span><i class="sw sim" aria-hidden="true"></i>simulated (dashed stripe)</span><span><i class="sw real" aria-hidden="true"></i>real (solid stripe)</span></div>
       <div class="kg"><span class="grp">State (border)</span><span><i class="sw up" aria-hidden="true"></i>up</span><span><i class="sw down" aria-hidden="true"></i>not reachable (dashed)</span><span><i class="sw off" aria-hidden="true"></i>off (dotted)</span></div>
@@ -1162,7 +1177,7 @@ function flowFit() {  // the shape of the panel the diagram must fill; narrow sc
   const r = $('flow').getBoundingClientRect(), a = r.width > 80 && r.height > 80 ? r.width / r.height : 0;
   return { a, col: a > 0 };
 }
-const fitKey = () => { const f = flowFit(); return f.a ? 'c' + Math.round(f.a * 6) : 'n'; };
+const fitKey = () => { const f = flowFit(); return (curLevel() === 'overview' ? 'o' : '') + (f.a ? 'c' + Math.round(f.a * 6) : 'n'); };
 function tileGrid(nodes, cols, tw, th, top = 52) {  // node tiles by group, relative to the cluster frame: [label|node, ...], and the height the frame needs
   let ry = top; const items = [];
   for (const k of ['compute', 'gpu']) {
@@ -1220,7 +1235,99 @@ function flowGeom(nodes, acc, svcs, a, col, u) {
   Object.assign(P, { tiles: tg.items, tw: tw0, th: th0, FW: Math.round(Math.max(natural, rightEdge + 8)), H, topEnd: 8 + topH });
   return P;
 }
+
+// ---- global view (#321): levels of detail. `overview` condenses a cluster to one card, `full` is the diagram. ----
+const OVERVIEW_AT = 24, CLUSTER_NAME = 'workbench';  // above this many nodes the page opens at the overview; the user can pin either level
+let levelPin = null, dived = false; try { levelPin = sessionStorage.getItem('workbench-level'); } catch (e) { /* not remembered */ }
+const curLevel = () => levelPin || (nodeList().length > OVERVIEW_AT ? 'overview' : 'full');
+function paintLevelUi() {
+  const ov = curLevel() === 'overview';
+  $('levelbtn').textContent = ov ? 'Full diagram' : 'Overview'; $('levelbtn').setAttribute('aria-pressed', ov);
+  $('crumb').hidden = !(dived && !ov);
+}
+function setLevel(l, dive) {
+  levelPin = l; dived = !!dive && l === 'full'; try { sessionStorage.setItem('workbench-level', l); } catch (e) { /* not remembered */ }
+  hidePreview(); buildFlow(); paintLevelUi(); if (l === 'full') $('flow').focus?.();
+}
+const ACCESS_WORD = { ssh: 'direct SSH', teleport: 'Teleport only' };
+function clusterFacts() {
+  const nodes = nodeList(), groups = [['Compute nodes', nodes.filter(n => n.kind === 'compute')], ['GPU nodes', nodes.filter(n => n.kind === 'gpu')]].filter(x => x[1].length);
+  const svcs = svcList(), snap = flowSnap, off = !snap || !Object.values(snap.reachable).some(Boolean);
+  const up = svcs.filter(x => snap && snap.reachable[x[0]]).length;
+  return { nodes, groups, svcs, snap, off, up, ok: nodes.filter(n => n.state === 'ok').length, faults: snap ? snap.faults || 0 : 0 };
+}
+function overviewSummary(f) {
+  return `${f.ok} of ${f.nodes.length} nodes healthy · ` + (f.off ? 'services not answering' : `${f.up} of ${f.svcs.length} services answering`) + ` · ${f.faults} ${f.faults === 1 ? 'fault' : 'faults'} applied`;
+}
+function showPreview(x, y) {  // the design underneath, as a small diagram; hovering or focusing the card shows it, nothing navigates
+  const f = clusterFacts(), lg = loginList(), pv = $('ovprev'), tp = hasTeleport();
+  pv.innerHTML = `<b>${esc(CLUSTER_NAME)}: the design underneath</b><div class="pvrow"><span class="pvb">Clients<small>Monitoring app, Prometheus, curl, you</small></span><i aria-hidden="true">↓</i>
+    <span class="pvb">Access<small>${[...(tp ? ['Teleport proxy'] : []), ...lg.map(l => `${esc(l.name)} (${ACCESS_WORD[l.mode] || 'SSH + Teleport'})`)].join(', ')}</small></span><i aria-hidden="true">↓ jump</i>
+    <span class="pvb">Nodes<small>${f.groups.map(([t, a]) => `${a.length} ${t.toLowerCase()}`).join(', ') || 'none yet'}</small></span></div>
+    <span class="pvb pvs">Services<small>${f.svcs.map(x => esc(x[1]) + (f.snap ? (f.snap.reachable[x[0]] ? ' ✓' : f.off ? ' –' : ' ✗') : '')).join(', ')}</small></span><em>Double-click or press Enter to open</em>`;
+  pv.hidden = false; const host = $('trafficpanel').getBoundingClientRect(), w = pv.offsetWidth, h = pv.offsetHeight;
+  pv.style.left = Math.max(8, Math.min(x - host.left + 14, host.width - w - 8)) + 'px'; pv.style.top = Math.max(8, Math.min(y - host.top + 14, host.height - h - 8)) + 'px';
+}
+function hidePreview() { $('ovprev').hidden = true; }
+function buildOverview() {
+  const g = $('flow'), f = clusterFacts(), lgs = loginList(), tp = hasTeleport(); g.dataset.ov = '1'; const r = g.getBoundingClientRect();
+  g.innerHTML = ''; dots = []; tiles = {}; svcPos = {}; svcOut = {}; svcLane = {}; flowNodes = flowSig(f.nodes); flowFitKey = fitKey(); g.removeAttribute('data-fit'); g.style.removeProperty('--u');
+  const W = Math.max(320, Math.round(r.width)), rowsEst = Math.ceil(f.svcs.reduce((a, [, l]) => a + l.length * 8 + 52, 0) / (W - 64)), H = Math.max(300, Math.round(dockWide() && r.height > 80 ? r.height : 420 + f.groups.length * 50 + rowsEst * 34 + (W < 900 ? 150 : 0))), wide = W >= 900; g.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const T = (x, y, t, sz, cls, anchor) => sv('text', { class: cls, x, y, style: `font-size:${sz}px`, ...(anchor ? { 'text-anchor': anchor } : {}) }, t);
+  const defs = sv('defs', {}), mk = sv('marker', { id: 'arr', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, orient: 'auto' }); mk.append(sv('path', { d: 'M0 0 L10 5 L0 10 z' })); defs.append(mk); g.append(defs);
+  const x0 = 12, y0 = 12, cw = W - 24, ch = H - 24, card = sv('g', { class: 'ovcard', role: 'button', tabindex: 0, 'aria-label': `${CLUSTER_NAME} cluster: ${overviewSummary(f)}. Press Enter or double-click to open the full design.` });
+  const open = () => setLevel('full', true);
+  card.append(sv('rect', { class: 'ovbg', x: x0, y: y0, width: cw, height: ch, rx: 16 }), T(x0 + 20, y0 + 34, CLUSTER_NAME + ' cluster', 22, 'ovt'), T(x0 + 20, y0 + 58, wide ? overviewSummary(f) : overviewSummary(f).split(' · ').slice(0, 1).concat(overviewSummary(f).split(' · ').slice(2)).join(' · '), 15, 'ovd'), ...(wide ? [] : [T(x0 + 20, y0 + 79, overviewSummary(f).split(' · ')[1], 15, 'ovd')]));
+  const sy = y0 + ch - 66, pills = [];  // services strip: one pill per service, wrapped; ✓ up, ✗ not reachable, – stack not running
+  let px = x0 + 20, py = y0 + ch - 128 + 0; const rowsNeeded = (() => { let x = x0 + 20, rows = 1; for (const [, l] of f.svcs) { const w = l.length * 8 + 44; if (x + w > x0 + cw - 20) { x = x0 + 20; rows++; } x += w + 8; } return rows; })();
+  py = y0 + ch - 58 - rowsNeeded * 34; const stripTop = py;
+  for (const [k, l] of f.svcs) {
+    const up = f.snap && f.snap.reachable[k], mark = !f.snap || f.off ? '–' : up ? '✓' : '✗', w = l.length * 8 + 44;
+    if (px + w > x0 + cw - 20) { px = x0 + 20; py += 34; }
+    card.append(sv('rect', { class: 'ovpill ' + (f.off ? 'off' : up ? 'up' : 'down'), x: px, y: py, width: w, height: 26, rx: 13 }), T(px + 14, py + 18, `${l} ${mark}`, 14, 'ovpt')); px += w + 8;
+  }
+  const bTop = y0 + (wide ? 74 : 94), bBot = stripTop - 14, fh = Math.max(120, bBot - bTop), gap = 34;
+  let C, A, N;
+  const accNames = [...(tp ? ['Teleport proxy'] : []), ...lgs.map(l => l.name)], mc = Math.max(12, Math.floor((cw - 68) / 7.6));
+  const wrapList = items => { const out = []; let cur = ''; for (const it of items) { if (cur && (cur + ' · ' + it).length > mc) { out.push(cur); cur = it; } else cur = cur ? cur + ' · ' + it : it; } if (cur) out.push(cur); return out; };
+  const cliLines = wrapList(['Monitoring app', 'Prometheus', 'curl', 'you']), accWrap = wrapList(accNames);
+  if (wide) { const use = cw - 40 - 2 * gap, w1 = use * 0.2, w2 = use * 0.3, w3 = use * 0.5, xa = x0 + 20; C = { x: xa, y: bTop + fh / 2 - Math.min(fh, 150) / 2, w: w1, h: Math.min(fh, 150) }; A = { x: xa + w1 + gap, y: bTop, w: w2, h: fh }; N = { x: A.x + w2 + gap, y: bTop, w: w3, h: fh }; }
+  else {  // stacked: each box is as tall as its content needs; spare height becomes even gaps
+    const hC = 34 + cliLines.length * 21, hA = 34 + accWrap.length * 21, hN = 38 + f.groups.length * 50, gp = Math.max(18, Math.min(60, (fh - hC - hA - hN) / 2)), y1 = bTop + Math.max(0, (fh - hC - hA - hN - 2 * gp) / 2);
+    C = { x: x0 + 20, y: y1, w: cw - 40, h: hC }; A = { x: C.x, y: y1 + hC + gp, w: C.w, h: hA }; N = { x: C.x, y: A.y + hA + gp, w: C.w, h: hN };
+  }
+  const bx = (b, title, lines) => { card.append(sv('rect', { class: 'ovbox', x: b.x, y: b.y, width: b.w, height: b.h, rx: 10 }), T(b.x + 14, b.y + 26, title, 16, 'ovt')); lines.forEach((t, i) => card.append(T(b.x + 14, b.y + 50 + i * 21, t, 14, 'ovd'))); };
+  const arrow = (a, b) => card.append(sv('path', { class: 'ovarr', d: `M${a.x} ${a.y} L${b.x} ${b.y}`, 'marker-end': 'url(#arr)' }));
+  bx(C, 'Clients', wide ? ['Monitoring app', 'Prometheus', 'curl · you (ssh, tsh)'].slice(0, Math.max(1, Math.floor((C.h - 34) / 21))) : cliLines);
+  const accLines = [...(tp ? ['Teleport proxy'] : []), ...lgs.map(l => `${l.name} · ${ACCESS_WORD[l.mode] || 'SSH + Teleport'}`)];
+  bx(A, 'Access', wide ? accLines.slice(0, Math.max(1, Math.floor((A.h - 34) / 21))) : accWrap);
+  card.append(sv('rect', { class: 'ovbox', x: N.x, y: N.y, width: N.w, height: N.h, rx: 10 }), T(N.x + 14, N.y + 26, 'Cluster nodes', 16, 'ovt'));
+  const gh = wide ? (N.h - 40) / Math.max(1, f.groups.length) : 50;
+  f.groups.forEach(([title, arr], i) => {
+    const gy = N.y + 40 + i * gh, okc = arr.filter(n => n.state === 'ok').length, bw = N.w - 28, sw = bw / arr.length, gp = sw > 5 ? 1.5 : 0;
+    card.append(T(N.x + 14, gy + 16, `${title}: ${okc} of ${arr.length} healthy`, 14, 'ovd'));
+    arr.forEach((n, j) => card.append(sv('rect', { class: 'ovseg ' + (n.state === 'ok' ? 'ok' : 'bad'), x: N.x + 14 + j * sw, y: gy + 26, width: Math.max(1.5, sw - gp), height: n.state === 'ok' ? 16 : 22, rx: 2 }, null)));
+  });
+  if (wide) card.append(T(x0 + 20, y0 + ch - 20, 'Hover to see the design underneath', 13, 'ovd'));
+  const ob = sv('g', { class: 'ovopen', role: 'button', tabindex: 0, 'aria-label': 'Open the full design of ' + CLUSTER_NAME }); ob.append(sv('rect', { x: x0 + cw - 190, y: y0 + ch - 44, width: 170, height: 32, rx: 8 }), T(x0 + cw - 105, y0 + ch - 23, 'Open full design ▸', 14, 'ovot', 'middle'));
+  ob.onclick = e => { e.stopPropagation(); open(); }; ob.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); open(); } };
+  card.append(ob);
+  if (wide) { arrow({ x: C.x + C.w, y: C.y + C.h / 2 }, { x: A.x - 2, y: A.y + A.h / 2 }); arrow({ x: A.x + A.w, y: A.y + A.h / 2 }, { x: N.x - 2, y: N.y + N.h / 2 }); }
+  else { arrow({ x: C.x + C.w / 2, y: C.y + C.h }, { x: A.x + A.w / 2, y: A.y - 2 }); arrow({ x: A.x + A.w / 2, y: A.y + A.h }, { x: N.x + N.w / 2, y: N.y - 2 }); }
+  card.ondblclick = open; card.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
+  card.onclick = () => { if (matchMedia('(max-width:640px)').matches) open(); };  // a phone has no hover and no double tap: one tap enters
+  card.onmousemove = e => showPreview(e.clientX, e.clientY); card.onmouseleave = hidePreview;
+  card.onfocus = () => { const b = card.getBoundingClientRect(); showPreview(b.left + b.width / 3, b.top + b.height / 3); }; card.onblur = hidePreview;
+  g.append(card);
+  $('ovtable').innerHTML = `<table><caption>Clusters</caption><thead><tr><th>Cluster</th><th>Nodes healthy</th><th>Services answering</th><th>Faults applied</th></tr></thead><tbody><tr><td><button class="linkbtn" id="ov-open">${esc(CLUSTER_NAME)}</button></td><td>${f.ok} of ${f.nodes.length}</td><td>${f.off ? 'none (stack not running)' : f.up + ' of ' + f.svcs.length}</td><td>${f.faults}</td></tr></tbody></table>`;
+  $('ov-open').onclick = open;
+}
+$('levelbtn').onclick = () => setLevel(curLevel() === 'overview' ? 'full' : 'overview', curLevel() === 'overview');
+$('crumb-all').onclick = () => setLevel('overview', false);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && dived && curLevel() === 'full' && !openNode && $('ckey').hidden && $('pop').hidden && !document.querySelector('dialog[open]')) setLevel('overview', false); });
 function buildFlow() {
+  if (curLevel() === 'overview') { buildOverview(); return; }
+  $('ovtable').innerHTML = ''; delete $('flow').dataset.ov;
   const g = $('flow'), nodes = nodeList(), lgs = loginList(), svcs = svcList().filter(x => x[0] !== 'teleport'), tpBox = svcList().find(x => x[0] === 'teleport');
   g.innerHTML = ''; dots = []; tiles = {}; svcPos = {}; svcOut = {}; svcLane = {}; flowNodes = flowSig(nodes); flowFitKey = fitKey();
   const CHIPS = [['Monitoring app', lgs[0].name], ['Prometheus', 'prometheus'], ['curl · scripts', null], ['You: ssh · tsh', lgs[0].name]];
@@ -1416,7 +1523,7 @@ function openFlow() {
 new ResizeObserver(() => { clearTimeout(fitTimer); fitTimer = setTimeout(() => { if ($('flow').firstChild && fitKey() !== flowFitKey) buildFlow(); }, 150); }).observe($('flow').parentElement);  // the panel changed shape (window, node selected): fit again
 let fitTimer = 0;
 function closeFlow() { if (flowEs) flowEs.close(); flowEs = null; flowCursor = 0; dots.forEach(d => { d.el.remove(); d.trail.remove(); }); dots = []; }
-$('flowpause').onclick = () => { flowPaused = !flowPaused; $('flowpause').setAttribute('aria-pressed', flowPaused); $('flowpause').textContent = flowPaused ? 'Resume animation' : 'Pause animation'; flowNote(); };
+$('flowpause').onclick = () => { flowPaused = !flowPaused; $('flowpause').setAttribute('aria-pressed', flowPaused); $('flowpause').textContent = flowPaused ? 'Resume' : 'Pause'; $('flowpause').setAttribute('aria-label', flowPaused ? 'Resume animation' : 'Pause animation'); flowNote(); };
 
 // the node list beside the diagram folds away, so the diagram can have the whole width (remembered when storage allows)
 function setTree(open, remember = true) {
@@ -1432,6 +1539,7 @@ function setView(iso, remember) {  // 2.5D game style or the flat baseline (#320
 $('viewtoggle').onclick = () => setView($('trafficpanel').dataset.view !== 'iso', true);
 let viewPref = null; try { viewPref = localStorage.getItem('workbench-view'); } catch (e) { /* default */ }
 setView(viewPref ? viewPref === 'iso' : !matchMedia('(prefers-reduced-motion: reduce)').matches, false);
+paintLevelUi();
 let treePref = null; try { treePref = localStorage.getItem('workbench-tree'); } catch (e) { /* default */ }
 if (treePref === 'closed') setTree(false, false);  // the list sits beside or under the diagram; folding it away is remembered
 if (dockWide()) paintReach();

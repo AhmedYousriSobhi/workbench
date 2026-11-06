@@ -214,6 +214,27 @@ def capture(out: Path) -> dict:
                     result["a11y"].append(f"the architecture is only {round(m['flow'])} px wide at {w}x{h}: the canvas should use the free space")
                 if m["list"] < 120 or m["insp"] < 300:
                     result["a11y"].append(f"node list or inspector too small at {w}x{h}: {m}")
+                level = page.evaluate("document.querySelector('#flow .ovcard') ? 'overview' : 'full'")  # the global view (#321): small clusters open at the full diagram, large ones at the overview
+                if level != ("full" if count == 6 else "overview"):
+                    result["a11y"].append(f"{count} nodes opened at the {level} level")
+                if count == 50:
+                    if not 0.9 <= m["fit"] <= 1.1:
+                        result["a11y"].append(f"the overview does not fill its panel at {w}x{h}: ratio {m['fit']:.2f}")
+                    page.hover("#flow .ovcard"); page.wait_for_timeout(150)
+                    if not page.locator("#ovprev:visible").count():
+                        result["a11y"].append("hovering the cluster card showed no preview of the design underneath")
+                    page.mouse.move(2, 2); page.dblclick("#flow .ovcard"); page.wait_for_timeout(500)
+                    if page.locator("#flow .nd").count() != 50 or page.locator("#crumb:visible").count() != 1:
+                        result["a11y"].append("double-click did not open the full diagram with a breadcrumb")
+                    page.keyboard.press("Escape"); page.wait_for_timeout(400)
+                    if not page.locator("#flow .ovcard").count():
+                        result["a11y"].append("Esc did not return to the overview")
+                    page.focus("#flow .ovcard"); page.keyboard.press("Enter"); page.wait_for_timeout(400)
+                    if page.locator("#flow .nd").count() != 50:
+                        result["a11y"].append("Enter on the cluster card did not open the full diagram")
+                    page.click("#crumb-all"); page.wait_for_timeout(300)
+                    if not page.locator("#flow .ovcard").count() or not page.locator("#ovtable table").count():
+                        result["a11y"].append("the breadcrumb did not return to the overview, or the cluster table is missing")
                 page.close()
             browser.close()
     finally:
