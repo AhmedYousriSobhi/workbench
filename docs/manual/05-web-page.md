@@ -11,7 +11,7 @@ One dashboard over everything: governor, cluster, scenarios. It fits one screen 
 Open the link once: it sets a cookie. The token lives in `compose/generated/secrets/ui_token`; anyone with the link on
 this machine can use the page, so keep it private. The page listens on `127.0.0.1` only.
 
-![The dashboard: the Infrastructure architecture on the left with the login nodes, services and nodes, the node list on the right](img/web-infrastructure.png)
+![The dashboard: the Infrastructure architecture fills the left column, the node list is top right and the connections bottom right](img/web-infrastructure.png)
 
 *A healthy cluster with Teleport on: L0 Normal, 5 of 5 services answering, 6 of 6 nodes healthy, "All clear" under Needs attention (sample data; the numbers on your page are live). Some older screenshots further down predate the redesign; `scripts/ui_shots.py` regenerates fresh ones.*
 
@@ -21,12 +21,12 @@ this machine can use the page, so keep it private. The page listens on `127.0.0.
 |---|---|
 | **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **☰ Menu**, help and the theme switch. The strip is for status only. **☰ Menu** lists the actions in three groups, each with a one-line hint: *Run* (**▶ Scenarios**), *Configure* (**▦ Cluster architecture**: nodes, GPUs per node, optional parts and the plan; **✚ Health checks**) and *Share* (**⇩ Export**). Esc closes it. Pressing the level or memory chip opens the **Governor** panel |
 | **Tabs and Needs attention** | the tabs *Nodes* and *Connections*, and one slim bar next to them with every item that needs you, or "All clear" |
-| **Stage** (Nodes tab) | the **Infrastructure architecture** on the left and the **node list** on the right (its three groups, Compute, GPU and Services, stacked one under the other). **Hide node list** folds the list away and gives the diagram the whole width; the choice is remembered (windows between 1100 and 1500 px start with the list folded, press **Show node list**) |
+| **Stage** (Nodes tab) | three areas that fill the window. **Left:** the **Infrastructure architecture**, drawn to the shape of its panel (clients across the top, the access layer under them, the cluster nodes below that, the services in a column at the right). **Top right:** the **node list** (Compute, GPU and Services). **Bottom right:** **Connections**, how to reach each part (address and a Copy button), which shows the selected part instead when you click one, and a **Timeline** tab of recent traffic and faults. **Hide node list** gives the right column to Connections; the choice is remembered |
 
 Three panels open on top of the page from the top strip or its **☰ Menu** and close with **✕ Close**, Esc or a click outside: **Scenarios**,
-**Plan** and **Governor**. A node is different: it opens *in place of the list* (below), so the Infrastructure architecture stays in view.
+**Plan** and **Governor**. A node is different: it opens in the **Connections** area (below), so the Infrastructure architecture and the node list stay in view.
 
-On a phone, and under 1100 px, the Infrastructure architecture and the list stack in one column. The page has a skip link and
+On a phone, and under 1100 px, the Infrastructure architecture, the list and the Connections area stack in one column and the diagram keeps its natural shape. The page has a skip link and
 landmarks, and honours reduced motion.
 
 ![The dashboard on a phone, panels stacked (older layout; today the Infrastructure architecture and the list stack in one column)](img/web-phone.png)
@@ -64,7 +64,7 @@ Read it from left to right:
 
 A login node that is in the selection but not running (never built, or stopped) is drawn **dashed with "✗ not running"**: the page checks whether anything answers on its port 22, so the diagram shows what runs, not only what you picked. With the whole stack down they all look dim instead.
 
-**Colours.** The boxes do not say *mock*; colour does, and the legend under the diagram repeats it. Violet with a dashed stripe is simulated,
+**Colours.** The boxes do not say *mock*; colour does, and the **Key** button above the diagram repeats it (it opens a small panel with every colour, mark and line style). Violet with a dashed stripe is simulated,
 blue with a solid stripe is real. The **border** is the state (green up, red dashed not reachable, grey dotted off). Two overlays sit on top and
 combine with everything else: a pulsing blue dot means traffic now (on a node tile: GPU work running), a red ring with a red triangle means a fault
 was applied in the last 30 seconds. So one box can be up, busy and faulted at the same time. The real Jira has no request counter, so it shows up or down only.
@@ -81,7 +81,7 @@ Every line says **how** it connects:
 
 A round dot travels along a line for each real request; a diamond travels from *Faults* to the node it hits and a ring flashes on that
 tile. *Pause animation* stops the dots; they also stop at governor L3 and under reduced motion, and the live feed runs only while
-the page is visible and the Nodes tab is open. **How to read this diagram** (under the picture) repeats the legend.
+the page is visible and the Nodes tab is open. **Key** (top right of the diagram) opens the legend: kinds, states, the dot, diamond and ring, the node marks, and a sample of each line style.
 
 **Hover** a part for a one-line tip (its state and how it is reached). **Click** it (or Tab to it and press Enter) for a pop-up window
 next to it with its address, the credential file, a command to copy, and buttons for the details:
@@ -93,8 +93,7 @@ next to it with its address, the credential file, a command to copy, and buttons
 Esc closes the pop-up and returns the focus to the part. For a node, **Actions and details** opens its panel (below); **Connections**
 opens the row for that part in the Connections tab.
 
-**Fold the list away.** The list beside the diagram is a second way to the same parts. **Hide node list** gives the diagram the
-whole width, which is the best view when the diagram is your main way in:
+**Fold the list away.** The list is a second way to the same parts. **Hide node list** gives the whole right column to Connections and the selected part:
 
 ![The Infrastructure architecture with the node list folded away](img/web-architecture-wide.png)
 
@@ -124,8 +123,8 @@ To turn it off, untick it and apply again. Two things stay in a terminal because
 
 ## A node: actions and info
 
-Click a node card, or a node tile in the diagram and then **Actions and details**. Its panel **replaces the list in place** (it is not a pop-up), so you can watch the Infrastructure architecture
-while you act. The panel has two cards and a header with **← All nodes** (Esc does the same), the node's name and its
+Click a node card, or a node tile in the diagram and then **Actions and details**. Its panel opens in the **Connections** area (it is not a pop-up) and that area grows to make room, so you can watch the Infrastructure architecture and the list
+while you act. The selected node is outlined in the list. The panel has two cards and a header with **← All nodes** (Esc does the same), the node's name and its
 live state.
 
 - **Actions**: the faults first, **Power off**, **Overheat (92 °C)**, **Fan failure** and **GPU error (XID 79)** (GPU

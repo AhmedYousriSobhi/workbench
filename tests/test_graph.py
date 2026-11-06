@@ -67,10 +67,21 @@ def test_nodes_are_entities_in_the_nodes_group():
 
 
 def test_page_draws_only_edges_named_in_the_model():
-    """Every `edge(...)` call in the page passes a model edge id, built the same way as webui/graph.py builds it."""
+    """Every edge id the page builds (in both arrangements, narrow and column) is one webui/graph.py can produce."""
     page = (ROOT / "webui" / "static" / "index.html").read_text()
-    calls = re.findall(r"edge\('(\w+)',.*?0?\.\d+, (?:null|'[\w-]+'|'ln-' \+ k), (`[^`]+`|'[^']+')\)", page)
-    assert len(calls) == 6, calls  # teleport api, ssh, teleport to login, service api, jump, teleport to nodes; the fault lane is checked below
-    assert 'data-edge' in page and "faults>${k}:inj" in page
-    for kind, eid in calls:
-        assert eid.strip("`'").rsplit(":", 1)[1] == kind, (kind, eid)  # the id's suffix is the kind the model gave it
+    used = {x for x in re.findall(r"[`']([^`']*>[^`']*:(?:api|ssh|teleport|jump|inj))[`']", page)}
+    model = graph.build({**SERVICES, "teleport": True, "jira-real": True}, NODES, logins("both", "teleport"))
+    shapes = {re.sub(r"\bcn\d+|\bgn\d+", "N", e["id"]) for e in model["edges"]}
+    pattern = {  # the page's template ids, turned into what the model would name them
+        "${l.name}>nodes:jump": {"login>nodes:jump", "login2>nodes:jump"},
+        "clients>${k}:api": {f"clients>{s}:api" for s in (*SERVICES, "jira-real")},
+        "clients>${l.name}:ssh": {"clients>login:ssh", "clients>login2:ssh"},
+        "clients>teleport:api": {"clients>teleport:api"},
+        "faults>${k}:inj": {f"faults>{s}:inj" for s in flow.SCENARIO_TARGETS.values()},
+        "teleport>${l.name}:teleport": {"teleport>login:teleport", "teleport>login2:teleport"},
+        "teleport>nodes:teleport": {"teleport>nodes:teleport"},
+    }
+    assert used == set(pattern), used ^ set(pattern)  # a new edge in the page needs a line here and in graph.py
+    for name, ids_ in pattern.items():
+        assert ids_ & shapes, name  # at least one concrete id of this shape exists in the model
+    assert "data-edge" in page
