@@ -20,12 +20,13 @@ cluster = {"logins": [{"name": "login", "mode": "ssh", "port": 2222, "ip": "10.1
 sys.path.insert(0, str(ROOT))
 import yaml
 
-from webui import connections
+from webui import blast, connections, graph
 
+cluster = {**graph.attach(cluster), "blast": blast.payload()}  # the declared graph and the blast table the page draws from (#312, #315)
 SIM = {**yaml.safe_load((ROOT / "sim.yaml").read_text()), "login": ["ssh", "teleport", "both"]}
-FLOW = """if (flowEs) flowEs.close(); flowSnap = {reachable: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'gpu-exporter': true, teleport: true}, totals: {'bmc-farm': 412, 'bcm-mock': 96, 'jira-mock': 31, 'gpu-exporter': 1180, teleport: 7}, faults: 0};
+FLOW = """if (flowEs) flowEs.close(); flowSnap = {reachable: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'gpu-exporter': true, teleport: true}, totals: {'bmc-farm': 412, 'bcm-mock': 96, 'jira-mock': 31, 'gpu-exporter': 1180, teleport: 7}, errors: {'bmc-farm': 2, 'bcm-mock': 0, 'jira-mock': 0, 'gpu-exporter': 0}, faults: 0};
           recent = [{t: Date.now(), to: 'teleport', n: 3}, {t: Date.now(), to: 'bmc-farm', n: 12}, {t: Date.now(), to: 'gpu-exporter', n: 30}]; paintBlocks();
-          onFlow({level: 0, cursor: 99, events: [{from: 'clients', to: 'teleport', n: 2, label: 'requests', nodes: []}, {from: 'clients', to: 'gpu-exporter', n: 2, label: 'requests', nodes: []}], totals: flowSnap.totals, reachable: flowSnap.reachable});"""
+          onFlow({level: 0, cursor: 99, events: [{from: 'clients', to: 'teleport', n: 2, label: 'requests', nodes: []}, {from: 'clients', to: 'gpu-exporter', n: 2, label: 'requests', nodes: []}], totals: flowSnap.totals, errors: flowSnap.errors, reachable: flowSnap.reachable});"""
 port = 8199
 proc = subprocess.Popen([sys.executable, "-m", "webui", str(port)], cwd=ROOT, stdout=subprocess.PIPE, text=True)
 try:
@@ -58,20 +59,45 @@ try:
         pg.screenshot(path=str(OUT / "web-cluster-architecture.png"))
         pg.locator("#pl-logins").scroll_into_view_if_needed(); pg.wait_for_timeout(300)
         pg.screenshot(path=str(OUT / "web-login-nodes.png"))
-        # the README's animation: the diagram alone, wide, with real-looking traffic and a fault landing on a node
+        # the README's animation: every capability in turn, each with a caption (#337). Sample data, no cluster.
         from PIL import Image
         pg.goto(url); pg.wait_for_selector("#flow rect.blk"); pg.wait_for_timeout(1200)
-        pg.evaluate("setTree(false)"); pg.evaluate(FLOW); pg.wait_for_timeout(300)
-        clip = pg.locator("#trafficpanel").bounding_box(); frames = []
-        script = {2: "['teleport', 2]", 6: "['bmc-farm', 3]", 10: "['gpu-exporter', 3]", 14: "['jira-mock', 2]", 17: "FAULT", 24: "['teleport', 3]"}
-        for i in range(36):
-            if i in script:
-                ev = ("{from: 'injector', to: 'bmc-farm', n: 1, label: 'x', nodes: ['gpu001', 'cn003']}" if script[i] == "FAULT"
-                      else f"{{from: 'clients', to: {script[i]}[0], n: {script[i]}[1], label: 'requests', nodes: []}}")
-                pg.evaluate(f"onFlow({{level: 0, cursor: {200 + i}, events: [{ev}], totals: flowSnap.totals, reachable: flowSnap.reachable}})")
-            frames.append(Image.open(io.BytesIO(pg.screenshot(clip=clip))).convert("RGB")); pg.wait_for_timeout(60)
-        w = 900; frames = [f.resize((w, round(f.height * w / f.width)), Image.LANCZOS).quantize(96) for f in frames]
-        frames[0].save(OUT / "architecture-demo.gif", save_all=True, append_images=frames[1:], duration=140, loop=0, optimize=True)
+        pg.evaluate("setTheme('dark')"); pg.evaluate("setView(true, false)"); pg.evaluate("setTree(false)"); pg.evaluate(FLOW); pg.wait_for_timeout(500)
+        # the diagram and the side panel (focus, blast radius, client's eye), side by side as on the real page; the caption has its own strip below
+        def union():
+            a, c = pg.locator("#trafficpanel").bounding_box(), pg.locator("#inspector").bounding_box()
+            x, y = min(a["x"], c["x"]), min(a["y"], c["y"]); return {"x": x, "y": y, "width": max(a["x"] + a["width"], c["x"] + c["width"]) - x, "height": max(a["y"] + a["height"], c["y"] + c["height"]) - y}
+        pg.select_option("#lens", "client"); pg.wait_for_timeout(400); box = union(); pg.select_option("#lens", "all"); pg.wait_for_timeout(300)
+        strip = 46
+        clip = {**box, "height": box["height"] + strip}; frames = []
+        pg.evaluate("""([top, left, w]) => { const c = document.createElement('div'); c.id = 'democap'; c.setAttribute('aria-hidden', 'true');
+            c.style.cssText = `position:absolute;left:${left}px;top:${top}px;width:${w}px;box-sizing:border-box;padding:8px 14px;border-radius:8px;font:600 18px system-ui,sans-serif;background:#0b1020;color:#e8eefc;border:1px solid #5b7cff;pointer-events:none;z-index:99`;
+            document.body.appendChild(c); }""", [box["y"] + box["height"] + 6, box["x"], box["width"]])
+        def traffic(to, n, err=None):
+            e = f", err: {err}" if err is not None else ""
+            pg.evaluate(f"onFlow({{level: 0, cursor: {len(frames) + 300}, events: [{{from: 'clients', to: '{to}', n: {n}, label: 'requests', nodes: []{e}}}], totals: flowSnap.totals, errors: flowSnap.errors, reachable: flowSnap.reachable}})")
+        def fault():
+            pg.evaluate(f"onFlow({{level: 0, cursor: {len(frames) + 300}, events: [{{from: 'injector', to: 'bmc-farm', n: 1, label: 'overheat on cn003', nodes: ['cn003']}}], totals: flowSnap.totals, errors: flowSnap.errors, reachable: flowSnap.reachable}})")
+        def scene(caption, count, act=None, at=None):
+            pg.evaluate("t => { document.getElementById('democap').textContent = t }", caption)
+            for i in range(count):
+                if act and i in (at or {0}): act()
+                frames.append(Image.open(io.BytesIO(pg.screenshot(clip=clip, full_page=True))).convert("RGB")); pg.wait_for_timeout(70)
+        scene("Clients reach every part; dots are real requests", 12, lambda: traffic("teleport", 2), {1, 5, 9})
+        scene("Error answers are triangles (counted by the mocks)", 10, lambda: traffic("bmc-farm", 3, 2), {1, 5})
+        scene("A fault: dashed parts are affected (declared, not measured)", 14, fault, {1})
+        pg.evaluate("setBlast(null)")
+        pg.select_option("#lens", "management"); scene("Lens: one plane at a time, nothing moves", 8)
+        pg.select_option("#lens", "client"); scene("Client's eye: what a client should call and what it got", 10)
+        pg.select_option("#lens", "all")
+        pg.evaluate("focusOn('teleport')"); scene("Focus: a part and its direct neighbours", 8)
+        pg.evaluate("focusOn(null)")
+        pg.evaluate("setView(false, false)"); scene("Flat view: the same diagram, calm", 7)
+        pg.evaluate("setView(true, false)")
+        pg.evaluate("setLevel('overview', false)"); scene("Global view: one card per cluster, double-click to dive in", 10)
+        pg.evaluate("setLevel('full', false)")
+        w = 820; frames = [f.resize((w, round(f.height * w / f.width)), Image.LANCZOS).quantize(64) for f in frames]
+        frames[0].save(OUT / "architecture-demo.gif", save_all=True, append_images=frames[1:], duration=150, loop=0, optimize=True)
         b.close()
 finally:
     proc.terminate()

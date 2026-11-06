@@ -1631,13 +1631,13 @@ function paintBlocks() {
   for (const [k] of svcList()) {
     const up = flowSnap.reachable[k]; sent += flowSnap.totals[k] || 0;
     $('fb-' + k).setAttribute('class', 'blk ' + (up ? 'up' : allOff ? 'off' : 'down') + (k === 'teleport' ? '' : REAL_SERVICES.has(k) ? ' real' : ' sim'));  // everything off = stack not running: stay calm, not red
-    const fitBox = t => fitText(t, 'sub', unitNow, svcFit[k] || 190);
+    const fitBox = (...alts) => { for (const t of alts) { if (fitText(t, 'sub', unitNow, svcFit[k] || 190) === t) return t; } return fitText(alts[alts.length - 1], 'sub', unitNow, svcFit[k] || 190); };  // the first wording that fits; shorter ones drop words, never end in an ellipsis
     $('fs-' + k).textContent = fitBox(up ? (k === 'jira-real' ? '✓ up · no counter' : '✓ up · ' + (rate[k] || 0) + (k === 'teleport' ? ' conn/min' : ' req/min')) : allOff ? '– offline' : '✗ not reachable');
     $('ln-' + k).setAttribute('class', 'lane' + (rate[k] ? ' on' : ''));
     const flt = recent.some(r => r.fault && r.to === k && r.t > Date.now() - 30000);  // a fault was applied to it in the last 30 s
     $('ff-' + k).setAttribute('class', 'fring' + (flt ? ' on' : '')); $('fx-' + k).setAttribute('class', 'badge flt' + (flt ? ' on' : '')); $('fa-' + k).setAttribute('class', 'badge act' + (rate[k] ? ' on' : ''));
     const si = document.getElementById('si-' + (k === 'gpu-exporter' ? 'gpu-exporter' : k)); if (si) si.textContent = k === 'jira-real' ? 'no request counter (the real Jira publishes none)' : `${rate[k] || 0} ${k === 'teleport' ? 'conn' : 'req'}/min · ${(flowSnap.totals[k] || 0).toLocaleString()} seen`;
-    const ne = flowSnap.errors && flowSnap.errors[k]; $('fc-' + k).textContent = fitBox((flowSnap.totals[k] || 0) ? (flowSnap.totals[k]).toLocaleString() + (ne ? ((flowSnap.totals[k]) === 1 ? ' request' : ' requests') + ` · ${ne} ${ne === 1 ? 'error' : 'errors'}` : (flowSnap.totals[k]) === 1 ? ' request seen' : ' requests seen') : svcList().find(x => x[0] === k)[2]);
+    const ne = flowSnap.errors && flowSnap.errors[k]; $('fc-' + k).textContent = (flowSnap.totals[k] || 0) ? (ne ? fitBox(`${flowSnap.totals[k].toLocaleString()} ${flowSnap.totals[k] === 1 ? 'request' : 'requests'} · ${ne} ${ne === 1 ? 'error' : 'errors'}`, `${flowSnap.totals[k].toLocaleString()} · ${ne} ${ne === 1 ? 'error' : 'errors'}`, `${ne} ${ne === 1 ? 'error' : 'errors'}`) : fitBox(flowSnap.totals[k].toLocaleString() + (flowSnap.totals[k] === 1 ? ' request seen' : ' requests seen'), flowSnap.totals[k].toLocaleString() + ' requests', flowSnap.totals[k].toLocaleString())) : fitBox(svcList().find(x => x[0] === k)[2]);
   }
   $('fc-clients').textContent = sent.toLocaleString() + ' requests';
   $('fc-injector').textContent = (flowSnap.faults || 0) + (flowSnap.faults === 1 ? ' fault applied' : ' faults applied');

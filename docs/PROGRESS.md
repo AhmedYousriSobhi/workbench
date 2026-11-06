@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**85% built** (35 done, 51 in review, 11 partial, 4 to do, 101 items).
+**85% built** (35 done, 52 in review, 11 partial, 4 to do, 102 items).
 
 ## Roadmap
 
@@ -225,9 +225,10 @@ _One click from cold start to a busy cluster._
 | View switcher | 🔍 In review | One segmented control under the diagram title (2.5D, Flat, Overview) replaces the separate level and style buttons: same look as the Connections / Timeline switch, keyboard operable (aria-pressed), the focus and selection survive a switch; the style is remembered, the level for the session; flat is the default under reduced motion and on a phone. Issue 324. | `webui/static/index.html`, `scripts/ui_shots.py` | - |
 | Plane lenses and the client's eye | 🔍 In review | A Lens menu restyles the same layout by plane (access, management, telemetry, tickets, faults) from the declared edges' plane: the rest dims by attribute, nothing moves. The Client's eye lens lists every client edge to a service with calls, errors, rate per minute and a verdict from the per-mock counters, and says not measured where nothing counts; with the stack down it shows one message. Issue 316. | `webui/static/index.html`, `scripts/ui_shots.py` | - |
 | 2.5D view | 🔍 In review | The 2.5D view is the same SVG restyled with CSS only (raised slabs, gradient faces, tiled floor, glow on live and failed parts); a lens lifts its plane (deeper side face and glow, the rest dims, nothing moves). Flat is the default under reduced motion and on a phone; the view switcher turns it on. Measured in headless Chromium: 19-36 % of one core main thread while animating and a 3.5 MB heap, no measurable cost over flat (ADR 0030). A tilted layered stack and a camera into a layer are not built. Issue 320. | `webui/static/index.html`, `docs/adr/0030-2-5d-view.md` | - |
+| README demo gif | 🔍 In review | The README's animation is made from sample data and shows each capability in turn with a caption: dark 2.5D with traffic, error triangles, a fault with its declared blast radius, a lens, the client's eye, focus, the flat view and the global view. Re-run scripts/doc_shots.py after a change to the page. Issue 337. | `scripts/doc_shots.py`, `docs/manual/img/architecture-demo.gif`, `README.md` | - |
 | Budget manager | ⬜ To do | Profile/budget form (W-7). | - | - |
 
-1/21 done
+1/22 done
 
 ### macOS agent and CI (0%)
 
