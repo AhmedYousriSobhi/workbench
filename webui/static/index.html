@@ -417,6 +417,10 @@
   @media (max-width:640px) { .focustab thead { display:none; } .focustab tr { display:block; padding:6px 0; border-bottom:1px solid var(--line); } .focustab td { display:block; border:0; padding:2px 8px; } }
   @media (prefers-reduced-motion:reduce) { #flow [data-dim] { transition:none; } }
   #flow .pk.err { fill:var(--bad); stroke:var(--fg); stroke-width:1.5; }
+  /* blast radius (#315): dashed outline and a marker, never colour alone */
+  #flow [data-blast] .blk, #flow [data-blast] .nd, #flow [data-blast].lane { stroke:var(--bad); stroke-dasharray:7 4; stroke-width:3.5; }
+  #flow path.lane[data-blast] { stroke:var(--bad); stroke-dasharray:7 4; stroke-width:4; opacity:1; }
+  .blastpane { margin-top:var(--sp3); padding:var(--sp3); border:1px dashed var(--bad); border-radius:10px; } .blastpane p { margin:var(--sp2) 0; }
 </style>
 </head>
 <body>
@@ -491,6 +495,7 @@
     <div id="ipane-conn" class="ipane">
     <div class="inspect-empty" id="inspect-empty"><b>How to reach each part</b><p class="small dim">Click a part of the diagram or a node for its details and actions. Credentials are never shown, only the file that holds them.</p><ul class="reach" id="reach"></ul></div>
     <div class="focuspane" id="focuspane" hidden></div>
+    <div class="blastpane" id="blastpane" role="status" hidden></div>
     <div id="pop" class="pop" role="dialog" aria-labelledby="pop-t" hidden></div>
   <section id="nodepane" hidden aria-labelledby="nodetitle">
     <div class="np-head"><button class="btn small" id="node-back">← All nodes</button><h2 id="nodetitle"></h2><span id="nodestate" class="pill"></span></div>
@@ -1094,7 +1099,7 @@ function showPane(which) { for (const [k, id] of [['conn', 'ipane-conn'], ['time
 $('it-conn').onclick = () => showPane('conn'); $('it-time').onclick = () => showPane('time');
 const paintInspector = () => {
   const sel = !$('pop').hidden || !$('nodepane').hidden;
-  $('inspect-empty').hidden = sel || !!focusId; $('nodeswrap').classList.toggle('detail', sel); if (sel) showPane('conn');
+  $('inspect-empty').hidden = sel || !!focusId || !!blastNow; $('nodeswrap').classList.toggle('detail', sel); if (sel) showPane('conn');
 };
 function setKey(open, restore) {
   $('ckey').hidden = !open; $('keybtn').setAttribute('aria-expanded', open); if (!open && restore) $('keybtn').focus();
@@ -1426,7 +1431,29 @@ function paintCrumb() {
 $('flow').addEventListener('dblclick', e => { const el = e.target.closest('[data-ent]'); if (curLevel() === 'overview') return; if (el) focusOn(el.getAttribute('data-ent') === focusId ? null : el.getAttribute('data-ent')); else if (focusId) focusOn(null); });
 $('flow').addEventListener('keydown', e => { if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey) { const el = e.target.closest && e.target.closest('[data-ent]'); if (el) { e.preventDefault(); focusOn(el.getAttribute('data-ent') === focusId ? null : el.getAttribute('data-ent')); } } });
 $('crumb-name').onclick = () => { if (focusId) focusOn(null); };
-const buildFlowBase = buildFlow; buildFlow = function () { buildFlowBase(); tagEntities(); applyFocus(); };
+
+// ---- blast radius (#315): a fault lights up the parts a client reads that it changes, and says what the client would see ----
+let blastNow = null, blastTimer = 0;
+function blastFor(ev) {  // the declared entry for an injection event: "<action> on <node>" from the buttons, else the service it hit
+  const bl = clusterNow().blast; if (!bl) return null;
+  const act = String(ev.label || '').split(' on ')[0].trim(), f = bl.faults[act];
+  if (f) return { services: f.services, nodes: ev.nodes || [], caption: f.caption, basis: bl.basis, title: `${act}${(ev.nodes || []).length ? ' on ' + ev.nodes.join(', ') : ''}` };
+  const sc = bl.services[ev.to]; return sc ? { services: [ev.to], nodes: ev.nodes || [], caption: sc, basis: bl.basis, title: `fault on ${ENT_NAME(ev.to)}` } : null;
+}
+function applyBlast() {
+  const g = $('flow'), b = blastNow;
+  g.querySelectorAll('[data-blast]').forEach(el => el.removeAttribute('data-blast'));
+  if (b) {
+    for (const k of b.services) g.querySelectorAll(`[data-ent="${k}"]`).forEach(el => el.setAttribute('data-blast', '1'));
+    for (const n of b.nodes) g.querySelectorAll(`[data-ent="${n}"]`).forEach(el => el.setAttribute('data-blast', '1'));
+    for (const k of b.services) g.querySelectorAll(`path.lane[data-edge="clients>${k}:api"]`).forEach(el => el.setAttribute('data-blast', '1'));
+  }
+  const pane = $('blastpane'); pane.hidden = !b; paintInspector();
+  pane.innerHTML = b ? `<b>Blast radius: ${esc(b.title)}</b><p>${esc(b.caption)}</p><p class="small dim">Dashed parts are affected: ${b.services.map(k => esc(ENT_NAME(k))).join(', ')}${b.nodes.length ? '; node ' + b.nodes.map(esc).join(', ') : ''}. Basis: ${esc(b.basis)}.</p><button class="btn small" id="blast-x">Dismiss</button>` : '';
+  if (b) $('blast-x').onclick = () => setBlast(null);
+}
+function setBlast(b) { blastNow = b; clearTimeout(blastTimer); if (b) blastTimer = setTimeout(() => setBlast(null), 45000); applyBlast(); if (b) announce(`Fault: ${b.title}. ${b.caption} (${b.basis})`); }
+const buildFlowBase = buildFlow; buildFlow = function () { buildFlowBase(); tagEntities(); applyFocus(); applyBlast(); };
 $('levelbtn').onclick = () => curLevel() === 'overview' ? enterCluster(clusterList()[0]) : setLevel('overview', false);
 $('crumb-all').onclick = () => setLevel('overview', false);
 document.addEventListener('keydown', e => {
@@ -1612,6 +1639,7 @@ function onFlow(snap) {
   snap.faults = (flowSnap?.faults || 0) + snap.events.filter(e => e.from === 'injector').length;
   snap.events.forEach(e => recent.push({ t: Date.now(), to: e.to, n: e.from === 'clients' ? e.n : 0, fault: e.from === 'injector' }));
   flowSnap = snap; paintBlocks(); flowNote(); paintFeed(snap.events);
+  const inj = snap.events.filter(e => e.from === 'injector').pop(); if (inj) { const b = blastFor(inj); if (b) setBlast(b); }
   if (animating()) snap.events.forEach(launch);
 }
 const feed = [];  // the Timeline dock: what the page was told, newest first (text only; the dots are the animation)

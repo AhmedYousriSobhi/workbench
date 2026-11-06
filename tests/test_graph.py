@@ -114,3 +114,17 @@ def test_no_edge_joins_two_clusters():
     cluster_of = {e["id"]: e["cluster"] for e in merged["entities"]}
     assert all(cluster_of[e["from"]] == cluster_of[e["to"]] == e["cluster"] for e in merged["edges"])
     assert all(e["group"].startswith(e["cluster"] + "/") for e in merged["entities"] if "group" in e)
+
+
+def test_blast_radius_table_matches_the_edge_model_and_the_page_actions():
+    """#315: every fault the page can apply has an entry, and every service it names has a client edge in the declared graph."""
+    from webui import blast, cluster
+
+    full = graph.build({**SERVICES, "teleport": True, "jira-real": True}, NODES, logins("both"))
+    edge_ids = ids(full)
+    assert set(blast.FAULTS) == set(cluster.ACTIONS)  # a new action must come with a reviewed caption
+    for name, f in blast.FAULTS.items():
+        assert f["services"] and f["caption"].endswith("."), name
+        assert all(f"clients>{s}:api" in edge_ids for s in f["services"]), name
+    assert all(f"clients>{s}:api" in edge_ids for s in blast.SERVICES)
+    assert "declared" in blast.BASIS

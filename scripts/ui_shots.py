@@ -16,7 +16,7 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from webui import graph
+from webui import blast, graph
 
 SYNTH_CLUSTER = """lastCluster = JSON.stringify({logins: [{name: 'login', mode: 'both', port: 2222}, {name: 'login2', mode: 'teleport', port: null}], services: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'jira-real': true, 'gpu-exporter': true, 'teleport': true}, actions: [{id: 'power-off', label: 'Power off', gpu_only: false}, {id: 'power-on', label: 'Power on', gpu_only: false}, {id: 'overheat', label: 'Overheat', gpu_only: false}, {id: 'fan-fail', label: 'Fan failure', gpu_only: false}, {id: 'clear', label: 'Clear faults', gpu_only: false}],
                             nodes: ['cn001', 'cn002', 'cn003', 'cn004'].map(n => ({name: n, kind: 'compute', state: 'ok', label: 'Healthy', temp: 45, power: 'On', gpus: 0}))
@@ -25,7 +25,7 @@ SYNTH_GRAPH = graph.build(
     {k: True for k in ("bmc-farm", "bcm-mock", "jira-mock", "jira-real", "gpu-exporter", "teleport")},
     [{"name": n, "kind": "compute"} for n in ("cn001", "cn002", "cn003", "cn004")] + [{"name": n, "kind": "gpu"} for n in ("gpu001", "gpu002")],
     [{"name": "login", "mode": "both"}, {"name": "login2", "mode": "teleport"}])
-SYNTH_CLUSTER = SYNTH_CLUSTER.replace("actions: [", "graph: " + json.dumps(SYNTH_GRAPH) + ", actions: [", 1)
+SYNTH_CLUSTER = SYNTH_CLUSTER.replace("actions: [", "graph: " + json.dumps(SYNTH_GRAPH) + ", blast: " + json.dumps(blast.payload()) + ", actions: [", 1)
 VIEWPORTS = {"desktop": (1280, 900), "phone": (390, 800)}
 
 
@@ -98,7 +98,7 @@ def capture(out: Path) -> dict:
                         result["a11y"].append("Infrastructure architecture is missing the node tiles or the clients")
                     page.wait_for_timeout(450)  # the diagram fits itself to the panel once it has settled (#319); a rebuild would drop packets already in flight
                     page.evaluate("""onFlow({level: 0, cursor: 9, events: [{from: 'clients', to: 'bmc-farm', n: 3, err: 2, label: 'requests', nodes: []},
-                        {from: 'clients', to: 'jira-mock', n: 2, label: 'requests', nodes: []}, {from: 'clients', to: 'teleport', n: 2, label: 'requests', nodes: []}, {from: 'injector', to: 'bmc-farm', n: 1, label: 'x', nodes: ['cn002']}],
+                        {from: 'clients', to: 'jira-mock', n: 2, label: 'requests', nodes: []}, {from: 'clients', to: 'teleport', n: 2, label: 'requests', nodes: []}, {from: 'injector', to: 'bmc-farm', n: 1, label: 'overheat on cn002', nodes: ['cn002']}],
                         errors: {'bmc-farm': 2}, totals: {'bmc-farm': 3, 'bcm-mock': 0, 'jira-mock': 2, 'gpu-exporter': 0, teleport: 2}, reachable: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'jira-real': true, 'gpu-exporter': true, teleport: true}})""")
                     page.wait_for_timeout(450)  # packets in flight
                     if not page.evaluate("flowPaused || reduced.matches") and page.locator("#dots .pk").count() < 1:
@@ -107,6 +107,9 @@ def capture(out: Path) -> dict:
                         result["a11y"].append("an error answer was not drawn as a triangle dot (#314)")
                     if "2 errors" not in page.text_content("#timeline-feed") or "2 errors" not in page.evaluate("document.getElementById('fc-bmc-farm').textContent"):
                         result["a11y"].append("errors have no text equivalent in the feed and the service box (#314)")
+                    b = page.evaluate("({marked: document.querySelectorAll('#flow [data-blast]').length, lanes: document.querySelectorAll('#flow path.lane[data-blast]').length, text: $('blastpane').hidden ? '' : $('blastpane').textContent})")
+                    if b["marked"] < 3 or b["lanes"] < 1 or "declared" not in b["text"] or "BMC farm" not in b["text"]:
+                        result["a11y"].append(f"blast radius did not mark the affected parts and say it is declared (#315): {b}")
                     drawn = set(page.evaluate("[...document.querySelectorAll('#flow [data-edge]')].map(e => e.dataset.edge)"))
                     declared = set(page.evaluate("JSON.parse(lastCluster).graph.edges.map(e => e.id)"))  # the model the page was given
                     if drawn != declared:  # the drawing and the declared graph must agree (#312)

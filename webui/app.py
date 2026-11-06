@@ -29,6 +29,7 @@ from starlette.routing import Route
 
 from benchctl import checks, nhc, scenario, slurmtrace
 
+from .blast import payload as blast_payload
 from .cluster import ActionError, Cluster
 from .flow import PAUSE_LEVEL, Flow
 from .graph import attach as attach_graph
@@ -173,7 +174,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
     async def cluster_state(request: Request):
         snap = await asyncio.to_thread(cluster.snapshot)
-        return JSONResponse(attach_graph(snap))
+        return JSONResponse({**attach_graph(snap), "blast": blast_payload()})
 
     def build_plan(q) -> tuple:
         from benchctl import workbench
