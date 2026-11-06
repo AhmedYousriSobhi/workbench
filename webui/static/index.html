@@ -412,10 +412,10 @@
   #flow .ovcard.attn .ovbg { stroke:var(--bad); stroke-dasharray:6 4; } @media (min-width:1100px) { .flowscroll:has(#flow[data-ov]) { overflow-y:auto !important; } }
   /* focus view (#313): classes toggle, nothing moves */
   #flow { user-select:none; }
-  #flow [data-dim] { opacity:.2; transition:opacity .15s; } #flow [data-focus] .blk, #flow [data-focus] .nd, #flow [data-focus] .chipbg { stroke:var(--accent); stroke-width:3.5; }
+  #flow [data-dim], #flow [data-ldim] { opacity:.2; transition:opacity .15s; } #flow [data-focus] .blk, #flow [data-focus] .nd, #flow [data-focus] .chipbg { stroke:var(--accent); stroke-width:3.5; }
   .focuspane { margin-top:var(--sp3); } .focustab { width:100%; border-collapse:collapse; font-size:13px; } .focustab th, .focustab td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
   @media (max-width:640px) { .focustab thead { display:none; } .focustab tr { display:block; padding:6px 0; border-bottom:1px solid var(--line); } .focustab td { display:block; border:0; padding:2px 8px; } }
-  @media (prefers-reduced-motion:reduce) { #flow [data-dim] { transition:none; } }
+  @media (prefers-reduced-motion:reduce) { #flow [data-dim], #flow [data-ldim] { transition:none; } }
   #flow .pk.err { fill:var(--bad); stroke:var(--fg); stroke-width:1.5; }
   /* blast radius (#315): dashed outline and a marker, never colour alone */
   #flow [data-blast] .blk, #flow [data-blast] .nd, #flow [data-blast].lane { stroke:var(--bad); stroke-dasharray:7 4; stroke-width:3.5; }
@@ -424,6 +424,7 @@
   /* view switcher (#324): the same segmented look as Connections / Timeline */
   .viewrow { margin-top:var(--sp2); } .seg { display:flex; gap:2px; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:3px; width:fit-content; } .seg .btn { border:0; background:transparent; border-radius:8px; }
   .seg .btn[aria-pressed=true] { background:var(--panel); box-shadow:0 0 0 1.5px var(--accent) inset; font-weight:650; }
+  .lensl { margin:0 var(--sp1) 0 var(--sp4); font-size:13px; color:var(--dim); } #lens { width:auto; padding:0 28px 0 10px; } .viewrow { align-items:center; flex-wrap:wrap; justify-content:flex-start !important; gap:var(--sp2); } .eyepane { margin-top:var(--sp3); }
 </style>
 </head>
 <body>
@@ -473,7 +474,8 @@
   <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 id="traffic-h" style="margin:0">Infrastructure architecture</h2>
     <span class="grow"></span><button class="btn small" id="keybtn" aria-expanded="false" aria-controls="ckey">Key</button><button class="btn small" id="flowpause" aria-pressed="false" aria-label="Pause animation">Pause</button>
     <button class="btn small" id="treetoggle" aria-expanded="true" aria-controls="nodesmain">Hide node list</button></div>
-    <div class="row viewrow"><div class="seg" id="viewseg" role="group" aria-label="View of the architecture"><button class="btn small" id="vw-iso" aria-pressed="true">2.5D</button><button class="btn small" id="vw-flat" aria-pressed="false">Flat</button><button class="btn small" id="vw-ov" aria-pressed="false">Overview</button></div></div>
+    <div class="row viewrow"><div class="seg" id="viewseg" role="group" aria-label="View of the architecture"><button class="btn small" id="vw-iso" aria-pressed="true">2.5D</button><button class="btn small" id="vw-flat" aria-pressed="false">Flat</button><button class="btn small" id="vw-ov" aria-pressed="false">Overview</button></div>
+      <label class="lensl" for="lens">Lens</label><select id="lens" class="btn small"><option value="all">All planes</option><option value="access">Access</option><option value="management">Management</option><option value="telemetry">Telemetry</option><option value="tickets">Tickets</option><option value="faults">Faults</option><option value="client">Client's eye</option></select></div>
     <div class="flowscroll"><svg id="flow" viewBox="0 0 1120 470" role="img" aria-label="Infrastructure architecture: clients and users, the access layer (login nodes, each direct SSH, Teleport or both, and the Teleport proxy when on), the services, and the nodes. Each part opens its details."></svg></div>
     <div class="ovprev" id="ovprev" role="tooltip" hidden></div><div class="srtable" id="ovtable"></div>
     <div class="ckey" id="ckey" role="group" aria-label="Key to the diagram" hidden>
@@ -500,6 +502,7 @@
     <div class="inspect-empty" id="inspect-empty"><b>How to reach each part</b><p class="small dim">Click a part of the diagram or a node for its details and actions. Credentials are never shown, only the file that holds them.</p><ul class="reach" id="reach"></ul></div>
     <div class="focuspane" id="focuspane" hidden></div>
     <div class="blastpane" id="blastpane" role="status" hidden></div>
+    <div class="eyepane" id="eyepane" hidden></div>
     <div id="pop" class="pop" role="dialog" aria-labelledby="pop-t" hidden></div>
   <section id="nodepane" hidden aria-labelledby="nodetitle">
     <div class="np-head"><button class="btn small" id="node-back">← All nodes</button><h2 id="nodetitle"></h2><span id="nodestate" class="pill"></span></div>
@@ -1103,7 +1106,7 @@ function showPane(which) { for (const [k, id] of [['conn', 'ipane-conn'], ['time
 $('it-conn').onclick = () => showPane('conn'); $('it-time').onclick = () => showPane('time');
 const paintInspector = () => {
   const sel = !$('pop').hidden || !$('nodepane').hidden;
-  $('inspect-empty').hidden = sel || !!focusId || !!blastNow; $('nodeswrap').classList.toggle('detail', sel); if (sel) showPane('conn');
+  $('inspect-empty').hidden = sel || !!focusId || !!blastNow || lens === 'client'; $('nodeswrap').classList.toggle('detail', sel); if (sel) showPane('conn');
 };
 function setKey(open, restore) {
   $('ckey').hidden = !open; $('keybtn').setAttribute('aria-expanded', open); if (!open && restore) $('keybtn').focus();
@@ -1457,7 +1460,39 @@ function applyBlast() {
   if (b) $('blast-x').onclick = () => setBlast(null);
 }
 function setBlast(b) { blastNow = b; clearTimeout(blastTimer); if (b) blastTimer = setTimeout(() => setBlast(null), 45000); applyBlast(); if (b) announce(`Fault: ${b.title}. ${b.caption} (${b.basis})`); }
-const buildFlowBase = buildFlow; buildFlow = function () { buildFlowBase(); tagEntities(); applyFocus(); applyBlast(); };
+
+// ---- lenses (#316): the same layout restyled by plane; the client's-eye lens reads only the counters we really have ----
+let lens = 'all';
+const PLANE_WORD = { access: 'how users get in', management: 'BMC and BCM', telemetry: 'GPU metrics', tickets: 'Jira', faults: 'fault injection' };
+function lensSet() {  // entities and edges of the lens plane; the client's eye is every client edge to a service
+  const gr = clusterNow().graph; if (!gr || lens === 'all') return null;
+  const edges = gr.edges.filter(e => lens === 'client' ? e.from === 'clients' && e.kind === 'api' : e.plane === lens), ents = new Set();
+  for (const e of edges) { ents.add(e.from); ents.add(e.to); }
+  return { edges: new Set(edges.map(e => e.id)), ents };
+}
+function applyLens() {
+  const g = $('flow'), ls = lensSet(), gr = clusterNow().graph;
+  g.querySelectorAll('[data-ent]').forEach(el => {
+    const id = el.getAttribute('data-ent'), ent = gr && gr.entities.find(e => e.id === id), on = !ls || ls.ents.has(id) || (ent && ent.group && ls.ents.has(ent.group));
+    if (on) el.removeAttribute('data-ldim'); else el.setAttribute('data-ldim', '1');
+  });
+  g.querySelectorAll('path.lane[data-edge]').forEach(l => { if (!ls || ls.edges.has(l.getAttribute('data-edge'))) l.removeAttribute('data-ldim'); else l.setAttribute('data-ldim', '1'); });
+  g.querySelectorAll('.elabs').forEach(el => { if (ls) el.setAttribute('data-ldim', '1'); else el.removeAttribute('data-ldim'); });
+  $('trafficpanel').dataset.lens = lens; paintEye();
+}
+function paintEye() {  // what the monitoring client called, from the per-mock counters; "not measured" where nothing counts
+  const pane = $('eyepane'), on = lens === 'client'; pane.hidden = !on; paintInspector(); if (!on) { pane.innerHTML = ''; return; }
+  const gr = clusterNow().graph, snap = flowSnap;
+  if (!gr || !stackUp()) { pane.innerHTML = `<b>Client's eye</b><p class="small dim">The simulation stack is not running, so there are no calls to show. Start it with <code>./scripts/benchctl start</code>.</p>`; return; }
+  const rate = {}, cut = Date.now() - 60000; recent.filter(r => r.t > cut).forEach(r => { rate[r.to] = (rate[r.to] || 0) + r.n; });
+  const rows = gr.edges.filter(e => e.from === 'clients' && e.kind === 'api').map(e => { const k = e.to, tot = snap && snap.totals ? snap.totals[k] : undefined, er = snap && snap.errors ? snap.errors[k] : undefined;
+    const verdict = !e.measured ? 'not measured (no request counter)' : !snap ? 'waiting for the first reading' : !snap.reachable[k] ? 'not reachable' : tot ? 'called' : 'not called yet';
+    return `<tr><td><b>${esc(ENT_NAME(k))}</b><br><span class="dim small">${esc(e.plane)}: ${esc(PLANE_WORD[e.plane] || '')}</span></td><td>${e.measured && snap ? (tot || 0).toLocaleString() : 'n/a'}</td><td>${e.measured && er !== undefined ? er : e.measured ? 'n/a' : 'n/a'}</td><td>${e.measured ? (rate[k] || 0) : 'n/a'}</td><td>${esc(verdict)}</td></tr>`; }).join('');
+  pane.innerHTML = `<b>Client's eye: what was called</b><p class="small dim">Every service a client should call, with the calls the mocks counted since the page opened (errors only where the mock counts them). Basis: counters, not a trace of which endpoint was used.</p>
+    <table class="focustab"><thead><tr><th>Service</th><th>Calls</th><th>Errors</th><th>Per min</th><th>Verdict</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+$('lens').onchange = () => { lens = $('lens').value; applyLens(); announce(lens === 'all' ? 'Lens cleared' : `Lens: ${$('lens').selectedOptions[0].textContent}`); };
+const buildFlowBase = buildFlow; buildFlow = function () { buildFlowBase(); tagEntities(); applyFocus(); applyBlast(); applyLens(); };
 $('crumb-all').onclick = () => setLevel('overview', false);
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && focusId && curLevel() === 'full' && !openNode && $('ckey').hidden && $('pop').hidden && !document.querySelector('dialog[open]')) { focusOn(null); return; }
@@ -1642,6 +1677,7 @@ function onFlow(snap) {
   snap.faults = (flowSnap?.faults || 0) + snap.events.filter(e => e.from === 'injector').length;
   snap.events.forEach(e => recent.push({ t: Date.now(), to: e.to, n: e.from === 'clients' ? e.n : 0, fault: e.from === 'injector' }));
   flowSnap = snap; paintBlocks(); flowNote(); paintFeed(snap.events);
+  if (lens === 'client') paintEye();
   const inj = snap.events.filter(e => e.from === 'injector').pop(); if (inj) { const b = blastFor(inj); if (b) setBlast(b); }
   if (animating()) snap.events.forEach(launch);
 }

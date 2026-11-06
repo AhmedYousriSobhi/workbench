@@ -230,6 +230,18 @@ def capture(out: Path) -> dict:
                         result["a11y"].append(f"focus view: {f}")
                     if before != after:
                         result["a11y"].append("focus view moved a part of the diagram")
+                    page.keyboard.press("Escape"); page.wait_for_timeout(200)
+                    for choice in ("management", "client"):  # lenses (#316): the layout never moves; the client's eye reads only real counters
+                        page.select_option("#lens", choice); page.wait_for_timeout(250)
+                        li = page.evaluate("({dim: document.querySelectorAll('#flow [data-ldim]').length, eye: $('eyepane').hidden ? '' : $('eyepane').textContent, pos: [...document.querySelectorAll('#flow [data-ent]')].map(e => { const r = e.getBoundingClientRect(); return [e.getAttribute('data-ent'), Math.round(r.x), Math.round(r.y)]; })})")
+                        if li["dim"] < 2 or li["pos"] != before:
+                            result["a11y"].append(f"lens {choice} dimmed nothing or moved a part")
+                        if choice == "client" and ("not measured" not in li["eye"] or "BMC farm" not in li["eye"] or "Verdict" not in li["eye"]):
+                            result["a11y"].append("client's-eye lens did not list the services with a verdict and 'not measured' where nothing counts")
+                    page.select_option("#lens", "all"); page.wait_for_timeout(200)
+                    if page.evaluate("document.querySelectorAll('#flow [data-ldim]').length"):
+                        result["a11y"].append("lens All planes left parts dimmed")
+                    page.locator("#flow g[data-ent='login']").dblclick(); page.wait_for_timeout(200)  # focus again for the checks below
                     page.click("#vw-flat"); page.wait_for_timeout(200)  # the view switcher (#324): style and level change, the focus stays
                     if page.evaluate("focusId") != "login" or page.get_attribute("#trafficpanel", "data-view") != "flat" or page.get_attribute("#vw-flat", "aria-pressed") != "true":
                         result["a11y"].append("switching to the flat view lost the focus or did not change the style")
