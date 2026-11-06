@@ -216,6 +216,11 @@ def test_flow_endpoint_streams_and_pauses_at_l3(tmp_path):
         with pytest.raises(urllib.error.HTTPError) as e:
             urllib.request.urlopen(base + "/api/flow", timeout=5)
         assert e.value.code == 401
+        for bad in ("abc", "1.5"):  # a bad cursor is a 422 before the stream starts, not a broken stream (#347)
+            with pytest.raises(urllib.error.HTTPError) as e:
+                urllib.request.urlopen(urllib.request.Request(base + f"/api/flow?after={bad}", headers={"Authorization": f"Bearer {TOKEN}"}), timeout=5)
+            assert e.value.code == 422
+        assert stream(base, TOKEN, "/api/flow?after=")[0]["level"] == 3
     finally:
         server.should_exit = True
         gov.shutdown()

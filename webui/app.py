@@ -159,8 +159,14 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
     async def flow_events(request: Request):
         """SSE feed of workload events for the dots; the page opens it only while the Cluster tab is showing."""
+        raw = request.query_params.get("after")
+        try:
+            after = int(raw) if raw else flow.seq  # no cursor: only what happens from now on
+        except ValueError as e:  # before the stream starts, so the client gets a status code, not a broken stream
+            raise HTTPException(422, "after must be a whole number") from e
+
         async def stream():
-            after = int(request.query_params.get("after") or flow.seq)  # no cursor: only what happens from now on
+            nonlocal after
             while True:
                 level = (await asyncio.to_thread(governor_status, socket)).get("level") or 0
                 paused = level >= PAUSE_LEVEL
