@@ -218,13 +218,15 @@ def make_handler(farm: Farm, sessions: Sessions | None = None, stats: dict | Non
     """Legacy HTTP surface (/<node>/redfish/v1, no auth) when `sessions` is None, else the TLS surface. `fixed_node`
     pins a TLS listener to one node (the per-node BMC address forwards to its own port, ADR 0018)."""
     if stats is None:
-        stats, lock = {"requests": 0}, threading.Lock()
+        stats, lock = {"requests": 0, "errors": 0}, threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
         def _send(self, code: int, obj, headers: dict | None = None) -> None:
             if counted(self.path, self.headers):
                 with lock:
                     stats["requests"] += 1
+                    if code >= 400:  # an error answer (401, 404, 503 ...): the page draws it as a different dot (#314)
+                        stats["errors"] += 1
             data = b"" if obj is None else (json.dumps(obj) if not isinstance(obj, str) else obj).encode()
             self.send_response(code)
             self.send_header("Content-Type", "application/json")
@@ -318,7 +320,7 @@ def main() -> None:
     sim = Path(sys.argv[1] if len(sys.argv) > 1 else "sim.yaml")
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 8000
     tls_port = int(sys.argv[3]) if len(sys.argv) > 3 else 8443
-    farm, stats, lock = Farm(load_nodes(sim)), {"requests": 0}, threading.Lock()
+    farm, stats, lock = Farm(load_nodes(sim)), {"requests": 0, "errors": 0}, threading.Lock()
     creds = read_credentials(Path("/run/workbench/bmc_credentials"))
     if creds:
         farm.account = creds[0]

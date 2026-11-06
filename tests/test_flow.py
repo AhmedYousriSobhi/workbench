@@ -305,3 +305,35 @@ def test_the_real_jira_is_reachability_only_no_counter():
     up["on"] = False
     f.poll()
     assert f.since(0)["reachable"]["jira-real"] is False
+
+
+def test_mocks_count_error_answers_beside_requests():
+    """#314: `errors` rises for 4xx/5xx answers to real clients only; `requests` keeps its meaning."""
+    srv, base = serve(bmc.make_handler(bmc.Farm(bmc.load_nodes(SIM))))
+    try:
+        get(base + "/cn001/redfish/v1/Systems/1")  # ok
+        assert get(base + "/cn001/redfish/v1/NoSuchThing")[0] == 404  # an error a client would see
+        get(base + "/nope/redfish/v1/Systems/1", headers={"X-Workbench-Probe": "1"})  # the UI's own poll: not counted at all
+        st = json.loads(get(base + "/sim/stats")[1])
+        assert st["requests"] == 2 and st["errors"] == 1
+    finally:
+        srv.shutdown()
+
+
+def test_events_carry_error_counts_only_where_a_counter_backs_them():
+    fm = FakeMocks()
+    errs = {"bmc-farm": 0}  # only the BMC farm reports errors here; the others are "older mocks" with no error counter
+
+    def fetch(url):
+        out = fm(url)
+        svc = fm.by_url[url]
+        return {**out, "errors": errs[svc]} if svc in errs else out
+
+    f = make_flow(fetch)
+    f.poll()
+    fm.counts["bmc-farm"], errs["bmc-farm"], fm.counts["jira-mock"] = 5, 2, 3
+    f.tick(1)
+    f.poll()
+    ev = {e["to"]: e for e in f.since(0)["events"]}
+    assert ev["bmc-farm"]["err"] == 2 and "err" not in ev["jira-mock"]  # 0 errors would be a measurement; no counter is "not measured"
+    assert f.since(0)["errors"]["bmc-farm"] == 2

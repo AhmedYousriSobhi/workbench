@@ -416,6 +416,7 @@
   .focuspane { margin-top:var(--sp3); } .focustab { width:100%; border-collapse:collapse; font-size:13px; } .focustab th, .focustab td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
   @media (max-width:640px) { .focustab thead { display:none; } .focustab tr { display:block; padding:6px 0; border-bottom:1px solid var(--line); } .focustab td { display:block; border:0; padding:2px 8px; } }
   @media (prefers-reduced-motion:reduce) { #flow [data-dim] { transition:none; } }
+  #flow .pk.err { fill:var(--bad); stroke:var(--fg); stroke-width:1.5; }
 </style>
 </head>
 <body>
@@ -470,7 +471,7 @@
     <div class="ckey" id="ckey" role="group" aria-label="Key to the diagram" hidden>
       <div class="kg"><span class="grp">What it is</span><span><i class="sw sim" aria-hidden="true"></i>simulated (dashed stripe)</span><span><i class="sw real" aria-hidden="true"></i>real (solid stripe)</span></div>
       <div class="kg"><span class="grp">State (border)</span><span><i class="sw up" aria-hidden="true"></i>up</span><span><i class="sw down" aria-hidden="true"></i>not reachable (dashed)</span><span><i class="sw off" aria-hidden="true"></i>off (dotted)</span></div>
-      <div class="kg"><span class="grp">On top</span><span><b class="dot" aria-hidden="true">●</b>pulsing: traffic now, or a node running GPU work</span><span><b class="dia" aria-hidden="true">◆</b>a fault travelling to its target</span><span><i class="sw ring" aria-hidden="true"></i><b class="tri" aria-hidden="true">▲</b>red ring: a fault applied in the last 30 s</span></div>
+      <div class="kg"><span class="grp">On top</span><span><b class="dot" aria-hidden="true">●</b>pulsing: traffic now, or a node running GPU work</span><span><b class="tri" aria-hidden="true">▲</b>a triangle dot: an answer the mock counted as an error</span><span><b class="dia" aria-hidden="true">◆</b>a fault travelling to its target</span><span><i class="sw ring" aria-hidden="true"></i><b class="tri" aria-hidden="true">▲</b>red ring: a fault applied in the last 30 s</span></div>
       <div class="kg"><span class="grp">Node</span><span><b aria-hidden="true">✓</b>healthy</span><span><b aria-hidden="true">▲</b>warning</span><span><b aria-hidden="true">✗</b>fault</span><span><b aria-hidden="true">⏻</b>off</span><span><b aria-hidden="true">?</b>unknown</span></div>
       <div class="kg"><span class="grp">Lines</span>
         <span><svg class="ls" viewBox="0 0 34 10" aria-hidden="true"><path class="lane ssh" d="M1 5H31" marker-end="url(#arr)"/></svg>direct SSH</span>
@@ -1568,7 +1569,7 @@ function paintBlocks() {
     const flt = recent.some(r => r.fault && r.to === k && r.t > Date.now() - 30000);  // a fault was applied to it in the last 30 s
     $('ff-' + k).setAttribute('class', 'fring' + (flt ? ' on' : '')); $('fx-' + k).setAttribute('class', 'badge flt' + (flt ? ' on' : '')); $('fa-' + k).setAttribute('class', 'badge act' + (rate[k] ? ' on' : ''));
     const si = document.getElementById('si-' + (k === 'gpu-exporter' ? 'gpu-exporter' : k)); if (si) si.textContent = k === 'jira-real' ? 'no request counter (the real Jira publishes none)' : `${rate[k] || 0} ${k === 'teleport' ? 'conn' : 'req'}/min · ${(flowSnap.totals[k] || 0).toLocaleString()} seen`;
-    $('fc-' + k).textContent = fitBox((flowSnap.totals[k] || 0) ? (flowSnap.totals[k]).toLocaleString() + ((flowSnap.totals[k]) === 1 ? ' request seen' : ' requests seen') : svcList().find(x => x[0] === k)[2]);
+    const ne = flowSnap.errors && flowSnap.errors[k]; $('fc-' + k).textContent = fitBox((flowSnap.totals[k] || 0) ? (flowSnap.totals[k]).toLocaleString() + (ne ? ((flowSnap.totals[k]) === 1 ? ' request' : ' requests') + ` · ${ne} ${ne === 1 ? 'error' : 'errors'}` : (flowSnap.totals[k]) === 1 ? ' request seen' : ' requests seen') : svcList().find(x => x[0] === k)[2]);
   }
   $('fc-clients').textContent = sent.toLocaleString() + ' requests';
   $('fc-injector').textContent = (flowSnap.faults || 0) + (flowSnap.faults === 1 ? ' fault applied' : ' faults applied');
@@ -1584,9 +1585,10 @@ function launch(ev) {
   const sp = svcPos[ev.to], fault = ev.from === 'injector', origin = fault ? { x: G.injector.x + G.injector.w, y: G.injector.y + G.injector.h / 2 } : svcOut[ev.to] || { x: G.clients.x + G.clients.w, y: G.clients.y + G.clients.h / 2 };
   const targets = fault && ev.nodes?.some(n => tiles[n]) ? ev.nodes.filter(n => tiles[n]).map(n => ({ pt: { x: tiles[n].x, y: tiles[n].y + tiles[n].h / 2 }, node: n })) : [{ pt: ev.to === 'teleport' ? { x: sp.x, y: sp.y + sp.h / 2 } : sp.entry || { x: sp.x + sp.w / 2, y: sp.y }, node: null }];
   for (const t of targets) for (let i = 0; i < Math.min(ev.n, 5) && dots.length < 60; i++) {
-    const el = fault ? sv('rect', { class: 'pk', width: 14, height: 14, rx: 2 }) : sv('circle', { class: 'pk', r: 7 }), trail = sv('circle', { class: 'pkt', r: 5 });
+    const err = !fault && i < Math.min(ev.err || 0, 5);  // an answer the mock counted as an error is a triangle, not a circle (#314); shape carries it, colour only helps
+    const el = fault ? sv('rect', { class: 'pk', width: 14, height: 14, rx: 2 }) : err ? sv('polygon', { class: 'pk err', points: '0,-10 10,8 -10,8' }) : sv('circle', { class: 'pk', r: 7 }), trail = sv('circle', { class: 'pkt', r: 5 });
     $('dots').append(trail, el);
-    dots.push({ el, trail, fault, bez: !fault && svcLane[ev.to] ? svcLane[ev.to] : curve(origin, t.pt), node: t.node, svc: ev.to, t0: performance.now() + i * 130, dur: fault ? 1700 : 1200 });
+    dots.push({ el, trail, fault, err, bez: !fault && svcLane[ev.to] ? svcLane[ev.to] : curve(origin, t.pt), node: t.node, svc: ev.to, t0: performance.now() + i * 130, dur: fault ? 1700 : 1200 });
   }
   if (!raf) raf = requestAnimationFrame(step);
 }
@@ -1600,7 +1602,7 @@ function step(now) {
     if (p >= 1) { d.el.remove(); d.trail.remove(); if (d.fault) hit(d); return false; }
     const q = Math.max(p, 0), pt = at(d.bez, q), tr = at(d.bez, Math.max(q - 0.07, 0)), vis = p < 0 ? 'hidden' : 'visible';
     d.el.setAttribute('visibility', vis); d.trail.setAttribute('visibility', vis); d.trail.setAttribute('cx', tr.x); d.trail.setAttribute('cy', tr.y);
-    if (d.fault) { d.el.setAttribute('transform', `translate(${pt.x} ${pt.y}) rotate(45) translate(-7 -7)`); } else { d.el.setAttribute('cx', pt.x); d.el.setAttribute('cy', pt.y); }
+    if (d.fault) { d.el.setAttribute('transform', `translate(${pt.x} ${pt.y}) rotate(45) translate(-7 -7)`); } else if (d.err) { d.el.setAttribute('transform', `translate(${pt.x} ${pt.y})`); } else { d.el.setAttribute('cx', pt.x); d.el.setAttribute('cy', pt.y); }
     return true;
   });
   raf = dots.length ? requestAnimationFrame(step) : 0;
@@ -1617,7 +1619,7 @@ function paintFeed(events) {
   const name = k => (svcList().find(x => x[0] === k) || [k, k])[1], hh = d => d.toTimeString().slice(0, 8);
   for (const e of events) {
     const fault = e.from === 'injector';
-    feed.unshift({ t: new Date(), fault, text: fault ? `Fault ${e.label || 'applied'} on ${(e.nodes || []).length ? e.nodes.join(', ') : name(e.to)}` : `${e.n} ${e.n === 1 ? 'request' : 'requests'} to ${name(e.to)}` });
+    feed.unshift({ t: new Date(), fault, text: fault ? `Fault ${e.label || 'applied'} on ${(e.nodes || []).length ? e.nodes.join(', ') : name(e.to)}` : `${e.n} ${e.n === 1 ? 'request' : 'requests'} to ${name(e.to)}` + (e.err ? `, ${e.err} ${e.err === 1 ? 'error' : 'errors'}` : '') });
   }
   feed.length = Math.min(feed.length, 40); $('dock-empty').hidden = feed.length > 0;
   $('timeline-feed').innerHTML = feed.map(f => `<li><span class="ft">${hh(f.t)}</span><span><b class="${f.fault ? 'f' : 'r'}" aria-hidden="true">${f.fault ? '◆' : '●'}</b> ${esc(f.text)}</span></li>`).join('');
