@@ -160,6 +160,8 @@ phases:
          how: "Every mock counts answers with status 400 or more in `errors` beside `requests` at /sim/stats; flow.py carries the rise as `err` on the event and the total as `errors` (absent where nothing counts it: Teleport, real Jira, older mocks = not measured). The page draws error answers as triangle dots (shape, not only colour) and says it in the Timeline and the service box. ADR 0009 addendum. Issue 314; needs a rebuilt mock image (benchctl up --build) for live data."}
       - {name: Blast radius, status: review, where: "webui/blast.py, webui/app.py, webui/static/index.html, tests/test_graph.py, scripts/ui_shots.py",
          how: "One reviewed table (webui/blast.py): for each node action, the services a client reads that it changes and a plain caption; /api/cluster carries it. When a fault event arrives the page marks those services, their client lines and the node with a dashed outline and shows the caption in Connections, announced to assistive tech, labelled declared-not-measured, cleared after 45 s or by Dismiss. A test checks every action has an entry and every named service has a client edge in the declared graph. Issue 315."}
+      - {name: View switcher, status: review, where: "webui/static/index.html, scripts/ui_shots.py",
+         how: "One segmented control under the diagram title (2.5D, Flat, Overview) replaces the separate level and style buttons: same look as the Connections / Timeline switch, keyboard operable (aria-pressed), the focus and selection survive a switch; the style is remembered, the level for the session; flat is the default under reduced motion and on a phone. Issue 324."}
       - {name: Budget manager, status: todo, how: "Profile/budget form (W-7)."}
 
   - id: p8

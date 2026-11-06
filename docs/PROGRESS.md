@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**85% built** (35 done, 48 in review, 11 partial, 4 to do, 98 items).
+**85% built** (35 done, 49 in review, 11 partial, 4 to do, 99 items).
 
 ## Roadmap
 
@@ -16,7 +16,7 @@ flowchart LR
     p4["People and chaos<br/>25%"]:::partial
     p5["Kubernetes<br/>50%"]:::partial
     p6["Fidelity VM<br/>0%"]:::partial
-    p7["Web UI and profiles<br/>83%"]:::partial
+    p7["Web UI and profiles<br/>84%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
     p0 --> p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7 --> p8
     classDef done fill:#1a7f37,stroke:#1a7f37,color:#fff
@@ -199,7 +199,7 @@ _One real Ubuntu VM with Redfish power control._
 
 0/1 done
 
-### Web UI and profiles (83%)
+### Web UI and profiles (84%)
 
 _One click from cold start to a busy cluster._
 
@@ -222,9 +222,10 @@ _One click from cold start to a busy cluster._
 | Focus view | 🔍 In review | Double-click a part (or F on a focused part) focuses it and its direct neighbours from the declared graph: the rest dims by an attribute toggle (nothing moves), faulted parts stay visible, Connections lists its edges (plane, kind, measured or declared), a breadcrumb under the diagram and Esc leave. ui_shots checks that no part moves. Issue 313. | `webui/static/index.html`, `scripts/ui_shots.py` | - |
 | Error-shaped dots | 🔍 In review | Every mock counts answers with status 400 or more in `errors` beside `requests` at /sim/stats; flow.py carries the rise as `err` on the event and the total as `errors` (absent where nothing counts it: Teleport, real Jira, older mocks = not measured). The page draws error answers as triangle dots (shape, not only colour) and says it in the Timeline and the service box. ADR 0009 addendum. Issue 314; needs a rebuilt mock image (benchctl up --build) for live data. | `components/*/ (GET /sim/stats)`, `webui/flow.py`, `webui/static/index.html`, `tests/test_flow.py`, `tests/real/test_flow_real.py` | - |
 | Blast radius | 🔍 In review | One reviewed table (webui/blast.py): for each node action, the services a client reads that it changes and a plain caption; /api/cluster carries it. When a fault event arrives the page marks those services, their client lines and the node with a dashed outline and shows the caption in Connections, announced to assistive tech, labelled declared-not-measured, cleared after 45 s or by Dismiss. A test checks every action has an entry and every named service has a client edge in the declared graph. Issue 315. | `webui/blast.py`, `webui/app.py`, `webui/static/index.html`, `tests/test_graph.py`, `scripts/ui_shots.py` | - |
+| View switcher | 🔍 In review | One segmented control under the diagram title (2.5D, Flat, Overview) replaces the separate level and style buttons: same look as the Connections / Timeline switch, keyboard operable (aria-pressed), the focus and selection survive a switch; the style is remembered, the level for the session; flat is the default under reduced motion and on a phone. Issue 324. | `webui/static/index.html`, `scripts/ui_shots.py` | - |
 | Budget manager | ⬜ To do | Profile/budget form (W-7). | - | - |
 
-1/18 done
+1/19 done
 
 ### macOS agent and CI (0%)
 
