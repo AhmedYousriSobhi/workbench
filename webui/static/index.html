@@ -421,6 +421,9 @@
   #flow [data-blast] .blk, #flow [data-blast] .nd, #flow [data-blast].lane { stroke:var(--bad); stroke-dasharray:7 4; stroke-width:3.5; }
   #flow path.lane[data-blast] { stroke:var(--bad); stroke-dasharray:7 4; stroke-width:4; opacity:1; }
   .blastpane { margin-top:var(--sp3); padding:var(--sp3); border:1px dashed var(--bad); border-radius:10px; } .blastpane p { margin:var(--sp2) 0; }
+  /* view switcher (#324): the same segmented look as Connections / Timeline */
+  .viewrow { margin-top:var(--sp2); } .seg { display:flex; gap:2px; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:3px; width:fit-content; } .seg .btn { border:0; background:transparent; border-radius:8px; }
+  .seg .btn[aria-pressed=true] { background:var(--panel); box-shadow:0 0 0 1.5px var(--accent) inset; font-weight:650; }
 </style>
 </head>
 <body>
@@ -468,8 +471,9 @@
   <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/benchctl start</code>.</div>
     <div class="nodeswrap" id="nodeswrap">
   <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 id="traffic-h" style="margin:0">Infrastructure architecture</h2>
-    <span class="grow"></span><button class="btn small" id="keybtn" aria-expanded="false" aria-controls="ckey">Key</button><button class="btn small" id="levelbtn" aria-pressed="false">Overview</button><button class="btn small" id="viewtoggle" aria-pressed="true">Flat view</button><button class="btn small" id="flowpause" aria-pressed="false" aria-label="Pause animation">Pause</button>
+    <span class="grow"></span><button class="btn small" id="keybtn" aria-expanded="false" aria-controls="ckey">Key</button><button class="btn small" id="flowpause" aria-pressed="false" aria-label="Pause animation">Pause</button>
     <button class="btn small" id="treetoggle" aria-expanded="true" aria-controls="nodesmain">Hide node list</button></div>
+    <div class="row viewrow"><div class="seg" id="viewseg" role="group" aria-label="View of the architecture"><button class="btn small" id="vw-iso" aria-pressed="true">2.5D</button><button class="btn small" id="vw-flat" aria-pressed="false">Flat</button><button class="btn small" id="vw-ov" aria-pressed="false">Overview</button></div></div>
     <div class="flowscroll"><svg id="flow" viewBox="0 0 1120 470" role="img" aria-label="Infrastructure architecture: clients and users, the access layer (login nodes, each direct SSH, Teleport or both, and the Teleport proxy when on), the services, and the nodes. Each part opens its details."></svg></div>
     <div class="ovprev" id="ovprev" role="tooltip" hidden></div><div class="srtable" id="ovtable"></div>
     <div class="ckey" id="ckey" role="group" aria-label="Key to the diagram" hidden>
@@ -1260,7 +1264,7 @@ let levelPin = null, dived = false; try { levelPin = sessionStorage.getItem('wor
 const curLevel = () => levelPin || (clusterList().length > 1 || nodeList().length > OVERVIEW_AT ? 'overview' : 'full');
 function paintLevelUi() {
   const ov = curLevel() === 'overview';
-  $('levelbtn').textContent = ov ? 'Full diagram' : 'Overview'; $('levelbtn').setAttribute('aria-pressed', ov);
+  paintViewSeg();
   paintCrumb();
 }
 function setLevel(l, dive) {
@@ -1454,7 +1458,6 @@ function applyBlast() {
 }
 function setBlast(b) { blastNow = b; clearTimeout(blastTimer); if (b) blastTimer = setTimeout(() => setBlast(null), 45000); applyBlast(); if (b) announce(`Fault: ${b.title}. ${b.caption} (${b.basis})`); }
 const buildFlowBase = buildFlow; buildFlow = function () { buildFlowBase(); tagEntities(); applyFocus(); applyBlast(); };
-$('levelbtn').onclick = () => curLevel() === 'overview' ? enterCluster(clusterList()[0]) : setLevel('overview', false);
 $('crumb-all').onclick = () => setLevel('overview', false);
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && focusId && curLevel() === 'full' && !openNode && $('ckey').hidden && $('pop').hidden && !document.querySelector('dialog[open]')) { focusOn(null); return; }
@@ -1671,12 +1674,19 @@ function setTree(open, remember = true) {
 $('treetoggle').onclick = () => setTree($('treetoggle').getAttribute('aria-expanded') !== 'true');
 
 function setView(iso, remember) {  // 2.5D game style or the flat baseline (#320)
-  $('trafficpanel').dataset.view = iso ? 'iso' : 'flat'; $('viewtoggle').setAttribute('aria-pressed', iso); $('viewtoggle').textContent = iso ? 'Flat view' : '2.5D view';
+  $('trafficpanel').dataset.view = iso ? 'iso' : 'flat'; paintViewSeg();
   if (remember) try { localStorage.setItem('workbench-view', iso ? 'iso' : 'flat'); } catch (e) { /* not remembered */ }
 }
-$('viewtoggle').onclick = () => setView($('trafficpanel').dataset.view !== 'iso', true);
+function paintViewSeg() {  // the view switcher (#324): one control for the style (2.5D, flat) and the level (diagram, overview)
+  const ov = curLevel() === 'overview', iso = $('trafficpanel').dataset.view === 'iso';
+  for (const [id, on] of [['vw-iso', !ov && iso], ['vw-flat', !ov && !iso], ['vw-ov', ov]]) $(id).setAttribute('aria-pressed', on);
+}
+const toDiagram = () => curLevel() === 'overview' ? enterCluster(clusterList()[0]) : 0;
+$('vw-iso').onclick = () => { setView(true, true); toDiagram(); };
+$('vw-flat').onclick = () => { setView(false, true); toDiagram(); };
+$('vw-ov').onclick = () => setLevel('overview', false);
 let viewPref = null; try { viewPref = localStorage.getItem('workbench-view'); } catch (e) { /* default */ }
-setView(viewPref ? viewPref === 'iso' : !matchMedia('(prefers-reduced-motion: reduce)').matches, false);
+setView(viewPref ? viewPref === 'iso' : !matchMedia('(prefers-reduced-motion: reduce), (max-width: 640px)').matches, false);  // default per device: flat under reduced motion and on a phone
 paintLevelUi();
 let treePref = null; try { treePref = localStorage.getItem('workbench-tree'); } catch (e) { /* default */ }
 if (treePref === 'closed') setTree(false, false);  // the list sits beside or under the diagram; folding it away is remembered

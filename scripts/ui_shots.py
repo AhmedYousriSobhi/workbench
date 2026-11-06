@@ -230,6 +230,16 @@ def capture(out: Path) -> dict:
                         result["a11y"].append(f"focus view: {f}")
                     if before != after:
                         result["a11y"].append("focus view moved a part of the diagram")
+                    page.click("#vw-flat"); page.wait_for_timeout(200)  # the view switcher (#324): style and level change, the focus stays
+                    if page.evaluate("focusId") != "login" or page.get_attribute("#trafficpanel", "data-view") != "flat" or page.get_attribute("#vw-flat", "aria-pressed") != "true":
+                        result["a11y"].append("switching to the flat view lost the focus or did not change the style")
+                    page.click("#vw-ov"); page.wait_for_timeout(300)
+                    if not page.locator("#flow .ovcard").count() or page.get_attribute("#vw-ov", "aria-pressed") != "true":
+                        result["a11y"].append("the Overview button of the view switcher did not open the overview")
+                    page.click("#vw-iso"); page.wait_for_timeout(400)
+                    if page.locator("#flow .nd").count() != 6 or page.get_attribute("#trafficpanel", "data-view") != "iso":
+                        result["a11y"].append("the 2.5D button of the view switcher did not return to the diagram in 2.5D")
+                    page.locator("#flow g[data-ent='login']").dblclick(); page.wait_for_timeout(200)  # focus again for the Esc check
                     page.keyboard.press("Escape"); page.wait_for_timeout(200)
                     if page.evaluate("document.querySelectorAll('#flow [data-dim]').length") or page.evaluate("focusId"):
                         result["a11y"].append("Esc did not leave the focus view")
