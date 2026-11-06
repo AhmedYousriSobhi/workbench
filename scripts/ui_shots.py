@@ -236,6 +236,27 @@ def capture(out: Path) -> dict:
                     if not page.locator("#flow .ovcard").count() or not page.locator("#ovtable table").count():
                         result["a11y"].append("the breadcrumb did not return to the overview, or the cluster table is missing")
                 page.close()
+            for w, h, count in ((1280, 900, 2), (1280, 900, 12), (1920, 1080, 12)):  # several clusters (#327): a grid of cards that fits the panel; entering one shows that cluster
+                page = browser.new_page(viewport={"width": w, "height": h})
+                page.goto(url)
+                page.wait_for_selector("#flow rect.blk")
+                page.wait_for_timeout(1200)
+                page.evaluate(SYNTH_CLUSTER)
+                page.evaluate("""n => { const c = JSON.parse(lastCluster), base = c.nodes;
+                    c.clusters = Array.from({length: n}, (_, i) => ({name: 'cluster-' + (i + 1), nodes: base.slice(0, i === 1 ? 3 : base.length), logins: c.logins, services: c.services}));
+                    lastCluster = JSON.stringify(c); renderCluster(c); setLevel('overview', false); }""", count)
+                page.wait_for_timeout(400)
+                m = page.evaluate("() => ({scroll: document.documentElement.scrollHeight - innerHeight, cards: document.querySelectorAll('#flow .ovcard').length, rows: document.querySelectorAll('#ovtable tbody tr').length, over: curLevel()})")
+                if m["scroll"] > 2 or m["cards"] != count or m["rows"] != count or m["over"] != "overview":
+                    result["a11y"].append(f"{count} clusters at {w}x{h}: {m}")
+                page.locator("#flow .ovcard").nth(1).dblclick(); page.wait_for_timeout(500)
+                m = page.evaluate("() => ({nodes: document.querySelectorAll('#flow .nd').length, crumb: document.querySelector('#crumb-name').textContent, list: document.querySelectorAll('#tree .er.node, #tree [data-node]').length})")
+                if m["nodes"] != 3 or m["crumb"] != "cluster-2":
+                    result["a11y"].append(f"entering cluster-2 of {count} at {w}x{h} did not show its own diagram: {m}")
+                page.keyboard.press("Escape"); page.wait_for_timeout(300)
+                if page.locator("#flow .ovcard").count() != count:
+                    result["a11y"].append(f"Esc did not return to the {count}-cluster overview")
+                page.close()
             browser.close()
     finally:
         proc.terminate()
