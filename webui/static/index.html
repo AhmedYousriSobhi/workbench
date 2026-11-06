@@ -359,6 +359,24 @@
   .btn.copy::before { content:""; display:inline-block; width:.8em; height:.8em; margin-right:.45em; vertical-align:-1px; border:1.5px solid currentColor; border-radius:2px; box-shadow:2px -2px 0 -0.5px var(--panel),2px -2px 0 0.5px currentColor; }
   #flow .lane.on { filter:drop-shadow(0 0 4px currentColor); }
   @media (prefers-reduced-motion:reduce) { #flow .lane.on { filter:none; } }
+
+  /* 2.5D game style (#320), kept calm: a faint floor, one short side face per slab, soft shadows, glow only where something is live or wrong.
+     CSS only (filters + gradients), no WebGL; flat view stays one click away and is the default under reduced motion. */
+  #trafficpanel[data-view="iso"] { --ext:color-mix(in srgb,var(--bg) 78%,var(--line)); --glow:var(--accent); }
+  #trafficpanel[data-view="iso"] .flowscroll { border-radius:12px; background:
+      linear-gradient(30deg,transparent 48%,color-mix(in srgb,var(--line) 45%,transparent) 49.2%,transparent 50.4%) 0 0/72px 42px,
+      linear-gradient(-30deg,transparent 48%,color-mix(in srgb,var(--line) 45%,transparent) 49.2%,transparent 50.4%) 0 0/72px 42px,
+      color-mix(in srgb,var(--bg) 70%,var(--panel)); }
+  #trafficpanel[data-view="iso"] #flow .frame { fill:color-mix(in srgb,var(--panel) 92%,var(--accent)); stroke:color-mix(in srgb,var(--line) 80%,var(--accent)); stroke-width:1.5;
+      filter:drop-shadow(3px 3px 0 var(--ext)) drop-shadow(6px 8px 8px rgba(0,0,0,.22)); }
+  #trafficpanel[data-view="iso"] #flow .blk, #trafficpanel[data-view="iso"] #flow .nd, #trafficpanel[data-view="iso"] #flow .chipbg {
+      filter:drop-shadow(2px 2px 0 var(--ext)) drop-shadow(3px 5px 4px rgba(0,0,0,.25)); }
+  #trafficpanel[data-view="iso"] #flow .blk.up, #trafficpanel[data-view="iso"] #flow .nd.ok { filter:drop-shadow(2px 2px 0 var(--ext)) drop-shadow(3px 5px 4px rgba(0,0,0,.25)); }
+  #trafficpanel[data-view="iso"] #flow .blk.down, #trafficpanel[data-view="iso"] #flow .nd.fault { filter:drop-shadow(2px 2px 0 var(--ext)) drop-shadow(0 0 6px color-mix(in srgb,var(--bad) 55%,transparent)); }
+  #trafficpanel[data-view="iso"] #flow .lane { filter:none; }
+  #trafficpanel[data-view="iso"] #flow .lane.on { filter:drop-shadow(0 0 3px currentColor); }
+  #trafficpanel[data-view="iso"] #flow .pk, #trafficpanel[data-view="iso"] #flow .dotc, #trafficpanel[data-view="iso"] #flow .dotf { filter:drop-shadow(0 0 3px var(--glow)); }
+  #trafficpanel[data-view="iso"] #flow .hit:hover rect, #trafficpanel[data-view="iso"] #flow .hit:focus-visible rect { stroke-width:3; }
 </style>
 </head>
 <body>
@@ -406,7 +424,7 @@
   <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/benchctl start</code>.</div>
     <div class="nodeswrap" id="nodeswrap">
   <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 id="traffic-h" style="margin:0">Infrastructure architecture</h2>
-    <span class="grow"></span><button class="btn small" id="keybtn" aria-expanded="false" aria-controls="ckey">Key</button><button class="btn small" id="flowpause" aria-pressed="false">Pause animation</button>
+    <span class="grow"></span><button class="btn small" id="keybtn" aria-expanded="false" aria-controls="ckey">Key</button><button class="btn small" id="viewtoggle" aria-pressed="true">Flat view</button><button class="btn small" id="flowpause" aria-pressed="false">Pause animation</button>
     <button class="btn small" id="treetoggle" aria-expanded="true" aria-controls="nodesmain">Hide node list</button></div>
     <div class="flowscroll"><svg id="flow" viewBox="0 0 1120 470" role="img" aria-label="Infrastructure architecture: clients and users, the access layer (login nodes, each direct SSH, Teleport or both, and the Teleport proxy when on), the services, and the nodes. Each part opens its details."></svg></div>
     <div class="ckey" id="ckey" role="group" aria-label="Key to the diagram" hidden>
@@ -1384,6 +1402,14 @@ function setTree(open, remember = true) {
   if (remember) try { localStorage.setItem('workbench-tree', open ? 'open' : 'closed'); } catch (e) { /* not remembered */ }
 }
 $('treetoggle').onclick = () => setTree($('treetoggle').getAttribute('aria-expanded') !== 'true');
+
+function setView(iso, remember) {  // 2.5D game style or the flat baseline (#320)
+  $('trafficpanel').dataset.view = iso ? 'iso' : 'flat'; $('viewtoggle').setAttribute('aria-pressed', iso); $('viewtoggle').textContent = iso ? 'Flat view' : '2.5D view';
+  if (remember) try { localStorage.setItem('workbench-view', iso ? 'iso' : 'flat'); } catch (e) { /* not remembered */ }
+}
+$('viewtoggle').onclick = () => setView($('trafficpanel').dataset.view !== 'iso', true);
+let viewPref = null; try { viewPref = localStorage.getItem('workbench-view'); } catch (e) { /* default */ }
+setView(viewPref ? viewPref === 'iso' : !matchMedia('(prefers-reduced-motion: reduce)').matches, false);
 let treePref = null; try { treePref = localStorage.getItem('workbench-tree'); } catch (e) { /* default */ }
 if (treePref === 'closed') setTree(false, false);  // the list sits beside or under the diagram; folding it away is remembered
 if (dockWide()) paintReach();
