@@ -91,6 +91,8 @@ the page is visible and the Nodes tab is open. **Key** (top right of the diagram
 
 **Blast radius.** When a fault is applied (a node button or a scenario step), the parts a client reads that the fault changes get a **dashed** outline (shape, not only colour), and Connections shows one plain sentence of what a client would observe, for example *the BMC reports the node Off, the BCM marks it down and its GPU metric series stop*. Every caption says it is **declared from the simulator's rules, not measured**. It clears after 45 seconds or with **Dismiss**. The table behind it is `webui/blast.py`, checked against the edge model by `tests/test_graph.py`.
 
+**Lenses.** The **Lens** menu next to the view switcher restyles the same layout by plane: *Access* (how users get in), *Management* (BMC and BCM), *Telemetry* (GPU metrics), *Tickets* (Jira) and *Faults*; everything outside the plane dims and nothing moves. **Client's eye** shows, for every service a client should call, how many calls the mocks counted, how many were errors, the rate per minute and a verdict (*called*, *not called yet*, *not reachable*), and says *not measured* where nothing counts (the real Jira, a service with no error counter). It is built only from the per-mock counters, so it tells you whether the client is reading everything, not which endpoint it used. With the stack down it shows one message instead.
+
 **Hover** a part for a one-line tip (its state and how it is reached). **Click** it (or Tab to it and press Enter) for a pop-up window
 next to it with its address, the credential file, a command to copy, and buttons for the details:
 
