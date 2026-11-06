@@ -36,6 +36,7 @@ class Governor:
         self.counts = {"actions": 0, "action_failures": 0, "admit_ok": 0, "admit_refused": 0}
         self.metrics: bytes = b""  # rendered at the end of each step, served by governor.metrics
         self._lock = threading.Lock()
+        self._change_lock = threading.Lock()  # one `benchctl` stack change at a time: two `up` would rewrite the same files
         self._prev = 0
         self.watchdog, self.watch_interval = watchdog, watch_interval
         self.violations: set[str] = set()
@@ -181,7 +182,8 @@ class Governor:
 
         def run() -> None:
             try:
-                rc = self.effector(args)
+                with self._change_lock:
+                    rc = self.effector(args)
             except Exception as e:  # noqa: BLE001
                 self._record(f"FAILED {label}: {e} {tag}")
                 return
