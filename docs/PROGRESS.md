@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**84% built** (35 done, 43 in review, 11 partial, 4 to do, 93 items).
+**84% built** (35 done, 44 in review, 11 partial, 4 to do, 94 items).
 
 ## Roadmap
 
@@ -16,7 +16,7 @@ flowchart LR
     p4["People and chaos<br/>25%"]:::partial
     p5["Kubernetes<br/>50%"]:::partial
     p6["Fidelity VM<br/>0%"]:::partial
-    p7["Web UI and profiles<br/>77%"]:::partial
+    p7["Web UI and profiles<br/>79%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
     p0 --> p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7 --> p8
     classDef done fill:#1a7f37,stroke:#1a7f37,color:#fff
@@ -199,7 +199,7 @@ _One real Ubuntu VM with Redfish power control._
 
 0/1 done
 
-### Web UI and profiles (77%)
+### Web UI and profiles (79%)
 
 _One click from cold start to a busy cluster._
 
@@ -217,9 +217,10 @@ _One click from cold start to a busy cluster._
 | Animated workload dots | 🔍 In review | Cluster tab Traffic panel: a dot travels from Clients to a mock each time it serves a real request (the mocks count them at /sim/stats; health checks, /sim calls and the UI's own polls are excluded), a diamond from Fault injector when a fault is applied. SSE at /api/flow opened only while the tab shows; pause button; stops at governor L3+ and for reduced motion. Slurm job dots are not drawn (the UI cannot read the scheduler). ADR 0009. | `webui/flow.py`, `components/*/ (GET /sim/stats)`, `webui/static/index.html` | #89 |
 | Canvas-first dashboard and fitted diagram | 🔍 In review | The Nodes tab is one grid: the Infrastructure architecture fills the left column, the node list is top right and Connections bottom right (how to reach each part with Copy, the selected part or node with its actions, a Timeline tab). The diagram is built from the measured shape of its panel (top to bottom: Clients, Access, Cluster nodes, Services column at the right) and rebuilt when the panel changes; node tiles grow to fill and show temperature and GPU load. The legend is a Key button with a popover that includes line samples. ui_shots.py checks fit, no page scroll at 1280x900 (6 nodes) and 1920x1080 (50 nodes), and the Key keyboard behaviour. Issue 319, ADR 0028; global view (issue 321), focus view (313) and 2.5D (320) follow. | `webui/static/index.html`, `scripts/ui_shots.py`, `docs/adr/0028-canvas-first-dashboard-and-fitted-diagram.md` | - |
 | Declared graph of the Infrastructure architecture | 🔍 In review | /api/cluster now carries `graph`: entities and typed edges (plane, drawn kind, measured or declared) derived from the snapshot in webui/graph.py. An edge is measured only where a counter backs it (mock request counters, Teleport connections, recorded faults); SSH, jump and Teleport hops and the real Jira are declared. The diagram draws only edges named in the model (data-edge, data-plane, data-measured on each line); the fault lane to the real Jira, which no scenario can reach, is no longer drawn. Slice 1 of the depth view (issue 312, epic 317); focus view, error-shape dots, blast radius and lenses follow. | `webui/graph.py`, `webui/app.py`, `webui/static/index.html`, `tests/test_graph.py`, `scripts/ui_shots.py` | - |
+| Themes and richer diagram look | 🔍 In review | The theme switch cycles Auto, Light, Dark, Midnight (deep navy, neon accents) and Dim (soft slate, low glare); tokens only, remembered in the browser. The 2.5D diagram gets gradient top faces tinted by kind and a decorative icon per service. Issue 325. | `webui/static/index.html` | - |
 | Budget manager | ⬜ To do | Profile/budget form (W-7). | - | - |
 
-1/13 done
+1/14 done
 
 ### macOS agent and CI (0%)
 

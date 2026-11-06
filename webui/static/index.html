@@ -377,6 +377,24 @@
   #trafficpanel[data-view="iso"] #flow .lane.on { filter:drop-shadow(0 0 3px currentColor); }
   #trafficpanel[data-view="iso"] #flow .pk, #trafficpanel[data-view="iso"] #flow .dotc, #trafficpanel[data-view="iso"] #flow .dotf { filter:drop-shadow(0 0 3px var(--glow)); }
   #trafficpanel[data-view="iso"] #flow .hit:hover rect, #trafficpanel[data-view="iso"] #flow .hit:focus-visible rect { stroke-width:3; }
+
+  /* more themes (#325): tokens only. Midnight = deep navy with neon accents; Dim = soft slate, low glare. All keep text contrast >= 4.5:1. */
+  :root[data-theme=midnight] { color-scheme:dark; --bg:#070b17; --panel:#0e1530; --line:#2a386a; --fg:#e8edff; --dim:#a8b4dc; --accent:#4cc9ff; --on-accent:#05101c;
+    --ok:#3ddc97; --warn:#ffc857; --bad:#ff7b8a; --pending:#a8b4dc; --brand:#2fe0c8; --sim:#b794ff; --real:#5aa9ff; --L0:#238636; --L1:#9e6a03; --L2:#b35900; --L3:#c2561b; --L4:#da3633; --L5:#b62324; --none:#4a5578; --shadow:none; --sel:rgba(76,201,255,.16); }
+  :root[data-theme=dim] { color-scheme:dark; --bg:#1b1e25; --panel:#252932; --line:#3b4150; --fg:#dadee6; --dim:#a7afbc; --accent:#86b8f2; --on-accent:#141820;
+    --ok:#72c586; --warn:#dcb85f; --bad:#f09590; --pending:#a7afbc; --brand:#5fc9bb; --sim:#b9a0f2; --real:#86b8f2; --L0:#2f7d3d; --L1:#8f6a12; --L2:#a85d0c; --L3:#b5582a; --L4:#c9423f; --L5:#a63232; --none:#4a5160; --shadow:none; --sel:rgba(134,184,242,.15); }
+
+  /* richer 2.5D faces (#325): a light top edge fading down, tinted by kind */
+  #flow .gs-t { stop-color:color-mix(in srgb,var(--panel) 86%,#fff); } #flow .gs-b { stop-color:var(--panel); }
+  #flow .gm-t { stop-color:color-mix(in srgb,var(--sim) 34%,var(--panel)); } #flow .gm-b { stop-color:color-mix(in srgb,var(--sim) 12%,var(--panel)); }
+  #flow .gr-t { stop-color:color-mix(in srgb,var(--real) 38%,var(--panel)); } #flow .gr-b { stop-color:color-mix(in srgb,var(--real) 14%,var(--panel)); }
+  #flow .gf-t { stop-color:color-mix(in srgb,var(--accent) 16%,var(--panel)); } #flow .gf-b { stop-color:color-mix(in srgb,var(--accent) 5%,var(--panel)); }
+  #trafficpanel[data-view="iso"] #flow .blk, #trafficpanel[data-view="iso"] #flow .nd, #trafficpanel[data-view="iso"] #flow .chipbg { fill:url(#g-slab); }
+  #trafficpanel[data-view="iso"] #flow .blk.sim { fill:url(#g-sim); } #trafficpanel[data-view="iso"] #flow .blk.real { fill:url(#g-real); }
+  #trafficpanel[data-view="iso"] #flow .frame { fill:url(#g-frame); }
+  #flow .sico { fill:none; stroke:var(--fg); stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; opacity:.22; pointer-events:none; }
+  /* where a jump line crosses a Teleport line the Teleport line breaks (a halo in the frame colour under the jump line) */
+  #flow .lanehalo { fill:none; stroke:color-mix(in srgb,var(--panel) 70%,var(--bg)); stroke-width:9; pointer-events:none; } #trafficpanel[data-view="iso"] #flow .lanehalo { stroke:color-mix(in srgb,var(--panel) 92%,var(--accent)); }
 </style>
 </head>
 <body>
@@ -1108,6 +1126,8 @@ async function openConnection(id) {  // the Connections tab, with the row for th
 }
 function flowSig(nodes) { return nodes.map(n => n.name).join(',') + (hasTeleport() ? '+teleport' : '') + '|' + loginList().map(l => l.name + ':' + l.mode + (l.up === false ? ':down' : '')).join(','); }
 // ---- the diagram (#192): clients -> services and access (login nodes, Teleport) -> nodes, one labelled line per way in ----
+const SVC_ICON = { 'bmc-farm': 'M4 5h16v5H4z M4 14h16v5H4z M7 7.5h.01 M7 16.5h.01', 'bcm-mock': 'M3 5h18v14H3z M3 9h18', 'jira-mock': 'M12 3l9 9-9 9-9-9z', 'jira-real': 'M12 3l9 9-9 9-9-9z M12 8l4 4-4 4-4-4z',
+  'gpu-exporter': 'M7 7h10v10H7z M10 3v4 M14 3v4 M10 17v4 M14 17v4 M3 10h4 M3 14h4 M17 10h4 M17 14h4', teleport: 'M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z' };  // decorative glyphs, one per kind
 const SVC_METHOD = { 'bmc-farm': 'HTTPS Redfish', 'bcm-mock': 'HTTP JSON', 'jira-mock': 'HTTP REST', 'jira-real': 'HTTP REST', 'gpu-exporter': 'HTTP metrics', teleport: 'tsh · HTTPS' };
 const MODE_TEXT = { ssh: 'Direct SSH', teleport: 'Teleport only', both: 'Direct SSH + Teleport' };
 const LOGIN_ONE = [{ name: 'login', mode: 'ssh', port: 2222 }];
@@ -1160,7 +1180,7 @@ function flowGeom(nodes, acc, svcs, a, col, u) {
   P.tileM = { y1: 8 + tn * 0.9, y2: 8 + tn * 0.9 + tn * 1.3, y3: 8 + tn * 0.9 + tn * 2.6 };
   if (col) {  // top to bottom: Clients row, Access row, Cluster nodes; the Services column sits at the right and its lines run down a gutter and enter from the left
     const tb = 10 + UF.title * u * 0.95, chipH = Math.ceil(UF.chip * u * 1.3 + 22), R1 = Math.ceil(tb + 12 + chipH + 14), GAPY = 64, GW = 110;
-    const mA = boxM(u, 4), mS = boxM(u, 3), ACCH = 46 + mA.h + 14, top = Math.ceil(tb + 34);
+    const mA = boxM(u, 4), mS = boxM(u, 3), nU = hasTeleport() ? acc.filter(l => l.mode && l.mode !== 'ssh').length : 0, ACCH = 46 + mA.h + 14 + (nU ? 14 + nU * 12 : 0), top = Math.ceil(tb + 34);
     const needA = Math.max(150, ...acc.map(x => Array.isArray(x) ? Math.max(W(x[1], 'sn', 600) + 44, W('✓ up · 99 conn/min', 'sub'), W('99,999 requests seen', 'sub')) + 24
       : Math.max(W(x.name, 'sn', 600), W(MODE_TEXT[x.mode], 'sub'), W(x.ip || x.name, 'sub'), W(portLine(x), 'sub')) + 24));
     const SWD = Math.ceil(Math.max(180, ...svcs.map(([, label, sub]) => Math.max(W(label, 'sn', 600) + 44, W('✓ up · 99,999 req/min', 'sub'), W('99,999 requests seen', 'sub'), W(sub, 'sub')) + 24))), svW = SWD + 32;
@@ -1218,7 +1238,9 @@ function buildFlow() {
   G.clients = P.clients; G.injector = P.injector; G.cluster = P.cluster;
   g.setAttribute('viewBox', `0 0 ${P.FW} ${P.H}`); g.setAttribute('data-fit', col ? 'c' : 'n'); g.style.setProperty('--u', u.toFixed(3));
   const fr = (rc, rx) => sv('rect', { class: 'frame', x: rc.x, y: rc.y, width: rc.w, height: rc.h, rx });
-  const defs = sv('defs', {}), mk = sv('marker', { id: 'arr', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, orient: 'auto' }); mk.append(sv('path', { d: 'M0 0 L10 5 L0 10 z' })); defs.append(mk); g.append(defs);
+  const defs = sv('defs', {}), mk = sv('marker', { id: 'arr', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, orient: 'auto' }); mk.append(sv('path', { d: 'M0 0 L10 5 L0 10 z' })); defs.append(mk);
+  for (const [id, a, b] of [['slab', 'gs-t', 'gs-b'], ['sim', 'gm-t', 'gm-b'], ['real', 'gr-t', 'gr-b'], ['frame', 'gf-t', 'gf-b']]) { const lg = sv('linearGradient', { id: 'g-' + id, x1: 0, y1: 0, x2: 0, y2: 1 }); lg.append(sv('stop', { offset: 0, class: a }), sv('stop', { offset: 1, class: b })); defs.append(lg); }
+  g.append(defs);
   g.append(fr(P.clients, 12), fr(P.injector, 12), fr(P.access, 14), fr(P.svcFrame, 14), fr(P.cluster, 14));
   const jy = P.injector.y, cy = P.clients.y, ix = P.injector.x + 14, tb = P.tb, sub = UF.sub * u, W = (t, k, w, up) => textW(t, k, u, w, up);
   g.append(sv('text', { class: 'ftitle', x: P.clients.x + 14, y: cy + tb }, 'Clients'), sv('text', { class: 'ftitle', x: ix, y: jy + tb }, 'Faults'), sv('text', { class: 'ftitle', x: P.access.x + 16, y: P.access.y + tb }, 'Access: how users get in'),
@@ -1243,7 +1265,7 @@ function buildFlow() {
     const kind = cls === 'blkacc' ? '' : REAL_SERVICES.has(k) ? 'real' : 'sim', bx = UF.sub * u;
     bg.append(sv('rect', { class: 'blk ' + cls + (kind ? ' ' + kind : ''), id: 'fb-' + k, x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), sv('rect', { class: 'fring', id: 'ff-' + k, x: p.x - 4, y: p.y - 4, width: p.w + 8, height: p.h + 8, rx: 13 }), ...(kind ? [sv('path', { class: 'kbar ' + kind, d: `M${p.x + 4} ${p.y + 12} V${p.y + p.h - 12}` })] : []),
       sv('text', { class: 'badge act', id: 'fa-' + k, x: p.x + p.w - bx * 2.4, y: p.y + m.ys[0] }, '●'), sv('text', { class: 'badge flt', id: 'fx-' + k, x: p.x + p.w - bx * 1.2, y: p.y + m.ys[0] }, '▲'),
-      sv('text', { class: 'sn', x: p.x + 12, y: p.y + m.ys[0] }, label), sv('text', { class: 'sub', id: 'fs-' + k, x: p.x + 12, y: p.y + m.ys[1] }, ''), sv('text', { class: 'sub', id: 'fc-' + k, x: p.x + 12, y: p.y + m.ys[2] }, subtxt)); svcFit[k] = p.w - 24; return bg;
+      sv('text', { class: 'sn', x: p.x + 12, y: p.y + m.ys[0] }, label), sv('text', { class: 'sub', id: 'fs-' + k, x: p.x + 12, y: p.y + m.ys[1] }, ''), sv('text', { class: 'sub', id: 'fc-' + k, x: p.x + 12, y: p.y + m.ys[2] }, subtxt)); svcFit[k] = p.w - 24; const ic = SVC_ICON[k]; if (ic) { const z = Math.min(p.h * 0.4, 30); bg.append(sv('path', { class: 'sico', d: ic, 'aria-hidden': 'true', transform: `translate(${p.x + p.w - z - 8} ${p.y + p.h - z - 6}) scale(${z / 24})` })); } return bg;
   };
   const svTip = k => { const l = svcList().find(x => x[0] === k); const up = flowSnap?.reachable[k]; return [l[1] + (REAL_SERVICES.has(k) ? ' (real)' : k === 'teleport' ? '' : ' (simulated)') + ' · ' + (up ? 'up' : flowSnap ? 'not reachable' : 'checking'), SVC_METHOD[k] + ' · click for address and command']; };
   const place = acc.map((a2, i) => [a2, P.place[i]]), tpP = tpBox && place[0][1], cb = P.clients.y + P.clients.h;
@@ -1253,10 +1275,10 @@ function buildFlow() {
     for (const [l, p] of place) {
       if (l === tpBox) continue;
       if (l.mode !== 'teleport') edge('ssh', poly([{ x: p.x + p.w / 2, y: cb }, { x: p.x + p.w / 2, y: p.y }]), 'direct SSH', 0.5, null, `clients>${l.name}:ssh`);
-      if (l.mode !== 'ssh' && tpBox) { const by = p.y + p.h, uy = by + 14 + (uu++) * 9, sx = tpP.x + tpP.w / 2 - 14; edge('teleport', poly([{ x: sx, y: tpP.y + tpP.h }, { x: sx, y: uy }, { x: p.x + p.w / 2 - 14, y: uy }, { x: p.x + p.w / 2 - 14, y: by }]), '', 0.5, null, `teleport>${l.name}:teleport`); }
+      if (l.mode !== 'ssh' && tpBox) { const by = p.y + p.h, uy = by + 12 + (uu++) * 12, sx = tpP.x + tpP.w / 2 - 14; edge('teleport', poly([{ x: sx, y: tpP.y + tpP.h }, { x: sx, y: uy }, { x: p.x + p.w / 2 - 14, y: uy }, { x: p.x + p.w / 2 - 14, y: by }]), '', 0.5, null, `teleport>${l.name}:teleport`); }
     }
-    for (const [l, p] of place) { const jx = p.x + p.w / 2 + 22; if (l !== tpBox) edge('jump', poly([{ x: jx, y: p.y + p.h }, { x: jx, y: P.cluster.y }]), 'jump host', 0.5, null, `${l.name}>nodes:jump`); }
-    if (tpBox) edge('teleport', poly([{ x: tpP.x + tpP.w / 2 + 22, y: tpP.y + tpP.h }, { x: tpP.x + tpP.w / 2 + 22, y: P.cluster.y }]), 'Teleport', 0.5, null, 'teleport>nodes:teleport');
+    for (const [l, p] of place) { const jx = p.x + p.w / 2 + 22; if (l !== tpBox) lanes.append(sv('path', { class: 'lanehalo', d: dpath(poly([{ x: jx, y: p.y + p.h }, { x: jx, y: P.access.y + P.access.h }])) })), edge('jump', poly([{ x: jx, y: p.y + p.h }, { x: jx, y: P.cluster.y }]), 'jump host', 0.5, null, `${l.name}>nodes:jump`); }
+    if (tpBox) lanes.append(sv('path', { class: 'lanehalo', d: dpath(poly([{ x: tpP.x + tpP.w / 2 + 22, y: tpP.y + tpP.h }, { x: tpP.x + tpP.w / 2 + 22, y: P.access.y + P.access.h }])) })), edge('teleport', poly([{ x: tpP.x + tpP.w / 2 + 22, y: tpP.y + tpP.h }, { x: tpP.x + tpP.w / 2 + 22, y: P.cluster.y }]), 'Teleport', 0.5, null, 'teleport>nodes:teleport');
   } else {
     if (tpBox) { const o = svcOut.teleport = out(); svcLane.teleport = edge('api', curve(o, { x: tpP.x, y: tpP.y + tpP.h / 2 }), SVC_METHOD.teleport, 0.5, 'ln-teleport', 'clients>teleport:api'); }
     for (const [l, p] of place) {
@@ -1426,13 +1448,13 @@ async function runChip() {
 }
 
 // theme: automatic follows the system; the choice is remembered when storage allows
-const THEMES = ['auto', 'light', 'dark'], THEME_ICON = { auto: '◐ Auto', light: '☀ Light', dark: '☾ Dark' };
+const THEMES = ['auto', 'light', 'dark', 'midnight', 'dim'], THEME_ICON = { auto: '◐ Auto', light: '☀ Light', dark: '☾ Dark', midnight: '✦ Midnight', dim: '☁ Dim' };
 function setTheme(t) {
   if (t === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = t;
   $('theme').textContent = THEME_ICON[t]; $('theme').setAttribute('aria-label', `Colour theme: ${t}. Press to change.`); $('theme').dataset.t = t;
   try { localStorage.setItem('workbench-theme', t); } catch (e) { /* private mode: not remembered */ }
 }
-$('theme').onclick = () => setTheme(THEMES[(THEMES.indexOf($('theme').dataset.t || 'auto') + 1) % 3]);
+$('theme').onclick = () => setTheme(THEMES[(THEMES.indexOf($('theme').dataset.t || 'auto') + 1) % THEMES.length]);
 let savedTheme = 'auto'; try { savedTheme = localStorage.getItem('workbench-theme') || 'auto'; } catch (e) { /* default */ }
 setTheme(THEMES.includes(savedTheme) ? savedTheme : 'auto');
 
