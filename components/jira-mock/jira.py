@@ -788,13 +788,15 @@ def counted(path: str, headers) -> bool:
 
 
 def make_handler(jira: Jira):
-    stats, lock = {"requests": 0}, threading.Lock()
+    stats, lock = {"requests": 0, "errors": 0}, threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
         def _send(self, code: int, obj=None, headers=None) -> None:
             if counted(self.path, self.headers):
                 with lock:
                     stats["requests"] += 1
+                    if code >= 400:  # an error answer (401, 404, 503 ...): the page draws it as a different dot (#314)
+                        stats["errors"] += 1
             data = b"" if obj is None else json.dumps(obj).encode()
             self.send_response(code)
             self.send_header("Content-Type", "application/json")

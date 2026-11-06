@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**84% built** (35 done, 45 in review, 11 partial, 4 to do, 95 items).
+**85% built** (35 done, 47 in review, 11 partial, 4 to do, 97 items).
 
 ## Roadmap
 
@@ -16,7 +16,7 @@ flowchart LR
     p4["People and chaos<br/>25%"]:::partial
     p5["Kubernetes<br/>50%"]:::partial
     p6["Fidelity VM<br/>0%"]:::partial
-    p7["Web UI and profiles<br/>80%"]:::partial
+    p7["Web UI and profiles<br/>82%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
     p0 --> p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7 --> p8
     classDef done fill:#1a7f37,stroke:#1a7f37,color:#fff
@@ -199,7 +199,7 @@ _One real Ubuntu VM with Redfish power control._
 
 0/1 done
 
-### Web UI and profiles (80%)
+### Web UI and profiles (82%)
 
 _One click from cold start to a busy cluster._
 
@@ -219,9 +219,11 @@ _One click from cold start to a busy cluster._
 | Declared graph of the Infrastructure architecture | 🔍 In review | /api/cluster now carries `graph`: entities and typed edges (plane, drawn kind, measured or declared) derived from the snapshot in webui/graph.py. An edge is measured only where a counter backs it (mock request counters, Teleport connections, recorded faults); SSH, jump and Teleport hops and the real Jira are declared. The diagram draws only edges named in the model (data-edge, data-plane, data-measured on each line); the fault lane to the real Jira, which no scenario can reach, is no longer drawn. Several clusters (issue 328): a snapshot with a `clusters` list gets one graph per cluster plus a merged graph with `cluster`-prefixed ids and no edge between clusters; nothing produces more than one cluster yet. Slice 1 of the depth view (issue 312, epic 317); focus view, error-shape dots, blast radius and lenses follow. | `webui/graph.py`, `webui/app.py`, `webui/static/index.html`, `tests/test_graph.py`, `scripts/ui_shots.py` | - |
 | Themes and richer diagram look | 🔍 In review | The theme switch cycles Auto, Light, Dark, Midnight (deep navy, neon accents) and Dim (soft slate, low glare); tokens only, remembered in the browser. The 2.5D diagram gets gradient top faces tinted by kind and a decorative icon per service. Issue 325. | `webui/static/index.html` | - |
 | Global view (levels of detail) | 🔍 In review | The Infrastructure architecture has two levels: `overview` (one card per cluster: clients, access, node groups with a health bar, services, faults) and `full`. Above 24 nodes the page opens at the overview; the Overview / Full diagram button pins a level. Hover or focus shows the design underneath; double-click, Enter or Open full design enters, a breadcrumb and Esc leave; a phone taps once. A table of clusters is in the page for screen readers. Issue 321, ADR 0029; several clusters draw as a grid of cards (issue 327; the backend field is issue 328, tested with synthetic data); the node-group level inside a large cluster follows. | `webui/static/index.html`, `scripts/ui_shots.py`, `docs/adr/0029-levels-of-detail-global-view.md` | - |
+| Focus view | 🔍 In review | Double-click a part (or F on a focused part) focuses it and its direct neighbours from the declared graph: the rest dims by an attribute toggle (nothing moves), faulted parts stay visible, Connections lists its edges (plane, kind, measured or declared), a breadcrumb under the diagram and Esc leave. ui_shots checks that no part moves. Issue 313. | `webui/static/index.html`, `scripts/ui_shots.py` | - |
+| Error-shaped dots | 🔍 In review | Every mock counts answers with status 400 or more in `errors` beside `requests` at /sim/stats; flow.py carries the rise as `err` on the event and the total as `errors` (absent where nothing counts it: Teleport, real Jira, older mocks = not measured). The page draws error answers as triangle dots (shape, not only colour) and says it in the Timeline and the service box. ADR 0009 addendum. Issue 314; needs a rebuilt mock image (benchctl up --build) for live data. | `components/*/ (GET /sim/stats)`, `webui/flow.py`, `webui/static/index.html`, `tests/test_flow.py`, `tests/real/test_flow_real.py` | - |
 | Budget manager | ⬜ To do | Profile/budget form (W-7). | - | - |
 
-1/15 done
+1/17 done
 
 ### macOS agent and CI (0%)
 

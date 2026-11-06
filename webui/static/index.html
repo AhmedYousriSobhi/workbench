@@ -398,7 +398,7 @@
 
   /* global view (#321) */
   #trafficpanel { position:relative; }
-  .crumb { margin-left:var(--sp3); font-size:13px; color:var(--dim); } .linkbtn { background:none; border:0; padding:4px 2px; min-height:32px; color:var(--accent); font:inherit; text-decoration:underline; cursor:pointer; }
+  .crumb { font-size:13px; color:var(--dim); } @media (min-width:1100px) { .crumb { position:absolute; right:18px; bottom:10px; background:var(--panel); padding:2px 8px; border-radius:8px; } } .linkbtn { background:none; border:0; padding:4px 2px; min-height:32px; color:var(--accent); font:inherit; text-decoration:underline; cursor:pointer; }
   .srtable { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
   .ovprev { position:absolute; z-index:5; width:min(340px,86%); padding:var(--sp3); background:var(--panel); border:1px solid var(--accent); border-radius:10px; box-shadow:0 8px 28px rgba(0,0,0,.4); font-size:13px; pointer-events:none; }
   .ovprev .pvrow { display:flex; flex-direction:column; gap:2px; align-items:stretch; margin:var(--sp2) 0; } .ovprev i { font-style:normal; color:var(--dim); text-align:center; font-size:12px; }
@@ -410,6 +410,13 @@
   #flow .ovopen { cursor:pointer; } #flow .ovopen rect { fill:var(--accent); } #flow text.ovot { fill:var(--on-accent); font-weight:700; } #flow .ovopen:focus-visible rect { stroke:var(--fg); stroke-width:3; }
   #flow[data-ov] { min-width:0 !important; } @media (max-width:1099px) { #flow[data-ov] { height:auto !important; max-height:none !important; } } #trafficpanel > .row .btn { padding-inline:10px; }
   #flow .ovcard.attn .ovbg { stroke:var(--bad); stroke-dasharray:6 4; } @media (min-width:1100px) { .flowscroll:has(#flow[data-ov]) { overflow-y:auto !important; } }
+  /* focus view (#313): classes toggle, nothing moves */
+  #flow { user-select:none; }
+  #flow [data-dim] { opacity:.2; transition:opacity .15s; } #flow [data-focus] .blk, #flow [data-focus] .nd, #flow [data-focus] .chipbg { stroke:var(--accent); stroke-width:3.5; }
+  .focuspane { margin-top:var(--sp3); } .focustab { width:100%; border-collapse:collapse; font-size:13px; } .focustab th, .focustab td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  @media (max-width:640px) { .focustab thead { display:none; } .focustab tr { display:block; padding:6px 0; border-bottom:1px solid var(--line); } .focustab td { display:block; border:0; padding:2px 8px; } }
+  @media (prefers-reduced-motion:reduce) { #flow [data-dim] { transition:none; } }
+  #flow .pk.err { fill:var(--bad); stroke:var(--fg); stroke-width:1.5; }
 </style>
 </head>
 <body>
@@ -456,7 +463,7 @@
   <div id="tab-nodes" role="tabpanel" aria-labelledby="tb-nodes">
   <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/benchctl start</code>.</div>
     <div class="nodeswrap" id="nodeswrap">
-  <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 id="traffic-h" style="margin:0">Infrastructure architecture</h2><nav id="crumb" class="crumb" aria-label="Breadcrumb" hidden><button class="linkbtn" id="crumb-all">All clusters</button> <span aria-hidden="true">›</span> <span aria-current="page" id="crumb-name">workbench</span></nav>
+  <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 id="traffic-h" style="margin:0">Infrastructure architecture</h2>
     <span class="grow"></span><button class="btn small" id="keybtn" aria-expanded="false" aria-controls="ckey">Key</button><button class="btn small" id="levelbtn" aria-pressed="false">Overview</button><button class="btn small" id="viewtoggle" aria-pressed="true">Flat view</button><button class="btn small" id="flowpause" aria-pressed="false" aria-label="Pause animation">Pause</button>
     <button class="btn small" id="treetoggle" aria-expanded="true" aria-controls="nodesmain">Hide node list</button></div>
     <div class="flowscroll"><svg id="flow" viewBox="0 0 1120 470" role="img" aria-label="Infrastructure architecture: clients and users, the access layer (login nodes, each direct SSH, Teleport or both, and the Teleport proxy when on), the services, and the nodes. Each part opens its details."></svg></div>
@@ -464,7 +471,7 @@
     <div class="ckey" id="ckey" role="group" aria-label="Key to the diagram" hidden>
       <div class="kg"><span class="grp">What it is</span><span><i class="sw sim" aria-hidden="true"></i>simulated (dashed stripe)</span><span><i class="sw real" aria-hidden="true"></i>real (solid stripe)</span></div>
       <div class="kg"><span class="grp">State (border)</span><span><i class="sw up" aria-hidden="true"></i>up</span><span><i class="sw down" aria-hidden="true"></i>not reachable (dashed)</span><span><i class="sw off" aria-hidden="true"></i>off (dotted)</span></div>
-      <div class="kg"><span class="grp">On top</span><span><b class="dot" aria-hidden="true">●</b>pulsing: traffic now, or a node running GPU work</span><span><b class="dia" aria-hidden="true">◆</b>a fault travelling to its target</span><span><i class="sw ring" aria-hidden="true"></i><b class="tri" aria-hidden="true">▲</b>red ring: a fault applied in the last 30 s</span></div>
+      <div class="kg"><span class="grp">On top</span><span><b class="dot" aria-hidden="true">●</b>pulsing: traffic now, or a node running GPU work</span><span><b class="tri" aria-hidden="true">▲</b>a triangle dot: an answer the mock counted as an error</span><span><b class="dia" aria-hidden="true">◆</b>a fault travelling to its target</span><span><i class="sw ring" aria-hidden="true"></i><b class="tri" aria-hidden="true">▲</b>red ring: a fault applied in the last 30 s</span></div>
       <div class="kg"><span class="grp">Node</span><span><b aria-hidden="true">✓</b>healthy</span><span><b aria-hidden="true">▲</b>warning</span><span><b aria-hidden="true">✗</b>fault</span><span><b aria-hidden="true">⏻</b>off</span><span><b aria-hidden="true">?</b>unknown</span></div>
       <div class="kg"><span class="grp">Lines</span>
         <span><svg class="ls" viewBox="0 0 34 10" aria-hidden="true"><path class="lane ssh" d="M1 5H31" marker-end="url(#arr)"/></svg>direct SSH</span>
@@ -477,11 +484,13 @@
       <span><b style="color:var(--warn)" aria-hidden="true">◆</b> diamond: a fault from a scenario or a button, travelling to the node it hits</span>
       <span>Lines: solid arrow = direct SSH · long dashes = through the Teleport proxy · short dashes = jump host (ssh from a login node) · thin = an API call</span>
       <span>Hover a part for its state, click it for the address, command and actions. Node tiles: ✓ healthy · ▲ warning · ✗ fault · ⏻ off · ? unknown</span></p></details>
+    <nav id="crumb" class="crumb" aria-label="Breadcrumb" hidden><button class="linkbtn" id="crumb-all">All clusters</button><span id="crumb-sep1" aria-hidden="true"> › </span><button class="linkbtn" id="crumb-name">workbench</button><span id="crumb-sep2" aria-hidden="true" hidden> › </span><span aria-current="page" id="crumb-focus"></span></nav>
     <p id="flowstate" class="dim small" role="status" style="margin-bottom:0"></p></section>
   <section class="inspector" id="inspector" aria-label="Connections and details">
     <div class="itabs" role="group" aria-label="Show"><button class="btn small" id="it-conn" aria-pressed="true">Connections</button><button class="btn small" id="it-time" aria-pressed="false">Timeline</button></div>
     <div id="ipane-conn" class="ipane">
     <div class="inspect-empty" id="inspect-empty"><b>How to reach each part</b><p class="small dim">Click a part of the diagram or a node for its details and actions. Credentials are never shown, only the file that holds them.</p><ul class="reach" id="reach"></ul></div>
+    <div class="focuspane" id="focuspane" hidden></div>
     <div id="pop" class="pop" role="dialog" aria-labelledby="pop-t" hidden></div>
   <section id="nodepane" hidden aria-labelledby="nodetitle">
     <div class="np-head"><button class="btn small" id="node-back">← All nodes</button><h2 id="nodetitle"></h2><span id="nodestate" class="pill"></span></div>
@@ -1085,7 +1094,7 @@ function showPane(which) { for (const [k, id] of [['conn', 'ipane-conn'], ['time
 $('it-conn').onclick = () => showPane('conn'); $('it-time').onclick = () => showPane('time');
 const paintInspector = () => {
   const sel = !$('pop').hidden || !$('nodepane').hidden;
-  $('inspect-empty').hidden = sel; $('nodeswrap').classList.toggle('detail', sel); if (sel) showPane('conn');
+  $('inspect-empty').hidden = sel || !!focusId; $('nodeswrap').classList.toggle('detail', sel); if (sel) showPane('conn');
 };
 function setKey(open, restore) {
   $('ckey').hidden = !open; $('keybtn').setAttribute('aria-expanded', open); if (!open && restore) $('keybtn').focus();
@@ -1247,7 +1256,7 @@ const curLevel = () => levelPin || (clusterList().length > 1 || nodeList().lengt
 function paintLevelUi() {
   const ov = curLevel() === 'overview';
   $('levelbtn').textContent = ov ? 'Full diagram' : 'Overview'; $('levelbtn').setAttribute('aria-pressed', ov);
-  $('crumb').hidden = !(dived && !ov);
+  paintCrumb();
 }
 function setLevel(l, dive) {
   levelPin = l; dived = !!dive && l === 'full'; if (l === 'overview') activeCluster = null; try { sessionStorage.setItem('workbench-level', l); } catch (e) { /* not remembered */ }
@@ -1369,9 +1378,60 @@ function buildGrid(names) {
     g.append(card);
   }));
 }
+
+// ---- focus view (#313): double-click (or F on a focused part) isolates a part and its direct neighbours; nothing moves ----
+let focusId = null;
+const ENT_NAME = id => ({ clients: 'Clients', faults: 'Faults', nodes: 'Cluster nodes', teleport: 'Teleport proxy' })[id] || (svcList().find(x => x[0] === id) || [])[1] || id;
+function tagEntities() {  // each clickable or framed part of the drawing gets the id of its entity in the declared graph
+  const g = $('flow'), tag = (el, id) => { if (el) el.setAttribute('data-ent', id); };
+  for (const [k] of svcList()) tag(document.getElementById('fb-' + k)?.parentNode, k);
+  for (const l of loginList()) tag(document.getElementById('lg-' + l.name), l.name);
+  for (const n of nodeList()) tag(document.getElementById('nd-' + n.name), n.name);
+  g.querySelectorAll('g.hit').forEach(h => { if (!h.hasAttribute('data-ent') && h.querySelector('.chipbg')) tag(h, 'clients'); });
+  const fr = g.querySelectorAll(':scope > .frame'); if (fr.length >= 5) { tag(fr[0], 'clients'); tag(fr[1], 'faults'); tag(fr[4], 'nodes'); }
+}
+function focusSet(id) {  // the entity, its neighbours over declared edges, and those edges; a node stands for the group it belongs to
+  const gr = clusterNow().graph; if (!gr) return null;
+  const ent = gr.entities.find(e => e.id === id), via = ent && ent.group ? ent.group : id, ents = new Set([id, via]), edges = new Set();
+  for (const e of gr.edges) if (e.from === via || e.to === via) { edges.add(e.id); ents.add(e.from); ents.add(e.to); }
+  return { ents, edges, via, edgeList: gr.edges.filter(e => edges.has(e.id)), group: gr.entities.filter(e => e.group && ents.has(e.group)).map(e => e.id) };
+}
+function applyFocus() {
+  const g = $('flow'), fs = focusId ? focusSet(focusId) : null, gr = clusterNow().graph;
+  if (focusId && !fs) focusId = null;
+  const keep = el => !!el.querySelector('.blk.down, .nd.fault, .nd.warn, .fring.on');  // faulted parts stay visible while the rest is dimmed
+  g.querySelectorAll('[data-ent]').forEach(el => {
+    const id = el.getAttribute('data-ent'), ent = gr && gr.entities.find(e => e.id === id), inSet = fs && (fs.ents.has(id) || (ent && ent.group && fs.ents.has(ent.group)) || id === focusId);
+    if (fs && !inSet && !keep(el)) el.setAttribute('data-dim', '1'); else el.removeAttribute('data-dim');
+    if (fs && id === focusId) el.setAttribute('data-focus', '1'); else el.removeAttribute('data-focus');
+  });
+  g.querySelectorAll('path.lane[data-edge]').forEach(l => { if (fs && !fs.edges.has(l.getAttribute('data-edge'))) l.setAttribute('data-dim', '1'); else l.removeAttribute('data-dim'); });
+  g.querySelectorAll('.elabs, .lanehalo').forEach(el => { if (fs) el.setAttribute('data-dim', '1'); else el.removeAttribute('data-dim'); });
+  paintFocusPane(fs); paintCrumb();
+}
+function paintFocusPane(fs) {
+  const pane = $('focuspane'); pane.hidden = !fs; paintInspector(); if (!fs) { pane.innerHTML = ''; return; }
+  const rows = fs.edgeList.map(e => { const out = e.from === fs.via, other = out ? e.to : e.from;
+    return `<tr><td>${out ? 'to' : 'from'} <b>${esc(ENT_NAME(other))}</b></td><td>${esc(e.plane)}</td><td>${esc(e.kind)}</td><td>${e.measured ? 'measured (a counter backs it)' : 'declared (how it is wired, not traffic seen)'}</td></tr>`; }).join('');
+  pane.innerHTML = `<b>${esc(ENT_NAME(focusId))}: what it connects to</b><p class="small dim">Everything else is dimmed; faulted parts stay visible. Esc or the breadcrumb returns.</p>
+    <table class="focustab"><thead><tr><th>Connection</th><th>Plane</th><th>Kind</th><th>Basis</th></tr></thead><tbody>${rows || '<tr><td colspan="4">No declared connections.</td></tr>'}</tbody></table>`;
+}
+function focusOn(id) { focusId = id; if (id) hidePop(false); applyFocus(); announce(id ? `Focused on ${ENT_NAME(id)} and its neighbours` : 'Focus cleared'); }
+function announce(t) { let a = $('focuslive'); if (!a) { a = document.createElement('div'); a.id = 'focuslive'; a.className = 'srtable'; a.setAttribute('aria-live', 'polite'); document.body.append(a); } a.textContent = t; }
+function paintCrumb() {
+  const ov = curLevel() === 'overview', show = !ov && (dived || focusId);
+  $('crumb').hidden = !show; $('crumb-all').hidden = !dived; $('crumb-sep1').hidden = !dived;
+  $('crumb-name').textContent = clusterTitle(); $('crumb-sep2').hidden = !focusId; $('crumb-focus').textContent = focusId ? ENT_NAME(focusId) : '';
+}
+$('flow').addEventListener('dblclick', e => { const el = e.target.closest('[data-ent]'); if (curLevel() === 'overview') return; if (el) focusOn(el.getAttribute('data-ent') === focusId ? null : el.getAttribute('data-ent')); else if (focusId) focusOn(null); });
+$('flow').addEventListener('keydown', e => { if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey) { const el = e.target.closest && e.target.closest('[data-ent]'); if (el) { e.preventDefault(); focusOn(el.getAttribute('data-ent') === focusId ? null : el.getAttribute('data-ent')); } } });
+$('crumb-name').onclick = () => { if (focusId) focusOn(null); };
+const buildFlowBase = buildFlow; buildFlow = function () { buildFlowBase(); tagEntities(); applyFocus(); };
 $('levelbtn').onclick = () => curLevel() === 'overview' ? enterCluster(clusterList()[0]) : setLevel('overview', false);
 $('crumb-all').onclick = () => setLevel('overview', false);
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && dived && curLevel() === 'full' && !openNode && $('ckey').hidden && $('pop').hidden && !document.querySelector('dialog[open]')) setLevel('overview', false); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && focusId && curLevel() === 'full' && !openNode && $('ckey').hidden && $('pop').hidden && !document.querySelector('dialog[open]')) { focusOn(null); return; }
+  if (e.key === 'Escape' && dived && curLevel() === 'full' && !openNode && $('ckey').hidden && $('pop').hidden && !document.querySelector('dialog[open]')) setLevel('overview', false); });
 function buildFlow() {
   if (curLevel() === 'overview') { buildOverview(); return; }
   $('ovtable').innerHTML = ''; delete $('flow').dataset.ov;
@@ -1509,7 +1569,7 @@ function paintBlocks() {
     const flt = recent.some(r => r.fault && r.to === k && r.t > Date.now() - 30000);  // a fault was applied to it in the last 30 s
     $('ff-' + k).setAttribute('class', 'fring' + (flt ? ' on' : '')); $('fx-' + k).setAttribute('class', 'badge flt' + (flt ? ' on' : '')); $('fa-' + k).setAttribute('class', 'badge act' + (rate[k] ? ' on' : ''));
     const si = document.getElementById('si-' + (k === 'gpu-exporter' ? 'gpu-exporter' : k)); if (si) si.textContent = k === 'jira-real' ? 'no request counter (the real Jira publishes none)' : `${rate[k] || 0} ${k === 'teleport' ? 'conn' : 'req'}/min · ${(flowSnap.totals[k] || 0).toLocaleString()} seen`;
-    $('fc-' + k).textContent = fitBox((flowSnap.totals[k] || 0) ? (flowSnap.totals[k]).toLocaleString() + ((flowSnap.totals[k]) === 1 ? ' request seen' : ' requests seen') : svcList().find(x => x[0] === k)[2]);
+    const ne = flowSnap.errors && flowSnap.errors[k]; $('fc-' + k).textContent = fitBox((flowSnap.totals[k] || 0) ? (flowSnap.totals[k]).toLocaleString() + (ne ? ((flowSnap.totals[k]) === 1 ? ' request' : ' requests') + ` · ${ne} ${ne === 1 ? 'error' : 'errors'}` : (flowSnap.totals[k]) === 1 ? ' request seen' : ' requests seen') : svcList().find(x => x[0] === k)[2]);
   }
   $('fc-clients').textContent = sent.toLocaleString() + ' requests';
   $('fc-injector').textContent = (flowSnap.faults || 0) + (flowSnap.faults === 1 ? ' fault applied' : ' faults applied');
@@ -1525,9 +1585,10 @@ function launch(ev) {
   const sp = svcPos[ev.to], fault = ev.from === 'injector', origin = fault ? { x: G.injector.x + G.injector.w, y: G.injector.y + G.injector.h / 2 } : svcOut[ev.to] || { x: G.clients.x + G.clients.w, y: G.clients.y + G.clients.h / 2 };
   const targets = fault && ev.nodes?.some(n => tiles[n]) ? ev.nodes.filter(n => tiles[n]).map(n => ({ pt: { x: tiles[n].x, y: tiles[n].y + tiles[n].h / 2 }, node: n })) : [{ pt: ev.to === 'teleport' ? { x: sp.x, y: sp.y + sp.h / 2 } : sp.entry || { x: sp.x + sp.w / 2, y: sp.y }, node: null }];
   for (const t of targets) for (let i = 0; i < Math.min(ev.n, 5) && dots.length < 60; i++) {
-    const el = fault ? sv('rect', { class: 'pk', width: 14, height: 14, rx: 2 }) : sv('circle', { class: 'pk', r: 7 }), trail = sv('circle', { class: 'pkt', r: 5 });
+    const err = !fault && i < Math.min(ev.err || 0, 5);  // an answer the mock counted as an error is a triangle, not a circle (#314); shape carries it, colour only helps
+    const el = fault ? sv('rect', { class: 'pk', width: 14, height: 14, rx: 2 }) : err ? sv('polygon', { class: 'pk err', points: '0,-10 10,8 -10,8' }) : sv('circle', { class: 'pk', r: 7 }), trail = sv('circle', { class: 'pkt', r: 5 });
     $('dots').append(trail, el);
-    dots.push({ el, trail, fault, bez: !fault && svcLane[ev.to] ? svcLane[ev.to] : curve(origin, t.pt), node: t.node, svc: ev.to, t0: performance.now() + i * 130, dur: fault ? 1700 : 1200 });
+    dots.push({ el, trail, fault, err, bez: !fault && svcLane[ev.to] ? svcLane[ev.to] : curve(origin, t.pt), node: t.node, svc: ev.to, t0: performance.now() + i * 130, dur: fault ? 1700 : 1200 });
   }
   if (!raf) raf = requestAnimationFrame(step);
 }
@@ -1541,7 +1602,7 @@ function step(now) {
     if (p >= 1) { d.el.remove(); d.trail.remove(); if (d.fault) hit(d); return false; }
     const q = Math.max(p, 0), pt = at(d.bez, q), tr = at(d.bez, Math.max(q - 0.07, 0)), vis = p < 0 ? 'hidden' : 'visible';
     d.el.setAttribute('visibility', vis); d.trail.setAttribute('visibility', vis); d.trail.setAttribute('cx', tr.x); d.trail.setAttribute('cy', tr.y);
-    if (d.fault) { d.el.setAttribute('transform', `translate(${pt.x} ${pt.y}) rotate(45) translate(-7 -7)`); } else { d.el.setAttribute('cx', pt.x); d.el.setAttribute('cy', pt.y); }
+    if (d.fault) { d.el.setAttribute('transform', `translate(${pt.x} ${pt.y}) rotate(45) translate(-7 -7)`); } else if (d.err) { d.el.setAttribute('transform', `translate(${pt.x} ${pt.y})`); } else { d.el.setAttribute('cx', pt.x); d.el.setAttribute('cy', pt.y); }
     return true;
   });
   raf = dots.length ? requestAnimationFrame(step) : 0;
@@ -1558,7 +1619,7 @@ function paintFeed(events) {
   const name = k => (svcList().find(x => x[0] === k) || [k, k])[1], hh = d => d.toTimeString().slice(0, 8);
   for (const e of events) {
     const fault = e.from === 'injector';
-    feed.unshift({ t: new Date(), fault, text: fault ? `Fault ${e.label || 'applied'} on ${(e.nodes || []).length ? e.nodes.join(', ') : name(e.to)}` : `${e.n} ${e.n === 1 ? 'request' : 'requests'} to ${name(e.to)}` });
+    feed.unshift({ t: new Date(), fault, text: fault ? `Fault ${e.label || 'applied'} on ${(e.nodes || []).length ? e.nodes.join(', ') : name(e.to)}` : `${e.n} ${e.n === 1 ? 'request' : 'requests'} to ${name(e.to)}` + (e.err ? `, ${e.err} ${e.err === 1 ? 'error' : 'errors'}` : '') });
   }
   feed.length = Math.min(feed.length, 40); $('dock-empty').hidden = feed.length > 0;
   $('timeline-feed').innerHTML = feed.map(f => `<li><span class="ft">${hh(f.t)}</span><span><b class="${f.fault ? 'f' : 'r'}" aria-hidden="true">${f.fault ? '◆' : '●'}</b> ${esc(f.text)}</span></li>`).join('');

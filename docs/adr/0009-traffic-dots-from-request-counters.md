@@ -29,3 +29,12 @@ The traffic diagram now sits beside the entity list and draws every node as a ti
 the node names they hit (`nodes` in the `/api/flow` event), so a fault diamond travels to that node and flashes a ring on its
 tile. Client traffic stays per service: the mocks count requests per service, not per client or per node, so round dots go
 from the *Clients* box to a service. The feed still closes when the page is hidden (the dashboard is one screen since issue 129, there are no tabs).
+
+## Update (issue 314): error answers
+Each mock now also counts, at the same single site, the answers with a status of 400 or more in `errors` beside `requests` at
+`GET /sim/stats` (probes, `/sim/*` and health checks stay uncounted; `requests` keeps its meaning). `webui/flow.py` carries
+the rise as `err` on the event (only when the mock reports `errors`: an older mock, Teleport, the real Jira, Slurm and
+k8s have no such counter and the event has no `err`, which the page reads as "not measured") and the running total as `errors`
+in the feed. The page draws up to five dots per event as before, the first `err` of them as triangles instead of circles (shape,
+not only colour), and says it in text: the Timeline line ("3 requests to BMC farm, 2 errors") and the service box ("3 requests,
+2 errors"). Latency stays out of scope: the mocks answer in microseconds, so a speed encoding would imply a measurement that is not real.
