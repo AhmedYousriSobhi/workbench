@@ -85,3 +85,32 @@ def test_page_draws_only_edges_named_in_the_model():
     for name, ids_ in pattern.items():
         assert ids_ & shapes, name  # at least one concrete id of this shape exists in the model
     assert "data-edge" in page
+
+
+def two_clusters():
+    return {"services": SERVICES, "nodes": NODES, "logins": logins("ssh"),
+            "clusters": [{"name": "c1", "services": {**SERVICES, "teleport": True}, "nodes": NODES, "logins": logins("both")},
+                         {"name": "c2", "services": SERVICES, "nodes": NODES[:1], "logins": logins("ssh", "ssh")}]}
+
+
+def test_one_cluster_snapshot_is_unchanged():
+    snap = {"services": SERVICES, "nodes": NODES, "logins": logins("ssh")}
+    out = graph.attach(snap)
+    assert "clusters" not in out and out["graph"] == graph.build(SERVICES, NODES, logins("ssh"))
+    assert all("cluster" not in e for e in out["graph"]["entities"] + out["graph"]["edges"])
+
+
+def test_several_clusters_each_get_their_own_graph_and_one_merged_graph():
+    out = graph.attach(two_clusters())
+    assert [c["name"] for c in out["clusters"]] == ["c1", "c2"]
+    assert all(c["graph"] == graph.build(c["services"], c["nodes"], c["logins"]) for c in out["clusters"])  # entering a cluster: the plain graph
+    merged = out["graph"]
+    assert len(ids(merged)) == len(merged["edges"])  # ids stay unique across clusters
+    assert {e["cluster"] for e in merged["entities"] + merged["edges"]} == {"c1", "c2"}
+
+
+def test_no_edge_joins_two_clusters():
+    merged = graph.attach(two_clusters())["graph"]
+    cluster_of = {e["id"]: e["cluster"] for e in merged["entities"]}
+    assert all(cluster_of[e["from"]] == cluster_of[e["to"]] == e["cluster"] for e in merged["edges"])
+    assert all(e["group"].startswith(e["cluster"] + "/") for e in merged["entities"] if "group" in e)

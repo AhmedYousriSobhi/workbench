@@ -27,6 +27,8 @@ tools solve this with semantic zoom: an overview first, detail on demand.
   optionally reachability and fault counts) the overview is a grid of cards, sized to fit the panel (compact cards beyond a few,
   a scrolling panel beyond that); a card with a failing node is marked with `▲` and a dashed border. Entering a card scopes the
   page (diagram, node list, Connections) to that cluster until Esc or the breadcrumb. Without the field the page is unchanged.
-  The backend side (the field itself, `cluster` on graph entities) is issue 328; until it lands the grid is exercised with
-  synthetic data in `scripts/ui_shots.py`.
+  The data contract is in `webui/graph.py` (issue 328): `attach(snapshot)` gives a snapshot with `clusters` one graph each (plain
+  ids, shown when that cluster is entered) and a merged top-level graph whose ids and edge ends are prefixed `cluster/` with a
+  `cluster` field; no edge joins two clusters (tested). Nothing produces more than one cluster yet, so the grid is exercised with
+  synthetic data in `scripts/ui_shots.py`; the multi-cluster plan (PR 239) supplies the sources.
 - A group level inside one very large cluster (expand a node group) is still to do.
