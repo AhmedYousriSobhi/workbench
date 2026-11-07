@@ -91,7 +91,7 @@ def test_undo_reverses_in_reverse_order():
 def test_failed_action_does_not_abort_plan():
     class S:
         def sample(self, now):
-            return Signals(4 * GB, 0, 6.0)
+            return Signals(GB // 2, 0, 6.0)
 
     seen = []
 
@@ -107,7 +107,7 @@ def test_failed_action_does_not_abort_plan():
 
 def test_deescalation_runs_undo():
     class S:
-        s = Signals(4 * GB, 0, 6.0)
+        s = Signals(GB // 2, 0, 6.0)
 
         def sample(self, now):
             return self.s

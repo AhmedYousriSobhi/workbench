@@ -27,8 +27,10 @@ Above roughly 30% PSI the kernel struggles to hand out new memory, so the govern
 | L1 warn | PSI some > 10% or MemAvailable < 2.0 GB | emit event/annotation; stop new job/ticket arrivals | P5 |
 | L2 throttle | PSI some > 20% for 10 s | lower `memory.high` on low classes; slow `user-sim`; scale slurmd count down | P5, P4 |
 | L3 freeze + reclaim | PSI some > 30% for 10 s | `docker pause` / `cgroup.freeze`, then `memory.reclaim` (kernel 5.19+) to push pages to zram/swap | P6, P5, P4 |
-| L4 stop | PSI **full** > 5% or MemAvailable < 1.0 GB | `docker stop`; `virsh managedsave` the VM (frees its RAM) | P6, then P5, P4, P3 |
+| L4 stop | PSI **full** > 5% for 5 s, or MemAvailable < 1.0 GB (at once) | `docker stop`; `virsh managedsave` the VM (frees its RAM) | P6, then P5, P4, P3 |
 | L5 emergency | still degrading after L4 | stop the whole profile except P0/P1 | all but P0/P1 |
+
+Limit of the L4 sustain (ADR 0032, issue 286): the 5 s hold for PSI full is argued from the PSI average and the unit tests (a short stall does not reach L4, a held one does), not measured live. The stall that prompted it (PSI full about 5% while a JVM starts, 5 GB still free) was not reproduced; the live Jira start with the governor running stayed at L0-L1 and was not stopped. A sustained stall now reaches L4 5 s later than before; low MemAvailable is not delayed. Tune `l4_sustain_s` with `--thresholds` if a real start still gets stopped.
 
 Key nuance: **pausing/freezing does not release RAM**, it only stops CPU use. Freeze is a cheap, instantly reversible step; actual relief comes from `memory.reclaim` (to compressed swap) or a real stop/save.
 

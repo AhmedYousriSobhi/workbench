@@ -18,7 +18,7 @@ from benchctl import stack
 from governor.executors import cgroup_dir, discover_docker
 
 ROOT = Path(__file__).resolve().parents[2]
-FAST = json.dumps({"sustain_s": 0.5, "calm_s": 1, "min_dwell_s": 0.3, "l5_after_s": 1000})
+FAST = json.dumps({"sustain_s": 0.5, "l4_sustain_s": 0.5, "calm_s": 1, "min_dwell_s": 0.3, "l5_after_s": 1000})
 
 
 @pytest.fixture

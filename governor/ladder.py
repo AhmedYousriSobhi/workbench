@@ -16,6 +16,7 @@ class Thresholds:
     l3_psi: float = 30.0
     sustain_s: float = 10.0  # L2/L3 PSI must hold this long
     l4_full: float = 5.0
+    l4_sustain_s: float = 5.0  # L4 PSI full must hold this long (a JVM start stalls briefly, #286); low MemAvailable stays immediate
     l4_mem: int = int(1.0 * GB)
     l5_after_s: float = 30.0  # L4 condition persisting this long -> L5
     calm_s: float = 60.0  # calm needed per step down
@@ -39,7 +40,8 @@ class Ladder:
 
     def target(self, s: Signals, now: float) -> int:
         t = self.t
-        l4 = s.psi_full_avg10 > t.l4_full or s.mem_available < t.l4_mem
+        stall = s.psi_full_avg10 > t.l4_full
+        l4 = s.mem_available < t.l4_mem or self._held("l4_psi", stall, now) >= t.l4_sustain_s
         if self._held("l4", l4, now) >= t.l5_after_s:
             return 5
         if l4:
