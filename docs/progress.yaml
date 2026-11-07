@@ -24,7 +24,7 @@ phases:
     goal: A root service that keeps the host alive by escalating through a ladder
     items:
       - {name: Signals and escalation ladder, status: done, pr: 14, where: "governor/signals.py, governor/ladder.py",
-         how: "MemAvailable, PSI and swap rate feed levels L0-L5. Escalates at once, steps down one level per 60 s calm with a 10 s dwell."}
+         how: "MemAvailable, PSI and swap rate feed levels L0-L5. Escalates at once, steps down one level per 60 s calm with a 10 s dwell. L4 from a PSI stall needs 5 s (ADR 0032, issue 286); low MemAvailable is immediate."}
       - {name: Priority planner, status: done, pr: 14, where: governor/planner.py,
          how: "P0-P6 classes; lowest priority first, reversible actions before destructive ones; undo on de-escalation."}
       - {name: Executors, status: done, pr: 20, where: governor/executors.py,

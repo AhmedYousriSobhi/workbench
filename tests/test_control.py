@@ -75,7 +75,7 @@ def test_real_mode_calls_executor():
 
 def test_level_change_runs_plan():
     g = make()
-    g.sampler.s = Signals(4 * GB, 0, 6.0)  # full PSI -> L4
+    g.sampler.s = Signals(GB // 2, 0, 6.0)  # low MemAvailable -> L4 at once
     assert g.step(0) == 4
     assert any("save vm" in m for m in g.audit)
 

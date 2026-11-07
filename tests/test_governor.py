@@ -32,19 +32,30 @@ def test_l3_and_l4():
     lad = Ladder()
     lad.update(sig(some=35), 0)
     assert lad.update(sig(some=35), 10) == 3
-    assert lad.update(sig(full=6), 11) == 4
+    assert lad.update(sig(full=6), 11) == 3
+    assert lad.update(sig(full=6), 16) == 4
     assert Ladder().update(sig(avail=0.5 * GB), 0) == 4
+
+
+def test_a_short_stall_does_not_reach_l4_but_a_held_one_does():
+    """#286: a JVM start stalls memory for a moment; that is not pressure worth a `docker stop`."""
+    lad = Ladder()
+    assert lad.update(sig(full=6), 0) == 0
+    assert lad.update(sig(full=6), 4) == 0
+    assert lad.update(sig(full=1), 5) == 0  # the stall ended before 5 s: the clock starts over
+    assert lad.update(sig(full=6), 6) == 0
+    assert lad.update(sig(full=6), 11) == 4
 
 
 def test_l5_when_l4_persists():
     lad = Ladder()
-    assert lad.update(sig(full=6), 0) == 4
-    assert lad.update(sig(full=6), 30) == 5
+    assert lad.update(sig(avail=0.5 * GB), 0) == 4
+    assert lad.update(sig(avail=0.5 * GB), 30) == 5
 
 
 def test_deescalation_needs_60s_calm_one_step_at_a_time():
     lad = Ladder()
-    lad.update(sig(full=6), 0)  # L4
+    lad.update(sig(avail=0.5 * GB), 0)  # L4
     assert lad.update(CALM, 20) == 4
     assert lad.update(CALM, 79) == 4
     assert lad.update(CALM, 80) == 3
@@ -54,9 +65,9 @@ def test_deescalation_needs_60s_calm_one_step_at_a_time():
 
 def test_no_flapping_on_brief_calm():
     lad = Ladder()
-    lad.update(sig(full=6), 0)
+    lad.update(sig(avail=0.5 * GB), 0)
     lad.update(CALM, 30)
-    lad.update(sig(full=6), 50)  # pressure returns, calm timer resets
+    lad.update(sig(avail=0.5 * GB), 50)  # pressure returns, calm timer resets
     assert lad.update(CALM, 100) == 4
 
 
