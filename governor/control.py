@@ -58,9 +58,10 @@ def dispatch(line: bytes, handle: Handler, groups: Callable[[], set[str]]) -> di
         if cmd in TARGETED and req.get("target") not in groups():
             return {"ok": False, "error": f"unknown group: {req.get('target')!r}"}
         if cmd == "scale" and not (
-            isinstance(req.get("group"), str) and isinstance(req.get("n"), int) and req["n"] >= 0
+            isinstance(req.get("group"), str) and isinstance(req.get("n"), int) and not isinstance(req["n"], bool)
+            and 0 <= req["n"] <= 64
         ):
-            return {"ok": False, "error": "scale needs group:str and n:int>=0"}
+            return {"ok": False, "error": "scale needs group:str and n:int 0..64"}
         if cmd == "set-profile" and not isinstance(req.get("profile"), str):
             return {"ok": False, "error": "set-profile needs profile:str"}
         if cmd == "apply-plan" and (err := plan_error(req)):
@@ -81,7 +82,8 @@ def dispatch(line: bytes, handle: Handler, groups: Callable[[], set[str]]) -> di
                                          and all(isinstance(n, str) and NODE_RE.fullmatch(n) for n in req["nodes"])
                                          and isinstance(req.get("since"), (int, float)) and not isinstance(req.get("since"), bool)):
             return {"ok": False, "error": "slurm-trace needs nodes:[NAME, ...] (at most 8) and since:number (unix seconds)"}
-        if cmd == "admit" and not (isinstance(req.get("budget_mb"), int) and req["budget_mb"] >= 0):
+        if cmd == "admit" and not (isinstance(req.get("budget_mb"), int) and not isinstance(req["budget_mb"], bool)
+                                   and req["budget_mb"] >= 0):
             return {"ok": False, "error": "admit needs budget_mb:int>=0"}
         return handle(cmd, req)
     except (ValueError, UnicodeDecodeError) as e:

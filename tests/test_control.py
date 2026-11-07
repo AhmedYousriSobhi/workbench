@@ -40,6 +40,11 @@ def test_dispatch_rejects_unknown_and_bad():
     assert d(b"[1]")["ok"] is False
     assert d(b'{"cmd":"freeze","target":"nope"}')["error"].startswith("unknown group")
     assert d(b'{"cmd":"scale","group":"cn","n":-1}')["ok"] is False
+    msg = "scale needs group:str and n:int 0..64"
+    for bad in ("true", "65", "100000", "2.0"):  # a bool is an int in Python; the cap matches apply-plan's cpu_nodes (#343)
+        assert d(f'{{"cmd":"scale","group":"compute","n":{bad}}}'.encode())["error"] == msg, bad
+    assert d(b'{"cmd":"scale","group":"compute","n":64}').get("error") != msg
+    assert d(b'{"cmd":"admit","budget_mb":true}')["ok"] is False
     assert d(b'{"cmd":"set-profile"}')["ok"] is False
     assert d(b"x" * 5000)["error"] == "request too large"
 
