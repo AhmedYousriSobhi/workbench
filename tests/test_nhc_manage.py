@@ -270,3 +270,39 @@ def test_page_writes_need_the_csrf_header_and_the_token(page):
     with pytest.raises(HTTPError) as e:
         urllib.request.urlopen(r, timeout=5)
     assert e.value.code == 401
+
+
+def test_two_changes_at_once_run_one_after_the_other_and_both_stay(src):
+    """Without the lock, B would read the files before A wrote them and then overwrite A's change (issue 348)."""
+    first_name, second_name = names(src)[:2]
+    events, a_inside = [], threading.Event()
+
+    def slow(checks, work):  # change A: holds the lock while B tries to start
+        events.append("A start")
+        a_inside.set()
+        time.sleep(0.4)
+        next(c for c in checks if c.name == first_name).enabled = False
+        events.append("A end")
+
+    def quick(checks, work):
+        events.append("B start")
+        next(c for c in checks if c.name == second_name).enabled = False
+
+    a = threading.Thread(target=nhc._change, args=(src, slow))
+    a.start()
+    assert a_inside.wait(5)
+    b = threading.Thread(target=nhc._change, args=(src, quick))
+    b.start()
+    a.join(10)
+    b.join(10)
+    assert events == ["A start", "A end", "B start"]
+    state = {c.name: c.enabled for c in nhc.load(src)}
+    assert state[first_name] is False and state[second_name] is False  # both changes are in checks.conf
+
+
+def test_a_refused_change_leaves_no_lock_held_and_changes_nothing(src):
+    before = (src / nhc.CONF).read_text()
+    with pytest.raises(nhc.NhcError):
+        nhc.set_check("no-such-check", enabled=False, src=src)
+    assert (src / nhc.CONF).read_text() == before
+    nhc.set_check(names(src)[0], enabled=False, src=src)  # the next change is not blocked

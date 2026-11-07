@@ -41,3 +41,4 @@ htmlcov/
 id_rsa*
 id_ed25519*
 bench-profile*.json
+images/node-base/.nhc.d.lock

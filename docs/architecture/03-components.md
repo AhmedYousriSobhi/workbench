@@ -5,6 +5,7 @@
 ## 4. Component decisions (what, why, alternatives)
 
 ### 4.1 Slurm: containerized, not VMs
+- **Real daemons, not a mock** (ADR 0025): the scheduler, its node states, command output and `slurmrestd` auth are Slurm's own; GPUs, cgroups and jobs are simulated. The ADR lists what is real, what is not and the cost.
 - Run `slurmctld` + `slurmrestd` in core; `slurmdbd` + MariaDB only in profiles that test accounting/QOS.
 - One container per fake compute node, all from **one shared base image** (shared file-backed pages). Community projects such as `giovtorres/slurm-docker-cluster` already use this pattern (controller, DB, and `c1`/`c2` `slurmd` containers under Docker Compose); use it as a starting point rather than writing from scratch.
 - Container-friendly `slurm.conf` starting points (validate on your Slurm version): `ProctrackType=proctrack/linuxproc`, `TaskPlugin=task/none`, fake `RealMemory`, and GPUs declared as GRES by count (`Name=gpu Type=h200 Count=8`, no device files) so GPU partitions behave like a DGX/HGX fleet.
@@ -33,7 +34,7 @@ Note: Jira Cloud cannot be self-hosted, and Atlassian ended Jira Server support 
 |---|---|---|
 | `mock` (default) | ~50-100 MB | Daily dev, CI, scenarios. a small stdlib server (built; WireMock was the alternative) implementing the Jira REST endpoints the app uses (issue create/transition/comment, search/JQL subset, webhooks), with failure modes (429, 503, slow). |
 | `cloud` | 0 local | Contract testing against a real **Jira Cloud free site** (small-team free tier; check current limits). Real auth, real rate limits. |
-| `dc` | ~3 GB+ | Only the `jira-real` profile, which suspends K8s + fidelity VM to pay for it. Keep heap at the recommended size; don't starve it. |
+| `dc` | ~2.1 GB cap (measured) | Only the `jira-real` profile, which suspends K8s + fidelity VM to pay for it. Keep heap at the recommended size; don't starve it. |
 
 Put **Toxiproxy** in front of the Jira mode only (an HTTP path, where it is cheap) to inject latency/outages. Do **not** put it in the Slurm RPC path; use `tc netem` there (section 4.9).
 
@@ -47,7 +48,8 @@ Put **Toxiproxy** in front of the Jira mode only (an HTTP path, where it is chea
 - **`ticket-bot`**: fake support engineers that pick up tickets the app creates, comment, transition and resolve them on realistic delays, including "customer" tickets the app should triage.
 - Submit through `slurmrestd` and the CLI so both integration paths of the app are exercised.
 
-### 4.8 Fidelity VM (the single real VM)
+### 4.8 Fidelity VM (deferred, ADR 0033)
+- Not built and not required: no client endpoint needs it. The notes below are the plan if it is revisited.
 - One Vagrant/libvirt Ubuntu VM, **on demand only**, for what containers can't prove: real kernel counters, systemd units, sshd, real `node_exporter`, power control via sushy-tools, and the app's Linux agent install path.
 - Prefer **libvirt/KVM** (`vagrant-libvirt`) over VirtualBox: KVM supports memory ballooning and KSM page merging, and `virsh managedsave` can fully release its RAM.
 - Hard-cap at 2 GB.

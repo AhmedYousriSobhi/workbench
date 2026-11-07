@@ -49,17 +49,23 @@ refresh_governor() {  # the Grafana token only exists after the first `up`: rest
 }
 
 ui_pid() { [ -f "$pidf" ] && kill -0 "$(cat "$pidf")" 2>/dev/null && cat "$pidf"; }
-link() { sed -n 's/.*workbench UI: //p' "$logf" 2>/dev/null | tail -1; }
+page_url() { sed -n 's/.*workbench UI: //p' "$logf" 2>/dev/null | tail -1; }  # the log never holds the token
+link() { local u; u="$(page_url)"; [ -n "$u" ] && [ -s "$state/secrets/ui_token" ] && echo "$u?token=$(cat "$state/secrets/ui_token")"; }
 ensure_venv() {
   [ -x .venv/bin/python ] && return 0
   echo "== creating the virtualenv (once)"
   python3 -m venv .venv && .venv/bin/pip install -q -e '.[dev]' || { echo "could not install the tools" >&2; return 1; }
 }
 start_ui() {
-  if ui_pid >/dev/null; then echo "web page already running (pid $(ui_pid))"; return 0; fi
+  if ui_pid >/dev/null; then
+    local u run; u="$(page_url)"; run="${u##*:}"  # the port the running page listens on (from its log)
+    if [ -n "${BENCHCTL_UI_PORT:-}" ] && [ -n "$run" ] && [ "$run" != "$port" ]; then  # an explicit port that differs: move the page
+      echo "web page runs on port $run, restarting it on port $port (BENCHCTL_UI_PORT)"; kill "$(ui_pid)" 2>/dev/null; rm -f "$pidf"; sleep 1
+    else echo "web page already running (pid $(ui_pid))"; return 0; fi
+  fi
   (umask 077; nohup .venv/bin/python -m webui "$port" >"$logf" 2>&1 & echo $! >"$pidf")
   for _ in $(seq 1 50); do
-    [ -n "$(link)" ] && curl -s -o /dev/null "http://127.0.0.1:$port/login" && return 0
+    [ -n "$(page_url)" ] && curl -s -o /dev/null "http://127.0.0.1:$port/login" && return 0
     sleep 0.3
   done
   echo "the web page did not start; see $logf" >&2; return 1

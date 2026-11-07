@@ -17,15 +17,15 @@ def spec_file(tmp_path, parts):
 
 def test_built_follows_the_saved_workbench(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    assert cluster.saved_has_teleport() is False        # nothing saved: a preset, no Teleport
+    assert cluster.saved_has_part("teleport") is False        # nothing saved: a preset, no Teleport
     spec_file(tmp_path, ["jira"])
-    assert cluster.saved_has_teleport() is False
+    assert cluster.saved_has_part("teleport") is False
     (tmp_path / "compose/generated/workbench.yaml").write_text(yaml.safe_dump({"name": "w", "cpu_nodes": 1, "gpu_nodes": 0,
                                                                               "gpus_per_node": 8, "parts": ["jira", "teleport"],
                                                                               "k8s_nodes": 0, "bmc_nodes": None}))
-    assert cluster.saved_has_teleport() is True
+    assert cluster.saved_has_part("teleport") is True
     (tmp_path / "compose/generated/workbench.yaml").write_text("not: [valid")
-    assert cluster.saved_has_teleport() is False        # a broken file hides Teleport instead of breaking the page
+    assert cluster.saved_has_part("teleport") is False        # a broken file hides Teleport instead of breaking the page
 
 
 def test_snapshot_lists_teleport_only_when_built(monkeypatch):
@@ -50,7 +50,7 @@ def test_the_diagram_is_called_infrastructure_architecture_and_can_draw_teleport
     html = Path("webui/static/index.html").read_text()
     assert '<h2 id="traffic-h" style="margin:0">Infrastructure architecture</h2>' in html and ">Traffic<" not in html
     assert "const TELEPORT_BOX = ['teleport'" in html and "'teleport': 'teleport'" in html  # a box, and a click to its Connections row
-    assert "hasTeleport() ? [...BASE_SERVICES, TELEPORT_BOX]" in html                       # only when the part is built
+    assert "...(hasTeleport() ? [TELEPORT_BOX] : [])" in html                       # only when the part is built
 
 
 def test_snapshot_carries_the_login_nodes_of_the_saved_workbench(tmp_path, monkeypatch):

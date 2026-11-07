@@ -297,3 +297,142 @@ def test_a_jira_activity_step_switches_the_background_changes_and_is_validated()
     sent = []
     out = scenario.execute(scenario.Step(0, "jira", {"activity": {"on": True, "every": 5}}), poster=lambda u, b: sent.append((u, b)))
     assert out.status == "ok" and sent == [("http://127.0.0.1:8080/sim/activity", {"on": True, "every": 5})]
+
+
+def _rec():
+    ran = []
+
+    def runner(cmd):
+        ran.append(cmd)
+        return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+    return ran, runner
+
+
+def test_daemon_steps_become_docker_commands():
+    ran, runner = _rec()
+    scenario.execute(scenario.Step(0, "slurm", {"slurmd_stop": ["cn001"]}), runner=runner)
+    assert ran == [["docker", "exec", "workbench-cn001-1", "touch", scenario.HOLD],
+                   ["docker", "exec", "workbench-cn001-1", "pkill", "-x", "slurmd"]]
+    ran.clear()
+    scenario.execute(scenario.Step(0, "slurm", {"slurmd_start": ["cn001"], "slurmd_restart": ["cn002"]}), runner=runner)
+    assert ["docker", "exec", "workbench-cn001-1", "rm", "-f", scenario.HOLD] in ran
+    assert ["docker", "exec", "workbench-cn002-1", "pkill", "-x", "slurmd"] in ran
+    ran.clear()
+    scenario.execute(scenario.Step(0, "slurm", {"slurmctld_restart": True, "cancel": True}), runner=runner)
+    assert ran[0][:2] == ["docker", "restart"] and "scancel" in ran[1]
+
+
+def test_submit_makes_the_same_job_as_benchctl_submit_and_a_failed_submit_fails_the_step():
+    ran, runner = _rec()
+    sub = {"node": "gpu001", "gpus": 2, "duration": 40}
+    assert scenario.execute(scenario.Step(0, "slurm", {"submit": sub}), runner=runner).status == "ok"
+    assert ran[0][:5] == ["docker", "exec", "-u", "alice", "workbench-login-1"]
+    assert "--nodelist=gpu001" in ran[0][-1] and "--gres=gpu:2" in ran[0][-1] and "sleep 40" in ran[0][-1]
+    bad = scenario.execute(scenario.Step(0, "slurm", {"submit": {"node": "cn001"}}),
+                           runner=lambda c: type("R", (), {"returncode": 1, "stdout": "", "stderr": "invalid account"})())
+    assert bad.status == "failed" and "invalid account" in bad.detail
+    # pkill finding nothing (exit 1) is the goal of a stop, not a failure
+    none = scenario.execute(scenario.Step(0, "slurm", {"slurmd_stop": ["cn001"]}),
+                            runner=lambda c: type("R", (), {"returncode": 1 if "pkill" in c else 0, "stdout": "", "stderr": ""})())
+    assert none.status == "ok"
+
+
+def test_without_docker_daemon_steps_go_through_the_daemon_callback_and_a_refusal_is_a_skip():
+    asked = []
+    o = scenario.execute(scenario.Step(0, "slurm", {"slurmd_restart": ["cn001"]}), host=False,
+                         daemon=lambda do: asked.append(do) or (True, "asked the governor"))
+    assert o.status == "ok" and asked == [{"slurmd_restart": ["cn001"]}]
+    refused = scenario.execute(scenario.Step(0, "slurm", {"cancel": True}), host=False, daemon=lambda do: (False, "refused at L3"))
+    assert refused.status == "skipped" and "L3" in refused.detail
+    seen = []
+    scenario.run({"name": "x", "steps": [{"at": "0s", "target": "slurm", "do": {"cancel": True}}]}, host=False,
+                 daemon=lambda do: (True, ""), on_before=seen.append, say=lambda m: None)
+    assert len(seen) == 1
+
+
+def test_daemon_steps_need_the_host_and_are_validated():
+    o = scenario.execute(scenario.Step(0, "slurm", {"slurmd_restart": ["cn001"]}), host=False, slurm=lambda *a: (True, ""))
+    assert o.status == "skipped"
+    bad = {"steps": [{"at": "0s", "target": "slurm", "do": {"slurmd_stop": ["nope"], "submit": {"node": "cn001", "x": 1}}},
+                     {"at": "1s", "target": "slurm", "do": {"submit": "cn001"}}]}
+    problems = scenario.validate(bad, SIM)
+    assert len(problems) == 3 and any("nope" in p for p in problems) and any("unknown key" in p for p in problems)
+    assert scenario.disruptive(bad) and not scenario.disruptive({"steps": [{"at": "0s", "target": "slurm", "do": {"drain": ["cn001"]}}]})
+
+
+def test_job_and_stepd_expectations():
+    out = {"squeue": "RUNNING\n", "pgrep": ""}
+
+    def runner(cmd):
+        key = "squeue" if "squeue" in cmd else "pgrep"
+        return type("R", (), {"returncode": 0 if out[key] or key == "squeue" else 1, "stdout": out[key], "stderr": ""})()
+    _, holds, _ = scenario.expectation({"slurm.job_state": {"node": "cn001", "state": "RUNNING"}}, runner)
+    assert holds()
+    _, holds, _ = scenario.expectation({"slurm.stepd": {"node": "cn001", "alive": False, "within": "5s"}}, runner)
+    assert holds()  # pgrep found nothing
+    _, holds, _ = scenario.expectation({"slurm.stepd": {"node": "cn001"}}, runner)
+    assert not holds()
+
+
+def test_jira_real_outage_pauses_and_restores_the_container():
+    calls = []
+    runner = lambda cmd: calls.append(cmd) or CP()
+    scenario.execute(scenario.Step(0, "jira-real", {"fault": "outage"}), runner=runner)
+    scenario.execute(scenario.Step(0, "jira-real", {"fault": "restore"}), runner=runner)
+    assert calls == [["docker", "pause", scenario.JIRA_REAL], ["docker", "unpause", scenario.JIRA_REAL]]
+    assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "outage"}), runner=lambda c: CP(code=1, err="boom")).detail == "boom"
+    assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "outage"}), host=False).status == "skipped"
+
+
+def test_jira_real_bad_logins_send_wrong_passwords(monkeypatch):
+    seen = []
+
+    def fake(req, timeout=0):
+        seen.append(req.full_url)
+        raise scenario.urllib.error.HTTPError(req.full_url, 401, "no", {}, None)
+
+    monkeypatch.setattr(scenario.urllib.request, "urlopen", fake)
+    out = scenario.execute(scenario.Step(0, "jira-real", {"fault": "bad_logins", "count": 3}))
+    assert out.status == "ok" and len(seen) == 3 and all(u.startswith("http://127.0.0.1:8083/") for u in seen)
+
+    def down(req, timeout=0):
+        raise OSError("refused")
+
+    monkeypatch.setattr(scenario.urllib.request, "urlopen", down)
+    assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "bad_logins"})).status == "failed"
+
+
+def test_jira_real_step_needs_a_known_fault():
+    sc = {"steps": [{"at": "0s", "target": "jira-real", "do": {"fault": "explode"}}]}
+    assert any("jira-real needs fault" in p for p in scenario.validate(sc, {"compute_nodes": 1}))
+
+
+def test_jira_real_clear_logins_zeroes_the_failed_count():
+    calls = []
+    scenario.execute(scenario.Step(0, "jira-real", {"fault": "clear_logins"}), runner=lambda c: calls.append(c) or CP())
+    assert calls[0][:3] == ["docker", "exec", scenario.JIRA_DB] and "login.currentFailedCount" in calls[0][-1]
+    assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "clear_logins"}), runner=lambda c: CP(code=1, err="x")).status == "failed"
+
+
+def test_jira_real_rate_limit_sets_the_table_and_bumps_the_version():
+    calls = []
+    runner = lambda c: calls.append(c) or CP()
+    scenario.execute(scenario.Step(0, "jira-real", {"fault": "rate_limit", "capacity": 5, "fill_rate": 2}), runner=runner)
+    scenario.execute(scenario.Step(0, "jira-real", {"fault": "rate_limit_off"}), runner=runner)
+    on, off = calls[0][-1], calls[1][-1]
+    assert "'ON'" in on and '"CAPACITY"=5' in on and '"FILL_RATE"=2' in on and "AO_AC3877_SETTINGS_VERSION" in on
+    assert "'OFF'" in off and calls[0][:3] == ["docker", "exec", scenario.JIRA_DB]
+    assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "rate_limit"}), runner=lambda c: CP(code=1, err="no")).detail == "no"
+
+
+def test_every_scenario_has_a_unique_reference_and_loads_by_it():
+    import re
+    rows = scenario.list_all()
+    refs = [s.get("ref") for s in rows]
+    assert all(r and re.fullmatch(r"SC-\d\d", r) for r in refs) and len(set(refs)) == len(refs)
+    first = rows[0]
+    for spelled in (first["ref"], first["ref"].lower(), "sc-" + str(int(first["ref"][3:]))):
+        assert scenario.load(spelled)["name"] == first["name"]
+    with __import__("pytest").raises(scenario.ScenarioError):
+        scenario.load("SC-99")
+    assert scenario.summary(first).startswith(f"{first['ref']} {first['name']}: ")

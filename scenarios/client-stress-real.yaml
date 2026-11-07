@@ -1,0 +1,28 @@
+name: client-stress-real
+ref: SC-02
+description: "client-stress for a client connected to the REAL Jira (127.0.0.1:8083, part jira-real up): the same five minutes of nodes, GPUs, heat and jobs, with Jira's own rate limit, a CAPTCHA lock and a 30 s hang instead of the mock's faults. Jira reloads rate-limit settings in about 40 s, so the 429s run from about 75 s to 180 s. No tickets are filed (the ticket wave goes to the mock only). Measure the client with benchctl measure app --match NAME --duration 330"
+steps:
+  - {at: 0s,   target: slurm,        do: {submit: {node: cn001, duration: 120}}}
+  - {at: 0s,   target: slurm,        do: {submit: {node: cn002, duration: 120}}}
+  - {at: 0s,   target: slurm,        do: {submit: {node: cn003, duration: 120}}}
+  - {at: 0s,   target: slurm,        do: {submit: {node: gpu001, duration: 150}}}
+  - {at: 0s,   target: slurm,        do: {submit: {node: gpu002, duration: 150}}}
+  - {at: 20s,  target: gpu-exporter, do: {nodes: [gpu001, gpu002], xid: 79}}
+  - {at: 30s,  target: bmc-farm,     do: {nodes: [gpu001, gpu002], fan_fail: 2}}
+  - {at: 40s,  target: bmc-farm,     do: {nodes: [gpu001], ramp: {to: 92, over: 90s}}}
+  - {at: 60s,  target: slurm,        do: {drain: [gpu001], reason: "stress xid 79"}}
+  - {at: 70s,  target: bmc-farm,     do: {nodes: [cn004], power: "Off"}}
+  - {at: 70s,  target: bcm-mock,     do: {nodes: [cn004], state: DOWN}}
+  - {at: 75s,  target: slurm,        do: {drain: [cn004], reason: "stress node down"}}
+  - {at: 60s,  target: jira-real,    do: {fault: rate_limit, capacity: 3, fill_rate: 1}}
+  - {at: 140s, target: jira-real,    do: {fault: rate_limit_off}}
+  - {at: 170s, target: jira-real,    do: {fault: bad_logins, user: alice, count: 6}}
+  - {at: 190s, target: jira-real,    do: {fault: outage}}
+  - {at: 220s, target: jira-real,    do: {fault: restore}}
+  - {at: 220s, target: slurm,        do: {submit: {node: cn001, duration: 60}}}
+  - {at: 220s, target: slurm,        do: {submit: {node: cn002, duration: 60}}}
+  - {at: 230s, target: jira-real,    do: {fault: clear_logins}}
+  - {at: 270s, target: gpu-exporter, do: {nodes: [gpu001, gpu002], clear: true}}
+  - {at: 270s, target: bmc-farm,     do: {nodes: [gpu001, gpu002, cn004], clear: true}}
+  - {at: 270s, target: bcm-mock,     do: {nodes: [cn004], state: UP}}
+  - {at: 270s, target: slurm,        do: {resume: [gpu001, cn004]}}

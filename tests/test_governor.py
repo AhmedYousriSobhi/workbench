@@ -32,19 +32,30 @@ def test_l3_and_l4():
     lad = Ladder()
     lad.update(sig(some=35), 0)
     assert lad.update(sig(some=35), 10) == 3
-    assert lad.update(sig(full=6), 11) == 4
+    assert lad.update(sig(full=6), 11) == 3
+    assert lad.update(sig(full=6), 16) == 4
     assert Ladder().update(sig(avail=0.5 * GB), 0) == 4
+
+
+def test_a_short_stall_does_not_reach_l4_but_a_held_one_does():
+    """#286: a JVM start stalls memory for a moment; that is not pressure worth a `docker stop`."""
+    lad = Ladder()
+    assert lad.update(sig(full=6), 0) == 0
+    assert lad.update(sig(full=6), 4) == 0
+    assert lad.update(sig(full=1), 5) == 0  # the stall ended before 5 s: the clock starts over
+    assert lad.update(sig(full=6), 6) == 0
+    assert lad.update(sig(full=6), 11) == 4
 
 
 def test_l5_when_l4_persists():
     lad = Ladder()
-    assert lad.update(sig(full=6), 0) == 4
-    assert lad.update(sig(full=6), 30) == 5
+    assert lad.update(sig(avail=0.5 * GB), 0) == 4
+    assert lad.update(sig(avail=0.5 * GB), 30) == 5
 
 
 def test_deescalation_needs_60s_calm_one_step_at_a_time():
     lad = Ladder()
-    lad.update(sig(full=6), 0)  # L4
+    lad.update(sig(avail=0.5 * GB), 0)  # L4
     assert lad.update(CALM, 20) == 4
     assert lad.update(CALM, 79) == 4
     assert lad.update(CALM, 80) == 3
@@ -54,9 +65,9 @@ def test_deescalation_needs_60s_calm_one_step_at_a_time():
 
 def test_no_flapping_on_brief_calm():
     lad = Ladder()
-    lad.update(sig(full=6), 0)
+    lad.update(sig(avail=0.5 * GB), 0)
     lad.update(CALM, 30)
-    lad.update(sig(full=6), 50)  # pressure returns, calm timer resets
+    lad.update(sig(avail=0.5 * GB), 50)  # pressure returns, calm timer resets
     assert lad.update(CALM, 100) == 4
 
 
@@ -378,6 +389,7 @@ def test_apply_plan_builds_the_benchctl_selection_command(tmp_path):
     req = {"cpu_nodes": 2, "gpu_nodes": 3, "gpus_per_node": 4, "parts": ["jira", "bmc"]}
     assert g.handle("apply-plan", req)["started"] and done.wait(5)
     assert calls[0][:7] == ["up", "--cpu-nodes", "2", "--gpu-nodes", "3", "--gpus-per-node", "4"]
+    assert calls[0][7:9] == ["--app-mb", "0"]
     assert "--with" in calls[0] and calls[0][calls[0].index("jira") - 1] == "--with" and calls[0][calls[0].index("load") - 1] == "--without"
 
 
@@ -460,6 +472,37 @@ def test_two_identical_changes_leave_different_lines_so_the_page_sees_the_second
     assert len(ends) == 2 and len(set(ends)) == 2 and ": done (#1 " in ends[0] and ": FAILED (exit 1) (#2 " in ends[1]
 
 
+def test_status_lists_the_compose_services_of_the_governed_containers(tmp_path):
+    g, _ = _calm_gov(tmp_path)
+    g.groups[:] = [Group("workbench-cn001-1", 4, service="cn001"), Group("vm1", 5, "vm")]
+    assert g.handle("status", {})["services"] == ["cn001"]
+
+
+def test_overlapping_changes_run_one_at_a_time(tmp_path):
+    """Two `benchctl up` at once rewrite the same generated files; a second change waits for the first (#341)."""
+    import threading
+    import time as _t
+
+    active, peak, finished = [0], [0], threading.Semaphore(0)
+    guard = threading.Lock()
+
+    def effector(args):
+        with guard:
+            active[0] += 1
+            peak[0] = max(peak[0], active[0])
+        _t.sleep(0.15)
+        with guard:
+            active[0] -= 1
+        finished.release()
+        return 0
+
+    g, _ = _calm_gov(tmp_path, effector=effector)
+    assert g.handle("scale", {"group": "compute", "n": 2})["started"]
+    assert g.handle("scale", {"group": "compute", "n": 3})["started"]
+    assert finished.acquire(timeout=5) and finished.acquire(timeout=5)
+    assert peak[0] == 1
+
+
 def test_a_change_that_raises_is_recorded_as_failed_with_its_tag(tmp_path):
     def boom(args):
         raise OSError("docker is gone")
@@ -471,3 +514,65 @@ def test_a_change_that_raises_is_recorded_as_failed_with_its_tag(tmp_path):
     while _t.time() < deadline and not any(a.startswith("FAILED scale=2") for a in g.audit):
         _t.sleep(0.02)
     assert any(a.startswith("FAILED scale=2: docker is gone (#1 ") for a in g.audit)
+
+
+def test_slurm_step_runs_the_matching_benchctl_command(tmp_path):
+    import threading
+    for req, want in (({"name": "slurmd-restart", "node": "cn001"}, ["set", "slurmd", "cn001", "restart"]),
+                      ({"name": "slurmd-stop", "node": "cn001"}, ["set", "slurmd", "cn001", "stop"]),
+                      ({"name": "slurmctld-restart"}, ["set", "slurmctld", "restart"]),
+                      ({"name": "cancel-jobs"}, ["remove", "jobs"])):
+        calls, done = [], threading.Event()
+        g, _ = _calm_gov(tmp_path, effector=lambda a, calls=calls, done=done: calls.append(a) or done.set() or 0)
+        assert g.handle("slurm-step", req)["started"] and done.wait(5)
+        assert calls == [want]
+
+
+def test_slurm_trace_is_read_only_and_needs_a_tracer(tmp_path):
+    g, _ = _calm_gov(tmp_path)
+    assert g.handle("slurm-trace", {"nodes": [], "since": 1.0})["ok"] is False
+    g.tracer = lambda nodes, since: {"jobs": ["(no jobs)"], "nodes": {}, "logs": {}, "asked": [nodes, since]}
+    assert g.handle("slurm-trace", {"nodes": ["cn001"], "since": 5})["trace"]["asked"] == [["cn001"], 5.0]
+    g.tracer = lambda nodes, since: 1 / 0
+    assert "trace failed" in g.handle("slurm-trace", {"nodes": [], "since": 1})["error"]
+
+
+def test_refresh_jira_licence_runs_the_benchctl_refresh(tmp_path):
+    import threading
+    calls, done = [], threading.Event()
+    g, _ = _calm_gov(tmp_path, effector=lambda a: calls.append(a) or done.set() or 0)
+    assert g.handle("refresh-jira-licence", {})["started"] and done.wait(5)
+    assert calls[-1] == ["refresh", "jira-real-licence"]
+
+
+def test_status_answers_while_a_plan_with_slow_actions_runs(tmp_path):
+    """A container stop takes up to 20 s; the page asks `status` every second and must not see the governor as gone (#342)."""
+    import json
+    import threading
+    import time as _t
+
+    from governor.signals import FileSampler
+    f = tmp_path / "s.json"
+    f.write_text(json.dumps({"mem_available": 4 * GB, "psi_some": 0, "psi_full": 0}))
+    in_action, release = threading.Event(), threading.Event()
+
+    def slow(a):
+        in_action.set()
+        release.wait(10)
+
+    g = Governor(FileSampler(f), Ladder(), [Group("c1", 2), Group("c2", 2)], slow, dry_run=False)
+    g.step(0)
+    f.write_text(json.dumps({"mem_available": 1 * GB, "psi_some": 80, "psi_full": 40}))  # pressure: a plan follows
+    t = threading.Thread(target=lambda: [g.step(x) for x in (1, 10, 20, 30, 40, 50)], daemon=True)
+    t.start()
+    try:
+        assert in_action.wait(5), "no action started"
+        t0 = _t.monotonic()
+        st = g.handle("status", {})
+        assert st["ok"] and _t.monotonic() - t0 < 1  # answered while an action is still running
+        assert any("level L0" in line for line in st["audit"])
+        t0 = _t.monotonic()
+        assert g.handle("admit", {"budget_mb": 10})["ok"] in (True, False) and _t.monotonic() - t0 < 1
+    finally:
+        release.set()
+        t.join(10)

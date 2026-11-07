@@ -4,6 +4,7 @@ A scenario is `steps` (`at`, `target`, `do`) and optional `expect` assertions. E
 mock's /sim/inject (or a `scontrol` call in slurmctld). `ramp` steps expand into a series of temperature steps.
 Targets whose component is not built yet (k8s, ticket-bot) are reported as skipped, not failed.
 """
+import base64
 import json
 import re
 import time
@@ -24,7 +25,11 @@ ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "ht
 JIRA_ACTIONS = ("create", "transition", "comment", "fault", "reset")
 SLURMCTLD = "workbench-slurmctld-1"
 LOGIN = "workbench-login-1"
-HOST_TARGETS = ("slurm", "ssh")  # steps that need Docker on the host
+JIRA_REAL = "workbench-jira-real-1"
+JIRA_DB = "workbench-jira-db-1"
+JIRA_REAL_URL = "http://127.0.0.1:8083"
+JIRA_REAL_MODES = ("outage", "restore", "bad_logins", "clear_logins", "rate_limit", "rate_limit_off")  # real faults on the real Jira, no proxy (issue 303)
+HOST_TARGETS = ("slurm", "ssh", "jira-real")  # steps that need Docker on the host
 SSH_STATES = ("down", "up", "hung")
 NODE_SSHD_STATES = ("down", "up")
 NOT_BUILT = ("k8s", "ticket-bot")
@@ -75,13 +80,25 @@ class Report:
 
 def load(name: str, root: Path = SCENARIOS) -> dict:
     path = root / f"{name}.yaml"
-    if not path.is_file():
-        raise ScenarioError(f"no scenario {name!r} (see: benchctl scenario list)")
+    if not path.is_file():  # a reference number works too: SC-02 or sc-2
+        m = re.fullmatch(r"(?i)sc-?0*(\d+)", name.strip())
+        hit = [s for s in list_all(root) if m and s.get("ref") == f"SC-{int(m.group(1)):02d}"]
+        if not hit:
+            raise ScenarioError(f"no scenario {name!r} (see: benchctl scenario list)")
+        return hit[0]
     return yaml.safe_load(path.read_text())
 
 
+def summary(sc: dict) -> str:
+    """One header line before a run: reference, name, steps, length, what it touches."""
+    steps = sc.get("steps", [])
+    length = max((parse_duration(s["at"]) for s in steps), default=0)
+    targets = ", ".join(sorted({s["target"] for s in steps}))
+    return f"{sc.get('ref', '-')} {sc['name']}: {len(steps)} steps, {length:.0f} s, targets {targets}"
+
+
 def list_all(root: Path = SCENARIOS) -> list[dict]:
-    return [yaml.safe_load(p.read_text()) for p in sorted(root.glob("*.yaml"))]
+    return sorted((yaml.safe_load(p.read_text()) for p in root.glob("*.yaml")), key=lambda s: s["name"])
 
 
 def plan(sc: dict) -> list[Step]:
@@ -120,9 +137,25 @@ def validate(sc: dict, sim: dict) -> list[str]:
             problems += [f"step {i}: {m}" for m in ssh_problems(do)]
         if t == "jira" and "tickets" in do:
             problems += [f"step {i}: {m}" for m in jira_ticket_problems(do["tickets"])]
-        names = [n for key in ("nodes", "drain", "down", "resume", "power_off", "power_on") for n in do.get(key) or []]
+        if t == "slurm":
+            problems += [f"step {i}: {m}" for m in daemon_problems(do)]
+        if t == "jira-real" and do.get("fault") not in JIRA_REAL_MODES:
+            problems.append(f"step {i}: jira-real needs fault: one of {', '.join(JIRA_REAL_MODES)}")
+        names = [n for key in ("nodes", "drain", "down", "resume", "power_off", "power_on", "slurmd_stop", "slurmd_start",
+                               "slurmd_restart") for n in do.get(key) or []]
+        if isinstance(do.get("submit"), dict) and do["submit"].get("node"):
+            names.append(do["submit"]["node"])
         problems += [f"step {i}: unknown node {n!r}" for n in names if n not in nodes]
     return problems
+
+
+def daemon_problems(do: dict) -> list[str]:
+    sub = do.get("submit")
+    if sub is None:
+        return []
+    if not isinstance(sub, dict) or not sub.get("node"):
+        return ["submit needs a mapping with `node`"]
+    return [f"submit: unknown key {k!r}" for k in sorted(set(sub) - SUBMIT_KEYS)]
 
 
 def jira_ticket_problems(tk) -> list[str]:
@@ -192,7 +225,43 @@ def post(url: str, body: dict, timeout: float = 10) -> None:
     urllib.request.urlopen(req, timeout=timeout).close()
 
 
+HOLD = "/run/workbench/slurmd.hold"  # images/node-base/slurmd-run waits while this file exists
+DAEMON_KEYS = ("slurmd_stop", "slurmd_start", "slurmd_restart", "slurmctld_restart", "submit", "cancel")
+SUBMIT_KEYS = {"node", "user", "gpus", "duration"}
 SLURM_STATES = {"drain": "drain", "down": "down", "resume": "resume", "power_off": "off", "power_on": "on"}
+
+
+def disruptive(sc: dict) -> bool:
+    """True when a step restarts or stops a Slurm daemon or starts a job: the governor must admit that first (GV-9)."""
+    return any(set(s.get("do") or {}) & set(DAEMON_KEYS) for s in sc.get("steps", []))
+
+
+def submit_command(sub: dict, sim: dict | None = None) -> list[str]:
+    """The same job `benchctl submit` makes (a `sleep` for `duration` s, pinned to `node`, `gpus` GPUs on a GPU node)."""
+    from . import workload
+
+    sim = sim or yaml.safe_load(Path("sim.yaml").read_text())
+    return workload.command(sim, sub["node"], int(sub.get("gpus", 0)), int(sub.get("duration", 600)), sub.get("user"))
+
+
+def daemon_commands(do: dict) -> list[list[str]]:
+    """Docker commands for the resilience steps. A stop creates the hold file first so the supervisor does not bring
+    slurmd back; `pkill -x slurmd` stops only the daemon (slurmstepd, the job's step process, is a different name)."""
+    cmds: list[list[str]] = []
+    for n in do.get("slurmd_stop", []):
+        c = f"workbench-{n}-1"
+        cmds += [["docker", "exec", c, "touch", HOLD], ["docker", "exec", c, "pkill", "-x", "slurmd"]]
+    for n in do.get("slurmd_restart", []):  # no hold file: the supervisor starts slurmd again by itself
+        cmds.append(["docker", "exec", f"workbench-{n}-1", "pkill", "-x", "slurmd"])
+    for n in do.get("slurmd_start", []):
+        cmds.append(["docker", "exec", f"workbench-{n}-1", "rm", "-f", HOLD])
+    if do.get("slurmctld_restart"):  # slurmctld is the container's main process, so restarting it is restarting the container
+        cmds.append(["docker", "restart", "-t", "10", SLURMCTLD])
+    if do.get("submit"):
+        cmds.append(submit_command(do["submit"]))
+    if do.get("cancel"):
+        cmds.append(["docker", "exec", SLURMCTLD, "scancel", "--quiet", "-u", "alice"])
+    return cmds
 
 
 def side_effects(step: Step) -> list[Step]:
@@ -240,18 +309,19 @@ def side_effects(step: Step) -> list[Step]:
             Step(step.at, "slurm", {"power_on" if on else "power_off": nodes}), *tickets]
 
 
-def execute(step: Step, poster=post, runner=checks.run, host: bool = True, slurm=None) -> Outcome:
+def execute(step: Step, poster=post, runner=checks.run, host: bool = True, slurm=None, daemon=None) -> Outcome:
     """Apply one step (and what it implies, see side_effects); the label names what was done, status says whether it worked.
 
     host=False is for callers without Docker access (the Web UI): `slurm(node, state, reason)` (the governor) takes
-    Slurm steps when given, otherwise they are skipped, not attempted.
+    Slurm steps when given, otherwise they are skipped, not attempted; `daemon(do)` -> (done, why not) takes the job and
+    daemon steps (DAEMON_KEYS) the same way.
     """
-    main = _apply(step, poster, runner, host, slurm)
+    main = _apply(step, poster, runner, host, slurm, daemon)
     if main.status != "ok":
         return main
     failed, notes = [], []
     for extra in side_effects(step):
-        o = _apply(extra, poster, runner, host, slurm)
+        o = _apply(extra, poster, runner, host, slurm, daemon)
         if extra.target == "jira" and o.status == "failed":  # no Jira in this cluster: a fault is still a fault
             o = Outcome(o.label, "skipped", "no Jira to file the ticket in")
         (failed if o.status == "failed" else notes if o.status == "skipped" else []).append(f"{extra.target}: {o.detail}")
@@ -260,11 +330,14 @@ def execute(step: Step, poster=post, runner=checks.run, host: bool = True, slurm
     return Outcome(main.label, "ok", "; ".join(notes))
 
 
-def _apply(step: Step, poster, runner, host: bool, slurm) -> Outcome:
+def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcome:
     label = f"{step.target} {json.dumps(step.do, sort_keys=True)}"
     if step.target in NOT_BUILT:
         return Outcome(label, "skipped", f"{step.target} is not built yet")
-    if step.target == "slurm" and not host and slurm:  # no Docker here: the governor does it
+    if step.target == "slurm" and not host and daemon and set(step.do) & set(DAEMON_KEYS):  # no Docker: the governor does it
+        ok, detail = daemon(step.do)
+        return Outcome(label, "ok" if ok else "skipped", detail)  # a refusal (calm levels only) is not a failure of the scenario
+    if step.target == "slurm" and not host and slurm and not set(step.do) & set(DAEMON_KEYS):  # no Docker: the governor does it
         for key, state in SLURM_STATES.items():
             for n in step.do.get(key, []):
                 ok, detail = slurm(n, state, step.do.get("reason"))
@@ -301,6 +374,12 @@ def _apply(step: Step, poster, runner, host: bool, slurm) -> Outcome:
                 r = runner(["docker", "exec", SLURMCTLD, "scontrol", "update", f"nodename={n}", "state=resume"])
                 if r.returncode:
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+            for cmd in daemon_commands(step.do):
+                r = runner(cmd)
+                if r.returncode and cmd[3:4] != ["pkill"]:  # pkill exits 1 when slurmd is already down: that is the goal
+                    return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+        elif step.target == "jira-real":
+            return jira_real_fault(step, label, runner)
         elif step.target == "jira":
             if "tickets" in step.do:  # {tickets: {action: create|transition|comment|reset, ...}}
                 poster(ENDPOINTS["jira-tickets"], step.do["tickets"])
@@ -321,6 +400,51 @@ def _apply(step: Step, poster, runner, host: bool, slurm) -> Outcome:
 def node_state(node: str, runner=checks.run) -> str:
     r = runner(["docker", "exec", SLURMCTLD, "sinfo", "-h", "-N", "-n", node, "-o", "%T"])
     return r.stdout.strip().split("\n")[0] if r.returncode == 0 else ""
+
+
+def jira_real_fault(step: Step, label: str, runner) -> Outcome:
+    """Real faults on the real Jira (no fault proxy, issue 303): `outage` pauses its container (clients time out, as with a
+    hung node), `restore` unpauses it, `bad_logins` sends wrong-password logins until Jira's own CAPTCHA lock answers 403
+    (the 401 then 403 pattern the Atlassian community reports); `clear_logins` resets the failed-login count (as an admin does in User management)."""
+    fault = step.do["fault"]
+    if fault in ("outage", "restore"):
+        r = runner(["docker", "pause" if fault == "outage" else "unpause", JIRA_REAL])
+        if r.returncode and "already" not in r.stderr and "is not paused" not in r.stderr:
+            return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+        return Outcome(label, "ok")
+    if fault == "clear_logins":  # what an admin does in User management ("reset failed login count"): zero it in Jira's own table
+        r = runner(["docker", "exec", JIRA_DB, "psql", "-U", "jira", "-d", "jira", "-qc",
+                    "update cwd_user_attributes set attribute_value='0' where attribute_name='login.currentFailedCount'"])
+        return Outcome(label, "failed", (r.stderr or r.stdout).strip()) if r.returncode else Outcome(label, "ok")
+    if fault in ("rate_limit", "rate_limit_off"):
+        return jira_real_rate_limit(step, label, runner)
+    user, n = str(step.do.get("user", "alice")), int(step.do.get("count", 5))
+    for _ in range(n):
+        req = urllib.request.Request(f"{JIRA_REAL_URL}/rest/api/2/myself", headers={
+            "Authorization": "Basic " + base64.b64encode(f"{user}:wrong-password".encode()).decode()})
+        try:
+            urllib.request.urlopen(req, timeout=10)
+        except urllib.error.HTTPError:
+            pass  # 401, then 403 once the CAPTCHA lock is on: both are the goal
+        except OSError as e:
+            return Outcome(label, "failed", str(e))
+    return Outcome(label, "ok")
+
+
+def rate_limit_sql(on: bool, capacity: int = 3, fill_rate: int = 1) -> str:
+    """Jira's own rate limiting (admin Rate limiting page) set in its tables, then the settings version is bumped so the
+    running Jira reloads it (no restart; the reload job runs about once a minute, issue 303)."""
+    mode = "ON" if on else "OFF"
+    return (f"update \"AO_AC3877_SYSTEM_RL_SETTINGS\" set \"MODE\"='{mode}', \"CAPACITY\"={capacity}, \"FILL_RATE\"={fill_rate}, "
+            "\"INTERVAL_FREQUENCY\"=1, \"INTERVAL_TIME_UNIT\"='SECONDS'; "
+            "update \"AO_AC3877_SETTINGS_VERSION\" set \"VERSION\"=\"VERSION\"+1;")
+
+
+def jira_real_rate_limit(step: Step, label: str, runner) -> Outcome:
+    on = step.do["fault"] == "rate_limit"
+    sql = rate_limit_sql(on, int(step.do.get("capacity", 3)), int(step.do.get("fill_rate", 1)))
+    r = runner(["docker", "exec", JIRA_DB, "psql", "-U", "jira", "-d", "jira", "-qc", sql])
+    return Outcome(label, "failed", (r.stderr or r.stdout).strip()) if r.returncode else Outcome(label, "ok")
 
 
 def jira_search(jql: str) -> list[dict]:
@@ -348,6 +472,15 @@ def jira_status(jql: str, status: str, count: int | None = None) -> bool:
     return bool(found) and all(i["fields"]["status"]["name"] == status for i in found) and count in (None, len(found))
 
 
+def job_states(node: str, runner=checks.run) -> list[str]:
+    r = runner(["docker", "exec", SLURMCTLD, "squeue", "-h", "-w", node, "-o", "%T"])
+    return r.stdout.split() if r.returncode == 0 else []
+
+
+def stepd_alive(node: str, runner=checks.run) -> bool:
+    return runner(["docker", "exec", f"workbench-{node}-1", "pgrep", "-x", "slurmstepd"]).returncode == 0
+
+
 def expectation(exp: dict, runner=checks.run, host: bool = True):
     """(label, holds(), within seconds) for one assertion; holds is None when it cannot be evaluated here."""
     (kind, args), = exp.items()
@@ -355,6 +488,10 @@ def expectation(exp: dict, runner=checks.run, host: bool = True):
     within = parse_duration(args.get("within", "0s"))
     if kind == "slurm.node_state" and host:
         return label, lambda: args["state"] in node_state(args["node"], runner), within
+    if kind == "slurm.job_state" and host:  # a job on `node` is in `state` (RUNNING, PENDING, ...)
+        return label, lambda: args["state"] in job_states(args["node"], runner), within
+    if kind == "slurm.stepd" and host:  # a slurmstepd runs on `node` (alive: true) or none does (alive: false)
+        return label, lambda: stepd_alive(args["node"], runner) == bool(args.get("alive", True)), within
     if kind == "jira.issue_created":
         return label, lambda: jira_labels(args["labels"]), within
     if kind == "jira.issue_status":
@@ -379,7 +516,8 @@ def check_expect(exp: dict, factor: float, sleep=time.sleep, clock=time.monotoni
 
 def run(sc: dict, speed: float = 1.0, dilation: float = 1.0, say=print, sleep=time.sleep, clock=time.monotonic,
         poster=post, runner=checks.run, host: bool = True, should_stop=lambda: False,
-        on_step=lambda step, outcome: None, on_expect=lambda outcome: None, slurm=None) -> Report:
+        on_step=lambda step, outcome: None, on_expect=lambda outcome: None, slurm=None, daemon=None,
+        on_before=lambda step: None) -> Report:
     """Play the scenario: wait for each step's time (divided by speed x time_dilation) and apply it.
 
     Every expectation is watched from the start: it passes the moment it holds (even if a later step undoes it) and
@@ -421,7 +559,8 @@ def run(sc: dict, speed: float = 1.0, dilation: float = 1.0, say=print, sleep=ti
         if should_stop():
             report.stopped = True
             return report
-        outcome = execute(step, poster, runner, host, slurm)
+        on_before(step)
+        outcome = execute(step, poster, runner, host, slurm, daemon)
         report.steps.append(outcome)
         on_step(step, outcome)
         say(f"[{step.at:6.1f}s] {outcome.status:7} {outcome.label}" + (f"  ({outcome.detail})" if outcome.detail else ""))

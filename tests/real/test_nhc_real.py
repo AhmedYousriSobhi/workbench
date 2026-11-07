@@ -22,11 +22,11 @@ def reason(node: str = "gpu001") -> str:
 
 
 @pytest.fixture(scope="module")
-def cluster():
+def cluster(test_timers):
     os.chdir(ROOT)
     bring_up(yaml.safe_load((ROOT / "sim.yaml").read_text()))
     assert wait_for(lambda: "gpu001" in docker("workbench-login-1", "sinfo", "-h", "-N", "-t", "idle", "-o", "%N").stdout, timeout=90)
-    assert wait_for(exporter_up, timeout=180), "the GPU exporter (it installs pyyaml at start) never answered"
+    assert wait_for(exporter_up, timeout=60), "the GPU exporter never answered"
     yield
     if NAME in [c.name for c in nhc.load()]:  # a failed test must not leave the check in the checkout
         nhc.remove(NAME)

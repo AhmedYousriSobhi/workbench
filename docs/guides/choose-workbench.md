@@ -9,14 +9,17 @@ Example: 2 CPU nodes, 4 GPU nodes with Jira.
 ./scripts/benchctl plan --cpu-nodes 2 --gpu-nodes 4 --with jira
 ```
 
-It prints the nodes and parts, the memory limits by item and the total, then one verdict line:
+It prints the nodes and parts, the memory by item (expected use and the cap), the reserve for the app under test (1 GB until you run `benchctl measure app --match NAME --save`, see [memory](memory.md)) and the total it needs, then one verdict line:
 
-- `fits: needs 1720 MB, 5340 MB free, 3620 MB would remain (floor 1024 MB)`: exit code 0.
+- `fits: needs 2092 MB (1068 MB expected + 1024 MB for the app (assumed, not measured)), 8000 MB free, 5908 MB would remain (floor 1024 MB)`: exit code 0.
 - `does not fit: ... short by 273 MB ... Try: drop load (100 MB); drop accounting (360 MB); 5 fewer node(s)`: exit code 1,
-  and it says what to remove.
+  and it says what to remove. When the workbench alone fits and only the app's reserve does not, it names the largest reserve that does (`--app-mb 700 if the app needs less than 1024 MB`); start the app after the workbench.
 
-The total is the sum of the container memory limits plus Prometheus and Grafana: an upper bound, the same figure the
-memory governor admits against. Real use is lower.
+**Expected** is what each part was measured to use plus 15 percent (never above its cap); **cap** is the container limit the
+governor enforces. Admission compares the expected use plus the app's reserve with free memory, so a start that fits is no longer
+refused because caps are generous. Services of the workbench that already run are left out of what the plan needs, for the same reason (the free figure no longer contains them). If the app under test already runs, its memory is already out of the free figure too: add
+`--app-mb 0` (to `plan`, `up`, `apply` or `start`) or set `WORKBENCH_APP_MB=0`. The numbers and how to re-measure them:
+[memory contract](../architecture/04-memory-and-profiles.md); the per-part table is in [how much memory it uses](memory.md).
 
 ## 2. Build
 
@@ -66,7 +69,7 @@ Name the parts by what they are for. Values are comma separated or repeated, `al
 ./scripts/benchctl start --addons --without teleport              # everything except one
 ```
 
-Category flags add to the default parts (`jira`, `bmc`, `bcm`, `accounting`, `scenarios`); `--without` removes. A typo gets a hint: `unknown ticketing item 'jirra'. Did you mean 'jira'?`. A plain `benchctl start` with no flags is the `min` preset, which has none of the optional parts.
+Category flags add to the default parts (`jira`, `bmc`, `bcm`, `accounting`, `scenarios`); `--without` removes. A typo gets a hint: `unknown ticketing item 'jirra'. Did you mean 'jira'?`. A plain `benchctl start` with no flags is the `min` preset, which has none of the optional parts. `start` never reuses the workbench you last built: its first line names what it starts and, if one was saved, what it replaces (`Starting the min size preset. This replaces the workbench last built (2 compute + 3 GPU nodes, parts ...)`). `benchctl start --profile min` is the plain default, spelled out, and `start` with parts builds the default workbench plus those parts.
 
 ## A workbench file
 
@@ -98,7 +101,7 @@ you chose, not the numbers in `sim.yaml`.
 running workbench** asks the governor to rebuild it to the plan: new nodes start, nodes you no longer want are removed,
 and Slurm's node list is reloaded. Progress shows in the entity list, the Infrastructure architecture and *Governor activity* (in the Governor panel). It needs the governor
 started by `./scripts/benchctl start` (it has the repository path) and calm memory (L0-L1); otherwise the page says why
-in one line. You can always copy the command shown and run it in a terminal instead.
+in one line. **GB needed** on the page is the number admission compares with free memory (expected use, minus what already runs, no app reserve), not the sum of the caps; hover it for the parts. `benchctl plan` shows the same number plus the 4096 MB app reserve, so the CLI figure is higher unless you pass `--app-mb 0`. The page counts the app under test as already running (no 4 GB reserve, `--app-mb 0` in the command it shows and in the rebuild). You can always copy the command shown and run it in a terminal instead.
 
 ## Going back
 

@@ -11,7 +11,7 @@ import urllib.error
 from collections.abc import Callable
 from pathlib import Path
 
-from . import addressing, checks, compose, logins, teleport, workbench
+from . import addressing, checks, compose, jira_real, logins, memory, slurmconf, teleport, workbench
 
 COMPOSE_FILE = Path("compose/generated/docker-compose.yml")
 PROJECT = "workbench"
@@ -21,6 +21,7 @@ STAGES = [  # (label, service-name pattern); later stages depend on earlier ones
     ("slurm core", r"slurmctld|mariadb|slurmdbd"),
     ("slurm services", r"slurmrestd|accounting-init"),
     ("mocks", r"bmc-farm|bcm-mock|jira-mock"),
+    ("jira real", r"jira-db|jira-real"),
     ("teleport", r"teleport"),
     ("bmc addresses", r"bmc-(cn|gpu)\d+"),
     ("nodes", r"(cn|gpu)\d+"),
@@ -76,15 +77,16 @@ def governor_admits(need_mb: int, say: Callable[[str], None], ask=None) -> bool:
 
 
 def missing_mb(services: dict, runner: Runner, file: Path) -> int:
-    """Memory limits of the services that are not running yet (what a start would add)."""
+    """Expected memory (measured use plus tolerance, never above the cap) of the services not running yet: what a start would add."""
     up_now = set(runner(dc("ps", "--status", "running", "--format", "{{.Service}}", file=file)).stdout.split())
-    return sum(int(s["mem_limit"].rstrip("m")) for n, s in services.items() if n not in up_now)
+    return sum(memory.expected_mb(n, int(s["mem_limit"].rstrip("m")), s.get("labels")) for n, s in services.items() if n not in up_now)
 
 
 def admit(profile: str, available: int | None = None) -> tuple[bool, str]:
     """Pre-flight: refuse unless the profile fits, naming a smaller profile that does."""
     avail = checks.mem_available() if available is None else available
-    return checks.preflight(profile, checks.load_profiles(), avail)
+    app = memory.app_mb() / 1024  # the app under test's reserve, on top of every profile's own expected use
+    return checks.preflight(profile, {n: b + app for n, b in checks.load_profiles().items()}, avail)
 
 
 ONESHOT = {"accounting-init"}  # run once and exit; success is exit code 0, not "running"
@@ -135,6 +137,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     except logins.LoginError as e:
         say(f"FAILED login nodes: {e}")
         return False
+    if slurmconf.test_timers_on():
+        say(f"NOTE test timers are on ({slurmconf.TEST_TIMERS_ENV}=1): {slurmconf.timers()}; not for client testing")
     conf = COMPOSE_FILE.parent / "slurm" / "slurm.conf"  # a changed file needs a controller restart (it only rereads at start)
     old_conf = conf.read_text() if conf.is_file() else None
     path = compose.write(data, sim=sim, compute_nodes=prof.get("compute_nodes"))
@@ -150,7 +154,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
             ok, msg = admit(profile, available)
         else:
             avail = checks.mem_available() if available is None else available
-            ok, msg = workbench.verdict(workbench.estimate(sim, chosen), avail // (1024 * 1024))
+            ok, msg = workbench.verdict(workbench.estimate(sim, chosen, running=workbench.running_services()), avail // (1024 * 1024))
         say(("admitted: " if ok else "REFUSED: ") + msg)
         if not ok or not governor_admits(missing, say):
             return False
@@ -161,6 +165,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         say(f"skipping (not implemented yet): {', '.join(skip)}")
     if "bmc-farm" in todo:
         ensure_bmc_credentials()
+    if "jira-real" in todo:
+        jira_real.ensure_secrets()
     if any(logins.is_login(n) for n in todo) or any(re.fullmatch(r"(cn|gpu)\d+", n) for n in todo):
         try:
             ensure_ssh_keys()
@@ -214,6 +220,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
             return False
         if label == "teleport" and not teleport.bootstrap(sim, ips, runner, dc, say):  # before the nodes read their certificates
             return False
+        if label == "teleport":
+            teleport.snapshot()  # the identity survives a rebuild (an emptied data directory restores it)
     if (changed or acct_added or (conf_changed and "slurmctld" in before)) and "slurmctld" in todo:  # slurm.conf changed under a running controller
         say("restarting slurmctld to pick up the new " + ("accounting setup" if acct_added and not changed else "node list" if changed else "slurm.conf"))
         r = runner(dc("up", "-d", "--no-deps", "--force-recreate", "slurmctld", file=path))
@@ -247,7 +255,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
 
 def down(runner: Runner = _run, say: Callable[[str], None] = print) -> bool:
     """Stop and remove only this compose project; the user's own containers/VMs are untouched."""
-    r = runner(dc("down", "--remove-orphans"))
+    t = os.environ.get("WORKBENCH_STOP_TIMEOUT", "")  # seconds before docker kills a container that ignores SIGTERM (default 10; the tests set 2, issue 310)
+    r = runner(dc("down", "--remove-orphans", *(["-t", t] if t.isdigit() else [])))
     say("stack is down" if r.returncode == 0 else f"FAILED: {r.stderr.strip()[-300:]}")
     return r.returncode == 0
 

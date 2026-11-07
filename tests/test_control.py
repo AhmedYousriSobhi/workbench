@@ -40,6 +40,11 @@ def test_dispatch_rejects_unknown_and_bad():
     assert d(b"[1]")["ok"] is False
     assert d(b'{"cmd":"freeze","target":"nope"}')["error"].startswith("unknown group")
     assert d(b'{"cmd":"scale","group":"cn","n":-1}')["ok"] is False
+    msg = "scale needs group:str and n:int 0..64"
+    for bad in ("true", "65", "100000", "2.0"):  # a bool is an int in Python; the cap matches apply-plan's cpu_nodes (#343)
+        assert d(f'{{"cmd":"scale","group":"compute","n":{bad}}}'.encode())["error"] == msg, bad
+    assert d(b'{"cmd":"scale","group":"compute","n":64}').get("error") != msg
+    assert d(b'{"cmd":"admit","budget_mb":true}')["ok"] is False
     assert d(b'{"cmd":"set-profile"}')["ok"] is False
     assert d(b"x" * 5000)["error"] == "request too large"
 
@@ -70,7 +75,7 @@ def test_real_mode_calls_executor():
 
 def test_level_change_runs_plan():
     g = make()
-    g.sampler.s = Signals(4 * GB, 0, 6.0)  # full PSI -> L4
+    g.sampler.s = Signals(GB // 2, 0, 6.0)  # low MemAvailable -> L4 at once
     assert g.step(0) == 4
     assert any("save vm" in m for m in g.audit)
 
@@ -129,3 +134,20 @@ def test_apply_plan_accepts_an_optional_list_of_bmc_node_names_only():
     assert d(ok)["ok"] and d({**ok, "bmc_nodes": ["cn001", "gpu002"]})["ok"] and d({**ok, "bmc_nodes": []})["ok"]
     for bad in ("cn001", ["cn001; rm -rf /"], ["../x"], [1], ["cn001"] * 81):
         assert d({**ok, "bmc_nodes": bad})["ok"] is False
+
+
+def test_slurm_step_and_trace_accept_only_known_names_and_node_names():
+    d = lambda r: control.dispatch(json.dumps(r).encode(), lambda c, q: {"ok": True}, lambda: {"compute"})
+    assert d({"cmd": "slurm-step", "name": "slurmd-restart", "node": "cn001"})["ok"]
+    assert d({"cmd": "slurm-step", "name": "slurmctld-restart"})["ok"] and d({"cmd": "slurm-step", "name": "cancel-jobs"})["ok"]
+    for bad in ({"name": "slurmd-restart"}, {"name": "slurmd-stop", "node": "cn001; rm"}, {"name": "rm -rf"}, {"node": "cn001"}):
+        assert d({"cmd": "slurm-step", **bad})["ok"] is False
+    assert d({"cmd": "slurm-trace", "nodes": ["cn001"], "since": 12.5})["ok"] and d({"cmd": "slurm-trace", "nodes": [], "since": 1})["ok"]
+    for bad in ({"nodes": ["x;y"], "since": 1}, {"nodes": "cn001", "since": 1}, {"nodes": ["cn001"]}, {"nodes": ["cn001"], "since": True},
+                {"nodes": [f"cn00{i}" for i in range(9)], "since": 1}):
+        assert d({"cmd": "slurm-trace", **bad})["ok"] is False
+
+
+def test_refresh_jira_licence_takes_no_arguments():
+    d = lambda r: control.dispatch(json.dumps(r).encode(), lambda c, q: {"ok": True}, lambda: {"compute"})
+    assert d({"cmd": "refresh-jira-licence"})["ok"]

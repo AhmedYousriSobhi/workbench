@@ -23,7 +23,7 @@ MIN_RAM_GB, REC_RAM_GB = 8, 12  # total RAM: below the first the stack cannot fi
 MIN_DISK_GB, REC_DISK_GB = 10, 20  # free space for images and Prometheus data
 MIN_CPUS, REC_CPUS = 2, 4
 MIN_PYTHON = (3, 11)
-PORTS = {8088: "web UI", 8080: "jira-mock", 8081: "bcm-mock", 8000: "bmc-farm", 9400: "gpu-exporter",
+PORTS = {8088: "web UI", 8080: "jira-mock", 8083: "jira-real", 8081: "bcm-mock", 8000: "bmc-farm", 9400: "gpu-exporter",
          3000: "Grafana", 9090: "Prometheus"}
 SAFETY_FLOOR = 1.0  # GB of MemAvailable that must remain after a profile starts (same as benchctl preflight)
 
@@ -180,6 +180,18 @@ def check_profiles(avail_gb: float, budgets: dict[str, float]) -> Check:
                  f"(largest: {fits[-1]}, budget {budgets[fits[-1]]:g} GB)")
 
 
+def _app_reserve_mb() -> int:
+    """WORKBENCH_APP_MB, else the saved `benchctl measure app --save`, else 1024 (benchctl/memory.py APP_MB)."""
+    raw = os.environ.get("WORKBENCH_APP_MB", "")
+    if raw.strip().isdigit():
+        return int(raw)
+    try:
+        import json
+        return int(json.loads((Path(__file__).resolve().parent.parent / "compose" / "generated" / "app_reserve.json").read_text())["mb"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return 1024
+
+
 def run_all() -> list[Check]:
     total, avail = meminfo_gb() if platform.system() == "Linux" else (0.0, 0.0)
     linux = platform.system() == "Linux"
@@ -189,7 +201,8 @@ def run_all() -> list[Check]:
         out += [check_cgroup_v2()]
     out += [*check_docker(), check_ports(), *check_optional()]
     if linux:
-        out.append(check_profiles(avail, profile_budgets()))
+        app = _app_reserve_mb() / 1024  # the app under test's reserve (same precedence as benchctl/memory.py; stdlib only here)
+        out.append(check_profiles(avail, {n: b + app for n, b in profile_budgets().items()}))
     return out
 
 

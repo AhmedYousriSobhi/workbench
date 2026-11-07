@@ -32,7 +32,7 @@ def cluster():
     assert wait_for(lambda: "gpu001" in subprocess.run(
         ["docker", "exec", "-u", "alice", "workbench-login-1", "sinfo", "-h", "-N", "-p", "gpu", "-t", "idle", "-o", "%N"],
         capture_output=True, text=True, check=False).stdout, timeout=90)
-    assert wait_for(_exporter_up, timeout=120), "the GPU exporter (it installs pyyaml at start) never answered"
+    assert wait_for(_exporter_up, timeout=60), "the GPU exporter never answered"
     yield
     stack.down(say=lambda m: None)
 

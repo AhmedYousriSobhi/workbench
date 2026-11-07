@@ -52,3 +52,10 @@ installation, agentless OpenSSH, upgrade overview).
   (priority class P2).
 - Open until measured live: the real memory use, the exact 18.x tag, and whether the agentless connection works
   through the unprivileged node network without extra routes.
+
+## Addendum: the cluster identity survives a rebuild (issue 223)
+A new Teleport cluster has a new CA, so a client's saved session fails with `tls: unknown certificate authority` and
+every user must be invited again. `benchctl down`, `up` and `add invite` therefore copy the sqlite backend (CA, users,
+credentials; via the sqlite backup API, safe while Teleport runs), `host_uuid` and the proxy certificate to
+`compose/generated/secrets/teleport/state` with the Teleport version. An empty data directory restores it when the
+version matches; another version starts a new cluster. The copy is taken at those moments, not continuously.

@@ -1,4 +1,5 @@
 name: login-node-down
+ref: SC-15
 description: The login node stops answering for 30 s (connections refused), then comes back with the same host key
 steps:
   - {at: 0s,  target: ssh, do: {state: down}}

@@ -19,7 +19,7 @@ from webui.app import create_app, governor_status
 ROOT = Path(__file__).resolve().parent.parent
 TOKEN = "test-token-123"
 STATUS = {"ok": True, "level": 2, "dry_run": False, "mem_available": 3 * 2**30, "psi_some": 4.5, "psi_full": 0.1,
-          "groups": ["compute"], "violations": [], "audit": ["L2: throttle p4"]}
+          "groups": ["compute"], "services": ["jira-mock"], "violations": [], "audit": ["L2: throttle p4"]}
 
 
 def free_port() -> int:
@@ -161,7 +161,11 @@ def test_launcher_prints_a_login_link_and_serves_with_the_token(monkeypatch, tmp
     launcher.main()
     out = capsys.readouterr().out
     token = launcher.load_token(tmp_path / "secrets" / "ui_token")
-    assert out.strip() == f"workbench UI: http://127.0.0.1:9123/login?token={token}"
+    assert out.strip() == "workbench UI: http://127.0.0.1:9123/login"  # piped (a log file): no token in it
+    assert token not in out
+    monkeypatch.setattr(launcher.sys.stdout, "isatty", lambda: True, raising=False)
+    launcher.main()
+    assert capsys.readouterr().out.strip() == f"workbench UI: http://127.0.0.1:9123/login?token={token}"  # a terminal gets the link
     assert ran["kw"] == {"host": "127.0.0.1", "port": 9123, "log_level": "warning"}  # localhost only (W-8)
 
 
@@ -181,7 +185,7 @@ def test_cluster_endpoints_need_auth_csrf_and_validate(ui):
 def test_page_has_the_app_shell(ui):
     body = req(ui, "/")[1].decode()
     for needle in ('class="skip"', '<main id="main"', 'id="govdlg"', 'id="scndlg"',
-                   'id="theme"', 'id="strip"', 'id="attn"', 'id="list"', 'id="flow"', 'prefers-reduced-motion'):
+                   'id="theme"', 'id="strip"', 'id="attn"', 'id="list"', 'id="flow"', 'id="viewseg"', 'id="crumb"', 'id="ovprev"', 'prefers-reduced-motion'):
         assert needle in body, needle
 
 
@@ -222,9 +226,36 @@ def test_plan_endpoint_estimates_without_side_effects(ui):
     data = json.loads(body)
     assert code == 200 and "2 cpu, 4 gpu" in data["text"] and data["total_mb"] > 700
     assert data["command"].startswith("benchctl up --cpu-nodes 2 --gpu-nodes 4") and "--without bmc" in data["command"]
+    assert data["command"].endswith("--app-mb 0") and "app under test" not in data["text"]  # the app already runs: no reserve, so Apply can show
     assert req(ui, "/api/plan?cpu_nodes=999")[0] == 422 and req(ui, "/api/plan?cpu_nodes=x")[0] == 422
     assert req(ui, "/api/plan", auth=False)[0] == 401
     assert b'id="plandlg"' in req(ui, "/")[1] and b"loadPlan" in req(ui, "/")[1]
+
+
+def test_plan_takes_running_services_from_the_governor_not_from_docker(ui, monkeypatch):
+    """The page has no Docker (W-3): what runs now comes from the governor's status (#339)."""
+    from benchctl import workbench
+
+    def boom(*a, **k):
+        raise AssertionError("the web page must not run docker")
+
+    monkeypatch.setattr(workbench, "running_services", boom)
+    monkeypatch.setattr("subprocess.run", boom)
+    code, body = req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8&parts=jira")
+    assert code == 200 and json.loads(body)["running_mb"] > 0  # jira-mock is in the governor's list
+
+
+def test_a_slow_plan_does_not_stall_the_other_requests(ui, monkeypatch):
+    """/api/plan used to run its blocking work on the event loop and froze every feed meanwhile (#340)."""
+    monkeypatch.setattr("webui.app.checks.mem_available", lambda: (time.sleep(1.5), 8 * 2**30)[1])
+    slow = threading.Thread(target=req, args=(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8"))
+    slow.start()
+    time.sleep(0.3)
+    t0 = time.time()
+    assert req(ui, "/api/status")[0] == 200
+    quick = time.time() - t0
+    slow.join()
+    assert quick < 0.8
 
 
 def test_connections_endpoint_lists_every_entity_with_credential_paths_only(ui):
@@ -245,6 +276,13 @@ def test_plan_apply_needs_csrf_validates_and_asks_the_governor(ui):
     code, body = req(ui, q, "POST", headers={"X-Requested-With": "workbench"})
     assert code == 200 and json.loads(body)["started"] is True
     assert b"pl-apply" in req(ui, "/")[1]
+
+
+def test_jira_refresh_button_needs_csrf_and_asks_the_governor(ui):
+    assert req(ui, "/api/jira-real/refresh", "POST")[0] == 403
+    code, body = req(ui, "/api/jira-real/refresh", "POST", headers={"X-Requested-With": "workbench"})
+    assert code == 200 and json.loads(body)["started"] is True
+    assert b"data-post" in req(ui, "/")[1] and req(ui, "/api/jira-real/refresh", "POST", auth=False)[0] == 401
 
 
 def test_export_button_downloads_the_profile_and_explains_a_missing_format(ui, monkeypatch, tmp_path):
@@ -371,3 +409,93 @@ def test_a_workload_button_asks_the_governor_to_submit_a_job_on_that_node(tmp_pa
     finally:
         server.should_exit = True
         gov.shutdown()
+
+
+def test_a_resilience_scenario_goes_through_the_governor_and_the_page_gets_a_trace(tmp_path):
+    asked = []
+    trace = {"jobs": ["7 RUNNING cn001"], "nodes": {"cn001": {"slurmd": "5", "slurmstepd": "9"}},
+             "logs": {"workbench-slurmctld-1": ["slurmctld: Node cn001 not responding"]}}
+
+    def handle(cmd, request):
+        asked.append((cmd, request))
+        return {"ok": True, "trace": trace} if cmd == "slurm-trace" else {"ok": True, "started": True} if cmd != "status" else STATUS
+
+    sock = str(tmp_path / "g.sock")
+    gov = control.serve(sock, handle, lambda: {"compute"})
+    (tmp_path / "res.yaml").write_text(
+        "name: res\ndescription: d\nsteps:\n  - {at: 0s, target: slurm, do: {submit: {node: cn001, duration: 60}}}\n"
+        "  - {at: 0s, target: slurm, do: {slurmd_restart: [cn001]}}\n")
+    port = free_port()
+    server = uvicorn.Server(uvicorn.Config(create_app(TOKEN, sock, tmp_path, ROOT / "sim.yaml", fetch=no_stack, poster=no_stack),
+                                           host="127.0.0.1", port=port, log_level="error"))
+    threading.Thread(target=server.run, daemon=True).start()
+    while not server.started:
+        time.sleep(0.02)
+    base, h = f"http://127.0.0.1:{port}", {"X-Requested-With": "workbench"}
+    try:
+        assert req(base, "/api/scenarios/res/run?trace=1", "POST", headers=h)[0] == 200
+        state = {}
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            state = json.loads(req(base, "/api/scenarios/run")[1])
+            if not state["running"]:
+                break
+            time.sleep(0.05)
+        assert state["ok"] is True and [s["status"] for s in state["steps"]] == ["ok", "ok"]
+        cmds = [(c, r.get("name") or r.get("node")) for c, r in asked if c in ("submit-job", "slurm-step")]
+        assert cmds == [("slurm-step", "slurmd-restart"), ("submit-job", "cn001")] or cmds == [("submit-job", "cn001"), ("slurm-step", "slurmd-restart")]
+        assert [e["label"][:5] for e in state["trace"]] == ["slurm", "slurm"]
+        assert "Node cn001 not responding" in state["trace"][0]["logs"][0]["line"] and "slurmstepd=9" in state["trace"][0]["after"]
+        # without the flag there is no trace; and with an unreachable governor it is refused up front
+        assert req(base, "/api/scenarios/res/run", "POST", headers=h)[0] == 200
+        time.sleep(1)
+        assert json.loads(req(base, "/api/scenarios/run")[1])["trace"] is None
+    finally:
+        server.should_exit = True
+        gov.shutdown()
+
+
+def test_licence_watch_reads_and_renews_once_when_the_end_is_near(monkeypatch):
+    """Detect (read the end over HTTP) and renew through the governor, once per cooldown, only when under the threshold (issue 293)."""
+    import asyncio
+    import time
+
+    from benchctl import checks, jira_real
+    from webui import licence
+
+    asked = []
+    monkeypatch.setattr(checks, "governor_request", lambda req, sock: asked.append(req) or {"ok": True, "started": True})
+    st = {"valid": True, "expires": int(time.time()) + 3 * 3600}
+    monkeypatch.setattr(jira_real, "licence_status", lambda *a, **k: st)
+    state = {}
+    asyncio.run(licence.watch(state, "sock", every=0, rounds=2))
+    assert asked == [] and "valid until" in state["text"]  # 3 h left: only detected
+    st = {"valid": True, "expires": int(time.time()) + 300}  # 5 min left
+    asyncio.run(licence.watch(state, "sock", every=0, rounds=3))
+    assert asked == [{"cmd": "refresh-jira-licence"}] and "renewing" in state["text"]  # asked once in three rounds
+    monkeypatch.setenv(jira_real.AUTO_ENV, "0")
+    state["asked"] = 0.0
+    asyncio.run(licence.watch(state, "sock", every=0, rounds=1))
+    assert len(asked) == 1  # automatic renewal off
+    monkeypatch.setattr(jira_real, "licence_status", lambda *a, **k: None)
+    asyncio.run(licence.watch(state, "sock", every=0, rounds=1))
+    assert state["text"] == "" and len(asked) == 1  # Jira down: quiet
+
+
+def test_plan_reports_the_admitted_number_next_to_the_caps(ui):
+    data = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=4&gpus_per_node=8&parts=jira")[1])
+    assert data["need_mb"] == data["expected_mb"] - data["running_mb"] < data["total_mb"]  # no app reserve on the page; expected is below the caps
+    assert b"p.need_mb" in req(ui, "/")[1]
+
+
+def test_diagram_has_a_colour_legend_and_combinable_overlays(ui):
+    """Kind is colour (simulated vs real), state is the border, traffic and fault are overlays that combine (issue 297)."""
+    page = req(ui, "/")[1]
+    for needle in (b'id="ckey"', b"simulated (dashed stripe)", b"real (solid stripe)", b"a fault applied in the last 30 s",
+                   b"They combine", b"const REAL_SERVICES", b"'ff-' + k", b"'fx-' + k", b"'fa-' + k"):
+        assert needle in page, needle
+    assert b"'Jira mock'" not in page and b"'BCM mock'" not in page  # the word is not in the boxes: colour says it
+
+
+def test_state_update_keeps_the_kind_class_of_a_service_box(ui):
+    assert b"(k === 'teleport' ? '' : REAL_SERVICES.has(k) ? ' real' : ' sim')" in req(ui, "/")[1]  # repainting the state must not drop the colour of the kind

@@ -6,6 +6,7 @@ Built on Starlette (FastAPI's base) rather than FastAPI itself: FastAPI's pydant
 budget (ADR 0008).
 """
 import asyncio
+import contextlib
 import hmac
 import json
 import re
@@ -26,10 +27,12 @@ from starlette.responses import (
 )
 from starlette.routing import Route
 
-from benchctl import checks, nhc, scenario
+from benchctl import checks, nhc, scenario, slurmtrace
 
+from .blast import payload as blast_payload
 from .cluster import ActionError, Cluster
 from .flow import PAUSE_LEVEL, Flow
+from .graph import attach as attach_graph
 from .wiki import Wiki, WikiError, esc, page
 
 STATIC = Path(__file__).parent / "static"
@@ -51,13 +54,13 @@ def governor_status(socket: str) -> dict:
 class Runs:
     """At most one scenario at a time; state is what the page polls."""
 
-    def __init__(self, root: Path, sim: dict, flow: Flow | None = None, slurm=None):
-        self.root, self.sim, self.flow, self.slurm = root, sim, flow, slurm
+    def __init__(self, root: Path, sim: dict, flow: Flow | None = None, slurm=None, daemon=None, trace=None):
+        self.root, self.sim, self.flow, self.slurm, self.daemon, self.trace = root, sim, flow, slurm, daemon, trace
         self.lock = threading.Lock()
         self.stop_flag = threading.Event()
         self.state: dict = {"running": False}
 
-    def start(self, name: str, speed: float) -> dict:
+    def start(self, name: str, speed: float, trace: bool = False) -> dict:
         try:
             sc = scenario.load(name, self.root)
         except scenario.ScenarioError as e:
@@ -65,6 +68,8 @@ class Runs:
         problems = scenario.validate(sc, self.sim)
         if problems:
             raise HTTPException(422, "; ".join(problems))
+        if trace and not self.trace:
+            raise HTTPException(409, "the trace is read by the governor, which is not reachable or has no --workdir")
         with self.lock:
             if self.state.get("running"):
                 raise HTTPException(409, f"{self.state['name']} is already running")
@@ -72,11 +77,11 @@ class Runs:
             self.stop_flag.clear()
             self.state = {"running": True, "name": name, "speed": speed, "stopped": False, "ok": None,
                           "steps": [{"at": s.at, "target": s.target, "do": s.do, "status": "pending", "detail": ""}
-                                    for s in steps], "expects": []}
-            threading.Thread(target=self._play, args=(sc, steps, speed), daemon=True).start()
+                                    for s in steps], "expects": [], "trace": [] if trace else None}
+            threading.Thread(target=self._play, args=(sc, steps, speed, trace), daemon=True).start()
             return {"started": name}
 
-    def _play(self, sc: dict, steps: list, speed: float) -> None:
+    def _play(self, sc: dict, steps: list, speed: float, trace: bool = False) -> None:
         done = [0]
 
         def on_step(step, outcome) -> None:
@@ -89,10 +94,13 @@ class Runs:
         def on_expect(outcome) -> None:
             self.state["expects"].append({"label": outcome.label, "status": outcome.status, "detail": outcome.detail})
 
+        tracer = slurmtrace.Deferred(slurmtrace.nodes_of(sc), self.trace, self.state["trace"].append) if trace else None
         try:
             rep = scenario.run(sc, speed=speed, dilation=float(self.sim.get("time_dilation", 1.0)), say=lambda m: None,
                                host=False, should_stop=self.stop_flag.is_set, on_step=on_step, on_expect=on_expect,
-                               slurm=self.slurm)
+                               slurm=self.slurm, daemon=self.daemon, on_before=tracer.before_step if tracer else lambda step: None)
+            if tracer:
+                tracer.finish()
             self.state.update(ok=rep.ok, stopped=rep.stopped)
         finally:
             self.state["running"] = False
@@ -107,7 +115,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
                fetch=None, poster=None, nhc_src: Path = nhc.SRC, nhc_out: Path = nhc.OUT) -> Starlette:
     sim = yaml.safe_load(sim_yaml.read_text())
     flow = Flow()
-    runs = Runs(scenarios, sim, flow, slurm=lambda n, s, r: _governed(slurm_state(n, s, r)))
+    runs = Runs(scenarios, sim, flow, slurm=lambda n, s, r: _governed(slurm_state(n, s, r)),
+                daemon=lambda do: daemon_step(do), trace=lambda nodes, since: slurm_trace(nodes, since))
     cluster = Cluster(sim, **{k: v for k, v in (("fetch", fetch), ("poster", poster)) if v})  # test seams: a host stack must not answer or be hit
     wiki = Wiki(docs)
 
@@ -150,8 +159,14 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
     async def flow_events(request: Request):
         """SSE feed of workload events for the dots; the page opens it only while the Cluster tab is showing."""
+        raw = request.query_params.get("after")
+        try:
+            after = int(raw) if raw else flow.seq  # no cursor: only what happens from now on
+        except ValueError as e:  # before the stream starts, so the client gets a status code, not a broken stream
+            raise HTTPException(422, "after must be a whole number") from e
+
         async def stream():
-            after = int(request.query_params.get("after") or flow.seq)  # no cursor: only what happens from now on
+            nonlocal after
             while True:
                 level = (await asyncio.to_thread(governor_status, socket)).get("level") or 0
                 paused = level >= PAUSE_LEVEL
@@ -164,9 +179,11 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
     async def cluster_state(request: Request):
-        return JSONResponse(await asyncio.to_thread(cluster.snapshot))
+        snap = await asyncio.to_thread(cluster.snapshot)
+        return JSONResponse({**attach_graph(snap), "blast": blast_payload()})
 
     def build_plan(q) -> tuple:
+        """Blocking (file reads, a governor call): run it with asyncio.to_thread."""
         from benchctl import workbench
 
         try:
@@ -179,7 +196,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             raise HTTPException(422, str(e)) from e
         if problems := spec.problems():
             raise HTTPException(422, "; ".join(problems))
-        est = workbench.estimate(*workbench.effective(sim, spec))
+        est = workbench.estimate(*workbench.effective(sim, spec), app_mb=0, running=set(governor_status(socket).get("services") or []))  # the page is open next to the app: its memory is already out of the free figure
         avail = checks.mem_available() // (1024 * 1024)
         ok, msg = workbench.verdict(est, avail, spec=spec)
         return spec, est, avail, ok, msg
@@ -209,20 +226,33 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
     async def plan(request: Request):
         """Estimate only, no side effects: the page cannot start containers. Applying goes through the governor."""
-        spec, est, avail, ok, msg = build_plan(request.query_params)
+        spec, est, avail, ok, msg = await asyncio.to_thread(build_plan, request.query_params)
         from benchctl import workbench
 
         flags = f"--cpu-nodes {spec.cpu_nodes} --gpu-nodes {spec.gpu_nodes} --gpus-per-node {spec.gpus_per_node}" + "".join(
             f" --with {p}" for p in sorted(spec.parts)) + "".join(f" --without {p}" for p in workbench.PARTS if p not in spec.parts)
         if spec.bmc_nodes is not None:
             flags += f" --bmc-nodes {','.join(spec.bmc_nodes)}"
-        flags += f" --login {','.join(spec.login_nodes)}"
-        return JSONResponse({"fits": ok, "message": msg, "total_mb": est["total_mb"], "available_mb": avail,
+        flags += f" --login {','.join(spec.login_nodes)} --app-mb 0"
+        return JSONResponse({"fits": ok, "message": msg, "total_mb": est["total_mb"], "need_mb": est["need_mb"], "expected_mb": est["expected_mb"],
+                             "running_mb": est["running_mb"], "available_mb": avail,
                              "text": workbench.render(spec, est), "command": f"benchctl up {flags}"})
+
+    async def jira_refresh(request: Request):
+        """The Refresh licence button: ask the governor to restart the real Jira (its test licence counts from its start)."""
+        try:
+            res = await asyncio.to_thread(checks.governor_request, {"cmd": "refresh-jira-licence"}, socket)
+        except (OSError, ValueError) as e:
+            raise HTTPException(503, "the governor is not reachable: start it with ./scripts/benchctl start") from e
+        if not res.get("ok"):
+            raise HTTPException(409, res.get("error", "the governor refused"))
+        if res.get("dry_run"):
+            return JSONResponse({"started": False, "message": "The governor is in dry-run mode or has no --workdir. Run: benchctl refresh jira-real-licence"})
+        return JSONResponse({"started": True, "message": "Restarting the real Jira: ready in about a minute with 3 more hours. Progress is in Governor activity."})
 
     async def plan_apply(request: Request):
         """Ask the governor to rebuild the workbench to this plan (it runs `benchctl up` as the user, calm levels only)."""
-        spec, _, _, ok, msg = build_plan(request.query_params)
+        spec, _, _, ok, msg = await asyncio.to_thread(build_plan, request.query_params)
         if not ok:
             raise HTTPException(422, "does not fit: " + msg)
         req = {"cmd": "apply-plan", "cpu_nodes": spec.cpu_nodes, "gpu_nodes": spec.gpu_nodes,
@@ -295,10 +325,26 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         return JSONResponse({"info": info, "text": describe.render(info), "ip": plan["nodes"].get(node),
                              "bmc_ip": plan["bmc"].get(node) if f"bmc-{node}" in services else None})
 
+    licence = {"text": "", "asked": 0.0}  # the real Jira's licence as the watcher last saw it, and when it last asked for a renewal
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app):
+        from webui import licence as licence_mod
+
+        task = asyncio.create_task(licence_mod.watch(licence, socket))
+        try:
+            yield
+        finally:
+            task.cancel()
+
     async def connections(request: Request):
         from webui import connections as conn
 
-        return JSONResponse({"entities": conn.entities(cluster.sim)})
+        rows = conn.entities(cluster.sim)
+        for e in rows:
+            if e["id"] == "jira-real" and licence["text"]:
+                e["status"] = licence["text"]
+        return JSONResponse({"entities": rows})
 
     async def export_profile(request: Request):
         """The client profile file for the cluster on disk now. Read fresh per request (the page has no Docker, W-3),
@@ -335,6 +381,33 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             return {"target": "slurm", "status": "skipped", "detail": "the governor is in dry-run mode or has no --workdir"}
         return {"target": "slurm", "status": "ok", "detail": f"asked the governor to set {node} {state}"}
 
+    def daemon_step(do: dict) -> tuple[bool, str]:
+        """The job and daemon steps of a scenario, asked of the governor (the page has no Docker, W-3); (done, why not)."""
+        reqs = [{"cmd": "slurm-step", "name": f"slurmd-{a}", "node": n} for a in ("stop", "restart", "start") for n in do.get(f"slurmd_{a}", [])]
+        reqs += [{"cmd": "slurm-step", "name": "slurmctld-restart"}] if do.get("slurmctld_restart") else []
+        if isinstance(do.get("submit"), dict):
+            sub = do["submit"]
+            reqs.append({"cmd": "submit-job", "node": sub["node"], "gpus": int(sub.get("gpus", 0)), "duration": int(sub.get("duration", 600)),
+                         **({"user": sub["user"]} if sub.get("user") else {})})
+        reqs += [{"cmd": "slurm-step", "name": "cancel-jobs"}] if do.get("cancel") else []
+        for r in reqs:
+            try:
+                res = checks.governor_request(r, socket)
+            except (OSError, ValueError):
+                return False, "the governor is not reachable"
+            if not res.get("ok"):
+                return False, res.get("error", "refused")
+            if res.get("dry_run"):
+                return False, "the governor is in dry-run mode or has no --workdir"
+        return True, "asked the governor"
+
+    def slurm_trace(nodes: list[str], since: float) -> dict | None:
+        try:
+            res = checks.governor_request({"cmd": "slurm-trace", "nodes": nodes, "since": since}, socket)
+        except (OSError, ValueError):
+            return None
+        return res.get("trace") if res.get("ok") else None
+
     async def node_workload(request: Request):
         """Submit a job on this node: the governor runs `benchctl submit` (the page has no Docker, W-3)."""
         q, node = request.query_params, request.path_params["node"]
@@ -342,7 +415,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             gpus, duration = int(q.get("gpus", "0")), int(q.get("duration", "300"))
         except ValueError as e:
             raise HTTPException(422, "gpus and duration must be whole numbers") from e
-        if node not in {n["name"] for n in cluster.snapshot()["nodes"]}:
+        if node not in {n["name"] for n in (await asyncio.to_thread(cluster.snapshot))["nodes"]}:
             raise HTTPException(404, f"unknown node {node}")
         try:
             res = await asyncio.to_thread(checks.governor_request, {"cmd": "submit-job", "node": node, "gpus": gpus, "duration": duration}, socket)
@@ -385,7 +458,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             speed = 0.0
         if not 0.1 <= speed <= 1000:
             raise HTTPException(422, "speed must be between 0.1 and 1000")
-        return JSONResponse(runs.start(request.path_params["name"], speed))
+        return JSONResponse(runs.start(request.path_params["name"], speed, request.query_params.get("trace") == "1"))
 
     async def help_home(request: Request):
         return RedirectResponse("/help/manual/README", status_code=303)
@@ -416,6 +489,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
     return Starlette(
+        lifespan=lifespan,
         routes=[
             Route("/login", login),
             Route("/", protected(index)),
@@ -431,6 +505,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/settings", protected(settings)),
             Route("/api/plan", protected(plan)),
             Route("/api/plan/apply", protected(plan_apply, write=True), methods=["POST"]),
+            Route("/api/jira-real/refresh", protected(jira_refresh, write=True), methods=["POST"]),
             Route("/api/nhc", protected(nhc_state)),
             Route("/api/nhc", protected(nhc_change, write=True), methods=["POST"]),
             Route("/api/connections", protected(connections)),

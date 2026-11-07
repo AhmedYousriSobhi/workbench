@@ -1,6 +1,6 @@
 # Profile: full
 name: full
-budget_gb: 8.5   # planning estimate; replace with measured value after Phase 0
+budget_gb: 1.9   # expected use of what is built today (1892 MB: measured + 15 percent, benchctl/memory.py, issue 287); the app under test is added on top by the pre-flight
 extends: [std]
 groups: []
 compute_nodes: 32

@@ -29,7 +29,8 @@ def ui():
     bring_up(sim)
     port = free_port()
     proc = subprocess.Popen([sys.executable, "-m", "webui", str(port)], cwd=ROOT, stdout=subprocess.PIPE, text=True)
-    token = proc.stdout.readline().split("token=")[1].strip()
+    proc.stdout.readline()  # the page prints its address; the token is only in its 0600 file (a terminal-only link, #346)
+    token = (ROOT / "compose/generated/secrets/ui_token").read_text().strip()
     base, h = f"http://127.0.0.1:{port}", {"Authorization": f"Bearer {token}", "X-Requested-With": "workbench"}
 
     def ready() -> bool:
@@ -95,6 +96,7 @@ def test_screenshot_of_a_faulted_cluster(ui, tmp_path):
         browser = p.chromium.launch()
         for vp, size in (("desktop", (1280, 900)), ("phone", (390, 800))):
             page = browser.new_page(viewport={"width": size[0], "height": size[1]})
+            page.add_init_script("localStorage.setItem('workbench-tree', 'open')")  # the list is folded by default at 1100-1500 px (#192)
             page.goto(f"{base}/login?token={token}")
             page.wait_for_selector(".node.fault")
             assert page.locator(".node.down").count() == 1 and page.locator(".node.warn").count() == 1

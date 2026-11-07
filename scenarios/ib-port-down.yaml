@@ -1,4 +1,5 @@
 name: ib-port-down
+ref: SC-07
 description: An InfiniBand port goes down on a GPU node and its NIC flaps; the health check drains the node and a ticket opens, then it recovers
 steps:
   - {at: 0s,  target: gpu-exporter, do: {nodes: [gpu001], ib_down: 1}}

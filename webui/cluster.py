@@ -16,6 +16,7 @@ BMC, BCM, JIRA, EXPORTER = ("http://127.0.0.1:8000", "http://127.0.0.1:8081", "h
                             "http://127.0.0.1:9400")
 SERVICES = {"bmc-farm": f"{BMC}/healthz", "bcm-mock": f"{BCM}/healthz", "jira-mock": f"{JIRA}/healthz",
             "gpu-exporter": f"{EXPORTER}/metrics"}
+JIRA_REAL = "http://127.0.0.1:8083"  # the real Jira's /status (benchctl/jira_real.py PORT); a service only when the part is built
 TELEPORT = "http://127.0.0.1:3434"  # Teleport's diagnostics endpoint (benchctl/teleport.py DIAG_PORT); a service only when the part is built
 HOT_C = 90.0
 # action -> (label, only for gpu nodes, steps as (target, do-template))
@@ -38,19 +39,23 @@ class ActionError(ValueError):
 
 
 def teleport_built() -> bool:
-    return saved_has_teleport()
+    return saved_has_part("teleport")
 
 
-def saved_has_teleport() -> bool:
-    """Whether the workbench last built has the Teleport part (read from the saved selection: the page has no Docker, W-3).
-    A page for a cluster without it must not show a Teleport that cannot exist."""
+def jira_real_built() -> bool:
+    return saved_has_part("jira-real")
+
+
+def saved_has_part(part: str) -> bool:
+    """Whether the workbench last built has the part (read from the saved selection: the page has no Docker, W-3).
+    A page for a cluster without it must not show a box that cannot exist (Teleport, the real Jira)."""
     from benchctl import workbench
 
     try:
         spec = workbench.current({})
     except (workbench.SpecError, OSError, ValueError):
         return False
-    return bool(spec and "teleport" in spec.parts)
+    return bool(spec and part in spec.parts)
 
 
 def saved_logins(sim: dict | None = None) -> list[dict]:
@@ -174,7 +179,8 @@ class Cluster:
 
         Sequential on purpose: localhost calls take a few ms, and a thread pool pushed the UI over its 50 MB budget.
         """
-        probes = {**SERVICES, **({"teleport": f"{TELEPORT}/healthz"} if teleport_built() else {})}
+        probes = {**SERVICES, **({"teleport": f"{TELEPORT}/healthz"} if teleport_built() else {}),
+                  **({"jira-real": f"{JIRA_REAL}/status"} if jira_real_built() else {})}
         names = list(probes)
         up = [self._try(probes[n]) is not None for n in names]
         rows = [self._node(*nk) for nk in self.nodes]

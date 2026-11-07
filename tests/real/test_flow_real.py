@@ -2,12 +2,15 @@
 import json
 import os
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
 import pytest
 from helpers import wait_for
 from test_cluster_real import api, ui  # noqa: F401  (the module-scoped live stack and UI process)
+
+from webui.flow import STATS
 
 JIRA = "http://127.0.0.1:8080"
 
@@ -38,7 +41,7 @@ def test_client_requests_and_fault_buttons_appear_as_events(ui):  # noqa: F811
     seen = read_flow(base, token, lambda s: any(e["to"] == "jira-mock" for x in s for e in x["events"]))
     jira = [e for x in seen for e in x["events"] if e["to"] == "jira-mock"]
     assert jira and jira[0]["from"] == "clients" and jira[0]["n"] >= 1
-    assert seen[-1]["totals"]["jira-mock"] >= 3 and all(seen[-1]["reachable"].values())
+    assert seen[-1]["totals"]["jira-mock"] >= 3 and all(seen[-1]["reachable"][svc] for svc in STATS)  # teleport is optional: not in this stack
     # the UI's own polling must not show up as traffic to the BMC or BCM
     assert not any(e["to"] in ("bmc-farm", "bcm-mock") and e["from"] == "clients" for x in seen for e in x["events"])
     api(base, h, "/api/nodes/cn001/overheat", "POST")
@@ -95,3 +98,25 @@ def test_dots_move_in_a_real_browser_and_pause(ui, tmp_path):  # noqa: F811
         assert page.evaluate("flowEs === null")
         assert errors == []
         browser.close()
+
+
+def test_error_answers_are_counted_by_the_live_mocks_and_reach_the_feed(ui):  # noqa: F811
+    """#314: an error answer to a client raises `errors` at /sim/stats and arrives as `err` on the dots feed; probes do not."""
+    base, _h, token = ui
+
+    def stats():
+        return json.loads(urllib.request.urlopen(f"{JIRA}/sim/stats", timeout=5).read())
+
+    before = stats()
+    assert "errors" in before  # the rebuilt mock image carries the counter
+
+    def bad():
+        try:
+            urllib.request.urlopen(f"{JIRA}/rest/api/2/no-such-resource", timeout=5).read()
+        except urllib.error.HTTPError:
+            pass
+    seen = read_flow(base, token, lambda s: (bad(), any(e.get("err") for x in s for e in x["events"] if e["to"] == "jira-mock"))[1], seconds=12)  # errors made while the stream is open (earlier ones are baseline)
+    after = stats()
+    assert after["errors"] > before["errors"] and after["requests"] > before["requests"]
+    assert any(e.get("err") for x in seen for e in x["events"] if e["to"] == "jira-mock")
+    assert seen[-1]["errors"]["jira-mock"] >= 1

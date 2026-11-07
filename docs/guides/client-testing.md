@@ -18,7 +18,7 @@ never print or commit them).
 |---|---|---|---|
 | SSH terminal, Slurm (`squeue`, `sinfo`; `sacct` needs the `accounting` part: on in a default workbench, `--with accounting` otherwise; without it sacct says accounting storage is disabled), port forwarding | `10.141.255.254:22` (fallback `127.0.0.1:2222`) | user `alice` or `bob` (from `sim.yaml`), key `secrets/ssh/id_ed25519` | merged (ADR 0011); compute nodes `cn001`... and `gpu001`... have sshd too, reached from the login node (ADR 0014). With several login nodes (`--login ssh,teleport`, ADR 0023) the table row is the first one that takes a key: `login2`... have addresses .252, .251, ... and ports 2223, ...; a `teleport` node takes no key (test the Teleport row against it) |
 | GPU usage through Grafana `/api/ds/query` | Grafana `10.141.255.21:3000` (fallback `127.0.0.1:3000`), datasource uid `prometheus`, host label `Hostname` | Viewer token in `secrets/grafana_viewer_token` | merged |
-| Jira search (`/rest/api/3/search/jql`, fallback `/rest/api/2/search`), `/myself`, `/field` | `http://10.141.255.11:8080` (fallback `127.0.0.1:8080`) | none in mock mode | merged (ADR 0005) |
+| Jira search (`/rest/api/3/search/jql`, fallback `/rest/api/2/search`), `/myself`, `/field`; Confluence pages (`/rest/api/search?cql=`, Cloud style `/wiki/rest/api/search`) on the same address | `http://10.141.255.11:8080` (fallback `127.0.0.1:8080`) | none in mock mode | merged (ADR 0005) |
 | BMC Redfish over TLS, certificate pinning | one address per node, `10.148.0.N:443` / `10.148.100.N:443` (fallback: one listener `127.0.0.1:8443`, node chosen by the `Host: bmc-<node>` header) | `admin` and the password in `secrets/bmc_credentials` | merged (ADR 0012); plain HTTP on `:8000` also remains. Inside the cluster network (login node, containers) the BMCs also answer on the standard `bmc-<node>:443`; on the host only `8443` is published (443 needs root) |
 | BCM (`cmsh` on a head node) | the login node is the head node: `cmsh -c "device; list"` over the same SSH connection | as for SSH | built (ADR 0013, #66); read-only, with a small interactive console (modes, list, status); node state follows bcm-mock and scenarios |
 | Teleport (`tsh login`, `tsh ssh`, ssh through the proxy) | proxy `10.141.255.30:3080` or `teleport.workbench.test:3080` (self-signed; `--insecure`), optional part: `benchctl up --with teleport` | identity file per user in `secrets/teleport/identity/`, or a password and one-time code set up through `benchctl add invite <user>` | built, review (ADR 0020, #39): agentless OpenSSH nodes; not simulated: agent extras, K8s/web/DB access. Your `tsh` major must not be newer than `teleport.version` |
@@ -54,6 +54,38 @@ If port 2222 refuses connections, the checkout is probably on a branch without t
   GPU usage appears only while the SSH user has a running job, and the GPUs of that job read busy (the others idle).
 - **Jira:** base URL `http://10.141.255.11:8080` (a client that refuses plain HTTP for a non-local host: use the fallback `http://127.0.0.1:8080`). `POST /sim/tickets` and the ticket scenarios ([tickets guide](jira-tickets.md)) file and move tickets; **a team changes tickets in the background** (`benchctl set jira-activity off` stops it, [guide](jira-tickets.md)) and **a node fault files one ticket by itself** (project OPS, reporter `ops-bot`, labels `node-<name>`, `fault-<kind>`, `auto`): Power off, GPU error (XID), overheat and fan failure each open one per node and kind (a repeat comments), Power on or Clear faults comments and resolves it, from the page, `benchctl set node` and scenarios alike; `POST /sim/failure` injects 401,
   429, 503 or slow responses.
+
+## Stress test: everything at once while the client runs
+
+`benchctl scenario run client-stress` (5 minutes, [scenarios/client-stress.yaml](../../scenarios/client-stress.yaml)) floods five nodes with jobs, raises GPU XID errors and fan failures, heats a GPU node, powers off and drains `cn004`, files 12 tickets, then makes the Jira mock answer 429, slow and 503 before clearing everything. With the client connected to the real Jira (`jira-real`), run `client-stress-real` instead: same nodes, GPUs, heat and jobs, but Jira's own rate limit (429, about 75 to 180 s), a CAPTCHA lock for one user (use a personal access token for the client's own account, or it is locked out too) and a 30 s hang. It files no tickets. Run it with the client open and measure the client at the same time (use a `--match` that names only the client's own processes, such as its install path; a loose word such as `name` matches unrelated programs. The tool prints `matched: <program> xN (MB)` before it samples and warns when more than 4 different programs match; read that line before `--save`):
+
+```bash
+./scripts/benchctl scenario run client-stress &
+./scripts/benchctl measure app --match NAME --duration 330 --save
+```
+
+**Running it with the real window, step by step (what was done once):**
+
+1. Bring the workbench up with the real Jira (`benchctl start --with jira-real`, then `benchctl setup jira-real` once; `benchctl status` shows the licence end).
+2. `benchctl export profile -o profile.json`, then `benchctl ssh-key install` (the client only accepts a key under `~/.ssh`; run `benchctl ssh-key remove` at the end).
+3. Start the client in its dev mode with a throwaway config directory (`XDG_CONFIG_HOME=<empty dir>`) and `--remote-debugging-port=9222`. A fresh config asks for a local account (any name, no password), then offers to claim the existing profile (choose it, confirm, Continue).
+4. Create the cluster through the client's own API from the profile file: the entry for the login node that takes a key, the key at `~/.ssh/workbench_ed25519`, the Grafana viewer token from `compose/generated/secrets/grafana_viewer_token`, and for the real Jira `http://127.0.0.1:8083` with `PAT_ALICE` from `compose/generated/secrets/jira-real.env`. Read the secrets from the files inside the script; never print them.
+5. In the client, trust the host key and Connect; check SSH, Slurm, Grafana and the Jira section are green.
+6. Measure idle (`measure app --duration 40`), then run the scenario, the measurement and a loop that opens every view (Grafana, Slurm with its Jobs, Nodes, Partitions and GPUs tabs, Storage, Tickets and docs, Notes) together.
+7. Stop the client, remove the throwaway config and the installed key.
+
+Measured this way: 469 MB idle; with every view opened and the scenario running, 664 MB peak, 555 MB typical. A first attempt whose clicks missed (the client only polled) peaked at 539 MB, which is why the views must be opened.
+
+`client-stress` hits `jira-mock` (8080) and files its tickets there; `client-stress-real` hits `jira-real`. Measured once (a desktop Electron client, one cluster, a terminal, the real Jira, every view opened in turn): 469 MB idle, 664 MB peak and 555 MB typical during the scenario, 8 processes; the machine reserve was set to 800 MB. One session, one cluster: it is a floor for several clusters or terminals, not a limit.
+
+## Slurm: what is real and what is not
+
+Slurm is the real software (ADR 0025), so a client sees real command output and real state changes. Real: `squeue`, `sinfo`,
+`sacct`, `scontrol` text and flags, node states (`down*`, `mixed`, `drain`), pending reasons (`ReqNodeNotAvail`), `slurmrestd`
+JWT auth, and a frozen node going `down*` by itself after about 30 s. Simulated: GPUs (count-based GRES), jobs (`sleep`),
+the node health checks' inputs and accounting storage unless the `accounting` part is on. **Not exercised:** cgroup limits,
+real GPU binding, resource contention, and `gres/gpu` in `AllocTRES` without `slurmdbd`. Do not report one of these as a
+client defect.
 
 ## Verifying without a GUI
 
@@ -150,8 +182,19 @@ down by not answering, which no page button or scenario step reports.
 
 **Power off** on the page (or `benchctl set node cn001 off`, which does the same) sets the BMC, BCM and GPU metrics and freezes the node's container: its `slurmd` stops answering and
 `slurmctld` marks it `down*` (Not responding) by itself after about 30 s (a client then shows it on its next poll: 60 s with the Slurm section open and the window focused, 5 min otherwise), which is what a monitoring client sees on a real
+
+The timings above (`SlurmdTimeout=15`, health check every 30 s) are the defaults and what you test a client against. The repository's own live tests shorten them (`WORKBENCH_TEST_TIMERS=1`: 10 s and 15 s) to finish sooner; `up` prints a note when that is on. Never set it while testing a client.
 dead node; the BMC reports it off and its GPU metrics disappear. **Power on** (`set node cn001 on`, or the page's button) reverses all of that and thaws it and Slurm returns
 it after its next answer. Use `set node NAME down` only to set the state by hand.
 
 Scenarios behave the same: one `bmc-farm` `power: "Off"` step takes the node down on the BMC, BCM, GPU metrics and in Slurm
 ([scenarios chapter](../manual/06-scenarios.md)), also when the scenario is played from the page.
+
+Results of the run against the real Jira (setup, every number, what was not exercised): [client-test-report-real-jira.md](client-test-report-real-jira.md). A scenario can be run by its reference: `benchctl scenario run SC-02` (the list shows them).
+
+## Open items after the real Jira run
+- [#305](https://github.com/AhmedYousriSobhi/workbench/issues/305) a real slow and 503 answer from Jira (fault proxy)
+- [#306](https://github.com/AhmedYousriSobhi/workbench/issues/306) tickets and a ticket check on the real Jira in `client-stress-real`
+- [#307](https://github.com/AhmedYousriSobhi/workbench/issues/307) token revoke fault (a real 401 for a token)
+- [#308](https://github.com/AhmedYousriSobhi/workbench/issues/308) verify the client's Jira panel under the real faults
+- [#309](https://github.com/AhmedYousriSobhi/workbench/issues/309) script the client stress run

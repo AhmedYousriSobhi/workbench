@@ -50,7 +50,7 @@ def discover_docker(run_cmd: Callable = run) -> tuple[list[Group], dict[str, Pat
     for c in info:
         name = c["Name"].lstrip("/")
         prio = int(c["Config"]["Labels"]["workbench.class"].lstrip("Pp"))
-        groups.append(Group(name, prio))
+        groups.append(Group(name, prio, service=c["Config"]["Labels"].get("com.docker.compose.service", "")))
         cgroups[name] = cgroup_dir(c)
     return groups, cgroups
 

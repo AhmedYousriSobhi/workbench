@@ -216,6 +216,11 @@ def test_flow_endpoint_streams_and_pauses_at_l3(tmp_path):
         with pytest.raises(urllib.error.HTTPError) as e:
             urllib.request.urlopen(base + "/api/flow", timeout=5)
         assert e.value.code == 401
+        for bad in ("abc", "1.5"):  # a bad cursor is a 422 before the stream starts, not a broken stream (#347)
+            with pytest.raises(urllib.error.HTTPError) as e:
+                urllib.request.urlopen(urllib.request.Request(base + f"/api/flow?after={bad}", headers={"Authorization": f"Bearer {TOKEN}"}), timeout=5)
+            assert e.value.code == 422
+        assert stream(base, TOKEN, "/api/flow?after=")[0]["level"] == 3
     finally:
         server.should_exit = True
         gov.shutdown()
@@ -287,3 +292,53 @@ def test_a_rise_in_proxy_connections_becomes_a_clients_to_teleport_event():
     scrape["text"] = "not reachable"  # a scrape without the counter is reachable with nothing counted, never a crash
     f.poll()
     assert f.since(0)["reachable"]["teleport"] is True
+
+
+def test_the_real_jira_is_reachability_only_no_counter():
+    from webui.flow import REACH_ONLY
+    up = {"on": True}
+
+    def fetch(url, *a):
+        if url == REACH_ONLY["jira-real"] and up["on"]:
+            return {"state": "RUNNING"}
+        raise OSError("down")
+    f = make_flow(fetch)
+    f.poll()
+    snap = f.since(0)
+    assert snap["reachable"]["jira-real"] is True and snap["totals"]["jira-real"] == 0 and snap["events"] == []
+    f.tick()
+    up["on"] = False
+    f.poll()
+    assert f.since(0)["reachable"]["jira-real"] is False
+
+
+def test_mocks_count_error_answers_beside_requests():
+    """#314: `errors` rises for 4xx/5xx answers to real clients only; `requests` keeps its meaning."""
+    srv, base = serve(bmc.make_handler(bmc.Farm(bmc.load_nodes(SIM))))
+    try:
+        get(base + "/cn001/redfish/v1/Systems/1")  # ok
+        assert get(base + "/cn001/redfish/v1/NoSuchThing")[0] == 404  # an error a client would see
+        get(base + "/nope/redfish/v1/Systems/1", headers={"X-Workbench-Probe": "1"})  # the UI's own poll: not counted at all
+        st = json.loads(get(base + "/sim/stats")[1])
+        assert st["requests"] == 2 and st["errors"] == 1
+    finally:
+        srv.shutdown()
+
+
+def test_events_carry_error_counts_only_where_a_counter_backs_them():
+    fm = FakeMocks()
+    errs = {"bmc-farm": 0}  # only the BMC farm reports errors here; the others are "older mocks" with no error counter
+
+    def fetch(url):
+        out = fm(url)
+        svc = fm.by_url[url]
+        return {**out, "errors": errs[svc]} if svc in errs else out
+
+    f = make_flow(fetch)
+    f.poll()
+    fm.counts["bmc-farm"], errs["bmc-farm"], fm.counts["jira-mock"] = 5, 2, 3
+    f.tick(1)
+    f.poll()
+    ev = {e["to"]: e for e in f.since(0)["events"]}
+    assert ev["bmc-farm"]["err"] == 2 and "err" not in ev["jira-mock"]  # 0 errors would be a measurement; no counter is "not measured"
+    assert f.since(0)["errors"]["bmc-farm"] == 2

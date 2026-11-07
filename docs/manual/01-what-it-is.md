@@ -10,7 +10,7 @@ Most of what the app talks to is an API, not an operating system. So:
 
 - One process (`bmc-farm`) answers for every node's Redfish BMC, and one (`gpu-exporter-farm`) for every GPU's metrics.
 - Slurm is real (built from source) but every `slurmd` is a small container from one shared image, and jobs are synthetic.
-- One real VM (the fidelity VM) exists for what containers cannot prove; it is on demand only.
+- A real VM (the fidelity VM) is deferred: no client endpoint needs it (ADR 0033).
 - Everything is generated from [sim.yaml](../../sim.yaml), so node names agree everywhere.
 
 ## The parts
@@ -40,7 +40,7 @@ A profile chooses which parts run and carries a memory budget that `benchctl up`
 |---|---|---|
 | `min` | core, mocks, 4 compute nodes, scenarios | 1 GB (measured 0.17 GB loaded) |
 | `std` | `min` plus accounting, 16 compute nodes, load simulators | about 6 GB (estimate) |
-| `full` | `std` plus 32 compute nodes, more fake nodes, the fidelity VM | about 8.5 GB (estimate) |
+| `full` | `std` plus 32 compute nodes, more fake nodes | about 8.5 GB (estimate) |
 | `jira-real` | `std` with a real Jira Data Center instead of the mock | about 7.5 GB (estimate) |
 | `mac-agent` | `min` plus an external macOS agent | about 1 GB local |
 

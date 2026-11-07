@@ -11,7 +11,7 @@ One dashboard over everything: governor, cluster, scenarios. It fits one screen 
 Open the link once: it sets a cookie. The token lives in `compose/generated/secrets/ui_token`; anyone with the link on
 this machine can use the page, so keep it private. The page listens on `127.0.0.1` only.
 
-![The dashboard: the Infrastructure architecture on the left with the login nodes, services and nodes, the node list on the right](img/web-infrastructure.png)
+![The dashboard: the Infrastructure architecture fills the left column, the node list is top right and the connections bottom right](img/web-infrastructure.png)
 
 *A healthy cluster with Teleport on: L0 Normal, 5 of 5 services answering, 6 of 6 nodes healthy, "All clear" under Needs attention (sample data; the numbers on your page are live). Some older screenshots further down predate the redesign; `scripts/ui_shots.py` regenerates fresh ones.*
 
@@ -19,14 +19,14 @@ this machine can use the page, so keep it private. The page listens on `127.0.0.
 
 | Area | Shows |
 |---|---|
-| **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **☰ Menu**, help and the theme switch. The strip is for status only. **☰ Menu** lists the actions in three groups, each with a one-line hint: *Run* (**▶ Scenarios**), *Configure* (**▦ Cluster architecture**: nodes, GPUs per node, optional parts and the plan; **✚ Health checks**) and *Share* (**⇩ Export**). Esc closes it. Pressing the level or memory chip opens the **Governor** panel |
+| **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **☰ Menu**, help and the theme switch (press it to cycle Auto, Light, Dark, **Midnight** with deep navy and neon accents, and **Dim** with soft slate and low glare; the choice is remembered). The strip is for status only. **☰ Menu** lists the actions in three groups, each with a one-line hint: *Run* (**▶ Scenarios**), *Configure* (**▦ Cluster architecture**: nodes, GPUs per node, optional parts and the plan; **✚ Health checks**) and *Share* (**⇩ Export**). Esc closes it. Pressing the level or memory chip opens the **Governor** panel |
 | **Tabs and Needs attention** | the tabs *Nodes* and *Connections*, and one slim bar next to them with every item that needs you, or "All clear" |
-| **Stage** (Nodes tab) | the **Infrastructure architecture** on the left and the **node list** on the right (its three groups, Compute, GPU and Services, stacked one under the other). **Hide node list** folds the list away and gives the diagram the whole width; the choice is remembered (windows between 1100 and 1500 px start with the list folded, press **Show node list**) |
+| **Stage** (Nodes tab) | three areas that fill the window. **Left:** the **Infrastructure architecture**, drawn to the shape of its panel (clients across the top, the access layer under them, the cluster nodes below that, the services in a column at the right). **Top right:** the **node list** (Compute, GPU and Services). **Bottom right:** **Connections**, how to reach each part (address and a Copy button), which shows the selected part instead when you click one, and a **Timeline** tab of recent traffic and faults. **Hide node list** gives the right column to Connections; the choice is remembered |
 
 Three panels open on top of the page from the top strip or its **☰ Menu** and close with **✕ Close**, Esc or a click outside: **Scenarios**,
-**Plan** and **Governor**. A node is different: it opens *in place of the list* (below), so the Infrastructure architecture stays in view.
+**Plan** and **Governor**. A node is different: it opens in the **Connections** area (below), so the Infrastructure architecture and the node list stay in view.
 
-On a phone, and under 1100 px, the Infrastructure architecture and the list stack in one column. The page has a skip link and
+On a phone, and under 1100 px, the Infrastructure architecture, the list and the Connections area stack in one column and the diagram keeps its natural shape. The page has a skip link and
 landmarks, and honours reduced motion.
 
 ![The dashboard on a phone, panels stacked (older layout; today the Infrastructure architecture and the list stack in one column)](img/web-phone.png)
@@ -60,9 +60,14 @@ Read it from left to right:
 | **Faults** | scenarios and buttons; a diamond travels from here to the node it hits |
 | **Access: how users get in** | the **login nodes** (one box each, with how it authenticates: *Direct SSH*, *Teleport only* or *Direct SSH + Teleport*) and the **Teleport proxy** when that part is on |
 | **Cluster nodes** | every compute and GPU node as a tile with its state |
-| **Services: what clients call** | BMC farm, BCM mock, Jira mock, GPU exporter |
+| **Services: what clients call** | BMC farm, BCM, Jira, GPU exporter (all simulated) and, when the real Jira is on, **Jira DC** |
 
 A login node that is in the selection but not running (never built, or stopped) is drawn **dashed with "✗ not running"**: the page checks whether anything answers on its port 22, so the diagram shows what runs, not only what you picked. With the whole stack down they all look dim instead.
+
+**Colours.** The boxes do not say *mock*; colour does, and the **Key** button above the diagram repeats it (it opens a small panel with every colour, mark and line style). Violet with a dashed stripe is simulated,
+blue with a solid stripe is real. The **border** is the state (green up, red dashed not reachable, grey dotted off). Two overlays sit on top and
+combine with everything else: a pulsing blue dot means traffic now (on a node tile: GPU work running), a red ring with a red triangle means a fault
+was applied in the last 30 seconds. So one box can be up, busy and faulted at the same time. The real Jira has no request counter, so it shows up or down only.
 
 Every line says **how** it connects:
 
@@ -74,9 +79,19 @@ Every line says **how** it connects:
 | `Teleport` from the Teleport box to the nodes (long dashes) | the nodes are also reachable through the proxy (agentless OpenSSH) |
 | `HTTP …` and `tsh · HTTPS` (thin) | an API call from a client to a service, or the `tsh` connection to the proxy |
 
-A round dot travels along a line for each real request; a diamond travels from *Faults* to the node it hits and a ring flashes on that
-tile. *Pause animation* stops the dots; they also stop at governor L3 and under reduced motion, and the live feed runs only while
-the page is visible and the Nodes tab is open. **How to read this diagram** (under the picture) repeats the legend.
+A round dot travels along a line for each real request (a **triangle** for an answer the mock counted as an error, such as a 404 or an injected 503; the service box and the Timeline also say "2 errors", and a service that keeps no error counter shows none); a diamond travels from *Faults* to the node it hits and a ring flashes on that
+tile. *Pause* stops the dots; they also stop at governor L3 and under reduced motion, and the live feed runs only while
+the page is visible and the Nodes tab is open. **Key** (top right of the diagram) opens the legend: kinds, states, the dot, diamond and ring, the node marks, and a sample of each line style. The **view switcher** under the title (*2.5D*, *Flat*, *Overview*) picks how the diagram is drawn and at what level; the focus, selection and node list stay as they are when you switch. *Overview* is the level of detail: The *overview* condenses the cluster to one card (clients, access, the node groups with a health bar, the services and the fault count); above 24 nodes the page opens there. Hover the card (or Tab to it) to see the design underneath, double-click it, press Enter or use **Open full design** to enter, and use the **All clusters** link or Esc to go back. With several clusters the overview is a grid of cards (the cluster's name, nodes healthy, services and faults, and a condensed *access → nodes* picture when the card is big enough); a card with a failing part is marked with ▲. Entering one shows that cluster's diagram and node list. On a phone, tap the card. A table of clusters is in the page for screen readers.
+
+![The overview: one card for the cluster, with a preview of the design underneath](img/web-global-view.png)
+
+*2.5D* and *Flat* are the drawing styles (in 2.5D a lens also lifts its plane: parts in it get a deeper side face and a glow; see ADR 0030): 2.5D (the default) draws the same diagram as raised slabs on a tiled floor with glowing lines; flat is the plain baseline and is the default under reduced motion and on a phone. The choice is remembered in the browser.
+
+**Focus.** Double-click a part (or Tab to it and press **F**) to focus it: the part and its direct neighbours stay lit, everything else dims, faulted parts stay visible, and nothing moves. Connections then lists what it connects to (plane, kind, and whether the link is *measured* by a counter or only *declared*). Double-click it again, press Esc, or use the breadcrumb under the diagram to leave.
+
+**Blast radius.** When a fault is applied (a node button or a scenario step), the parts a client reads that the fault changes get a **dashed** outline (shape, not only colour), and Connections shows one plain sentence of what a client would observe, for example *the BMC reports the node Off, the BCM marks it down and its GPU metric series stop*. Every caption says it is **declared from the simulator's rules, not measured**. It clears after 45 seconds or with **Dismiss**. The table behind it is `webui/blast.py`, checked against the edge model by `tests/test_graph.py`.
+
+**Lenses.** The **Lens** menu next to the view switcher restyles the same layout by plane: *Access* (how users get in), *Management* (BMC and BCM), *Telemetry* (GPU metrics), *Tickets* (Jira) and *Faults*; everything outside the plane dims and nothing moves. **Client's eye** shows, for every service a client should call, how many calls the mocks counted, how many were errors, the rate per minute and a verdict (*called*, *not called yet*, *not reachable*), and says *not measured* where nothing counts (the real Jira, a service with no error counter). It is built only from the per-mock counters, so it tells you whether the client is reading everything, not which endpoint it used. With the stack down it shows one message instead.
 
 **Hover** a part for a one-line tip (its state and how it is reached). **Click** it (or Tab to it and press Enter) for a pop-up window
 next to it with its address, the credential file, a command to copy, and buttons for the details:
@@ -88,8 +103,7 @@ next to it with its address, the credential file, a command to copy, and buttons
 Esc closes the pop-up and returns the focus to the part. For a node, **Actions and details** opens its panel (below); **Connections**
 opens the row for that part in the Connections tab.
 
-**Fold the list away.** The list beside the diagram is a second way to the same parts. **Hide node list** gives the diagram the
-whole width, which is the best view when the diagram is your main way in:
+**Fold the list away.** The list is a second way to the same parts. **Hide node list** gives the whole right column to Connections and the selected part:
 
 ![The Infrastructure architecture with the node list folded away](img/web-architecture-wide.png)
 
@@ -119,8 +133,8 @@ To turn it off, untick it and apply again. Two things stay in a terminal because
 
 ## A node: actions and info
 
-Click a node card, or a node tile in the diagram and then **Actions and details**. Its panel **replaces the list in place** (it is not a pop-up), so you can watch the Infrastructure architecture
-while you act. The panel has two cards and a header with **← All nodes** (Esc does the same), the node's name and its
+Click a node card, or a node tile in the diagram and then **Actions and details**. Its panel opens in the **Connections** area (it is not a pop-up) and that area grows to make room, so you can watch the Infrastructure architecture and the list
+while you act. The selected node is outlined in the list. The panel has two cards and a header with **← All nodes** (Esc does the same), the node's name and its
 live state.
 
 - **Actions**: the faults first, **Power off**, **Overheat (92 °C)**, **Fan failure** and **GPU error (XID 79)** (GPU
@@ -163,8 +177,10 @@ while an older one kept running). Restart it and reload:
 
 Press **▶ Scenarios**, type in *Filter scenarios* if the list is long, pick a speed (one setting for all), press
 **▶ Play**, and watch each step turn ok, skipped or failed. **Stop** aborts. While one runs, the top strip shows it and
-pressing that chip reopens the sheet. Steps that need Docker (the `slurm` target: drain and resume) are **skipped on this
-page**, because the page has no Docker access by design; run those with `./scripts/benchctl scenario run NAME`.
+pressing that chip reopens the sheet. The page has no Docker access by design, so its `slurm` steps (drain, resume, job and daemon steps)
+are done by the governor; one it refuses (memory level L2 and above) or cannot do (started without `--workdir`) shows **skipped** with the reason, and
+`./scripts/benchctl scenario run NAME` does it from the terminal. Tick **Slurm trace** before **▶ Play** to see, under the timeline, what the
+jobs and Slurm's logs did around each step ([Slurm resilience](../guides/slurm-resilience.md)).
 
 ![Run panel showing node-down, step 2 of 6, with each step marked ok or pending and a Stop button (older layout)](img/web-scenario-running.png)
 
@@ -181,6 +197,20 @@ is offline, or memory is tight (L2 and up), the same is also listed under *Needs
 The **Connections** tab lists every part (login node, nodes, BMC, BCM, Jira, Slurm REST, GPU exporter, Prometheus,
 Grafana, this page) with its address, a command you can copy, and the **file that holds its credential**. The page shows
 paths, never secrets.
+
+The last column, **Open**, has one-click actions for the parts that have one:
+
+- **Open ... ↗** opens a web page in a new tab: Grafana, Prometheus, jira-mock, the GPU metrics, the Teleport web UI, the
+  Redfish endpoint and this page. Links to an API say so (**Open jira-mock API (JSON)**, **Open Redfish API (JSON, certificate
+  warning)**): you get raw JSON, not a page, and the browser warns about the Redfish self-signed certificate; both are expected. The links use the
+  ports published on `127.0.0.1`, so they work without the Docker network route.
+- **Open in SSH app (needs a handler)** on a login node that takes a key hands the address to the terminal your desktop
+  registered for `ssh://`. Not every desktop has one (the browser then asks which app to use): **Copy benchctl ssh**, the
+  first action of the row, works everywhere.
+- **Copy benchctl ssh** gives `benchctl ssh alice@<node>`, a real SSH login as that user through the login node (`benchctl ssh <node>`
+  without a user is a root shell). A node's panel has the same command with the node filled in. The button says "Copied" and the page announces it to screen readers.
+
+The page never opens a terminal itself (it has no Docker or root access, W-3). A part with nothing to open shows "none".
 
 ## One message per condition
 
