@@ -161,7 +161,11 @@ def test_launcher_prints_a_login_link_and_serves_with_the_token(monkeypatch, tmp
     launcher.main()
     out = capsys.readouterr().out
     token = launcher.load_token(tmp_path / "secrets" / "ui_token")
-    assert out.strip() == f"workbench UI: http://127.0.0.1:9123/login?token={token}"
+    assert out.strip() == "workbench UI: http://127.0.0.1:9123/login"  # piped (a log file): no token in it
+    assert token not in out
+    monkeypatch.setattr(launcher.sys.stdout, "isatty", lambda: True, raising=False)
+    launcher.main()
+    assert capsys.readouterr().out.strip() == f"workbench UI: http://127.0.0.1:9123/login?token={token}"  # a terminal gets the link
     assert ran["kw"] == {"host": "127.0.0.1", "port": 9123, "log_level": "warning"}  # localhost only (W-8)
 
 
