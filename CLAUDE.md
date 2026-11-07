@@ -8,6 +8,11 @@ workbench: a memory-governed simulation of an HPC/AI cluster (Slurm, Kubernetes,
 
 **Main purpose:** workbench is the test target for a desktop HPC monitoring client (SPEC G5). To test one against it, read [docs/guides/client-testing.md](docs/guides/client-testing.md) first. Never name that client in this repo.
 
+## Never guess: confirm first (mandatory)
+
+- If a fact, requirement, scope choice or the monitoring client's behaviour is not clear from the code, SPEC.md or the docs, do not guess and do not proceed on an assumption. Stop and ask the owner, then wait for the answer.
+- This covers suggesting to defer, drop or add a feature, naming what the client uses, and any decision that changes SPEC. State what you know, what you do not, and give a recommendation with the question.
+
 ## Git workflow (mandatory)
 
 - Before starting any new task or piece of work, create a GitHub issue for it (`gh issue create`: what, why, acceptance criteria). Branch from it, name the branch after it, and reference it in the PR (`Closes #N`).
