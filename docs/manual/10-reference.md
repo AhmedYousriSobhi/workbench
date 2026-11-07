@@ -65,7 +65,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 | `.venv/bin/python -m webui [port]` | the web page (default 8088) |
 | `http://127.0.0.1:8088/help/` | these pages inside the web page, with search (needs the login) |
 | `python -m governor [flags]` | the governor (`--dry-run`, `--once`, `--user-mode`, `--socket`, `--metrics-addr`, `--grafana-url`, `--thresholds`, `--workdir`, `--refresh-interval`, `--no-watchdog`) |
-| `fidelity-vm/bin/up.sh`, `down.sh` | the on-demand VM |
+| `fidelity-vm/bin/up.sh`, `down.sh` | the deferred VM scaffold (ADR 0033) |
 
 ## Ports (127.0.0.1, except 9401)
 
@@ -117,4 +117,4 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 | Class P0-P6 | container priority; the highest number is acted on first |
 | Scenario | a named, timed list of faults |
 | Mock | a program that imitates one service's API |
-| Fidelity VM | the one real VM, on demand |
+| Fidelity VM | deferred (ADR 0033) |

@@ -119,8 +119,8 @@ phases:
     title: Fidelity VM
     goal: One real Ubuntu VM with Redfish power control
     items:
-      - {name: VM scaffold, status: partial, where: fidelity-vm,
-         how: "Vagrantfile, provisioning scripts and up/down helpers exist; not re-verified end to end since the scaffold merge."}
+      - {name: VM scaffold (deferred), status: todo, where: fidelity-vm,
+         how: "Vagrantfile, provisioning scripts and up/down helpers exist; not re-verified end to end since the scaffold merge. Deferred, not needed for the client test target (ADR 0033, issue 366)."}
 
   - id: p7
     title: Web UI and profiles

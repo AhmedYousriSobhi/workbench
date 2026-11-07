@@ -48,7 +48,8 @@ Put **Toxiproxy** in front of the Jira mode only (an HTTP path, where it is chea
 - **`ticket-bot`**: fake support engineers that pick up tickets the app creates, comment, transition and resolve them on realistic delays, including "customer" tickets the app should triage.
 - Submit through `slurmrestd` and the CLI so both integration paths of the app are exercised.
 
-### 4.8 Fidelity VM (the single real VM)
+### 4.8 Fidelity VM (deferred, ADR 0033)
+- Not built and not required: no client endpoint needs it. The notes below are the plan if it is revisited.
 - One Vagrant/libvirt Ubuntu VM, **on demand only**, for what containers can't prove: real kernel counters, systemd units, sshd, real `node_exporter`, power control via sushy-tools, and the app's Linux agent install path.
 - Prefer **libvirt/KVM** (`vagrant-libvirt`) over VirtualBox: KVM supports memory ballooning and KSM page merging, and `virsh managedsave` can fully release its RAM.
 - Hard-cap at 2 GB.
