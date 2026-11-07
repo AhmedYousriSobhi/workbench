@@ -30,7 +30,7 @@ FLOW = """if (flowEs) flowEs.close(); flowSnap = {reachable: {'bmc-farm': true, 
 port = 8199
 proc = subprocess.Popen([sys.executable, "-m", "webui", str(port)], cwd=ROOT, stdout=subprocess.PIPE, text=True)
 try:
-    url = proc.stdout.readline().split("UI: ")[1].strip()
+    url = proc.stdout.readline().split("UI: ")[1].strip() + "?token=" + (ROOT / "compose/generated/secrets/ui_token").read_text().strip()  # the log line has no token (#346)
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page(viewport={"width": 1280, "height": 900}, color_scheme="light")
