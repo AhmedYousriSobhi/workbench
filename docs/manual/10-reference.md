@@ -84,7 +84,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 
 | Variable | Used by | Meaning |
 |---|---|---|
-| `BENCHCTL_UI_PORT` | `benchctl start` | web page port (default 8088) |
+| `BENCHCTL_UI_PORT` | `benchctl start` | web page port (default 8088); when a page already runs on another port, `start` restarts it on this one |
 | `BENCHCTL_GOVERNOR` | `benchctl start` | `auto`, `user`, `system` or `off` |
 | `WORKBENCH_GOV_SOCKET` | `benchctl`, web page | governor socket path override |
 | `WORKBENCH_GRAFANA_TOKEN` | governor | token for annotations (set by `benchctl start`; never put it in files) |

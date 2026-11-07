@@ -57,7 +57,12 @@ ensure_venv() {
   python3 -m venv .venv && .venv/bin/pip install -q -e '.[dev]' || { echo "could not install the tools" >&2; return 1; }
 }
 start_ui() {
-  if ui_pid >/dev/null; then echo "web page already running (pid $(ui_pid))"; return 0; fi
+  if ui_pid >/dev/null; then
+    local u run; u="$(page_url)"; run="${u##*:}"  # the port the running page listens on (from its log)
+    if [ -n "${BENCHCTL_UI_PORT:-}" ] && [ -n "$run" ] && [ "$run" != "$port" ]; then  # an explicit port that differs: move the page
+      echo "web page runs on port $run, restarting it on port $port (BENCHCTL_UI_PORT)"; kill "$(ui_pid)" 2>/dev/null; rm -f "$pidf"; sleep 1
+    else echo "web page already running (pid $(ui_pid))"; return 0; fi
+  fi
   (umask 077; nohup .venv/bin/python -m webui "$port" >"$logf" 2>&1 & echo $! >"$pidf")
   for _ in $(seq 1 50); do
     [ -n "$(page_url)" ] && curl -s -o /dev/null "http://127.0.0.1:$port/login" && return 0
