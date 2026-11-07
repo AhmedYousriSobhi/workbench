@@ -63,7 +63,8 @@ Open **☰ Menu → ✚ Health checks** in the top strip. Drag a block by its ha
 the keyboard), tick a block to switch the check on or off, edit a parameter and leave the field to save it, and ✕ removes a
 check. To add one, drag a template from the bottom of the sheet into the list (or press it), name it and fill in its
 parameters. A refused change shows one line saying why and the list goes back to what was saved. The page adds checks
-from templates only; for a script of your own use the command line or a file.
+from templates only; for a script of your own use the command line or a file. Changes made at the same moment (two tabs, or the page and
+`benchctl set check`) are applied one after the other, so none is lost.
 
 ## Undo
 

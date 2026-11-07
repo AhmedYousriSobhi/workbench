@@ -8,6 +8,7 @@ the files as they were. `sync` copies the result into compose/generated/nhc, whi
 """
 from __future__ import annotations
 
+import fcntl
 import os
 import re
 import shutil
@@ -244,17 +245,21 @@ def _write_atomic(dest: Path, data: bytes) -> None:
 
 
 def _change(src: Path, mutate) -> list[Check]:
-    tmp, work = _stage(src)
-    try:
-        checks = load(work)
-        checks = mutate(checks, work) or checks
-        (work / CONF).write_text(render(checks))
-        if errs := problems(work):
-            raise NhcError("\n".join(errs))
-        _commit(work, src)
-        return checks
-    finally:
-        tmp.cleanup()
+    # One change at a time, across processes (two page tabs, the page plus `benchctl set check`): the whole
+    # read-modify-write is under the lock, or the second writer would overwrite the first one's change.
+    with open(src.parent / f".{src.name}.lock", "a") as lock:  # beside the directory, so it is never copied or compared
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        tmp, work = _stage(src)
+        try:
+            checks = load(work)
+            checks = mutate(checks, work) or checks
+            (work / CONF).write_text(render(checks))
+            if errs := problems(work):
+                raise NhcError("\n".join(errs))
+            _commit(work, src)
+            return checks
+        finally:
+            tmp.cleanup()
 
 
 def _find(checks: list[Check], name: str) -> Check:
