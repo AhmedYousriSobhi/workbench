@@ -35,7 +35,8 @@ class Governor:
         self._changes = 0
         self.counts = {"actions": 0, "action_failures": 0, "admit_ok": 0, "admit_refused": 0}
         self.metrics: bytes = b""  # rendered at the end of each step, served by governor.metrics
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()  # guards the state `status` reads; never held while an action runs from step() (ADR 0031)
+        self._exec_lock = threading.Lock()  # one container action at a time (a manual `stop` and a plan must not interleave)
         self._change_lock = threading.Lock()  # one `benchctl` stack change at a time: two `up` would rewrite the same files
         self._prev = 0
         self.watchdog, self.watch_interval = watchdog, watch_interval
@@ -57,23 +58,28 @@ class Governor:
         """Run or (dry-run) log one action, recording it in the audit trail (GV-6)."""
         msg = f"{'dry-run: would ' if self.dry_run else ''}{a}"
         log.info(msg)
-        self._record(msg)
-        self.counts["actions"] += 1
+        with self._lock:
+            self._record(msg)
+            self.counts["actions"] += 1
         if not self.dry_run:
             try:
-                self.executor(a)
-                if a.verb in ("stop", "save"):
-                    self.stopped.add(a.target)
-                elif a.verb == "start":
-                    self.stopped.discard(a.target)
+                with self._exec_lock:  # slow (docker stop is up to 20 s); `status` needs only `_lock`
+                    self.executor(a)
+                with self._lock:
+                    if a.verb in ("stop", "save"):
+                        self.stopped.add(a.target)
+                    elif a.verb == "start":
+                        self.stopped.discard(a.target)
             except Exception as e:  # noqa: BLE001  one failed action must not abort the plan
-                self.counts["action_failures"] += 1
                 log.error("action failed: %s: %s", a, e)
-                self._record(f"FAILED {a}: {e}")
+                with self._lock:
+                    self.counts["action_failures"] += 1
+                    self._record(f"FAILED {a}: {e}")
 
     def step(self, now: float) -> int:
         """One control cycle: sample, update the ladder, act on level changes."""
         s = self.sampler.sample(now)
+        acts: list[Action] = []
         with self._lock:
             self.signals = s
             level = self.ladder.update(s, now)
@@ -82,8 +88,8 @@ class Governor:
                 acts = undo(self._prev, level, self.groups) if level < self._prev else \
                     reversible_first(plan(level, self.groups))
                 self._prev = level
-                for a in acts:
-                    self._act(a)
+        for a in acts:  # outside the lock: `status` keeps answering while containers are stopped one by one (#342)
+            self._act(a)
         self._watch(now, level)
         self._refresh(now, level)
         with self._lock:
@@ -102,6 +108,7 @@ class Governor:
         except Exception as e:  # noqa: BLE001  discovery failure keeps the old inventory
             log.warning("inventory refresh failed: %s", e)
             return
+        late: list[Action] = []
         with self._lock:
             known = {g.name for g in self.groups}
             new = [g for g in found if g.name not in known]
@@ -117,8 +124,9 @@ class Governor:
             for n in sorted(gone):
                 self._note(f"inventory: - {n}")
             if level > 0:  # a container that appears mid-incident gets the current level's actions
-                for a in reversible_first(plan(level, new)):
-                    self._act(a)
+                late = reversible_first(plan(level, new))
+        for a in late:
+            self._act(a)
 
     def _watch(self, now: float, level: int) -> None:
         """Report new/resolved security findings. Skipped from L3 up: it forks `docker`, which must
@@ -201,6 +209,9 @@ class Governor:
                 return {"ok": True, "trace": self.tracer(req["nodes"], float(req["since"]))}
             except Exception as e:  # noqa: BLE001
                 return {"ok": False, "error": f"trace failed: {e}"}
+        if cmd in ("freeze", "thaw", "stop", "start"):  # slow, so not under the lock: it would hold `status` up like a plan does
+            self._act(Action(cmd, req["target"], self.ladder.level))
+            return {"ok": True}
         with self._lock:
             if cmd == "status":
                 s = self.signals
@@ -213,9 +224,6 @@ class Governor:
                         "services": sorted({g.service for g in self.groups if g.service}),  # as of the last inventory refresh
                         "violations": sorted(self.violations),
                         "audit": self.audit[-60:]}
-            if cmd in ("freeze", "thaw", "stop", "start"):
-                self._act(Action(cmd, req["target"], self.ladder.level))
-                return {"ok": True}
             if cmd == "admit":
                 return self._admit(req["budget_mb"])
             if cmd == "scale":

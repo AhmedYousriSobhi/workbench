@@ -123,4 +123,4 @@ See [architecture section 12](docs/architecture/09-roadmap-decisions-risks.md) (
 
 Not built yet (so no requirement above is satisfied by them): W-7 Profile and Budget Manager; the user simulator and ticket bot; Slurm job dots on the Infrastructure architecture; Teleport scenarios (certificate expiry, `teleport-outage`) and Teleport in the Web UI; Kubernetes and the fidelity VM.
 
-Also open: the governor serves control commands under the same lock that executes a plan, so `status` waits for the whole plan. Measured with the rootless executor, a container stop costs about 175 ms and a pause about 28 ms (about 2 s for 12 containers); decide whether control commands need a bound before the `full` profile is relied on (issue #53).
+The governor's control commands no longer wait for a running plan: actions run outside the state lock (ADR 0031, issue 342; it was issue 53).

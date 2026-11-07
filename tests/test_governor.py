@@ -532,3 +532,36 @@ def test_refresh_jira_licence_runs_the_benchctl_refresh(tmp_path):
     g, _ = _calm_gov(tmp_path, effector=lambda a: calls.append(a) or done.set() or 0)
     assert g.handle("refresh-jira-licence", {})["started"] and done.wait(5)
     assert calls[-1] == ["refresh", "jira-real-licence"]
+
+
+def test_status_answers_while_a_plan_with_slow_actions_runs(tmp_path):
+    """A container stop takes up to 20 s; the page asks `status` every second and must not see the governor as gone (#342)."""
+    import json
+    import threading
+    import time as _t
+
+    from governor.signals import FileSampler
+    f = tmp_path / "s.json"
+    f.write_text(json.dumps({"mem_available": 4 * GB, "psi_some": 0, "psi_full": 0}))
+    in_action, release = threading.Event(), threading.Event()
+
+    def slow(a):
+        in_action.set()
+        release.wait(10)
+
+    g = Governor(FileSampler(f), Ladder(), [Group("c1", 2), Group("c2", 2)], slow, dry_run=False)
+    g.step(0)
+    f.write_text(json.dumps({"mem_available": 1 * GB, "psi_some": 80, "psi_full": 40}))  # pressure: a plan follows
+    t = threading.Thread(target=lambda: [g.step(x) for x in (1, 10, 20, 30, 40, 50)], daemon=True)
+    t.start()
+    try:
+        assert in_action.wait(5), "no action started"
+        t0 = _t.monotonic()
+        st = g.handle("status", {})
+        assert st["ok"] and _t.monotonic() - t0 < 1  # answered while an action is still running
+        assert any("level L0" in line for line in st["audit"])
+        t0 = _t.monotonic()
+        assert g.handle("admit", {"budget_mb": 10})["ok"] in (True, False) and _t.monotonic() - t0 < 1
+    finally:
+        release.set()
+        t.join(10)
