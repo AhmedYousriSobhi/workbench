@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**85% built** (35 done, 52 in review, 11 partial, 4 to do, 102 items).
+**85% built** (35 done, 52 in review, 10 partial, 5 to do, 102 items).
 
 ## Roadmap
 
@@ -15,7 +15,7 @@ flowchart LR
     p3["Mocks<br/>83%"]:::partial
     p4["People and chaos<br/>25%"]:::partial
     p5["Kubernetes<br/>50%"]:::partial
-    p6["Fidelity VM<br/>0%"]:::partial
+    p6["Fidelity VM<br/>0%"]:::todo
     p7["Web UI and profiles<br/>86%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
     p0 --> p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7 --> p8
@@ -195,7 +195,7 @@ _One real Ubuntu VM with Redfish power control._
 
 | Part | Status | How it is built | Where | PR |
 |---|---|---|---|---|
-| VM scaffold | 🟡 Partial | Vagrantfile, provisioning scripts and up/down helpers exist; not re-verified end to end since the scaffold merge. | `fidelity-vm` | - |
+| VM scaffold (deferred) | ⬜ To do | Vagrantfile, provisioning scripts and up/down helpers exist; not re-verified end to end since the scaffold merge. Deferred, not needed for the client test target (ADR 0033, issue 366). | `fidelity-vm` | - |
 
 0/1 done
 

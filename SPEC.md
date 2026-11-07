@@ -20,7 +20,7 @@ Normative requirements for workbench. [README.md](README.md) gives the overview 
 | ID | Requirement |
 |---|---|
 | P-1 | Host: Ubuntu, cgroup v2, PSI enabled (`/proc/pressure/memory`), kernel 5.19+ for `memory.reclaim`. |
-| P-2 | Docker with the systemd cgroup driver; libvirt/KVM for the fidelity VM. |
+| P-2 | Docker with the systemd cgroup driver. libvirt/KVM is needed only for the deferred fidelity VM (C-10). |
 | P-3 | `benchctl doctor` MUST verify P-1/P-2 and report fixes; it MAY apply host tuning (zram, swappiness, THP) with confirmation. |
 
 ## 3. Configuration: `sim.yaml`
@@ -40,7 +40,7 @@ Normative requirements for workbench. [README.md](README.md) gives the overview 
 | C-7 | Observability | Prometheus (about 2 d retention) + Grafana + Alertmanager with file-provisioned dashboards. Governor metrics exposed independently of Prometheus. |
 | C-8 | user-sim / ticket-bot | Personas with Poisson arrivals and failure behavior; fake engineers working Jira tickets on realistic delays. Submission via `slurmrestd` and CLI. |
 | C-9 | scenario-engine | Runs YAML scenarios (steps with `at`, `target`, `do`; optional `expect` assertions). |
-| C-10 | Fidelity VM | Single on-demand libvirt Ubuntu VM, hard cap 2 GB, power via sushy-tools. |
+| C-10 | Fidelity VM | **Deferred** (ADR 0033, issue 366): not needed for G5. Planned as one on-demand libvirt Ubuntu VM, hard cap 2 GB, power via sushy-tools; an unverified scaffold stays in `fidelity-vm/`. No other requirement depends on it. |
 | C-11 | Storage sim | No NFS/Lustre servers. Static `node_exporter` textfile metrics for fake mounts. MariaDB and Prometheus TSDB on capped tmpfs (about 200 MB). |
 | C-12 | Network chaos | `tc netem` on Docker bridge networks for latency, loss, partition. Toxiproxy only on the Jira HTTP path. |
 | C-14 | Login node | One `login` container (`sshd`, Slurm client tools, key login only, no root, TCP forwarding on, simulated users from `sim.yaml`) on 127.0.0.1:2222, unprivileged and memory-limited, keys generated into `compose/generated/secrets/ssh`; for SSH-based clients that run `squeue`/`sinfo`/`sacct` over SSH (ADR 0011). |
@@ -121,6 +121,6 @@ Exit tests are listed in [architecture section 11](docs/architecture/09-roadmap-
 
 See [architecture section 12](docs/architecture/09-roadmap-decisions-risks.md) (Slurm access path, BCM surface, Jira features, real GPUs, Mac access). Each MUST be resolved before the dependent component is implemented.
 
-Not built yet (so no requirement above is satisfied by them): W-7 Profile and Budget Manager; the user simulator and ticket bot; Slurm job dots on the Infrastructure architecture; Teleport scenarios (certificate expiry, `teleport-outage`) and Teleport in the Web UI; Kubernetes and the fidelity VM.
+Not built yet (so no requirement above is satisfied by them): W-7 Profile and Budget Manager; the user simulator and ticket bot; Slurm job dots on the Infrastructure architecture; Teleport scenarios (certificate expiry, `teleport-outage`) and Teleport in the Web UI; Kubernetes; the fidelity VM is deferred (ADR 0033).
 
 The governor's control commands no longer wait for a running plan: actions run outside the state lock (ADR 0031, issue 342; it was issue 53).
