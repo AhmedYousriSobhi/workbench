@@ -39,15 +39,11 @@ class ActionError(ValueError):
 
 
 def teleport_built() -> bool:
-    return saved_has_teleport()
+    return saved_has_part("teleport")
 
 
 def jira_real_built() -> bool:
     return saved_has_part("jira-real")
-
-
-def saved_has_teleport() -> bool:
-    return saved_has_part("teleport")
 
 
 def saved_has_part(part: str) -> bool:
