@@ -42,7 +42,7 @@ def capture(out: Path) -> dict:
     proc = subprocess.Popen([sys.executable, "-m", "webui", str(port)], cwd=ROOT, stdout=subprocess.PIPE, text=True)
     result: dict = {"shots": [], "console_errors": [], "overflow": [], "a11y": []}
     try:
-        url = proc.stdout.readline().split("UI: ")[1].strip()
+        url = proc.stdout.readline().split("UI: ")[1].strip() + "?token=" + (ROOT / "compose/generated/secrets/ui_token").read_text().strip()  # the log line has no token (#346)
         with sync_playwright() as p:
             browser = p.chromium.launch()
             for scheme in ("light", "dark"):

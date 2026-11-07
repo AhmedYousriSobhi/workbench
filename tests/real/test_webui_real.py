@@ -31,7 +31,8 @@ def ui():
     bring_up(sim)
     port = free_port()
     proc = subprocess.Popen([sys.executable, "-m", "webui", str(port)], cwd=ROOT, stdout=subprocess.PIPE, text=True)
-    token = proc.stdout.readline().split("token=")[1].strip()
+    proc.stdout.readline()  # the page prints its address; the token is only in its 0600 file (a terminal-only link, #346)
+    token = (ROOT / "compose/generated/secrets/ui_token").read_text().strip()
     base = f"http://127.0.0.1:{port}"
     h = {"Authorization": f"Bearer {token}", "X-Requested-With": "workbench"}
 
