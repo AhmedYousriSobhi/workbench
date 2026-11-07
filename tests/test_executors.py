@@ -65,8 +65,18 @@ def test_discover_docker_parses_inspect():
         return subprocess.CompletedProcess(cmd, 0, out, "")
 
     groups, cgs = discover_docker(fake)
-    assert groups == [Group("cn1", 4)]
+    assert groups == [Group("cn1", 4)] and groups[0].service == ""
     assert cgs["cn1"] == Path("/sys/fs/cgroup/workbench.slice/workbench-p4.slice/docker-abc.scope")  # systemd nests dashed slices
+
+
+def test_discover_docker_reads_the_compose_service_label():
+    insp = [{"Name": "/workbench-cn001-1", "Id": "abc", "HostConfig": {},
+             "Config": {"Labels": {"workbench.class": "P4", "com.docker.compose.service": "cn001"}}}]
+
+    def fake(cmd, timeout=15):
+        return subprocess.CompletedProcess(cmd, 0, "abc\n" if cmd[1] == "ps" else json.dumps(insp), "")
+
+    assert discover_docker(fake)[0] == [Group("workbench-cn001-1", 4, service="cn001")]
 
 
 def test_undo_reverses_in_reverse_order():

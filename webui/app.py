@@ -177,6 +177,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         return JSONResponse({**attach_graph(snap), "blast": blast_payload()})
 
     def build_plan(q) -> tuple:
+        """Blocking (file reads, a governor call): run it with asyncio.to_thread."""
         from benchctl import workbench
 
         try:
@@ -189,7 +190,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             raise HTTPException(422, str(e)) from e
         if problems := spec.problems():
             raise HTTPException(422, "; ".join(problems))
-        est = workbench.estimate(*workbench.effective(sim, spec), app_mb=0, running=workbench.running_services())  # the page is open next to the app: its memory is already out of the free figure
+        est = workbench.estimate(*workbench.effective(sim, spec), app_mb=0, running=set(governor_status(socket).get("services") or []))  # the page is open next to the app: its memory is already out of the free figure
         avail = checks.mem_available() // (1024 * 1024)
         ok, msg = workbench.verdict(est, avail, spec=spec)
         return spec, est, avail, ok, msg
@@ -219,7 +220,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
     async def plan(request: Request):
         """Estimate only, no side effects: the page cannot start containers. Applying goes through the governor."""
-        spec, est, avail, ok, msg = build_plan(request.query_params)
+        spec, est, avail, ok, msg = await asyncio.to_thread(build_plan, request.query_params)
         from benchctl import workbench
 
         flags = f"--cpu-nodes {spec.cpu_nodes} --gpu-nodes {spec.gpu_nodes} --gpus-per-node {spec.gpus_per_node}" + "".join(
@@ -245,7 +246,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
     async def plan_apply(request: Request):
         """Ask the governor to rebuild the workbench to this plan (it runs `benchctl up` as the user, calm levels only)."""
-        spec, _, _, ok, msg = build_plan(request.query_params)
+        spec, _, _, ok, msg = await asyncio.to_thread(build_plan, request.query_params)
         if not ok:
             raise HTTPException(422, "does not fit: " + msg)
         req = {"cmd": "apply-plan", "cpu_nodes": spec.cpu_nodes, "gpu_nodes": spec.gpu_nodes,
@@ -408,7 +409,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             gpus, duration = int(q.get("gpus", "0")), int(q.get("duration", "300"))
         except ValueError as e:
             raise HTTPException(422, "gpus and duration must be whole numbers") from e
-        if node not in {n["name"] for n in cluster.snapshot()["nodes"]}:
+        if node not in {n["name"] for n in (await asyncio.to_thread(cluster.snapshot))["nodes"]}:
             raise HTTPException(404, f"unknown node {node}")
         try:
             res = await asyncio.to_thread(checks.governor_request, {"cmd": "submit-job", "node": node, "gpus": gpus, "duration": duration}, socket)

@@ -209,7 +209,9 @@ class Governor:
                         "mem_available": s.mem_available if s else None,
                         "psi_some": s.psi_some_avg10 if s else None,
                         "psi_full": s.psi_full_avg10 if s else None,
-                        "groups": sorted(self.group_names()), "violations": sorted(self.violations),
+                        "groups": sorted(self.group_names()),
+                        "services": sorted({g.service for g in self.groups if g.service}),  # as of the last inventory refresh
+                        "violations": sorted(self.violations),
                         "audit": self.audit[-60:]}
             if cmd in ("freeze", "thaw", "stop", "start"):
                 self._act(Action(cmd, req["target"], self.ladder.level))
