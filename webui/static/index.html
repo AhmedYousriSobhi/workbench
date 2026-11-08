@@ -2079,7 +2079,7 @@ function paintTrafficMap(rows, ghosts = []) {
   groups.forEach(g => { const o = trOff[g.title] || [0, 0]; g.x = Math.max(M / 2, M + cols.indexOf(g.c) * (GW + GAPX) + o[0]); g.y = Math.max(M / 2, ry(g.r) + o[1]); });
   const w = Math.max(...groups.map(g => g.x + GW)) + M + 64,  h = Math.max(...groups.map(g => g.y + g.h)) + M / 2;  // +64: room for the same-group brackets on the right
   svg.setAttribute('viewBox', `0 0 ${w} ${h}`); svg.style.width = trZoom * 100 + '%'; svg.style.height = 'auto'; svg.style.minWidth = Math.min(w, 560) + 'px';
-  const defs = sv('defs', {}); for (const [p, [c]] of Object.entries(PLANE_STYLE)) { const m = sv('marker', { id: 'tm-' + p, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, orient: 'auto' }); m.append(sv('path', { d: 'M0 0 L10 5 L0 10 z', fill: c })); defs.append(m); }
+  const defs = sv('defs', {}); for (const [p, [c]] of Object.entries(PLANE_STYLE)) { const m = sv('marker', { id: 'tm-' + p, viewBox: '0 0 10 10', refX: 9, refY: 5, markerUnits: 'userSpaceOnUse', markerWidth: 9, markerHeight: 9, orient: 'auto' }); m.append(sv('path', { d: 'M0 0 L10 5 L0 10 z', fill: c })); defs.append(m); }
   svg.append(defs);
   groups.forEach(g => {
     const box = sv('g', { 'data-group': g.title, tabindex: 0, role: 'group', 'aria-label': g.title + ' group, movable', style: 'cursor:grab' });
@@ -2111,8 +2111,9 @@ function paintTrafficMap(rows, ghosts = []) {
     if (!A || !B) return;
     const right = B.x > A.x + A.w + 30, left = B.x + B.w < A.x - 30, so = left ? -1 : 1, si = right ? -1 : 1;  // sides: 1 = right edge
     const x1 = so > 0 ? A.x + A.w : A.x, x2 = si > 0 ? B.x + B.w : B.x, y1 = A.y + PH / 2 + end(l.from, 'o' + so), y2 = B.y + PH / 2 + end(l.to, 'i' + si), [c, dash] = PLANE_STYLE[l.plane] || ['#8da2ff', ''];
-    let pts;
-    if (!right && !left) { const out = Math.max(x1, x2) + ST + 8 + lane('b' + Math.round(Math.max(x1, x2))); pts = [[x1, y1], [out, y1], [out, y2], [x2, y2]]; }  // same column: a bracket on the right
+    let pts, bracket = null;
+    // same column: nested brackets on the right; their port pills sit on four levels so they never overlap
+    if (!right && !left) { const bk = 'b' + Math.round(Math.max(x1, x2)), bi = (lanes[bk] = (lanes[bk] || 0) + 1) - 1, out = Math.max(x1, x2) + ST + 8 + bi * 16; bracket = { x: out, y: (y1 + y2) / 2 + (bi % 4 - 1.5) * 17 }; pts = [[x1, y1], [out, y1], [out, y2], [x2, y2]]; }  // same column: a bracket on the right
     else {  // flowchart routing: out sideways, one vertical lane in the gap before the target, in sideways; a run that would cross a group goes along the gap between rows
       const gx = (right ? B.g.x - GAPX / 2 : B.g.x + GW + GAPX / 2) + lane('v' + Math.round(B.g.x) + so);
       if (right && cross([x1 + ST, y1], [gx, y1], A, B)) { const yc = gapAt(A, B) + lane('c' + Math.round(gapAt(A, B))), gs = A.g.x + GW + GAPX / 2 + lane('v' + Math.round(A.g.x) + 's'); pts = [[x1, y1], [gs, y1], [gs, yc], [gx, yc], [gx, y2], [x2, y2]]; }
@@ -2123,7 +2124,7 @@ function paintTrafficMap(rows, ghosts = []) {
     if (!ghost) g.append(sv('path', { d, fill: 'none', stroke: 'transparent', 'stroke-width': 14 }));
     g.append(sv('path', { d, fill: 'none', stroke: ghost ? 'var(--dim)' : c, 'stroke-width': sel ? 4.5 : ghost ? 1.6 : 2.8, 'stroke-opacity': ghost ? 1 : 0.85, 'stroke-linejoin': 'round', 'stroke-dasharray': ghost ? '2 5' : '', 'marker-end': ghost ? '' : `url(#tm-${mk})` }));
     if (!ghost && trView(l).up === true) g.append(sv('path', { d, class: 'trdots', fill: 'none', stroke: '#fff', 'stroke-opacity': 0.9, 'stroke-width': 2.4, 'stroke-linecap': 'round', 'stroke-dasharray': '0.1 14', 'pointer-events': 'none' }));  // moving dots: the caller-to-callee direction, only on a link whose far end answers
-    if (l.port != null && !ghost) { const lx = x2 + si * (ST + 18), ly = y2, wd = String(l.port).length * 7 + 14; g.append(sv('rect', { x: lx - wd / 2, y: ly - 8, width: wd, height: 16, rx: 8, fill: 'var(--panel)', stroke: c, 'stroke-width': 1.4 })); g.append(sv('text', { x: lx, y: ly + 4, 'text-anchor': 'middle', fill: 'currentColor', 'font-size': 11, 'font-weight': 600 }, l.port)); }
+    if (l.port != null && !ghost) { const lx = bracket ? bracket.x : x2 + si * (ST + 18), ly = bracket ? bracket.y : y2, wd = String(l.port).length * 7 + 14; g.append(sv('rect', { x: lx - wd / 2, y: ly - 8, width: wd, height: 16, rx: 8, fill: 'var(--panel)', stroke: c, 'stroke-width': 1.4 })); g.append(sv('text', { x: lx, y: ly + 4, 'text-anchor': 'middle', fill: 'currentColor', 'font-size': 11, 'font-weight': 600 }, l.port)); }
     g.append(sv('title', {}, `${l.from} to ${l.to}, ${l.plane} plane, ${l.protocol}${l.port == null ? '' : ' port ' + l.port}` + (ghost ? ` (grayed: ${l.why})` : '')));
     svg.append(g);
   });
