@@ -18,9 +18,13 @@ often a bastion in front of them. Until now the login node was the BCM head node
   key-login nodes (s-login, k-login) and the controller with `ssh -J`; Teleport nodes keep Teleport as their way in. The direct
   ports stay published: the bastion is an extra path, not the only one.
 
+## Client export
+With the jump part on, the profile has one extra `<login>-jump` entry per key-login node: the login's private address and port 22 with a
+`jumpHost` block (address, port, user, `private-key`), the shape the client's profile type defines. The key path and any secret are never
+exported; the client keeps the key. Teleport entries get no jump host (the client cannot use one with Teleport). Issue 415.
+
 ## Not built (open)
 - The Infrastructure architecture drawing (hand-laid SVG) has no jump or controller box yet; the Traffic & Communication diagram,
   Connections and the graph model do.
-- The client profile export carries no jump entry: its format for a jump host is not recorded in this repository.
 - The controller is not registered in Teleport.
 - Memory for the jump host is unmeasured (`NOT_MEASURED`, planned at its 24 MB cap).
