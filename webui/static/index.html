@@ -2015,11 +2015,11 @@ const TR_ICON = { server: 'M2 3h12v4H2zM2 9h12v4H2zM4.5 5h.01M4.5 11h.01', db: '
   screen: 'M2 3h12v8H2zM6 14h4M8 11v3', cube: 'M8 1.5l6 3v7l-6 3-6-3v-7zM2 4.5l6 3 6-3M8 7.5v7', chart: 'M2 13V3M2 13h12M5 10l3-3 2 2 3-4', lock: 'M4 7h8v6H4zM5.5 7V5a2.5 2.5 0 0 1 5 0v2' };
 const PART_ICON = { clients: 'screen', login: 'lock', teleport: 'lock', slurmrestd: 'gear', slurmctld: 'gear', slurmdbd: 'db', slurmd: 'server', nodes: 'server', 'bmc-farm': 'server', 'bcm-mock': 'server', 'k8s-api': 'gear',
   'kube-scheduler': 'gear', 'kube-controller-manager': 'gear', etcd: 'db', prometheus: 'chart', grafana: 'chart', 'gpu-exporter': 'chart', governor: 'gear', 'sim-nodes': 'server', storage: 'db' };
-const TR_GROUPS = [  // the fixed architecture: [title, grid column, grid row, colour, parts]; a part with no link in this cluster is drawn grayed, never dropped
-  ['External clients', 0, 0, '#4cc9ff', ['clients']], ['Access', 1, 0, '#8da2ff', ['login', 'teleport', 'slurmrestd']],
-  ['Slurm', 2, 0, '#3fb950', ['slurmctld', 'slurmdbd', 'slurmd', 'nodes']], ['Management', 3, 0, '#ffb02e', ['bmc-farm', 'bcm-mock', 'jira-mock', 'jira-real']],
-  ['Kubernetes', 0, 1, '#b38cff', ['k8s-api', 'kube-scheduler', 'kube-controller-manager', 'etcd', 'kwok']],
-  ['Monitoring', 2, 1, '#4cc9ff', ['prometheus', 'grafana', 'gpu-exporter', 'governor', 'sim-nodes']], ['Storage', 3, 1, '#c9a0ff', ['storage']]];
+const TR_GROUPS = [  // the fixed architecture, clients in the middle of the main row: [title, grid column, grid row, colour, parts]; a part with no link in this cluster is drawn grayed, never dropped
+  ['Slurm', 0, 1, '#3fb950', ['slurmctld', 'slurmdbd', 'slurmd', 'nodes']], ['Access', 1, 1, '#8da2ff', ['login', 'teleport', 'slurmrestd']],
+  ['External clients', 2, 1, '#4cc9ff', ['clients']], ['Management', 3, 1, '#ffb02e', ['bmc-farm', 'bcm-mock', 'jira-mock', 'jira-real']],
+  ['Kubernetes', 2, 0, '#b38cff', ['k8s-api', 'kube-scheduler', 'kube-controller-manager', 'etcd', 'kwok']],
+  ['Monitoring', 2, 2, '#4cc9ff', ['prometheus', 'grafana', 'gpu-exporter', 'governor', 'sim-nodes']], ['Storage', 0, 2, '#c9a0ff', ['storage']]];
 let trHist = [], trRange = 300;  // what this page was told since it opened (the counters are read live; nothing is stored on the server)
 const hhmmss = t => new Date(t).toTimeString().slice(0, 8);
 function paintTrTimeline(links) {
@@ -2038,9 +2038,9 @@ function paintTrTimeline(links) {
     + `<text x="0" y="${h - 2}" font-size="11" fill="currentColor" opacity=".7">${hhmmss(from)}</text><text x="${w}" y="${h - 2}" font-size="11" text-anchor="end" fill="currentColor" opacity=".7">${hhmmss(now)}</text><text x="${w}" y="12" font-size="11" text-anchor="end" fill="currentColor" opacity=".7">peak ${max} per ${Math.round(bw / 1000)} s</text></svg>`;
 }
 $('tr-range').onclick = e => { const b = e.target.closest('[data-s]'); if (!b) return; trRange = +b.dataset.s; $('tr-range').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); paintTraffic(); };
-let trOff = {}; try { trOff = JSON.parse(localStorage.getItem('workbench-tr-layout') || '{}'); } catch (e) { /* default layout */ }
+let trOff = {}; try { trOff = JSON.parse(localStorage.getItem('workbench-tr-layout3') || '{}'); } catch (e) { /* default layout */ }
 let trRows = [], trGhosts = [];
-function saveTrLayout() { try { localStorage.setItem('workbench-tr-layout', JSON.stringify(trOff)); } catch (e) { /* not remembered */ } }
+function saveTrLayout() { try { localStorage.setItem('workbench-tr-layout3', JSON.stringify(trOff)); } catch (e) { /* not remembered */ } }
 // auto layout from the links on show (groups with no link are left out, columns close up); a dragged group keeps its offset; lines are routed from the final positions
 function paintTrafficMap(rows, ghosts = []) {
   trRows = rows; trGhosts = ghosts;
@@ -2090,7 +2090,7 @@ function paintTrafficMap(rows, ghosts = []) {
     if (!A || !B) return;
     const right = B.x > A.x + A.w + 30, left = B.x + B.w < A.x - 30, so = left ? -1 : 1, si = right ? -1 : 1;  // sides: 1 = right edge
     const x1 = so > 0 ? A.x + A.w : A.x, x2 = si > 0 ? B.x + B.w : B.x, y1 = A.y + PH / 2 + end(l.from, 'o' + so), y2 = B.y + PH / 2 + end(l.to, 'i' + si), [c, dash] = PLANE_STYLE[l.plane] || ['#8da2ff', ''];
-    const mx = right || left ? (x1 + x2) / 2 + lane('m' + Math.round(x1 + x2)) : Math.max(x1, x2) + 24 + lane('s' + Math.round(x1));
+    const mid = right || left ? (x1 + x2) / 2 : Math.max(x1, x2) + 40, mx = mid + lane('g' + Math.round(mid));  // lanes are shared by everything that uses the same gap
     let pts = [[x1, y1], [mx, y1], [mx, y2], [x2, y2]];
     if ((right || left) && (hits(x1, mx, y1, A, B) || hits(mx, x2, y2, A, B))) { const cy = top + lane('c'), ex = x1 + so * 20 + lane('e' + Math.round(x1)), nx = x2 + si * 20 + lane('n' + Math.round(x2)); pts = [[x1, y1], [ex, y1], [ex, cy], [nx, cy], [nx, y2], [x2, y2]]; }
     const d = rounded(pts), g = ghost ? sv('g', { opacity: 0.4 }) : sv('g', { 'data-link': l.id, style: 'cursor:pointer' }), sel = l.id === trSel, mk = PLANE_STYLE[l.plane] ? l.plane : 'access';
