@@ -62,3 +62,10 @@ def test_every_link_endpoint_has_a_place_in_the_fixed_drawing():
     page = (Path(__file__).parent.parent / "webui/static/index.html").read_text()
     ends = {e for k in [*comms.LINKS, *comms.UNREADABLE, *comms.PLANNED] for e in k[:2]}
     assert [e for e in sorted(ends) if f"'{e}'" not in page] == []
+
+
+def test_every_part_of_the_drawing_has_a_description_for_the_click_view():
+    page = (Path(__file__).parent.parent / "webui/static/index.html").read_text()
+    block = page[page.index("const PART_INFO = {") : page.index("const PART_ICON")]
+    ends = {e for k in [*comms.LINKS, *comms.UNREADABLE, *comms.PLANNED] for e in k[:2]}
+    assert [e for e in sorted(ends) if f"'{e}':" not in block] == []
