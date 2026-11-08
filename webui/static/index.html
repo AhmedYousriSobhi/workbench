@@ -88,6 +88,9 @@
   .trgrid { display:grid; grid-template-columns:1fr; gap:var(--sp4); align-items:start; } @media (min-width:1500px) { .trgrid { grid-template-columns:minmax(0,1fr) 300px; } }
   .trkey { display:inline-flex; align-items:center; gap:6px; margin-right:var(--sp3); font-weight:600; color:var(--fg); } .trkey i { width:22px; height:4px; border-radius:2px; display:inline-block; }
   @keyframes trflow { to { stroke-dashoffset:-14; } } .trdots { animation:trflow 1s linear infinite; }
+  .trtime { margin-top:var(--sp4); border:1px solid var(--line); border-radius:8px; padding:var(--sp3); } .trtime h3 { margin:0; font-size:14px; } .trtgrid { display:grid; grid-template-columns:1fr; gap:var(--sp3); margin-top:var(--sp2); } @media (min-width:900px) { .trtgrid { grid-template-columns:minmax(0,1fr) minmax(0,1fr); } }
+  #tr-range .btn[aria-pressed=true] { border-color:var(--accent); background:var(--sel); font-weight:650; }
+  .trfeed { list-style:none; margin:0; padding:0; font-size:13px; } .trfeed li { display:grid; grid-template-columns:64px 1fr auto; gap:var(--sp2); padding:4px 0; border-bottom:1px solid var(--line); } .trfeed .ft { color:var(--dim); font-variant-numeric:tabular-nums; } .trfeed .f { color:var(--warn,#ffb02e); }
   .trtable { margin-top:var(--sp4); } .trtable summary { cursor:pointer; padding:var(--sp2) 0; font-weight:600; min-height:40px; }
   .trinsp { border:1px solid var(--line); border-radius:8px; padding:var(--sp3); } .trinsp h3 { margin:0 0 var(--sp2); font-size:14px; display:flex; justify-content:space-between; align-items:center; }
   .trinsp dl { display:grid; grid-template-columns:auto 1fr; gap:4px var(--sp3); margin:0 0 var(--sp3); font-size:13px; } .trinsp dt { color:var(--dim); } .trinsp dd { margin:0; word-break:break-word; }
@@ -591,6 +594,9 @@
       <div class="trgrid"><div><div class="tablewrap"><svg id="tr-map" role="img" aria-label="Diagram of the links listed in the table below"></svg></div>
         <p class="dim small"><span id="tr-legend"></span> <button class="btn small" id="tr-reset" hidden>Reset layout</button></p></div>
         <div id="tr-insp" class="trinsp" role="group" aria-label="Traffic flow inspector"></div></div>
+      <section class="trtime" aria-labelledby="tr-time-h"><div class="row"><h3 id="tr-time-h">Traffic activity timeline</h3><span class="grow"></span>
+        <span role="group" aria-label="Time range" id="tr-range"><button class="btn small" data-s="60" aria-pressed="false">1m</button> <button class="btn small" data-s="300" aria-pressed="true">5m</button> <button class="btn small" data-s="900" aria-pressed="false">15m</button> <button class="btn small" data-s="3600" aria-pressed="false">1h</button></span></div>
+        <div class="trtgrid"><ul id="tr-feed" class="trfeed" aria-live="off"></ul><div id="tr-chart"></div></div></section>
       <details class="trtable"><summary>Link table</summary><div class="tablewrap"><table class="conn"><thead><tr><th>From</th><th>To</th><th>Protocol and port</th><th>Plane</th><th>Software</th><th>Evidence</th><th>Requests</th><th>Probe latency</th><th>State</th></tr></thead><tbody id="tr-rows"><tr><td colspan="9" class="skel">Loading…</td></tr></tbody></table></div></details></div>
   </div>
   <div id="tab-conn" role="tabpanel" aria-labelledby="tb-conn" hidden>
@@ -1822,6 +1828,8 @@ function onFlow(snap) {
   flowLevel = snap.level; flowCursor = snap.cursor;
   snap.faults = (flowSnap?.faults || 0) + snap.events.filter(e => e.from === 'injector').length;
   snap.events.forEach(e => recent.push({ t: Date.now(), to: e.to, n: e.from === 'clients' ? e.n : 0, fault: e.from === 'injector' }));
+  snap.events.forEach(e => trHist.push({ t: Date.now(), from: e.from, to: e.to, n: e.n, label: e.label, nodes: e.nodes, err: e.err, ms: snap.latency?.[e.to] }));
+  trHist = trHist.filter(h => h.t > Date.now() - 3600e3).slice(-800);
   flowSnap = snap; paintBlocks(); flowNote(); paintFeed(snap.events); paintTraffic();
   if (lens === 'client') paintEye();
   const inj = snap.events.filter(e => e.from === 'injector').pop(); if (inj) { const b = blastFor(inj); if (b) setBlast(b); }
@@ -2008,6 +2016,24 @@ const TR_GROUPS = [  // the fixed architecture: [title, grid column, grid row, c
   ['Slurm', 2, 0, '#3fb950', ['slurmctld', 'slurmdbd', 'slurmd', 'nodes']], ['Management', 3, 0, '#ffb02e', ['bmc-farm', 'bcm-mock', 'jira-mock', 'jira-real']],
   ['Kubernetes', 0, 1, '#b38cff', ['k8s-api', 'kube-scheduler', 'kube-controller-manager', 'etcd', 'kwok']],
   ['Monitoring', 2, 1, '#4cc9ff', ['prometheus', 'grafana', 'gpu-exporter', 'governor', 'sim-nodes']], ['Storage', 3, 1, '#c9a0ff', ['storage']]];
+let trHist = [], trRange = 300;  // what this page was told since it opened (the counters are read live; nothing is stored on the server)
+const hhmmss = t => new Date(t).toTimeString().slice(0, 8);
+function paintTrTimeline(links) {
+  const now = Date.now(), from = now - trRange * 1000, ev = trHist.filter(h => h.t >= from), say = h => {
+    if (h.from === 'injector') return `Fault ${h.label || 'applied'} on ${(h.nodes || []).join(', ') || h.to}`;
+    const l = links.find(k => k.from === h.from && (k.service || k.to) === h.to) || links.find(k => (k.service || k.to) === h.to);
+    return `${l ? l.from : h.from} → ${l ? l.to : h.to}${l ? ` (${l.protocol} :${l.port})` : ''}`;
+  };
+  $('tr-feed').innerHTML = ev.slice(-12).reverse().map(h => `<li><span class="ft">${hhmmss(h.t)}</span><span>${h.from === 'injector' ? '<b class="f" aria-hidden="true">◆</b> ' : ''}${esc(say(h))}</span><span class="dim">${h.from === 'injector' ? '' : h.n + ' req' + (h.ms != null ? ', ' + h.ms + ' ms' : '')}</span></li>`).join('')
+    || `<li class="dim"><span></span><span>No requests seen in the last ${trRange >= 3600 ? '1 h' : trRange / 60 + ' min'}. A count rises only when a client calls a mock service.</span><span></span></li>`;
+  const B = 60, w = 480, h = 120, bw = trRange * 1000 / B, bins = new Array(B).fill(0), faults = [];
+  ev.forEach(e => { const i = Math.min(B - 1, Math.floor((e.t - from) / bw)); if (e.from === 'injector') faults.push(i); else bins[i] += e.n; });
+  const max = Math.max(...bins, 1), x = i => (i + 0.5) / B * w, y = v => h - 14 - v / max * (h - 26), pts = bins.map((v, i) => `${x(i)},${y(v)}`).join(' ');
+  $('tr-chart').innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="100%" role="img" aria-label="Requests over the last ${trRange / 60} minutes, peak ${max} per ${Math.round(bw / 1000)} s bucket, ${faults.length} fault${faults.length === 1 ? '' : 's'} marked"><polygon points="0,${h - 14} ${pts} ${w},${h - 14}" fill="var(--accent)" fill-opacity="0.18"/><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>`
+    + faults.map(i => `<path d="M${x(i)} 4V${h - 14}" stroke="#ffb02e" stroke-width="2" stroke-dasharray="3 3"/>`).join('')
+    + `<text x="0" y="${h - 2}" font-size="11" fill="currentColor" opacity=".7">${hhmmss(from)}</text><text x="${w}" y="${h - 2}" font-size="11" text-anchor="end" fill="currentColor" opacity=".7">${hhmmss(now)}</text><text x="${w}" y="12" font-size="11" text-anchor="end" fill="currentColor" opacity=".7">peak ${max} per ${Math.round(bw / 1000)} s</text></svg>`;
+}
+$('tr-range').onclick = e => { const b = e.target.closest('[data-s]'); if (!b) return; trRange = +b.dataset.s; $('tr-range').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); paintTraffic(); };
 let trOff = {}; try { trOff = JSON.parse(localStorage.getItem('workbench-tr-layout') || '{}'); } catch (e) { /* default layout */ }
 let trRows = [], trGhosts = [];
 function saveTrLayout() { try { localStorage.setItem('workbench-tr-layout', JSON.stringify(trOff)); } catch (e) { /* not remembered */ } }
@@ -2122,6 +2148,7 @@ function paintTraffic() {
     + `<td>${esc(l.protocol)} :${l.port}<br><span class="dim small">${esc(l.what)}</span></td><td>${esc(l.plane)}</td><td>${v.sw}</td><td>${v.ev}</td>`
     + `<td>${v.mon ? `${l.targets} target${l.targets === 1 ? '' : 's'}` : v.n == null ? '–' : v.n.toLocaleString() + (v.rate == null ? '' : ` (${+v.rate.toFixed(1)}/s)`)}</td>`
     + `<td>${v.ms == null ? '–' : v.ms + ' ms'}</td><td>${v.state}</td></tr>`).join('') || '<tr><td colspan="9" class="skel">No links.</td></tr>';
+  paintTrTimeline(links);
   paintTrafficMap(rows, !path && f.plane === 'all' && f.sw === 'all' && f.ev === 'all' ? (clusterNow().absent || []) : []);
   const pb = $('tr-path');
   pb.hidden = !path;
