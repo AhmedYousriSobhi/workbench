@@ -547,3 +547,11 @@ def test_the_inline_script_has_valid_javascript_syntax(tmp_path):
     f.write_text(js)
     r = subprocess.run([node, "--check", str(f)], capture_output=True, text=True, check=False)
     assert r.returncode == 0, r.stderr[:400]
+
+
+def test_traffic_view_follows_node_state_and_logs_changes(ui):
+    page = req(ui, "/")[1].decode()
+    # issue 414: node health reaches the parts, the link state text, the part inspector and the timeline
+    for marker in ("function nodeHealth", "noteNodeChanges", "slurmNodes = s && s.node_states", "renderCluster(JSON.parse(text)); paintTraffic()",
+                   "from: 'state'", "nodes out"):
+        assert marker in page, marker

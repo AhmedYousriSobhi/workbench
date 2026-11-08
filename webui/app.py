@@ -437,8 +437,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
     slurm_stats_cache: list = [float("-inf"), None]
 
     async def slurm_stats(request: Request):
-        """slurmctld's own request counts (sdiag), through the governor; cached 10 s so many tabs cost one exec."""
-        if time.monotonic() - slurm_stats_cache[0] > 10:
+        """slurmctld's own request counts (sdiag) and the Slurm node states (sinfo), through the governor; cached 4 s so many tabs cost one exec."""
+        if time.monotonic() - slurm_stats_cache[0] > 4:
             try:
                 res = await asyncio.to_thread(checks.governor_request, {"cmd": "slurm-stats"}, socket)
             except (OSError, ValueError):

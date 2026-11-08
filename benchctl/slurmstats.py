@@ -9,9 +9,11 @@ import re
 from . import checks
 from .scenario import LOGIN
 
+NODE = re.compile(r"^([a-z][a-z0-9-]*[0-9]{3})\s+([a-z_]+)[*~#!%$@^+-]*$")  # `sinfo -h -N -o "%N %T"`: name, state (a trailing flag char is dropped)
 RPC = re.compile(r"^\s*([A-Z][A-Z0-9_]+)\s+\(\s*\d+\)\s+count:(\d+)\s+ave_time:(\d+)")
 THREADS = re.compile(r"Server thread count:\s*(\d+)")
 TOP = 5
+SERVING = {"idle", "allocated", "mixed"}  # states that are in service; any other wins when a node is listed twice
 
 
 def parse(text: str) -> dict:
@@ -32,7 +34,7 @@ def collect(runner=checks.run) -> dict:
     r = runner(["docker", "exec", LOGIN, "sdiag"])
     if r.returncode:
         raise RuntimeError("sdiag: no answer from slurmctld")
-    return {**parse(r.stdout), "dbd": dbd(runner)}
+    return {**parse(r.stdout), "dbd": dbd(runner), "node_states": node_states(runner)}
 
 
 def dbd(runner=checks.run) -> bool | None:
@@ -41,3 +43,16 @@ def dbd(runner=checks.run) -> bool | None:
     if "disabled" in f"{r.stdout}{r.stderr}".lower():
         return None
     return r.returncode == 0 and bool(r.stdout.strip())
+
+
+def node_states(runner=checks.run) -> dict[str, str] | None:
+    """{node: Slurm state} from one `sinfo` on the login node (idle, allocated, mixed, draining, drained, down...); None when it gives no answer.
+    A node in two partitions is listed twice: the worse state wins (issue 414)."""
+    r = runner(["docker", "exec", LOGIN, "sinfo", "-h", "-N", "-o", "%N %T"])
+    if r.returncode:
+        return None
+    out: dict[str, str] = {}
+    for ln in r.stdout.splitlines():
+        if (m := NODE.match(ln.strip())) and (m[1] not in out or m[2] not in SERVING):
+            out[m[1]] = m[2]
+    return out
