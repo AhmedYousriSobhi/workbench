@@ -587,7 +587,7 @@
         <label for="tr-ev" class="small dim">Evidence</label><select id="tr-ev" class="btn small"><option value="all">All</option><option value="observed">Observed</option><option value="configured">Configured</option></select></div>
       <div id="tr-path" class="small" hidden></div><div id="tr-slurm" class="small" hidden></div>
       <div class="trgrid"><div><div class="tablewrap"><svg id="tr-map" role="img" aria-label="Diagram of the links listed in the table below"></svg></div>
-        <p class="dim small" id="tr-legend"></p></div>
+        <p class="dim small"><span id="tr-legend"></span> <button class="btn small" id="tr-reset" hidden>Reset layout</button></p></div>
         <div id="tr-insp" class="trinsp" role="group" aria-label="Traffic flow inspector"></div></div>
       <details class="trtable"><summary>Link table</summary><div class="tablewrap"><table class="conn"><thead><tr><th>From</th><th>To</th><th>Protocol and port</th><th>Plane</th><th>Software</th><th>Evidence</th><th>Requests</th><th>Probe latency</th><th>State</th></tr></thead><tbody id="tr-rows"><tr><td colspan="9" class="skel">Loading…</td></tr></tbody></table></div></details></div>
   </div>
@@ -2001,48 +2001,81 @@ const TR_GROUPS = [  // [title, grid column, grid row, colour, parts]
   ['Slurm', 2, 0, '#3fb950', ['slurmctld', 'slurmd', 'nodes']], ['Management', 3, 0, '#ffb02e', ['bmc-farm', 'bcm-mock', 'jira-mock', 'jira-real']],
   ['Kubernetes', 0, 1, '#b38cff', ['k8s-api', 'kube-scheduler', 'kube-controller-manager', 'etcd', 'kwok']],
   ['Monitoring', 2, 1, '#4cc9ff', ['prometheus', 'grafana', 'gpu-exporter', 'governor', 'sim-nodes']]];
+let trOff = {}; try { trOff = JSON.parse(localStorage.getItem('workbench-tr-layout') || '{}'); } catch (e) { /* default layout */ }
+let trRows = [];
+function saveTrLayout() { try { localStorage.setItem('workbench-tr-layout', JSON.stringify(trOff)); } catch (e) { /* not remembered */ } }
+// auto layout from the links on show (groups with no link are left out, columns close up); a dragged group keeps its offset; lines are routed from the final positions
 function paintTrafficMap(rows) {
+  trRows = rows;
   const svg = $('tr-map'), links = rows.map(r => r.l), ids = new Set(links.flatMap(l => [l.from, l.to]));
   svg.replaceChildren();
-  $('tr-legend').textContent = 'Lines: ' + [...new Set(links.map(l => l.plane))].map(p => `${p} (${PLANE_STYLE[p]?.[1] ? 'dashed' : 'solid'})`).join(', ') + '. Arrows point from the caller to the part called.';
+  $('tr-legend').textContent = 'Lines: ' + [...new Set(links.map(l => l.plane))].map(p => `${p} (${PLANE_STYLE[p]?.[1] ? 'dashed' : 'solid'})`).join(', ') + '. Arrows point from the caller to the part called. Drag a group (or focus it and use the arrow keys) to move it.';
+  $('tr-reset').hidden = !Object.keys(trOff).length;
   if (!ids.size) return;
   const known = new Set(TR_GROUPS.flatMap(g => g[4])), other = [...ids].filter(i => !known.has(i)), groups = [...TR_GROUPS, ...(other.length ? [['Other', 1, 1, '#8da2ff', other]] : [])]
     .map(([title, c, r, col, parts]) => ({ title, c, r, col, parts: parts.filter(p => ids.has(p)) })).filter(g => g.parts.length);
-  const GW = 190, PH = 36, HEAD = 32, GAPX = 70, GAPY = 36, PAD = 14, pos = {};
-  const rowH = {}; groups.forEach(g => { rowH[g.r] = Math.max(rowH[g.r] || 0, HEAD + g.parts.length * (PH + 6) + 8); });
-  const rowY = {}; let y = PAD; Object.keys(rowH).map(Number).sort().forEach(r => { rowY[r] = y; y += rowH[r] + GAPY; });
-  const cols = [...new Set(groups.map(g => g.c))].sort(), colX = Object.fromEntries(cols.map((c, i) => [c, PAD + i * (GW + GAPX)]));
-  const w = PAD * 2 + cols.length * (GW + GAPX) - GAPX, h = y - GAPY + PAD;
-  svg.setAttribute('viewBox', `0 0 ${w} ${h}`); svg.style.width = '100%'; svg.style.height = 'auto'; svg.style.minWidth = Math.min(w, 560) + 'px'; svg.style.maxWidth = '';  // scales to the column, but never below readable (the wrapper scrolls)
+  const GW = 190, PH = 36, HEAD = 32, GAPX = 80, GAPY = 44, M = 40, pos = {};
+  groups.forEach(g => { g.h = HEAD + g.parts.length * (PH + 6) + 8; });
+  const rowH = {}; groups.forEach(g => { rowH[g.r] = Math.max(rowH[g.r] || 0, g.h); });
+  const rowY = {}; let y = M + 10; Object.keys(rowH).map(Number).sort().forEach(r => { rowY[r] = y; y += rowH[r] + GAPY; });
+  const cols = [...new Set(groups.map(g => g.c))].sort((p, q) => p - q);
+  groups.forEach(g => { const o = trOff[g.title] || [0, 0]; g.x = Math.max(M / 2, M + cols.indexOf(g.c) * (GW + GAPX) + o[0]); g.y = Math.max(M / 2, rowY[g.r] + o[1]); });
+  const w = Math.max(...groups.map(g => g.x + GW)) + M, h = Math.max(...groups.map(g => g.y + g.h)) + M / 2;
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`); svg.style.width = '100%'; svg.style.height = 'auto'; svg.style.minWidth = Math.min(w, 560) + 'px';
   const defs = sv('defs', {}); for (const [p, [c]] of Object.entries(PLANE_STYLE)) { const m = sv('marker', { id: 'tm-' + p, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, orient: 'auto' }); m.append(sv('path', { d: 'M0 0 L10 5 L0 10 z', fill: c })); defs.append(m); }
   svg.append(defs);
   groups.forEach(g => {
-    const x = colX[g.c], gy = rowY[g.r];
-    svg.append(sv('rect', { x, y: gy, width: GW, height: rowH[g.r], rx: 10, fill: g.col, 'fill-opacity': 0.07, stroke: g.col, 'stroke-opacity': 0.6, 'stroke-width': 1.2 }));
-    svg.append(sv('text', { x: x + 12, y: gy + 21, fill: g.col, 'font-size': 15, 'font-weight': 700 }, g.title));
+    const box = sv('g', { 'data-group': g.title, tabindex: 0, role: 'group', 'aria-label': g.title + ' group, movable', style: 'cursor:grab' });
+    box.append(sv('rect', { x: g.x, y: g.y, width: GW, height: g.h, rx: 10, fill: g.col, 'fill-opacity': 0.07, stroke: g.col, 'stroke-opacity': 0.6, 'stroke-width': 1.2 }));
+    box.append(sv('text', { x: g.x + 12, y: g.y + 21, fill: g.col, 'font-size': 15, 'font-weight': 700 }, g.title));
+    svg.append(box);
     g.parts.forEach((id, i) => {
-      const up = flowSnap?.reachable[id], py = gy + HEAD + i * (PH + 6);
-      pos[id] = { x: x + 10, y: py, w: GW - 20, col: g.c };
-      svg.append(sv('rect', { x: x + 10, y: py, width: GW - 20, height: PH, rx: 6, fill: 'var(--panel)', stroke: 'var(--line)', 'stroke-width': 1.2, 'stroke-dasharray': up === false ? '4 3' : '' }));
-      svg.append(sv('text', { x: x + 20, y: py + PH / 2 + 5, fill: 'currentColor', 'font-size': 14 }, (up === undefined ? '' : up ? '✓ ' : '✗ ') + (id.length > 20 ? id.slice(0, 19) + '…' : id)));
+      const up = flowSnap?.reachable[id], py = g.y + HEAD + i * (PH + 6);
+      pos[id] = { x: g.x + 10, y: py, w: GW - 20, g };
+      svg.append(sv('rect', { x: g.x + 10, y: py, width: GW - 20, height: PH, rx: 6, fill: 'var(--panel)', stroke: 'var(--line)', 'stroke-width': 1.2, 'stroke-dasharray': up === false ? '4 3' : '', 'pointer-events': 'none' }));
+      svg.append(sv('text', { x: g.x + 20, y: py + PH / 2 + 5, fill: 'currentColor', 'font-size': 14, 'pointer-events': 'none' }, (up === undefined ? '' : up ? '✓ ' : '✗ ') + (id.length > 20 ? id.slice(0, 19) + '…' : id)));
     });
   });
-  const seen = {};
+  // flowchart routing: leave a box sideways, run in the gap, and go round above everything when a group is in the way
+  const lanes = {}, ends = {}, lane = k => { const n = lanes[k] = (lanes[k] || 0) + 1; return ((n - 1) % 6 - 2.5) * 6; };
+  const end = (id, side) => { const k = id + side, n = ends[k] = (ends[k] || 0) + 1; return (n - 1) % 5 * 6 - 6; };  // spread arrivals on one box edge
+  const hits = (xa, xb, yy, A, B) => groups.some(q => q !== A.g && q !== B.g && yy > q.y - 2 && yy < q.y + q.h + 2 && Math.max(xa, xb) > q.x && Math.min(xa, xb) < q.x + GW);
+  const rounded = pts => pts.map((q, i) => {
+    if (!i) return `M${q[0]} ${q[1]}`; if (i === pts.length - 1) return `L${q[0]} ${q[1]}`;
+    const a = pts[i - 1], c = pts[i + 1], r = 9, u = m => { const d = Math.hypot(m[0] - q[0], m[1] - q[1]) || 1, k = Math.min(r, d / 2) / d; return [q[0] + (m[0] - q[0]) * k, q[1] + (m[1] - q[1]) * k]; };
+    const p1 = u(a), p2 = u(c); return `L${p1[0]} ${p1[1]}Q${q[0]} ${q[1]} ${p2[0]} ${p2[1]}`;
+  }).join('');
+  const top = Math.min(...groups.map(g => g.y)) - 16;
   links.forEach(l => {
     const A = pos[l.from], B = pos[l.to];
     if (!A || !B) return;
-    const dir = Math.sign(B.col - A.col), key = [l.from, l.to].sort().join('|'), n = seen[key] = (seen[key] || 0) + 1;
-    const x1 = dir > 0 ? A.x + A.w : dir < 0 ? A.x : A.x + A.w, x2 = dir > 0 ? B.x : dir < 0 ? B.x + B.w : B.x + B.w, y1 = A.y + PH / 2, y2 = B.y + PH / 2;
-    const bulge = dir === 0 ? 34 + n * 10 : (n - 1) * 14, cx = (x1 + x2) / 2 + bulge, cy = (y1 + y2) / 2, [c, dash] = PLANE_STYLE[l.plane] || ['#8da2ff', ''];
-    const d = `M${x1} ${y1} Q${cx} ${cy} ${x2} ${y2}`, g = sv('g', { 'data-link': l.id, style: 'cursor:pointer' }), t = 0.8;
+    const right = B.x > A.x + A.w + 30, left = B.x + B.w < A.x - 30, so = left ? -1 : 1, si = right ? -1 : 1;  // sides: 1 = right edge
+    const x1 = so > 0 ? A.x + A.w : A.x, x2 = si > 0 ? B.x + B.w : B.x, y1 = A.y + PH / 2 + end(l.from, 'o' + so), y2 = B.y + PH / 2 + end(l.to, 'i' + si), [c, dash] = PLANE_STYLE[l.plane] || ['#8da2ff', ''];
+    const mx = right || left ? (x1 + x2) / 2 + lane('m' + Math.round(x1 + x2)) : Math.max(x1, x2) + 24 + lane('s' + Math.round(x1));
+    let pts = [[x1, y1], [mx, y1], [mx, y2], [x2, y2]];
+    if ((right || left) && (hits(x1, mx, y1, A, B) || hits(mx, x2, y2, A, B))) { const cy = top + lane('c'), ex = x1 + so * 20 + lane('e' + Math.round(x1)), nx = x2 + si * 20 + lane('n' + Math.round(x2)); pts = [[x1, y1], [ex, y1], [ex, cy], [nx, cy], [nx, y2], [x2, y2]]; }
+    const d = rounded(pts), g = sv('g', { 'data-link': l.id, style: 'cursor:pointer' });
     g.append(sv('path', { d, fill: 'none', stroke: 'transparent', 'stroke-width': 12 }));
-    g.append(sv('path', { d, fill: 'none', stroke: c, 'stroke-width': l.id === trSel ? 4 : 2.2, 'stroke-dasharray': dash, 'marker-end': `url(#tm-${PLANE_STYLE[l.plane] ? l.plane : 'access'})` }));
-    const q = (a, k, b) => (1 - t) * (1 - t) * a + 2 * t * (1 - t) * k + t * t * b;  // the port sits near the called end, where the lines have fanned out
-    g.append(sv('text', { x: q(x1, cx, x2), y: q(y1, cy, y2) - 4, 'text-anchor': 'middle', fill: 'currentColor', 'font-size': 12, stroke: 'var(--panel)', 'stroke-width': 3, 'paint-order': 'stroke' }, `:${l.port}`));
+    g.append(sv('path', { d, fill: 'none', stroke: c, 'stroke-width': l.id === trSel ? 4 : 2.2, 'stroke-linejoin': 'round', 'stroke-dasharray': dash, 'marker-end': `url(#tm-${PLANE_STYLE[l.plane] ? l.plane : 'access'})` }));
+    g.append(sv('text', { x: x2 - si * 20, y: y2 - 4, 'text-anchor': 'middle', fill: 'currentColor', 'font-size': 12, stroke: 'var(--panel)', 'stroke-width': 3, 'paint-order': 'stroke' }, `:${l.port}`));
     g.append(sv('title', {}, `${l.from} to ${l.to}, ${l.protocol} port ${l.port}`));
     svg.append(g);
   });
 }
+// move a group by dragging or the arrow keys; the lines re-route on every move, the offsets are remembered in this browser
+(() => {
+  const svg = $('tr-map'); let drag = null;
+  const move = (title, dx, dy) => { const o = trOff[title] || [0, 0]; trOff[title] = [o[0] + dx, o[1] + dy]; paintTrafficMap(trRows); };
+  svg.addEventListener('pointerdown', e => { const g = e.target.closest('[data-group]'); if (!g || e.target.closest('[data-link]')) return; drag = { t: g.dataset.group, x: e.clientX, y: e.clientY }; svg.setPointerCapture(e.pointerId); });
+  svg.addEventListener('pointermove', e => { if (!drag) return; const k = svg.viewBox.baseVal.width / svg.getBoundingClientRect().width; move(drag.t, (e.clientX - drag.x) * k, (e.clientY - drag.y) * k); drag.x = e.clientX; drag.y = e.clientY; });
+  const stop = () => { if (drag) { drag = null; saveTrLayout(); } };
+  svg.addEventListener('pointerup', stop); svg.addEventListener('pointercancel', stop);
+  svg.addEventListener('keydown', e => {
+    const g = e.target.closest?.('[data-group]'), d = { ArrowLeft: [-20, 0], ArrowRight: [20, 0], ArrowUp: [0, -20], ArrowDown: [0, 20] }[e.key];
+    if (!g || !d) return; e.preventDefault(); const t = g.dataset.group; move(t, d[0], d[1]); saveTrLayout(); svg.querySelector(`[data-group="${CSS.escape(t)}"]`)?.focus();
+  });
+  $('tr-reset').onclick = () => { trOff = {}; saveTrLayout(); paintTrafficMap(trRows); };
+})();
 // the right-hand inspector: one link's facts, a rate chart from the counter samples taken while the tab is open
 function rateChart(hist) {
   if (!hist || hist.length < 2) return '<p class="dim small">The chart fills in as the page samples the counter (every 3 s).</p>';
