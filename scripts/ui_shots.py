@@ -45,9 +45,16 @@ def capture(out: Path) -> dict:
         url = proc.stdout.readline().split("UI: ")[1].strip() + "?token=" + (ROOT / "compose/generated/secrets/ui_token").read_text().strip()  # the log line has no token (#346)
         with sync_playwright() as p:
             browser = p.chromium.launch()
+            first = browser.new_page(viewport={"width": 1280, "height": 900}, color_scheme="light")  # nothing stored: dark first
+            first.goto(url)
+            first.wait_for_timeout(500)
+            if first.evaluate("document.documentElement.dataset.theme") != "midnight":
+                result["a11y"].append("a first visit does not start in the dark theme")
+            first.close()
             for scheme in ("light", "dark"):
                 for vp, (w, h) in VIEWPORTS.items():
                     page = browser.new_page(viewport={"width": w, "height": h}, color_scheme=scheme)
+                    page.add_init_script("localStorage.setItem('workbench-theme','auto')")  # the shots follow the system scheme; the default is checked above
                     page.on("console", lambda m, r=result: r["console_errors"].append(m.text) if m.type == "error" else None)
                     page.on("pageerror", lambda e, r=result: r["console_errors"].append(str(e)))
                     deadline = time.time() + 15
