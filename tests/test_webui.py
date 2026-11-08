@@ -512,7 +512,7 @@ def test_scenarios_is_a_docked_drawer_with_a_toggle_not_a_modal():
 
 def test_traffic_has_filters_inspector_and_path_following():
     html = (ROOT / "webui/static/index.html").read_text()
-    for needle in ('id="tr-sw"', 'id="tr-ev"', 'id="tr-insp"', 'id="tr-path"', "function pathOf", "/api/monitoring", "rateOf(", 'id="tr-map"', "paintTrafficMap", '<html lang="en" data-theme="midnight">'):
+    for needle in ('id="tr-sw"', 'id="tr-ev"', 'id="tr-insp"', 'id="tr-path"', "function pathOf", "The web page server is older than this page", "/api/monitoring", "rateOf(", 'id="tr-map"', "paintTrafficMap", '<html lang="en" data-theme="midnight">'):
         assert needle in html, needle
 
 

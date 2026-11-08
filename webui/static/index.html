@@ -2032,7 +2032,10 @@ function paintTraffic() {
   if ($('tab-traffic').hidden) return;
   paintSlurmStats();
   const base = clusterNow().comms, sel = $('tr-plane');
-  if (!base) return;
+  if (!base) {  // the page is newer than the server that serves it (a server started before an update never sends the links)
+    if (lastCluster) $('tr-rows').innerHTML = '<tr><td colspan="9" class="skel">The web page server is older than this page, so it sends no links. Restart it: <code>kill $(cat compose/generated/ui.pid); ./scripts/benchctl start</code></td></tr>';
+    return;
+  }
   const links = [...base, ...monLinks];
   if (sel.options.length === 1) [...new Set(links.map(l => l.plane))].forEach(p => sel.add(new Option(p, p)));
   const path = trPath && pathOf(links, trPath), f = { plane: sel.value, sw: $('tr-sw').value, ev: $('tr-ev').value };
