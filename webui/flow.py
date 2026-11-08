@@ -44,6 +44,7 @@ class Flow:
         self.totals = dict.fromkeys([*STATS, *COUNTERS, *REACH_ONLY], 0)
         self.errors = dict.fromkeys(STATS, 0)  # only mocks that count error answers; Teleport, the real Jira, Slurm, k8s are "not measured"
         self.reachable = dict.fromkeys([*STATS, *COUNTERS, *REACH_ONLY], False)
+        self.latency: dict[str, int] = {}  # ms the last probe took, per service that answered: measured, never estimated
         self.polled = float("-inf")
         self.lock = threading.Lock()
 
@@ -69,7 +70,7 @@ class Flow:
                 return
             self.polled = now
             for svc, url in {**STATS, **COUNTERS}.items():
-                errs = None
+                errs, t0 = None, self.clock()
                 try:
                     if svc in COUNTERS:
                         got = counter_total(self.fetch(url), TELEPORT_COUNTER)
@@ -81,8 +82,10 @@ class Flow:
                     self.last.pop(svc, None)
                     self.last_err.pop(svc, None)
                     self.reachable[svc] = False
+                    self.latency.pop(svc, None)
                     continue
                 self.reachable[svc] = True
+                self.latency[svc] = round((self.clock() - t0) * 1000)
                 prev = self.last.get(svc)
                 self.last[svc] = got
                 prev_err = self.last_err.get(svc)
@@ -99,14 +102,25 @@ class Flow:
                     if svc == "k8s-api":
                         from benchctl import k8s
 
+                        t0 = self.clock()
                         self.reachable[svc] = k8s.api_up()
+                        if self.reachable[svc]:
+                            self.latency[svc] = round((self.clock() - t0) * 1000)
+                            n = k8s.api_requests()  # all callers, since the API server started: shown as a total, never as dots
+                            if n is not None:
+                                self.totals[svc] = n
+                        else:
+                            self.latency.pop(svc, None)
                         continue
+                    t0 = self.clock()
                     self.fetch(url)
                     self.reachable[svc] = True
+                    self.latency[svc] = round((self.clock() - t0) * 1000)
                 except (OSError, ValueError, KeyError, TypeError):
                     self.reachable[svc] = False
+                    self.latency.pop(svc, None)
 
     def since(self, after: int) -> dict:
         with self.lock:
             return {"cursor": self.seq, "events": [e for e in self.events if e["id"] > after],
-                    "totals": dict(self.totals), "errors": dict(self.errors), "reachable": dict(self.reachable)}
+                    "totals": dict(self.totals), "errors": dict(self.errors), "latency": dict(self.latency), "reachable": dict(self.reachable)}

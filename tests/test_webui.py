@@ -1,5 +1,6 @@
 import json
 import socket
+import subprocess
 import threading
 import time
 import urllib.request
@@ -267,6 +268,7 @@ def test_connections_endpoint_lists_every_entity_with_credential_paths_only(ui):
     assert req(ui, "/api/connections", auth=False)[0] == 401
     page = req(ui, "/")[1]
     assert b'role="tablist"' in page and b'id="tab-conn"' in page and b"paintConnections" in page
+    assert b'id="tab-traffic"' in page and b"paintTraffic" in page and b'aria-label="Workspaces"' in page
 
 
 def test_plan_apply_needs_csrf_validates_and_asks_the_governor(ui):
@@ -507,3 +509,41 @@ def test_scenarios_is_a_docked_drawer_with_a_toggle_not_a_modal():
     for needle in ('<dialog id="scndlg" class="drawer"', 'id="scn-toggle"', "function scnOpen(", "d.show()", "dialog.drawer", "dialog[open]:not(.drawer)", "li.classList.toggle('active'"):
         assert needle in html, needle
     assert "$('scndlg').showModal()" not in html
+
+
+def test_traffic_has_filters_inspector_and_path_following():
+    html = (ROOT / "webui/static/index.html").read_text()
+    for needle in ('id="tr-sw"', 'id="tr-ev"', 'id="tr-insp"', 'id="tr-path"', "function pathOf", "The web page server is older than this page", "/api/monitoring", "rateOf(", 'id="tr-map"', 'id="tr-reset"', 'id="tr-chips"', 'id="tr-zin"', 'id="tr-feed"', 'id="tr-chart"', "paintTrTimeline", 'id="kpis"', 'id="subseg"', "paintKpis", "dbdLink", 'id="tr-move"', "paintTrafficMap", '<html lang="en" data-theme="midnight">'):
+        assert needle in html, needle
+
+
+def test_slurm_stats_come_from_the_governor(tmp_path):
+    stats = {"rpcs": 5, "threads": 2, "top": []}
+    sock = str(tmp_path / "g.sock")
+    gov = control.serve(sock, lambda cmd, request: {"ok": True, "stats": stats} if cmd == "slurm-stats" else STATUS, lambda: {"compute"})
+    port = free_port()
+    server = uvicorn.Server(uvicorn.Config(create_app(TOKEN, sock, tmp_path, ROOT / "sim.yaml", fetch=no_stack, poster=no_stack),
+                                           host="127.0.0.1", port=port, log_level="error"))
+    threading.Thread(target=server.run, daemon=True).start()
+    while not server.started:
+        time.sleep(0.02)
+    try:
+        assert json.loads(req(f"http://127.0.0.1:{port}", "/api/slurm-stats")[1]) == {"stats": stats}
+    finally:
+        server.should_exit = True
+        gov.shutdown()
+
+
+def test_the_inline_script_has_valid_javascript_syntax(tmp_path):
+    """A stray quote in one string once broke the whole page while every string-matching test still passed."""
+    import re
+    import shutil
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    html = (ROOT / "webui/static/index.html").read_text()
+    js = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.DOTALL))
+    f = tmp_path / "page.js"
+    f.write_text(js)
+    r = subprocess.run([node, "--check", str(f)], capture_output=True, text=True, check=False)
+    assert r.returncode == 0, r.stderr[:400]

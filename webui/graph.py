@@ -8,13 +8,14 @@ An edge is `measured` only when something real counts it (a mock's request count
 fault events the page itself records). Every other edge is declared: it says how the parts are wired, not that traffic
 was seen. The page must never present a declared edge as measured traffic.
 """
-from .flow import COUNTERS, SCENARIO_TARGETS, STATS
+from . import comms
+from .flow import SCENARIO_TARGETS
 
 PLANES = ("access", "management", "telemetry", "tickets", "faults")
 # service -> the plane its API belongs to (what a client uses it for)
 SERVICE_PLANE = {"bmc-farm": "management", "bcm-mock": "management", "gpu-exporter": "telemetry",
                  "jira-mock": "tickets", "jira-real": "tickets", "k8s-api": "management"}
-MEASURED = {*STATS, *COUNTERS}  # services a counter backs; the real Jira publishes none, so it is declared only
+MEASURED = comms.MEASURED  # the real Jira publishes no counter, so it is declared only
 INJECTABLE = set(SCENARIO_TARGETS.values())  # blocks a scenario step or fault button can reach (flow.note)
 
 
@@ -73,7 +74,7 @@ def attach(snap: dict) -> dict:
     are independent: no edge ever joins two of them."""
     clusters = snap.get("clusters")
     if not clusters:
-        return {**snap, "graph": build(snap["services"], snap["nodes"], snap["logins"])}
-    per = [{**c, "graph": build(c["services"], c["nodes"], c["logins"])} for c in clusters]
+        return {**snap, "graph": build(snap["services"], snap["nodes"], snap["logins"]), "comms": comms.build(snap["services"], snap["nodes"], snap["logins"]), "absent": comms.absent(snap["services"], snap["nodes"], snap["logins"])}
+    per = [{**c, "graph": build(c["services"], c["nodes"], c["logins"]), "comms": comms.build(c["services"], c["nodes"], c["logins"]), "absent": comms.absent(c["services"], c["nodes"], c["logins"])} for c in clusters]
     merged = [build(c["services"], c["nodes"], c["logins"], c["name"]) for c in clusters]
     return {**snap, "clusters": per, "graph": {"entities": [e for g in merged for e in g["entities"]], "edges": [e for g in merged for e in g["edges"]]}}

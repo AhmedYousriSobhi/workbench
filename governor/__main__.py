@@ -93,9 +93,20 @@ def main(argv: list[str] | None = None) -> None:
             raise RuntimeError((r.stderr or r.stdout).strip()[:200])
         return json.loads(r.stdout)
 
+    def statser() -> dict:
+        cmd = [sys.executable, "-m", "benchctl.cli", "get", "slurm-stats"]
+        owner = Path(args.workdir).stat().st_uid
+        if os.geteuid() == 0 and owner != 0:
+            cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]
+        r = subprocess.run(cmd, cwd=args.workdir, capture_output=True, timeout=30, check=False, text=True)
+        if r.returncode:
+            raise RuntimeError((r.stderr or r.stdout).strip()[:200])
+        return json.loads(r.stdout)
+
     gov = Governor(sampler, ladder, groups, executor, args.dry_run, watchdog, args.watch_interval,
                    annotator, discover_docker, args.refresh_interval,
-                   effector if args.workdir else None, tracer=tracer if args.workdir else None)
+                   effector if args.workdir else None, tracer=tracer if args.workdir else None,
+                   statser=statser if args.workdir else None)
     srv = control.serve(args.socket, gov.handle, gov.group_names, gid=args.socket_gid) \
         if args.socket else None
     msrv = None

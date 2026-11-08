@@ -65,10 +65,10 @@ start_ui() {
   fi
   (umask 077; nohup .venv/bin/python -m webui "$port" >"$logf" 2>&1 & echo $! >"$pidf")
   for _ in $(seq 1 50); do
-    [ -n "$(page_url)" ] && curl -s -o /dev/null "http://127.0.0.1:$port/login" && return 0
+    [ -n "$(page_url)" ] && ui_pid >/dev/null && curl -s -o /dev/null "http://127.0.0.1:$port/login" && return 0
     sleep 0.3
   done
-  echo "the web page did not start; see $logf" >&2; return 1
+  echo "the web page did not start; see $logf (port $port busy? an older page started by hand: pkill -f 'python -m webui', then start again)" >&2; return 1
 }
 show_link() {
   echo; echo "Web page: $(link)"

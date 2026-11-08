@@ -11,6 +11,7 @@ import hmac
 import json
 import re
 import threading
+import time
 from pathlib import Path
 
 import yaml
@@ -29,6 +30,7 @@ from starlette.routing import Route
 
 from benchctl import checks, nhc, scenario, slurmtrace
 
+from . import monitoring
 from .blast import payload as blast_payload
 from .cluster import ActionError, Cluster
 from .flow import PAUSE_LEVEL, Flow
@@ -432,6 +434,26 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             return None
         return res.get("trace") if res.get("ok") else None
 
+    slurm_stats_cache: list = [float("-inf"), None]
+
+    async def slurm_stats(request: Request):
+        """slurmctld's own request counts (sdiag), through the governor; cached 10 s so many tabs cost one exec."""
+        if time.monotonic() - slurm_stats_cache[0] > 10:
+            try:
+                res = await asyncio.to_thread(checks.governor_request, {"cmd": "slurm-stats"}, socket)
+            except (OSError, ValueError):
+                res = {}
+            slurm_stats_cache[:] = [time.monotonic(), res.get("stats") if res.get("ok") else None]
+        return JSONResponse({"stats": slurm_stats_cache[1]})
+
+    monitoring_cache: list = [float("-inf"), []]
+
+    async def monitoring_links(request: Request):
+        """Prometheus's own scrape results as Traffic links; cached 10 s, empty while Prometheus does not answer."""
+        if time.monotonic() - monitoring_cache[0] > 10:
+            monitoring_cache[:] = [time.monotonic(), await asyncio.to_thread(monitoring.links)]
+        return JSONResponse({"links": monitoring_cache[1]})
+
     async def node_workload(request: Request):
         """Submit a job on this node: the governor runs `benchctl submit` (the page has no Docker, W-3)."""
         q, node = request.query_params, request.path_params["node"]
@@ -526,6 +548,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/events", protected(events)),
             Route("/api/cluster", protected(cluster_state)),
             Route("/api/flow", protected(flow_events)),
+            Route("/api/slurm-stats", protected(slurm_stats)),
+            Route("/api/monitoring", protected(monitoring_links)),
             Route("/api/settings", protected(settings)),
             Route("/api/plan", protected(plan)),
             Route("/api/plan/apply", protected(plan_apply, write=True), methods=["POST"]),

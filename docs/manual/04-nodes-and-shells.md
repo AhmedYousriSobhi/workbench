@@ -114,7 +114,7 @@ The first node is `login`, then `login2`, `login3`, ... (addresses 10.141.255.25
 login: [ssh, teleport]
 ```
 
-or in the page: **☰ Menu → ▦ Cluster architecture → Login nodes** (**Add login node**, pick *Direct SSH*, *Teleport only* or *Direct SSH and Teleport* for each, **Apply**).
+or in the page: **left nav → ⚙ Cluster architecture → Login nodes** (**Add login node**, pick *Direct SSH*, *Teleport only* or *Direct SSH and Teleport* for each, **Apply**).
 
 ![The Cluster architecture sheet: three login nodes, each with its own way in](img/web-login-nodes.png)
 
@@ -149,7 +149,7 @@ the Teleport CA (Teleport's agentless OpenSSH mode); no Teleport process runs on
 ./scripts/benchctl up --with teleport             # the same on a running cluster, without the page
 ```
 
-or in the page: **☰ Menu → ▦ Cluster architecture → Access → Teleport → Apply** (press twice to confirm), see [the web page](05-web-page.md#teleport-from-the-page). Then check it: the `teleport` card in the entity list says `answering`.
+or in the page: **left nav → ⚙ Cluster architecture → Access → Teleport → Apply** (press twice to confirm), see [the web page](05-web-page.md#teleport-from-the-page). Then check it: the `teleport` card in the entity list says `answering`.
 
 **2. Reach it with an identity file.** Nothing to set up: one file per user in `sim.yaml`, valid for `teleport.cert_ttl` (12 h by default; `benchctl up` writes fresh ones).
 

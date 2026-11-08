@@ -71,7 +71,7 @@ def test_the_diagram_draws_access_paths_and_every_part_has_a_tip_and_a_pop_up():
     html = Path("webui/static/index.html").read_text()
     for needle in ("'direct SSH'", "'jump host'", "'Teleport'", "MODE_TEXT", "loginList()",     # one labelled line per way in
                    'id="tip"', 'role="tooltip"', 'id="pop"', 'role="dialog"', "function openPop(", "function showTip(",
-                   'id="treetoggle"', "function setTree(", "workbench-tree"):                   # the node list folds away
+                   'id="subseg"', "function setTree(", "workbench-tree"):                   # the node list folds away
         assert needle in html, needle
 
 

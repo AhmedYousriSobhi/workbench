@@ -27,7 +27,7 @@ class Governor:
                  executor: Executor, dry_run: bool = True, watchdog: Watchdog | None = None,
                  watch_interval: float = 15.0, annotator: Annotator | None = None,
                  inventory: Callable[[], tuple[list[Group], dict]] | None = None,
-                 refresh_interval: float = 30.0, effector: Effector | None = None, tracer: Callable | None = None):
+                 refresh_interval: float = 30.0, effector: Effector | None = None, tracer: Callable | None = None, statser: Callable | None = None):
         self.sampler, self.ladder, self.groups = sampler, ladder, groups
         self.executor, self.dry_run = executor, dry_run
         self.signals: Signals | None = None
@@ -46,6 +46,7 @@ class Governor:
         self.annotator = annotator
         self.effector = effector
         self.tracer = tracer
+        self.statser = statser
         self.inventory, self.refresh_interval = inventory, refresh_interval
         self._next_refresh = refresh_interval
         self._static = [g for g in groups if g.kind == "vm"]  # VMs are configured, not discovered
@@ -209,6 +210,15 @@ class Governor:
                 return {"ok": True, "trace": self.tracer(req["nodes"], float(req["since"]))}
             except Exception as e:  # noqa: BLE001
                 return {"ok": False, "error": f"trace failed: {e}"}
+        if cmd == "slurm-stats":  # read-only, no arguments; a Docker exec, so not at L3 up (the animation is a luxury) and not under the lock
+            if not self.statser:
+                return {"ok": False, "error": "no Slurm stats without --workdir (the governor runs `benchctl get slurm-stats`)"}
+            if self.ladder.level >= 3:
+                return {"ok": False, "error": "paused: memory pressure"}
+            try:
+                return {"ok": True, "stats": self.statser()}
+            except Exception as e:  # noqa: BLE001
+                return {"ok": False, "error": f"slurm stats failed: {e}"}
         if cmd in ("freeze", "thaw", "stop", "start"):  # slow, so not under the lock: it would hold `status` up like a plan does
             self._act(Action(cmd, req["target"], self.ladder.level))
             return {"ok": True}
