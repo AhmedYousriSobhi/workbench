@@ -27,6 +27,7 @@ from . import (
     nhc,
     nodes,
     scenario,
+    slurmstats,
     slurmtrace,
     stack,
     teleport,
@@ -174,7 +175,7 @@ def _sim() -> dict:
     return workbench.effective(base, spec)[0] if spec else base
 
 
-def _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes=None, login=None):
+def _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes=None, login=None, bmc_groups=None):
     """(spec, sim, profile) from a workbench file and/or flags; flags win. Exits 1 with every problem listed."""
     base = _base_sim()
     try:
@@ -183,12 +184,14 @@ def _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, 
         typer.echo(f"invalid workbench: {e}", err=True)
         raise typer.Exit(1) from e
     for key, val in (("name", name), ("cpu_nodes", cpu_nodes), ("gpu_nodes", gpu_nodes),
-                     ("gpus_per_node", gpus_per_node), ("k8s_nodes", k8s_nodes)):
+                     ("gpus_per_node", gpus_per_node), ("k8s_nodes", k8s_nodes), ("k8s_cpu_nodes", k8s_cpu_nodes)):
         if val is not None:
             setattr(spec, key, val)
     spec.parts = sorted((set(spec.parts) | set(with_ or [])) - set(without or []))
     if bmc_nodes is not None:
         spec.bmc_nodes = [n for n in bmc_nodes.split(",") if n]
+    if bmc_groups is not None:
+        spec.bmc_groups = [g for g in bmc_groups.split(",") if g]
     if login is not None:
         spec.login_nodes = _login_modes(login)
     if problems := spec.problems():
@@ -205,7 +208,9 @@ GPU = typer.Option(None, "--gpu-nodes", help="GPU nodes (default: sim.yaml)")
 GPUS = typer.Option(None, "--gpus-per-node", help="GPUs on each GPU node, 1 to 8")
 WITH = typer.Option(None, "--with", autocompletion=completion.parts, help=f"add a part: {', '.join(workbench.PARTS)} (repeat)")
 WITHOUT = typer.Option(None, "--without", autocompletion=completion.parts, help="remove a part (repeat)")
-K8S = typer.Option(None, "--k8s-nodes", help="Kubernetes nodes (not built yet)")
+K8S = typer.Option(None, "--k8s-nodes", help="Kubernetes GPU nodes (needs --with k8s; default: sim.yaml)")
+K8S_CPU = typer.Option(None, "--k8s-cpu-nodes", help="Kubernetes CPU nodes (needs --with k8s; default: sim.yaml)")
+BMC_GROUPS = typer.Option(None, "--bmc-groups", help=f"node groups that get BMCs, comma separated ({', '.join(nodes.GROUPS)}); default all; each BMC costs about 32 MB")
 BMC_NODES = typer.Option(None, "--bmc-nodes", help="nodes that get a BMC address, comma separated (default all); each costs about 32 MB")
 
 def _login_modes(login) -> list[str]:
@@ -218,6 +223,7 @@ def _login_modes(login) -> list[str]:
 
 LOGIN = typer.Option(None, "--login", autocompletion=completion.login_modes, rich_help_panel="Parts by category",
                      help=f"login nodes, one auth mode each: {', '.join(logins.MODES)} (comma separated), e.g. ssh,teleport; "
+                          f"add :slurm or :k8s for an s-login or k-login, e.g. ssh:slurm,ssh:k8s (default both); "
                           "the first is `login`, then login2, ...")
 
 
@@ -254,9 +260,13 @@ def _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, ac
     except workbench.SpecError as e:
         typer.echo(f"invalid: {e}", err=True)
         raise typer.Exit(1) from e
-    if login is not None and any(m in logins.VIA_TELEPORT for m in _login_modes(login)):
-        extra = sorted({*extra, "teleport"})  # a login node that uses Teleport needs it on
-    chosen = with_ is not None or addons or any(v is not None for v in picked.values()) or (login is not None and "teleport" in extra)
+    need = set()
+    if login is not None:
+        entries = _login_modes(login)
+        need |= {"teleport"} if any(logins.auth(m) in logins.VIA_TELEPORT for m in entries) else set()  # a login node that uses Teleport needs it on
+        need |= {"k8s"} if any(logins.kind(m) == "k8s" for m in entries) else set()  # a k-login needs the Kubernetes part
+        extra = sorted({*extra, *need})
+    chosen = with_ is not None or addons or any(v is not None for v in picked.values()) or bool(need)
     return sorted(set(with_ or []) | set(extra)) if chosen else None
 
 
@@ -265,8 +275,8 @@ SAVE = typer.Option(None, "--save", help="write the selection to this workbench 
 
 @app.command()
 def plan(file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS,
-         with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, save: str = SAVE,
-         bmc_nodes: str = BMC_NODES, workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING,
+         with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, k8s_cpu_nodes: int = K8S_CPU, save: str = SAVE,
+         bmc_nodes: str = BMC_NODES, bmc_groups: str = BMC_GROUPS, workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING,
          monitoring: list[str] = MONITORING, ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE,
          access: list[str] = ACCESS, simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN, app_mb: int = APP_MB_OPT) -> None:
     """Estimate the memory a workbench needs against what the host has free; exit 1 if it would not fit."""
@@ -275,7 +285,7 @@ def plan(file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: in
     import yaml
 
     with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons, login)
-    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes, login)
+    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes, login, bmc_groups)
     est = workbench.estimate(sim, prof, running=workbench.running_services())
     ok, msg = workbench.verdict(est, checks.mem_available() // (1024 * 1024), spec=spec)
     typer.echo(workbench.render(spec, est) + f"\n\n{msg}")
@@ -285,8 +295,8 @@ def plan(file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: in
     raise typer.Exit(0 if ok else 1)
 
 
-def _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes=None, login=None) -> None:
-    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes, login)
+def _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes=None, login=None, bmc_groups=None) -> None:
+    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes, login, bmc_groups)
     typer.echo(workbench.render(spec, workbench.estimate(sim, prof)) + "\n")
     if not stack.up(sim, "workbench", say=typer.echo, prof=prof):
         raise typer.Exit(1)
@@ -296,19 +306,19 @@ def _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_
 @app.command()
 def up(profile: str = typer.Option(None, "--profile", autocompletion=completion.profiles, callback=_profile_check, help="a size preset (default std); or choose by counts below"),
        file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS,
-       with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, bmc_nodes: str = BMC_NODES,
+       with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, k8s_cpu_nodes: int = K8S_CPU, bmc_nodes: str = BMC_NODES, bmc_groups: str = BMC_GROUPS,
        workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING,
        ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE, access: list[str] = ACCESS,
        simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN, app_mb: int = APP_MB_OPT) -> None:
     """Estimate, then start. By preset (--profile) or by selection (--cpu-nodes 2 --gpu-nodes 4 --with jira,
     --ticketing jira --hardware bmc,bcm, --addons ...)."""
     with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons, login)
-    chosen = any(v is not None for v in (file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes, login))
+    chosen = any(v is not None for v in (file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes, login, bmc_groups))
     if chosen and profile:
         typer.echo("choose one: --profile PRESET, or a selection (--cpu-nodes, --gpu-nodes, --with, -f FILE)", err=True)
         raise typer.Exit(1)
     if chosen:
-        _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes, login)
+        _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes, login, bmc_groups)
         return
     workbench.forget()
     raise typer.Exit(0 if stack.up(_base_sim(), profile or "std", say=typer.echo) else 1)
@@ -317,13 +327,13 @@ def up(profile: str = typer.Option(None, "--profile", autocompletion=completion.
 @app.command()
 def apply(file: str = typer.Option(..., "-f", "--file", help="workbench file to build"), name: str = NAME,
           cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS, with_: list[str] = WITH,
-          without: list[str] = WITHOUT, k8s_nodes: int = K8S, bmc_nodes: str = BMC_NODES,
+          without: list[str] = WITHOUT, k8s_nodes: int = K8S, k8s_cpu_nodes: int = K8S_CPU, bmc_nodes: str = BMC_NODES, bmc_groups: str = BMC_GROUPS,
           workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING,
           ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE, access: list[str] = ACCESS,
           simulation: list[str] = SIMULATION, addons: bool = ADDONS, login: list[str] = LOGIN, app_mb: int = APP_MB_OPT) -> None:
     """Build the workbench a file describes (the same as `up -f FILE`)."""
     with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, simulation, addons, login)
-    _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, bmc_nodes, login)
+    _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes, login, bmc_groups)
 
 
 def _launcher(*args: str) -> None:
@@ -546,6 +556,12 @@ def get_trace(node: list[str] = TRACE_NODES, since: float = TRACE_SINCE) -> None
     """What Slurm shows now (jobs, slurmd and slurmstepd pids per node) and what slurmctld and the nodes logged lately, as JSON:
     the data behind `scenario run --trace` and the page's Slurm trace. Read-only."""
     typer.echo(json.dumps(slurmtrace.collect(node, time.time() - since, lambda c: stack._run(c))))
+
+
+@get_app.command("slurm-stats")
+def get_slurm_stats() -> None:
+    """slurmctld's request counts and times from `sdiag`, as JSON: the data behind the page's Traffic view. Read-only."""
+    typer.echo(json.dumps(slurmstats.collect(lambda c: stack._run(c))))
 
 
 @get_app.command("scenarios")

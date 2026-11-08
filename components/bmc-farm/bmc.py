@@ -40,6 +40,10 @@ def load_nodes(sim_yaml: Path) -> dict[str, dict]:
     for i in range(1, g.get("nodes", 0) + 1):
         out[f"{g['prefix']}{i:03d}"] = {"gpus": g["gpus_per_node"], "memory_mb": 2048 * g["gpus_per_node"],
                                         "cpus": 8 * g["gpus_per_node"]}
+    k = cfg.get("kubernetes") or {}
+    for grp in (k.get("nodes") or []) if k.get("enabled") else []:  # Kubernetes nodes are machines too: they have a BMC (listed after the Slurm nodes)
+        for i in range(1, int(grp.get("count", 0)) + 1):
+            out[f"{grp['prefix']}{i:03d}"] = {"gpus": int(grp.get("gpus", 0)), "memory_mb": int(grp.get("memory_gb", 32)) * 1024, "cpus": int(grp.get("cpus", 8))}
     return out
 
 

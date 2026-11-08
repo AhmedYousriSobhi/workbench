@@ -8,13 +8,14 @@ An edge is `measured` only when something real counts it (a mock's request count
 fault events the page itself records). Every other edge is declared: it says how the parts are wired, not that traffic
 was seen. The page must never present a declared edge as measured traffic.
 """
-from .flow import COUNTERS, SCENARIO_TARGETS, STATS
+from . import comms
+from .flow import SCENARIO_TARGETS
 
 PLANES = ("access", "management", "telemetry", "tickets", "faults")
 # service -> the plane its API belongs to (what a client uses it for)
 SERVICE_PLANE = {"bmc-farm": "management", "bcm-mock": "management", "gpu-exporter": "telemetry",
-                 "jira-mock": "tickets", "jira-real": "tickets"}
-MEASURED = {*STATS, *COUNTERS}  # services a counter backs; the real Jira publishes none, so it is declared only
+                 "jira-mock": "tickets", "jira-real": "tickets", "k8s-api": "management"}
+MEASURED = comms.MEASURED  # the real Jira publishes no counter, so it is declared only
 INJECTABLE = set(SCENARIO_TARGETS.values())  # blocks a scenario step or fault button can reach (flow.note)
 
 
@@ -32,10 +33,13 @@ def build(services: dict, nodes: list, logins: list, cluster: str | None = None)
     teleport = "teleport" in services
     svcs = [s for s in services if s != "teleport"]
     ents = [{"id": "clients", "type": "clients"}, {"id": "faults", "type": "injector"}]
-    ents += [{"id": lg["name"], "type": "login", "mode": lg["mode"]} for lg in logins]
+    ents += [{"id": lg["name"], "type": "login", "mode": lg["mode"], "kind": lg.get("kind", "both")} for lg in logins]
     ents += [{"id": "teleport", "type": "access"}] if teleport else []
     ents += [{"id": s, "type": "service"} for s in svcs]
-    ents += [{"id": "nodes", "type": "group"}] + [{"id": n["name"], "type": n["kind"] + "-node", "group": "nodes"} for n in nodes]
+    slurm_nodes = [n for n in nodes if n["kind"] != "k8s"]
+    k8s_nodes = [n for n in nodes if n["kind"] == "k8s"]
+    ents += [{"id": "nodes", "type": "group"}] + [{"id": n["name"], "type": n["kind"] + "-node", "group": "nodes"} for n in slurm_nodes]
+    ents += ([{"id": "k8s-nodes", "type": "group"}] + [{"id": n["name"], "type": "k8s-node", "group": "k8s-nodes"} for n in k8s_nodes]) if k8s_nodes else []
     edges = []
     if teleport:
         edges.append(_edge("clients", "teleport", "access", "api", "teleport" in MEASURED))
@@ -48,7 +52,12 @@ def build(services: dict, nodes: list, logins: list, cluster: str | None = None)
         edges.append(_edge("clients", s, SERVICE_PLANE.get(s, "management"), "api", s in MEASURED))
         if s in INJECTABLE:
             edges.append(_edge("faults", s, "faults", "inj", True))
-    edges += [_edge(lg["name"], "nodes", "access", "jump", False) for lg in logins]
+    for lg in logins:  # an s-login jumps to the Slurm nodes, a k-login reaches the Kubernetes nodes with kubectl
+        kind = lg.get("kind", "both")
+        if kind in ("slurm", "both"):
+            edges.append(_edge(lg["name"], "nodes", "access", "jump", False))
+        if kind in ("k8s", "both") and k8s_nodes:
+            edges.append(_edge(lg["name"], "k8s-nodes", "access", "kubectl", False))
     if teleport:
         edges.append(_edge("teleport", "nodes", "access", "teleport", False))
     if cluster:
@@ -65,7 +74,7 @@ def attach(snap: dict) -> dict:
     are independent: no edge ever joins two of them."""
     clusters = snap.get("clusters")
     if not clusters:
-        return {**snap, "graph": build(snap["services"], snap["nodes"], snap["logins"])}
-    per = [{**c, "graph": build(c["services"], c["nodes"], c["logins"])} for c in clusters]
+        return {**snap, "graph": build(snap["services"], snap["nodes"], snap["logins"]), "comms": comms.build(snap["services"], snap["nodes"], snap["logins"]), "absent": comms.absent(snap["services"], snap["nodes"], snap["logins"])}
+    per = [{**c, "graph": build(c["services"], c["nodes"], c["logins"]), "comms": comms.build(c["services"], c["nodes"], c["logins"]), "absent": comms.absent(c["services"], c["nodes"], c["logins"])} for c in clusters]
     merged = [build(c["services"], c["nodes"], c["logins"], c["name"]) for c in clusters]
     return {**snap, "clusters": per, "graph": {"entities": [e for g in merged for e in g["entities"]], "edges": [e for g in merged for e in g["edges"]]}}

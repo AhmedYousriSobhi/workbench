@@ -10,7 +10,7 @@ import this file); tests/test_addressing.py keeps the two equal."""
 import ipaddress
 
 from . import logins as logins_mod
-from .nodes import node_names
+from .nodes import hardware_nodes
 
 INTERNAL = "10.141.0.0/16"
 IPMI = "10.148.0.0/16"
@@ -25,7 +25,8 @@ BMC_NODE_PORT_BASE = 9000          # the farm's per-node TLS port: 9000 + index 
 # service -> last octet in 10.141.255.0/24. observability.yml (a static file) repeats the three observability ones.
 SERVICE_HOSTS = {"slurmctld": 1, "slurmrestd": 2, "slurmdbd": 3, "mariadb": 4, "bcm-mock": 10, "jira-mock": 11,
                  "bmc-farm": 12, "scenario-engine": 13, "user-sim": 14, "ticket-bot": 15, "jira-real": 16, "jira-db": 17,
-                 "teleport": 30, "prometheus": 20, "grafana": 21, "gpu-exporter-farm": 22}
+                 "teleport": 30, "k8s-apiserver": 40, "k8s-etcd": 41, "k8s-controller-manager": 42, "k8s-scheduler": 43,
+                 "kwok-controller": 44, "prometheus": 20, "grafana": 21, "gpu-exporter-farm": 22}
 
 
 class AddressingError(Exception):
@@ -44,27 +45,31 @@ def _prefix(subnet: str) -> tuple[int, int]:
 
 
 GPU_BLOCK = 100  # the third octet GPU nodes start at; compute nodes use 0..99 (25,400 of them)
+BLOCK = {"compute": 0, "gpu": GPU_BLOCK, "k8s-cpu": 200, "k8s-gpu": 230}  # first third octet of each kind (Kubernetes nodes: BMC and BCM addresses)
+ROOM = {"compute": 100, "gpu": 100, "k8s-cpu": 30, "k8s-gpu": 24}         # how many third octets each kind may use
 
 
 def host_ip(subnet: str, index: int, kind: str = "compute") -> str:
     """The `index`-th (0-based) address of a kind of node in a /16 (never .0, never the 10.x.255.* service block)."""
-    if not 0 <= index < 254 * (GPU_BLOCK if kind == "compute" else 100):
+    if not 0 <= index < 254 * ROOM[kind]:
         raise AddressingError(f"too many {kind} nodes for {subnet}")
     a, b = _prefix(subnet)
-    return f"{a}.{b}.{index // 254 + (GPU_BLOCK if kind == 'gpu' else 0)}.{index % 254 + 1}"
+    return f"{a}.{b}.{index // 254 + BLOCK[kind]}.{index % 254 + 1}"
 
 
 def plan(sim: dict, compute_override: int | None = None) -> dict:
     """{"internal", "ipmi", "login", "nodes": {name: ip}, "bmc": {node: ip}, "services": {name: ip}}."""
     a, b = _prefix(INTERNAL)
-    seen = {"compute": 0, "gpu": 0}
+    seen = dict.fromkeys(BLOCK, 0)
     nodes, bmc = {}, {}
-    for name, kind in node_names(sim, compute_override):
-        nodes[name], bmc[name] = host_ip(INTERNAL, seen[kind], kind), host_ip(IPMI, seen[kind], kind)
+    for name, kind in hardware_nodes(sim, compute_override):
+        if kind in ("compute", "gpu"):  # Slurm nodes only: Teleport and ssh use `nodes`; a Kubernetes node has a BMC address and no SSH
+            nodes[name] = host_ip(INTERNAL, seen[kind], kind)
+        bmc[name] = host_ip(IPMI, seen[kind], kind)
         seen[kind] += 1
     logins = {logins_mod.name(i): login_ip(i) for i, _ in enumerate(logins_mod.modes(sim))}
     return {"internal": INTERNAL, "ipmi": IPMI, "login": LOGIN_IP, "logins": logins, "ipmi_logins": {n: login_ip(i, IPMI) for i, n in enumerate(logins)}, "nodes": nodes, "bmc": bmc,
-            "bmc_port": {n: BMC_NODE_PORT_BASE + i for i, (n, _) in enumerate(node_names(sim, compute_override))},
+            "bmc_port": {n: BMC_NODE_PORT_BASE + i for i, (n, _) in enumerate(hardware_nodes(sim, compute_override))},
             "services": {s: f"{a}.{b}.255.{h}" for s, h in SERVICE_HOSTS.items()}}
 
 

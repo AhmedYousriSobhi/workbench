@@ -537,6 +537,18 @@ def test_slurm_trace_is_read_only_and_needs_a_tracer(tmp_path):
     assert "trace failed" in g.handle("slurm-trace", {"nodes": [], "since": 1})["error"]
 
 
+def test_slurm_stats_is_read_only_needs_a_statser_and_pauses_under_pressure(tmp_path):
+    g, _ = _calm_gov(tmp_path)
+    assert g.handle("slurm-stats", {})["ok"] is False
+    g.statser = lambda: {"rpcs": 7}
+    assert g.handle("slurm-stats", {}) == {"ok": True, "stats": {"rpcs": 7}}
+    g.ladder.level = 3
+    assert "paused" in g.handle("slurm-stats", {})["error"]
+    g.ladder.level = 0
+    g.statser = lambda: 1 / 0
+    assert "slurm stats failed" in g.handle("slurm-stats", {})["error"]
+
+
 def test_refresh_jira_licence_runs_the_benchctl_refresh(tmp_path):
     import threading
     calls, done = [], threading.Event()

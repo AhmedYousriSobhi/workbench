@@ -48,8 +48,8 @@ def test_governor_unreachable_is_warn(tmp_path):
 
 
 def test_tools_marks_missing():
-    res = {c.name: c.status for c in checks.check_tools(lambda t: None if t == "k3d" else "/x")}
-    assert res["tool k3d"] == checks.WARN and res["tool docker"] == checks.OK
+    res = {c.name: c.status for c in checks.check_tools(lambda t: None if t == "virsh" else "/x")}
+    assert res["tool virsh"] == checks.WARN and res["tool docker"] == checks.OK
     assert {c.status for c in checks.check_tools(lambda t: None)} == {checks.FAIL, checks.WARN}
 
 

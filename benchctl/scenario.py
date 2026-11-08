@@ -16,7 +16,7 @@ from pathlib import Path
 
 import yaml
 
-from . import checks
+from . import checks, k8s
 from .nodes import node_names
 
 ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "http://127.0.0.1:8000/sim/inject",
@@ -28,11 +28,13 @@ LOGIN = "workbench-login-1"
 JIRA_REAL = "workbench-jira-real-1"
 JIRA_DB = "workbench-jira-db-1"
 JIRA_REAL_URL = "http://127.0.0.1:8083"
-JIRA_REAL_MODES = ("outage", "restore", "bad_logins", "clear_logins", "rate_limit", "rate_limit_off")  # real faults on the real Jira, no proxy (issue 303)
-HOST_TARGETS = ("slurm", "ssh", "jira-real")  # steps that need Docker on the host
+JIRA_REAL_MODES = ("outage", "restore", "bad_logins", "clear_logins", "rate_limit", "rate_limit_off", "token_revoke", "token_restore",
+                   "proxy_503", "proxy_429", "proxy_slow", "proxy_off")  # real faults on the real Jira (issue 303); proxy_* through benchctl/jira_proxy.py (issue 305)
+JIRA_REAL_TICKET_ACTIONS = ("create", "transition", "comment")  # `tickets:` steps on the real Jira go through the REST driver (issue 306)
+HOST_TARGETS = ("slurm", "ssh", "jira-real", "k8s")  # steps that need Docker on the host
 SSH_STATES = ("down", "up", "hung")
 NODE_SSHD_STATES = ("down", "up")
-NOT_BUILT = ("k8s", "ticket-bot")
+NOT_BUILT = ("ticket-bot",)
 RAMP_STEP_S = 10.0
 RAMP_START_C = 50.0
 SCENARIOS = Path("scenarios")
@@ -139,8 +141,14 @@ def validate(sc: dict, sim: dict) -> list[str]:
             problems += [f"step {i}: {m}" for m in jira_ticket_problems(do["tickets"])]
         if t == "slurm":
             problems += [f"step {i}: {m}" for m in daemon_problems(do)]
-        if t == "jira-real" and do.get("fault") not in JIRA_REAL_MODES:
-            problems.append(f"step {i}: jira-real needs fault: one of {', '.join(JIRA_REAL_MODES)}")
+        if t == "k8s":
+            problems += [f"step {i}: {m}" for m in k8s.step_problems(do, {n for n, _ in k8s.node_list(sim)})]
+        if t == "jira-real" and "tickets" in do:
+            problems += [f"step {i}: {m}" for m in jira_ticket_problems(do["tickets"], JIRA_REAL_TICKET_ACTIONS)]
+        elif t == "jira-real" and do.get("fault") not in JIRA_REAL_MODES:
+            problems.append(f"step {i}: jira-real needs fault: one of {', '.join(JIRA_REAL_MODES)}, or tickets:")
+        if t == "k8s":  # its node names are Kubernetes nodes, checked above
+            continue
         names = [n for key in ("nodes", "drain", "down", "resume", "power_off", "power_on", "slurmd_stop", "slurmd_start",
                                "slurmd_restart") for n in do.get(key) or []]
         if isinstance(do.get("submit"), dict) and do["submit"].get("node"):
@@ -158,9 +166,9 @@ def daemon_problems(do: dict) -> list[str]:
     return [f"submit: unknown key {k!r}" for k in sorted(set(sub) - SUBMIT_KEYS)]
 
 
-def jira_ticket_problems(tk) -> list[str]:
-    if not isinstance(tk, dict) or tk.get("action") not in JIRA_ACTIONS:
-        return [f"jira tickets needs action: one of {', '.join(JIRA_ACTIONS)}"]
+def jira_ticket_problems(tk, actions=JIRA_ACTIONS) -> list[str]:
+    if not isinstance(tk, dict) or tk.get("action") not in actions:
+        return [f"jira tickets needs action: one of {', '.join(actions)}"]
     need = {"create": ("summary",), "transition": ("jql", "to"), "comment": ("jql", "body"), "fault": ("node",), "reset": ()}[tk["action"]]
     return [f"jira tickets {tk['action']} needs {k}" for k in need if not tk.get(k)]
 
@@ -378,6 +386,12 @@ def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcom
                 r = runner(cmd)
                 if r.returncode and cmd[3:4] != ["pkill"]:  # pkill exits 1 when slurmd is already down: that is the goal
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+        elif step.target == "k8s":
+            k8s.write_pod(step.do)
+            for args in k8s.step_args(step.do):
+                r = runner(k8s.kubectl_cmd(k8s.current_sim(), *args))
+                if r.returncode:
+                    return Outcome(label, "failed", (r.stderr or r.stdout).strip()[-300:])
         elif step.target == "jira-real":
             return jira_real_fault(step, label, runner)
         elif step.target == "jira":
@@ -406,7 +420,13 @@ def jira_real_fault(step: Step, label: str, runner) -> Outcome:
     """Real faults on the real Jira (no fault proxy, issue 303): `outage` pauses its container (clients time out, as with a
     hung node), `restore` unpauses it, `bad_logins` sends wrong-password logins until Jira's own CAPTCHA lock answers 403
     (the 401 then 403 pattern the Atlassian community reports); `clear_logins` resets the failed-login count (as an admin does in User management)."""
+    if "tickets" in step.do:
+        return jira_real_tickets(step, label)
     fault = step.do["fault"]
+    if fault.startswith("proxy_"):
+        return jira_real_proxy(step, label)
+    if fault in ("token_revoke", "token_restore"):
+        return jira_real_token(step, label)
     if fault in ("outage", "restore"):
         r = runner(["docker", "pause" if fault == "outage" else "unpause", JIRA_REAL])
         if r.returncode and "already" not in r.stderr and "is not paused" not in r.stderr:
@@ -428,6 +448,64 @@ def jira_real_fault(step: Step, label: str, runner) -> Outcome:
             pass  # 401, then 403 once the CAPTCHA lock is on: both are the goal
         except OSError as e:
             return Outcome(label, "failed", str(e))
+    return Outcome(label, "ok")
+
+
+def jira_real_proxy(step: Step, label: str) -> Outcome:
+    """`proxy_503`, `proxy_429`, `proxy_slow` (count, delay, retry_after) fail the next requests that reach the fault proxy
+    (127.0.0.1:8084, started with the scenario); `proxy_off` clears it. A client on 127.0.0.1:8083 never meets these (issue 305)."""
+    from . import jira_proxy
+    fault = step.do["fault"]
+    body = None if fault == "proxy_off" else {"mode": fault.removeprefix("proxy_"), **{k: step.do[k] for k in ("count", "delay", "retry_after") if k in step.do}}
+    try:
+        jira_proxy.shared().fault.set(body)
+    except (OSError, ValueError) as e:
+        return Outcome(label, "failed", f"fault proxy: {e}")
+    return Outcome(label, "ok")
+
+
+def jira_real_token(step: Step, label: str) -> Outcome:
+    """`token_revoke` deletes the user's personal access token in Jira (a client holding it gets a real 401); `token_restore`
+    makes a new one and rewrites PAT_<USER> in compose/generated/secrets/jira-real.env (never printed). Default user alice:
+    the ticket driver uses admin's token, so it keeps working."""
+    from . import jira_real
+    user = str(step.do.get("user", "alice"))
+    try:
+        if step.do["fault"] == "token_revoke":
+            n = jira_real.revoke_token(user)
+            return Outcome(label, "ok" if n else "skipped", "" if n else f"{user} had no workbench token")
+        jira_real.reissue_token(user)
+    except (jira_real.JiraRealError, OSError) as e:
+        return Outcome(label, "failed", str(e))
+    return Outcome(label, "ok")
+
+
+def real_driver():
+    from .jira_driver import JiraDriver
+    return JiraDriver.for_target("real")
+
+
+def jira_real_tickets(step: Step, label: str) -> Outcome:
+    """`tickets: {action: create|transition|comment, ...}` on the real Jira through the standard REST API: the same body as the
+    mock's `/sim/tickets` (create: summary with {n}, count, labels, priority, description; transition: jql and to; comment: jql and body)."""
+    from .jira_driver import JiraError
+    tk = step.do["tickets"]
+    try:
+        drv = real_driver()
+        if tk["action"] == "create":
+            for n in range(1, min(int(tk.get("count", 1)), 200) + 1):
+                drv.create(str(tk["summary"]).replace("{n}", str(n)), description=str(tk.get("description", "")).replace("{n}", str(n)),
+                           labels=tk.get("labels") or [], priority=tk.get("priority", "Medium"))
+        else:
+            for hit in drv.search(str(tk["jql"])):
+                if tk["action"] == "comment":
+                    drv.comment(hit["key"], str(tk["body"]))
+                else:
+                    drv.move(hit["key"], tk["to"])
+    except JiraError as e:
+        return Outcome(label, "failed", str(e))
+    except OSError as e:
+        return Outcome(label, "failed", f"real Jira unreachable: {e}")
     return Outcome(label, "ok")
 
 
@@ -466,9 +544,17 @@ def jira_labels(labels: list[str]) -> bool:
         return False
 
 
-def jira_status(jql: str, status: str, count: int | None = None) -> bool:
+def real_search(jql: str) -> list[dict]:
+    """The same search on the real Jira (an expectation with `target: real`); an expectation that cannot ask does not hold."""
+    try:
+        return real_driver().search(jql)
+    except Exception:  # noqa: BLE001  JiraError, OSError, a missing setup: the expectation just does not hold
+        return []
+
+
+def jira_status(jql: str, status: str, count: int | None = None, search=None) -> bool:
     """Every ticket matching `jql` is in `status` (and, when given, there are exactly `count` of them)."""
-    found = jira_search(jql)
+    found = (search or jira_search)(jql)
     return bool(found) and all(i["fields"]["status"]["name"] == status for i in found) and count in (None, len(found))
 
 
@@ -492,12 +578,17 @@ def expectation(exp: dict, runner=checks.run, host: bool = True):
         return label, lambda: args["state"] in job_states(args["node"], runner), within
     if kind == "slurm.stepd" and host:  # a slurmstepd runs on `node` (alive: true) or none does (alive: false)
         return label, lambda: stepd_alive(args["node"], runner) == bool(args.get("alive", True)), within
+    if kind == "k8s.node_ready" and host:  # the node's Ready condition is `ready` (default true)
+        return label, lambda: k8s.node_ready(args["node"], runner) == bool(args.get("ready", True)), within
+    if kind == "k8s.pod_status" and host:  # the pod's phase or a container's waiting/terminated reason is `reason`
+        return label, lambda: args["reason"] in k8s.pod_reasons(args["namespace"], args["name"], runner).split(), within
     if kind == "jira.issue_created":
         return label, lambda: jira_labels(args["labels"]), within
+    search = (lambda q: real_search(q)) if args.get("target") == "real" else (lambda q: jira_search(q))  # `target: real` asks the real Jira
     if kind == "jira.issue_status":
-        return label, lambda: jira_status(args["jql"], args["status"], args.get("count")), within
+        return label, lambda: jira_status(args["jql"], args["status"], args.get("count"), search), within
     if kind == "jira.issue_count":
-        return label, lambda: len(jira_search(args["jql"])) == int(args["count"]), within
+        return label, lambda: len(search(args["jql"])) == int(args["count"]), within
     return label, None, within
 
 
@@ -525,6 +616,12 @@ def run(sc: dict, speed: float = 1.0, dilation: float = 1.0, say=print, sleep=ti
     """
     factor = max(speed * dilation, 1e-6)
     report = Report(sc["name"])
+    if host and any(s["target"] == "jira-real" and str((s.get("do") or {}).get("fault", "")).startswith("proxy_") for s in sc.get("steps", [])):
+        from . import jira_proxy
+        try:  # up before the first step, so a client can already be pointed at it
+            say(f"fault proxy for the real Jira on 127.0.0.1:{jira_proxy.shared().port} (point the client there for the proxy faults)")
+        except OSError as e:
+            say(f"fault proxy could not start: {e}")
     start = clock()
     pending = []
     for exp in sc.get("expect") or []:

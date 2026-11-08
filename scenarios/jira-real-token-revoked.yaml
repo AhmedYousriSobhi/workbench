@@ -1,0 +1,6 @@
+name: jira-real-token-revoked
+ref: SC-29
+description: "alice's personal access token on the real Jira is revoked, so a client that uses it gets a real 401, then a new token is made at 90 s and written to compose/generated/secrets/jira-real.env (PAT_ALICE, not printed); the client needs the new value. The ticket driver uses admin's token and is not affected."
+steps:
+  - {at: 0s,  target: jira-real, do: {fault: token_revoke, user: alice}}
+  - {at: 90s, target: jira-real, do: {fault: token_restore, user: alice}}

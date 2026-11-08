@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import bring_up, wait_for
+from helpers import bring_up, release, wait_for
 
-from benchctl import scenario, stack
+from benchctl import scenario
 
 ROOT = Path(__file__).resolve().parents[2]
 BASE = "http://127.0.0.1:8080"
@@ -36,7 +36,7 @@ def live():
     assert wait_for(lambda: scenario.node_state("cn003") != "", timeout=60)
     call("/sim/tickets", {"action": "reset"})
     yield sim
-    stack.down(say=lambda m: None)
+    release()
 
 
 def play(name: str, sim: dict, speed: float = 20):

@@ -8,9 +8,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import bring_up, wait_for
-
-from benchctl import stack
+from helpers import bring_up, release, wait_for
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -25,7 +23,7 @@ def exported(tmp_path_factory):
                        capture_output=True, text=True, check=False)
     assert r.returncode == 0, r.stdout + r.stderr
     yield json.loads(out.read_text())
-    stack.down(say=lambda m: None)
+    release()
 
 
 def test_ssh_endpoint_answers(exported):

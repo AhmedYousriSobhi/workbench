@@ -1,12 +1,13 @@
 name: client-stress-real
 ref: SC-02
-description: "client-stress for a client connected to the REAL Jira (127.0.0.1:8083, part jira-real up): the same five minutes of nodes, GPUs, heat and jobs, with Jira's own rate limit, a CAPTCHA lock and a 30 s hang instead of the mock's faults. Jira reloads rate-limit settings in about 40 s, so the 429s run from about 75 s to 180 s. No tickets are filed (the ticket wave goes to the mock only). Measure the client with benchctl measure app --match NAME --duration 330"
+description: "client-stress for a client connected to the REAL Jira (127.0.0.1:8083, part jira-real up): the same five minutes of nodes, GPUs, heat and jobs, with Jira's own rate limit, a CAPTCHA lock and a 30 s hang instead of the mock's faults. Jira reloads rate-limit settings in about 40 s, so the 429s run from about 75 s to 180 s. The 12-ticket wave is filed on the real Jira (project OPS, label stress) and moved to In Progress at 235 s (only tickets made in the last 10 minutes count, so a repeat run does not add up). Measure the client with benchctl measure app --match NAME --duration 330"
 steps:
   - {at: 0s,   target: slurm,        do: {submit: {node: cn001, duration: 120}}}
   - {at: 0s,   target: slurm,        do: {submit: {node: cn002, duration: 120}}}
   - {at: 0s,   target: slurm,        do: {submit: {node: cn003, duration: 120}}}
   - {at: 0s,   target: slurm,        do: {submit: {node: gpu001, duration: 150}}}
   - {at: 0s,   target: slurm,        do: {submit: {node: gpu002, duration: 150}}}
+  - {at: 10s,  target: jira-real,    do: {tickets: {action: create, count: 12, summary: "Stress {n}: job failed on cn002", labels: [stress, cn002], priority: Medium}}}
   - {at: 20s,  target: gpu-exporter, do: {nodes: [gpu001, gpu002], xid: 79}}
   - {at: 30s,  target: bmc-farm,     do: {nodes: [gpu001, gpu002], fan_fail: 2}}
   - {at: 40s,  target: bmc-farm,     do: {nodes: [gpu001], ramp: {to: 92, over: 90s}}}
@@ -19,6 +20,7 @@ steps:
   - {at: 170s, target: jira-real,    do: {fault: bad_logins, user: alice, count: 6}}
   - {at: 190s, target: jira-real,    do: {fault: outage}}
   - {at: 220s, target: jira-real,    do: {fault: restore}}
+  - {at: 235s, target: jira-real,    do: {tickets: {action: transition, jql: 'labels = stress AND created >= -10m', to: In Progress}}}
   - {at: 220s, target: slurm,        do: {submit: {node: cn001, duration: 60}}}
   - {at: 220s, target: slurm,        do: {submit: {node: cn002, duration: 60}}}
   - {at: 230s, target: jira-real,    do: {fault: clear_logins}}
@@ -26,3 +28,5 @@ steps:
   - {at: 270s, target: bmc-farm,     do: {nodes: [gpu001, gpu002, cn004], clear: true}}
   - {at: 270s, target: bcm-mock,     do: {nodes: [cn004], state: UP}}
   - {at: 270s, target: slurm,        do: {resume: [gpu001, cn004]}}
+expect:
+  - jira.issue_count: {jql: 'labels = stress AND created >= -10m', count: 12, target: real, within: 280s}

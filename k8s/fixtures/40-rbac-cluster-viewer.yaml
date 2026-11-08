@@ -1,0 +1,18 @@
+# The read-only user a monitoring client is given on the k-login node: everything it lists, nothing it can change.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: workbench-viewer}
+rules:
+- {apiGroups: [""], resources: [nodes, pods, pods/log, events, namespaces, persistentvolumeclaims, resourcequotas, services, configmaps], verbs: [get, list, watch]}
+- {apiGroups: [apps], resources: [deployments, daemonsets, replicasets, statefulsets], verbs: [get, list, watch]}
+- {apiGroups: [batch], resources: [jobs, cronjobs], verbs: [get, list, watch]}
+- {apiGroups: [autoscaling], resources: [horizontalpodautoscalers], verbs: [get, list, watch]}
+- {apiGroups: [metrics.k8s.io], resources: [nodes, pods], verbs: [get, list]}
+- {apiGroups: [apiextensions.k8s.io], resources: [customresourcedefinitions], verbs: [get, list]}
+- {apiGroups: [authorization.k8s.io], resources: [selfsubjectaccessreviews, selfsubjectrulesreviews], verbs: [create]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: workbench-viewer}
+subjects: [{kind: User, name: viewer}]
+roleRef: {kind: ClusterRole, name: workbench-viewer, apiGroup: rbac.authorization.k8s.io}

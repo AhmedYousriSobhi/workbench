@@ -117,7 +117,7 @@ The login node is the head node, with a read-only `cmsh`. In the cluster's **Bas
 | Host | the login node `10.141.255.254`, port `22`, over the SSH connection from section 1 |
 
 Press **Test BCM Connection** (save the cluster first). You can check by hand what it runs:
-`ssh -i compose/generated/secrets/ssh/id_ed25519 alice@10.141.255.254 'cmsh -c "device; list"'` (it lists the head node `login` and the nodes with their status). Only reading works. Plain `cmsh` over a terminal opens a read-only console: type `device`, then `list` or `status`, `..` to go up, `exit` to leave.
+`ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes alice@10.141.255.254 'cmsh -c "device; list"'` (it lists the head node `login` and the nodes with their status). Only reading works. Plain `cmsh` over a terminal opens a read-only console: type `device`, then `list` or `status`, `..` to go up, `exit` to leave.
 
 ## 7. BMC (Redfish)
 
@@ -130,7 +130,7 @@ Press **Test BCM Connection** (save the cluster first). You can check by hand wh
 Each BMC is a small container on the BMC network (`10.148.0.0/16`) with its own fixed IP at the standard port 443
 ([ADR 0018](../adr/0018-fixed-addressing-plan.md)). The address works from this machine and from the login node (the jump
 host is also on that network). `benchctl export profile --bmc` writes one target per node with its own address.
-A node can have no BMC: switch it off in **▦ Cluster architecture** (the BMC part lists the nodes) or with `--bmc-nodes cn001,gpu001`;
+Every machine has a BMC by default, the Kubernetes nodes too (when that part is on). Choose which in **▦ Cluster architecture** (the BMC part has a switch per node group, Slurm CPU, Slurm GPU, Kubernetes CPU and Kubernetes GPU, with the memory each costs, and a collapsed list to leave out single nodes) or with `--bmc-groups slurm-gpu,k8s-gpu` and `--bmc-nodes cn001,gpu001`;
 each BMC costs about 32 MB. A client that cannot route to the cluster network uses the old single listener,
 `127.0.0.1:8443` with the Host header `bmc-<node>` (`--loopback`).
 

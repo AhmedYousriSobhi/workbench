@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import bring_up, wait_for
+from helpers import bring_up, release, wait_for
 
 from benchctl import compose, scenario, stack
 
@@ -42,7 +42,7 @@ def login():
     assert wait_for(lambda: ssh("true").returncode == 0, timeout=60), ssh("true").stderr
     yield
     step(reset=True)
-    stack.down(say=lambda m: None)
+    release()
 
 
 @pytest.fixture(autouse=True)

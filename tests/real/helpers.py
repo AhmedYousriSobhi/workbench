@@ -11,6 +11,7 @@ from benchctl import stack
 
 ROOT = Path(__file__).resolve().parents[2]
 GB = 1024**3
+STACK_STARTED = False  # set by bring_up; conftest brings the shared stack down once, at the end of the session (issue 234)
 
 
 def wait_for(pred, timeout: float = 15) -> bool:
@@ -35,13 +36,21 @@ def exporter_up() -> bool:
 def bring_up(sim: dict, profile: str = "min") -> None:
     """Start the stack for a fixture. On failure say why: a refusal by the governor (host memory low, GV-9) is the
     environment, not a defect in the code under test, so the message says so instead of a bare AssertionError."""
+    global STACK_STARTED
     said: list[str] = []
     if stack.up(sim, profile, say=said.append, available=64 * GB):
+        STACK_STARTED = True
         return
     why = " | ".join(said[-4:]) or "no output"
     if "REFUSED by governor" in why:
         raise AssertionError(f"ENVIRONMENT, not a code defect: the governor refused `up` (free host memory, then rerun): {why}")
     raise AssertionError(f"stack.up failed: {why}")
+
+
+def release() -> None:
+    """End of a module that uses the shared stack (issue 234): leave it running for the next module. `up` is idempotent, so
+    the next fixture finds every service running and only waits for its own readiness; conftest stops it once at the end,
+    or before a module in ISOLATED_MODULES that needs a cold start of its own."""
 
 
 def signals(path: Path, avail_gb: float = 8, some: float = 0, full: float = 0) -> None:

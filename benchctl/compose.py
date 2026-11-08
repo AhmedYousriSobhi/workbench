@@ -6,8 +6,8 @@ from pathlib import Path
 
 import yaml
 
-from . import addressing, jira_real, logins, nhc, slurmconf, teleport
-from .nodes import node_names
+from . import addressing, jira_real, k8s, logins, nhc, slurmconf, teleport
+from .nodes import KIND_GROUP, hardware_nodes, node_names
 
 OBSERVABILITY = "../observability.yml"  # static; hosts prometheus, grafana, gpu-exporter-farm
 
@@ -27,6 +27,8 @@ CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {
     "access": {"login": ("workbench/login:dev", 40, 2)},
     # the tag is replaced from sim.yaml teleport.version (benchctl/teleport.py); the limit is a planning estimate until measured
     "teleport": {"teleport": (f"{teleport.IMAGE}:{teleport.DEFAULT_VERSION}", 256, 2)},
+    # a real control plane with KWOK nodes (ADR 0034); the image tags are replaced from sim.yaml kubernetes.version (benchctl/k8s.py)
+    "k8s": {n: (k8s.images({})[n], k8s.LIMITS[n], 3) for n in k8s.SERVICES},
     "scenarios": {"scenario-engine": ("workbench/scenario-engine:dev", 60, 5)},
     "load": {"user-sim": ("workbench/user-sim:dev", 60, 5), "ticket-bot": ("workbench/ticket-bot:dev", 40, 5)},
 }
@@ -70,7 +72,7 @@ def generate(sim: dict, profile: dict) -> dict:
         for i, (lname, _) in enumerate(logins.nodes(sim)):
             if i:
                 services[lname] = {k: v for k, v in copy.deepcopy(services["login"]).items() if k != "build"}
-    if problems := logins.problems(sim, {"teleport"} if "teleport" in services else set()):
+    if problems := logins.problems(sim, {p for p, n in (("teleport", "teleport"), ("k8s", k8s.API)) if n in services}):
         raise logins.LoginError("; ".join(problems))
     for name, kind in node_names(sim, profile.get("compute_nodes")):
         svc = _service("workbench/node-base:dev", SLURMD_MB, SLURMD_PRIO, "../../images/node-base")
@@ -83,9 +85,10 @@ def generate(sim: dict, profile: dict) -> dict:
             svc["depends_on"] = ["slurmctld"]
         services[name] = svc
     slurm_mount = "./slurm:/etc/slurm:ro"
+    lkinds = logins.kinds(sim) if "login" in services else {}
     for name, svc in services.items():
         if name in ("slurmctld", "slurmrestd") or logins.is_login(name) or svc["labels"].get("workbench.node"):
-            svc["volumes"] = [slurm_mount]
+            svc["volumes"] = [] if lkinds.get(name) == "k8s" else [slurm_mount]  # a k-login has no Slurm configuration: its Slurm tools say so
             if svc["labels"].get("workbench.node"):  # sshd on every compute node (ADR 0014)
                 svc["volumes"].append("./nhc:/etc/workbench/nhc:ro")  # the health checks, edited live (ADR 0019)
                 svc["volumes"].append("./secrets/ssh:/run/workbench/ssh:ro")
@@ -98,7 +101,8 @@ def generate(sim: dict, profile: dict) -> dict:
         svc = services[lname]
         svc["volumes"].append("./secrets/ssh:/run/workbench/ssh:ro")
         svc.setdefault("environment", {})["WORKBENCH_LOGIN_AUTH"] = mode
-        svc.update({"depends_on": ["slurmctld"] if "slurmctld" in services else []})
+        svc.setdefault("environment", {})["WORKBENCH_LOGIN_KIND"] = lkinds[lname]
+        svc.update({"depends_on": ["slurmctld"] if "slurmctld" in services and lkinds[lname] != "k8s" else []})
         if mode in logins.DIRECT:
             svc["ports"] = [f"127.0.0.1:{SSH_PORT + i}:22"]
     if "teleport" in services:  # auth + proxy (ADR 0020): only the proxy and diagnostics ports are published, localhost only
@@ -113,6 +117,11 @@ def generate(sim: dict, profile: dict) -> dict:
         for svc in services.values():  # sshd trusts the Teleport CA and presents its host certificate (nodes and login)
             if svc["labels"].get("workbench.node") or any(svc is services.get(n) for n in logins.via_teleport(sim)):
                 svc["volumes"].append(f"./secrets/teleport:{teleport.CONTAINER_SECRETS}:ro")
+    k8s.wire(services, sim)  # no-op unless the k8s part is on
+    if k8s.API in services:  # every login node gets the read-only kubeconfigs (login.sh puts them in each user's ~/.kube)
+        for lname in [n for n, k in lkinds.items() if k in ("k8s", "both")]:  # an s-login gets none
+            services[lname]["volumes"] += ["./secrets/k8s/viewer.kubeconfig:/run/workbench/k8s/viewer.kubeconfig:ro",
+                                           "./secrets/k8s/limited.kubeconfig:/run/workbench/k8s/limited.kubeconfig:ro"]
     if "bmc-farm" in services:  # Redfish endpoints for every node in sim.yaml, localhost only
         # :8443 is TLS at the standard /redfish/v1, the node chosen by Host: clients reach it as bmc-<node>
         services["bmc-farm"].update({
@@ -161,9 +170,12 @@ def _wire_jira_real(services: dict) -> None:
 
 
 def bmc_nodes(sim: dict, profile: dict | None = None) -> list[str]:
-    """The nodes that have a BMC address: `sim["bmc"]["nodes"]` when a selection names some, else every node."""
-    every = [n for n, _ in node_names(sim, (profile or {}).get("compute_nodes"))]
-    chosen = (sim.get("bmc") or {}).get("nodes")
+    """The nodes that have a BMC address: the machines whose group `sim["bmc"]["groups"]` names (default every group: Slurm CPU and
+    GPU nodes, Kubernetes CPU and GPU nodes), then only those in `sim["bmc"]["nodes"]` when a selection lists some."""
+    cfg = sim.get("bmc") or {}
+    groups = cfg.get("groups")
+    every = [n for n, k in hardware_nodes(sim, (profile or {}).get("compute_nodes")) if groups is None or KIND_GROUP[k] in groups]
+    chosen = cfg.get("nodes")
     return every if chosen is None else [n for n in every if n in chosen]
 
 

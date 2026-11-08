@@ -19,12 +19,13 @@ this machine can use the page, so keep it private. The page listens on `127.0.0.
 
 | Area | Shows |
 |---|---|
-| **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **☰ Menu**, help and the theme switch (press it to cycle Auto, Light, Dark, **Midnight** with deep navy and neon accents, and **Dim** with soft slate and low glare; the choice is remembered). The strip is for status only. **☰ Menu** lists the actions in three groups, each with a one-line hint: *Run* (**▶ Scenarios**), *Configure* (**▦ Cluster architecture**: nodes, GPUs per node, optional parts and the plan; **✚ Health checks**) and *Share* (**⇩ Export**). Esc closes it. Pressing the level or memory chip opens the **Governor** panel |
+| **Overview cards** | in the left rail: nodes healthy, services up, GPUs busy (only with GPU nodes) and faults applied, all counted from the cluster data the page already reads |
+| **View choice** | under the nav on Infrastructure: **All** (diagram and node list), **Topology** (diagram only, wider) or **Nodes** (list and details only); remembered in this browser |
+| **Left nav** | the workspaces: **Infrastructure**, **Traffic & Communication** (the documented links: protocol, port, real or simulated, observed or configured, the measured probe latency, above the table slurmctld's own request counts from `sdiag`, slurmdbd's answer to one `sacctmgr` query, and Prometheus's scrape links). The links are also drawn as a diagram (the plane is the line's colour and dash pattern). The page opens in the dark Midnight theme until you pick another with the theme button. Filter by plane, software or evidence, click a link's source to open its inspector; a toolbar of plane chips with zoom, Fit and full screen; below the diagram, a **Traffic activity timeline** (requests and faults this page was told about, 1 m to 1 h, kept only while the page is open); the diagram is one fixed architecture (every group always drawn; a part this cluster lacks, the page cannot read yet (slurmdbd, until it answers a query), or that is planned and not built (shared storage), is grayed, never dropped) and a group can be dragged (or moved with the arrow keys; on a touch screen turn on the **Move** button first, otherwise a finger scrolls the page) with the lines re-routing, kept in the browser, **Reset layout** undoes it, and press **Follow the path** to see the chain it belongs to, **Connections**, then **Scenarios** and **Cluster architecture**. **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **☰ Menu** (Health checks, Export), help and the theme switch (press it to cycle Auto, Light, Dark, **Midnight** with deep navy and neon accents, and **Dim** with soft slate and low glare; the choice is remembered). The strip is for status only. **☰ Menu** lists the actions in three groups, each with a one-line hint: *Run* (**▶ Scenarios**), *Configure* (**▦ Cluster architecture**: nodes, GPUs per node, optional parts and the plan; **✚ Health checks**) and *Share* (**⇩ Export**). Esc closes it. Pressing the level or memory chip opens the **Governor** panel |
 | **Tabs and Needs attention** | the tabs *Nodes* and *Connections*, and one slim bar next to them with every item that needs you, or "All clear" |
-| **Stage** (Nodes tab) | three areas that fill the window. **Left:** the **Infrastructure architecture**, drawn to the shape of its panel (clients across the top, the access layer under them, the cluster nodes below that, the services in a column at the right). **Top right:** the **node list** (Compute, GPU and Services). **Bottom right:** **Connections**, how to reach each part (address and a Copy button), which shows the selected part instead when you click one, and a **Timeline** tab of recent traffic and faults. **Hide node list** gives the right column to Connections; the choice is remembered |
+| **Stage** (Infrastructure) | three areas that fill the window. **Left:** the **Infrastructure architecture**, drawn to the shape of its panel (clients across the top, the access layer under them, the cluster nodes below that, the services in a column at the right). **Top right:** the **node list** (Compute, GPU and Services). **Bottom right:** **Connections**, how to reach each part (address and a Copy button), which shows the selected part instead when you click one, and a **Timeline** tab of recent traffic and faults. **Topology** (left rail) gives the right column to Connections; the choice is remembered |
 
-Three panels open on top of the page from the top strip or its **☰ Menu** and close with **✕ Close**, Esc or a click outside: **Scenarios**,
-**Plan** and **Governor**. A node is different: it opens in the **Connections** area (below), so the Infrastructure architecture and the node list stay in view.
+Two panels open on top of the page from the top strip or its **☰ Menu** and close with **✕ Close**, Esc or a click outside: **Cluster architecture** and **Governor**. **Scenarios** is different: it is a panel docked on the right that you switch on and off with the **▶ Scenarios** button in the top strip, so the diagram stays visible and live while a scenario runs. A node is different: it opens in the **Connections** area (below), so the Infrastructure architecture and the node list stay in view.
 
 On a phone, and under 1100 px, the Infrastructure architecture, the list and the Connections area stack in one column and the diagram keeps its natural shape. The page has a skip link and
 landmarks, and honours reduced motion.
@@ -81,7 +82,7 @@ Every line says **how** it connects:
 
 A round dot travels along a line for each real request (a **triangle** for an answer the mock counted as an error, such as a 404 or an injected 503; the service box and the Timeline also say "2 errors", and a service that keeps no error counter shows none); a diamond travels from *Faults* to the node it hits and a ring flashes on that
 tile. *Pause* stops the dots; they also stop at governor L3 and under reduced motion, and the live feed runs only while
-the page is visible and the Nodes tab is open. **Key** (top right of the diagram) opens the legend: kinds, states, the dot, diamond and ring, the node marks, and a sample of each line style. The **view switcher** under the title (*2.5D*, *Flat*, *Overview*) picks how the diagram is drawn and at what level; the focus, selection and node list stay as they are when you switch. *Overview* is the level of detail: The *overview* condenses the cluster to one card (clients, access, the node groups with a health bar, the services and the fault count); above 24 nodes the page opens there. Hover the card (or Tab to it) to see the design underneath, double-click it, press Enter or use **Open full design** to enter, and use the **All clusters** link or Esc to go back. With several clusters the overview is a grid of cards (the cluster's name, nodes healthy, services and faults, and a condensed *access → nodes* picture when the card is big enough); a card with a failing part is marked with ▲. Entering one shows that cluster's diagram and node list. On a phone, tap the card. A table of clusters is in the page for screen readers.
+the page is visible and the Infrastructure workspace is open. **Key** (top right of the diagram) opens the legend: kinds, states, the dot, diamond and ring, the node marks, and a sample of each line style. The **view switcher** under the title (*2.5D*, *Flat*, *Overview*) picks how the diagram is drawn and at what level; the focus, selection and node list stay as they are when you switch. *Overview* is the level of detail: The *overview* condenses the cluster to one card (clients, access, the node groups with a health bar, the services and the fault count); above 24 nodes the page opens there. Hover the card (or Tab to it) to see the design underneath, double-click it, press Enter or use **Open full design** to enter, and use the **All clusters** link or Esc to go back. With several clusters the overview is a grid of cards (the cluster's name, nodes healthy, services and faults, and a condensed *access → nodes* picture when the card is big enough); a card with a failing part is marked with ▲. Entering one shows that cluster's diagram and node list. On a phone, tap the card. A table of clusters is in the page for screen readers.
 
 ![The overview: one card for the cluster, with a preview of the design underneath](img/web-global-view.png)
 
@@ -103,7 +104,7 @@ next to it with its address, the credential file, a command to copy, and buttons
 Esc closes the pop-up and returns the focus to the part. For a node, **Actions and details** opens its panel (below); **Connections**
 opens the row for that part in the Connections tab.
 
-**Fold the list away.** The list is a second way to the same parts. **Hide node list** gives the whole right column to Connections and the selected part:
+**Fold the list away.** The list is a second way to the same parts. **Topology** in the view choice (left rail, under the nav) hides the list and gives the whole right column to Connections and the selected part:
 
 ![The Infrastructure architecture with the node list folded away](img/web-architecture-wide.png)
 
@@ -117,9 +118,9 @@ workbench (`benchctl start --login ssh,teleport,both`, or the Login nodes rows o
 
 ## Teleport from the page
 
-Teleport is a part like the others, so you control it from **☰ Menu → ▦ Cluster architecture**:
+Teleport is a part like the others, so you control it from **left nav → ⚙ Cluster architecture**:
 
-1. Open **☰ Menu → ▦ Cluster architecture**.
+1. Open **left nav → ⚙ Cluster architecture**.
 2. Under **Access**, tick **Teleport** (+256 MB). The memory bar shows whether it fits.
 3. Press **Apply to the running workbench**, then press it again to confirm.
 4. When the apply finishes, the `teleport` card appears in the list and the box in the diagram. Open **Connections**: the
@@ -157,10 +158,9 @@ live state.
 
 ## Plan: change the workbench
 
-![The Cluster architecture sheet: node counts, then the optional parts grouped by category](img/web-cluster-architecture.png)
+![The Cluster architecture sheet: Slurm and Kubernetes node counts, login nodes, optional parts, and the summary](img/web-cluster-architecture.png)
 
-**▦ Cluster architecture** opens a panel with steppers for CPU nodes, GPU nodes and GPUs per node, toggles for the optional parts, grouped by category as in the `--ticketing`, `--hardware` flags (accounting, Jira, BMC, BCM, Teleport, scenarios, load; each shows the memory limit it adds, and the toggles show what is built now), and a
-memory bar ("1.7 GB needed of 4.5 GB free"). It shows the change against what runs now ("GPU nodes 2 → 3 (+1)") and the
+**▦ Cluster architecture** opens a wide sheet with one card per concern and a summary beside it that stays in view. **Slurm cluster**: steppers for CPU nodes, GPU nodes and GPUs per node, each with what one node is (for example 8 CPUs, 4 GB; H200). **Kubernetes cluster**: an Enabled switch and steppers for its own CPU and GPU nodes (KWOK), separate from the Slurm nodes. **Login nodes**: one card per login node with two choices, *Way in* (SSH, Teleport, Both) and *Serves* (Slurm, Kubernetes, Both: an s-login, a k-login or a shared login), and two presets, *One shared login* and *Separate s-login and k-login*. **Optional parts**: toggles grouped by category as in the `--ticketing`, `--hardware` flags (accounting, Jira, BMC, BCM, Teleport, scenarios, load; each shows the memory limit it adds, and the toggles show what is built now). The summary lists the node counts per scheduler, the logins, the memory it needs against free memory, and the command for a terminal; on a phone it stacks under the cards. The memory bar reads like "1.7 GB needed of 4.5 GB free". The sheet shows the change against what runs now ("GPU nodes 2 → 3 (+1)") and the
 `benchctl up ...` command for a terminal. Editing the numbers only estimates. **Apply to the running workbench** (press
 twice: the second press confirms) asks the governor to rebuild it; new nodes start and nodes you no longer want are
 removed. See [choose the workbench](../guides/choose-workbench.md).
@@ -175,9 +175,7 @@ while an older one kept running). Restart it and reload:
 
 ## Scenarios
 
-Press **▶ Scenarios**, type in *Filter scenarios* if the list is long, pick a speed (one setting for all), press
-**▶ Play**, and watch each step turn ok, skipped or failed. **Stop** aborts. While one runs, the top strip shows it and
-pressing that chip reopens the sheet. The page has no Docker access by design, so its `slurm` steps (drain, resume, job and daemon steps)
+Press **▶ Scenarios** in the top strip: a panel docks on the right and the diagram stays in view. The run card is at the top (status, a progress bar, **Stop**, and the steps with the current one highlighted); below it is the library (type in *Filter scenarios*, pick a speed that applies to all, press **▶ Play** on a card; the running scenario's card is highlighted). Press the button again, or **✕ Close**, to hide it; it stays open across a reload. While one runs, the top strip also shows it, and pressing that chip opens the panel. The page has no Docker access by design, so its `slurm` steps (drain, resume, job and daemon steps)
 are done by the governor; one it refuses (memory level L2 and above) or cannot do (started without `--workdir`) shows **skipped** with the reason, and
 `./scripts/benchctl scenario run NAME` does it from the terminal. Tick **Slurm trace** before **▶ Play** to see, under the timeline, what the
 jobs and Slurm's logs did around each step ([Slurm resilience](../guides/slurm-resilience.md)).

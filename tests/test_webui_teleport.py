@@ -55,22 +55,23 @@ def test_the_diagram_is_called_infrastructure_architecture_and_can_draw_teleport
 
 def test_snapshot_carries_the_login_nodes_of_the_saved_workbench(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    assert cluster.saved_logins() == [{"name": "login", "mode": "ssh", "port": 2222}]   # nothing saved: the one login that takes a key
+    assert cluster.saved_logins() == [{"name": "login", "mode": "ssh", "kind": "both", "port": 2222}]   # nothing saved: the one login that takes a key
     f = tmp_path / "compose" / "generated" / "workbench.yaml"
     f.parent.mkdir(parents=True)
     f.write_text(yaml.safe_dump({"name": "w", "cpu_nodes": 1, "gpu_nodes": 0, "gpus_per_node": 8, "parts": ["jira", "teleport"],
-                                 "k8s_nodes": 0, "bmc_nodes": None, "login_nodes": ["both", "teleport", "ssh"]}))
-    assert cluster.saved_logins() == [{"name": "login", "mode": "both", "port": 2222}, {"name": "login2", "mode": "teleport", "port": None},
-                                      {"name": "login3", "mode": "ssh", "port": 2224}]  # a Teleport-only node publishes no port
+                                 "k8s_nodes": 0, "bmc_nodes": None, "login_nodes": ["both", "teleport:k8s", "ssh:slurm"]}))
+    assert cluster.saved_logins() == [{"name": "login", "mode": "both", "kind": "both", "port": 2222},
+                                      {"name": "login2", "mode": "teleport", "kind": "k8s", "port": None},
+                                      {"name": "login3", "mode": "ssh", "kind": "slurm", "port": 2224}]  # a Teleport-only node publishes no port
     f.write_text("not: [valid")
-    assert cluster.saved_logins() == [{"name": "login", "mode": "ssh", "port": 2222}]   # a broken file does not break the page
+    assert cluster.saved_logins() == [{"name": "login", "mode": "ssh", "kind": "both", "port": 2222}]   # a broken file does not break the page
 
 
 def test_the_diagram_draws_access_paths_and_every_part_has_a_tip_and_a_pop_up():
     html = Path("webui/static/index.html").read_text()
     for needle in ("'direct SSH'", "'jump host'", "'Teleport'", "MODE_TEXT", "loginList()",     # one labelled line per way in
                    'id="tip"', 'role="tooltip"', 'id="pop"', 'role="dialog"', "function openPop(", "function showTip(",
-                   'id="treetoggle"', "function setTree(", "workbench-tree"):                   # the node list folds away
+                   'id="subseg"', "function setTree(", "workbench-tree"):                   # the node list folds away
         assert needle in html, needle
 
 

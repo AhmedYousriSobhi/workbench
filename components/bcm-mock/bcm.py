@@ -33,6 +33,11 @@ def load_nodes(sim_yaml: Path) -> dict[str, dict]:
     for i in range(1, g.get("nodes", 0) + 1):
         out[f"{g['prefix']}{i:03d}"] = {"category": "gpu", "gpus": g["gpus_per_node"],
                                         "memory_mb": 2048 * g["gpus_per_node"], "cpus": 8 * g["gpus_per_node"]}
+    k = cfg.get("kubernetes") or {}
+    for grp in (k.get("nodes") or []) if k.get("enabled") else []:  # Kubernetes nodes are devices too, in their own categories
+        for i in range(1, int(grp.get("count", 0)) + 1):
+            out[f"{grp['prefix']}{i:03d}"] = {"category": "k8s-gpu" if grp.get("gpus") else "k8s-cpu", "gpus": int(grp.get("gpus", 0)),
+                                              "memory_mb": int(grp.get("memory_gb", 32)) * 1024, "cpus": int(grp.get("cpus", 8))}
     return out
 
 
@@ -49,7 +54,7 @@ class Cluster:
     def ip(self, name: str) -> str:
         kind = self.nodes[name]["category"]  # the same formula as benchctl/addressing.py host_ip (this file cannot import it)
         i = [n for n, v in self.nodes.items() if v["category"] == kind].index(name)
-        return f"10.141.{i // 254 + (100 if kind == 'gpu' else 0)}.{i % 254 + 1}"
+        return f"10.141.{i // 254 + {'gpu': 100, 'k8s-cpu': 200, 'k8s-gpu': 230}.get(kind, 0)}.{i % 254 + 1}"  # benchctl/addressing.py BLOCK
 
     def inject(self, req: dict) -> None:
         node = req["node"]

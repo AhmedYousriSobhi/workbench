@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import bring_up, wait_for
+from helpers import bring_up, release, wait_for
 
-from benchctl import checks, stack
+from benchctl import checks
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -46,7 +46,7 @@ def ui():
     yield base, h, proc
     proc.terminate()
     proc.wait(timeout=10)
-    stack.down(say=lambda m: None)
+    release()
 
 
 def api(base, h, path, method="GET"):

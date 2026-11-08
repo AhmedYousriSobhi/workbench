@@ -11,6 +11,7 @@ import hmac
 import json
 import re
 import threading
+import time
 from pathlib import Path
 
 import yaml
@@ -29,6 +30,7 @@ from starlette.routing import Route
 
 from benchctl import checks, nhc, scenario, slurmtrace
 
+from . import monitoring
 from .blast import payload as blast_payload
 from .cluster import ActionError, Cluster
 from .flow import PAUSE_LEVEL, Flow
@@ -182,14 +184,31 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         snap = await asyncio.to_thread(cluster.snapshot)
         return JSONResponse({**attach_graph(snap), "blast": blast_payload()})
 
+    def node_shapes(saved) -> dict:
+        """What one node of each kind is (the sheet shows it next to the counts), and the Kubernetes counts now in effect."""
+        from benchctl import k8s
+
+        groups = k8s.node_groups(sim)
+        kc = next((g for g in groups if not g.get("gpus")), {})
+        kg = next((g for g in groups if g.get("gpus")), {})
+        pick = lambda v, g: int(g.get("count", 0)) if v is None else v
+        return {"slurm_cpu": {"cpus": sim.get("compute", {}).get("cpus"), "memory_gb": round(sim.get("compute", {}).get("memory_mb", 0) / 1024, 1),
+                              "prefix": sim.get("compute", {}).get("prefix", "cn")},
+                "slurm_gpu": {"gpu_type": sim.get("gpu", {}).get("type", ""), "prefix": sim.get("gpu", {}).get("prefix", "gpu")},
+                "k8s_cpu": {"cpus": kc.get("cpus"), "memory_gb": kc.get("memory_gb"), "prefix": kc.get("prefix", "kcn"), "count": pick(saved.k8s_cpu_nodes if saved else None, kc)},
+                "k8s_gpu": {"cpus": kg.get("cpus"), "memory_gb": kg.get("memory_gb"), "gpus": kg.get("gpus"), "gpu_type": kg.get("gpu_type", ""),
+                            "prefix": kg.get("prefix", "kgpu"), "count": pick(saved.k8s_nodes if saved else None, kg)},
+                "bmc": {"groups": saved.bmc_groups if saved else None, "nodes": saved.bmc_nodes if saved else None}}
+
     def build_plan(q) -> tuple:
         """Blocking (file reads, a governor call): run it with asyncio.to_thread."""
         from benchctl import workbench
 
         try:
-            spec = workbench.from_dict({k: int(q[k]) for k in ("cpu_nodes", "gpu_nodes", "gpus_per_node") if k in q}
+            spec = workbench.from_dict({k: int(q[k]) for k in ("cpu_nodes", "gpu_nodes", "gpus_per_node", "k8s_nodes", "k8s_cpu_nodes") if k in q}
                                        | ({"parts": [p for p in q["parts"].split(",") if p]} if "parts" in q else {})
                                        | ({"bmc_nodes": [n for n in q["bmc_nodes"].split(",") if n]} if "bmc_nodes" in q else {})
+                                       | ({"bmc_groups": [g for g in q["bmc_groups"].split(",") if g]} if "bmc_groups" in q else {})
                                        | ({"login_nodes": [m for m in q["logins"].split(",") if m]} if "logins" in q else {}),
                                        workbench.defaults(sim))
         except (ValueError, workbench.SpecError) as e:
@@ -219,8 +238,9 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         except workbench.SpecError:
             saved = None
         return JSONResponse({"parts": workbench.catalog(built),
-                             "logins": {"modes": list(logins.MODES), "max": logins.MAX_LOGINS,
+                             "logins": {"modes": list(logins.MODES), "kinds": list(logins.KINDS), "max": logins.MAX_LOGINS,
                                         "now": saved.login_nodes if saved else logins.modes(sim)},
+                             "shapes": node_shapes(saved),
                              "nodes": nodes, "bmc_node_mb": compose.BMC_FORWARDER_MB,
                              "limits": {k: list(v) for k, v in workbench.LIMITS.items()}})
 
@@ -233,6 +253,9 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             f" --with {p}" for p in sorted(spec.parts)) + "".join(f" --without {p}" for p in workbench.PARTS if p not in spec.parts)
         if spec.bmc_nodes is not None:
             flags += f" --bmc-nodes {','.join(spec.bmc_nodes)}"
+        flags += "".join(f" {f} {getattr(spec, k)}" for k, f in (("k8s_nodes", "--k8s-nodes"), ("k8s_cpu_nodes", "--k8s-cpu-nodes")) if getattr(spec, k) is not None)
+        if spec.bmc_groups is not None:
+            flags += f" --bmc-groups {','.join(spec.bmc_groups)}"
         flags += f" --login {','.join(spec.login_nodes)} --app-mb 0"
         return JSONResponse({"fits": ok, "message": msg, "total_mb": est["total_mb"], "need_mb": est["need_mb"], "expected_mb": est["expected_mb"],
                              "running_mb": est["running_mb"], "available_mb": avail,
@@ -260,6 +283,9 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         if spec.bmc_nodes is not None:
             req["bmc_nodes"] = spec.bmc_nodes
         req["login_nodes"] = spec.login_nodes
+        if spec.bmc_groups is not None:
+            req["bmc_groups"] = spec.bmc_groups
+        req.update({k: getattr(spec, k) for k in ("k8s_nodes", "k8s_cpu_nodes") if getattr(spec, k) is not None})
         try:
             res = await asyncio.to_thread(checks.governor_request, req, socket)
         except (OSError, ValueError) as e:
@@ -408,6 +434,26 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             return None
         return res.get("trace") if res.get("ok") else None
 
+    slurm_stats_cache: list = [float("-inf"), None]
+
+    async def slurm_stats(request: Request):
+        """slurmctld's own request counts (sdiag), through the governor; cached 10 s so many tabs cost one exec."""
+        if time.monotonic() - slurm_stats_cache[0] > 10:
+            try:
+                res = await asyncio.to_thread(checks.governor_request, {"cmd": "slurm-stats"}, socket)
+            except (OSError, ValueError):
+                res = {}
+            slurm_stats_cache[:] = [time.monotonic(), res.get("stats") if res.get("ok") else None]
+        return JSONResponse({"stats": slurm_stats_cache[1]})
+
+    monitoring_cache: list = [float("-inf"), []]
+
+    async def monitoring_links(request: Request):
+        """Prometheus's own scrape results as Traffic links; cached 10 s, empty while Prometheus does not answer."""
+        if time.monotonic() - monitoring_cache[0] > 10:
+            monitoring_cache[:] = [time.monotonic(), await asyncio.to_thread(monitoring.links)]
+        return JSONResponse({"links": monitoring_cache[1]})
+
     async def node_workload(request: Request):
         """Submit a job on this node: the governor runs `benchctl submit` (the page has no Docker, W-3)."""
         q, node = request.query_params, request.path_params["node"]
@@ -502,6 +548,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/events", protected(events)),
             Route("/api/cluster", protected(cluster_state)),
             Route("/api/flow", protected(flow_events)),
+            Route("/api/slurm-stats", protected(slurm_stats)),
+            Route("/api/monitoring", protected(monitoring_links)),
             Route("/api/settings", protected(settings)),
             Route("/api/plan", protected(plan)),
             Route("/api/plan/apply", protected(plan_apply, write=True), methods=["POST"]),

@@ -7,9 +7,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import bring_up, exporter_up, wait_for
-
-from benchctl import stack
+from helpers import bring_up, exporter_up, release, wait_for
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -31,7 +29,7 @@ def cluster():
     assert wait_for(lambda: "gpu001" in slurm("sinfo", "-h", "-N", "-p", "gpu", "-t", "idle", "-o", "%N").stdout, timeout=90)
     assert wait_for(exporter_up, timeout=60), "the GPU exporter never answered"
     yield
-    stack.down(say=lambda m: None)
+    release()
 
 
 def test_a_job_makes_its_gpus_busy_and_ending_it_makes_them_idle(cluster):

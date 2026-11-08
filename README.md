@@ -23,7 +23,7 @@ anyone who wants a cluster to poke without a data centre.
 
 - *a fault outlines the parts a client would notice (blast radius, declared, not measured);*
 - *a **Lens** shows one plane at a time and **Client's eye** lists what a client called and what it got, from real counters only;*
-- *double-click a part to **focus** it and its neighbours; switch between **2.5D**, **Flat** and **Overview** (one card per cluster, double-click to dive in).*
+- *double-click a part to **focus** it and its neighbours; switch between **2.5D**, **Flat** and **Clusters** (one card per cluster, double-click to dive in).*
 
 ## 1. Wake it up (2 minutes, no sudo)
 

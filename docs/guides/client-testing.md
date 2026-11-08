@@ -22,7 +22,7 @@ never print or commit them).
 | BMC Redfish over TLS, certificate pinning | one address per node, `10.148.0.N:443` / `10.148.100.N:443` (fallback: one listener `127.0.0.1:8443`, node chosen by the `Host: bmc-<node>` header) | `admin` and the password in `secrets/bmc_credentials` | merged (ADR 0012); plain HTTP on `:8000` also remains. Inside the cluster network (login node, containers) the BMCs also answer on the standard `bmc-<node>:443`; on the host only `8443` is published (443 needs root) |
 | BCM (`cmsh` on a head node) | the login node is the head node: `cmsh -c "device; list"` over the same SSH connection | as for SSH | built (ADR 0013, #66); read-only, with a small interactive console (modes, list, status); node state follows bcm-mock and scenarios |
 | Teleport (`tsh login`, `tsh ssh`, ssh through the proxy) | proxy `10.141.255.30:3080` or `teleport.workbench.test:3080` (self-signed; `--insecure`), optional part: `benchctl up --with teleport` | identity file per user in `secrets/teleport/identity/`, or a password and one-time code set up through `benchctl add invite <user>` | built, review (ADR 0020, #39): agentless OpenSSH nodes; not simulated: agent extras, K8s/web/DB access. Your `tsh` major must not be newer than `teleport.version` |
-| Kubernetes | not built | | SPEC section 11 |
+| Kubernetes (`kubectl` over the SSH session: `get nodes\|pods\|events`, `get --raw /readyz`, `auth can-i`, `describe`, `logs`) | the login node: `kubectl` as `alice` or `bob` with `~/.kube/config` (read-only, cluster-wide) and `~/.kube/limited.yaml` (namespace `team-a` only), both mode 600 and owned by the user; the API server `https://10.141.255.40:6443` (fallback `127.0.0.1:6443`); optional part: `benchctl up --with k8s` | the kubeconfigs above (tokens in `secrets/k8s/`); the host copy `secrets/k8s/admin.kubeconfig` is for you, never for a client | built, review (ADR 0034, #232): a real API server, scheduler and controller manager; the nodes (`kcn001`, `kgpu001`...) are KWOK fakes with `nvidia.com/gpu` and GPU Feature Discovery labels, so pods never really run: no real pod logs (`kubectl logs` has nothing to show), no `exec`, no metrics-server (the client treats it as optional); failing pods get their status from KWOK stages. With `--login ssh:slurm,ssh:k8s` the Kubernetes entry is the k-login (`login2`) and the Slurm entry the s-login. **Exercised (issue 380):** `benchctl export profile` run through the client's own profile importer (the Kubernetes entry gets `k8s`: enabled, interval, workload signals, `poolLabel pool`; host and kubeconfig stay yours), and the commands it runs (`get nodes -o json`, `get pods -A`, `get events -A`, `get --raw /readyz?verbose`, `/version`, `auth can-i`, `config view --minify`, `describe pod`, Deployments, Jobs, PVCs, DaemonSets, ResourceQuotas, HPAs) as `alice` over SSH on the k-login: all answer; the metrics API answers 404, which the client treats as optional. **Not exercised:** the client's own screens (Discover step, Nodes and GPUs tabs, notifications): they need the desktop app, run by you |
 
 If port 2222 refuses connections, the checkout is probably on a branch without the login node; that is not a client bug.
 
@@ -57,7 +57,7 @@ If port 2222 refuses connections, the checkout is probably on a branch without t
 
 ## Stress test: everything at once while the client runs
 
-`benchctl scenario run client-stress` (5 minutes, [scenarios/client-stress.yaml](../../scenarios/client-stress.yaml)) floods five nodes with jobs, raises GPU XID errors and fan failures, heats a GPU node, powers off and drains `cn004`, files 12 tickets, then makes the Jira mock answer 429, slow and 503 before clearing everything. With the client connected to the real Jira (`jira-real`), run `client-stress-real` instead: same nodes, GPUs, heat and jobs, but Jira's own rate limit (429, about 75 to 180 s), a CAPTCHA lock for one user (use a personal access token for the client's own account, or it is locked out too) and a 30 s hang. It files no tickets. Run it with the client open and measure the client at the same time (use a `--match` that names only the client's own processes, such as its install path; a loose word such as `name` matches unrelated programs. The tool prints `matched: <program> xN (MB)` before it samples and warns when more than 4 different programs match; read that line before `--save`):
+`benchctl scenario run client-stress` (5 minutes, [scenarios/client-stress.yaml](../../scenarios/client-stress.yaml)) floods five nodes with jobs, raises GPU XID errors and fan failures, heats a GPU node, powers off and drains `cn004`, files 12 tickets, then makes the Jira mock answer 429, slow and 503 before clearing everything. With the client connected to the real Jira (`jira-real`), run `client-stress-real` instead: same nodes, GPUs, heat and jobs, but Jira's own rate limit (429, about 75 to 180 s), a CAPTCHA lock for one user (use a personal access token for the client's own account, or it is locked out too) and a 30 s hang. It files its 12 tickets on the real Jira (only tickets made in the last 10 minutes are counted, so a repeat run does not add up). Run it with the client open and measure the client at the same time (use a `--match` that names only the client's own processes, such as its install path; a loose word such as `name` matches unrelated programs. The tool prints `matched: <program> xN (MB)` before it samples and warns when more than 4 different programs match; read that line before `--save`):
 
 ```bash
 ./scripts/benchctl scenario run client-stress &
@@ -139,7 +139,7 @@ engine's targets, not in ad hoc `docker exec` commands.
 
 ## Known gaps
 
-Kubernetes is not built; Teleport is SSH access only (no dynamic labels, session recording or sharing); the fake `cmsh` console is a read-only subset.
+Kubernetes has no real kubelet (no pod logs, no metrics-server) and is not reachable through Teleport; Teleport is SSH access only (no dynamic labels, session recording or sharing); the fake `cmsh` console is a read-only subset.
 The full list is the roadmap, issue #69.
 
 ## After the dashboard or the plan changes
@@ -193,8 +193,6 @@ Scenarios behave the same: one `bmc-farm` `power: "Off"` step takes the node dow
 Results of the run against the real Jira (setup, every number, what was not exercised): [client-test-report-real-jira.md](client-test-report-real-jira.md). A scenario can be run by its reference: `benchctl scenario run SC-02` (the list shows them).
 
 ## Open items after the real Jira run
-- [#305](https://github.com/AhmedYousriSobhi/workbench/issues/305) a real slow and 503 answer from Jira (fault proxy)
-- [#306](https://github.com/AhmedYousriSobhi/workbench/issues/306) tickets and a ticket check on the real Jira in `client-stress-real`
-- [#307](https://github.com/AhmedYousriSobhi/workbench/issues/307) token revoke fault (a real 401 for a token)
+- Built, not yet run against the client: a real slow, 503 and 429 through the fault proxy (#305, SC-28, the client must use `127.0.0.1:8084`), tickets and a ticket check on the real Jira in `client-stress-real` (#306), and the token revoke fault (#307, SC-29)
 - [#308](https://github.com/AhmedYousriSobhi/workbench/issues/308) verify the client's Jira panel under the real faults
 - [#309](https://github.com/AhmedYousriSobhi/workbench/issues/309) script the client stress run

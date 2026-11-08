@@ -114,7 +114,7 @@ The first node is `login`, then `login2`, `login3`, ... (addresses 10.141.255.25
 login: [ssh, teleport]
 ```
 
-or in the page: **☰ Menu → ▦ Cluster architecture → Login nodes** (**Add login node**, pick *Direct SSH*, *Teleport only* or *Direct SSH and Teleport* for each, **Apply**).
+or in the page: **left nav → ⚙ Cluster architecture → Login nodes** (**Add login node**, pick *Direct SSH*, *Teleport only* or *Direct SSH and Teleport* for each, **Apply**).
 
 ![The Cluster architecture sheet: three login nodes, each with its own way in](img/web-login-nodes.png)
 
@@ -125,10 +125,12 @@ or in the page: **☰ Menu → ▦ Cluster architecture → Login nodes** (**Add
 **3. Use them.**
 
 ```bash
-ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1       # login   (ssh or both)
+ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2222 alice@127.0.0.1       # login   (ssh or both)
 ID=compose/generated/secrets/teleport/identity/alice
 tsh --proxy=10.141.255.30:3080 --insecure -i $ID ssh alice@login2                 # login2  (teleport or both)
 ```
+
+`-o IdentitiesOnly=yes` matters if you use `ssh-agent`: without it ssh offers every agent key first, and the server ends the login after six ("Too many authentication failures") before the cluster key is tried.
 
 A key offered to a `teleport` node is refused (`Permission denied`), and it has no published port. A node set to `ssh` is not registered in Teleport, so `tsh ls` does not list it. Fewer login nodes than before: the extra containers are removed on the next `up`. The client profile export (`benchctl export profile`) uses the first node that takes a key.
 
@@ -147,7 +149,7 @@ the Teleport CA (Teleport's agentless OpenSSH mode); no Teleport process runs on
 ./scripts/benchctl up --with teleport             # the same on a running cluster, without the page
 ```
 
-or in the page: **☰ Menu → ▦ Cluster architecture → Access → Teleport → Apply** (press twice to confirm), see [the web page](05-web-page.md#teleport-from-the-page). Then check it: the `teleport` card in the entity list says `answering`.
+or in the page: **left nav → ⚙ Cluster architecture → Access → Teleport → Apply** (press twice to confirm), see [the web page](05-web-page.md#teleport-from-the-page). Then check it: the `teleport` card in the entity list says `answering`.
 
 **2. Reach it with an identity file.** Nothing to set up: one file per user in `sim.yaml`, valid for `teleport.cert_ttl` (12 h by default; `benchctl up` writes fresh ones).
 
@@ -179,6 +181,37 @@ The web UI is at `https://10.141.255.30:3080` (same login). The proxy has its ow
 **The same Teleport cluster survives a rebuild** (see *Keep or reset the Teleport cluster* below). **A login or compute node you drop is forgotten.** `benchctl up` removes the Teleport registration and the host certificate of every node the workbench no longer has, so `tsh ls` lists only what exists (before this, a dropped `login2` stayed registered and a dial failed with *no route to host*). **Your password survives `up`.** `benchctl up` creates a Teleport user only when it does not exist yet, so the password and one-time code you chose from an invite stay. (Before this fix every `up` replaced the users and `tsh login` then said *invalid username or password*; run `benchctl add invite <user>` once to set them again.) **Good to know.** A Teleport container created before the page showed Teleport has no diagnostics port yet, so the card says `not answering` and no dots appear; run `./scripts/benchctl up --with teleport` once to recreate it. Your `tsh` must not be a newer major version than the server (`teleport.version` in `sim.yaml`, default 18.x); use a separate
 `TELEPORT_HOME` if you keep other Teleport profiles. Not simulated: the Teleport agent's extras (dynamic labels, session
 recording that survives a dropped connection, session sharing), Kubernetes, web and database access.
+
+### Kubernetes (optional part)
+
+`./scripts/benchctl up --with k8s` (or `--workload kubernetes`) adds a real Kubernetes control plane (etcd, API server,
+scheduler, controller manager) and KWOK, which plays the nodes. About 0.3 GB of memory. The nodes are fake and separate from the
+Slurm nodes: `kcn001`, `kcn002` (CPU) and `kgpu001`, `kgpu002` (8 GPUs each, labelled as GPU Feature Discovery does); change them
+under `kubernetes:` in `sim.yaml`, or set the counts with `--k8s-nodes N` (GPU nodes) and `--k8s-cpu-nodes N`, or in the page (Cluster architecture). Pods never really run, so there are no real pod
+logs; a pod labelled `workbench_fault` (the fixtures have crash-looping, OOM-killed, image-pull and failed-job ones) shows the status a kubelet
+would report. The first start pulls about 400 MB of images.
+
+**s-login and k-login.** A login node can serve one scheduler: add `:slurm` or `:k8s` to its mode. An s-login has the Slurm tools and no
+kubeconfig; a k-login has `kubectl` and the kubeconfigs and no Slurm configuration. A bare `ssh` serves both (as before). The Cluster
+architecture sheet has a second list per login node, and the diagram draws the Slurm nodes and the Kubernetes nodes as separate groups,
+each login pointing at the group it serves (`jump host` for Slurm, `kubectl` for Kubernetes):
+
+```bash
+./scripts/benchctl up --with k8s --login ssh:slurm,ssh:k8s      # login = s-login, login2 = k-login
+ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2223 alice@127.0.0.1 kubectl get nodes
+```
+
+From a login node a user has `kubectl` and a read-only kubeconfig (`~/.kube/config`, cluster-wide) and a namespace-limited one
+(`~/.kube/limited.yaml`, only `team-a`):
+
+```bash
+ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2222 alice@127.0.0.1 kubectl get nodes
+ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2222 alice@127.0.0.1 kubectl get pods -A
+```
+
+You, the administrator, have `compose/generated/secrets/k8s/admin.kubeconfig` (API on `127.0.0.1:6443`); never hand it to a client.
+Faults: scenarios `k8s-node-notready` (a GPU node reports NotReady, then recovers) and `pod-crashloop`
+([chapter 6](06-scenarios.md)). Not built: a real node (real pod logs), metrics-server, Kubernetes through Teleport. See ADR 0034.
 
 ### Keep or reset the Teleport cluster
 

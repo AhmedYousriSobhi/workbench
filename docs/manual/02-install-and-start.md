@@ -5,7 +5,7 @@
 - Ubuntu with cgroup v2, a kernel that exposes memory PSI (`/proc/pressure/memory`), 16 GB RAM, free disk for images.
 - Docker (daemon and compose plugin) that **your user** can run without `sudo`.
 - Python 3.11 or newer (Ubuntu's `python3`; there is no `python`).
-- Optional: KVM and libvirt for the fidelity VM; `k3d` and `kubectl` once Kubernetes lands.
+- Optional: KVM and libvirt for the fidelity VM. Kubernetes needs no tool on the host: `kubectl` runs from the official image.
 
 Check all of this before building anything:
 

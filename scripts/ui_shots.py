@@ -45,9 +45,16 @@ def capture(out: Path) -> dict:
         url = proc.stdout.readline().split("UI: ")[1].strip() + "?token=" + (ROOT / "compose/generated/secrets/ui_token").read_text().strip()  # the log line has no token (#346)
         with sync_playwright() as p:
             browser = p.chromium.launch()
+            first = browser.new_page(viewport={"width": 1280, "height": 900}, color_scheme="light")  # nothing stored: dark first
+            first.goto(url)
+            first.wait_for_timeout(500)
+            if first.evaluate("document.documentElement.dataset.theme") != "midnight":
+                result["a11y"].append("a first visit does not start in the dark theme")
+            first.close()
             for scheme in ("light", "dark"):
                 for vp, (w, h) in VIEWPORTS.items():
                     page = browser.new_page(viewport={"width": w, "height": h}, color_scheme=scheme)
+                    page.add_init_script("localStorage.setItem('workbench-theme','auto')")  # the shots follow the system scheme; the default is checked above
                     page.on("console", lambda m, r=result: r["console_errors"].append(m.text) if m.type == "error" else None)
                     page.on("pageerror", lambda e, r=result: r["console_errors"].append(str(e)))
                     deadline = time.time() + 15
@@ -85,6 +92,28 @@ def capture(out: Path) -> dict:
                     page.click("#theme")
                     if page.evaluate("document.documentElement.dataset.theme") != "dark":
                         result["a11y"].append("theme toggle did not switch to dark")
+                    page.click("#tb-traffic")  # documented links, real or simulated, observed or configured
+                    page.wait_for_selector("#tr-rows tr td:nth-child(3)", state="attached")
+                    tpath = out / f"traffic-{vp}-{scheme}.png"
+                    page.screenshot(path=str(tpath), full_page=True)
+                    result["shots"].append(str(tpath))
+                    if page.locator("#tr-rows tr").count() < 5:
+                        result["a11y"].append("traffic tab lists fewer than 5 links")
+                    page.click("#tr-chips [data-plane] >> nth=1")  # a plane chip narrows the rows, All restores them
+                    if page.locator("#tr-rows tr").count() >= page.evaluate("trRows.length") + 1:
+                        result["a11y"].append("plane chip did not narrow the links")
+                    page.click("#tr-chips [data-plane=all]")
+                    page.click("#tr-zin")
+                    if page.evaluate("trZoom") <= 1:
+                        result["a11y"].append("zoom in did nothing")
+                    page.click("#tr-zfit")
+                    page.click("#tr-map [data-link] >> nth=0", force=True)  # inspector, then the path through that link
+                    page.wait_for_selector("#tr-insp:not([hidden])")
+                    page.click("#tr-follow")
+                    page.wait_for_selector("#tr-path:not([hidden])")
+                    if page.locator("#tr-rows tr").count() < 1:
+                        result["a11y"].append("following a path left no links")
+                    page.click("#tr-clear")
                     page.click("#tb-conn")  # connections tab: every entity listed with an address and a credential location
                     page.wait_for_selector("#conn-rows tr td code")
                     cpath = out / f"connections-{vp}-{scheme}.png"
@@ -137,10 +166,10 @@ def capture(out: Path) -> dict:
                         page.mouse.move(2, 2)
                         page.evaluate(SYNTH_CLUSTER)  # with the stack down (a --full run, after the other modules tore theirs down) the list is hidden for want of nodes
                         page.wait_for_timeout(300)
-                        page.click("#treetoggle")  # the node list folds away, the diagram keeps the width
+                        page.click("[data-sub=topo]")  # the node list folds away, the diagram keeps the width
                         if page.locator("#nodesmain:visible").count() != 0:
                             result["a11y"].append("the node list did not fold away")
-                        page.click("#treetoggle")
+                        page.click("[data-sub=all]")
                         if page.locator("#nodesmain:visible").count() != 1:
                             result["a11y"].append("the node list did not come back")
                     if vp == "phone" and page.evaluate("document.querySelector('#nodeswrap').getBoundingClientRect().width < 300 || getComputedStyle(document.querySelector('#nodeswrap')).gridTemplateColumns.split(' ').length > 1"):
@@ -162,7 +191,6 @@ def capture(out: Path) -> dict:
                     page.keyboard.press("Escape")
                     if page.locator("#menu:visible").count() or page.evaluate("document.activeElement.id") != "menubtn":
                         result["a11y"].append("Escape must close the menu and return focus to the Menu button")
-                    page.click("#menubtn")
                     page.click("#scnbtn")  # scenarios sheet: list, filter, play buttons
                     page.wait_for_selector("#list .btn")
                     spath = out / f"scenarios-{vp}-{scheme}.png"
@@ -171,7 +199,6 @@ def capture(out: Path) -> dict:
                     page.click("#scn-close")
                     if page.locator("#scndlg[open]").count():
                         result["a11y"].append("scenarios sheet did not close")
-                    page.click("#menubtn")
                     page.click("#planbtn")  # planner sheet: opens, estimates, reacts to a stepper press, shows the command
                     page.wait_for_function("document.querySelector('#pl-msg').textContent.length > 5")
                     page.click("[data-step=pl-cpu][data-d='-1']")

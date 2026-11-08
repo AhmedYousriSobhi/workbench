@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import bring_up, wait_for
+from helpers import bring_up, release, wait_for
 
 from benchctl import compose, stack
 
@@ -31,7 +31,7 @@ def login():
     bring_up(sim)
     assert wait_for(lambda: ssh("true").returncode == 0, timeout=45), ssh("true").stderr
     yield sim
-    stack.down(say=lambda m: None)
+    release()
 
 
 def test_slurm_tools_work_over_a_non_interactive_session(login):
