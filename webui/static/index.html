@@ -2060,16 +2060,17 @@ function paintTrTimeline(links) {
 $('tr-range').onclick = e => { const b = e.target.closest('[data-s]'); if (!b) return; trRange = +b.dataset.s; $('tr-range').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); paintTraffic(); };
 let trOff = {}; try { trOff = JSON.parse(localStorage.getItem('workbench-tr-layout5') || '{}'); } catch (e) { /* default layout */ }
 let trRows = [], trGhosts = [];
-function saveTrLayout() { try { localStorage.setItem('workbench-tr-layout5', JSON.stringify(trOff)); } catch (e) { /* not remembered */ } }
+let trOrd = {}; try { trOrd = JSON.parse(localStorage.getItem('workbench-tr-order1') || '{}'); } catch (e) { /* default order */ }
+function saveTrLayout() { try { localStorage.setItem('workbench-tr-layout5', JSON.stringify(trOff)); localStorage.setItem('workbench-tr-order1', JSON.stringify(trOrd)); } catch (e) { /* not remembered */ } }
 // auto layout from the links on show (groups with no link are left out, columns close up); a dragged group keeps its offset; lines are routed from the final positions
 function paintTrafficMap(rows, ghosts = []) {
   trRows = rows; trGhosts = ghosts;
   const svg = $('tr-map'), links = rows.map(r => r.l), live = new Set(links.flatMap(l => [l.from, l.to])), ids = new Set([...live, ...TR_GROUPS.flatMap(g => g[4])]);
   svg.replaceChildren();
   $('tr-legend').innerHTML = [...new Set(links.map(l => l.plane))].map(p => `<span class="trkey"><i style="background:${PLANE_STYLE[p]?.[0] || '#8da2ff'}"></i>${esc(p)}</span>`).join('') + '<span class="dim">Arrows run from the caller to the part called; moving dots mean the far end answers; the number is the port; grayed: not in this cluster, or not readable here. Drag a group (or use the arrow keys) to move it.</span>';
-  $('tr-reset').hidden = !Object.keys(trOff).length;
+  $('tr-reset').hidden = !Object.keys(trOff).length && !Object.keys(trOrd).length;
   const known = new Set(TR_GROUPS.flatMap(g => g[4])), other = [...ids].filter(i => !known.has(i)), groups = [...TR_GROUPS, ...(other.length ? [['Other', 1, 1, '#8da2ff', other]] : [])]
-    .map(([title, c, r, col, parts]) => ({ title, c, r, col, parts: parts.filter(p => ids.has(p)) })).filter(g => g.parts.length);
+    .map(([title, c, r, col, parts]) => ({ title, c, r, col, parts: parts.filter(p => ids.has(p)).sort((a, b) => (trOrd[title]?.indexOf(a) ?? -1) - (trOrd[title]?.indexOf(b) ?? -1) || 0) })).filter(g => g.parts.length);
   const GW = 170, PH = 40, HEAD = 30, GAPX = 140, GAPY = 40, M = 30, pos = {};
   groups.forEach(g => { g.h = HEAD + g.parts.length * (PH + 6) + 8; });
   const rowH = {}; groups.filter(g => g.r % 1 === 0).forEach(g => { rowH[g.r] = Math.max(rowH[g.r] || 0, g.h); });
@@ -2094,6 +2095,7 @@ function paintTrafficMap(rows, ghosts = []) {
       const ic = sv('path', { d: TR_ICON[PART_ICON[id] || 'cube'], transform: `translate(${g.x + 18} ${py + PH / 2 - 8})`, fill: 'none', stroke: g.col, 'stroke-width': 1.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: gone ? 0.4 : 1, 'pointer-events': 'none' });
       svg.append(ic);
       svg.append(sv('text', { x: g.x + 42, y: py + PH / 2 + 5, fill: 'currentColor', 'font-size': 14, 'opacity': gone ? 0.4 : 1, 'pointer-events': 'none' }, (gone || up === undefined ? '' : up ? '✓ ' : '✗ ') + (id.length > 14 ? id.slice(0, 13) + '…' : id)));
+      svg.append(sv('rect', { class: 'trpart', 'data-part': id, 'data-of': g.title, tabindex: 0, role: 'button', 'aria-label': `${id}: drag up or down, or press Alt+Up or Alt+Down, to reorder inside ${g.title}`, x: g.x + 10, y: py, width: GW - 20, height: PH, fill: 'transparent', style: 'cursor:ns-resize' }));
     });
   });
   // polyline routing: a short stub out of the box, a straight run to a stub into the target; a run that would cross a group goes along the gap between rows instead
@@ -2157,7 +2159,20 @@ function paintTrafficMap(rows, ghosts = []) {
     if (!g || !d) return; e.preventDefault(); const t = g.dataset.group; move(t, d[0], d[1]); saveTrLayout(); svg.querySelector(`[data-group="${CSS.escape(t)}"]`)?.focus();
   });
   $('tr-move').onclick = () => { const on = !svg.classList.contains('moving'); svg.classList.toggle('moving', on); $('tr-move').setAttribute('aria-pressed', on); };
-  $('tr-reset').onclick = () => { trOff = {}; saveTrLayout(); paintTrafficMap(trRows, trGhosts); };
+  // reorder the parts of a group: drag one up or down inside its group, or Alt+Up / Alt+Down; the order is remembered in this browser
+  const order = t => trRows.length ? Array.from(svg.querySelectorAll(`[data-part][data-of="${CSS.escape(t)}"]`), r => r.dataset.part) : [];
+  const shift = (id, t, to) => { const o = order(t), i = o.indexOf(id), j = Math.max(0, Math.min(o.length - 1, to)); if (i < 0 || i === j) return false; o.splice(j, 0, o.splice(i, 1)[0]); trOrd[t] = o; paintTrafficMap(trRows, trGhosts); return true; };
+  let pd = null;
+  svg.addEventListener('pointerdown', e => { const r = e.target.closest('[data-part]'); if (!r) return; pd = { id: r.dataset.part, t: r.dataset.of, y: e.clientY }; svg.setPointerCapture(e.pointerId); });
+  svg.addEventListener('pointermove', e => { if (!pd) return; const k = svg.viewBox.baseVal.width / svg.getBoundingClientRect().width, step = ((40 + 6)) / k, i = order(pd.t).indexOf(pd.id), n = Math.round((e.clientY - pd.y) / step); if (n && shift(pd.id, pd.t, i + n)) pd.y += n * step; });
+  const stopPart = () => { if (pd) { pd = null; saveTrLayout(); } };
+  svg.addEventListener('pointerup', stopPart); svg.addEventListener('pointercancel', stopPart);
+  svg.addEventListener('keydown', e => {
+    const r = e.target.closest?.('[data-part]'); if (!r || !e.altKey || !['ArrowUp', 'ArrowDown'].includes(e.key)) return;
+    e.preventDefault(); const id = r.dataset.part, t = r.dataset.of; if (shift(id, t, order(t).indexOf(id) + (e.key === 'ArrowUp' ? -1 : 1))) saveTrLayout();
+    svg.querySelector(`[data-part="${CSS.escape(id)}"]`)?.focus();
+  });
+  $('tr-reset').onclick = () => { trOff = {}; trOrd = {}; saveTrLayout(); paintTrafficMap(trRows, trGhosts); };
 })();
 // the right-hand inspector: one link's facts, a rate chart from the counter samples taken while the tab is open
 function rateChart(hist) {
