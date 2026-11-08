@@ -219,7 +219,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         except workbench.SpecError:
             saved = None
         return JSONResponse({"parts": workbench.catalog(built),
-                             "logins": {"modes": list(logins.MODES), "max": logins.MAX_LOGINS,
+                             "logins": {"modes": list(logins.MODES), "kinds": list(logins.KINDS), "max": logins.MAX_LOGINS,
                                         "now": saved.login_nodes if saved else logins.modes(sim)},
                              "nodes": nodes, "bmc_node_mb": compose.BMC_FORWARDER_MB,
                              "limits": {k: list(v) for k, v in workbench.LIMITS.items()}})

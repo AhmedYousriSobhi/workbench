@@ -10,6 +10,7 @@ This module generates what the services need (a PKI, kubeconfigs, the node manif
 applies the cluster content once the API server answers. It runs `kubectl` from the official image, so no tool needs
 installing on the host."""
 import base64
+import json
 import os
 import re
 import secrets
@@ -275,6 +276,50 @@ def api_ready(ips: dict, timeout: float = 90, sleep: Callable[[float], None] = t
             pass
         sleep(1)
     return False
+
+
+def viewer_token() -> str | None:
+    """The read-only user's token, from the file the API server reads (the page uses only this one, never the admin)."""
+    try:
+        for line in (SECRETS_DIR / "tokens.csv").read_text().splitlines():
+            tok, _, rest = line.partition(",")
+            if rest.startswith("viewer,"):
+                return tok
+    except OSError:
+        pass
+    return None
+
+
+def api_json(path: str, timeout: float = 2.0):
+    """GET one API path on the published localhost port as `viewer`; None when the API or the token is not there."""
+    tok = viewer_token()
+    if not tok:
+        return None
+    ctx = ssl.create_default_context(cafile=str(SECRETS_DIR / "ca.crt"))
+    ctx.check_hostname = False  # the certificate names the cluster addresses, and 127.0.0.1 is the published fallback
+    req = urllib.request.Request(f"https://127.0.0.1:{API_PORT}{path}", headers={"Authorization": f"Bearer {tok}"})
+    try:
+        with urllib.request.urlopen(req, context=ctx, timeout=timeout) as r:
+            return json.load(r)
+    except (OSError, ValueError):
+        return None
+
+
+def node_rows(sim: dict, fetch: Callable = api_json) -> list[dict]:
+    """The Kubernetes nodes as the page's node cards: `[{name, kind: "k8s", gpus, state, label}]`, state from the live API
+    (Ready, NotReady, cordoned) or `unknown` when it does not answer. Nodes come from sim.yaml, so a missing one is shown."""
+    live = {}
+    got = fetch("/api/v1/nodes")
+    for item in (got or {}).get("items", []) if isinstance(got, dict) else []:
+        conds = {c.get("type"): c.get("status") for c in item.get("status", {}).get("conditions", [])}
+        live[item["metadata"]["name"]] = (conds.get("Ready"), bool(item.get("spec", {}).get("unschedulable")))
+    rows = []
+    for name, g in node_list(sim):
+        ready, cordon = live.get(name, (None, False))
+        state, label = (("unknown", "No data") if not got else ("down", "Not in the cluster") if name not in live else
+                        ("fault", "NotReady") if ready != "True" else ("warn", "Cordoned (no new pods)") if cordon else ("ok", "Ready"))
+        rows.append({"name": name, "kind": "k8s", "gpus": int(g.get("gpus", 0)), "state": state, "label": label})
+    return rows
 
 
 def bootstrap(sim: dict, ips: dict, say: Callable[[str], None] = print, runner: Callable = _run, ready: Callable = api_ready,

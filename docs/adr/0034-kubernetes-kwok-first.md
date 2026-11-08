@@ -115,8 +115,12 @@ Decided with the owner while building; each can be changed later.
 - **Access.** A static token file gives two users: `viewer` (a read-only ClusterRole, cluster-wide) and `limited` (read of pods and
   events in `team-a`). Every login node gets both kubeconfigs and `login.sh` installs them in each simulated user's `~/.kube`
   (owned by the user, mode 600, the check a client makes). The administrator's certificate stays on the host.
-- **Simplification of the k-login idea:** in phase 1 every login node gets `kubectl` when the part is on; a separate
-  `k-login` with its own `scheduler:` attribute (C-18) is still to do.
+- **s-login and k-login (issue 380).** A login entry is `MODE[:KIND]`, KIND `slurm`, `k8s` or `both` (default, as before). An s-login
+  has no kubeconfig mount; a k-login has no `/etc/slurm` mount and does not wait for slurmctld; a k-login needs the `k8s` part (the
+  CLI and the sheet turn it on). It is an attribute of the login entry, not a separate image. The diagram groups the Kubernetes nodes
+  apart from the Slurm nodes (the page reads their state from the API as the read-only user), and the graph has `login>k8s-nodes:kubectl`
+  next to `login>nodes:jump`. Printed ssh commands carry `-o IdentitiesOnly=yes`: with several keys in ssh-agent, sshd ended the login
+  after six offers.
 - **Node names** are separate from the Slurm nodes (`kcn001`, `kgpu001`); `--k8s-nodes N` sets the GPU node count.
 - **Phase 2 candidates:** one real k3s or kind worker for real CPU pods and pod logs (privileged container, own ADR),
   metrics-server, Kubernetes through Teleport, a k-login node, the Infrastructure architecture diagram.

@@ -125,10 +125,12 @@ or in the page: **☰ Menu → ▦ Cluster architecture → Login nodes** (**Add
 **3. Use them.**
 
 ```bash
-ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1       # login   (ssh or both)
+ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2222 alice@127.0.0.1       # login   (ssh or both)
 ID=compose/generated/secrets/teleport/identity/alice
 tsh --proxy=10.141.255.30:3080 --insecure -i $ID ssh alice@login2                 # login2  (teleport or both)
 ```
+
+`-o IdentitiesOnly=yes` matters if you use `ssh-agent`: without it ssh offers every agent key first, and the server ends the login after six ("Too many authentication failures") before the cluster key is tried.
 
 A key offered to a `teleport` node is refused (`Permission denied`), and it has no published port. A node set to `ssh` is not registered in Teleport, so `tsh ls` does not list it. Fewer login nodes than before: the extra containers are removed on the next `up`. The client profile export (`benchctl export profile`) uses the first node that takes a key.
 
@@ -189,12 +191,22 @@ under `kubernetes:` in `sim.yaml`, or set the GPU node count with `--k8s-nodes N
 logs; a pod labelled `workbench_fault` (the fixtures have crash-looping, OOM-killed, image-pull and failed-job ones) shows the status a kubelet
 would report. The first start pulls about 400 MB of images.
 
+**s-login and k-login.** A login node can serve one scheduler: add `:slurm` or `:k8s` to its mode. An s-login has the Slurm tools and no
+kubeconfig; a k-login has `kubectl` and the kubeconfigs and no Slurm configuration. A bare `ssh` serves both (as before). The Cluster
+architecture sheet has a second list per login node, and the diagram draws the Slurm nodes and the Kubernetes nodes as separate groups,
+each login pointing at the group it serves (`jump host` for Slurm, `kubectl` for Kubernetes):
+
+```bash
+./scripts/benchctl up --with k8s --login ssh:slurm,ssh:k8s      # login = s-login, login2 = k-login
+ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2223 alice@127.0.0.1 kubectl get nodes
+```
+
 From a login node a user has `kubectl` and a read-only kubeconfig (`~/.kube/config`, cluster-wide) and a namespace-limited one
 (`~/.kube/limited.yaml`, only `team-a`):
 
 ```bash
-ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1 kubectl get nodes
-ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1 kubectl get pods -A
+ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2222 alice@127.0.0.1 kubectl get nodes
+ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2222 alice@127.0.0.1 kubectl get pods -A
 ```
 
 You, the administrator, have `compose/generated/secrets/k8s/admin.kubeconfig` (API on `127.0.0.1:6443`); never hand it to a client.

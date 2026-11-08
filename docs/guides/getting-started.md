@@ -126,8 +126,8 @@ docker exec -u alice -it workbench-gpu001-1 bash                  # the same, as
 For tools that connect over SSH (a desktop monitoring client), `benchctl up` starts a `login` container (more login nodes, and Teleport-only ones: `benchctl up --login ssh,teleport`, see [Nodes and shells](../manual/04-nodes-and-shells.md#login-nodes-how-many-and-how-each-one-lets-you-in)) on `127.0.0.1:2222` with key login only and the Slurm client tools on PATH; the key is `compose/generated/secrets/ssh/id_ed25519` (ADR 0011):
 
 ```bash
-ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1 sinfo
-ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1 ssh cn001 hostname   # a hop to a node
+ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2222 alice@127.0.0.1 sinfo
+ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2222 alice@127.0.0.1 ssh cn001 hostname   # a hop to a node
 ```
 
 A client that only accepts keys under `~/.ssh` can use `./scripts/benchctl ssh-key install` (copies the key to `~/.ssh/workbench_ed25519`) and `./scripts/benchctl ssh-key remove` afterwards.

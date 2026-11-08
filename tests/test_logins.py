@@ -139,3 +139,73 @@ def test_the_sheet_has_a_login_row_and_sends_the_modes():
     html = (ROOT / "webui/static/index.html").read_text()
     assert 'id="pl-loginrows"' in html and "q.set('logins', loginModes.join(','))" in html
     assert "LOGIN_LABEL = { ssh: 'Direct SSH', teleport: 'Teleport only', both: 'Direct SSH and Teleport' }" in html
+
+
+# ---- s-login and k-login (issue 380): MODE[:KIND] ----
+def test_an_entry_may_name_the_scheduler_it_serves():
+    assert logins.parse("ssh:slurm,ssh:k8s,teleport") == ["ssh:slurm", "ssh:k8s", "teleport"]
+    s = sim("ssh:slurm", "teleport:k8s", "both")
+    assert logins.nodes(s) == [("login", "ssh"), ("login2", "teleport"), ("login3", "both")]   # auth modes: everything that used them is unchanged
+    assert logins.kinds(s) == {"login": "slurm", "login2": "k8s", "login3": "both"}            # no kind = both, as before
+    assert [n for n, _ in logins.direct(s)] == ["login", "login3"] and logins.via_teleport(s) == ["login2", "login3"]
+    assert logins.serves("ssh:k8s", "k8s") and not logins.serves("ssh:k8s", "slurm") and logins.serves("ssh", "slurm") and logins.serves("ssh", "k8s")
+    with pytest.raises(logins.LoginError, match=r"unknown login type 'k8x' in 'ssh:k8x'. Did you mean 'k8s'"):
+        logins.parse("ssh:k8x")
+    assert logins.problems(sim("ssh:k8s"), {"teleport"}) == ["login node login is a k-login (Kubernetes) but the k8s part is off (add --with k8s)"]
+    assert logins.problems(sim("ssh:k8s"), {"k8s"}) == [] and logins.problems(sim("ssh:slurm"), set()) == []
+
+
+def test_compose_gives_an_s_login_no_kubeconfig_and_a_k_login_no_slurm_configuration():
+    s = {**sim("ssh:slurm", "ssh:k8s", "ssh"), "kubernetes": BASE.get("kubernetes", {})}
+    prof = compose.load_profile("min")
+    svcs = compose.generate(s, {**prof, "groups": [*prof["groups"], "k8s"]})["services"]
+    vol = {n: svcs[n]["volumes"] for n in ("login", "login2", "login3")}
+    kube = lambda n: any("/run/workbench/k8s/" in v for v in vol[n])
+    slurm = lambda n: "./slurm:/etc/slurm:ro" in vol[n]
+    assert (slurm("login"), kube("login")) == (True, False)       # s-login
+    assert (slurm("login2"), kube("login2")) == (False, True)     # k-login
+    assert (slurm("login3"), kube("login3")) == (True, True)      # both
+    assert svcs["login2"]["depends_on"] == [] and svcs["login"]["depends_on"] == ["slurmctld"]
+    assert [svcs[n]["environment"]["WORKBENCH_LOGIN_KIND"] for n in ("login", "login2", "login3")] == ["slurm", "k8s", "both"]
+    with pytest.raises(logins.LoginError, match="k-login"):
+        compose.generate(sim("ssh:k8s"), prof)
+
+
+def test_connections_names_the_type_and_every_ssh_command_carries_identities_only():
+    rows = {e["id"]: e for e in connections.entities({**sim("ssh:slurm", "ssh:k8s"), "kubernetes": BASE.get("kubernetes", {})})}
+    assert "s-login" in rows["login"]["name"] and "k-login" in rows["login2"]["name"]
+    assert "kubectl only" in rows["login2"]["how"] and "Slurm tools only" in rows["login"]["how"]
+    for r in rows.values():
+        if r["kind"] == "ssh" or r["id"] == "k8s":
+            assert "IdentitiesOnly=yes" in r["command"], r["id"]
+    assert rows["k8s"]["command"].startswith("ssh -i") and "10.141.255.252" in rows["k8s"]["command"]    # kubectl runs on the k-login
+    assert "10.141.255.254" in rows["nodes"]["command"]                                                  # the nodes are reached from the s-login
+    k8s_row = next(a for a in rows["k8s"]["actions"] if a["kind"] == "copy")
+    assert "@login2 kubectl" in k8s_row["value"]
+
+
+def test_the_graph_joins_each_login_to_the_nodes_it_serves():
+    from webui import graph
+
+    nodes = [{"name": "cn001", "kind": "compute"}, {"name": "kgpu001", "kind": "k8s"}]
+    lg = [{"name": "login", "mode": "ssh", "kind": "slurm"}, {"name": "login2", "mode": "ssh", "kind": "k8s"}, {"name": "login3", "mode": "ssh", "kind": "both"}]
+    g = graph.build({}, nodes, lg)
+    ids = {e["id"] for e in g["edges"]}
+    assert {"login>nodes:jump", "login2>k8s-nodes:kubectl", "login3>nodes:jump", "login3>k8s-nodes:kubectl"} <= ids
+    assert not ({"login2>nodes:jump", "login>k8s-nodes:kubectl"} & ids)
+    assert {"id": "k8s-nodes", "type": "group"} in g["entities"] and {"id": "kgpu001", "type": "k8s-node", "group": "k8s-nodes"} in g["entities"]
+    assert not any(e["id"] == "k8s-nodes" for e in graph.build({}, nodes[:1], lg)["entities"])      # no Kubernetes nodes, no group
+
+
+def test_the_cli_and_the_governor_accept_a_login_kind():
+    base = {"cpu_nodes": 2, "gpu_nodes": 0, "gpus_per_node": 8, "parts": ["k8s"]}
+    assert control.plan_error({**base, "login_nodes": ["ssh:slurm", "teleport:k8s", "both:both"]}) is None
+    for bad in (["ssh:"], ["ssh:root"], ["ssh:k8s;rm"], [":k8s"]):
+        assert "login_nodes" in control.plan_error({**base, "login_nodes": bad}), bad
+    assert completion.login_modes("ssh:k") == ["ssh:k8s"] and completion.login_modes("ssh,teleport:s") == ["ssh,teleport:slurm"]
+
+
+def test_the_page_has_a_type_per_login_a_kubernetes_group_and_a_kubectl_line():
+    html = (ROOT / "webui/static/index.html").read_text()
+    for needle in ("KIND_LABEL", "data-f=\"kind\"", "GROUP_TITLE", "br-k8s", "k8s-nodes:kubectl", "'kubectl'", "KIND_NAME[loginKind(l)]"):
+        assert needle in html, needle

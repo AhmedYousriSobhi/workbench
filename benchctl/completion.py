@@ -96,6 +96,9 @@ def login_modes(incomplete: str) -> list[str]:
 
     head, _, tail = incomplete.rpartition(",")
     prefix = head + "," if head else ""
+    auth, colon, kind = tail.partition(":")
+    if colon:  # `ssh:k` -> `ssh:k8s`
+        return [f"{prefix}{auth}:{k}" for k in logins.KINDS if k.startswith(kind)]
     return [prefix + m for m in logins.MODES if m.startswith(tail)]
 
 

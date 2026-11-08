@@ -18,15 +18,19 @@ from benchctl import k8s, scenario, stack, workbench
 
 ROOT = Path(__file__).resolve().parents[2]
 SIM = yaml.safe_load((ROOT / "sim.yaml").read_text())
+SPEC = workbench.Spec(parts=["k8s"], cpu_nodes=1, gpu_nodes=0, login_nodes=["ssh:slurm", "ssh:k8s"])
 
 
 def docker(*args: str, timeout: float = 60) -> subprocess.CompletedProcess:
     return subprocess.run(["docker", *args], capture_output=True, text=True, timeout=timeout, check=False)
 
 
-def as_user(user: str, *cmd: str) -> subprocess.CompletedProcess:
-    """kubectl (or any command) on the login node as a simulated user, the way a client's SSH session runs it."""
-    return docker("exec", "-u", user, "workbench-login-1", "sh", "-c", " ".join(c if c.startswith("$HOME/") else shlex.quote(c) for c in cmd))  # a shell, so $HOME is the user's home
+S_LOGIN, K_LOGIN = "workbench-login-1", "workbench-login2-1"  # `ssh:slurm,ssh:k8s` (issue 380)
+
+
+def as_user(user: str, *cmd: str, node: str = K_LOGIN) -> subprocess.CompletedProcess:
+    """kubectl (or any command) on a login node (the k-login unless `node` says otherwise) as a simulated user, the way a client's SSH session runs it."""
+    return docker("exec", "-u", user, node, "sh", "-c", " ".join(c if c.startswith("$HOME/") else shlex.quote(c) for c in cmd))  # a shell, so $HOME is the user's home
 
 
 def kubectl_as(user: str, *args: str, kubeconfig: str | None = None) -> subprocess.CompletedProcess:
@@ -36,8 +40,7 @@ def kubectl_as(user: str, *args: str, kubeconfig: str | None = None) -> subproce
 @pytest.fixture(scope="module")
 def cluster():
     os.chdir(ROOT)
-    spec = workbench.Spec(parts=["k8s"], cpu_nodes=1, gpu_nodes=0, login_nodes=["ssh"])
-    sim, prof = workbench.effective(SIM, spec)
+    sim, prof = workbench.effective(SIM, SPEC)
     said: list[str] = []
     if not stack.up(sim, "workbench", say=said.append, available=64 * 1024**3, prof=prof):
         why = " | ".join(said[-4:])
@@ -124,3 +127,51 @@ def test_a_scenario_pod_crash_loops_and_is_deleted(cluster):
     finally:
         assert scenario.execute(scenario.Step(0, "k8s", {"delete_pod": {"namespace": "team-b", "name": "loop-live"}})).status == "ok"
     assert wait_for(lambda: kubectl_as("alice", "get", "pod", "loop-live", "-n", "team-b").returncode != 0, timeout=30)
+
+
+def test_the_s_login_has_slurm_and_no_kubeconfig_and_the_k_login_the_reverse(cluster):
+    assert as_user("alice", "sinfo", "-h", node=S_LOGIN).returncode == 0 and as_user("alice", "test", "-e", "$HOME/.kube/config", node=S_LOGIN).returncode != 0
+    assert as_user("alice", "test", "-e", "$HOME/.kube/config").returncode == 0 and as_user("alice", "sinfo", node=K_LOGIN).returncode != 0
+    mounts = {n: {m["Destination"] for m in json.loads(docker("inspect", n).stdout)[0]["Mounts"]} for n in (S_LOGIN, K_LOGIN)}
+    assert "/etc/slurm" in mounts[S_LOGIN] and "/run/workbench/k8s" not in " ".join(mounts[S_LOGIN])
+    assert "/etc/slurm" not in mounts[K_LOGIN] and any(m.startswith("/run/workbench/k8s") for m in mounts[K_LOGIN])
+
+
+def test_the_connections_ssh_command_logs_in_with_a_loaded_agent(cluster, tmp_path):
+    """Issue 380: the printed command carries IdentitiesOnly, so keys in ssh-agent are not offered first (sshd gives up after 6)."""
+    from webui import connections
+
+    row = next(r for r in connections.entities(cluster) if r["id"] == "login2")
+    assert "IdentitiesOnly=yes" in row["command"] and "k-login" in row["name"]
+    agent = subprocess.run(["ssh-agent", "-s"], capture_output=True, text=True, check=True).stdout
+    env = {**os.environ, **dict(line.split(";")[0].split("=", 1) for line in agent.splitlines() if "=" in line.split(";")[0])}
+    try:
+        for i in range(8):  # more keys than MaxAuthTries
+            k = tmp_path / f"k{i}"
+            subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(k)], check=True, capture_output=True)
+            subprocess.run(["ssh-add", str(k)], env=env, capture_output=True, check=True)
+        argv = shlex.split(row["command"])
+        quiet = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "-o", "BatchMode=yes"]
+        bare = shlex.split(row["command"].replace(" -o IdentitiesOnly=yes", ""))
+        run = lambda a: subprocess.run([*a[:1], *quiet, *a[1:], "hostname"], env=env, capture_output=True, text=True, timeout=30, cwd=ROOT, check=False)
+        assert run(argv).stdout.strip() == "login2", run(argv).stderr
+        res = run(bare)  # the same command without it: the failure the owner saw
+        assert res.returncode != 0 and "Too many authentication failures" in res.stderr, res.stderr
+    finally:
+        subprocess.run(["ssh-agent", "-k"], env=env, capture_output=True, check=False)
+
+
+def test_the_page_snapshot_groups_the_kubernetes_nodes_and_types_the_logins(cluster, monkeypatch):
+    from webui import graph
+    from webui.cluster import Cluster
+
+    monkeypatch.setattr("webui.cluster.k8s_built", lambda: True)  # tests/conftest.py turns it off so a developer's build does not leak in
+    workbench.save(SPEC)  # the page reads the saved selection (SAVED is a temporary file in tests, tests/conftest.py)
+    snap = Cluster(cluster).snapshot()
+    kn = [n for n in snap["nodes"] if n["kind"] == "k8s"]
+    assert {n["name"] for n in kn} == {"kcn001", "kcn002", "kgpu001", "kgpu002"}, snap["nodes"]
+    assert {n["state"] for n in kn} == {"ok"}, kn
+    assert {lg["name"]: lg["kind"] for lg in snap["logins"]} == {"login": "slurm", "login2": "k8s"}
+    g = graph.build(snap["services"], snap["nodes"], snap["logins"])
+    ids = {e["id"] for e in g["edges"]}
+    assert "login>nodes:jump" in ids and "login2>k8s-nodes:kubectl" in ids and "login2>nodes:jump" not in ids and "login>k8s-nodes:kubectl" not in ids

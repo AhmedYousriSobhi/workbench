@@ -72,7 +72,7 @@ def generate(sim: dict, profile: dict) -> dict:
         for i, (lname, _) in enumerate(logins.nodes(sim)):
             if i:
                 services[lname] = {k: v for k, v in copy.deepcopy(services["login"]).items() if k != "build"}
-    if problems := logins.problems(sim, {"teleport"} if "teleport" in services else set()):
+    if problems := logins.problems(sim, {p for p, n in (("teleport", "teleport"), ("k8s", k8s.API)) if n in services}):
         raise logins.LoginError("; ".join(problems))
     for name, kind in node_names(sim, profile.get("compute_nodes")):
         svc = _service("workbench/node-base:dev", SLURMD_MB, SLURMD_PRIO, "../../images/node-base")
@@ -85,9 +85,10 @@ def generate(sim: dict, profile: dict) -> dict:
             svc["depends_on"] = ["slurmctld"]
         services[name] = svc
     slurm_mount = "./slurm:/etc/slurm:ro"
+    lkinds = logins.kinds(sim) if "login" in services else {}
     for name, svc in services.items():
         if name in ("slurmctld", "slurmrestd") or logins.is_login(name) or svc["labels"].get("workbench.node"):
-            svc["volumes"] = [slurm_mount]
+            svc["volumes"] = [] if lkinds.get(name) == "k8s" else [slurm_mount]  # a k-login has no Slurm configuration: its Slurm tools say so
             if svc["labels"].get("workbench.node"):  # sshd on every compute node (ADR 0014)
                 svc["volumes"].append("./nhc:/etc/workbench/nhc:ro")  # the health checks, edited live (ADR 0019)
                 svc["volumes"].append("./secrets/ssh:/run/workbench/ssh:ro")
@@ -100,7 +101,8 @@ def generate(sim: dict, profile: dict) -> dict:
         svc = services[lname]
         svc["volumes"].append("./secrets/ssh:/run/workbench/ssh:ro")
         svc.setdefault("environment", {})["WORKBENCH_LOGIN_AUTH"] = mode
-        svc.update({"depends_on": ["slurmctld"] if "slurmctld" in services else []})
+        svc.setdefault("environment", {})["WORKBENCH_LOGIN_KIND"] = lkinds[lname]
+        svc.update({"depends_on": ["slurmctld"] if "slurmctld" in services and lkinds[lname] != "k8s" else []})
         if mode in logins.DIRECT:
             svc["ports"] = [f"127.0.0.1:{SSH_PORT + i}:22"]
     if "teleport" in services:  # auth + proxy (ADR 0020): only the proxy and diagnostics ports are published, localhost only
@@ -117,7 +119,7 @@ def generate(sim: dict, profile: dict) -> dict:
                 svc["volumes"].append(f"./secrets/teleport:{teleport.CONTAINER_SECRETS}:ro")
     k8s.wire(services, sim)  # no-op unless the k8s part is on
     if k8s.API in services:  # every login node gets the read-only kubeconfigs (login.sh puts them in each user's ~/.kube)
-        for lname, _ in logins.nodes(sim) if "login" in services else []:
+        for lname in [n for n, k in lkinds.items() if k in ("k8s", "both")]:  # an s-login gets none
             services[lname]["volumes"] += ["./secrets/k8s/viewer.kubeconfig:/run/workbench/k8s/viewer.kubeconfig:ro",
                                            "./secrets/k8s/limited.kubeconfig:/run/workbench/k8s/limited.kubeconfig:ro"]
     if "bmc-farm" in services:  # Redfish endpoints for every node in sim.yaml, localhost only

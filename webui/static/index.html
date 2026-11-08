@@ -489,13 +489,13 @@
       <div class="kg"><span class="grp">Lines</span>
         <span><svg class="ls" viewBox="0 0 34 10" aria-hidden="true"><path class="lane ssh" d="M1 5H31" marker-end="url(#arr)"/></svg>direct SSH</span>
         <span><svg class="ls" viewBox="0 0 34 10" aria-hidden="true"><path class="lane teleport" d="M1 5H31"/></svg>through the Teleport proxy</span>
-        <span><svg class="ls" viewBox="0 0 34 10" aria-hidden="true"><path class="lane jump" d="M1 5H31"/></svg>jump host (ssh from a login node)</span>
+        <span><svg class="ls" viewBox="0 0 34 10" aria-hidden="true"><path class="lane jump" d="M1 5H31"/></svg>jump host (ssh from an s-login) · kubectl (from a k-login)</span>
         <span><svg class="ls" viewBox="0 0 34 10" aria-hidden="true"><path class="lane api" d="M1 5H31"/></svg>an API call</span></div>
       <p class="dim small kfoot">They combine: one box can be up, busy and faulted at once. Hover a part for its state, click it for the address, command and actions.</p></div>
     <details class="quiet legendbox"><summary class="small dim">Reading guide</summary>
     <p class="legend small dim"><span><b style="color:var(--accent)" aria-hidden="true">●</b> round dot: a request from a client (the app, Prometheus, curl) or an SSH connection through Teleport</span>
       <span><b style="color:var(--warn)" aria-hidden="true">◆</b> diamond: a fault from a scenario or a button, travelling to the node it hits</span>
-      <span>Lines: solid arrow = direct SSH · long dashes = through the Teleport proxy · short dashes = jump host (ssh from a login node) · thin = an API call</span>
+      <span>Lines: solid arrow = direct SSH · long dashes = through the Teleport proxy · short dashes = jump host (ssh from an s-login) or kubectl (from a k-login) · thin = an API call</span>
       <span>Hover a part for its state, click it for the address, command and actions. Node tiles: ✓ healthy · ▲ warning · ✗ fault · ⏻ off · ? unknown</span></p></details>
     <nav id="crumb" class="crumb" aria-label="Breadcrumb" hidden><button class="linkbtn" id="crumb-all">All clusters</button><span id="crumb-sep1" aria-hidden="true"> › </span><button class="linkbtn" id="crumb-name">workbench</button><span id="crumb-sep2" aria-hidden="true" hidden> › </span><span aria-current="page" id="crumb-focus"></span></nav>
     <p id="flowstate" class="dim small" role="status" style="margin-bottom:0"></p></section>
@@ -527,6 +527,7 @@
   <div id="tree" class="lists" aria-label="Cluster entities">
     <section id="br-compute"><h3 class="bh">Compute nodes <span class="cnt" id="cnt-compute"></span></h3><ul class="rows" id="nodes-compute"></ul></section>
     <section id="br-gpu"><h3 class="bh">GPU nodes <span class="cnt" id="cnt-gpu"></span></h3><ul class="rows" id="nodes-gpu"></ul></section>
+    <section id="br-k8s"><h3 class="bh">Kubernetes nodes <span class="cnt" id="cnt-k8s"></span></h3><ul class="rows" id="nodes-k8s"></ul></section>
     <section id="svcpanel"><h3 class="bh">Services <span class="cnt" id="cnt-svc"></span></h3><ul class="rows" id="services"></ul></section>
   </div>
   <p class="dim small" id="treenote">Drain in Slurm and Kubernetes node faults are not available here: the page has no Docker access by design, and Kubernetes is not built yet. Use <code>./scripts/benchctl scenario run node-down</code> for Slurm.</p>
@@ -597,7 +598,7 @@
         <div class="toggles" id="pl-parts"></div>
         <fieldset class="bmcnodes" id="pl-bmcbox" hidden><legend class="small dim">Nodes that get a BMC (<span id="pl-bmcmb"></span> MB each)</legend><div class="toggles" id="pl-bmcnodes"></div></fieldset>
         <p class="small dim" style="margin:8px 0 0">Slurm, Prometheus and Grafana are always on.</p></fieldset>
-      <fieldset class="planparts" id="pl-logins"><legend class="small dim">Login nodes: how each one authenticates (<span id="pl-loginmb"></span>)</legend>
+      <fieldset class="planparts" id="pl-logins"><legend class="small dim">Login nodes: how each one authenticates and which scheduler it serves (<span id="pl-loginmb"></span>)</legend>
         <div id="pl-loginrows"></div>
         <button type="button" class="btn small" id="pl-loginadd">＋ Add login node</button>
         <p class="small dim" id="pl-loginnote" style="margin:8px 0 0"></p></fieldset>
@@ -725,12 +726,12 @@ function renderCluster(c) {
   for (const id of ['nodesmain']) $(id).hidden = !stackUp;  // one message when down, not five
   const svcs = Object.entries(c.services), svcUp = svcs.filter(([, u]) => u).length;
   $('services').innerHTML = svcs.map(svcRow).join(''); $('cnt-svc').textContent = `${svcUp} of ${svcs.length} answering`; paintBlocks();
-  for (const kind of ['compute', 'gpu']) {
+  for (const kind of ['compute', 'gpu', 'k8s']) {
     const rows = c.nodes.filter(n => n.kind === kind);
     $('nodes-' + kind).innerHTML = rows.map(n => node(n)).join(''); $('br-' + kind).hidden = !rows.length;
     $('cnt-' + kind).textContent = `${rows.filter(n => n.state === 'ok').length} of ${rows.length} healthy`;
   }
-  document.querySelectorAll('.node').forEach(b => b.onclick = () => showNode(b.dataset.node));
+  document.querySelectorAll('.node').forEach(b => b.onclick = () => { const n = c.nodes.find(x => x.name === b.dataset.node); if (n && n.kind === 'k8s') openConnection('k8s'); else showNode(b.dataset.node); });  // a Kubernetes node has no BMC or Slurm actions: its row is Connections
   if (openNode) { const n = c.nodes.find(x => x.name === openNode); if (n) { $('nodestate').className = 'pill ' + n.state; $('nodestate').textContent = `${STATE_ICON[n.state]} ${n.label}`; } }
 }
 async function loadCluster() {
@@ -774,17 +775,22 @@ function currentSize() {
 let loginModes = [], loginMax = 8;
 const LOGIN_LABEL = { ssh: 'Direct SSH', teleport: 'Teleport only', both: 'Direct SSH and Teleport' };
 const loginName = i => i === 0 ? 'login' : 'login' + (i + 1);
+const KIND_LABEL = { both: 'Slurm and Kubernetes (login)', slurm: 'Slurm only (s-login)', k8s: 'Kubernetes only (k-login)' };
+const entryAuth = m => m.split(':')[0], entryKind = m => m.split(':')[1] || 'both', entryOf = (a, k) => k === 'both' ? a : `${a}:${k}`;
 function drawLogins() {
-  $('pl-loginrows').innerHTML = loginModes.map((m, i) => `<div class="loginrow"><b class="nm">${loginName(i)}</b><select data-i="${i}" aria-label="How ${loginName(i)} authenticates">${Object.entries(LOGIN_LABEL).map(([k, v]) => `<option value="${k}"${k === m ? ' selected' : ''}>${v}</option>`).join('')}</select>${i === loginModes.length - 1 && i > 0 ? `<button type="button" class="btn small" data-rm="${i}" aria-label="Remove ${loginName(i)}">Remove</button>` : ''}</div>`).join('');
-  $('pl-loginrows').querySelectorAll('select').forEach(el => el.onchange = () => { loginModes[+el.dataset.i] = el.value; loginsChanged(); });
+  const opts = (map, cur) => Object.entries(map).map(([k, v]) => `<option value="${k}"${k === cur ? ' selected' : ''}>${v}</option>`).join('');
+  $('pl-loginrows').innerHTML = loginModes.map((m, i) => `<div class="loginrow"><b class="nm">${loginName(i)}</b><select data-i="${i}" data-f="auth" aria-label="How ${loginName(i)} authenticates">${opts(LOGIN_LABEL, entryAuth(m))}</select><select data-i="${i}" data-f="kind" aria-label="Which scheduler ${loginName(i)} serves">${opts(KIND_LABEL, entryKind(m))}</select>${i === loginModes.length - 1 && i > 0 ? `<button type="button" class="btn small" data-rm="${i}" aria-label="Remove ${loginName(i)}">Remove</button>` : ''}</div>`).join('');
+  $('pl-loginrows').querySelectorAll('select').forEach(el => el.onchange = () => { const i = +el.dataset.i, m = loginModes[i]; loginModes[i] = el.dataset.f === 'auth' ? entryOf(el.value, entryKind(m)) : entryOf(entryAuth(m), el.value); loginsChanged(); });
   $('pl-loginrows').querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { loginModes.splice(+b.dataset.rm, 1); drawLogins(); loginsChanged(); });
   $('pl-loginadd').disabled = loginModes.length >= loginMax;
   $('pl-loginmb').textContent = `${loginModes.length} × 40 MB`;
 }
 function syncTeleport() {  // a Teleport login needs the Teleport part: tick it, and say so
-  const tp = document.querySelector('#pl-parts input[value="teleport"]'), need = loginModes.some(m => m !== 'ssh');
+  const tp = document.querySelector('#pl-parts input[value="teleport"]'), need = loginModes.some(m => entryAuth(m) !== 'ssh');
   if (tp && need && !tp.checked) tp.checked = true;
-  $('pl-loginnote').textContent = need ? 'A Teleport login turns the Teleport part on. A "Teleport only" node publishes no port and refuses key login.' : '';
+  const k8 = document.querySelector('#pl-parts input[value="k8s"]'), needK = loginModes.some(m => entryKind(m) === 'k8s');  // a k-login needs the Kubernetes part
+  if (k8 && needK && !k8.checked) k8.checked = true;
+  $('pl-loginnote').textContent = [need ? 'A Teleport login turns the Teleport part on. A "Teleport only" node publishes no port and refuses key login.' : '', needK ? 'A k-login turns the Kubernetes part on. It has kubectl and the read-only kubeconfigs, and no Slurm configuration.' : ''].filter(Boolean).join(' ');
 }
 function loginsChanged() { syncTeleport(); planInputs(); }
 $('pl-loginadd').onclick = () => { if (loginModes.length < loginMax) { loginModes.push('ssh'); drawLogins(); loginsChanged(); } };
@@ -1124,14 +1130,14 @@ async function popInfo(kind, id) {
   const conn = (r, extra = []) => r ? [['Address', `<code>${esc(r.address)}</code>`], ...extra, ['Credential', r.credential ? `<code>${esc(r.credential)}</code>` : 'none']] : [['Details', 'Open Connections']];
   if (kind === 'node') {
     const n = c.nodes.find(x => x.name === id) || { name: id, label: '', state: 'unknown', kind: '' }, cx = row('nodes');
-    let ip = ''; try { const b = await (await fetch(`/api/nodes/${id}`)).json(); ip = b.ip || ''; } catch (e) { /* the pop-up still opens */ }
-    return { title: id, badge: `${STATE_ICON[n.state] || '?'} ${n.label}`, cls: n.state, cmd: cx ? cx.command.replace('<node>', id) : '', kv: [['Kind', n.kind === 'gpu' ? 'GPU node' : 'Compute node'], ['Address', ip ? `<code>${esc(ip)}</code> (private, from a login node)` : 'see Connections'],
-      ['Reached by', 'ssh from any login node (jump host)' + (tp ? ', or through the Teleport proxy' : '')]], actions: [{ label: 'Actions and details', fn: () => showNode(id) }, { label: 'Connections', fn: () => openConnection('nodes') }] };
+    let ip = ''; try { if (n.kind !== 'k8s') { const b = await (await fetch(`/api/nodes/${id}`)).json(); ip = b.ip || ''; } } catch (e) { /* the pop-up still opens */ }
+    return { title: id, badge: `${STATE_ICON[n.state] || '?'} ${n.label}`, cls: n.state, cmd: cx ? cx.command.replace('<node>', id) : '', kv: n.kind === 'k8s' ? [['Kind', `Kubernetes node (simulated by KWOK)${n.gpus ? `, ${n.gpus} GPUs` : ''}`], ['Reached by', 'kubectl from a login node that serves Kubernetes (k-login); it has no SSH, BMC or Slurm side']] : [['Kind', n.kind === 'gpu' ? 'GPU node' : 'Compute node'], ['Address', ip ? `<code>${esc(ip)}</code> (private, from a login node)` : 'see Connections'],
+      ['Reached by', 'ssh from any s-login (jump host)' + (tp ? ', or through the Teleport proxy' : '')]], actions: n.kind === 'k8s' ? [{ label: 'Connections', fn: () => openConnection('k8s') }] : [{ label: 'Actions and details', fn: () => showNode(id) }, { label: 'Connections', fn: () => openConnection('nodes') }] };
   }
   if (kind === 'login') {
     const l = loginList().find(x => x.name === id) || { mode: 'ssh' }, r = row(id);
-    return { title: id, badge: loginRuns(l) ? MODE_TEXT[l.mode] : '✗ not running', cls: loginRuns(l) ? '' : 'fault', cmd: r ? r.command : '', kv: [['Status', loginRuns(l) ? 'running (answers on port 22)' : 'not running: it is in the selection, but nothing answers on its port 22. Build it with ./scripts/benchctl up'], ['Way in', l.mode === 'teleport' ? 'Teleport only: no published port, a key is refused' : l.mode === 'both' ? 'Direct SSH with a key, or Teleport' : 'Direct SSH with a key'], ...conn(r),
-      ['To the nodes', 'ssh from here (jump host)']], actions: [{ label: 'Connections', fn: () => openConnection(id) }] };
+    return { title: id, badge: loginRuns(l) ? `${KIND_NAME[loginKind(l)]} · ${MODE_TEXT[l.mode]}` : '✗ not running', cls: loginRuns(l) ? '' : 'fault', cmd: r ? r.command : '', kv: [['Status', loginRuns(l) ? 'running (answers on port 22)' : 'not running: it is in the selection, but nothing answers on its port 22. Build it with ./scripts/benchctl up'], ['Way in', l.mode === 'teleport' ? 'Teleport only: no published port, a key is refused' : l.mode === 'both' ? 'Direct SSH with a key, or Teleport' : 'Direct SSH with a key'], ...conn(r),
+      ['Serves', KIND_TEXT[loginKind(l)]], ['To the nodes', loginKind(l) === 'k8s' ? 'kubectl from here (read-only kubeconfig in ~/.kube); no Slurm nodes' : 'ssh from here (jump host)' + (loginKind(l) === 'both' && c.nodes.some(n => n.kind === 'k8s') ? '; kubectl for the Kubernetes nodes' : '')]], actions: [{ label: 'Connections', fn: () => openConnection(id) }] };
   }
   if (kind === 'svc') {
     const r = row(SVC_CONN[id]), l = svcList().find(x => x[0] === id) || [id, id], up = flowSnap?.reachable[id], t = flowSnap?.totals[id] || 0;
@@ -1167,13 +1173,15 @@ async function openConnection(id) {  // the Connections tab, with the row for th
   const row = id && document.querySelector(`#conn-rows tr[data-id="${id}"]`); if (!row) return;
   document.querySelectorAll('#conn-rows tr.focus').forEach(r => r.classList.remove('focus')); row.classList.add('focus'); row.scrollIntoView({ block: 'center' });
 }
-function flowSig(nodes) { return nodes.map(n => n.name).join(',') + (hasTeleport() ? '+teleport' : '') + '|' + loginList().map(l => l.name + ':' + l.mode + (l.up === false ? ':down' : '')).join(','); }
+function flowSig(nodes) { return nodes.map(n => n.name).join(',') + (hasTeleport() ? '+teleport' : '') + '|' + loginList().map(l => l.name + ':' + l.mode + ':' + loginKind(l) + (l.up === false ? ':down' : '')).join(','); }
 // ---- the diagram (#192): clients -> services and access (login nodes, Teleport) -> nodes, one labelled line per way in ----
 const SVC_ICON = { 'bmc-farm': 'M4 5h16v5H4z M4 14h16v5H4z M7 7.5h.01 M7 16.5h.01', 'bcm-mock': 'M3 5h18v14H3z M3 9h18', 'jira-mock': 'M12 3l9 9-9 9-9-9z', 'jira-real': 'M12 3l9 9-9 9-9-9z M12 8l4 4-4 4-4-4z',
   'gpu-exporter': 'M7 7h10v10H7z M10 3v4 M14 3v4 M10 17v4 M14 17v4 M3 10h4 M3 14h4 M17 10h4 M17 14h4', teleport: 'M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z' };  // decorative glyphs, one per kind
 const SVC_METHOD = { 'bmc-farm': 'HTTPS Redfish', 'bcm-mock': 'HTTP JSON', 'jira-mock': 'HTTP REST', 'jira-real': 'HTTP REST', 'gpu-exporter': 'HTTP metrics', teleport: 'tsh · HTTPS' };
 const MODE_TEXT = { ssh: 'Direct SSH', teleport: 'Teleport only', both: 'Direct SSH + Teleport' };
-const LOGIN_ONE = [{ name: 'login', mode: 'ssh', port: 2222 }];
+const KIND_TEXT = { slurm: 's-login · Slurm', k8s: 'k-login · Kubernetes', both: 'login · Slurm + Kubernetes' }, KIND_NAME = { slurm: 's-login', k8s: 'k-login', both: 's+k login' };
+const loginKind = l => l.kind || 'both';
+const LOGIN_ONE = [{ name: 'login', mode: 'ssh', kind: 'both', port: 2222 }];
 const stackUp = () => { try { return Object.values(JSON.parse(lastCluster).services).some(Boolean); } catch (e) { return false; } };
 const loginRuns = l => l.up !== false;  // nothing answers on its port 22: it was selected, but it is not built or not running
 const loginAddr = l => (l.ip || l.name) + (l.mode === 'teleport' ? ' · no port' : ` · :${l.port}`);  // the address a client dials (private IP; the published port is on 127.0.0.1)
@@ -1208,7 +1216,7 @@ function flowFit() {  // the shape of the panel the diagram must fill; narrow sc
 const fitKey = () => { const f = flowFit(); return (curLevel() === 'overview' ? 'o' : '') + (f.a ? 'c' + Math.round(f.a * 6) : 'n'); };
 function tileGrid(nodes, cols, tw, th, top = 52) {  // node tiles by group, relative to the cluster frame: [label|node, ...], and the height the frame needs
   let ry = top; const items = [];
-  for (const k of ['compute', 'gpu']) {
+  for (const k of ['compute', 'gpu', 'k8s']) {
     const rows = nodes.filter(n => n.kind === k); if (!rows.length) continue;
     items.push(['label', k, ry]); ry += 26;
     rows.forEach((n, i) => items.push(['node', n, 24 + (i % cols) * (tw + GAP), ry + Math.floor(i / cols) * (th + GAP)]));
@@ -1225,7 +1233,7 @@ function flowGeom(nodes, acc, svcs, a, col, u) {
     const tb = 10 + UF.title * u * 0.95, chipH = Math.ceil(UF.chip * u * 1.3 + 22), R1 = Math.ceil(tb + 12 + chipH + 14), GAPY = 64, GW = 110;
     const mA = boxM(u, 4), mS = boxM(u, 3), nU = hasTeleport() ? acc.filter(l => l.mode && l.mode !== 'ssh').length : 0, ACCH = 46 + mA.h + 14 + (nU ? 14 + nU * 12 : 0), top = Math.ceil(tb + 34);
     const needA = Math.max(150, ...acc.map(x => Array.isArray(x) ? Math.max(W(x[1], 'sn', 600) + 44, W('✓ up · 99 conn/min', 'sub'), W('99,999 requests seen', 'sub')) + 24
-      : Math.max(W(x.name, 'sn', 600), W(MODE_TEXT[x.mode], 'sub'), W(x.ip || x.name, 'sub'), W(portLine(x), 'sub')) + 24));
+      : Math.max(W(`${x.name} · ${KIND_NAME[loginKind(x)]}`, 'sn', 600), W(MODE_TEXT[x.mode], 'sub'), W(x.ip || x.name, 'sub'), W(portLine(x), 'sub')) + 24));
     const SWD = Math.ceil(Math.max(180, ...svcs.map(([, label, sub]) => Math.max(W(label, 'sn', 600) + 44, W('✓ up · 99,999 req/min', 'sub'), W('99,999 requests seen', 'sub'), W(sub, 'sub')) + 24))), svW = SWD + 32;
     const chipW = Math.ceil(Math.max(120, ...['Monitoring app', 'Prometheus', 'curl · scripts', 'You: ssh · tsh'].map(t => W(t, 'chip', 600) + 24)));
     let Wm = Math.max(4 * chipW + 54, acc.length * (Math.ceil(needA) + 14) + 18, 444);
@@ -1284,7 +1292,7 @@ const clusterTitle = () => activeCluster || clusterList()[0];
 function withCluster(name, fn) { const prev = activeCluster; activeCluster = multi() ? name : null; try { return fn(); } finally { activeCluster = prev; } }
 function enterCluster(name) { activeCluster = multi() ? name : null; $('crumb-name').textContent = clusterTitle(); setLevel('full', true); }
 function clusterFacts() {
-  const nodes = nodeList(), groups = [['Compute nodes', nodes.filter(n => n.kind === 'compute')], ['GPU nodes', nodes.filter(n => n.kind === 'gpu')]].filter(x => x[1].length);
+  const nodes = nodeList(), groups = [['Compute nodes', nodes.filter(n => n.kind === 'compute')], ['GPU nodes', nodes.filter(n => n.kind === 'gpu')], ['Kubernetes nodes', nodes.filter(n => n.kind === 'k8s')]].filter(x => x[1].length);
   const sc = lastCluster ? scoped() : {}, svcs = svcList(), snap = flowSnap && { ...flowSnap, reachable: sc.reachable || flowSnap.reachable, faults: sc.faults ?? flowSnap.faults }, off = !snap || !Object.values(snap.reachable).some(Boolean);
   const up = svcs.filter(x => snap && snap.reachable[x[0]]).length;
   return { nodes, groups, svcs, snap, off, up, ok: nodes.filter(n => n.state === 'ok').length, faults: snap ? snap.faults || 0 : 0 };
@@ -1559,7 +1567,13 @@ function buildFlow() {
       if (l.mode !== 'teleport') edge('ssh', poly([{ x: p.x + p.w / 2, y: cb }, { x: p.x + p.w / 2, y: p.y }]), 'direct SSH', 0.5, null, `clients>${l.name}:ssh`);
       if (l.mode !== 'ssh' && tpBox) { const by = p.y + p.h, uy = by + 12 + (uu++) * 12, sx = tpP.x + tpP.w / 2 - 14; edge('teleport', poly([{ x: sx, y: tpP.y + tpP.h }, { x: sx, y: uy }, { x: p.x + p.w / 2 - 14, y: uy }, { x: p.x + p.w / 2 - 14, y: by }]), '', 0.5, null, `teleport>${l.name}:teleport`); }
     }
-    for (const [l, p] of place) { const jx = p.x + p.w / 2 + 22; if (l !== tpBox) lanes.append(sv('path', { class: 'lanehalo', d: dpath(poly([{ x: jx, y: p.y + p.h }, { x: jx, y: P.access.y + P.access.h }])) })), edge('jump', poly([{ x: jx, y: p.y + p.h }, { x: jx, y: P.cluster.y }]), 'jump host', 0.5, null, `${l.name}>nodes:jump`); }
+    for (const [l, p] of place) {  // an s-login jumps to the Slurm nodes; a k-login reaches the Kubernetes nodes with kubectl; a login serving both draws both
+      if (l === tpBox) continue;
+      for (const [eid, jx, text] of [[`${l.name}>nodes:jump`, p.x + p.w / 2 + 22, 'jump host'], [`${l.name}>k8s-nodes:kubectl`, p.x + p.w / 2 - 22, 'kubectl']]) {
+        if (gr && !gedge(eid)) continue;
+        lanes.append(sv('path', { class: 'lanehalo', d: dpath(poly([{ x: jx, y: p.y + p.h }, { x: jx, y: P.access.y + P.access.h }])) })); edge('jump', poly([{ x: jx, y: p.y + p.h }, { x: jx, y: P.cluster.y }]), text, 0.5, null, eid);
+      }
+    }
     if (tpBox) lanes.append(sv('path', { class: 'lanehalo', d: dpath(poly([{ x: tpP.x + tpP.w / 2 + 22, y: tpP.y + tpP.h }, { x: tpP.x + tpP.w / 2 + 22, y: P.access.y + P.access.h }])) })), edge('teleport', poly([{ x: tpP.x + tpP.w / 2 + 22, y: tpP.y + tpP.h }, { x: tpP.x + tpP.w / 2 + 22, y: P.cluster.y }]), 'Teleport', 0.5, null, 'teleport>nodes:teleport');
   } else {
     if (tpBox) { const o = svcOut.teleport = out(); svcLane.teleport = edge('api', curve(o, { x: tpP.x, y: tpP.y + tpP.h / 2 }), SVC_METHOD.teleport, 0.5, 'ln-teleport', 'clients>teleport:api'); }
@@ -1586,14 +1600,17 @@ function buildFlow() {
     }
   });
   if (!col) {
-    for (const [l, p] of place) if (l !== tpBox) edge('jump', curve({ x: p.x + p.w, y: p.y + p.h / 2 }, { x: P.cluster.x, y: p.y + p.h / 2 }), 'jump host', 0.5, null, `${l.name}>nodes:jump`);
+    for (const [l, p] of place) if (l !== tpBox) {
+      edge('jump', curve({ x: p.x + p.w, y: p.y + p.h / 2 - 8 }, { x: P.cluster.x, y: p.y + p.h / 2 - 8 }), 'jump host', 0.5, null, `${l.name}>nodes:jump`);
+      edge('jump', curve({ x: p.x + p.w, y: p.y + p.h / 2 + 8 }, { x: P.cluster.x, y: p.y + p.h / 2 + 8 }), 'kubectl', 0.5, null, `${l.name}>k8s-nodes:kubectl`);
+    }
     if (tpBox) edge('teleport', curve({ x: tpP.x + tpP.w, y: tpP.y + tpP.h / 2 }, { x: P.cluster.x, y: tpP.y + tpP.h / 2 }), 'Teleport', 0.5, null, 'teleport>nodes:teleport');
   }
   for (const [a2, p] of place) {
     if (a2 === tpBox) { g.append(box('teleport', tpBox[1], tpBox[2], p, 'svc', 'teleport', 'blkacc')); continue; }
     const l = a2, lt = () => !loginRuns(l) ? [`${l.name} · not running`, stackUp() ? 'Selected, but nothing answers on its port 22: build it with benchctl up' : 'The stack is not running'] : [`${l.name} · ${MODE_TEXT[l.mode]}`, l.mode === 'teleport' ? 'No direct port: only through the Teleport proxy' : `${l.ip || l.name} (also 127.0.0.1:${l.port}) · click for the command`];
     const bg = asButton(sv('g', { id: 'lg-' + l.name }), `${l.name}: ${MODE_TEXT[l.mode]}${loginRuns(l) ? '' : ', not running'}. Details`, () => openPop(bg, 'login', l.name), lt);
-    const lines = col ? [l.name, MODE_TEXT[l.mode], loginRuns(l) ? (l.ip || l.name) : '✗ not running', loginRuns(l) ? portLine(l) : ''] : [l.name, MODE_TEXT[l.mode], loginRuns(l) ? loginAddr(l) : '✗ not running'];
+    const lines = col ? [`${l.name} · ${KIND_NAME[loginKind(l)]}`, MODE_TEXT[l.mode], loginRuns(l) ? (l.ip || l.name) : '✗ not running', loginRuns(l) ? portLine(l) : ''] : [`${l.name} · ${KIND_NAME[loginKind(l)]}`, MODE_TEXT[l.mode], loginRuns(l) ? loginAddr(l) : '✗ not running'];
     bg.append(sv('rect', { class: 'blk lgn' + (loginRuns(l) ? '' : stackUp() ? ' down' : ' off'), x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), ...lines.map((t, n) => t ? [sv('text', { class: n ? 'sub' : 'sn', x: p.x + 12, y: p.y + mA.ys[n] }, fitText(t, n ? 'sub' : 'sn', u, p.w - 24, n ? 400 : 600))] : []).flat()); g.append(bg);
   }
   svcs.forEach(([k, label, sb], i) => g.append(box(k, label, sb, P.svcP[i], 'svc', k)));
@@ -1604,7 +1621,7 @@ function buildFlow() {
   });
   const tm = P.tileM;
   for (const item of P.tiles) {
-    if (item[0] === 'label') { g.append(sv('text', { class: 'ftitle', x: P.cluster.x + 24, y: P.cluster.y + item[2] + 4 }, item[1] === 'gpu' ? 'GPU nodes' : 'Compute nodes')); continue; }
+    if (item[0] === 'label') { g.append(sv('text', { class: 'ftitle', x: P.cluster.x + 24, y: P.cluster.y + item[2] + 4 }, GROUP_TITLE[item[1]])); continue; }
     const [, n, rx, ry] = item, x = P.cluster.x + rx, ty = P.cluster.y + ry, glyph = STATE_ICON[n.state] || '?';
     const tg = asButton(sv('g', { id: 'nd-' + n.name }), `${n.name}: ${n.label}. Details`, () => openPop(tg, 'node', n.name), () => { const c = nodeList().find(m => m.name === n.name) || n; return [`${c.name} · ${c.label}`, 'click for how to reach it and its actions']; });
     const [temp, gpu] = tileFacts(n), cr = UF.tile * u * 0.8, ccx = x + P.tw - 8 - cr, ccy = ty + tm.y1 - UF.tile * u * 0.3;
@@ -1615,7 +1632,8 @@ function buildFlow() {
   }
   g.append(labels, sv('g', { id: 'dots' })); paintBlocks();
 }
-const tileFacts = n => [n.temp != null ? `${n.temp} °C` : '', n.gpus ? `${n.gpus_busy || 0}/${n.gpus} GPU` : ''];
+const GROUP_TITLE = { compute: 'Slurm compute nodes', gpu: 'Slurm GPU nodes', k8s: 'Kubernetes nodes' };
+const tileFacts = n => n.kind === 'k8s' ? ['KWOK', n.gpus ? `${n.gpus} GPU` : 'CPU'] : [n.temp != null ? `${n.temp} °C` : '', n.gpus ? `${n.gpus_busy || 0}/${n.gpus} GPU` : ''];
 function paintTiles() {  // node states change without a rebuild; a different node list does rebuild
   const nodes = nodeList(), sig = flowSig(nodes);
   if (sig !== flowNodes || fitKey() !== flowFitKey) { buildFlow(); return; }

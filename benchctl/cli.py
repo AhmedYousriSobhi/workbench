@@ -218,6 +218,7 @@ def _login_modes(login) -> list[str]:
 
 LOGIN = typer.Option(None, "--login", autocompletion=completion.login_modes, rich_help_panel="Parts by category",
                      help=f"login nodes, one auth mode each: {', '.join(logins.MODES)} (comma separated), e.g. ssh,teleport; "
+                          f"add :slurm or :k8s for an s-login or k-login, e.g. ssh:slurm,ssh:k8s (default both); "
                           "the first is `login`, then login2, ...")
 
 
@@ -254,9 +255,13 @@ def _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, ac
     except workbench.SpecError as e:
         typer.echo(f"invalid: {e}", err=True)
         raise typer.Exit(1) from e
-    if login is not None and any(m in logins.VIA_TELEPORT for m in _login_modes(login)):
-        extra = sorted({*extra, "teleport"})  # a login node that uses Teleport needs it on
-    chosen = with_ is not None or addons or any(v is not None for v in picked.values()) or (login is not None and "teleport" in extra)
+    need = set()
+    if login is not None:
+        entries = _login_modes(login)
+        need |= {"teleport"} if any(logins.auth(m) in logins.VIA_TELEPORT for m in entries) else set()  # a login node that uses Teleport needs it on
+        need |= {"k8s"} if any(logins.kind(m) == "k8s" for m in entries) else set()  # a k-login needs the Kubernetes part
+        extra = sorted({*extra, *need})
+    chosen = with_ is not None or addons or any(v is not None for v in picked.values()) or bool(need)
     return sorted(set(with_ or []) | set(extra)) if chosen else None
 
 

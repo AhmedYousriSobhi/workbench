@@ -265,7 +265,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     if "bmc-farm" in todo:
         say(f"bmc: https://127.0.0.1:8443/redfish/v1 (Host bmc-<node>), user admin, password in {BMC_CREDENTIALS}")
     for lname, idx in logins.direct(sim) if "login" in todo else []:
-        say(f"ssh: ssh -i {SSH_DIR}/id_ed25519 -p {compose.SSH_PORT + idx} <user>@127.0.0.1 (users from sim.yaml; {lname})")
+        say(f"ssh: ssh -i {SSH_DIR}/id_ed25519 -o IdentitiesOnly=yes -p {compose.SSH_PORT + idx} <user>@127.0.0.1 "
+            f"(users from sim.yaml; {lname}, {logins.KIND_LABEL[logins.kinds(sim)[lname]]})")
     for lname in logins.via_teleport(sim) if "login" in todo else []:
         say(f"{lname}: reachable through Teleport only: tsh --proxy={teleport.proxy_addr(sim)} --insecure -i "
             f"{teleport.SECRETS_DIR}/identity/<user> ssh <user>@{lname}")
