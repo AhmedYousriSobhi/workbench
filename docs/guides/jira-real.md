@@ -121,16 +121,22 @@ Real: Atlassian's code, REST v2, workflow, JQL, custom fields, validation. Not r
 (Jira contract tests (issue 229)).
 
 ## Faults on the real Jira (scenarios)
-The scenario target `jira-real` makes the real Jira fail in the ways integrations meet (Atlassian's rate-limit page and the community's usual failures), with real behaviour and no proxy. `fault:` is one of:
+The scenario target `jira-real` makes the real Jira fail in the ways integrations meet (Atlassian's rate-limit page and the community's usual failures), with real behaviour; slow, 503 and 429-with-Retry-After need the small fault proxy (below). `fault:` is one of:
 
 | fault | what happens | what a client sees |
 |---|---|---|
 | `outage` / `restore` | `docker pause` / `unpause` of the Jira container | calls hang, then time out; then work again |
 | `bad_logins` (`user`, `count`) | wrong-password Basic logins | 401, then 403 with `X-Authentication-Denied-Reason: CAPTCHA_CHALLENGE` (REST cannot solve a CAPTCHA; a personal access token is not affected) |
 | `clear_logins` | zeroes every user's failed-login count in Jira's own table (what an admin's "reset failed login count" does) | the user can log in again |
+| `token_revoke` / `token_restore` (`user`, default `alice`) | deletes the user's `workbench` personal access token in Jira; restore makes a new one and rewrites `PAT_<USER>` in `compose/generated/secrets/jira-real.env` (0600, never printed) | a client using the old token gets a real 401 until it is given the new value; the ticket driver uses admin's token and is not affected |
+| `proxy_slow` (`count`, `delay`) / `proxy_503` / `proxy_429` (`count`, `retry_after`) / `proxy_off` | sets the fault proxy (below) | the next `count` REST calls through the proxy are delayed `delay` s then answered, or get 503 / 429 with `Retry-After: retry_after` (default 30); then normal |
 | `rate_limit` (`capacity`, `fill_rate`) / `rate_limit_off` | turns Jira's own rate limiting (Administration, Rate limiting) on or off in its tables and bumps the settings version | 429 with `X-RateLimit-Limit/Remaining/FillRate/Interval-Seconds` and `Retry-After`; Jira reloads about once a minute, so the change shows 30 to 60 s later (measured: about 40 s); `myself`, `serverInfo` and `search` are not counted, `project`, `field` and `issue` are |
 
-Run `benchctl scenario run jira-real-outage` or `jira-real-429` or `jira-real-captcha` (needs `jira-real` up). Not built: a real slow or 503 answer, which would need a fault proxy in front of Jira; the mock's `jira` target covers those. A client should send authenticated requests (Basic or session): rate limiting counts per user.
+Run `benchctl scenario run jira-real-outage`, `jira-real-429`, `jira-real-captcha`, `jira-real-token-revoked` or `jira-real-slow-503` (needs `jira-real` up). A client should send authenticated requests (Basic or session): rate limiting counts per user.
+
+**Fault proxy (issue 305).** Jira has no setting for a slow answer or a 503, so a scenario with a `proxy_*` step starts a small standard-library proxy on the host, `127.0.0.1:8084`, in front of Jira (`benchctl/jira_proxy.py`, a few MB, up when the run starts and gone when it ends). **Point the client at `http://127.0.0.1:8084`** for those scenarios (`:8083` never meets the proxy faults). Only `/rest/` calls are failed; `/status` and everything else pass through, and after `count` calls it passes everything again. If port 8084 is taken the run says so and the `proxy_*` steps fail.
+
+**Tickets in scenarios (issue 306).** A `jira-real` step can carry `tickets: {action: create|transition|comment, ...}` (same body as the mock's, `create` takes `count`, `summary` with `{n}`, `labels`, `priority`; `transition` and `comment` take a `jql`), done through the standard REST API with admin's token. The expectation `jira.issue_count` / `jira.issue_status` takes `target: real` to ask the real Jira. `client-stress-real` (SC-02) uses both for its 12-ticket wave.
 
 ## Test it
 
