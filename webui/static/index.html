@@ -2033,7 +2033,7 @@ function paintTraffic() {
   paintSlurmStats();
   const base = clusterNow().comms, sel = $('tr-plane');
   if (!base) {  // the page is newer than the server that serves it (a server started before an update never sends the links)
-    if (lastCluster) $('tr-rows').innerHTML = '<tr><td colspan="9" class="skel">The web page server is older than this page, so it sends no links. Restart it: <code>kill $(cat compose/generated/ui.pid); ./scripts/benchctl start</code></td></tr>';
+    if (lastCluster) $('tr-rows').innerHTML = '<tr><td colspan="9" class="skel">The web page server is older than this page, so it sends no links. Restart it: <code>pkill -f 'python -m webui'; ./scripts/benchctl start</code></td></tr>';
     return;
   }
   const links = [...base, ...monLinks];
