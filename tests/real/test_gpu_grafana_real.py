@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import bring_up, wait_for
+from helpers import bring_up, release, wait_for
 
 from benchctl import stack
 
@@ -45,7 +45,7 @@ def token():
     # Prometheus scrapes every 15 s: wait for the first samples of every metric
     assert wait_for(lambda: all(len(series(gpu_query(tok, ["gpu001", "gpu002"])[1], k)) == 16 for k in METRICS), timeout=90)
     yield tok
-    stack.down(say=lambda m: None)
+    release()
 
 
 def series(response: dict, ref: str) -> list[dict]:

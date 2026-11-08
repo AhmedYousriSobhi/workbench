@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import bring_up, wait_for
+from helpers import bring_up, release, wait_for
 
-from benchctl import scenario, stack
+from benchctl import scenario
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -39,7 +39,7 @@ def live():
     assert wait_for(ready, timeout=40)
     assert wait_for(lambda: slurm_state("cn003") != "", timeout=40)
     yield sim
-    stack.down(say=lambda m: None)
+    release()
 
 
 def test_each_target_changes_real_state(live):

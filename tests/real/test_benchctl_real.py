@@ -6,9 +6,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import bring_up, wait_for
-
-from benchctl import stack
+from helpers import bring_up, release, wait_for
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -23,7 +21,7 @@ def cluster():
     bring_up(yaml.safe_load((ROOT / "sim.yaml").read_text()))
     assert wait_for(lambda: "cn001" in benchctl("exec", "login", "--", "sinfo", "-h", "-N", "-o", "%N").stdout, timeout=90)
     yield
-    stack.down(say=lambda m: None)
+    release()
 
 
 def test_get_nodes_reports_real_state(cluster):

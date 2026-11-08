@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import bring_up, wait_for
+from helpers import bring_up, release, wait_for
 
 from benchctl import stack
 
@@ -48,7 +48,7 @@ def farm():
     assert wait_for(lambda: _up(), timeout=40)
     user, _, pw = (ROOT / stack.BMC_CREDENTIALS).read_text().strip().partition(":")
     yield user, pw
-    stack.down(say=lambda m: None)
+    release()
 
 
 def _up() -> bool:
