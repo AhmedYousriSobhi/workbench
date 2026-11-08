@@ -290,6 +290,19 @@ def viewer_token() -> str | None:
     return None
 
 
+def api_up(timeout: float = 1.5) -> bool:
+    """Whether the API server answers /readyz on the published localhost port (anonymous: the default RBAC allows it; nothing is sent)."""
+    ctx = ssl.create_default_context(cafile=str(SECRETS_DIR / "ca.crt")) if (SECRETS_DIR / "ca.crt").exists() else None
+    if ctx is None:
+        return False
+    ctx.check_hostname = False  # the certificate names the cluster addresses; 127.0.0.1 is the published fallback
+    try:
+        with urllib.request.urlopen(f"https://127.0.0.1:{API_PORT}/readyz", context=ctx, timeout=timeout) as r:
+            return r.status == 200
+    except OSError:
+        return False
+
+
 def api_json(path: str, timeout: float = 2.0):
     """GET one API path on the published localhost port as `viewer`; None when the API or the token is not there."""
     tok = viewer_token()

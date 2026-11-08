@@ -128,3 +128,10 @@ def test_blast_radius_table_matches_the_edge_model_and_the_page_actions():
         assert all(f"clients>{s}:api" in edge_ids for s in f["services"]), name
     assert all(f"clients>{s}:api" in edge_ids for s in blast.SERVICES)
     assert "declared" in blast.BASIS
+
+
+def test_the_kubernetes_api_is_a_declared_management_edge_with_no_counter():
+    g = graph.build({**SERVICES, "k8s-api": True}, NODES, logins("ssh"))
+    e = {x["id"]: x for x in g["edges"]}["clients>k8s-api:api"]
+    assert e["plane"] == "management" and not e["measured"]            # up or down only, like the real Jira
+    assert "faults>k8s-api:inj" not in ids(g)                           # nothing injects into it

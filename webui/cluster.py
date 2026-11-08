@@ -187,6 +187,11 @@ class Cluster:
                   **({"jira-real": f"{JIRA_REAL}/status"} if jira_real_built() else {})}
         names = list(probes)
         up = [self._try(probes[n]) is not None for n in names]
+        if k8s_built():  # the real API server: a box with up/down only (no request counter, like the real Jira)
+            from benchctl import k8s
+
+            names.append("k8s-api")
+            up.append(k8s.api_up())
         rows = [self._node(*nk) for nk in self.nodes]
         devices = self._try(f"{BCM}/json", {"service": "cmdevice", "call": "getDevices"})
         bcm = {d["hostname"]: d["status"] for d in (devices or {}).get("result", [])} if isinstance(devices, dict) else {}

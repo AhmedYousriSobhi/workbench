@@ -13,7 +13,7 @@ from .flow import COUNTERS, SCENARIO_TARGETS, STATS
 PLANES = ("access", "management", "telemetry", "tickets", "faults")
 # service -> the plane its API belongs to (what a client uses it for)
 SERVICE_PLANE = {"bmc-farm": "management", "bcm-mock": "management", "gpu-exporter": "telemetry",
-                 "jira-mock": "tickets", "jira-real": "tickets"}
+                 "jira-mock": "tickets", "jira-real": "tickets", "k8s-api": "management"}
 MEASURED = {*STATS, *COUNTERS}  # services a counter backs; the real Jira publishes none, so it is declared only
 INJECTABLE = set(SCENARIO_TARGETS.values())  # blocks a scenario step or fault button can reach (flow.note)
 

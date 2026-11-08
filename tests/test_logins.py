@@ -209,3 +209,16 @@ def test_the_page_has_a_type_per_login_a_kubernetes_group_and_a_kubectl_line():
     html = (ROOT / "webui/static/index.html").read_text()
     for needle in ("KIND_LABEL", "seg(i, 'kind'", "pl-lg-split", "pl-kon", "pl-kcpu", "pl-sum", "GROUP_TITLE", "br-k8s", "k8s-nodes:kubectl", "'kubectl'", "KIND_NAME[loginKind(l)]"):
         assert needle in html, needle
+
+
+def test_the_export_puts_slurm_on_the_s_login_and_kubernetes_on_the_k_login():
+    """The client runs kubectl on the node an entry connects to, so the k8s block goes on the k-login's entry (issue 380)."""
+    svcs = {"login", "login2", "slurmctld", "k8s-apiserver"}
+    cl = export.build(sim("ssh:slurm", "ssh:k8s"), svcs, "w", False, None)["clusters"]
+    assert [c["name"] for c in cl] == ["w", "w-login2"]
+    assert cl[0]["scheduler"]["kind"] == "slurm" and cl[0]["k8s"] is None and "s-login login" in cl[0]["description"]
+    assert cl[1]["scheduler"] is None and "k-login login2" in cl[1]["description"]
+    assert cl[1]["k8s"] == {"enabled": True, "intervalSec": 45, "workloadSignals": True, "notify": False, "poolLabel": "pool"}  # host and kubeconfig stay the user's (never exported)
+    one = export.build(sim("ssh"), {"login", "slurmctld", "k8s-apiserver"}, "w", False, None)["clusters"]
+    assert one[0]["scheduler"] and one[0]["k8s"]                     # a shared login carries both
+    assert export.build(sim("ssh"), {"login", "slurmctld"}, "w", False, None)["clusters"][0]["k8s"] is None   # no Kubernetes part, no block
