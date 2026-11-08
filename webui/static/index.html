@@ -386,10 +386,12 @@
   .pillchip.good { background:color-mix(in srgb,var(--ok) 13%,transparent); border-color:color-mix(in srgb,var(--ok) 45%,transparent); } .pillchip.warn { background:color-mix(in srgb,var(--warn) 13%,transparent); border-color:color-mix(in srgb,var(--warn) 45%,transparent); } .pillchip.bad { background:color-mix(in srgb,var(--bad) 13%,transparent); border-color:color-mix(in srgb,var(--bad) 45%,transparent); }
   .itabs { background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:3px; gap:2px; width:fit-content; } .itabs .btn { border:0; background:transparent; border-radius:8px; } .itabs .btn[aria-pressed=true] { background:var(--panel); box-shadow:0 1px 3px rgba(0,0,0,.25); }
   @media (min-width:1100px) { .nodesmain .er.node { grid-template-columns:20px minmax(64px,auto) minmax(0,1fr) auto; min-height:34px; } .nodesmain .er.node .st { grid-column:3; } .nodesmain .er.node .info { grid-column:4; white-space:nowrap; text-align:right; justify-content:flex-end; } .nodesmain .er.node .info .meter { display:none; } }
+  #subseg[hidden] { display:none; } #subseg { flex-direction:column; width:auto; margin-top:var(--sp4); } #subseg .btn { text-align:left; } @media (max-width:860px) { #subseg { flex-direction:row; margin:0; } } #nodeswrap.subnodes #trafficpanel { display:none; }
   #trafficpanel { order:0; } #nodesmain { order:2; } #inspector { order:3; } .ipane#dock { display:block; } .ipane#dock[hidden] { display:block; }  /* narrow: one column, the timeline under the list */
   @media (min-width:1100px) {
     #nodeswrap { display:grid; grid-template-columns:minmax(0,1.75fr) minmax(0,1fr); grid-template-rows:minmax(0,1fr) minmax(0,1fr); grid-template-areas:"canvas list" "canvas side"; gap:var(--sp4); height:calc(100vh - 168px); min-height:600px; align-items:stretch; }
     #nodeswrap.detail { grid-template-rows:minmax(0,4fr) minmax(0,6fr); }  /* a selected part gets room for its actions */
+    #nodeswrap.subnodes { grid-template-areas:"list side" "list side"; height:auto; }
     #nodeswrap.treeoff, #nodeswrap.solo { grid-template-areas:"canvas side" "canvas side"; } #nodeswrap.treeoff #nodesmain, #nodeswrap.solo #nodesmain { display:none; }
     #trafficpanel { grid-area:canvas; min-width:0; min-height:0; display:flex; flex-direction:column; }
     #trafficpanel > .flowscroll { flex:1 1 0; min-height:0; min-width:0; overflow:visible; display:flex; } .legendbox { display:none; }
@@ -416,10 +418,7 @@
   /* 2.5D game style (#320), kept calm: a faint floor, one short side face per slab, soft shadows, glow only where something is live or wrong.
      CSS only (filters + gradients), no WebGL; flat view stays one click away and is the default under reduced motion. */
   #trafficpanel[data-view="iso"] { --ext:color-mix(in srgb,var(--bg) 78%,var(--line)); --glow:var(--accent); }
-  #trafficpanel[data-view="iso"] .flowscroll { border-radius:12px; background:
-      linear-gradient(30deg,transparent 48%,color-mix(in srgb,var(--line) 45%,transparent) 49.2%,transparent 50.4%) 0 0/72px 42px,
-      linear-gradient(-30deg,transparent 48%,color-mix(in srgb,var(--line) 45%,transparent) 49.2%,transparent 50.4%) 0 0/72px 42px,
-      color-mix(in srgb,var(--bg) 70%,var(--panel)); }
+  #trafficpanel[data-view="iso"] .flowscroll { border-radius:12px; background:color-mix(in srgb,var(--bg) 70%,var(--panel)); }
   #trafficpanel[data-view="iso"] #flow .frame { fill:color-mix(in srgb,var(--panel) 92%,var(--accent)); stroke:color-mix(in srgb,var(--line) 80%,var(--accent)); stroke-width:1.5;
       filter:drop-shadow(3px 3px 0 var(--ext)) drop-shadow(6px 8px 8px rgba(0,0,0,.22)); }
   #trafficpanel[data-view="iso"] #flow .blk, #trafficpanel[data-view="iso"] #flow .nd, #trafficpanel[data-view="iso"] #flow .chipbg {
@@ -522,6 +521,7 @@
   </div>
   <button class="sidei" id="scnbtn" aria-haspopup="dialog"><b aria-hidden="true">▶</b>Scenarios</button>
   <button class="sidei" id="planbtn" aria-haspopup="dialog"><b aria-hidden="true">⚙</b>Cluster architecture</button>
+  <div class="itabs seg rsub" id="subseg" role="group" aria-label="Infrastructure view"><button class="btn small" data-sub="all" aria-pressed="true">All</button><button class="btn small" data-sub="topo" aria-pressed="false">Topology</button><button class="btn small" data-sub="nodes" aria-pressed="false">Nodes</button></div>
   <div class="kpis" id="kpis" role="group" aria-label="Cluster at a glance"></div>
 </nav>
 <div class="cols">
@@ -1878,6 +1878,13 @@ function setTree(open, remember = true) {
   $('nodeswrap').classList.toggle('treeoff', !open); $('treetoggle').setAttribute('aria-expanded', open); $('treetoggle').textContent = open ? 'Hide node list' : 'Show node list';
   if (remember) try { localStorage.setItem('workbench-tree', open ? 'open' : 'closed'); } catch (e) { /* not remembered */ }
 }
+function setSub(v, remember = true) {  // All | Topology (diagram, list folded) | Nodes (list, diagram hidden)
+  $('nodeswrap').classList.toggle('subnodes', v === 'nodes'); setTree(v === 'all' || v === 'nodes', false);
+  document.querySelectorAll('#subseg [data-sub]').forEach(b => b.setAttribute('aria-pressed', b.dataset.sub === v));
+  if (remember) try { localStorage.setItem('workbench-sub', v); } catch (e) { /* not remembered */ }
+  if (v !== 'nodes') requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+}
+document.querySelectorAll('#subseg [data-sub]').forEach(b => b.onclick = () => setSub(b.dataset.sub));
 $('treetoggle').onclick = () => setTree($('treetoggle').getAttribute('aria-expanded') !== 'true');
 
 function setView(iso, remember) {  // 2.5D game style or the flat baseline (#320)
@@ -1896,7 +1903,8 @@ let viewPref = null; try { viewPref = localStorage.getItem('workbench-view'); } 
 setView(viewPref ? viewPref === 'iso' : !matchMedia('(prefers-reduced-motion: reduce), (max-width: 640px)').matches, false);  // default per device: flat under reduced motion and on a phone
 paintLevelUi();
 let treePref = null; try { treePref = localStorage.getItem('workbench-tree'); } catch (e) { /* default */ }
-if (treePref === 'closed') setTree(false, false);  // the list sits beside or under the diagram; folding it away is remembered
+if (treePref === 'closed') setTree(false, false);
+try { const sp = localStorage.getItem('workbench-sub'); if (sp === 'topo' || sp === 'nodes') setSub(sp, false); } catch (e) { /* default */ }  // the list sits beside or under the diagram; folding it away is remembered
 if (dockWide()) paintReach();
 // scenario chip in the status strip, so a running scenario is visible on every page
 let chipTimer;
@@ -2212,6 +2220,7 @@ async function paintSlurmStats() {
 const TABS = ['nodes', 'traffic', 'conn'];
 function selectTab(t, focus) {
   TABS.forEach(k => { const on = k === t; $('tab-' + k).hidden = !on; $('tb-' + k).setAttribute('aria-selected', on); $('tb-' + k).tabIndex = on ? 0 : -1; });
+  $('subseg').hidden = t !== 'nodes';  // the view choice belongs to Infrastructure
   if (focus) $('tb-' + t).focus();
   if ((t === 'nodes' || t === 'traffic') && !document.hidden) openFlow(); else closeFlow();
   if (t === 'conn') paintConnections();
