@@ -1,4 +1,4 @@
-"""Slurm's own request statistics (#397): what `sdiag` says slurmctld served, as JSON for the page's Traffic view.
+"""Slurm's own request statistics (#397): what `sdiag` says slurmctld served, plus whether slurmdbd answers (#400), as JSON for the page's Traffic view.
 
 Read-only and argument-free: one `sdiag` on the login node, parsed here. A pure function over an injected runner, so it
 unit-tests without Docker. Counters are totals since slurmctld started (or `sdiag --reset`, which nothing here calls).
@@ -32,4 +32,12 @@ def collect(runner=checks.run) -> dict:
     r = runner(["docker", "exec", LOGIN, "sdiag"])
     if r.returncode:
         raise RuntimeError("sdiag: no answer from slurmctld")
-    return parse(r.stdout)
+    return {**parse(r.stdout), "dbd": dbd(runner)}
+
+
+def dbd(runner=checks.run) -> bool | None:
+    """Does slurmdbd answer? One `sacctmgr` query on the login node: True answers, False no answer, None accounting is not configured."""
+    r = runner(["docker", "exec", LOGIN, "timeout", "5", "sacctmgr", "-n", "show", "cluster", "format=cluster"])
+    if "disabled" in f"{r.stdout}{r.stderr}".lower():
+        return None
+    return r.returncode == 0 and bool(r.stdout.strip())

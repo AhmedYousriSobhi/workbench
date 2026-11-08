@@ -200,7 +200,11 @@ LINKS = [
 # documented wiring the page has no way to read yet (issue 400): drawn grayed, never measured
 UNREADABLE = [
     ("slurmctld", "slurmdbd", "TCP (Slurm RPC)", 6819, "data", "accounting records", "slurm", True, None),
-    ("nodes", "storage", "NFS or Lustre (not simulated)", None, "data", "shared job data (SPEC C-11: no real NFS or Lustre)", "slurm", False, None),
+]
+
+# parts that are planned and not built (owner decision, issue 400): drawn grayed with the reason, never measured
+PLANNED = [
+    ("nodes", "storage", "NFS or Lustre (planned)", None, "data", "shared job data; storage is planned and not built (SPEC C-11: no real NFS or Lustre)", "slurm", False, None),
 ]
 
 
@@ -234,4 +238,4 @@ def build(services: dict, nodes: list, logins: list) -> list[dict]:
 
 def absent(services: dict, nodes: list, logins: list) -> list[dict]:
     """The documented links this cluster lacks, plus the ones the page cannot read: the fixed drawing grays them out."""
-    return [_row(k, "not in this cluster") for k in LINKS if not _has(k, services, nodes, logins)] + [_row(k, "the page cannot read this yet") for k in UNREADABLE]
+    return [_row(k, "not in this cluster") for k in LINKS if not _has(k, services, nodes, logins)] + [_row(k, "the page cannot read this yet") for k in UNREADABLE] + [_row(k, "planned, not built yet") for k in PLANNED]

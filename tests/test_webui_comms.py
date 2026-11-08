@@ -54,10 +54,11 @@ def test_absent_lists_the_links_a_cluster_lacks_and_the_unreadable_ones():
     got = {r["id"]: r for r in comms.absent({"k8s-api": True}, [{"name": "kcn001", "kind": "k8s"}], [])}
     assert got["login>slurmctld:6817"]["why"] == "not in this cluster"
     assert got["slurmctld>slurmdbd:6819"]["why"] == "the page cannot read this yet"
+    assert got["nodes>storage:None"]["why"] == "planned, not built yet"
     assert "kube-scheduler>k8s-api:6443" not in got  # present, so not absent
 
 
 def test_every_link_endpoint_has_a_place_in_the_fixed_drawing():
     page = (Path(__file__).parent.parent / "webui/static/index.html").read_text()
-    ends = {e for k in [*comms.LINKS, *comms.UNREADABLE] for e in k[:2]}
+    ends = {e for k in [*comms.LINKS, *comms.UNREADABLE, *comms.PLANNED] for e in k[:2]}
     assert [e for e in sorted(ends) if f"'{e}'" not in page] == []

@@ -43,3 +43,11 @@ def test_only_the_busiest_few_are_listed():
         f"\tREQUEST_X{c}  ( {c}) count:{c}  ave_time:1  total_time:1\n" for c in range(1, 9)
     )
     assert len(slurmstats.parse(many)["top"]) == slurmstats.TOP
+
+
+def test_slurmdbd_answers_does_not_answer_or_is_not_configured():
+    assert slurmstats.dbd(run("workbench\n")) is True
+    assert slurmstats.dbd(run("", 1)) is False
+    assert slurmstats.dbd(lambda c: subprocess.CompletedProcess(c, 1, "", "Slurm accounting storage is disabled")) is None
+    both = lambda c: subprocess.CompletedProcess(c, 0, "workbench\n" if "sacctmgr" in c else SDIAG, "")
+    assert slurmstats.collect(both)["dbd"] is True

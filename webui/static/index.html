@@ -2003,7 +2003,7 @@ async function poll() {
 }
 // Traffic & Communication: the documented links (webui/comms.py) and Prometheus's own scrape results (webui/monitoring.py)
 // with the measured counters beside them, nothing invented
-let trSel = null, trPath = null, monLinks = [];
+let trSel = null, trPath = null, monLinks = [], dbdLink = null;
 const trRate = {};  // service -> {t, n, rate}: requests per second from the counter, re-sampled every 3 s
 function rateOf(svc, n) {
   const now = Date.now(), r = trRate[svc] ||= { t: now, n, rate: null, hist: [] };
@@ -2019,12 +2019,12 @@ function pathOf(links, id) {
   return seen;
 }
 function trView(l) {
-  const key = l.service || l.to, snap = flowSnap, mon = l.targets != null;
-  const up = mon ? l.up === l.targets : snap?.reachable[key];
+  const key = l.service || l.to, snap = flowSnap, mon = l.targets != null, probe = l.probe != null;
+  const up = probe ? l.probe : mon ? l.up === l.targets : snap?.reachable[key];
   const n = l.measured && !mon ? snap?.totals[l.service] : null, rate = n == null ? null : rateOf(l.service, n);
   const ms = mon ? l.scrape_ms : up ? snap?.latency?.[key] : null;
   return { up, n, rate, ms, mon, state: up === undefined ? '–' : up ? '✓ up' : mon ? `✗ ${l.up} of ${l.targets} up` : '✗ not reachable',
-    ev: l.measured ? 'observed' : 'configured', sw: l.real ? 'real' : 'simulated' };
+    ev: l.measured || probe ? 'observed' : 'configured', sw: l.real ? 'real' : 'simulated' };
 }
 // the same links as a diagram: parts grouped by role in a fixed template (a group is drawn only when it has a part), one line per
 // link; the plane is the line's colour and dash pattern (the table names it), ✓/✗ says whether a part answers
@@ -2165,7 +2165,7 @@ function paintTraffic() {
     if (lastCluster) $('tr-rows').innerHTML = '<tr><td colspan="9" class="skel">The web page server is older than this page, so it sends no links. Restart it: <code>pkill -f \"python -m webui\"; ./scripts/benchctl start</code></td></tr>';
     return;
   }
-  const links = [...base, ...monLinks];
+  const links = [...base, ...monLinks, ...(dbdLink ? [dbdLink] : [])];
   paintChips(links);
   const path = trPath && pathOf(links, trPath), f = { plane: trPlane, sw: $('tr-sw').value, ev: $('tr-ev').value };
   const rows = links.filter(l => !path || path.has(l.id)).map(l => ({ l, v: trView(l) }))
@@ -2175,7 +2175,7 @@ function paintTraffic() {
     + `<td>${v.mon ? `${l.targets} target${l.targets === 1 ? '' : 's'}` : v.n == null ? '–' : v.n.toLocaleString() + (v.rate == null ? '' : ` (${+v.rate.toFixed(1)}/s)`)}</td>`
     + `<td>${v.ms == null ? '–' : v.ms + ' ms'}</td><td>${v.state}</td></tr>`).join('') || '<tr><td colspan="9" class="skel">No links.</td></tr>';
   paintTrTimeline(links);
-  paintTrafficMap(rows, !path && f.plane === 'all' && f.sw === 'all' && f.ev === 'all' ? (clusterNow().absent || []) : []);
+  paintTrafficMap(rows, !path && f.plane === 'all' && f.sw === 'all' && f.ev === 'all' ? (clusterNow().absent || []).filter(l => !dbdLink || l.id !== dbdLink.id) : []);
   const pb = $('tr-path');
   pb.hidden = !path;
   if (path) pb.innerHTML = `Path through <b>${esc(trPath)}</b>: ${path.size} link${path.size === 1 ? '' : 's'}. <button class="btn small" id="tr-clear">Show all links</button>`;
@@ -2209,6 +2209,8 @@ async function paintSlurmStats() {
   fetch('/api/monitoring').then(r => r.json()).then(j => { monLinks = j.links; paintTraffic(); }).catch(() => { monLinks = []; });
   let s = null;
   try { s = (await (await fetch('/api/slurm-stats')).json()).stats; } catch (e) { /* the governor or the stack is down: show nothing */ }
+  dbdLink = s && s.dbd != null ? { id: 'slurmctld>slurmdbd:6819', from: 'slurmctld', to: 'slurmdbd', protocol: 'TCP (Slurm RPC)', port: 6819, plane: 'data', what: 'accounting records; seen by a sacctmgr query (answers or not, no counter)', real: true, measured: false, probe: s.dbd, service: null } : null;
+  paintTraffic();
   const box = $('tr-slurm');
   box.hidden = !s;
   if (s) box.innerHTML = `<b>slurmctld (sdiag)</b>: ${s.rpcs.toLocaleString()} requests served since it started${s.threads == null ? '' : `, ${s.threads} threads now`}. Busiest: `
