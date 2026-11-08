@@ -86,6 +86,8 @@
   pre { margin:0; font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap; word-break:break-word; max-height:300px; overflow:auto; }
   .tablewrap { overflow-x:auto; }
   .trgrid { display:grid; grid-template-columns:1fr; gap:var(--sp4); align-items:start; } @media (min-width:1500px) { .trgrid { grid-template-columns:minmax(0,1fr) 300px; } }
+  .trkey { display:inline-flex; align-items:center; gap:6px; margin-right:var(--sp3); font-weight:600; color:var(--fg); } .trkey i { width:22px; height:4px; border-radius:2px; display:inline-block; }
+  @keyframes trflow { to { stroke-dashoffset:-14; } } .trdots { animation:trflow 1s linear infinite; }
   .trtable { margin-top:var(--sp4); } .trtable summary { cursor:pointer; padding:var(--sp2) 0; font-weight:600; min-height:40px; }
   .trinsp { border:1px solid var(--line); border-radius:8px; padding:var(--sp3); } .trinsp h3 { margin:0 0 var(--sp2); font-size:14px; display:flex; justify-content:space-between; align-items:center; }
   .trinsp dl { display:grid; grid-template-columns:auto 1fr; gap:4px var(--sp3); margin:0 0 var(--sp3); font-size:13px; } .trinsp dt { color:var(--dim); } .trinsp dd { margin:0; word-break:break-word; }
@@ -1996,6 +1998,11 @@ function trView(l) {
 // the same links as a diagram: parts grouped by role in a fixed template (a group is drawn only when it has a part), one line per
 // link; the plane is the line's colour and dash pattern (the table names it), ✓/✗ says whether a part answers
 const PLANE_STYLE = { control: ['#4cc9ff', '7 4'], data: ['#3fb950', ''], monitoring: ['#b38cff', '2 4'], management: ['#ffb02e', '10 3 2 3'], access: ['#8da2ff', ''] };
+const TR_ICON = { server: 'M2 3h12v4H2zM2 9h12v4H2zM4.5 5h.01M4.5 11h.01', db: 'M3 4c0-1.1 2.2-2 5-2s5 .9 5 2-2.2 2-5 2-5-.9-5-2zM3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2',
+  gear: 'M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4',
+  screen: 'M2 3h12v8H2zM6 14h4M8 11v3', cube: 'M8 1.5l6 3v7l-6 3-6-3v-7zM2 4.5l6 3 6-3M8 7.5v7', chart: 'M2 13V3M2 13h12M5 10l3-3 2 2 3-4', lock: 'M4 7h8v6H4zM5.5 7V5a2.5 2.5 0 0 1 5 0v2' };
+const PART_ICON = { clients: 'screen', login: 'lock', teleport: 'lock', slurmrestd: 'gear', slurmctld: 'gear', slurmdbd: 'db', slurmd: 'server', nodes: 'server', 'bmc-farm': 'server', 'bcm-mock': 'server', 'k8s-api': 'gear',
+  'kube-scheduler': 'gear', 'kube-controller-manager': 'gear', etcd: 'db', prometheus: 'chart', grafana: 'chart', 'gpu-exporter': 'chart', governor: 'gear', 'sim-nodes': 'server', storage: 'db' };
 const TR_GROUPS = [  // the fixed architecture: [title, grid column, grid row, colour, parts]; a part with no link in this cluster is drawn grayed, never dropped
   ['External clients', 0, 0, '#4cc9ff', ['clients']], ['Access', 1, 0, '#8da2ff', ['login', 'teleport', 'slurmrestd']],
   ['Slurm', 2, 0, '#3fb950', ['slurmctld', 'slurmdbd', 'slurmd', 'nodes']], ['Management', 3, 0, '#ffb02e', ['bmc-farm', 'bcm-mock', 'jira-mock', 'jira-real']],
@@ -2009,7 +2016,7 @@ function paintTrafficMap(rows, ghosts = []) {
   trRows = rows; trGhosts = ghosts;
   const svg = $('tr-map'), links = rows.map(r => r.l), live = new Set(links.flatMap(l => [l.from, l.to])), ids = new Set([...live, ...TR_GROUPS.flatMap(g => g[4])]);
   svg.replaceChildren();
-  $('tr-legend').textContent = 'Grayed: not in this cluster, or not readable here. Lines: ' + [...new Set(links.map(l => l.plane))].map(p => `${p} (${PLANE_STYLE[p]?.[1] ? 'dashed' : 'solid'})`).join(', ') + '. Arrows point from the caller to the part called. Drag a group (or focus it and use the arrow keys) to move it.';
+  $('tr-legend').innerHTML = [...new Set(links.map(l => l.plane))].map(p => `<span class="trkey"><i style="background:${PLANE_STYLE[p]?.[0] || '#8da2ff'}"></i>${esc(p)}</span>`).join('') + '<span class="dim">Arrows run from the caller to the part called; moving dots mean the far end answers; the number is the port; grayed: not in this cluster, or not readable here. Drag a group (or use the arrow keys) to move it.</span>';
   $('tr-reset').hidden = !Object.keys(trOff).length;
   const known = new Set(TR_GROUPS.flatMap(g => g[4])), other = [...ids].filter(i => !known.has(i)), groups = [...TR_GROUPS, ...(other.length ? [['Other', 1, 1, '#8da2ff', other]] : [])]
     .map(([title, c, r, col, parts]) => ({ title, c, r, col, parts: parts.filter(p => ids.has(p)) })).filter(g => g.parts.length);
@@ -2025,14 +2032,17 @@ function paintTrafficMap(rows, ghosts = []) {
   svg.append(defs);
   groups.forEach(g => {
     const box = sv('g', { 'data-group': g.title, tabindex: 0, role: 'group', 'aria-label': g.title + ' group, movable', style: 'cursor:grab' });
-    box.append(sv('rect', { x: g.x, y: g.y, width: GW, height: g.h, rx: 10, fill: g.col, 'fill-opacity': 0.07, stroke: g.col, 'stroke-opacity': 0.6, 'stroke-width': 1.2 }));
-    box.append(sv('text', { x: g.x + 12, y: g.y + 21, fill: g.col, 'font-size': 15, 'font-weight': 700 }, g.title));
+    box.append(sv('rect', { x: g.x, y: g.y, width: GW, height: g.h, rx: 10, fill: g.col, 'fill-opacity': 0.08, stroke: g.col, 'stroke-opacity': 0.8, 'stroke-width': 1.6 }));
+    box.append(sv('path', { d: `M${g.x} ${g.y + 28}V${g.y + 10}a10 10 0 0 1 10-10h${GW - 20}a10 10 0 0 1 10 10v18z`, fill: g.col, 'fill-opacity': 0.22 }));
+    box.append(sv('text', { x: g.x + 12, y: g.y + 20, fill: g.col, 'font-size': 15, 'font-weight': 700 }, g.title));
     svg.append(box);
     g.parts.forEach((id, i) => {
       const up = flowSnap?.reachable[id], gone = !live.has(id), py = g.y + HEAD + i * (PH + 6);
       pos[id] = { x: g.x + 10, y: py, w: GW - 20, g };
-      svg.append(sv('rect', { x: g.x + 10, y: py, width: GW - 20, height: PH, rx: 6, fill: 'var(--panel)', stroke: 'var(--line)', 'stroke-width': 1.2, 'stroke-dasharray': up === false || gone ? '4 3' : '', 'opacity': gone ? 0.4 : 1, 'pointer-events': 'none' }));
-      svg.append(sv('text', { x: g.x + 20, y: py + PH / 2 + 5, fill: 'currentColor', 'font-size': 14, 'opacity': gone ? 0.4 : 1, 'pointer-events': 'none' }, (gone || up === undefined ? '' : up ? '✓ ' : '✗ ') + (id.length > 20 ? id.slice(0, 19) + '…' : id)));
+      svg.append(sv('rect', { x: g.x + 10, y: py, width: GW - 20, height: PH, rx: 7, fill: 'var(--panel)', stroke: gone ? 'var(--line)' : g.col, 'stroke-opacity': gone ? 1 : 0.7, 'stroke-width': 1.4, 'stroke-dasharray': up === false || gone ? '4 3' : '', 'opacity': gone ? 0.4 : 1, 'pointer-events': 'none' }));
+      const ic = sv('path', { d: TR_ICON[PART_ICON[id] || 'cube'], transform: `translate(${g.x + 18} ${py + PH / 2 - 8})`, fill: 'none', stroke: g.col, 'stroke-width': 1.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: gone ? 0.4 : 1, 'pointer-events': 'none' });
+      svg.append(ic);
+      svg.append(sv('text', { x: g.x + 42, y: py + PH / 2 + 5, fill: 'currentColor', 'font-size': 14, 'opacity': gone ? 0.4 : 1, 'pointer-events': 'none' }, (gone || up === undefined ? '' : up ? '✓ ' : '✗ ') + (id.length > 16 ? id.slice(0, 15) + '…' : id)));
     });
   });
   // flowchart routing: leave a box sideways, run in the gap, and go round above everything when a group is in the way
@@ -2045,7 +2055,7 @@ function paintTrafficMap(rows, ghosts = []) {
     const p1 = u(a), p2 = u(c); return `L${p1[0]} ${p1[1]}Q${q[0]} ${q[1]} ${p2[0]} ${p2[1]}`;
   }).join('');
   const top = Math.min(...groups.map(g => g.y)) - 16;
-  [...ghosts.map(l => ({ l, ghost: true })), ...links.map(l => ({ l }))].forEach(({ l, ghost }) => {
+  [...ghosts.filter(l => l.why !== 'not in this cluster').map(l => ({ l, ghost: true })), ...links.map(l => ({ l }))].forEach(({ l, ghost }) => {
     const A = pos[l.from], B = pos[l.to];
     if (!A || !B) return;
     const right = B.x > A.x + A.w + 30, left = B.x + B.w < A.x - 30, so = left ? -1 : 1, si = right ? -1 : 1;  // sides: 1 = right edge
@@ -2053,11 +2063,12 @@ function paintTrafficMap(rows, ghosts = []) {
     const mx = right || left ? (x1 + x2) / 2 + lane('m' + Math.round(x1 + x2)) : Math.max(x1, x2) + 24 + lane('s' + Math.round(x1));
     let pts = [[x1, y1], [mx, y1], [mx, y2], [x2, y2]];
     if ((right || left) && (hits(x1, mx, y1, A, B) || hits(mx, x2, y2, A, B))) { const cy = top + lane('c'), ex = x1 + so * 20 + lane('e' + Math.round(x1)), nx = x2 + si * 20 + lane('n' + Math.round(x2)); pts = [[x1, y1], [ex, y1], [ex, cy], [nx, cy], [nx, y2], [x2, y2]]; }
-    const d = rounded(pts), g = ghost ? sv('g', { opacity: 0.35 }) : sv('g', { 'data-link': l.id, style: 'cursor:pointer' });
-    if (!ghost) g.append(sv('path', { d, fill: 'none', stroke: 'transparent', 'stroke-width': 12 }));
-    g.append(sv('path', { d, fill: 'none', stroke: ghost ? 'var(--dim)' : c, 'stroke-width': l.id === trSel ? 4 : 2.2, 'stroke-linejoin': 'round', 'stroke-dasharray': ghost ? '2 4' : dash, 'marker-end': ghost ? '' : `url(#tm-${PLANE_STYLE[l.plane] ? l.plane : 'access'})` }));
-    if (l.port != null && !ghost) g.append(sv('text', { x: x2 - si * 20, y: y2 - 4, 'text-anchor': 'middle', fill: 'currentColor', 'font-size': 12, stroke: 'var(--panel)', 'stroke-width': 3, 'paint-order': 'stroke' }, `:${l.port}`));
-    g.append(sv('title', {}, `${l.from} to ${l.to}, ${l.protocol}${l.port == null ? '' : ' port ' + l.port}` + (ghost ? ` (grayed: ${l.why})` : '')));
+    const d = rounded(pts), g = ghost ? sv('g', { opacity: 0.4 }) : sv('g', { 'data-link': l.id, style: 'cursor:pointer' }), sel = l.id === trSel, mk = PLANE_STYLE[l.plane] ? l.plane : 'access';
+    if (!ghost) g.append(sv('path', { d, fill: 'none', stroke: 'transparent', 'stroke-width': 14 }));
+    g.append(sv('path', { d, fill: 'none', stroke: ghost ? 'var(--dim)' : c, 'stroke-width': sel ? 4.5 : ghost ? 1.6 : 2.8, 'stroke-opacity': ghost ? 1 : 0.85, 'stroke-linejoin': 'round', 'stroke-dasharray': ghost ? '2 5' : '', 'marker-end': ghost ? '' : `url(#tm-${mk})` }));
+    if (!ghost && trView(l).up === true) g.append(sv('path', { d, class: 'trdots', fill: 'none', stroke: '#fff', 'stroke-opacity': 0.9, 'stroke-width': 2.4, 'stroke-linecap': 'round', 'stroke-dasharray': '0.1 14', 'pointer-events': 'none' }));  // moving dots: the caller-to-callee direction, only on a link whose far end answers
+    if (l.port != null && !ghost) { const lx = x2 + si * 30, ly = y2, wd = String(l.port).length * 7 + 14; g.append(sv('rect', { x: lx - wd / 2, y: ly - 18, width: wd, height: 16, rx: 8, fill: 'var(--panel)', stroke: c, 'stroke-width': 1.4 })); g.append(sv('text', { x: lx, y: ly - 6, 'text-anchor': 'middle', fill: 'currentColor', 'font-size': 11, 'font-weight': 600 }, l.port)); }
+    g.append(sv('title', {}, `${l.from} to ${l.to}, ${l.plane} plane, ${l.protocol}${l.port == null ? '' : ' port ' + l.port}` + (ghost ? ` (grayed: ${l.why})` : '')));
     svg.append(g);
   });
 }
