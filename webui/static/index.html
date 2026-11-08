@@ -55,6 +55,11 @@
   .tile { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:var(--sp4); box-shadow:var(--shadow); text-align:left; font:inherit; color:inherit; display:block; width:100%; }
   button.tile { cursor:pointer; } button.tile:hover { border-color:var(--accent); }
   .tile h2 { margin:0 0 var(--sp2); } .tile .big { margin-bottom:2px; } .tile .sub { font-size:13px; color:var(--dim); }
+  .kpis { display:flex; flex-direction:column; gap:var(--sp2); margin-top:var(--sp4); } @media (max-width:860px) { .kpis { flex-direction:row; flex-wrap:wrap; margin:0; } } .kpis:empty { display:none; }
+  .kpi { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:var(--sp1) var(--sp3); display:flex; align-items:baseline; gap:var(--sp2); box-shadow:var(--shadow); border-left:4px solid var(--line); }
+  .kpi.ok { border-left-color:var(--ok,#3fb950); } .kpi.bad { border-left-color:var(--bad,#f85149); } .kpi.warn { border-left-color:var(--warn,#d29922); }
+  .kpi b { white-space:nowrap; font-size:1.25rem; line-height:1.3; font-variant-numeric:tabular-nums; } .kpi b small { font-size:.9rem; font-weight:400; color:var(--dim); }
+  .kpi span { color:var(--dim); font-size:.85rem; }
   .two { display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:var(--sp4); align-items:start; margin-bottom:var(--sp4); } .two > .panel { margin:0; }
   ul.attn { list-style:none; margin:0; padding:0; } ul.attn li { display:flex; gap:10px; align-items:baseline; padding:8px 0; border-bottom:1px solid var(--line); } ul.attn li:last-child { border:0; }
   ul.attn .ic { width:1.2em; text-align:center; flex:none; font-weight:700; } .ic.warn { color:var(--warn); } .ic.bad { color:var(--bad); } .ic.good { color:var(--ok); }
@@ -517,6 +522,7 @@
   </div>
   <button class="sidei" id="scnbtn" aria-haspopup="dialog"><b aria-hidden="true">▶</b>Scenarios</button>
   <button class="sidei" id="planbtn" aria-haspopup="dialog"><b aria-hidden="true">⚙</b>Cluster architecture</button>
+  <div class="kpis" id="kpis" role="group" aria-label="Cluster at a glance"></div>
 </nav>
 <div class="cols">
 <main id="main" tabindex="-1" aria-label="Cluster components">
@@ -807,10 +813,17 @@ function node(n) {
 function svcRow([k, up]) {
   return `<li><div class="er svc ${up ? 'ok' : 'fault'}"><b class="g" aria-hidden="true">${up ? '✓' : '✗'}</b><span class="nm">${esc(k)}</span><span class="st">${up ? 'answering' : 'not answering'}</span><span class="info" id="si-${esc(k)}"></span></div></li>`;
 }
+function paintKpis() {  // stack down: no cards, one notice (W-10); the cluster at a glance, all from the page's own data (nodes, reachability, applied faults); nothing is invented
+  const f = clusterFacts(), gpu = f.nodes.filter(n => n.kind === 'gpu'), gt = gpu.reduce((a, n) => a + (n.gpus || 0), 0), gb = gpu.reduce((a, n) => a + (n.gpus_busy || 0), 0);
+  const bad = f.nodes.length - f.ok, k = (cls, v, of, label) => `<div class="kpi ${cls}"><b>${v}${of == null ? '' : ` <small>of ${of}</small>`}</b><span>${label}</span></div>`;
+  $('kpis').innerHTML = !f.nodes.length || f.off ? '' : k(bad ? 'warn' : 'ok', f.ok, f.nodes.length, 'nodes healthy') + k(f.off ? 'bad' : f.up < f.svcs.length ? 'warn' : 'ok', f.up, f.svcs.length, 'services up')
+    + (gt ? k('', gb, gt, 'GPUs busy') : '') + k(f.faults ? 'bad' : 'ok', f.faults, null, f.faults === 1 ? 'fault applied' : 'faults applied');
+}
 function renderCluster(c) {
   if (activeCluster && c.clusters) { const m = c.clusters.find(x => x.name === activeCluster); if (m) c = { ...c, ...m }; }  // several clusters (#327): the list and Connections follow the cluster entered
   paintHealth(c);
   if ($('flow').firstChild) paintTiles();
+  setTimeout(paintKpis);
   const stackUp = Object.values(c.services).some(Boolean);
   $('stackdown').hidden = stackUp;
   $('nodeswrap').classList.toggle('solo', !stackUp);
@@ -1834,7 +1847,7 @@ function onFlow(snap) {
   snap.events.forEach(e => recent.push({ t: Date.now(), to: e.to, n: e.from === 'clients' ? e.n : 0, fault: e.from === 'injector' }));
   snap.events.forEach(e => trHist.push({ t: Date.now(), from: e.from, to: e.to, n: e.n, label: e.label, nodes: e.nodes, err: e.err, ms: snap.latency?.[e.to] }));
   trHist = trHist.filter(h => h.t > Date.now() - 3600e3).slice(-800);
-  flowSnap = snap; paintBlocks(); flowNote(); paintFeed(snap.events); paintTraffic();
+  flowSnap = snap; paintBlocks(); paintKpis(); flowNote(); paintFeed(snap.events); paintTraffic();
   if (lens === 'client') paintEye();
   const inj = snap.events.filter(e => e.from === 'injector').pop(); if (inj) { const b = blastFor(inj); if (b) setBlast(b); }
   if (animating()) snap.events.forEach(launch);
