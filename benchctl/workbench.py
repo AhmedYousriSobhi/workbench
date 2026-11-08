@@ -67,7 +67,8 @@ class Spec:
     gpu_nodes: int = 2
     gpus_per_node: int = 8
     parts: list[str] = field(default_factory=lambda: list(DEFAULT_PARTS))
-    k8s_nodes: int = 0
+    k8s_nodes: int | None = None      # Kubernetes GPU nodes; None keeps sim.yaml's count
+    k8s_cpu_nodes: int | None = None  # Kubernetes CPU nodes; None keeps sim.yaml's count
     bmc_nodes: list[str] | None = None  # nodes that get a BMC address; None = every node (part "bmc")
     login_nodes: list[str] = field(default_factory=lambda: list(logins.DEFAULT))  # auth mode of each login node (ADR 0023)
 
@@ -86,13 +87,17 @@ class Spec:
             out += logins.problems({"login": modes}, set(self.parts))
         except logins.LoginError as e:
             out.append(str(e))
-        if self.k8s_nodes and "k8s" not in self.parts:
-            out.append("--k8s-nodes needs the Kubernetes part: add --with k8s (or --workload kubernetes)")
+        for key, flag, hi in (("k8s_nodes", "--k8s-nodes", 16), ("k8s_cpu_nodes", "--k8s-cpu-nodes", 64)):
+            n = getattr(self, key)
+            if n is not None and not 0 <= n <= hi:
+                out.append(f"{key} must be 0 to {hi}, not {n}")
+            elif n and "k8s" not in self.parts:
+                out.append(f"{flag} needs the Kubernetes part: add --with k8s (or --workload kubernetes)")
         return out
 
     def to_dict(self) -> dict:
         return {"name": self.name, "cpu_nodes": self.cpu_nodes, "gpu_nodes": self.gpu_nodes,
-                "gpus_per_node": self.gpus_per_node, "parts": sorted(set(self.parts)), "k8s_nodes": self.k8s_nodes,
+                "gpus_per_node": self.gpus_per_node, "parts": sorted(set(self.parts)), "k8s_nodes": self.k8s_nodes, "k8s_cpu_nodes": self.k8s_cpu_nodes,
                 "bmc_nodes": None if self.bmc_nodes is None else sorted(set(self.bmc_nodes)),
                 "login_nodes": list(self.login_nodes)}
 
@@ -132,6 +137,8 @@ def from_dict(data: dict, base: Spec) -> Spec:
     unknown = set(data) - set(base.to_dict())
     if unknown:
         raise SpecError(f"unknown field(s) in the workbench file: {', '.join(sorted(unknown))}")
+    if "k8s_cpu_nodes" not in data and data.get("k8s_nodes") == 0:  # a file saved before the CPU count existed: 0 meant "sim.yaml's count"
+        data = {**data, "k8s_nodes": None}
     merged = {**base.to_dict(), **data}
     return Spec(**{**merged, "parts": list(merged["parts"]),
                    "bmc_nodes": None if merged.get("bmc_nodes") is None else list(merged["bmc_nodes"]),
@@ -173,8 +180,8 @@ def effective(sim: dict, spec: Spec) -> tuple[dict, dict]:
     if spec.bmc_nodes is not None:
         s["bmc"] = {**(s.get("bmc") or {}), "nodes": sorted(set(spec.bmc_nodes))}
     s["login"] = list(spec.login_nodes)
-    if spec.k8s_nodes:  # --k8s-nodes N: the number of Kubernetes GPU nodes (the other groups keep sim.yaml's counts)
-        s["kubernetes"] = {**(s.get("kubernetes") or {}), "nodes": k8s.node_groups(s, spec.k8s_nodes)}
+    if spec.k8s_nodes is not None or spec.k8s_cpu_nodes is not None:  # --k8s-nodes / --k8s-cpu-nodes: the GPU and CPU node counts
+        s["kubernetes"] = {**(s.get("kubernetes") or {}), "nodes": k8s.node_groups(s, spec.k8s_nodes, spec.k8s_cpu_nodes)}
     s["partitions"] = [p for p in s.get("partitions", []) if have.get(p["nodes"], 1) > 0]
     groups, drop = ["core", "access"], []
     for part in spec.parts:

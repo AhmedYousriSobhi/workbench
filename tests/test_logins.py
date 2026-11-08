@@ -207,5 +207,5 @@ def test_the_cli_and_the_governor_accept_a_login_kind():
 
 def test_the_page_has_a_type_per_login_a_kubernetes_group_and_a_kubectl_line():
     html = (ROOT / "webui/static/index.html").read_text()
-    for needle in ("KIND_LABEL", "data-f=\"kind\"", "GROUP_TITLE", "br-k8s", "k8s-nodes:kubectl", "'kubectl'", "KIND_NAME[loginKind(l)]"):
+    for needle in ("KIND_LABEL", "seg(i, 'kind'", "pl-lg-split", "pl-kon", "pl-kcpu", "pl-sum", "GROUP_TITLE", "br-k8s", "k8s-nodes:kubectl", "'kubectl'", "KIND_NAME[loginKind(l)]"):
         assert needle in html, needle

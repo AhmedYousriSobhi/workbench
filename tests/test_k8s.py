@@ -253,3 +253,25 @@ def test_the_selection_turns_the_part_on_and_counts_the_gpu_nodes():
     on = workbench.estimate(*workbench.effective(SIM, workbench.Spec(parts=[*workbench.DEFAULT_PARTS, "k8s"])), app_mb=0)
     off = workbench.estimate(*workbench.effective(SIM, workbench.Spec()), app_mb=0)
     assert on["total_mb"] - off["total_mb"] == sum(k8s.LIMITS.values())  # the five services' limits, nothing else
+
+
+def test_k8s_cpu_and_gpu_node_counts_are_separate_and_none_keeps_sim_yaml():
+    assert [n for n, _ in k8s.node_list(SIM, None, 3)][:4] == ["kcn001", "kcn002", "kcn003", "kgpu001"]
+    s = workbench.Spec(parts=[*workbench.DEFAULT_PARTS, "k8s"], k8s_nodes=0, k8s_cpu_nodes=5)
+    sim, _ = workbench.effective(SIM, s)
+    names = [n for n, _ in k8s.node_list(sim)]
+    assert names == [f"kcn00{i}" for i in range(1, 6)]                      # 0 GPU nodes is a real choice now, not "default"
+    assert [n for n, _ in k8s.node_list(workbench.effective(SIM, workbench.Spec(parts=["k8s"]))[0])] == ["kcn001", "kcn002", "kgpu001", "kgpu002"]
+    assert any("--k8s-cpu-nodes needs" in p for p in workbench.Spec(k8s_cpu_nodes=2).problems())
+    assert any("k8s_nodes must be 0 to 16" in p for p in workbench.Spec(parts=["k8s"], k8s_nodes=99).problems())
+    old = workbench.from_dict({"k8s_nodes": 0}, workbench.Spec())      # a file saved before the CPU count existed: 0 meant "sim.yaml's count"
+    assert old.k8s_nodes is None and workbench.from_dict({"k8s_nodes": 0, "k8s_cpu_nodes": 1}, workbench.Spec()).k8s_nodes == 0
+
+
+def test_the_governor_and_the_plan_carry_the_kubernetes_counts():
+    from governor import control
+
+    base = {"cpu_nodes": 2, "gpu_nodes": 0, "gpus_per_node": 8, "parts": ["k8s"]}
+    assert control.plan_error({**base, "k8s_nodes": 3, "k8s_cpu_nodes": 0}) is None
+    for bad in ({"k8s_nodes": 99}, {"k8s_cpu_nodes": -1}, {"k8s_nodes": "2"}, {"k8s_nodes": True}):
+        assert "k8s_" in control.plan_error({**base, **bad}), bad

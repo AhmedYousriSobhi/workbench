@@ -107,6 +107,24 @@
   .planform { display:flex; flex-wrap:wrap; gap:10px; margin:8px 0; } .planform input[type=number] { width:5em; min-height:40px; }
   .partgroup { flex-basis:100%; } .partgroup > b { display:inline-block; min-width:6.5rem; text-transform:capitalize; }
   .loginrow { display:flex; gap:var(--sp3); align-items:center; flex-wrap:wrap; margin-bottom:var(--sp2); } .loginrow .nm { min-width:4.5rem; } .loginrow select { min-height:40px; }
+
+  /* Cluster architecture sheet: a wide two-column layout, one card per concern, a sticky summary */
+  dialog#plandlg { width:min(96vw,1060px); max-width:none; max-height:min(94vh,900px); }
+  .sheet-b.plan-grid { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:var(--sp4); align-items:start; }
+  .plan-main, .plan-side { min-width:0; } .plan-main { display:flex; flex-direction:column; gap:var(--sp4); } .plan-side { position:sticky; top:0; display:flex; flex-direction:column; gap:var(--sp3); }
+  .pcard { border:1px solid var(--line); border-radius:14px; padding:var(--sp4); background:var(--panel); display:flex; flex-direction:column; gap:var(--sp3); }
+  .pch { display:flex; align-items:center; gap:var(--sp3); flex-wrap:wrap; } .pch h3 { margin:0; font-size:16px; } .pch .pswitch { margin-left:auto; }
+  .pbadge { font-size:12.5px; padding:3px 10px; border-radius:999px; background:color-mix(in srgb,var(--accent) 12%,var(--panel)); border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line)); font-variant-numeric:tabular-nums; } .pbadge:empty { display:none; }
+  .prow { display:flex; align-items:center; justify-content:space-between; gap:var(--sp3); flex-wrap:wrap; } .plab { display:flex; flex-direction:column; min-width:0; } .plab label { font-weight:600; font-size:14px; }
+  .prow .stpin { flex:0 0 150px; } .pnote { margin:0; } .pcard.off #pc-k8s-body { opacity:.45; pointer-events:none; } .pcard:not(.off) #pc-k8s-off { display:none; } .pcard.off .pbadge { display:none; }
+  #pc-k8s-body { display:flex; flex-direction:column; gap:var(--sp3); } #pl-loginadd { align-self:flex-start; }
+  .presets { display:flex; flex-wrap:wrap; gap:var(--sp2); }
+  .lrow { display:grid; grid-template-columns:5.5rem 1fr auto; gap:var(--sp3); align-items:center; padding:var(--sp3); border:1px solid var(--line); border-radius:12px; margin-bottom:var(--sp2); }
+  .lrow .nm { font-size:15px; } .lrow .nm small { display:block; font-weight:500; color:var(--dim); font-size:12px; } .lopts { display:flex; flex-wrap:wrap; gap:var(--sp3); } .lopt { display:flex; flex-direction:column; gap:3px; } .lopt > span { font-size:12px; color:var(--dim); }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; } .seg button { min-height:40px; padding:0 12px; border:0; background:transparent; color:var(--fg); font:inherit; font-size:14px; cursor:pointer; border-right:1px solid var(--line); } .seg button:last-child { border-right:0; }
+  .seg button[aria-pressed="true"] { background:color-mix(in srgb,var(--accent) 16%,var(--panel)); font-weight:650; } .seg button[aria-pressed="true"]::before { content:'✓ '; } .seg button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+  .psh { margin:0 0 var(--sp2); font-size:14px; } .psum { display:grid; grid-template-columns:auto 1fr; gap:4px var(--sp3); margin:0; font-size:13.5px; } .psum dt { color:var(--dim); } .psum dd { margin:0; font-variant-numeric:tabular-nums; }
+  @media (max-width:860px) { .sheet-b.plan-grid { grid-template-columns:1fr; } .plan-side { position:static; } .lrow { grid-template-columns:1fr auto; } .lrow .nm { grid-column:1 / 3; } }
   .planparts { border:1px solid var(--line); border-radius:8px; } .planparts label { display:inline-block; min-height:40px; padding:8px 10px 0 0; }
   #pl-bar { width:100%; height:14px; } #pl-cmd { white-space:pre-wrap; margin:4px 0 0; }
   .node dt { color:var(--dim); } .node dd { margin:0; }
@@ -586,26 +604,42 @@
     <div class="sheet-f"><p id="exp-msg" role="status" class="small"></p><button class="btn small" id="exp-cancel">Cancel</button><button class="btn" id="exp-go">Download bench-profile.json</button></div>
   </dialog>
   <dialog id="plandlg" class="sheet" aria-labelledby="plan-h">
-    <div class="sheet-h"><div><h2 id="plan-h">Cluster architecture</h2><p class="dim small">Everything that changes what runs, and so how much memory it needs. Check that it fits, then apply.</p></div>
+    <div class="sheet-h"><div><h2 id="plan-h">Cluster architecture</h2><p class="dim small">Choose the Slurm and Kubernetes nodes, the login nodes and the optional parts. The summary shows what it costs in memory. Check that it fits, then apply.</p></div>
       <button class="btn small" id="plan-close" aria-label="Close the plan">✕ Close</button></div>
-    <div class="sheet-b">
-      <div class="steps3">
-        <div class="stp"><label for="pl-cpu">CPU nodes</label><div class="stpin"><button type="button" class="btn small" data-step="pl-cpu" data-d="-1" aria-label="Fewer CPU nodes">−</button><input type="number" id="pl-cpu" min="0" max="64" value="4"><button type="button" class="btn small" data-step="pl-cpu" data-d="1" aria-label="More CPU nodes">+</button></div><span class="small dim" id="pl-now-cpu"></span></div>
-        <div class="stp"><label for="pl-gpu">GPU nodes</label><div class="stpin"><button type="button" class="btn small" data-step="pl-gpu" data-d="-1" aria-label="Fewer GPU nodes">−</button><input type="number" id="pl-gpu" min="0" max="16" value="2"><button type="button" class="btn small" data-step="pl-gpu" data-d="1" aria-label="More GPU nodes">+</button></div><span class="small dim" id="pl-now-gpu"></span></div>
-        <div class="stp"><label for="pl-gpus">GPUs per node</label><div class="stpin"><button type="button" class="btn small" data-step="pl-gpus" data-d="-1" aria-label="Fewer GPUs per node">−</button><input type="number" id="pl-gpus" min="1" max="8" value="8"><button type="button" class="btn small" data-step="pl-gpus" data-d="1" aria-label="More GPUs per node">+</button></div><span class="small dim" id="pl-now-gpus"></span></div>
+    <div class="sheet-b plan-grid">
+      <div class="plan-main">
+        <section class="pcard" aria-labelledby="pc-slurm-h"><header class="pch"><h3 id="pc-slurm-h">Slurm cluster</h3><span class="pbadge" id="pc-slurm-sum"></span></header>
+          <div class="prow"><div class="plab"><label for="pl-cpu">CPU nodes</label><span class="small dim" id="pl-shape-cpu"></span></div><div class="stpin"><button type="button" class="btn small" data-step="pl-cpu" data-d="-1" aria-label="Fewer cpu nodes">−</button><input type="number" id="pl-cpu" min="0" max="64" value="4"><button type="button" class="btn small" data-step="pl-cpu" data-d="1" aria-label="More cpu nodes">+</button></div></div>
+          <div class="prow"><div class="plab"><label for="pl-gpu">GPU nodes</label><span class="small dim" id="pl-shape-gpu"></span></div><div class="stpin"><button type="button" class="btn small" data-step="pl-gpu" data-d="-1" aria-label="Fewer gpu nodes">−</button><input type="number" id="pl-gpu" min="0" max="16" value="2"><button type="button" class="btn small" data-step="pl-gpu" data-d="1" aria-label="More gpu nodes">+</button></div></div>
+          <div class="prow"><div class="plab"><label for="pl-gpus">GPUs per GPU node</label><span class="small dim" id="pl-now-gpus"></span></div><div class="stpin"><button type="button" class="btn small" data-step="pl-gpus" data-d="-1" aria-label="Fewer gpus per gpu node">−</button><input type="number" id="pl-gpus" min="1" max="8" value="8"><button type="button" class="btn small" data-step="pl-gpus" data-d="1" aria-label="More gpus per gpu node">+</button></div></div>
+        </section>
+        <section class="pcard" id="pc-k8s" aria-labelledby="pc-k8s-h"><header class="pch"><h3 id="pc-k8s-h">Kubernetes cluster</h3><span class="pbadge" id="pc-k8s-sum"></span>
+            <label class="tog pswitch"><input type="checkbox" id="pl-kon"><span>Enabled</span></label></header>
+          <p class="small dim pnote" id="pc-k8s-off">Off. Turn it on for a real control plane (API server, etcd, scheduler) with simulated KWOK nodes, about 0.9 GB.</p>
+          <div id="pc-k8s-body">
+          <div class="prow"><div class="plab"><label for="pl-kcpu">CPU nodes</label><span class="small dim" id="pl-shape-kcpu"></span></div><div class="stpin"><button type="button" class="btn small" data-step="pl-kcpu" data-d="-1" aria-label="Fewer cpu nodes">−</button><input type="number" id="pl-kcpu" min="0" max="64" value="2"><button type="button" class="btn small" data-step="pl-kcpu" data-d="1" aria-label="More cpu nodes">+</button></div></div>
+          <div class="prow"><div class="plab"><label for="pl-kgpu">GPU nodes</label><span class="small dim" id="pl-shape-kgpu"></span></div><div class="stpin"><button type="button" class="btn small" data-step="pl-kgpu" data-d="-1" aria-label="Fewer gpu nodes">−</button><input type="number" id="pl-kgpu" min="0" max="16" value="2"><button type="button" class="btn small" data-step="pl-kgpu" data-d="1" aria-label="More gpu nodes">+</button></div></div>
+          <p class="small dim pnote">Kubernetes nodes are separate from the Slurm nodes. Pods never really run on them (KWOK).</p></div>
+        </section>
+        <section class="pcard" id="pl-logins" aria-labelledby="pc-login-h"><header class="pch"><h3 id="pc-login-h">Login nodes</h3><span class="pbadge" id="pl-loginmb"></span></header>
+          <p class="small dim pnote">Each login node has a way in (SSH key, Teleport or both) and serves a scheduler: an <b>s-login</b> has the Slurm tools, a <b>k-login</b> has kubectl, a shared login has both.</p>
+          <div class="presets" role="group" aria-label="Login layouts"><button type="button" class="btn small" id="pl-lg-one">One shared login</button><button type="button" class="btn small" id="pl-lg-split">Separate s-login and k-login</button></div>
+          <div id="pl-loginrows"></div>
+          <button type="button" class="btn small" id="pl-loginadd">＋ Add login node</button>
+          <p class="small dim pnote" id="pl-loginnote"></p></section>
+        <section class="pcard" aria-labelledby="pc-parts-h"><header class="pch"><h3 id="pc-parts-h">Optional parts</h3><span class="pbadge">memory each adds</span></header>
+          <div class="toggles" id="pl-parts"></div>
+          <fieldset class="bmcnodes" id="pl-bmcbox" hidden><legend class="small dim">Nodes that get a BMC (<span id="pl-bmcmb"></span> MB each)</legend><div class="toggles" id="pl-bmcnodes"></div></fieldset>
+          <p class="small dim pnote">Slurm, Prometheus and Grafana are always on.</p></section>
       </div>
-      <fieldset class="planparts"><legend class="small dim">Optional parts (memory limit each adds)</legend>
-        <div class="toggles" id="pl-parts"></div>
-        <fieldset class="bmcnodes" id="pl-bmcbox" hidden><legend class="small dim">Nodes that get a BMC (<span id="pl-bmcmb"></span> MB each)</legend><div class="toggles" id="pl-bmcnodes"></div></fieldset>
-        <p class="small dim" style="margin:8px 0 0">Slurm, Prometheus and Grafana are always on.</p></fieldset>
-      <fieldset class="planparts" id="pl-logins"><legend class="small dim">Login nodes: how each one authenticates and which scheduler it serves (<span id="pl-loginmb"></span>)</legend>
-        <div id="pl-loginrows"></div>
-        <button type="button" class="btn small" id="pl-loginadd">＋ Add login node</button>
-        <p class="small dim" id="pl-loginnote" style="margin:8px 0 0"></p></fieldset>
-      <section class="fit" aria-label="Does it fit"><div class="fitnum"><b id="pl-need">–</b><span class="dim small" id="pl-free"></span></div>
-        <progress id="pl-bar" max="100" value="0" aria-label="Memory needed as a share of free memory"></progress>
-        <p id="pl-msg" role="status" class="small"></p><p id="pl-diff" class="small"></p></section>
-      <details class="cmdbox"><summary class="small">Command for a terminal</summary><pre id="pl-cmd" class="small"></pre><button class="btn small" id="pl-copy" hidden>Copy command</button></details>
+      <div class="plan-side" role="region" aria-label="Summary">
+        <section class="fit" aria-label="Your cluster"><h3 class="psh">Your cluster</h3>
+          <dl class="psum" id="pl-sum"></dl></section>
+        <section class="fit" aria-label="Does it fit"><div class="fitnum"><b id="pl-need">–</b><span class="dim small" id="pl-free"></span></div>
+          <progress id="pl-bar" max="100" value="0" aria-label="Memory needed as a share of free memory"></progress>
+          <p id="pl-msg" role="status" class="small"></p><p id="pl-diff" class="small"></p></section>
+        <details class="cmdbox"><summary class="small">Command for a terminal</summary><pre id="pl-cmd" class="small"></pre><button class="btn small" id="pl-copy" hidden>Copy command</button></details>
+      </div>
     </div>
     <div class="sheet-f"><p id="pl-apply-msg" role="status" class="small"></p><button class="btn small" id="plan-cancel">Cancel</button><button class="btn" id="pl-apply" hidden>Apply to the running workbench</button></div>
   </dialog>
@@ -750,6 +784,8 @@ async function loadPlan() {
   const parts = [...document.querySelectorAll('#pl-parts input:checked')].map(i => i.value).join(',');
   const q = new URLSearchParams({ cpu_nodes: $('pl-cpu').value, gpu_nodes: $('pl-gpu').value, gpus_per_node: $('pl-gpus').value, parts });
   if (loginModes.length) q.set('logins', loginModes.join(','));
+  if (k8sOn()) { q.set('k8s_cpu_nodes', $('pl-kcpu').value); q.set('k8s_nodes', $('pl-kgpu').value); }
+  paintPlanSummary();
   if (!$('pl-bmcbox').hidden) q.set('bmc_nodes', [...document.querySelectorAll('#pl-bmcnodes input:checked')].map(i => i.value).join(','));
   const r = await fetch('/api/plan?' + q);
   if (!r.ok) { $('pl-msg').textContent = '✗ ' + (await r.json()).detail; $('pl-cmd').textContent = ''; $('pl-bar').value = 0; $('pl-need').textContent = '–'; $('pl-free').textContent = ''; $('pl-apply').hidden = true; return; }
@@ -765,7 +801,19 @@ async function loadPlan() {
 }
 document.querySelectorAll('#plandlg input[type=number]').forEach(i => i.oninput = i.onchange = () => planInputs());
 let armed = 0;
-function planInputs() { clearTimeout(planTimer); planTimer = setTimeout(loadPlan, 250); armed = 0; $('pl-apply').textContent = 'Apply to the running workbench'; }
+const k8sInput = () => document.querySelector('#pl-parts input[value="k8s"]'), k8sOn = () => !!(k8sInput() && k8sInput().checked);
+let shapes = {};
+function paintPlanSummary() {  // the same numbers the cards show, as one list: how many nodes of each kind, which logins, how many parts
+  const n = id => +$(id).value || 0, gpus = n('pl-gpu') * n('pl-gpus'), on = k8sOn(), kg = (shapes.k8s_gpu || {}).gpus || 8, kgpus = n('pl-kgpu') * kg;
+  $('pc-slurm-sum').textContent = `${n('pl-cpu') + n('pl-gpu')} nodes`;
+  $('pc-k8s-sum').textContent = `${n('pl-kcpu') + n('pl-kgpu')} nodes`; $('pc-k8s').classList.toggle('off', !on); $('pl-kon').checked = on;
+  document.querySelectorAll('#pc-k8s-body input, #pc-k8s-body button').forEach(el => { el.disabled = !on; });
+  const parts = [...document.querySelectorAll('#pl-parts input:checked')].map(i => i.value).filter(v => v !== 'k8s').length;
+  const rows = [['Slurm', `${n('pl-cpu')} CPU + ${n('pl-gpu')} GPU nodes · ${gpus} GPUs`], ['Kubernetes', on ? `${n('pl-kcpu')} CPU + ${n('pl-kgpu')} GPU nodes · ${kgpus} GPUs (KWOK)` : 'off'],
+    ['Login nodes', loginModes.map((m, i) => `${loginName(i)} (${KIND_NAME[entryKind(m)]}, ${LOGIN_LABEL[entryAuth(m)].replace('Direct ', '')})`).join(', ') || 'none'], ['Optional parts', `${parts} selected`]];
+  $('pl-sum').innerHTML = rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
+}
+function planInputs() { paintPlanSummary(); clearTimeout(planTimer); planTimer = setTimeout(loadPlan, 250); armed = 0; $('pl-apply').textContent = 'Apply to the running workbench'; }
 document.querySelectorAll('[data-step]').forEach(b => b.onclick = () => { const i = $(b.dataset.step); i.value = Math.min(+i.max, Math.max(+i.min, (+i.value || 0) + +b.dataset.d)); planInputs(); });
 function currentSize() {
   const nodes = nodeList(), g = nodes.find(n => n.kind === 'gpu');
@@ -777,14 +825,18 @@ const LOGIN_LABEL = { ssh: 'Direct SSH', teleport: 'Teleport only', both: 'Direc
 const loginName = i => i === 0 ? 'login' : 'login' + (i + 1);
 const KIND_LABEL = { both: 'Slurm and Kubernetes (login)', slurm: 'Slurm only (s-login)', k8s: 'Kubernetes only (k-login)' };
 const entryAuth = m => m.split(':')[0], entryKind = m => m.split(':')[1] || 'both', entryOf = (a, k) => k === 'both' ? a : `${a}:${k}`;
+const AUTH_SHORT = { ssh: 'SSH', teleport: 'Teleport', both: 'Both' }, KIND_SHORT = { slurm: 'Slurm', k8s: 'Kubernetes', both: 'Both' };
+function seg(i, field, map, cur) { return `<div class="seg" role="group" aria-label="${field === 'auth' ? 'Way in' : 'Serves'} of ${loginName(i)}">${Object.entries(map).map(([k, v]) => `<button type="button" data-i="${i}" data-f="${field}" data-v="${k}" aria-pressed="${k === cur}">${v}</button>`).join('')}</div>`; }
 function drawLogins() {
-  const opts = (map, cur) => Object.entries(map).map(([k, v]) => `<option value="${k}"${k === cur ? ' selected' : ''}>${v}</option>`).join('');
-  $('pl-loginrows').innerHTML = loginModes.map((m, i) => `<div class="loginrow"><b class="nm">${loginName(i)}</b><select data-i="${i}" data-f="auth" aria-label="How ${loginName(i)} authenticates">${opts(LOGIN_LABEL, entryAuth(m))}</select><select data-i="${i}" data-f="kind" aria-label="Which scheduler ${loginName(i)} serves">${opts(KIND_LABEL, entryKind(m))}</select>${i === loginModes.length - 1 && i > 0 ? `<button type="button" class="btn small" data-rm="${i}" aria-label="Remove ${loginName(i)}">Remove</button>` : ''}</div>`).join('');
-  $('pl-loginrows').querySelectorAll('select').forEach(el => el.onchange = () => { const i = +el.dataset.i, m = loginModes[i]; loginModes[i] = el.dataset.f === 'auth' ? entryOf(el.value, entryKind(m)) : entryOf(entryAuth(m), el.value); loginsChanged(); });
+  $('pl-loginrows').innerHTML = loginModes.map((m, i) => `<div class="lrow"><b class="nm">${loginName(i)}<small>${esc(KIND_TEXT[entryKind(m)])}</small></b><div class="lopts"><div class="lopt"><span>Way in</span>${seg(i, 'auth', AUTH_SHORT, entryAuth(m))}</div><div class="lopt"><span>Serves</span>${seg(i, 'kind', KIND_SHORT, entryKind(m))}</div></div>${i === loginModes.length - 1 && i > 0 ? `<button type="button" class="btn small" data-rm="${i}" aria-label="Remove ${loginName(i)}">Remove</button>` : '<span></span>'}</div>`).join('');
+  $('pl-loginrows').querySelectorAll('.seg button').forEach(el => el.onclick = () => { const i = +el.dataset.i, m = loginModes[i]; loginModes[i] = el.dataset.f === 'auth' ? entryOf(el.dataset.v, entryKind(m)) : entryOf(entryAuth(m), el.dataset.v); drawLogins(); loginsChanged(); });
   $('pl-loginrows').querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { loginModes.splice(+b.dataset.rm, 1); drawLogins(); loginsChanged(); });
   $('pl-loginadd').disabled = loginModes.length >= loginMax;
   $('pl-loginmb').textContent = `${loginModes.length} × 40 MB`;
 }
+$('pl-lg-one').onclick = () => { loginModes = ['ssh']; drawLogins(); loginsChanged(); };
+$('pl-lg-split').onclick = () => { loginModes = ['ssh:slurm', 'ssh:k8s']; drawLogins(); loginsChanged(); };
+$('pl-kon').onchange = () => { const k = k8sInput(); if (k) k.checked = $('pl-kon').checked; if (!$('pl-kon').checked) { loginModes = loginModes.map(m => entryKind(m) === 'k8s' ? entryOf(entryAuth(m), 'slurm') : m); drawLogins(); } syncTeleport(); planInputs(); };
 function syncTeleport() {  // a Teleport login needs the Teleport part: tick it, and say so
   const tp = document.querySelector('#pl-parts input[value="teleport"]'), need = loginModes.some(m => entryAuth(m) !== 'ssh');
   if (tp && need && !tp.checked) tp.checked = true;
@@ -801,7 +853,10 @@ async function drawParts() {  // the options come from the backend registry (/ap
   try {
     const j = await (await fetch('/api/settings')).json();
     $('pl-parts').innerHTML = [...new Set(j.parts.map(p => p.category))].map(c => `<div class="partgroup" role="group" aria-label="${esc(c)}"><b class="small dim">${esc(c)}</b> ` + j.parts.filter(p => p.category === c).map(p => `<label class="tog" title="${esc(p.help)}"><input type="checkbox" value="${esc(p.id)}"${p.on ? ' checked' : ''}><span>${esc(p.label)} <small class="dim">+${p.mb} MB</small></span></label>`).join('') + '</div>').join('');
+    $('pl-parts').querySelectorAll('label').forEach(l => { if (l.querySelector('input[value="k8s"]')) l.hidden = true; });  // Kubernetes has its own card
+    $('pl-parts').querySelectorAll('.partgroup').forEach(g => { if (![...g.querySelectorAll('label')].some(l => !l.hidden)) g.hidden = true; });
     $('pl-parts').querySelectorAll('input').forEach(i => i.oninput = i.onchange = () => { showBmcNodes(); planInputs(); });
+    shapes = j.shapes || {};
     $('pl-bmcmb').textContent = j.bmc_node_mb;
     $('pl-bmcnodes').innerHTML = j.nodes.map(n => `<label class="tog"><input type="checkbox" value="${esc(n.name)}"${n.bmc ? ' checked' : ''}><span>${esc(n.name)}</span></label>`).join('');
     $('pl-bmcnodes').querySelectorAll('input').forEach(i => i.oninput = i.onchange = () => planInputs());
@@ -813,10 +868,14 @@ async function drawParts() {  // the options come from the backend registry (/ap
 }
 async function openPlan() {
   await drawParts();
-  const c = currentSize();
+  const c = currentSize(), sh = shapes;
   if (c.cpu + c.gpu) { $('pl-cpu').value = c.cpu; $('pl-gpu').value = c.gpu; if (c.gpus) $('pl-gpus').value = c.gpus; }
-  $('pl-now-cpu').textContent = c.cpu + c.gpu ? `now ${c.cpu}` : ''; $('pl-now-gpu').textContent = c.cpu + c.gpu ? `now ${c.gpu}` : ''; $('pl-now-gpus').textContent = c.gpus ? `now ${c.gpus}` : '';
-  $('pl-apply-msg').textContent = ''; armed = 0; $('plandlg').showModal(); loadPlan();
+  if (sh.k8s_cpu) { $('pl-kcpu').value = sh.k8s_cpu.count; $('pl-kgpu').value = sh.k8s_gpu.count; }
+  const node = (o, unit) => o && o.cpus ? `${o.cpus} CPUs · ${o.memory_gb} GB each${unit || ''}` : '';
+  $('pl-shape-cpu').textContent = node(sh.slurm_cpu); $('pl-shape-gpu').textContent = sh.slurm_gpu && sh.slurm_gpu.gpu_type ? `${sh.slurm_gpu.gpu_type.toUpperCase()} GPUs` : '';
+  $('pl-shape-kcpu').textContent = node(sh.k8s_cpu); $('pl-shape-kgpu').textContent = sh.k8s_gpu && sh.k8s_gpu.gpus ? `${sh.k8s_gpu.gpus} × ${(sh.k8s_gpu.gpu_type || '').toUpperCase()}, ${sh.k8s_gpu.cpus} CPUs each` : '';
+  $('pl-now-gpus').textContent = c.gpus ? `now ${c.gpus}` : '';
+  $('pl-apply-msg').textContent = ''; armed = 0; paintPlanSummary(); $('plandlg').showModal(); loadPlan();
 }
 $('c-level').onclick = $('c-mem').onclick = () => $('govdlg').showModal(); $('gov-close').onclick = () => $('govdlg').close();
 $('govdlg').addEventListener('click', e => { if (e.target === $('govdlg')) $('govdlg').close(); });

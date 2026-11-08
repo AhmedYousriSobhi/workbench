@@ -187,7 +187,7 @@ recording that survives a dropped connection, session sharing), Kubernetes, web 
 `./scripts/benchctl up --with k8s` (or `--workload kubernetes`) adds a real Kubernetes control plane (etcd, API server,
 scheduler, controller manager) and KWOK, which plays the nodes. About 0.3 GB of memory. The nodes are fake and separate from the
 Slurm nodes: `kcn001`, `kcn002` (CPU) and `kgpu001`, `kgpu002` (8 GPUs each, labelled as GPU Feature Discovery does); change them
-under `kubernetes:` in `sim.yaml`, or set the GPU node count with `--k8s-nodes N`. Pods never really run, so there are no real pod
+under `kubernetes:` in `sim.yaml`, or set the counts with `--k8s-nodes N` (GPU nodes) and `--k8s-cpu-nodes N`, or in the page (Cluster architecture). Pods never really run, so there are no real pod
 logs; a pod labelled `workbench_fault` (the fixtures have crash-looping, OOM-killed, image-pull and failed-job ones) shows the status a kubelet
 would report. The first start pulls about 400 MB of images.
 

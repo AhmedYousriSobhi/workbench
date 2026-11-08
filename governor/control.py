@@ -32,6 +32,10 @@ def plan_error(req: dict) -> str | None:
         v = req.get(key)
         if not (isinstance(v, int) and not isinstance(v, bool) and lo <= v <= hi):
             return f"apply-plan needs {key}: int {lo}..{hi}"
+    for key, hi in (("k8s_nodes", 16), ("k8s_cpu_nodes", 64)):  # optional: absent keeps sim.yaml's count
+        v = req.get(key)
+        if v is not None and not (isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= hi):
+            return f"apply-plan {key} must be an int 0..{hi}"
     parts = req.get("parts")
     if not (isinstance(parts, list) and all(isinstance(p, str) and p in PLAN_PARTS for p in parts)):
         return f"apply-plan parts must be a list of: {', '.join(sorted(PLAN_PARTS))}"

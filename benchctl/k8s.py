@@ -67,20 +67,20 @@ def kubectl_image(sim: dict) -> str:
     return f"registry.k8s.io/kubectl:{version(sim)}"
 
 
-def node_groups(sim: dict, gpu_override: int | None = None) -> list[dict]:
+def node_groups(sim: dict, gpu_override: int | None = None, cpu_override: int | None = None) -> list[dict]:
     """The Kubernetes node groups: sim.yaml `kubernetes.nodes`, else the defaults. `gpu_override` (--k8s-nodes) sets the
-    count of the group that has GPUs."""
+    count of the group that has GPUs, `cpu_override` (--k8s-cpu-nodes) the count of the one that has none."""
     groups = [dict(g) for g in ((sim.get("kubernetes") or {}).get("nodes") or DEFAULT_NODES)]
-    if gpu_override is not None:
-        for g in groups:
-            if g.get("gpus"):
-                g["count"] = gpu_override
+    for g in groups:
+        over = gpu_override if g.get("gpus") else cpu_override
+        if over is not None:
+            g["count"] = over
     return groups
 
 
-def node_list(sim: dict, gpu_override: int | None = None) -> list[tuple[str, dict]]:
+def node_list(sim: dict, gpu_override: int | None = None, cpu_override: int | None = None) -> list[tuple[str, dict]]:
     """[(name, group)] in order: kcn001, kcn002, kgpu001, ..."""
-    return [(f"{g['prefix']}{i:03d}", g) for g in node_groups(sim, gpu_override) for i in range(1, int(g.get("count", 0)) + 1)]
+    return [(f"{g['prefix']}{i:03d}", g) for g in node_groups(sim, gpu_override, cpu_override) for i in range(1, int(g.get("count", 0)) + 1)]
 
 
 def problems(sim: dict) -> list[str]:
