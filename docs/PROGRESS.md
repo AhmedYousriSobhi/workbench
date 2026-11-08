@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**86% built** (35 done, 53 in review, 9 partial, 5 to do, 102 items).
+**86% built** (36 done, 52 in review, 9 partial, 5 to do, 102 items).
 
 ## Roadmap
 
@@ -14,7 +14,7 @@ flowchart LR
     p2["Slurm<br/>100%"]:::review
     p3["Mocks<br/>83%"]:::partial
     p4["People and chaos<br/>25%"]:::partial
-    p5["Kubernetes<br/>100%"]:::review
+    p5["Kubernetes<br/>100%"]:::done
     p6["Fidelity VM<br/>0%"]:::todo
     p7["Web UI and profiles<br/>86%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
@@ -54,7 +54,7 @@ flowchart TB
         tele["Teleport access"]:::partial
         chaos["scenario engine (benchctl)"]:::partial
         users["user-sim / ticket-bot"]:::todo
-        k8s["Kubernetes + KWOK"]:::review
+        k8s["Kubernetes + KWOK"]:::done
         webui["Web UI"]:::partial
     end
     subgraph ext["Outside the 16 GB budget"]
@@ -185,9 +185,9 @@ _Mixed real and fake K8s nodes._
 | Part | Status | How it is built | Where | PR |
 |---|---|---|---|---|
 | Cluster fixtures | ✅ Done | Namespaces, workloads, failure signals and a read-only RBAC role, applied with apply.sh. | `k8s/fixtures` | - |
-| Kubernetes part (real control plane plus KWOK nodes) | 🔍 In review | Optional part (`benchctl up --with k8s` or `--workload kubernetes`, off by default; issue 232, ADR 0034): etcd, kube-apiserver, kube-controller-manager, kube-scheduler and the KWOK controller as five unprivileged, memory-limited compose services at fixed addresses (API 10.141.255.40:6443), P3, measured about 0.3 GB (cap 0.77 GB). Nodes (kcn001..., kgpu001... with nvidia.com/gpu and GPU Feature Discovery labels) come from sim.yaml kubernetes.nodes; a PKI and read-only kubeconfigs are generated into secrets/k8s; the login node has kubectl (from the official image) and per-user ~/.kube/config (cluster-wide) and limited.yaml (namespace team-a), mode 600. Failing pods get a kubelet's status from KWOK stages (label workbench_fault: CrashLoopBackOff, OOMKilled, ImagePullBackOff, failed job). Scenario target k8s (down/up, cordon, pod, delete_pod, scale, apply; expect k8s.node_ready, k8s.pod_status): k8s-node-notready, pod-crashloop. Login nodes can be an s-login (`ssh:slurm`) or a k-login (`ssh:k8s`) (issue 380): the k-login has kubectl and the kubeconfigs and no Slurm configuration; the diagram shows the Kubernetes nodes as their own group, each login pointing at the group it serves; printed ssh commands carry -o IdentitiesOnly=yes. The Cluster architecture sheet is a wide two-column layout (Slurm card, Kubernetes card with its own CPU and GPU node counts, a card per login node with Way in and Serves choices, optional parts, a sticky summary); --k8s-cpu-nodes. The diagram has a Kubernetes API box (up or down, no request counter) and the client export puts the k8s block on the k-login's entry (checked with the client's own importer). Kubernetes nodes are machines: they get BMCs (a rule per node group, --bmc-groups), BCM entries (categories k8s-cpu, k8s-gpu) and GPU metrics. The Scenarios panel is a docked drawer toggled from the top strip. Verified live (verify.sh --unit k8s); the client's screens not yet tried (desktop app). Not built: a real agent node (privileged), metrics-server, Teleport access. | `benchctl/k8s.py`, `benchctl/compose.py`, `benchctl/stack.py`, `benchctl/scenario.py`, `k8s/kwok`, `k8s/fixtures`, `images/login`, `tests/test_k8s.py`, `tests/real/test_k8s_real.py`, `docs/adr/0034-kubernetes-kwok-first.md` | - |
+| Kubernetes part (real control plane plus KWOK nodes) | ✅ Done | Optional part (`benchctl up --with k8s` or `--workload kubernetes`, off by default; issue 232, ADR 0034): etcd, kube-apiserver, kube-controller-manager, kube-scheduler and the KWOK controller as five unprivileged, memory-limited compose services at fixed addresses (API 10.141.255.40:6443), P3, measured about 0.3 GB (cap 0.77 GB). Nodes (kcn001..., kgpu001... with nvidia.com/gpu and GPU Feature Discovery labels) come from sim.yaml kubernetes.nodes; a PKI and read-only kubeconfigs are generated into secrets/k8s; the login node has kubectl (from the official image) and per-user ~/.kube/config (cluster-wide) and limited.yaml (namespace team-a), mode 600. Failing pods get a kubelet's status from KWOK stages (label workbench_fault: CrashLoopBackOff, OOMKilled, ImagePullBackOff, failed job). Scenario target k8s (down/up, cordon, pod, delete_pod, scale, apply; expect k8s.node_ready, k8s.pod_status): k8s-node-notready, pod-crashloop. Login nodes can be an s-login (`ssh:slurm`) or a k-login (`ssh:k8s`) (issue 380): the k-login has kubectl and the kubeconfigs and no Slurm configuration; the diagram shows the Kubernetes nodes as their own group, each login pointing at the group it serves; printed ssh commands carry -o IdentitiesOnly=yes. The Cluster architecture sheet is a wide two-column layout (Slurm card, Kubernetes card with its own CPU and GPU node counts, a card per login node with Way in and Serves choices, optional parts, a sticky summary); --k8s-cpu-nodes. The diagram has a Kubernetes API box (up or down, no request counter) and the client export puts the k8s block on the k-login's entry (checked with the client's own importer). Kubernetes nodes are machines: they get BMCs (a rule per node group, --bmc-groups), BCM entries (categories k8s-cpu, k8s-gpu) and GPU metrics. The Scenarios panel is a docked drawer toggled from the top strip. Verified live (verify.sh --unit k8s); the client's screens not yet tried (desktop app). Not built: a real agent node (privileged), metrics-server, Teleport access. | `benchctl/k8s.py`, `benchctl/compose.py`, `benchctl/stack.py`, `benchctl/scenario.py`, `k8s/kwok`, `k8s/fixtures`, `images/login`, `tests/test_k8s.py`, `tests/real/test_k8s_real.py`, `docs/adr/0034-kubernetes-kwok-first.md` | [#379](https://github.com/AhmedYousriSobhi/workbench/pull/379) |
 
-1/2 done
+2/2 done
 
 ### Fidelity VM (0%)
 
