@@ -1,5 +1,6 @@
 import json
 import socket
+import subprocess
 import threading
 import time
 import urllib.request
@@ -531,3 +532,18 @@ def test_slurm_stats_come_from_the_governor(tmp_path):
     finally:
         server.should_exit = True
         gov.shutdown()
+
+
+def test_the_inline_script_has_valid_javascript_syntax(tmp_path):
+    """A stray quote in one string once broke the whole page while every string-matching test still passed."""
+    import re
+    import shutil
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    html = (ROOT / "webui/static/index.html").read_text()
+    js = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.DOTALL))
+    f = tmp_path / "page.js"
+    f.write_text(js)
+    r = subprocess.run([node, "--check", str(f)], capture_output=True, text=True, check=False)
+    assert r.returncode == 0, r.stderr[:400]
