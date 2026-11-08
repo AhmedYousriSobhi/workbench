@@ -85,6 +85,9 @@
   label.chk { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--dim); cursor:pointer; }
   pre { margin:0; font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap; word-break:break-word; max-height:300px; overflow:auto; }
   .tablewrap { overflow-x:auto; }
+  .trgrid { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:var(--sp4); align-items:start; } @media (max-width:1100px) { .trgrid { grid-template-columns:1fr; } }
+  .trinsp { border:1px solid var(--line); border-radius:8px; padding:var(--sp3); } .trinsp h3 { margin:0 0 var(--sp2); font-size:14px; display:flex; justify-content:space-between; align-items:center; }
+  .trinsp dl { display:grid; grid-template-columns:auto 1fr; gap:4px var(--sp3); margin:0 0 var(--sp3); font-size:13px; } .trinsp dt { color:var(--dim); } .trinsp dd { margin:0; word-break:break-word; }
   table { width:100%; border-collapse:collapse; }
   th { text-align:left; font-size:12px; color:var(--dim); font-weight:600; }
   td,th { padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:middle; }
@@ -581,10 +584,10 @@
       <div class="row"><label for="tr-plane" class="small dim">Plane</label><select id="tr-plane" class="btn small"><option value="all">All</option></select>
         <label for="tr-sw" class="small dim">Software</label><select id="tr-sw" class="btn small"><option value="all">All</option><option value="real">Real</option><option value="simulated">Simulated</option></select>
         <label for="tr-ev" class="small dim">Evidence</label><select id="tr-ev" class="btn small"><option value="all">All</option><option value="observed">Observed</option><option value="configured">Configured</option></select></div>
-      <div id="tr-path" class="small" hidden></div><div id="tr-insp" class="small" hidden></div>
-      <div id="tr-slurm" class="small" hidden></div>
-      <div class="tablewrap"><svg id="tr-map" role="img" aria-label="Diagram of the links listed in the table below"></svg></div>
-      <p class="dim small" id="tr-legend"></p>
+      <div id="tr-path" class="small" hidden></div><div id="tr-slurm" class="small" hidden></div>
+      <div class="trgrid"><div><div class="tablewrap"><svg id="tr-map" role="img" aria-label="Diagram of the links listed in the table below"></svg></div>
+        <p class="dim small" id="tr-legend"></p></div>
+        <div id="tr-insp" class="trinsp" role="group" aria-label="Traffic flow inspector"></div></div>
       <div class="tablewrap"><table class="conn"><thead><tr><th>From</th><th>To</th><th>Protocol and port</th><th>Plane</th><th>Software</th><th>Evidence</th><th>Requests</th><th>Probe latency</th><th>State</th></tr></thead><tbody id="tr-rows"><tr><td colspan="9" class="skel">Loading…</td></tr></tbody></table></div></div>
   </div>
   <div id="tab-conn" role="tabpanel" aria-labelledby="tb-conn" hidden>
@@ -1969,8 +1972,8 @@ async function poll() {
 let trSel = null, trPath = null, monLinks = [];
 const trRate = {};  // service -> {t, n, rate}: requests per second from the counter, re-sampled every 3 s
 function rateOf(svc, n) {
-  const now = Date.now(), r = trRate[svc] ||= { t: now, n, rate: null };
-  if (now - r.t >= 3000) { r.rate = Math.max(n - r.n, 0) / ((now - r.t) / 1000); r.t = now; r.n = n; }
+  const now = Date.now(), r = trRate[svc] ||= { t: now, n, rate: null, hist: [] };
+  if (now - r.t >= 3000) { r.rate = Math.max(n - r.n, 0) / ((now - r.t) / 1000); r.t = now; r.n = n; r.hist.push(r.rate); if (r.hist.length > 40) r.hist.shift(); }
   return r.rate;
 }
 // every link on the chain through `id`: upstream until a source, downstream until a sink
@@ -1989,44 +1992,74 @@ function trView(l) {
   return { up, n, rate, ms, mon, state: up === undefined ? '–' : up ? '✓ up' : mon ? `✗ ${l.up} of ${l.targets} up` : '✗ not reachable',
     ev: l.measured ? 'observed' : 'configured', sw: l.real ? 'real' : 'simulated' };
 }
-// the same links as a diagram: boxes in columns by distance from the callers, one line per link; the plane is the line's
-// colour and dash pattern (and the table names it), the box says whether the part answers (✓ ✗), selecting a line opens the inspector
+// the same links as a diagram: parts grouped by role in a fixed template (a group is drawn only when it has a part), one line per
+// link; the plane is the line's colour and dash pattern (the table names it), ✓/✗ says whether a part answers
 const PLANE_STYLE = { control: ['#4cc9ff', '7 4'], data: ['#3fb950', ''], monitoring: ['#b38cff', '2 4'], management: ['#ffb02e', '10 3 2 3'], access: ['#8da2ff', ''] };
+const TR_GROUPS = [  // [title, grid column, grid row, colour, parts]
+  ['External clients', 0, 0, '#4cc9ff', ['clients']], ['Access', 1, 0, '#8da2ff', ['login', 'teleport', 'slurmrestd']],
+  ['Slurm', 2, 0, '#3fb950', ['slurmctld', 'slurmd', 'nodes']], ['Management', 3, 0, '#ffb02e', ['bmc-farm', 'bcm-mock', 'jira-mock', 'jira-real']],
+  ['Kubernetes', 0, 1, '#b38cff', ['k8s-api', 'kube-scheduler', 'kube-controller-manager', 'etcd', 'kwok']],
+  ['Monitoring', 2, 1, '#4cc9ff', ['prometheus', 'grafana', 'gpu-exporter', 'governor', 'sim-nodes']]];
 function paintTrafficMap(rows) {
-  const svg = $('tr-map'), links = rows.map(r => r.l), ids = [...new Set(links.flatMap(l => [l.from, l.to]))];
+  const svg = $('tr-map'), links = rows.map(r => r.l), ids = new Set(links.flatMap(l => [l.from, l.to]));
   svg.replaceChildren();
-  $('tr-legend').textContent = 'Lines: ' + [...new Set(links.map(l => l.plane))].map(p => `${p} (${PLANE_STYLE[p] ? (PLANE_STYLE[p][1] ? 'dashed' : 'solid') : 'solid'})`).join(', ') + '. Arrows point from the caller to the part called.';
-  if (!ids.length) return;
-  const depth = {}, roots = ids.filter(i => !links.some(l => l.to === i)), queue = [...(roots.length ? roots : [ids[0]])];
-  queue.forEach(i => depth[i] = 0);
-  for (let k = 0; k < queue.length; k++) for (const l of links) if (l.from === queue[k] && depth[l.to] === undefined) { depth[l.to] = depth[queue[k]] + 1; queue.push(l.to); }
-  ids.forEach(i => { depth[i] ??= 0; });
-  const cols = {}; ids.forEach(i => (cols[depth[i]] ||= []).push(i));
-  const W = 150, H = 34, GX = 70, GY = 26, pos = {};
-  Object.entries(cols).forEach(([d, list]) => list.forEach((id, r) => { pos[id] = { x: 12 + d * (W + GX), y: 12 + r * (H + GY) }; }));
-  const w = 24 + (Math.max(...Object.keys(cols)) + 1) * (W + GX) - GX, h = 24 + Math.max(...Object.values(cols).map(c => c.length)) * (H + GY) - GY;
-  svg.setAttribute('viewBox', `0 0 ${w} ${h}`); svg.setAttribute('width', w); svg.setAttribute('height', h);
+  $('tr-legend').textContent = 'Lines: ' + [...new Set(links.map(l => l.plane))].map(p => `${p} (${PLANE_STYLE[p]?.[1] ? 'dashed' : 'solid'})`).join(', ') + '. Arrows point from the caller to the part called.';
+  if (!ids.size) return;
+  const known = new Set(TR_GROUPS.flatMap(g => g[4])), other = [...ids].filter(i => !known.has(i)), groups = [...TR_GROUPS, ...(other.length ? [['Other', 1, 1, '#8da2ff', other]] : [])]
+    .map(([title, c, r, col, parts]) => ({ title, c, r, col, parts: parts.filter(p => ids.has(p)) })).filter(g => g.parts.length);
+  const GW = 150, PH = 28, HEAD = 26, GAPX = 44, GAPY = 30, PAD = 12, pos = {};
+  const rowH = {}; groups.forEach(g => { rowH[g.r] = Math.max(rowH[g.r] || 0, HEAD + g.parts.length * (PH + 6) + 8); });
+  const rowY = {}; let y = PAD; Object.keys(rowH).map(Number).sort().forEach(r => { rowY[r] = y; y += rowH[r] + GAPY; });
+  const cols = [...new Set(groups.map(g => g.c))].sort(), colX = Object.fromEntries(cols.map((c, i) => [c, PAD + i * (GW + GAPX)]));
+  const w = PAD * 2 + cols.length * (GW + GAPX) - GAPX, h = y - GAPY + PAD;
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`); svg.style.width = '100%'; svg.style.height = 'auto'; svg.style.minWidth = Math.min(w, 600) + 'px'; svg.style.maxWidth = w + 'px';  // scales to the column, but never below readable (the wrapper scrolls)
   const defs = sv('defs', {}); for (const [p, [c]] of Object.entries(PLANE_STYLE)) { const m = sv('marker', { id: 'tm-' + p, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto' }); m.append(sv('path', { d: 'M0 0 L10 5 L0 10 z', fill: c })); defs.append(m); }
   svg.append(defs);
-  const edge = (a, b) => { const A = pos[a], B = pos[b], fwd = depth[b] > depth[a], x1 = A.x + (fwd ? W : 0), x2 = B.x + (fwd ? 0 : W), y1 = A.y + H / 2, y2 = B.y + H / 2; return [x1, y1, x2, y2]; };
+  groups.forEach(g => {
+    const x = colX[g.c], gy = rowY[g.r];
+    svg.append(sv('rect', { x, y: gy, width: GW, height: rowH[g.r], rx: 10, fill: g.col, 'fill-opacity': 0.07, stroke: g.col, 'stroke-opacity': 0.6, 'stroke-width': 1.2 }));
+    svg.append(sv('text', { x: x + 12, y: gy + 17, fill: g.col, 'font-size': 12, 'font-weight': 600 }, g.title));
+    g.parts.forEach((id, i) => {
+      const up = flowSnap?.reachable[id], py = gy + HEAD + i * (PH + 6);
+      pos[id] = { x: x + 10, y: py, w: GW - 20, col: g.c };
+      svg.append(sv('rect', { x: x + 10, y: py, width: GW - 20, height: PH, rx: 6, fill: 'var(--panel)', stroke: 'var(--line)', 'stroke-width': 1.2, 'stroke-dasharray': up === false ? '4 3' : '' }));
+      svg.append(sv('text', { x: x + 20, y: py + PH / 2 + 4, fill: 'currentColor', 'font-size': 12 }, (up === undefined ? '' : up ? '✓ ' : '✗ ') + (id.length > 17 ? id.slice(0, 16) + '…' : id)));
+    });
+  });
   const seen = {};
   links.forEach(l => {
-    const [x1, y1, x2, y2] = edge(l.from, l.to), key = [l.from, l.to].sort().join('|'), n = seen[key] = (seen[key] || 0) + 1, [c, dash] = PLANE_STYLE[l.plane] || ['#8da2ff', ''];
-    const bend = (depth[l.to] > depth[l.from] ? 0 : 36) + (n - 1) * 16, mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - bend;
-    const g = sv('g', { 'data-link': l.id, style: 'cursor:pointer' });
-    g.append(sv('path', { d: `M${x1} ${y1} Q${mx} ${my} ${x2} ${y2}`, fill: 'none', stroke: 'transparent', 'stroke-width': 12 }));
-    g.append(sv('path', { d: `M${x1} ${y1} Q${mx} ${my} ${x2} ${y2}`, fill: 'none', stroke: c, 'stroke-width': l.id === trSel ? 3.5 : 1.6, 'stroke-dasharray': dash, 'marker-end': `url(#tm-${PLANE_STYLE[l.plane] ? l.plane : 'access'})` }));
-    const t = 0.78, q = (a, c, b) => (1 - t) * (1 - t) * a + 2 * t * (1 - t) * c + t * t * b;  // the port sits near the called end, where the lines have fanned out
-    g.append(sv('text', { x: q(x1, mx, x2), y: q(y1, my, y2) - 4, 'text-anchor': 'middle', fill: 'currentColor', 'font-size': 10, stroke: 'var(--panel)', 'stroke-width': 3, 'paint-order': 'stroke' }, `:${l.port}`));
+    const A = pos[l.from], B = pos[l.to];
+    if (!A || !B) return;
+    const dir = Math.sign(B.col - A.col), key = [l.from, l.to].sort().join('|'), n = seen[key] = (seen[key] || 0) + 1;
+    const x1 = dir > 0 ? A.x + A.w : dir < 0 ? A.x : A.x + A.w, x2 = dir > 0 ? B.x : dir < 0 ? B.x + B.w : B.x + B.w, y1 = A.y + PH / 2, y2 = B.y + PH / 2;
+    const bulge = dir === 0 ? 34 + n * 10 : (n - 1) * 14, cx = (x1 + x2) / 2 + bulge, cy = (y1 + y2) / 2, [c, dash] = PLANE_STYLE[l.plane] || ['#8da2ff', ''];
+    const d = `M${x1} ${y1} Q${cx} ${cy} ${x2} ${y2}`, g = sv('g', { 'data-link': l.id, style: 'cursor:pointer' }), t = 0.8;
+    g.append(sv('path', { d, fill: 'none', stroke: 'transparent', 'stroke-width': 12 }));
+    g.append(sv('path', { d, fill: 'none', stroke: c, 'stroke-width': l.id === trSel ? 3.5 : 1.6, 'stroke-dasharray': dash, 'marker-end': `url(#tm-${PLANE_STYLE[l.plane] ? l.plane : 'access'})` }));
+    const q = (a, k, b) => (1 - t) * (1 - t) * a + 2 * t * (1 - t) * k + t * t * b;  // the port sits near the called end, where the lines have fanned out
+    g.append(sv('text', { x: q(x1, cx, x2), y: q(y1, cy, y2) - 4, 'text-anchor': 'middle', fill: 'currentColor', 'font-size': 10, stroke: 'var(--panel)', 'stroke-width': 3, 'paint-order': 'stroke' }, `:${l.port}`));
     g.append(sv('title', {}, `${l.from} to ${l.to}, ${l.protocol} port ${l.port}`));
     svg.append(g);
   });
-  ids.forEach(id => {
-    const up = flowSnap?.reachable[id], p = pos[id], g = sv('g', {});
-    g.append(sv('rect', { x: p.x, y: p.y, width: W, height: H, rx: 6, fill: 'var(--panel)', stroke: 'var(--line)', 'stroke-width': 1.2, 'stroke-dasharray': up === false ? '4 3' : '' }));
-    g.append(sv('text', { x: p.x + 10, y: p.y + H / 2 + 4, fill: 'currentColor', 'font-size': 12 }, (up === undefined ? '' : up ? '✓ ' : '✗ ') + id));
-    svg.append(g);
-  });
+}
+// the right-hand inspector: one link's facts, a rate chart from the counter samples taken while the tab is open
+function rateChart(hist) {
+  if (!hist || hist.length < 2) return '<p class="dim small">The chart fills in as the page samples the counter (every 3 s).</p>';
+  const max = Math.max(...hist, 1), pts = hist.map((v, i) => `${(i / (hist.length - 1)) * 240},${46 - (v / max) * 42}`).join(' ');
+  return `<svg viewBox="0 0 240 50" width="100%" height="50" role="img" aria-label="Requests per second, newest on the right, peak ${+max.toFixed(1)}"><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="1.8"/></svg><div class="dim small">Peak ${+max.toFixed(1)}/s over the last ${hist.length * 3} s</div>`;
+}
+function paintTrInspector(cur) {
+  const box = $('tr-insp');
+  if (!cur) { box.innerHTML = '<h3>Traffic flow inspector</h3><p class="dim small">Select a link in the diagram or the table to see its details here.</p>'; return; }
+  const v = trView(cur), row = (k, val) => `<dt>${k}</dt><dd>${val}</dd>`;
+  box.innerHTML = `<h3>Traffic flow inspector <button class="btn small" id="tr-close" aria-label="Close the inspector">✕</button></h3><dl>`
+    + row('Source', esc(cur.from)) + row('Destination', esc(cur.to)) + row('Protocol', esc(cur.protocol)) + row('Port', cur.port)
+    + row('Direction', `${esc(cur.from)} → ${esc(cur.to)}`) + row('Plane', esc(cur.plane)) + row('Software', v.sw) + row('Evidence', v.ev)
+    + row('Request rate', v.rate == null ? 'not counted for this link' : `${+v.rate.toFixed(1)} req/s`)
+    + row('Latency', v.ms == null ? 'not measured' : `${v.ms} ms (${v.mon ? 'Prometheus scrape' : 'this page\'s probe'})`)
+    + row('Requests', v.mon ? `${cur.targets} target${cur.targets === 1 ? '' : 's'} scraped` : v.n == null ? '–' : v.n.toLocaleString())
+    + row('State', v.state) + `</dl><p class="small">${esc(cur.what)}</p>` + rateChart(trRate[cur.service]?.hist)
+    + '<button class="btn small" id="tr-follow">Follow the path</button>';
 }
 function paintTraffic() {
   if ($('tab-traffic').hidden) return;
@@ -2049,15 +2082,7 @@ function paintTraffic() {
   const pb = $('tr-path');
   pb.hidden = !path;
   if (path) pb.innerHTML = `Path through <b>${esc(trPath)}</b>: ${path.size} link${path.size === 1 ? '' : 's'}. <button class="btn small" id="tr-clear">Show all links</button>`;
-  const cur = links.find(l => l.id === trSel), box = $('tr-insp');
-  box.hidden = !cur;
-  if (cur) {
-    const v = trView(cur);
-    box.innerHTML = `<b>${esc(cur.from)} → ${esc(cur.to)}</b> · ${esc(cur.protocol)} port ${cur.port} · ${esc(cur.plane)} plane · ${v.sw} · ${v.ev}<br>`
-      + `Direction: ${esc(cur.from)} calls ${esc(cur.to)}. State: ${v.state}. Latency: ${v.ms == null ? 'not measured' : v.ms + ' ms' + (v.mon ? ' (Prometheus scrape)' : ' (this page\'s probe)')}. `
-      + `Requests: ${v.mon ? cur.targets + ' targets scraped' : v.n == null ? 'not counted for this link' : v.n.toLocaleString()}${v.rate == null ? '' : `, ${+v.rate.toFixed(1)}/s`}. ${esc(cur.what)}. `
-      + `<button class="btn small" id="tr-follow">Follow the path</button> <button class="btn small" id="tr-close">Close</button>`;
-  }
+  paintTrInspector(links.find(l => l.id === trSel));
 }
 $('tr-rows').onclick = $('tr-map').onclick = e => { const b = e.target.closest('[data-link]'); if (b) { trSel = trSel === (b.dataset.link) ? null : b.dataset.link; paintTraffic(); } };
 document.addEventListener('click', e => {
