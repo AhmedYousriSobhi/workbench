@@ -360,3 +360,14 @@ def test_latency_is_the_measured_probe_time_and_goes_when_a_service_stops_answer
     up["on"] = False
     f.poll()
     assert "bmc-farm" not in f.since(0)["latency"]
+
+
+def test_the_api_server_total_is_a_total_not_dots(monkeypatch):
+    from benchctl import k8s
+    from webui import flow as wf
+    monkeypatch.setattr(k8s, "api_up", lambda *a, **kw: True)
+    monkeypatch.setattr(k8s, "api_requests", lambda: 123)
+    f = wf.Flow(fetch=lambda *a: {"requests": 0}, min_interval=0)
+    f.poll()
+    snap = f.since(0)
+    assert snap["totals"]["k8s-api"] == 123 and all(e["to"] != "k8s-api" for e in snap["events"])

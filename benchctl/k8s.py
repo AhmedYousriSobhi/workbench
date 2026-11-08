@@ -34,6 +34,7 @@ API = "k8s-apiserver"
 ENTRYPOINT = {"k8s-etcd": "etcd", "k8s-apiserver": "kube-apiserver", "k8s-controller-manager": "kube-controller-manager",
               "k8s-scheduler": "kube-scheduler", "kwok-controller": "kwok"}
 API_PORT = 6443
+METRICS_USER = "metrics"  # reads /metrics only (k8s/fixtures/45-rbac-metrics.yaml); the page uses it for request counts
 # limits in MB (upper bounds for the planning estimate; measured idle 275 MiB, 310 MiB with 50 nodes and the fixtures)
 LIMITS = {"k8s-etcd": 256, "k8s-apiserver": 384, "k8s-controller-manager": 128, "k8s-scheduler": 64, "kwok-controller": 64}
 SECRETS_DIR = Path("compose/generated/secrets/k8s")   # PKI, tokens and kubeconfigs (gitignored)
@@ -182,6 +183,7 @@ def prepare(sim: dict, ips: dict, secrets_dir: Path | None = None, state_dir: Pa
         _openssl("ec", "-in", "sa.key", "-pubout", "-out", "sa.pub", cwd=d)
         tokens = {"viewer": secrets.token_hex(24), "limited": secrets.token_hex(24)}
         (d / "tokens.csv").write_text("".join(f"{t},{u},{u}-uid\n" for u, t in tokens.items()))
+        (d / "tokens.csv").chmod(0o600)
         ca = _b64(d / "ca.crt")
         internal = f"https://{api_ip(ips)}:{API_PORT}"
         (d / "component.kubeconfig").write_text(kubeconfig(
@@ -195,6 +197,9 @@ def prepare(sim: dict, ips: dict, secrets_dir: Path | None = None, state_dir: Pa
         ips_stamp.write_text(api_ip(ips))
         for f in d.iterdir():
             f.chmod(0o600)
+    if metrics_token(d) is None:  # a cluster made before this user existed gets it without a new PKI (the API server reads it on its next start)
+        with (d / "tokens.csv").open("a") as f:
+            f.write(f"{secrets.token_hex(24)},{METRICS_USER},{METRICS_USER}-uid\n")
     (st / "nodes.yaml").write_text(nodes_yaml(sim, gpu_override))
 
 
@@ -278,16 +283,24 @@ def api_ready(ips: dict, timeout: float = 90, sleep: Callable[[float], None] = t
     return False
 
 
-def viewer_token() -> str | None:
-    """The read-only user's token, from the file the API server reads (the page uses only this one, never the admin)."""
+def _token(user: str, d: Path | None = None) -> str | None:
+    """`user`'s token from the file the API server reads (the page uses only read-only users, never the admin)."""
     try:
-        for line in (SECRETS_DIR / "tokens.csv").read_text().splitlines():
+        for line in ((d or SECRETS_DIR) / "tokens.csv").read_text().splitlines():
             tok, _, rest = line.partition(",")
-            if rest.startswith("viewer,"):
+            if rest.startswith(f"{user},"):
                 return tok
     except OSError:
         pass
     return None
+
+
+def viewer_token() -> str | None:
+    return _token("viewer")
+
+
+def metrics_token(d: Path | None = None) -> str | None:
+    return _token(METRICS_USER, d)
 
 
 def api_up(timeout: float = 1.5) -> bool:
@@ -303,19 +316,30 @@ def api_up(timeout: float = 1.5) -> bool:
         return False
 
 
-def api_json(path: str, timeout: float = 2.0):
-    """GET one API path on the published localhost port as `viewer`; None when the API or the token is not there."""
-    tok = viewer_token()
-    if not tok:
+def api_json(path: str, timeout: float = 2.0, tok: str | None = None, raw: bool = False):
+    """GET one API path on the published localhost port as `viewer` (or `tok`); None when the API or the token is not there."""
+    tok = tok or viewer_token()
+    if not tok or not (SECRETS_DIR / "ca.crt").exists():
         return None
     ctx = ssl.create_default_context(cafile=str(SECRETS_DIR / "ca.crt"))
     ctx.check_hostname = False  # the certificate names the cluster addresses, and 127.0.0.1 is the published fallback
     req = urllib.request.Request(f"https://127.0.0.1:{API_PORT}{path}", headers={"Authorization": f"Bearer {tok}"})
     try:
         with urllib.request.urlopen(req, context=ctx, timeout=timeout) as r:
-            return json.load(r)
+            return r.read().decode() if raw else json.load(r)
     except (OSError, ValueError):
         return None
+
+
+def api_requests() -> int | None:
+    """Every request the API server has served since it started (`apiserver_request_total`, all callers: kubectl, the
+    scheduler, the controllers, KWOK), read as the `metrics` user, who may read /metrics and nothing else. None when it cannot be read."""
+    text = api_json("/metrics", tok=metrics_token(), raw=True)
+    if not isinstance(text, str):
+        return None
+    name = "apiserver_request_total"
+    vals = [float(ln.rsplit(" ", 1)[1]) for ln in text.splitlines() if ln.startswith(name) and ln[len(name):len(name) + 1] in (" ", "{")]
+    return int(sum(vals)) if vals else None
 
 
 def node_rows(sim: dict, fetch: Callable = api_json) -> list[dict]:

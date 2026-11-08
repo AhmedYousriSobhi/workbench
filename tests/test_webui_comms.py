@@ -39,3 +39,10 @@ def test_attach_adds_comms_per_cluster():
     assert graph.attach(snap)["comms"] == comms.build(SVC, NODES, LOGINS)
     two = graph.attach({**snap, "clusters": [{"name": "a", **snap}, {"name": "b", **snap}]})
     assert all(c["comms"] for c in two["clusters"])
+
+
+def test_the_api_server_link_is_counted_but_the_architecture_edge_is_not():
+    from webui import graph
+    link = {(x["from"], x["to"]): x for x in comms.build({"k8s-api": True}, [{"name": "kcn001", "kind": "k8s"}], [])}[("clients", "k8s-api")]
+    assert link["measured"] is True and link["service"] == "k8s-api"
+    assert "k8s-api" not in graph.MEASURED  # its total counts every caller, so the drawing never shows it as client traffic

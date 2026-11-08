@@ -106,6 +106,9 @@ class Flow:
                         self.reachable[svc] = k8s.api_up()
                         if self.reachable[svc]:
                             self.latency[svc] = round((self.clock() - t0) * 1000)
+                            n = k8s.api_requests()  # all callers, since the API server started: shown as a total, never as dots
+                            if n is not None:
+                                self.totals[svc] = n
                         else:
                             self.latency.pop(svc, None)
                         continue

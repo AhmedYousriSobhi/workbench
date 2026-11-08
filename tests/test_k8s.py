@@ -278,3 +278,27 @@ def test_the_governor_and_the_plan_carry_the_kubernetes_counts():
     assert control.plan_error({**base, "k8s_nodes": 3, "k8s_cpu_nodes": 0}) is None
     for bad in ({"k8s_nodes": 99}, {"k8s_cpu_nodes": -1}, {"k8s_nodes": "2"}, {"k8s_nodes": True}):
         assert "k8s_" in control.plan_error({**base, **bad}), bad
+
+
+def test_a_metrics_user_reads_only_metrics_and_an_older_cluster_gets_one(tmp_path):
+    ips = addressing.plan(SIM)
+    d = tmp_path / "s"
+    k8s.prepare(SIM, ips, d, tmp_path / "st")
+    tok = k8s.metrics_token(d)
+    assert tok and tok != k8s._token("viewer", d) and (d / "tokens.csv").stat().st_mode & 0o777 == 0o600
+    role = next(yaml.safe_load_all((ROOT / "k8s/fixtures/45-rbac-metrics.yaml").read_text()))
+    assert role["rules"] == [{"nonResourceURLs": ["/metrics"], "verbs": ["get"]}]  # nothing else, not even a list of pods
+    lines = [ln for ln in (d / "tokens.csv").read_text().splitlines() if ln.split(",")[1] != "metrics"]
+    (d / "tokens.csv").write_text("\n".join(lines) + "\n")
+    k8s.prepare(SIM, ips, d, tmp_path / "st")
+    assert k8s.metrics_token(d) and len((d / "tokens.csv").read_text().splitlines()) == 3
+
+
+def test_api_requests_sums_the_counter_and_is_none_when_unreadable(monkeypatch):
+    text = 'apiserver_request_total{verb="GET",code="200"} 40\napiserver_request_total{verb="LIST",code="200"} 2\napiserver_request_duration_seconds_count 9\n'
+    monkeypatch.setattr(k8s, "api_json", lambda *a, **kw: text)
+    assert k8s.api_requests() == 42
+    monkeypatch.setattr(k8s, "api_json", lambda *a, **kw: None)
+    assert k8s.api_requests() is None
+    monkeypatch.setattr(k8s, "api_json", lambda *a, **kw: "# no counter yet\n")
+    assert k8s.api_requests() is None

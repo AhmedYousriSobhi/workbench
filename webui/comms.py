@@ -10,6 +10,7 @@ protocols" page, Prometheus, DCGM exporter, Redfish and Teleport docs). Three fa
 from .flow import COUNTERS, STATS
 
 MEASURED = {*STATS, *COUNTERS}  # the services a request counter backs
+COUNTED = {*MEASURED, "k8s-api"}  # plus the API server's own total (all callers); not an edge counter, so the architecture drawing ignores it
 
 # (from, to, protocol, port, plane, what, needs, real, service the counter belongs to)
 # `needs`: "slurm" always; a service name; "k8s-api"; "teleport"
@@ -148,7 +149,7 @@ LINKS = [
         True,
         None,
     ),
-    ("clients", "k8s-api", "HTTPS", 6443, "control", "kubectl, API calls", "k8s-api", True, None),
+    ("clients", "k8s-api", "HTTPS", 6443, "control", "kubectl and every other caller (the count is the API server's total)", "k8s-api", True, "k8s-api"),
     (
         "kube-scheduler",
         "k8s-api",
@@ -214,7 +215,7 @@ def build(services: dict, nodes: list, logins: list) -> list[dict]:
                 "plane": plane,
                 "what": what,
                 "real": real,
-                "measured": counter in MEASURED if counter else False,
+                "measured": counter in COUNTED if counter else False,
                 "service": counter,
             }
         )
