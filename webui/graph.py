@@ -74,7 +74,7 @@ def attach(snap: dict) -> dict:
     are independent: no edge ever joins two of them."""
     clusters = snap.get("clusters")
     if not clusters:
-        return {**snap, "graph": build(snap["services"], snap["nodes"], snap["logins"]), "comms": comms.build(snap["services"], snap["nodes"], snap["logins"])}
-    per = [{**c, "graph": build(c["services"], c["nodes"], c["logins"]), "comms": comms.build(c["services"], c["nodes"], c["logins"])} for c in clusters]
+        return {**snap, "graph": build(snap["services"], snap["nodes"], snap["logins"]), "comms": comms.build(snap["services"], snap["nodes"], snap["logins"]), "absent": comms.absent(snap["services"], snap["nodes"], snap["logins"])}
+    per = [{**c, "graph": build(c["services"], c["nodes"], c["logins"]), "comms": comms.build(c["services"], c["nodes"], c["logins"]), "absent": comms.absent(c["services"], c["nodes"], c["logins"])} for c in clusters]
     merged = [build(c["services"], c["nodes"], c["logins"], c["name"]) for c in clusters]
     return {**snap, "clusters": per, "graph": {"entities": [e for g in merged for e in g["entities"]], "edges": [e for g in merged for e in g["edges"]]}}

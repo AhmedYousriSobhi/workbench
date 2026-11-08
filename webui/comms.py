@@ -197,26 +197,41 @@ LINKS = [
 ]
 
 
+# documented wiring the page has no way to read yet (issue 400): drawn grayed, never measured
+UNREADABLE = [
+    ("slurmctld", "slurmdbd", "TCP (Slurm RPC)", 6819, "data", "accounting records", "slurm", True, None),
+    ("nodes", "storage", "NFS or Lustre (not simulated)", None, "data", "shared job data (SPEC C-11: no real NFS or Lustre)", "slurm", False, None),
+]
+
+
+def _row(link, why=None):
+    src, dst, proto, port, plane, what, _needs, real, counter = link
+    row = {
+        "id": f"{src}>{dst}:{port}",
+        "from": src,
+        "to": dst,
+        "protocol": proto,
+        "port": port,
+        "plane": plane,
+        "what": what,
+        "real": real,
+        "measured": counter in COUNTED if counter else False,
+        "service": counter,
+    }
+    return {**row, "why": why} if why else row
+
+
+def _has(link, services: dict, nodes: list, logins: list) -> bool:
+    needs = link[6]
+    slurm = bool(logins) or any(n["kind"] != "k8s" for n in nodes)
+    return slurm if needs == "slurm" else needs in set(services)
+
+
 def build(services: dict, nodes: list, logins: list) -> list[dict]:
     """The documented links whose parts this snapshot has, each tagged real/simulated and measured/configured."""
-    have = set(services)
-    slurm = bool(logins) or any(n["kind"] != "k8s" for n in nodes)
-    out = []
-    for src, dst, proto, port, plane, what, needs, real, counter in LINKS:
-        if needs == "slurm" and not slurm or needs != "slurm" and needs not in have:
-            continue
-        out.append(
-            {
-                "id": f"{src}>{dst}:{port}",
-                "from": src,
-                "to": dst,
-                "protocol": proto,
-                "port": port,
-                "plane": plane,
-                "what": what,
-                "real": real,
-                "measured": counter in COUNTED if counter else False,
-                "service": counter,
-            }
-        )
-    return out
+    return [_row(k) for k in LINKS if _has(k, services, nodes, logins)]
+
+
+def absent(services: dict, nodes: list, logins: list) -> list[dict]:
+    """The documented links this cluster lacks, plus the ones the page cannot read: the fixed drawing grays them out."""
+    return [_row(k, "not in this cluster") for k in LINKS if not _has(k, services, nodes, logins)] + [_row(k, "the page cannot read this yet") for k in UNREADABLE]

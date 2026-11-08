@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from webui import comms, graph
 
 SVC = {"bmc-farm": True, "gpu-exporter": True, "jira-real": True}
@@ -46,3 +48,16 @@ def test_the_api_server_link_is_counted_but_the_architecture_edge_is_not():
     link = {(x["from"], x["to"]): x for x in comms.build({"k8s-api": True}, [{"name": "kcn001", "kind": "k8s"}], [])}[("clients", "k8s-api")]
     assert link["measured"] is True and link["service"] == "k8s-api"
     assert "k8s-api" not in graph.MEASURED  # its total counts every caller, so the drawing never shows it as client traffic
+
+
+def test_absent_lists_the_links_a_cluster_lacks_and_the_unreadable_ones():
+    got = {r["id"]: r for r in comms.absent({"k8s-api": True}, [{"name": "kcn001", "kind": "k8s"}], [])}
+    assert got["login>slurmctld:6817"]["why"] == "not in this cluster"
+    assert got["slurmctld>slurmdbd:6819"]["why"] == "the page cannot read this yet"
+    assert "kube-scheduler>k8s-api:6443" not in got  # present, so not absent
+
+
+def test_every_link_endpoint_has_a_place_in_the_fixed_drawing():
+    page = (Path(__file__).parent.parent / "webui/static/index.html").read_text()
+    ends = {e for k in [*comms.LINKS, *comms.UNREADABLE] for e in k[:2]}
+    assert [e for e in sorted(ends) if f"'{e}'" not in page] == []
