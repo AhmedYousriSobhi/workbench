@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**85% built** (35 done, 52 in review, 10 partial, 5 to do, 102 items).
+**86% built** (35 done, 53 in review, 9 partial, 5 to do, 102 items).
 
 ## Roadmap
 
@@ -14,7 +14,7 @@ flowchart LR
     p2["Slurm<br/>100%"]:::review
     p3["Mocks<br/>83%"]:::partial
     p4["People and chaos<br/>25%"]:::partial
-    p5["Kubernetes<br/>50%"]:::partial
+    p5["Kubernetes<br/>100%"]:::review
     p6["Fidelity VM<br/>0%"]:::todo
     p7["Web UI and profiles<br/>86%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
@@ -54,7 +54,7 @@ flowchart TB
         tele["Teleport access"]:::partial
         chaos["scenario engine (benchctl)"]:::partial
         users["user-sim / ticket-bot"]:::todo
-        k8s["k3d + KWOK"]:::partial
+        k8s["Kubernetes + KWOK"]:::review
         webui["Web UI"]:::partial
     end
     subgraph ext["Outside the 16 GB budget"]
@@ -171,21 +171,21 @@ _Simulated users and engineers, scripted faults._
 
 | Part | Status | How it is built | Where | PR |
 |---|---|---|---|---|
-| Scenario files | 🟡 Partial | Twelve scenarios: ib-port-down, gpu-xid-storm, node-down, fan-failure, jira-429, jira-outage, jira-flap, ticket-lifecycle, drain-ticket and ticket-wave run now; pod-crashloop and k8s-node-notready need k3d/KWOK. | `scenarios` | #73 |
+| Scenario files | 🟡 Partial | Twelve scenarios: ib-port-down, gpu-xid-storm, node-down, fan-failure, jira-429, jira-outage, jira-flap, ticket-lifecycle, drain-ticket and ticket-wave run now; pod-crashloop and k8s-node-notready need the k8s part. | `scenarios` | #73 |
 | Slurm resilience scenarios and trace | 🔍 In review | Four scenarios start a real job (and a simulated GPU job) and restart or stop slurmd, restart slurmctld or drain under it; `scenario run NAME --trace` prints job states, slurmstepd pids and the new Slurm log lines per step. slurmd now runs under slurmd-run instead of as PID 1 so it can restart without the container. Steps: submit {node, gpus, duration}, cancel, slurmd_restart|stop|start, slurmctld_restart; expect slurm.job_state, slurm.stepd. The page plays them and shows the trace (tick Slurm trace) through new governor commands slurm-step and slurm-trace (read-only `benchctl get trace`), so W-3 holds; also `benchctl set slurmd|slurmctld`, `remove jobs`. Unit tests run; live test written, NOT yet run (observed behaviour to be recorded). Issue 220. | `scenarios/slurmd-*.yaml`, `scenarios/slurmctld-restart-mid-job.yaml`, `scenarios/drain-mid-job.yaml`, `benchctl/slurmtrace.py`, `images/node-base/slurmd-run`, `governor/core.py`, `webui/app.py`, `webui/static/index.html`, `tests/real/test_slurmresilience_real.py`, `docs/guides/slurm-resilience.md` | - |
 | user-sim and ticket-bot | ⬜ To do | Personas with Poisson arrivals and engineers working tickets. | - | - |
-| scenario-engine | 🟡 Partial | `benchctl scenario list|run NAME|SC-nn [--speed N] [--dry-run]` (fixed reference numbers SC-01..., a summary line before a run, issue 303): steps drive bmc-farm, bcm-mock, gpu-exporter, jira-mock, Slurm (scontrol) and the login node's sshd (ssh target: down, hung, up, rotate_host_key, max_sessions, reject_auth, node_sshd + nodes, reset; scenarios ssh-host-key-changed, login-node-down, login-node-hung, ssh-session-limit, ssh-key-refused, ssh-node-sshd-down; tests/real/test_ssh_faults_real.py); ramps; expect (slurm.node_state, jira.issue_created) watched from the start; k8s and ticket-bot steps skipped. `jira-real` target (issue 303): real faults on the real Jira, outage/restore (docker pause), bad_logins (401 then 403 CAPTCHA), clear_logins, rate_limit/rate_limit_off (Jira's own limiter through its tables, real 429 with X-RateLimit headers, about 40 s reload); scenarios jira-real-outage, jira-real-captcha and jira-real-429, and client-stress-real (the whole client-stress run against the real Jira), verified live. Issues 305-307 (unit-tested; verified live against the real Jira with tests/real/test_jira_dc_real.py, not yet against the client): token_revoke/token_restore (a real 401 for a personal access token, scenario jira-real-token-revoked), proxy_slow/proxy_503/proxy_429/proxy_off through a stdlib fault proxy on 127.0.0.1:8084 (benchctl/jira_proxy.py, scenario jira-real-slow-503, the client must use :8084), and `tickets:` steps plus `target: real` expectations on the real Jira through the REST driver (client-stress-real files its 12 tickets there); ADR 0026 addendum. Runs in the host CLI, not a container (ADR 0006). Verified live. | `benchctl/scenario.py` | #73 |
+| scenario-engine | 🟡 Partial | `benchctl scenario list|run NAME|SC-nn [--speed N] [--dry-run]` (fixed reference numbers SC-01..., a summary line before a run, issue 303): steps drive bmc-farm, bcm-mock, gpu-exporter, jira-mock, Slurm (scontrol) and the login node's sshd (ssh target: down, hung, up, rotate_host_key, max_sessions, reject_auth, node_sshd + nodes, reset; scenarios ssh-host-key-changed, login-node-down, login-node-hung, ssh-session-limit, ssh-key-refused, ssh-node-sshd-down; tests/real/test_ssh_faults_real.py); ramps; expect (slurm.node_state, jira.issue_created) watched from the start; ticket-bot steps skipped; `k8s` steps (needs the k8s part) run kubectl from the official image. `jira-real` target (issue 303): real faults on the real Jira, outage/restore (docker pause), bad_logins (401 then 403 CAPTCHA), clear_logins, rate_limit/rate_limit_off (Jira's own limiter through its tables, real 429 with X-RateLimit headers, about 40 s reload); scenarios jira-real-outage, jira-real-captcha and jira-real-429, and client-stress-real (the whole client-stress run against the real Jira), verified live. Issues 305-307 (unit-tested; verified live against the real Jira with tests/real/test_jira_dc_real.py, not yet against the client): token_revoke/token_restore (a real 401 for a personal access token, scenario jira-real-token-revoked), proxy_slow/proxy_503/proxy_429/proxy_off through a stdlib fault proxy on 127.0.0.1:8084 (benchctl/jira_proxy.py, scenario jira-real-slow-503, the client must use :8084), and `tickets:` steps plus `target: real` expectations on the real Jira through the REST driver (client-stress-real files its 12 tickets there); ADR 0026 addendum. Runs in the host CLI, not a container (ADR 0006). Verified live. | `benchctl/scenario.py` | #73 |
 
 0/4 done
 
-### Kubernetes (50%)
+### Kubernetes (100%)
 
 _Mixed real and fake K8s nodes._
 
 | Part | Status | How it is built | Where | PR |
 |---|---|---|---|---|
 | Cluster fixtures | ✅ Done | Namespaces, workloads, failure signals and a read-only RBAC role, applied with apply.sh. | `k8s/fixtures` | - |
-| k3d plus KWOK cluster | 🟡 Partial | Design is set but kubectl and k3d are not installed on this host, so it has not been brought up. | - | - |
+| Kubernetes part (real control plane plus KWOK nodes) | 🔍 In review | Optional part (`benchctl up --with k8s` or `--workload kubernetes`, off by default; issue 232, ADR 0034): etcd, kube-apiserver, kube-controller-manager, kube-scheduler and the KWOK controller as five unprivileged, memory-limited compose services at fixed addresses (API 10.141.255.40:6443), P3, measured about 0.3 GB (cap 0.77 GB). Nodes (kcn001..., kgpu001... with nvidia.com/gpu and GPU Feature Discovery labels) come from sim.yaml kubernetes.nodes; a PKI and read-only kubeconfigs are generated into secrets/k8s; the login node has kubectl (from the official image) and per-user ~/.kube/config (cluster-wide) and limited.yaml (namespace team-a), mode 600. Failing pods get a kubelet's status from KWOK stages (label workbench_fault: CrashLoopBackOff, OOMKilled, ImagePullBackOff, failed job). Scenario target k8s (down/up, cordon, pod, delete_pod, scale, apply; expect k8s.node_ready, k8s.pod_status): k8s-node-notready, pod-crashloop. Login nodes can be an s-login (`ssh:slurm`) or a k-login (`ssh:k8s`) (issue 380): the k-login has kubectl and the kubeconfigs and no Slurm configuration; the diagram shows the Kubernetes nodes as their own group, each login pointing at the group it serves; printed ssh commands carry -o IdentitiesOnly=yes. The Cluster architecture sheet is a wide two-column layout (Slurm card, Kubernetes card with its own CPU and GPU node counts, a card per login node with Way in and Serves choices, optional parts, a sticky summary); --k8s-cpu-nodes. The diagram has a Kubernetes API box (up or down, no request counter) and the client export puts the k8s block on the k-login's entry (checked with the client's own importer). Kubernetes nodes are machines: they get BMCs (a rule per node group, --bmc-groups), BCM entries (categories k8s-cpu, k8s-gpu) and GPU metrics. The Scenarios panel is a docked drawer toggled from the top strip. Verified live (verify.sh --unit k8s); the client's screens not yet tried (desktop app). Not built: a real agent node (privileged), metrics-server, Teleport access. | `benchctl/k8s.py`, `benchctl/compose.py`, `benchctl/stack.py`, `benchctl/scenario.py`, `k8s/kwok`, `k8s/fixtures`, `images/login`, `tests/test_k8s.py`, `tests/real/test_k8s_real.py`, `docs/adr/0034-kubernetes-kwok-first.md` | - |
 
 1/2 done
 
@@ -293,4 +293,3 @@ _What keeps every change safe and debuggable._
 
 - Only the min budget is measured (0.17 GB loaded with 60 queued jobs, VMs off); std/full budgets are still estimates.
 - The governor's own locked memory is about 100-170 MB, slightly over its 0.15 GB budget.
-- Host swap is 100% full and kubectl/k3d are missing, which blocks the Kubernetes phase here.

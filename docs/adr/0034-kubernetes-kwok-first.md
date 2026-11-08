@@ -93,3 +93,34 @@ Real clusters are mixed, so the Kubernetes part must not assume "one cluster = S
 - One Kubernetes cluster now, but shaped as above (heterogeneous, per cluster, multi-cluster possible later).
 - Still open: should the Kubernetes API also be reachable through Teleport, or only over SSH from a login node? Not
   decided; phase 1 does SSH only.
+
+## As built (phase 1, issue 232)
+Decided with the owner while building; each can be changed later.
+- **Compose services, not `kwokctl`.** `kwokctl create --dry-run` shows the cluster is five upstream images started with plain
+  Docker flags. They run as compose services (`benchctl/k8s.py`): our uid (not root), memory limits, the `workbench.class=P3`
+  label, fixed addresses from the plan (`10.141.255.40` to `.44`), our own PKI and kubeconfigs in `secrets/k8s`. No host tool is
+  installed: `kubectl` runs from `registry.k8s.io/kubectl` (and is copied into the login image from it).
+- **Measured** (4 KWOK nodes and the fixtures): apiserver 201 MiB, etcd about 130 (it sat at its first 128 MB cap, now 256),
+  controller manager 47, scheduler 18, KWOK 11. Caps total 896 MB. None of the containers is privileged and none needs a
+  capability (`cap_drop: ALL` stops the apiserver binary, which carries file capabilities, so it is not used).
+- **Failures come from KWOK stages.** With no kubelet every pod would be Running. A pod labelled `workbench_fault`
+  (`crashloop`, `oom`, `imagepull`, `jobfail`) gets the status a kubelet reports (`k8s/kwok/stage-faults.yaml`); the default
+  `pod-ready` stage skips labelled pods. `Unschedulable` and the Warning events are the real scheduler's. The KWOK controller starts
+  after the cluster content exists (it exits with "no stages found" otherwise) and needs `--enable-crds=Stage`.
+- **NotReady is a KWOK stage.** The scenario step `down` labels the node `workbench_fault=down`; the `fault-node-down` stage
+  sets Ready to False (`KubeletNotReady`) and the default `node-initialize` stage skips labelled nodes, so it stays. `up` removes
+  the label and `node-initialize` makes the node Ready again. First tried and dropped: removing the KWOK annotation does not stop
+  KWOK renewing the node's lease, so the node controller never marked it Unknown (seen live). KWOK manages only nodes with the
+  annotation, so a real node can join the same API server in phase 2.
+- **Access.** A static token file gives two users: `viewer` (a read-only ClusterRole, cluster-wide) and `limited` (read of pods and
+  events in `team-a`). Every login node gets both kubeconfigs and `login.sh` installs them in each simulated user's `~/.kube`
+  (owned by the user, mode 600, the check a client makes). The administrator's certificate stays on the host.
+- **s-login and k-login (issue 380).** A login entry is `MODE[:KIND]`, KIND `slurm`, `k8s` or `both` (default, as before). An s-login
+  has no kubeconfig mount; a k-login has no `/etc/slurm` mount and does not wait for slurmctld; a k-login needs the `k8s` part (the
+  CLI and the sheet turn it on). It is an attribute of the login entry, not a separate image. The diagram groups the Kubernetes nodes
+  apart from the Slurm nodes (the page reads their state from the API as the read-only user), and the graph has `login>k8s-nodes:kubectl`
+  next to `login>nodes:jump`. Printed ssh commands carry `-o IdentitiesOnly=yes`: with several keys in ssh-agent, sshd ended the login
+  after six offers.
+- **Node names** are separate from the Slurm nodes (`kcn001`, `kgpu001`); `--k8s-nodes N` sets the GPU node count.
+- **Phase 2 candidates:** one real k3s or kind worker for real CPU pods and pod logs (privileged container, own ADR),
+  metrics-server, Kubernetes through Teleport, a k-login node, the Infrastructure architecture diagram.

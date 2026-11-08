@@ -1,0 +1,228 @@
+# workbench fault stages: a pod labelled workbench_fault=<kind> is given the status a real kubelet would report.
+# KWOK has no kubelet, so without these every pod would simply be Running (docs/adr/0034). Applied by benchctl/k8s.py.
+apiVersion: kwok.x-k8s.io/v1alpha1
+kind: Stage
+metadata:
+  name: fault-crashloop
+spec:
+  weight: 10
+  next:
+    statusTemplate: |
+      {{ $now := Now }}
+      {{ $podIPs := PodIPsWith .spec.nodeName ( or .spec.hostNetwork false ) ( or .metadata.uid "" ) ( or .metadata.name "" ) ( or .metadata.namespace "" ) }}
+      {{ with $podIPs }}
+      podIP: {{ index . 0 | Quote }}
+      podIPs:
+      {{ range . }}
+      - ip: {{ . | Quote }}
+      {{ end }}
+      {{ end }}
+      phase: Running
+      startTime: {{ $now | Quote }}
+      conditions:
+      - {lastTransitionTime: {{ $now | Quote }}, status: "True", type: Initialized}
+      - {lastTransitionTime: {{ $now | Quote }}, status: "False", type: Ready, reason: ContainersNotReady}
+      - {lastTransitionTime: {{ $now | Quote }}, status: "False", type: ContainersReady, reason: ContainersNotReady}
+      containerStatuses:
+      {{ range .spec.containers }}
+      - image: {{ .image | Quote }}
+        name: {{ .name | Quote }}
+        ready: false
+        started: false
+        restartCount: 7
+        state:
+          waiting: {reason: CrashLoopBackOff, message: "back-off 5m0s restarting failed container"}
+        lastState:
+          terminated: {exitCode: 1, reason: Error, startedAt: {{ $now | Quote }}, finishedAt: {{ $now | Quote }}}
+      {{ end }}
+  resourceRef:
+    apiGroup: v1
+    kind: Pod
+  selector:
+    matchLabels:
+      workbench_fault: crashloop
+    matchExpressions:
+    - key: .metadata.deletionTimestamp
+      operator: DoesNotExist
+    - key: .status.phase
+      operator: In
+      values:
+      - Pending
+    - key: .status.containerStatuses
+      operator: DoesNotExist
+---
+apiVersion: kwok.x-k8s.io/v1alpha1
+kind: Stage
+metadata:
+  name: fault-oom
+spec:
+  weight: 10
+  next:
+    statusTemplate: |
+      {{ $now := Now }}
+      {{ $podIPs := PodIPsWith .spec.nodeName ( or .spec.hostNetwork false ) ( or .metadata.uid "" ) ( or .metadata.name "" ) ( or .metadata.namespace "" ) }}
+      {{ with $podIPs }}
+      podIP: {{ index . 0 | Quote }}
+      podIPs:
+      {{ range . }}
+      - ip: {{ . | Quote }}
+      {{ end }}
+      {{ end }}
+      phase: Running
+      startTime: {{ $now | Quote }}
+      conditions:
+      - {lastTransitionTime: {{ $now | Quote }}, status: "True", type: Initialized}
+      - {lastTransitionTime: {{ $now | Quote }}, status: "False", type: Ready, reason: ContainersNotReady}
+      - {lastTransitionTime: {{ $now | Quote }}, status: "False", type: ContainersReady, reason: ContainersNotReady}
+      containerStatuses:
+      {{ range .spec.containers }}
+      - image: {{ .image | Quote }}
+        name: {{ .name | Quote }}
+        ready: false
+        started: false
+        restartCount: 7
+        state:
+          waiting: {reason: CrashLoopBackOff, message: "back-off 5m0s restarting failed container"}
+        lastState:
+          terminated: {exitCode: 137, reason: OOMKilled, startedAt: {{ $now | Quote }}, finishedAt: {{ $now | Quote }}}
+      {{ end }}
+  resourceRef:
+    apiGroup: v1
+    kind: Pod
+  selector:
+    matchLabels:
+      workbench_fault: oom
+    matchExpressions:
+    - key: .metadata.deletionTimestamp
+      operator: DoesNotExist
+    - key: .status.phase
+      operator: In
+      values:
+      - Pending
+    - key: .status.containerStatuses
+      operator: DoesNotExist
+---
+apiVersion: kwok.x-k8s.io/v1alpha1
+kind: Stage
+metadata:
+  name: fault-imagepull
+spec:
+  weight: 10
+  next:
+    statusTemplate: |
+      {{ $now := Now }}
+      {{ $podIPs := PodIPsWith .spec.nodeName ( or .spec.hostNetwork false ) ( or .metadata.uid "" ) ( or .metadata.name "" ) ( or .metadata.namespace "" ) }}
+      {{ with $podIPs }}
+      podIP: {{ index . 0 | Quote }}
+      podIPs:
+      {{ range . }}
+      - ip: {{ . | Quote }}
+      {{ end }}
+      {{ end }}
+      phase: Pending
+      startTime: {{ $now | Quote }}
+      conditions:
+      - {lastTransitionTime: {{ $now | Quote }}, status: "True", type: Initialized}
+      - {lastTransitionTime: {{ $now | Quote }}, status: "False", type: Ready, reason: ContainersNotReady}
+      - {lastTransitionTime: {{ $now | Quote }}, status: "False", type: ContainersReady, reason: ContainersNotReady}
+      containerStatuses:
+      {{ range .spec.containers }}
+      - image: {{ .image | Quote }}
+        name: {{ .name | Quote }}
+        ready: false
+        started: false
+        restartCount: 0
+        state:
+          waiting: {reason: ImagePullBackOff, message: "Back-off pulling image"}
+      {{ end }}
+  resourceRef:
+    apiGroup: v1
+    kind: Pod
+  selector:
+    matchLabels:
+      workbench_fault: imagepull
+    matchExpressions:
+    - key: .metadata.deletionTimestamp
+      operator: DoesNotExist
+    - key: .status.phase
+      operator: In
+      values:
+      - Pending
+    - key: .status.containerStatuses
+      operator: DoesNotExist
+---
+apiVersion: kwok.x-k8s.io/v1alpha1
+kind: Stage
+metadata:
+  name: fault-jobfail
+spec:
+  weight: 10
+  next:
+    statusTemplate: |
+      {{ $now := Now }}
+      {{ $podIPs := PodIPsWith .spec.nodeName ( or .spec.hostNetwork false ) ( or .metadata.uid "" ) ( or .metadata.name "" ) ( or .metadata.namespace "" ) }}
+      {{ with $podIPs }}
+      podIP: {{ index . 0 | Quote }}
+      podIPs:
+      {{ range . }}
+      - ip: {{ . | Quote }}
+      {{ end }}
+      {{ end }}
+      phase: Failed
+      startTime: {{ $now | Quote }}
+      conditions:
+      - {lastTransitionTime: {{ $now | Quote }}, status: "True", type: Initialized}
+      - {lastTransitionTime: {{ $now | Quote }}, status: "False", type: Ready, reason: PodFailed}
+      - {lastTransitionTime: {{ $now | Quote }}, status: "False", type: ContainersReady, reason: PodFailed}
+      containerStatuses:
+      {{ range .spec.containers }}
+      - image: {{ .image | Quote }}
+        name: {{ .name | Quote }}
+        ready: false
+        started: false
+        restartCount: 0
+        state:
+          terminated: {exitCode: 1, reason: Error, startedAt: {{ $now | Quote }}, finishedAt: {{ $now | Quote }}}
+      {{ end }}
+  resourceRef:
+    apiGroup: v1
+    kind: Pod
+  selector:
+    matchLabels:
+      workbench_fault: jobfail
+    matchExpressions:
+    - key: .metadata.deletionTimestamp
+      operator: DoesNotExist
+    - key: .status.phase
+      operator: In
+      values:
+      - Pending
+    - key: .status.containerStatuses
+      operator: DoesNotExist
+---
+apiVersion: kwok.x-k8s.io/v1alpha1
+kind: Stage
+metadata:
+  name: fault-node-down
+spec:
+  weight: 10
+  next:
+    statusTemplate: |
+      {{ $now := Now }}
+      {{ $since := or .metadata.creationTimestamp $now }}
+      conditions:
+      - {lastHeartbeatTime: {{ $now | Quote }}, lastTransitionTime: {{ $now | Quote }}, status: "False", type: Ready, reason: KubeletNotReady, message: "container runtime is down"}
+      - {lastHeartbeatTime: {{ $now | Quote }}, lastTransitionTime: {{ $since | Quote }}, status: "False", type: MemoryPressure, reason: KubeletHasSufficientMemory, message: "kubelet has sufficient memory available"}
+      - {lastHeartbeatTime: {{ $now | Quote }}, lastTransitionTime: {{ $since | Quote }}, status: "False", type: DiskPressure, reason: KubeletHasNoDiskPressure, message: "kubelet has no disk pressure"}
+      - {lastHeartbeatTime: {{ $now | Quote }}, lastTransitionTime: {{ $since | Quote }}, status: "False", type: PIDPressure, reason: KubeletHasSufficientPID, message: "kubelet has sufficient PID available"}
+  resourceRef:
+    apiGroup: v1
+    kind: Node
+  selector:
+    matchLabels:
+      workbench_fault: down
+    matchExpressions:
+    - key: .status.conditions.[] | select( .type == "Ready" ) | .status
+      operator: In
+      values:
+      - "True"

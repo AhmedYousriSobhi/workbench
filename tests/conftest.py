@@ -11,6 +11,7 @@ def _no_teleport_from_this_machine(monkeypatch):
         return
     monkeypatch.setattr(cluster, "teleport_built", lambda: False)
     monkeypatch.setattr(cluster, "jira_real_built", lambda: False)  # same for the real Jira box
+    monkeypatch.setattr(cluster, "k8s_built", lambda: False)  # and the Kubernetes node group
 
 
 @pytest.fixture(autouse=True)

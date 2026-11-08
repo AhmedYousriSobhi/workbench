@@ -153,7 +153,8 @@ def check_optional(which=shutil.which, kvm: bool | None = None) -> list[Check]:
     has_kvm = kvm if kvm is not None else Path("/dev/kvm").exists()
     out = [Check("kvm", OK, "/dev/kvm present") if has_kvm else
            Check("kvm", WARN, "no /dev/kvm", "only the fidelity VM needs it")]
-    for tool, why in (("k3d", "Kubernetes profiles"), ("kubectl", "Kubernetes profiles"), ("virsh", "the fidelity VM")):
+    # Kubernetes needs no host tool: kubectl runs from the official image (ADR 0034)
+    for tool, why in (("virsh", "the fidelity VM"),):
         out.append(Check(tool, OK, "found") if which(tool) else Check(tool, WARN, "missing", f"needed for {why} only"))
     return out
 

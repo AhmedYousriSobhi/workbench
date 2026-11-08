@@ -34,8 +34,7 @@ def test_expand_names_items_with_commas_repeats_and_all():
 def test_expand_says_why_an_item_is_refused():
     with pytest.raises(workbench.SpecError, match=r"unknown ticketing item 'jirra'. Did you mean 'jira'\? Valid: jira, jira-real, all"):
         workbench.expand({"ticketing": ["jirra"]})
-    with pytest.raises(workbench.SpecError, match="Kubernetes is not built yet"):
-        workbench.expand({"workload": ["kubernetes"]})
+    assert workbench.expand({"workload": ["kubernetes"]}) == ["k8s"]  # built (ADR 0034): the item turns the part on
     with pytest.raises(workbench.SpecError, match="Valid: bmc, bcm, all"):
         workbench.expand({"hardware": ["bmc,nope"]})
 
@@ -45,7 +44,7 @@ def test_completion_offers_flags_items_and_continues_after_a_comma():
     assert completion.category("hardware")("b") == ["bmc", "bcm"]
     assert completion.category("hardware")("bmc,") == ["bmc,bcm", "bmc,all"]
     assert completion.category("hardware")("bmc,b") == ["bmc,bcm"]
-    assert "kubernetes" not in completion.category("workload")("")  # not built: never suggested
+    assert "kubernetes" in completion.category("workload")("k")
     assert completion.category("access")("t") == ["teleport"]
     out = runner.invoke(cli.app, ["start", "--help"], terminal_width=200).output
     for flag in ("--workload", "--accounting", "--monitoring", "--ticketing", "--hardware", "--access", "--simulation", "--addons"):

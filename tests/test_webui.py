@@ -40,9 +40,9 @@ def ui(tmp_path):
     scen.mkdir()
     (scen / "quick.yaml").write_text(
         "name: quick\ndescription: d\nsteps:\n  - {at: 0s, target: slurm, do: {drain: [cn001]}}\n"
-        "  - {at: 0s, target: k8s, do: {x: 1}}\n")
-    (scen / "slow.yaml").write_text("name: slow\ndescription: d\nsteps:\n  - {at: 0s, target: k8s, do: {a: 1}}\n"
-                                    "  - {at: 1h, target: k8s, do: {b: 2}}\n")
+        "  - {at: 0s, target: ticket-bot, do: {x: 1}}\n")
+    (scen / "slow.yaml").write_text("name: slow\ndescription: d\nsteps:\n  - {at: 0s, target: ticket-bot, do: {a: 1}}\n"
+                                    "  - {at: 1h, target: ticket-bot, do: {b: 2}}\n")
     port = free_port()
     server = uvicorn.Server(uvicorn.Config(create_app(TOKEN, sock, scen, ROOT / "sim.yaml", interval=0.05, fetch=no_stack, poster=no_stack),
                                            host="127.0.0.1", port=port, log_level="error"))
@@ -124,7 +124,7 @@ def test_scenario_list_and_run_sends_slurm_steps_through_the_governor(ui):
         if not state["running"]:
             break
         time.sleep(0.05)
-    # the Slurm drain goes through the governor (the page never runs Docker itself); the k8s step is not built
+    # the Slurm drain goes through the governor (the page never runs Docker itself); the ticket-bot step is not built
     assert state["ok"] is True and [s["status"] for s in state["steps"]] == ["ok", "skipped"]
     assert "not built" in state["steps"][1]["detail"]
 
@@ -499,3 +499,11 @@ def test_diagram_has_a_colour_legend_and_combinable_overlays(ui):
 
 def test_state_update_keeps_the_kind_class_of_a_service_box(ui):
     assert b"(k === 'teleport' ? '' : REAL_SERVICES.has(k) ? ' real' : ' sim')" in req(ui, "/")[1]  # repainting the state must not drop the colour of the kind
+
+
+def test_scenarios_is_a_docked_drawer_with_a_toggle_not_a_modal():
+    """The diagram must stay visible while a scenario runs (issue 380): a non-modal drawer, toggled from the top strip."""
+    html = (Path(__file__).resolve().parent.parent / "webui/static/index.html").read_text()
+    for needle in ('<dialog id="scndlg" class="drawer"', 'id="scn-toggle"', "function scnOpen(", "d.show()", "dialog.drawer", "dialog[open]:not(.drawer)", "li.classList.toggle('active'"):
+        assert needle in html, needle
+    assert "$('scndlg').showModal()" not in html

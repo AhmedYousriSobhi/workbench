@@ -14,7 +14,7 @@ inventories are generated from it, so node names agree everywhere. **Never hand-
 | `gpu` | `nodes`, `prefix` (`gpu001`...), `gpus_per_node`, `type` |
 | `partitions` | name and which nodes (`cpu`, `gpu`) |
 | `users` | name, persona, QOS; UIDs are assigned in order from 1001 |
-| `kubernetes` | `real_agents`, `kwok_nodes` (not built yet) |
+| `kubernetes` | `version` (Kubernetes release of the control plane), `nodes`: groups of KWOK nodes with `prefix`, `count`, `cpus`, `memory_gb`, `pool` and, for GPU nodes, `gpus` and `gpu_type` (the optional Kubernetes part, [chapter 4](04-nodes-and-shells.md)) |
 | `bmc.per_node` | one Redfish endpoint per node |
 | `host` | `reserve_gb` and `safety_floor_gb`: memory kept for the host |
 

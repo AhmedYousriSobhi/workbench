@@ -76,3 +76,10 @@ def test_the_real_jira_row_offers_a_post_button_for_one_known_path_only():
     assert post == [{"kind": "post", "label": "Refresh licence (restarts Jira)", "value": "/api/jira-real/refresh"}]
     assert connections.valid_action(post[0])
     assert not connections.valid_action({"kind": "post", "label": "x", "value": "/api/anything"})
+
+
+def test_kubernetes_row_names_the_read_only_kubeconfig_and_never_the_admin_one():
+    row = next(e for e in rows() if e["id"] == "k8s")
+    assert row["address"] == "https://10.141.255.40:6443" and row["credential"].endswith("secrets/k8s/viewer.kubeconfig")
+    assert "kubectl get nodes" in row["command"] and "admin.kubeconfig" not in row["credential"] + row["command"]
+    assert [a["kind"] for a in row["actions"]] == ["copy"]

@@ -1,8 +1,8 @@
 name: k8s-node-notready
 ref: SC-14
-description: A KWOK GPU node flips to NotReady; pods on it become Unknown and the app should alert
+description: A Kubernetes GPU node reports NotReady (KubeletNotReady), then recovers; the client should alert
 steps:
-  - {at: 0s,  target: k8s, do: {kwok_node: kwok-gpu-001, ready: false}}
-  - {at: 3m,  target: k8s, do: {kwok_node: kwok-gpu-001, ready: true}}
+  - {at: 0s,   target: k8s, do: {down: [kgpu001]}}
+  - {at: 120s, target: k8s, do: {up: [kgpu001]}}
 expect:
-  - k8s.node_condition: {node: kwok-gpu-001, ready: false, within: 1m}
+  - k8s.node_ready: {node: kgpu001, ready: false, within: 90s}

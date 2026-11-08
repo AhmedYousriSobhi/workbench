@@ -12,8 +12,7 @@ A scenario is a named, repeatable timeline of faults. They live in `scenarios/*.
 ./scripts/benchctl scenario run SC-02 --dry-run          # the reference works instead of the name
 ```
 
-The command exits 1 when a step errors or an `expect` line does not hold. Steps for parts that are not built (Kubernetes,
-ticket-bot) are reported as **skipped**, not failed. From the web page ([chapter 5](05-web-page.md)) the `slurm` steps go through the governor; tick **Slurm trace** there for the same trace (see the [resilience guide](../guides/slurm-resilience.md)).
+The command exits 1 when a step errors or an `expect` line does not hold. Steps for parts that are not built (ticket-bot) are reported as **skipped**, not failed. From the web page ([chapter 5](05-web-page.md)) the `slurm` steps go through the governor; tick **Slurm trace** there for the same trace (see the [resilience guide](../guides/slurm-resilience.md)).
 
 ## The scenarios shipped
 
@@ -46,8 +45,8 @@ ticket-bot) are reported as **skipped**, not failed. From the web page ([chapter
 | SC-20 | `slurmd-disabled-mid-job` | `slurmd` stays down 45 s under a running job, then returns |
 | SC-19 | `slurmctld-restart-mid-job` | `slurmctld` restarts with a real and a simulated GPU job running |
 | SC-03 | `drain-mid-job` | a node is drained under a running job; the job finishes, the node ends drained |
-| SC-14 | `k8s-node-notready` | a KWOK node flips to NotReady (**Kubernetes not built**: skipped) |
-| SC-18 | `pod-crashloop` | a pod crash-loops and another is OOMKilled (**Kubernetes not built**: skipped) |
+| SC-14 | `k8s-node-notready` | a Kubernetes GPU node reports NotReady, then recovers (needs the `k8s` part) |
+| SC-18 | `pod-crashloop` | a pod crash-loops and another is OOMKilled (needs the `k8s` part) |
 
 ## Write your own
 
@@ -64,11 +63,14 @@ expect:
 ```
 
 - `at`: when the step runs, as `10s`, `2m`. `--speed` and `time_dilation` in `sim.yaml` compress it.
-- `target`: `bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira`, `slurm`, `ssh` (built); `k8s`, `ticket-bot` (not built, skipped).
+- `target`: `bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira`, `slurm`, `ssh`, `k8s` (built); `ticket-bot` (not built, skipped).
 - `do`: the body for that target. `nodes: [...]` fans out one request per node and must name nodes from `sim.yaml`. `slurm`
   takes `drain` and `resume` (node lists) and the job and daemon steps of the [resilience guide](../guides/slurm-resilience.md) (`submit: {node, gpus, duration}`, `cancel`, `slurmd_restart`, `slurmd_stop`, `slurmd_start`, `slurmctld_restart`); `jira` takes `failure: {mode: "429"|"503"|null, count: N}`; `bmc-farm` takes `power`,
   `temp`, `fan_fail`, `ramp: {to, over}`, `clear`; `ssh` (the login node) takes `state: down|hung|up` (stop, freeze, restore),
   `rotate_host_key: true`, `max_sessions: N` (OpenSSH MaxSessions) and `reset: true` (original key, default limit, node up).
+- `k8s` (needs the part and Docker; the page skips it) takes `down: [node]` (the node reports NotReady, `KubeletNotReady`) and `up: [node]` (Ready again), `cordon` and `uncordon` (node lists), `pod: {namespace, name, fault: crashloop|oom|imagepull|jobfail, gpus: N}`,
+  `delete_pod: {namespace, name}`, `scale: {namespace, deploy, replicas}` and `apply: [path under k8s/]`. Expectations: `k8s.node_ready: {node, ready, within}`
+  and `k8s.pod_status: {namespace, name, reason, within}` (the pod's phase or a container's waiting or terminated reason).
 - `expect`: assertions checked after the steps. Anything that needs the app under test (such as `jira.issue_created`) only
   holds when the app, or ticket-bot once built, does its part.
 

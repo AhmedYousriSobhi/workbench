@@ -90,6 +90,8 @@ See [docs/architecture/08-repository-and-migration.md](docs/architecture/08-repo
 
 - `jira-real` (127.0.0.1:8083, optional, never in `--addons`/`all`; ADR 0026): the official Jira Data Center image and Postgres, 2.1 GB + Postgres, P6; `benchctl start --with jira-real`, then `benchctl setup jira-real` (wizard, users, project OPS, tokens; localhost only), `benchctl refresh jira-real-licence` (or the Connections button) restarts Jira for another 3 hours (the key counts from Jira's start), `benchctl remove jira-real-state` to start over. The 3-hour Atlassian test licence is a gitignored file (`docs/guides/jira-real.md`); never commit it. `./scripts/verify.sh --unit jira_dc [--clean]`.
 
+- **Kubernetes** (optional, `benchctl up --with k8s`; ADR 0034, SPEC C-2): five upstream control-plane images plus KWOK as compose services (`benchctl/k8s.py`), fake nodes from `sim.yaml` `kubernetes.nodes`, failing pods from KWOK stages (`k8s/kwok/stage-faults.yaml`, label `workbench_fault`), `kubectl` from the official image (nothing to install on the host), read-only kubeconfigs on the login node, scenario target `k8s`. `./scripts/verify.sh --unit k8s [--clean]`. Never edit `compose/generated/secrets/k8s`.
+
 - `bcm-mock` (127.0.0.1:8081, CMDaemon-style `POST /json`) and `jira-mock` (127.0.0.1:8080, REST v2 subset, `POST /sim/failure`) are stdlib-only; surfaces and gaps in ADR 0005.
 
 - `./scripts/benchctl scenario list | run NAME [--speed N] [--dry-run]`: scenario engine (`benchctl/scenario.py`, ADR 0006) over `scenarios/*.yaml`; add a target in `execute()` and in `ENDPOINTS`/`validate`. gpu-exporter-farm publishes 127.0.0.1:9400 for injection.

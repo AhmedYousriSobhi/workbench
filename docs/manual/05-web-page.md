@@ -23,8 +23,7 @@ this machine can use the page, so keep it private. The page listens on `127.0.0.
 | **Tabs and Needs attention** | the tabs *Nodes* and *Connections*, and one slim bar next to them with every item that needs you, or "All clear" |
 | **Stage** (Nodes tab) | three areas that fill the window. **Left:** the **Infrastructure architecture**, drawn to the shape of its panel (clients across the top, the access layer under them, the cluster nodes below that, the services in a column at the right). **Top right:** the **node list** (Compute, GPU and Services). **Bottom right:** **Connections**, how to reach each part (address and a Copy button), which shows the selected part instead when you click one, and a **Timeline** tab of recent traffic and faults. **Hide node list** gives the right column to Connections; the choice is remembered |
 
-Three panels open on top of the page from the top strip or its **☰ Menu** and close with **✕ Close**, Esc or a click outside: **Scenarios**,
-**Plan** and **Governor**. A node is different: it opens in the **Connections** area (below), so the Infrastructure architecture and the node list stay in view.
+Two panels open on top of the page from the top strip or its **☰ Menu** and close with **✕ Close**, Esc or a click outside: **Cluster architecture** and **Governor**. **Scenarios** is different: it is a panel docked on the right that you switch on and off with the **▶ Scenarios** button in the top strip, so the diagram stays visible and live while a scenario runs. A node is different: it opens in the **Connections** area (below), so the Infrastructure architecture and the node list stay in view.
 
 On a phone, and under 1100 px, the Infrastructure architecture, the list and the Connections area stack in one column and the diagram keeps its natural shape. The page has a skip link and
 landmarks, and honours reduced motion.
@@ -157,10 +156,9 @@ live state.
 
 ## Plan: change the workbench
 
-![The Cluster architecture sheet: node counts, then the optional parts grouped by category](img/web-cluster-architecture.png)
+![The Cluster architecture sheet: Slurm and Kubernetes node counts, login nodes, optional parts, and the summary](img/web-cluster-architecture.png)
 
-**▦ Cluster architecture** opens a panel with steppers for CPU nodes, GPU nodes and GPUs per node, toggles for the optional parts, grouped by category as in the `--ticketing`, `--hardware` flags (accounting, Jira, BMC, BCM, Teleport, scenarios, load; each shows the memory limit it adds, and the toggles show what is built now), and a
-memory bar ("1.7 GB needed of 4.5 GB free"). It shows the change against what runs now ("GPU nodes 2 → 3 (+1)") and the
+**▦ Cluster architecture** opens a wide sheet with one card per concern and a summary beside it that stays in view. **Slurm cluster**: steppers for CPU nodes, GPU nodes and GPUs per node, each with what one node is (for example 8 CPUs, 4 GB; H200). **Kubernetes cluster**: an Enabled switch and steppers for its own CPU and GPU nodes (KWOK), separate from the Slurm nodes. **Login nodes**: one card per login node with two choices, *Way in* (SSH, Teleport, Both) and *Serves* (Slurm, Kubernetes, Both: an s-login, a k-login or a shared login), and two presets, *One shared login* and *Separate s-login and k-login*. **Optional parts**: toggles grouped by category as in the `--ticketing`, `--hardware` flags (accounting, Jira, BMC, BCM, Teleport, scenarios, load; each shows the memory limit it adds, and the toggles show what is built now). The summary lists the node counts per scheduler, the logins, the memory it needs against free memory, and the command for a terminal; on a phone it stacks under the cards. The memory bar reads like "1.7 GB needed of 4.5 GB free". The sheet shows the change against what runs now ("GPU nodes 2 → 3 (+1)") and the
 `benchctl up ...` command for a terminal. Editing the numbers only estimates. **Apply to the running workbench** (press
 twice: the second press confirms) asks the governor to rebuild it; new nodes start and nodes you no longer want are
 removed. See [choose the workbench](../guides/choose-workbench.md).
@@ -175,9 +173,7 @@ while an older one kept running). Restart it and reload:
 
 ## Scenarios
 
-Press **▶ Scenarios**, type in *Filter scenarios* if the list is long, pick a speed (one setting for all), press
-**▶ Play**, and watch each step turn ok, skipped or failed. **Stop** aborts. While one runs, the top strip shows it and
-pressing that chip reopens the sheet. The page has no Docker access by design, so its `slurm` steps (drain, resume, job and daemon steps)
+Press **▶ Scenarios** in the top strip: a panel docks on the right and the diagram stays in view. The run card is at the top (status, a progress bar, **Stop**, and the steps with the current one highlighted); below it is the library (type in *Filter scenarios*, pick a speed that applies to all, press **▶ Play** on a card; the running scenario's card is highlighted). Press the button again, or **✕ Close**, to hide it; it stays open across a reload. While one runs, the top strip also shows it, and pressing that chip opens the panel. The page has no Docker access by design, so its `slurm` steps (drain, resume, job and daemon steps)
 are done by the governor; one it refuses (memory level L2 and above) or cannot do (started without `--workdir`) shows **skipped** with the reason, and
 `./scripts/benchctl scenario run NAME` does it from the terminal. Tick **Slurm trace** before **▶ Play** to see, under the timeline, what the
 jobs and Slurm's logs did around each step ([Slurm resilience](../guides/slurm-resilience.md)).

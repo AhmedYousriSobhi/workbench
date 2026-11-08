@@ -36,6 +36,10 @@ def load_nodes(sim_yaml: Path) -> dict[str, int]:
     g = cfg.get("gpu", {})
     for i in range(1, g.get("nodes", 0) + 1):
         nodes[f"{g['prefix']}{i:03d}"] = g["gpus_per_node"]
+    k = cfg.get("kubernetes") or {}
+    for grp in (k.get("nodes") or []) if k.get("enabled") else []:  # the Kubernetes GPU nodes publish GPU metrics too, as a real GPU node does
+        for i in range(1, int(grp.get("count", 0)) + 1):
+            nodes[f"{grp['prefix']}{i:03d}"] = int(grp.get("gpus", 0))
     return nodes
 
 

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 
-from . import compose, logins, memory
+from . import compose, k8s, logins, memory, nodes
 
 SAVED = Path("compose/generated/workbench.yaml")  # the spec `apply`/`up` last built; absent after a plain profile `up`
 OBSERVABILITY = {"prometheus": 300, "grafana": 300, "gpu-exporter-farm": 100}  # limits, compose/observability.yml
@@ -22,7 +22,7 @@ FLOOR_MB = 1024                                   # MemAvailable that must remai
 # part -> (compose group, services it adds; None = the whole group)
 PARTS: dict[str, tuple[str, list[str] | None]] = {
     "jira": ("mocks", ["jira-mock"]), "jira-real": ("jira-real", None), "bmc": ("mocks", ["bmc-farm"]), "bcm": ("mocks", ["bcm-mock"]),
-    "accounting": ("accounting", None), "teleport": ("teleport", None), "scenarios": ("scenarios", None), "load": ("load", None)}
+    "accounting": ("accounting", None), "teleport": ("teleport", None), "k8s": ("k8s", None), "scenarios": ("scenarios", None), "load": ("load", None)}
 # The one registry of options that change what runs and so what memory it needs. The Cluster architecture sheet is drawn from it
 # (`catalog`): a new option is an entry here and in PARTS, not new page code.
 PART_INFO: dict[str, tuple[str, str]] = {
@@ -32,6 +32,7 @@ PART_INFO: dict[str, tuple[str, str]] = {
     "bmc": ("BMC farm", "One Redfish endpoint per node: power, thermals, fans."),
     "bcm": ("BCM", "The BCM mock (CMDaemon JSON) and its device list."),
     "teleport": ("Teleport", "Teleport auth and proxy: tsh login and ssh to the login node and every node through it (not on by default)."),
+    "k8s": ("Kubernetes", "A real Kubernetes control plane (etcd, API server, scheduler, controller manager) with KWOK fake CPU and GPU nodes, a read-only kubeconfig and fixtures (ADR 0034)."),
     "scenarios": ("Scenarios", "The scenario engine that plays timed faults."),
     "load": ("Load", "User and ticket simulators that generate jobs and tickets."),
 }
@@ -39,7 +40,7 @@ PART_INFO: dict[str, tuple[str, str]] = {
 # An item whose part is None is always on (accepted, nothing to add); NOT_BUILT items are refused with a message.
 # Every optional part is in exactly one category (tested), so a new part is added here and in PARTS.
 CATEGORIES: dict[str, tuple[str, dict[str, str | None]]] = {
-    "workload": ("what runs the jobs", {"slurm": None, "kubernetes": None}),
+    "workload": ("what runs the jobs", {"slurm": None, "kubernetes": "k8s"}),
     "accounting": ("job history for sacct", {"slurmdbd": "accounting"}),
     "monitoring": ("metrics and dashboards", {"prometheus": None, "grafana": None}),
     "ticketing": ("ticket systems", {"jira": "jira", "jira-real": "jira-real"}),
@@ -47,7 +48,7 @@ CATEGORIES: dict[str, tuple[str, dict[str, str | None]]] = {
     "access": ("how users reach the nodes", {"teleport": "teleport"}),
     "simulation": ("fault and user simulators", {"scenarios": "scenarios", "load": "load"}),
 }
-NOT_BUILT = {"kubernetes": "Kubernetes is not built yet (SPEC section 11); use --workload slurm"}
+NOT_BUILT: dict[str, str] = {}
 PART_CATEGORY = {part: cat for cat, (_, items) in CATEGORIES.items() for part in items.values() if part}
 BY_NAME_ONLY = ("jira-real",)  # heavy (about 2.4 GB): never turned on by `all` or `--addons`, only by its name (ADR 0026)
 DEFAULT_PARTS = ("jira", "bmc", "bcm", "accounting", "scenarios")  # accounting: without slurmdbd, sacct says storage is disabled
@@ -66,8 +67,10 @@ class Spec:
     gpu_nodes: int = 2
     gpus_per_node: int = 8
     parts: list[str] = field(default_factory=lambda: list(DEFAULT_PARTS))
-    k8s_nodes: int = 0
+    k8s_nodes: int | None = None      # Kubernetes GPU nodes; None keeps sim.yaml's count
+    k8s_cpu_nodes: int | None = None  # Kubernetes CPU nodes; None keeps sim.yaml's count
     bmc_nodes: list[str] | None = None  # nodes that get a BMC address; None = every node (part "bmc")
+    bmc_groups: list[str] | None = None  # node groups that get BMCs (nodes.GROUPS); None = every group
     login_nodes: list[str] = field(default_factory=lambda: list(logins.DEFAULT))  # auth mode of each login node (ADR 0023)
 
     def problems(self) -> list[str]:
@@ -78,6 +81,8 @@ class Spec:
         if self.cpu_nodes + self.gpu_nodes < 1:
             out.append("a workbench needs at least one node")
         out += [f"unknown part {p!r}; parts: {', '.join(PARTS)}" for p in self.parts if p not in PARTS]
+        if self.bmc_groups is not None and not set(self.bmc_groups) <= set(nodes.GROUPS):
+            out.append(f"bmc_groups must be from: {', '.join(nodes.GROUPS)}")
         if self.bmc_nodes is not None and not all(isinstance(n, str) and re.fullmatch(r"[a-z]{2,8}[0-9]{3}", n) for n in self.bmc_nodes):
             out.append("bmc_nodes must be node names such as cn001, gpu002")
         try:
@@ -85,14 +90,19 @@ class Spec:
             out += logins.problems({"login": modes}, set(self.parts))
         except logins.LoginError as e:
             out.append(str(e))
-        if self.k8s_nodes:
-            out.append("Kubernetes nodes are not built yet (SPEC section 11): use --k8s-nodes 0")
+        for key, flag, hi in (("k8s_nodes", "--k8s-nodes", 16), ("k8s_cpu_nodes", "--k8s-cpu-nodes", 64)):
+            n = getattr(self, key)
+            if n is not None and not 0 <= n <= hi:
+                out.append(f"{key} must be 0 to {hi}, not {n}")
+            elif n and "k8s" not in self.parts:
+                out.append(f"{flag} needs the Kubernetes part: add --with k8s (or --workload kubernetes)")
         return out
 
     def to_dict(self) -> dict:
         return {"name": self.name, "cpu_nodes": self.cpu_nodes, "gpu_nodes": self.gpu_nodes,
-                "gpus_per_node": self.gpus_per_node, "parts": sorted(set(self.parts)), "k8s_nodes": self.k8s_nodes,
+                "gpus_per_node": self.gpus_per_node, "parts": sorted(set(self.parts)), "k8s_nodes": self.k8s_nodes, "k8s_cpu_nodes": self.k8s_cpu_nodes,
                 "bmc_nodes": None if self.bmc_nodes is None else sorted(set(self.bmc_nodes)),
+                "bmc_groups": None if self.bmc_groups is None else sorted(set(self.bmc_groups)),
                 "login_nodes": list(self.login_nodes)}
 
 
@@ -131,9 +141,12 @@ def from_dict(data: dict, base: Spec) -> Spec:
     unknown = set(data) - set(base.to_dict())
     if unknown:
         raise SpecError(f"unknown field(s) in the workbench file: {', '.join(sorted(unknown))}")
+    if "k8s_cpu_nodes" not in data and data.get("k8s_nodes") == 0:  # a file saved before the CPU count existed: 0 meant "sim.yaml's count"
+        data = {**data, "k8s_nodes": None}
     merged = {**base.to_dict(), **data}
     return Spec(**{**merged, "parts": list(merged["parts"]),
                    "bmc_nodes": None if merged.get("bmc_nodes") is None else list(merged["bmc_nodes"]),
+                   "bmc_groups": None if merged.get("bmc_groups") is None else list(merged["bmc_groups"]),
                    "login_nodes": list(merged["login_nodes"])})
 
 
@@ -171,7 +184,13 @@ def effective(sim: dict, spec: Spec) -> tuple[dict, dict]:
     have = {"compute": spec.cpu_nodes, "gpu": spec.gpu_nodes}
     if spec.bmc_nodes is not None:
         s["bmc"] = {**(s.get("bmc") or {}), "nodes": sorted(set(spec.bmc_nodes))}
+    if spec.bmc_groups is not None:
+        s["bmc"] = {**(s.get("bmc") or {}), "groups": sorted(set(spec.bmc_groups))}
     s["login"] = list(spec.login_nodes)
+    if "k8s" in spec.parts:  # the part is on: the simulation says so, with the node groups spelled out (the BMC, BCM and GPU exporter read them)
+        s["kubernetes"] = {**(s.get("kubernetes") or {}), "enabled": True, "nodes": k8s.node_groups(s, spec.k8s_nodes, spec.k8s_cpu_nodes)}
+    elif spec.k8s_nodes is not None or spec.k8s_cpu_nodes is not None:
+        s["kubernetes"] = {**(s.get("kubernetes") or {}), "nodes": k8s.node_groups(s, spec.k8s_nodes, spec.k8s_cpu_nodes)}
     s["partitions"] = [p for p in s.get("partitions", []) if have.get(p["nodes"], 1) > 0]
     groups, drop = ["core", "access"], []
     for part in spec.parts:

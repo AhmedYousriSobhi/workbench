@@ -40,7 +40,8 @@ nothing) when the estimate does not fit. Check: `benchctl get nodes`, `benchctl 
 | `--ticketing jira`, `--hardware bmc,bcm`, `--access teleport`, ... | the same parts by category, see below |
 | `--addons` | every optional part (`--without teleport` still removes one) |
 | `--login ssh,teleport,both` | the login nodes, one auth mode each (`login`, `login2`, ...; 1 to 8); a Teleport mode turns Teleport on. See [login nodes](../manual/04-nodes-and-shells.md#login-nodes-how-many-and-how-each-one-lets-you-in) |
-| `--k8s-nodes N` | Kubernetes nodes: not built yet, so any value above 0 is refused |
+| `--bmc-groups LIST` | node groups that get a BMC: `slurm-cpu`, `slurm-gpu`, `k8s-cpu`, `k8s-gpu` (default all); each BMC is about 32 MB; `--bmc-nodes` then leaves out single nodes |
+| `--k8s-nodes N`, `--k8s-cpu-nodes N` | Kubernetes GPU nodes and CPU nodes (KWOK); need `--with k8s`; without them the counts in `sim.yaml` apply (2 and 2) |
 | `--name NAME` | name of the workbench (also the cluster's name in an exported client profile) |
 | `-f FILE` | read the selection from a workbench file; flags override it |
 | `--save FILE` (plan) | write the selection to a file |

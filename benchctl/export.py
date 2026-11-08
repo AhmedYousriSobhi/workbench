@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 
-from . import addressing, compose, logins, nodes, stack, teleport, workbench
+from . import addressing, compose, k8s, logins, nodes, stack, teleport, workbench
 
 LOCAL_FORMAT_FILE = Path(".git/export-format")
 BMC_PORT = 8443
@@ -80,9 +80,18 @@ def build(sim: dict, services: set[str], name: str = "workbench", include_bmc: b
     names = [name if k == 0 else f"{name}-{n}" + ("-teleport" if r == "teleport" and m == "both" else "") for k, (n, m, r, c, t) in enumerate(routes)]
     clusters = [login_cluster(nm, n, r, m, c, t) for nm, (n, m, r, c, t) in zip(names, routes, strict=True)]
     cluster = clusters[0]
-    if "slurmctld" in services:
+    kinds = logins.kinds(sim)
+    pick = lambda sched: next((c for c, r in zip(clusters, routes, strict=True) if kinds[r[0]] in (sched, "both")), None)
+    for c, r in zip(clusters, routes, strict=True):  # an s-login or k-login says so in its description
+        if kinds[r[0]] != "both":
+            c["description"] = c["description"].replace("login node " + r[0], f"{logins.KIND_LABEL[kinds[r[0]]].split(' (')[0]} {r[0]}", 1)
+    if (kc := pick("k8s")) and k8s.API in services:  # kubectl runs on the node this entry connects to, so the k-login's entry carries it
+        kc["k8s"] = {"enabled": True, "intervalSec": 45, "workloadSignals": True, "notify": False, "poolLabel": "pool"}
+    if (sc := pick("slurm")) is not None and "slurmctld" in services:
+        cluster = sc
         cluster["scheduler"] = {"kind": "slurm", "scope": "mine", "partitions": [p["name"] for p in sim.get("partitions", [])],
                                 "intervalSec": 60, "autoRefresh": True}
+    cluster = clusters[0]  # Grafana and Jira ride on the first entry
     if "grafana" in services:
         cluster["grafana"] = {"baseUrl": web("grafana", 3000), "dashboardUids": ["hpc-overview"],
                               "gpuDatasourceUid": "prometheus", "gpuHostLabel": "Hostname"}
@@ -93,7 +102,7 @@ def build(sim: dict, services: set[str], name: str = "workbench", include_bmc: b
     if include_bmc and "bmc-farm" in services:
         if bmc_via not in ("ip", "name"):
             raise ExportError(f"bad --bmc-via {bmc_via!r}: ip or name")
-        every = [n for n, _ in nodes.node_names(sim)]
+        every = [n for n, _ in nodes.hardware_nodes(sim)]
         if loopback:  # the one published listener; the node is chosen by the Host header, so every target looks alike
             targets = [(n, "127.0.0.1", BMC_PORT) for n in every]
         else:  # each BMC has its own address on the ipmi network, reachable from here and from the login node (ADR 0018)

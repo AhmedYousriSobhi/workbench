@@ -42,6 +42,10 @@ def teleport_built() -> bool:
     return saved_has_part("teleport")
 
 
+def k8s_built() -> bool:
+    return saved_has_part("k8s")
+
+
 def jira_real_built() -> bool:
     return saved_has_part("jira-real")
 
@@ -59,7 +63,7 @@ def saved_has_part(part: str) -> bool:
 
 
 def saved_logins(sim: dict | None = None) -> list[dict]:
-    """The login nodes of the workbench last built, `[{name, mode, port}]` (`port`: published on 127.0.0.1, `None` for a Teleport-only node) (file only, no Docker). The diagram draws one box per entry
+    """The login nodes of the workbench last built, `[{name, mode, kind, port}]` (`kind`: slurm, k8s or both; `port`: published on 127.0.0.1, `None` for a Teleport-only node) (file only, no Docker). The diagram draws one box per entry
     and labels how each is reached; with nothing saved it is the single `login` that takes a key, as `sim.yaml` defaults."""
     from benchctl import addressing, compose, logins, workbench
 
@@ -69,7 +73,7 @@ def saved_logins(sim: dict | None = None) -> list[dict]:
     except (workbench.SpecError, OSError, ValueError):
         modes = logins.DEFAULT
     ips = addressing.plan({**sim, "login": list(modes)}, 1)["logins"] if sim else {}  # the private address each box shows
-    return [{"name": logins.name(i), "mode": m, "port": compose.SSH_PORT + i if m in logins.DIRECT else None,
+    return [{"name": logins.name(i), "mode": logins.auth(m), "kind": logins.kind(m), "port": compose.SSH_PORT + i if logins.auth(m) in logins.DIRECT else None,
              **({"ip": ips[logins.name(i)]} if logins.name(i) in ips else {})} for i, m in enumerate(modes)]
 
 
@@ -183,6 +187,11 @@ class Cluster:
                   **({"jira-real": f"{JIRA_REAL}/status"} if jira_real_built() else {})}
         names = list(probes)
         up = [self._try(probes[n]) is not None for n in names]
+        if k8s_built():  # the real API server: a box with up/down only (no request counter, like the real Jira)
+            from benchctl import k8s
+
+            names.append("k8s-api")
+            up.append(k8s.api_up())
         rows = [self._node(*nk) for nk in self.nodes]
         devices = self._try(f"{BCM}/json", {"service": "cmdevice", "call": "getDevices"})
         bcm = {d["hostname"]: d["status"] for d in (devices or {}).get("result", [])} if isinstance(devices, dict) else {}
@@ -198,6 +207,10 @@ class Cluster:
             row["xid"] = xids.get(row["name"], 0)
             row["ib_down"], row["nic_flap"] = ib.get(row["name"], 0), row["name"] in flap
             row["state"], row["label"] = classify(row)
+        if k8s_built():  # the Kubernetes nodes are their own group beside the Slurm nodes; their state is the API's (read-only user)
+            from benchctl import k8s
+
+            rows += k8s.node_rows(k8s.current_sim())
         return {"services": dict(zip(names, up, strict=True)), "nodes": rows, "logins": [{**lg, "up": self.probe(lg["ip"])} if lg.get("ip") else lg for lg in saved_logins(self.sim)],
                 "actions": [{"id": a, "label": v[0], "gpu_only": v[1]} for a, v in ACTIONS.items()]}
 

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import yaml
 
-from . import checks
+from . import checks, k8s
 from .nodes import node_names
 
 ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "http://127.0.0.1:8000/sim/inject",
@@ -31,10 +31,10 @@ JIRA_REAL_URL = "http://127.0.0.1:8083"
 JIRA_REAL_MODES = ("outage", "restore", "bad_logins", "clear_logins", "rate_limit", "rate_limit_off", "token_revoke", "token_restore",
                    "proxy_503", "proxy_429", "proxy_slow", "proxy_off")  # real faults on the real Jira (issue 303); proxy_* through benchctl/jira_proxy.py (issue 305)
 JIRA_REAL_TICKET_ACTIONS = ("create", "transition", "comment")  # `tickets:` steps on the real Jira go through the REST driver (issue 306)
-HOST_TARGETS = ("slurm", "ssh", "jira-real")  # steps that need Docker on the host
+HOST_TARGETS = ("slurm", "ssh", "jira-real", "k8s")  # steps that need Docker on the host
 SSH_STATES = ("down", "up", "hung")
 NODE_SSHD_STATES = ("down", "up")
-NOT_BUILT = ("k8s", "ticket-bot")
+NOT_BUILT = ("ticket-bot",)
 RAMP_STEP_S = 10.0
 RAMP_START_C = 50.0
 SCENARIOS = Path("scenarios")
@@ -141,10 +141,14 @@ def validate(sc: dict, sim: dict) -> list[str]:
             problems += [f"step {i}: {m}" for m in jira_ticket_problems(do["tickets"])]
         if t == "slurm":
             problems += [f"step {i}: {m}" for m in daemon_problems(do)]
+        if t == "k8s":
+            problems += [f"step {i}: {m}" for m in k8s.step_problems(do, {n for n, _ in k8s.node_list(sim)})]
         if t == "jira-real" and "tickets" in do:
             problems += [f"step {i}: {m}" for m in jira_ticket_problems(do["tickets"], JIRA_REAL_TICKET_ACTIONS)]
         elif t == "jira-real" and do.get("fault") not in JIRA_REAL_MODES:
             problems.append(f"step {i}: jira-real needs fault: one of {', '.join(JIRA_REAL_MODES)}, or tickets:")
+        if t == "k8s":  # its node names are Kubernetes nodes, checked above
+            continue
         names = [n for key in ("nodes", "drain", "down", "resume", "power_off", "power_on", "slurmd_stop", "slurmd_start",
                                "slurmd_restart") for n in do.get(key) or []]
         if isinstance(do.get("submit"), dict) and do["submit"].get("node"):
@@ -382,6 +386,12 @@ def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcom
                 r = runner(cmd)
                 if r.returncode and cmd[3:4] != ["pkill"]:  # pkill exits 1 when slurmd is already down: that is the goal
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+        elif step.target == "k8s":
+            k8s.write_pod(step.do)
+            for args in k8s.step_args(step.do):
+                r = runner(k8s.kubectl_cmd(k8s.current_sim(), *args))
+                if r.returncode:
+                    return Outcome(label, "failed", (r.stderr or r.stdout).strip()[-300:])
         elif step.target == "jira-real":
             return jira_real_fault(step, label, runner)
         elif step.target == "jira":
@@ -568,6 +578,10 @@ def expectation(exp: dict, runner=checks.run, host: bool = True):
         return label, lambda: args["state"] in job_states(args["node"], runner), within
     if kind == "slurm.stepd" and host:  # a slurmstepd runs on `node` (alive: true) or none does (alive: false)
         return label, lambda: stepd_alive(args["node"], runner) == bool(args.get("alive", True)), within
+    if kind == "k8s.node_ready" and host:  # the node's Ready condition is `ready` (default true)
+        return label, lambda: k8s.node_ready(args["node"], runner) == bool(args.get("ready", True)), within
+    if kind == "k8s.pod_status" and host:  # the pod's phase or a container's waiting/terminated reason is `reason`
+        return label, lambda: args["reason"] in k8s.pod_reasons(args["namespace"], args["name"], runner).split(), within
     if kind == "jira.issue_created":
         return label, lambda: jira_labels(args["labels"]), within
     search = (lambda q: real_search(q)) if args.get("target") == "real" else (lambda q: jira_search(q))  # `target: real` asks the real Jira

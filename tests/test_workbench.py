@@ -28,7 +28,7 @@ def test_problems_name_every_bad_field():
     s = spec(cpu_nodes=99, gpus_per_node=9, parts=["jira", "nope"], k8s_nodes=2)
     text = " | ".join(s.problems())
     assert "cpu_nodes must be 0 to 64" in text and "gpus_per_node must be 1 to 8" in text
-    assert "unknown part 'nope'" in text and "Kubernetes nodes are not built" in text
+    assert "unknown part 'nope'" in text and "--k8s-nodes needs the Kubernetes part" in text
     assert "at least one node" in " ".join(spec(cpu_nodes=0, gpu_nodes=0).problems())
     assert spec().problems() == []
 
