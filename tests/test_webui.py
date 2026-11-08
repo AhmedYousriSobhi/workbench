@@ -267,6 +267,7 @@ def test_connections_endpoint_lists_every_entity_with_credential_paths_only(ui):
     assert req(ui, "/api/connections", auth=False)[0] == 401
     page = req(ui, "/")[1]
     assert b'role="tablist"' in page and b'id="tab-conn"' in page and b"paintConnections" in page
+    assert b'id="tab-traffic"' in page and b"paintTraffic" in page and b'aria-label="Workspaces"' in page
 
 
 def test_plan_apply_needs_csrf_validates_and_asks_the_governor(ui):

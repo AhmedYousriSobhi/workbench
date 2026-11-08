@@ -162,7 +162,6 @@ def capture(out: Path) -> dict:
                     page.keyboard.press("Escape")
                     if page.locator("#menu:visible").count() or page.evaluate("document.activeElement.id") != "menubtn":
                         result["a11y"].append("Escape must close the menu and return focus to the Menu button")
-                    page.click("#menubtn")
                     page.click("#scnbtn")  # scenarios sheet: list, filter, play buttons
                     page.wait_for_selector("#list .btn")
                     spath = out / f"scenarios-{vp}-{scheme}.png"
@@ -171,7 +170,6 @@ def capture(out: Path) -> dict:
                     page.click("#scn-close")
                     if page.locator("#scndlg[open]").count():
                         result["a11y"].append("scenarios sheet did not close")
-                    page.click("#menubtn")
                     page.click("#planbtn")  # planner sheet: opens, estimates, reacts to a stepper press, shows the command
                     page.wait_for_function("document.querySelector('#pl-msg').textContent.length > 5")
                     page.click("[data-step=pl-cpu][data-d='-1']")

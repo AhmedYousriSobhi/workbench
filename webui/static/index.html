@@ -44,6 +44,13 @@
   #conn i { width:9px; height:9px; border-radius:50%; background:var(--bad); display:inline-block; }
   #conn.live i { background:var(--ok); }
   main { min-width:0; }
+  .shell { display:grid; grid-template-columns:var(--side) minmax(0,1fr); align-items:start; }
+  .side { position:sticky; top:62px; display:flex; flex-direction:column; gap:var(--sp1); padding:var(--sp4) var(--sp3); }
+  .side [role=tablist] { display:flex; flex-direction:column; gap:var(--sp1); }
+  .sidei { display:flex; align-items:center; gap:10px; width:100%; min-height:44px; padding:0 var(--sp3); font:inherit; font-weight:600; text-align:left; color:var(--dim); background:none; border:0; border-left:3px solid transparent; border-radius:6px; cursor:pointer; }
+  .sidei b { width:1.2em; text-align:center; } .sidei:hover { color:var(--fg); background:var(--sel); }
+  .sidei[aria-selected=true] { color:var(--fg); background:var(--sel); border-left-color:var(--accent); }
+  @media (max-width:860px) { .shell { grid-template-columns:minmax(0,1fr); } .side { position:static; flex-direction:row; flex-wrap:wrap; padding:var(--sp2) var(--sp4); } .side [role=tablist] { flex-direction:row; flex-wrap:wrap; } .sidei { width:auto; border-left:0; border-bottom:3px solid transparent; } .sidei[aria-selected=true] { border-bottom-color:var(--accent); } }
   .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr)); gap:var(--sp4); margin:0 0 var(--sp4); }
   .tile { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:var(--sp4); box-shadow:var(--shadow); text-align:left; font:inherit; color:inherit; display:block; width:100%; }
   button.tile { cursor:pointer; } button.tile:hover { border-color:var(--accent); }
@@ -179,9 +186,6 @@
   #flow .ndt { font:600 8.5px system-ui,sans-serif; fill:var(--fg); } #flow .ring { fill:none; stroke:var(--warn); stroke-width:2.5; animation:ring 1.1s ease-out forwards; transform-box:fill-box; transform-origin:center; }
   @keyframes ring { from { opacity:1; transform:scale(1); } to { opacity:0; transform:scale(2.2); } }
   #flow .pk { fill:var(--accent); stroke:var(--panel); stroke-width:1.2; } #flow .pkt { fill:var(--accent); opacity:.25; }
-  .tabs { display:flex; gap:var(--sp2); border-bottom:1px solid var(--line); margin:0 0 var(--sp4); overflow-x:auto; }
-  .tabs button { font:inherit; font-weight:600; background:none; color:var(--dim); border:0; border-bottom:3px solid transparent; min-height:44px; padding:0 var(--sp4); cursor:pointer; white-space:nowrap; }
-  .tabs button:hover { color:var(--fg); } .tabs button[aria-selected=true] { color:var(--fg); border-bottom-color:var(--accent); }
   .scnbar { display:flex; gap:var(--sp2); margin:0 0 var(--sp2); } .scnbar input[type=search] { flex:1; min-width:0; min-height:40px; font:inherit; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--fg); padding:0 10px; }
   ul.scns { max-height:min(46vh,420px); overflow-y:auto; border-top:1px solid var(--line); scrollbar-width:thin; }
   .scn { display:grid; grid-template-columns:1fr auto; gap:0 var(--sp2); align-items:center; padding:8px 0; }
@@ -211,7 +215,6 @@
   .grouphead { margin:var(--sp5) 0 var(--sp3); color:var(--dim); font-weight:600; }
   .top { padding:var(--sp3) var(--sp5); border-bottom-color:var(--line); } .pillchip { background:transparent; border-color:transparent; } .pillchip:hover { border-color:var(--line); }
   .svcline { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp2) var(--sp4); margin:0 0 var(--sp5); } .svcline .chip { border-color:transparent; padding:2px 0; font-size:13px; }
-  .tabs { border-bottom-color:var(--line); margin-bottom:var(--sp5); gap:var(--sp4); } .tabs button { padding:0 var(--sp2); }
   .panel.duo { display:grid; grid-template-columns:1fr 1fr; gap:var(--sp4); } .duo .big { font-size:24px; } .duo svg.spark { height:44px; }
   .banner { padding:var(--sp4); border-color:transparent; } .banner b { font-size:17px; }
   .nodes { gap:var(--sp4); grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr)); }
@@ -295,7 +298,7 @@
   .runbox { margin-top:var(--sp4); padding-top:var(--sp4); border-top:1px solid var(--line); }
   @media (max-width:1100px) { .nodeswrap { grid-template-columns:minmax(0,1fr); } .nodesmain { order:2; max-height:none; } .attnbar { flex-direction:column; align-items:flex-start; } }
   @media (max-width:860px) { .cols { padding:var(--sp3) var(--sp4) var(--sp5); } }
-  .subbar { display:flex; align-items:center; gap:var(--sp5); margin:0 0 var(--sp3); } .subbar .tabs { margin:0; border-bottom:0; flex:none; } .subbar .attnbar { flex:1; margin:0; min-width:0; }
+  .subbar { display:flex; align-items:center; gap:var(--sp5); margin:0 0 var(--sp3); } .subbar .attnbar { flex:1; margin:0; min-width:0; }
   .attnbar { padding:var(--sp1) var(--sp4); min-height:44px; } .attnbar h2 { font-size:13px; }
   .nodeswrap { grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); gap:var(--sp3); } .trafficpanel { padding:var(--sp3) var(--sp4); }
   .trafficpanel .legend { font-size:12px; margin-top:var(--sp2); gap:2px var(--sp4); } .trafficpanel .legend span:nth-child(3) { flex-basis:100%; } #flowstate { font-size:12px; margin-top:var(--sp1); }
@@ -485,10 +488,7 @@
     <span id="conn" role="status"><i></i><span>connecting…</span></span>
     <span class="menuwrap"><button class="pillchip menubtn" id="menubtn" aria-expanded="false" aria-controls="menu">☰ Menu</button>
       <div id="menu" class="menu" hidden>
-        <p class="menugroup" id="mg-run">Run</p>
-        <button class="menuitem" id="scnbtn" aria-haspopup="dialog"><b aria-hidden="true">▶</b><span><span class="mi-t">Scenarios</span><span class="mi-h">Play timed faults and workloads</span></span></button>
         <p class="menugroup" id="mg-conf">Configure</p>
-        <button class="menuitem" id="planbtn" aria-haspopup="dialog"><b aria-hidden="true">▦</b><span><span class="mi-t">Cluster architecture</span><span class="mi-h">Nodes, GPUs per node, optional parts, and what fits in memory</span></span></button>
         <button class="menuitem" id="nhcbtn" aria-haspopup="dialog"><b aria-hidden="true">✚</b><span><span class="mi-t">Health checks</span><span class="mi-h">What makes a node drain</span></span></button>
         <p class="menugroup" id="mg-share">Share</p>
         <button class="menuitem" id="expbtn" aria-haspopup="dialog"><b aria-hidden="true">⇩</b><span><span class="mi-t">Export</span><span class="mi-h">A profile file for the monitoring client</span></span></button>
@@ -497,13 +497,19 @@
     <button class="pillchip" id="theme" aria-label="Colour theme: automatic. Press to change.">◐ Auto</button>
   </div>
 </header>
+<div class="shell">
+<nav class="side" aria-label="Workspaces">
+  <div role="tablist" aria-orientation="vertical" aria-label="Workspaces">
+    <button role="tab" class="sidei" id="tb-nodes" aria-controls="tab-nodes" aria-selected="true"><b aria-hidden="true">▦</b>Infrastructure</button>
+    <button role="tab" class="sidei" id="tb-traffic" aria-controls="tab-traffic" aria-selected="false" tabindex="-1"><b aria-hidden="true">⇄</b>Traffic &amp; Communication</button>
+    <button role="tab" class="sidei" id="tb-conn" aria-controls="tab-conn" aria-selected="false" tabindex="-1"><b aria-hidden="true">⌖</b>Connections</button>
+  </div>
+  <button class="sidei" id="scnbtn" aria-haspopup="dialog"><b aria-hidden="true">▶</b>Scenarios</button>
+  <button class="sidei" id="planbtn" aria-haspopup="dialog"><b aria-hidden="true">⚙</b>Cluster architecture</button>
+</nav>
 <div class="cols">
 <main id="main" tabindex="-1" aria-label="Cluster components">
   <div class="subbar">
-  <div class="tabs" role="tablist" aria-label="Dashboard sections">
-    <button role="tab" id="tb-nodes" aria-controls="tab-nodes" aria-selected="true">Nodes</button>
-    <button role="tab" id="tb-conn" aria-controls="tab-conn" aria-selected="false" tabindex="-1">Connections</button>
-  </div>
   <section class="attnbar" aria-label="Needs attention"><h2 class="rh">Needs attention</h2><ul class="attn" id="attn"><li class="skel">Checking…</li></ul></section>
   </div>
   <div id="tab-nodes" role="tabpanel" aria-labelledby="tb-nodes">
@@ -568,6 +574,12 @@
   <p class="dim small" id="treenote">Drain in Slurm and Kubernetes node faults are not available here: the page has no Docker access by design, and Kubernetes is not built yet. Use <code>./scripts/benchctl scenario run node-down</code> for Slurm.</p>
   </div>
   </div>
+  </div>
+  <div id="tab-traffic" role="tabpanel" aria-labelledby="tb-traffic" hidden>
+    <div class="panel"><h2>Traffic &amp; Communication</h2>
+      <p class="dim small">Every link the cluster declares. <b>Observed</b> means a request counter backs it (the count is real); <b>configured</b> means the wiring is declared, no traffic is measured for it. Simulated parts answer as real ones would.</p>
+      <div class="row"><label for="tr-plane" class="small dim">Plane</label><select id="tr-plane" class="btn small"><option value="all">All</option></select></div>
+      <div class="tablewrap"><table class="conn"><thead><tr><th>From</th><th>To</th><th>Plane</th><th>How</th><th>Evidence</th><th>Requests</th><th>State</th></tr></thead><tbody id="tr-rows"><tr><td colspan="7" class="skel">Loading…</td></tr></tbody></table></div></div>
   </div>
   <div id="tab-conn" role="tabpanel" aria-labelledby="tb-conn" hidden>
     <div class="panel"><h2>How to reach each part</h2>
@@ -678,6 +690,7 @@
     <div class="sheet-f"><p id="nhc-msg" role="status" class="small"></p><button class="btn small" id="nhc-done">Close</button></div>
   </dialog>
 </main>
+</div>
 </div>
 <script>
 const $ = id => document.getElementById(id);
@@ -1797,7 +1810,7 @@ function onFlow(snap) {
   flowLevel = snap.level; flowCursor = snap.cursor;
   snap.faults = (flowSnap?.faults || 0) + snap.events.filter(e => e.from === 'injector').length;
   snap.events.forEach(e => recent.push({ t: Date.now(), to: e.to, n: e.from === 'clients' ? e.n : 0, fault: e.from === 'injector' }));
-  flowSnap = snap; paintBlocks(); flowNote(); paintFeed(snap.events);
+  flowSnap = snap; paintBlocks(); flowNote(); paintFeed(snap.events); paintTraffic();
   if (lens === 'client') paintEye();
   const inj = snap.events.filter(e => e.from === 'injector').pop(); if (inj) { const b = blastFor(inj); if (b) setBlast(b); }
   if (animating()) snap.events.forEach(launch);
@@ -1945,18 +1958,34 @@ async function poll() {
     || `<p class="dim small">${s.running ? 'The first entry appears when the next step starts.' : 'Nothing to show.'}</p>`) : '';
   if (s.running) pollTimer = setTimeout(poll, 1000);
 }
+// Traffic & Communication: the declared graph (webui/graph.py) with the measured counters beside it, nothing invented
+const END = id => id.split('/').pop();
+function paintTraffic() {
+  if ($('tab-traffic').hidden) return;
+  const gr = clusterNow().graph, sel = $('tr-plane');
+  if (!gr) return;
+  if (sel.options.length === 1) [...new Set(gr.edges.map(e => e.plane))].forEach(p => sel.add(new Option(p, p)));
+  const rows = gr.edges.filter(e => sel.value === 'all' || e.plane === sel.value).map(e => {
+    const to = END(e.to), up = flowSnap?.reachable[to], n = flowSnap?.totals[to];
+    return `<tr><td>${esc(END(e.from))}</td><td>${esc(to)}</td><td>${esc(e.plane)}</td><td>${esc(e.kind)}</td><td>${e.measured ? 'observed' : 'configured'}</td>`
+      + `<td>${e.measured && n != null ? n.toLocaleString() : '–'}</td><td>${up === undefined ? '–' : up ? '✓ up' : '✗ not reachable'}</td></tr>`;
+  });
+  $('tr-rows').innerHTML = rows.join('') || '<tr><td colspan="7" class="skel">No links declared.</td></tr>';
+}
+$('tr-plane').onchange = paintTraffic;
 // tabs: the live traffic feed runs only while its tab and the page are visible
-const TABS = ['nodes', 'conn'];
+const TABS = ['nodes', 'traffic', 'conn'];
 function selectTab(t, focus) {
   TABS.forEach(k => { const on = k === t; $('tab-' + k).hidden = !on; $('tb-' + k).setAttribute('aria-selected', on); $('tb-' + k).tabIndex = on ? 0 : -1; });
   if (focus) $('tb-' + t).focus();
-  if (t === 'nodes' && !document.hidden) openFlow(); else closeFlow();
+  if ((t === 'nodes' || t === 'traffic') && !document.hidden) openFlow(); else closeFlow();
   if (t === 'conn') paintConnections();
+  if (t === 'traffic') paintTraffic();
   try { sessionStorage.setItem('workbench-tab', t); } catch (e) { /* not remembered */ }
 }
 TABS.forEach((k, i) => {
   $('tb-' + k).onclick = () => selectTab(k);
-  $('tb-' + k).onkeydown = e => { const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key]; if (d) { e.preventDefault(); selectTab(TABS[(i + d + TABS.length) % TABS.length], true); } };
+  $('tb-' + k).onkeydown = e => { const d = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key]; if (d) { e.preventDefault(); selectTab(TABS[(i + d + TABS.length) % TABS.length], true); } };
 });
 // start
 loadCluster(); runChip(); loadScenarios(); poll();
@@ -1964,7 +1993,7 @@ let savedTab = 'nodes'; try { savedTab = sessionStorage.getItem('workbench-tab')
 selectTab(TABS.includes(savedTab) ? savedTab : 'nodes');
 try { if (sessionStorage.getItem('workbench-scn') === '1') scnOpen(true); } catch (e) { /* closed */ }
 // the live feed is only worth its CPU while the page is visible
-document.addEventListener('visibilitychange', () => { if (document.hidden || $('tab-nodes').hidden) closeFlow(); else openFlow(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden || ($('tab-nodes').hidden && $('tab-traffic').hidden)) closeFlow(); else openFlow(); });
 </script>
 </body>
 </html>
