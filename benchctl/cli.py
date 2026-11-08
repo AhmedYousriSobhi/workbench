@@ -27,6 +27,7 @@ from . import (
     nhc,
     nodes,
     scenario,
+    slurmstats,
     slurmtrace,
     stack,
     teleport,
@@ -555,6 +556,12 @@ def get_trace(node: list[str] = TRACE_NODES, since: float = TRACE_SINCE) -> None
     """What Slurm shows now (jobs, slurmd and slurmstepd pids per node) and what slurmctld and the nodes logged lately, as JSON:
     the data behind `scenario run --trace` and the page's Slurm trace. Read-only."""
     typer.echo(json.dumps(slurmtrace.collect(node, time.time() - since, lambda c: stack._run(c))))
+
+
+@get_app.command("slurm-stats")
+def get_slurm_stats() -> None:
+    """slurmctld's request counts and times from `sdiag`, as JSON: the data behind the page's Traffic view. Read-only."""
+    typer.echo(json.dumps(slurmstats.collect(lambda c: stack._run(c))))
 
 
 @get_app.command("scenarios")

@@ -579,6 +579,7 @@
     <div class="panel"><h2>Traffic &amp; Communication</h2>
       <p class="dim small">How the parts talk, as their documentation says (ports are the defaults of the real software). <b>Real</b>: real software answers; <b>simulated</b>: a mock or KWOK imitates it. <b>Observed</b>: a request counter backs the count; <b>configured</b>: documented wiring, no traffic measured.</p>
       <div class="row"><label for="tr-plane" class="small dim">Plane</label><select id="tr-plane" class="btn small"><option value="all">All</option></select></div>
+      <div id="tr-slurm" class="small" hidden></div>
       <div class="tablewrap"><table class="conn"><thead><tr><th>From</th><th>To</th><th>Protocol and port</th><th>Plane</th><th>Software</th><th>Evidence</th><th>Requests</th><th>Probe latency</th><th>State</th></tr></thead><tbody id="tr-rows"><tr><td colspan="9" class="skel">Loading…</td></tr></tbody></table></div></div>
   </div>
   <div id="tab-conn" role="tabpanel" aria-labelledby="tb-conn" hidden>
@@ -1961,6 +1962,7 @@ async function poll() {
 // Traffic & Communication: the declared graph (webui/graph.py) with the measured counters beside it, nothing invented
 function paintTraffic() {
   if ($('tab-traffic').hidden) return;
+  paintSlurmStats();
   const links = clusterNow().comms, sel = $('tr-plane');
   if (!links) return;
   if (sel.options.length === 1) [...new Set(links.map(l => l.plane))].forEach(p => sel.add(new Option(p, p)));
@@ -1972,6 +1974,18 @@ function paintTraffic() {
   $('tr-rows').innerHTML = rows.join('') || '<tr><td colspan="9" class="skel">No links.</td></tr>';
 }
 $('tr-plane').onchange = paintTraffic;
+// slurmctld's own request counts (sdiag, read by the governor): refreshed every 10 s while the Traffic tab is open
+let slurmAt = 0;
+async function paintSlurmStats() {
+  if ($('tab-traffic').hidden || Date.now() - slurmAt < 10000) return;
+  slurmAt = Date.now();
+  let s = null;
+  try { s = (await (await fetch('/api/slurm-stats')).json()).stats; } catch (e) { /* the governor or the stack is down: show nothing */ }
+  const box = $('tr-slurm');
+  box.hidden = !s;
+  if (s) box.innerHTML = `<b>slurmctld (sdiag)</b>: ${s.rpcs.toLocaleString()} requests served since it started${s.threads == null ? '' : `, ${s.threads} threads now`}. Busiest: `
+    + s.top.map(t => `${esc(t.type)} ${t.count.toLocaleString()} (${t.ave_us.toLocaleString()} µs each)`).join(', ') + '.';
+}
 // tabs: the live traffic feed runs only while its tab and the page are visible
 const TABS = ['nodes', 'traffic', 'conn'];
 function selectTab(t, focus) {

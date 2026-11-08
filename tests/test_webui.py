@@ -508,3 +508,20 @@ def test_scenarios_is_a_docked_drawer_with_a_toggle_not_a_modal():
     for needle in ('<dialog id="scndlg" class="drawer"', 'id="scn-toggle"', "function scnOpen(", "d.show()", "dialog.drawer", "dialog[open]:not(.drawer)", "li.classList.toggle('active'"):
         assert needle in html, needle
     assert "$('scndlg').showModal()" not in html
+
+
+def test_slurm_stats_come_from_the_governor(tmp_path):
+    stats = {"rpcs": 5, "threads": 2, "top": []}
+    sock = str(tmp_path / "g.sock")
+    gov = control.serve(sock, lambda cmd, request: {"ok": True, "stats": stats} if cmd == "slurm-stats" else STATUS, lambda: {"compute"})
+    port = free_port()
+    server = uvicorn.Server(uvicorn.Config(create_app(TOKEN, sock, tmp_path, ROOT / "sim.yaml", fetch=no_stack, poster=no_stack),
+                                           host="127.0.0.1", port=port, log_level="error"))
+    threading.Thread(target=server.run, daemon=True).start()
+    while not server.started:
+        time.sleep(0.02)
+    try:
+        assert json.loads(req(f"http://127.0.0.1:{port}", "/api/slurm-stats")[1]) == {"stats": stats}
+    finally:
+        server.should_exit = True
+        gov.shutdown()
