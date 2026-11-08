@@ -577,9 +577,9 @@
   </div>
   <div id="tab-traffic" role="tabpanel" aria-labelledby="tb-traffic" hidden>
     <div class="panel"><h2>Traffic &amp; Communication</h2>
-      <p class="dim small">Every link the cluster declares. <b>Observed</b> means a request counter backs it (the count is real); <b>configured</b> means the wiring is declared, no traffic is measured for it. Simulated parts answer as real ones would.</p>
+      <p class="dim small">How the parts talk, as their documentation says (ports are the defaults of the real software). <b>Real</b>: real software answers; <b>simulated</b>: a mock or KWOK imitates it. <b>Observed</b>: a request counter backs the count; <b>configured</b>: documented wiring, no traffic measured.</p>
       <div class="row"><label for="tr-plane" class="small dim">Plane</label><select id="tr-plane" class="btn small"><option value="all">All</option></select></div>
-      <div class="tablewrap"><table class="conn"><thead><tr><th>From</th><th>To</th><th>Plane</th><th>How</th><th>Evidence</th><th>Requests</th><th>State</th></tr></thead><tbody id="tr-rows"><tr><td colspan="7" class="skel">Loading…</td></tr></tbody></table></div></div>
+      <div class="tablewrap"><table class="conn"><thead><tr><th>From</th><th>To</th><th>Protocol and port</th><th>Plane</th><th>Software</th><th>Evidence</th><th>Requests</th><th>State</th></tr></thead><tbody id="tr-rows"><tr><td colspan="8" class="skel">Loading…</td></tr></tbody></table></div></div>
   </div>
   <div id="tab-conn" role="tabpanel" aria-labelledby="tb-conn" hidden>
     <div class="panel"><h2>How to reach each part</h2>
@@ -1959,18 +1959,17 @@ async function poll() {
   if (s.running) pollTimer = setTimeout(poll, 1000);
 }
 // Traffic & Communication: the declared graph (webui/graph.py) with the measured counters beside it, nothing invented
-const END = id => id.split('/').pop();
 function paintTraffic() {
   if ($('tab-traffic').hidden) return;
-  const gr = clusterNow().graph, sel = $('tr-plane');
-  if (!gr) return;
-  if (sel.options.length === 1) [...new Set(gr.edges.map(e => e.plane))].forEach(p => sel.add(new Option(p, p)));
-  const rows = gr.edges.filter(e => sel.value === 'all' || e.plane === sel.value).map(e => {
-    const to = END(e.to), up = flowSnap?.reachable[to], n = flowSnap?.totals[to];
-    return `<tr><td>${esc(END(e.from))}</td><td>${esc(to)}</td><td>${esc(e.plane)}</td><td>${esc(e.kind)}</td><td>${e.measured ? 'observed' : 'configured'}</td>`
-      + `<td>${e.measured && n != null ? n.toLocaleString() : '–'}</td><td>${up === undefined ? '–' : up ? '✓ up' : '✗ not reachable'}</td></tr>`;
+  const links = clusterNow().comms, sel = $('tr-plane');
+  if (!links) return;
+  if (sel.options.length === 1) [...new Set(links.map(l => l.plane))].forEach(p => sel.add(new Option(p, p)));
+  const rows = links.filter(l => sel.value === 'all' || l.plane === sel.value).map(l => {
+    const up = flowSnap?.reachable[l.service || l.to], n = l.measured ? flowSnap?.totals[l.service] : null;
+    return `<tr><td>${esc(l.from)}</td><td>${esc(l.to)}</td><td>${esc(l.protocol)} :${l.port}<br><span class="dim small">${esc(l.what)}</span></td><td>${esc(l.plane)}</td>`
+      + `<td>${l.real ? 'real' : 'simulated'}</td><td>${l.measured ? 'observed' : 'configured'}</td><td>${n == null ? '–' : n.toLocaleString()}</td><td>${up === undefined ? '–' : up ? '✓ up' : '✗ not reachable'}</td></tr>`;
   });
-  $('tr-rows').innerHTML = rows.join('') || '<tr><td colspan="7" class="skel">No links declared.</td></tr>';
+  $('tr-rows').innerHTML = rows.join('') || '<tr><td colspan="8" class="skel">No links.</td></tr>';
 }
 $('tr-plane').onchange = paintTraffic;
 // tabs: the live traffic feed runs only while its tab and the page are visible

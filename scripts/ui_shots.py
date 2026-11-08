@@ -85,6 +85,13 @@ def capture(out: Path) -> dict:
                     page.click("#theme")
                     if page.evaluate("document.documentElement.dataset.theme") != "dark":
                         result["a11y"].append("theme toggle did not switch to dark")
+                    page.click("#tb-traffic")  # documented links, real or simulated, observed or configured
+                    page.wait_for_selector("#tr-rows tr td code, #tr-rows tr td:nth-child(3)")
+                    tpath = out / f"traffic-{vp}-{scheme}.png"
+                    page.screenshot(path=str(tpath), full_page=True)
+                    result["shots"].append(str(tpath))
+                    if page.locator("#tr-rows tr").count() < 5:
+                        result["a11y"].append("traffic tab lists fewer than 5 links")
                     page.click("#tb-conn")  # connections tab: every entity listed with an address and a credential location
                     page.wait_for_selector("#conn-rows tr td code")
                     cpath = out / f"connections-{vp}-{scheme}.png"
