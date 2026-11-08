@@ -385,7 +385,7 @@
   #flow[data-fit] .ndg { font-size:calc(var(--u,1.5) * 10px); }
   .pillchip.good { background:color-mix(in srgb,var(--ok) 13%,transparent); border-color:color-mix(in srgb,var(--ok) 45%,transparent); } .pillchip.warn { background:color-mix(in srgb,var(--warn) 13%,transparent); border-color:color-mix(in srgb,var(--warn) 45%,transparent); } .pillchip.bad { background:color-mix(in srgb,var(--bad) 13%,transparent); border-color:color-mix(in srgb,var(--bad) 45%,transparent); }
   .itabs { background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:3px; gap:2px; width:fit-content; } .itabs .btn { border:0; background:transparent; border-radius:8px; } .itabs .btn[aria-pressed=true] { background:var(--panel); box-shadow:0 1px 3px rgba(0,0,0,.25); }
-  @media (min-width:1100px) { .nodesmain .er.node { grid-template-columns:20px minmax(64px,auto) minmax(0,1fr) auto; min-height:34px; } .nodesmain .er.node .st { grid-column:3; } .nodesmain .er.node .info { grid-column:4; white-space:nowrap; text-align:right; justify-content:flex-end; } .nodesmain .er.node .info .meter { display:none; } }
+  @media (min-width:1100px) { .nodesmain .er.node .info .meter { display:none; } }  /* the list is narrow: the facts wrap under the name, never over the state */
   #subseg[hidden] { display:none; } #subseg { flex-direction:column; width:auto; margin-top:var(--sp4); } #subseg .btn { text-align:left; } @media (max-width:860px) { #subseg { flex-direction:row; margin:0; } } #nodeswrap.subnodes #trafficpanel { display:none; }
   #trafficpanel { order:0; } #nodesmain { order:2; } #inspector { order:3; } .ipane#dock { display:block; } .ipane#dock[hidden] { display:block; }  /* narrow: one column, the timeline under the list */
   @media (min-width:1100px) {
