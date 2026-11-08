@@ -2070,7 +2070,7 @@ function paintTrafficMap(rows, ghosts = []) {
   $('tr-reset').hidden = !Object.keys(trOff).length;
   const known = new Set(TR_GROUPS.flatMap(g => g[4])), other = [...ids].filter(i => !known.has(i)), groups = [...TR_GROUPS, ...(other.length ? [['Other', 1, 1, '#8da2ff', other]] : [])]
     .map(([title, c, r, col, parts]) => ({ title, c, r, col, parts: parts.filter(p => ids.has(p)) })).filter(g => g.parts.length);
-  const GW = 170, PH = 34, HEAD = 30, GAPX = 140, GAPY = 40, M = 30, pos = {};
+  const GW = 170, PH = 40, HEAD = 30, GAPX = 140, GAPY = 40, M = 30, pos = {};
   groups.forEach(g => { g.h = HEAD + g.parts.length * (PH + 6) + 8; });
   const rowH = {}; groups.filter(g => g.r % 1 === 0).forEach(g => { rowH[g.r] = Math.max(rowH[g.r] || 0, g.h); });
   const rowY = {}; let y = M + 10; Object.keys(rowH).map(Number).sort().forEach(r => { rowY[r] = y; y += rowH[r] + GAPY; });
@@ -2079,7 +2079,7 @@ function paintTrafficMap(rows, ghosts = []) {
   groups.forEach(g => { const o = trOff[g.title] || [0, 0]; g.x = Math.max(M / 2, M + cols.indexOf(g.c) * (GW + GAPX) + o[0]); g.y = Math.max(M / 2, ry(g.r) + o[1]); });
   const w = Math.max(...groups.map(g => g.x + GW)) + M + 64,  h = Math.max(...groups.map(g => g.y + g.h)) + M / 2;  // +64: room for the same-group brackets on the right
   svg.setAttribute('viewBox', `0 0 ${w} ${h}`); svg.style.width = trZoom * 100 + '%'; svg.style.height = 'auto'; svg.style.minWidth = Math.min(w, 560) + 'px';
-  const defs = sv('defs', {}); for (const [p, [c]] of Object.entries(PLANE_STYLE)) { const m = sv('marker', { id: 'tm-' + p, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, orient: 'auto' }); m.append(sv('path', { d: 'M0 0 L10 5 L0 10 z', fill: c })); defs.append(m); }
+  const defs = sv('defs', {}); for (const [p, [c]] of Object.entries(PLANE_STYLE)) { const m = sv('marker', { id: 'tm-' + p, viewBox: '0 0 10 10', refX: 9, refY: 5, markerUnits: 'userSpaceOnUse', markerWidth: 9, markerHeight: 9, orient: 'auto' }); m.append(sv('path', { d: 'M0 0 L10 5 L0 10 z', fill: c })); defs.append(m); }
   svg.append(defs);
   groups.forEach(g => {
     const box = sv('g', { 'data-group': g.title, tabindex: 0, role: 'group', 'aria-label': g.title + ' group, movable', style: 'cursor:grab' });
@@ -2098,7 +2098,7 @@ function paintTrafficMap(rows, ghosts = []) {
   });
   // polyline routing: a short stub out of the box, a straight run to a stub into the target; a run that would cross a group goes along the gap between rows instead
   const lanes = {}, ends = {}, lane = k => { const n = lanes[k] = (lanes[k] || 0) + 1; return ((n - 1) % 8 - 3.5) * 5.5; };
-  const end = (id, side) => { const k = id + side, n = ends[k] = (ends[k] || 0) + 1; return (n - 1) % 5 * 6 - 6; };  // spread arrivals on one box edge
+  const end = (id, side) => { const k = id + side, n = ends[k] = (ends[k] || 0) + 1; return (n - 1) % 5 * 8 - 16; };  // spread arrivals on one box edge
   const ST = 14, cross = (p, q, A, B) => groups.some(g => g !== A.g && g !== B.g && Array.from({ length: 25 }, (_, i) => i / 24).some(t => { const x = p[0] + (q[0] - p[0]) * t, y = p[1] + (q[1] - p[1]) * t; return x > g.x - 4 && x < g.x + GW + 4 && y > g.y - 4 && y < g.y + g.h + 4; }));
   const gapAt = (A, B) => { const r = B.g.r, f = Math.floor(r); return r > A.g.r ? rowY[Math.ceil(r)] - GAPY / 2 : r < A.g.r ? rowY[f] + rowH[f] + GAPY / 2 : rowY[f] - GAPY / 2; };  // the gap between rows on the target's side
   const rounded = pts => pts.map((q, i) => {
@@ -2106,13 +2106,15 @@ function paintTrafficMap(rows, ghosts = []) {
     const a = pts[i - 1], c = pts[i + 1], r = 10, u = m => { const d = Math.hypot(m[0] - q[0], m[1] - q[1]) || 1, k = Math.min(r, d / 2) / d; return [q[0] + (m[0] - q[0]) * k, q[1] + (m[1] - q[1]) * k]; };
     const p1 = u(a), p2 = u(c); return `L${p1[0]} ${p1[1]}Q${q[0]} ${q[1]} ${p2[0]} ${p2[1]}`;
   }).join('');
+  const pills = [];
   [...ghosts.filter(l => l.why !== 'not in this cluster').map(l => ({ l, ghost: true })), ...links.map(l => ({ l }))].forEach(({ l, ghost }) => {
     const A = pos[l.from], B = pos[l.to];
     if (!A || !B) return;
     const right = B.x > A.x + A.w + 30, left = B.x + B.w < A.x - 30, so = left ? -1 : 1, si = right ? -1 : 1;  // sides: 1 = right edge
     const x1 = so > 0 ? A.x + A.w : A.x, x2 = si > 0 ? B.x + B.w : B.x, y1 = A.y + PH / 2 + end(l.from, 'o' + so), y2 = B.y + PH / 2 + end(l.to, 'i' + si), [c, dash] = PLANE_STYLE[l.plane] || ['#8da2ff', ''];
     let pts;
-    if (!right && !left) { const out = Math.max(x1, x2) + ST + 8 + lane('b' + Math.round(Math.max(x1, x2))); pts = [[x1, y1], [out, y1], [out, y2], [x2, y2]]; }  // same column: a bracket on the right
+    // same column: nested brackets on the right
+    if (!right && !left) { const bk = 'b' + Math.round(Math.max(x1, x2)), bi = (lanes[bk] = (lanes[bk] || 0) + 1) - 1, out = Math.max(x1, x2) + ST + 8 + bi * 18; pts = [[x1, y1], [out, y1], [out, y2], [x2, y2]]; }  // same column: a bracket on the right
     else {  // flowchart routing: out sideways, one vertical lane in the gap before the target, in sideways; a run that would cross a group goes along the gap between rows
       const gx = (right ? B.g.x - GAPX / 2 : B.g.x + GW + GAPX / 2) + lane('v' + Math.round(B.g.x) + so);
       if (right && cross([x1 + ST, y1], [gx, y1], A, B)) { const yc = gapAt(A, B) + lane('c' + Math.round(gapAt(A, B))), gs = A.g.x + GW + GAPX / 2 + lane('v' + Math.round(A.g.x) + 's'); pts = [[x1, y1], [gs, y1], [gs, yc], [gx, yc], [gx, y2], [x2, y2]]; }
@@ -2120,12 +2122,26 @@ function paintTrafficMap(rows, ghosts = []) {
     }
     pts = pts.filter((q, i) => !i || q[0] !== pts[i - 1][0] || q[1] !== pts[i - 1][1]);
     const d = rounded(pts), g = ghost ? sv('g', { opacity: 0.4 }) : sv('g', { 'data-link': l.id, style: 'cursor:pointer' }), sel = l.id === trSel, mk = PLANE_STYLE[l.plane] ? l.plane : 'access';
+    g.append(sv('path', { d, fill: 'none', stroke: 'var(--panel)', 'stroke-width': ghost ? 0 : 6.5, 'stroke-linejoin': 'round', 'pointer-events': 'none' }));  // a casing, so two lines that run close still read as two
     if (!ghost) g.append(sv('path', { d, fill: 'none', stroke: 'transparent', 'stroke-width': 14 }));
     g.append(sv('path', { d, fill: 'none', stroke: ghost ? 'var(--dim)' : c, 'stroke-width': sel ? 4.5 : ghost ? 1.6 : 2.8, 'stroke-opacity': ghost ? 1 : 0.85, 'stroke-linejoin': 'round', 'stroke-dasharray': ghost ? '2 5' : '', 'marker-end': ghost ? '' : `url(#tm-${mk})` }));
     if (!ghost && trView(l).up === true) g.append(sv('path', { d, class: 'trdots', fill: 'none', stroke: '#fff', 'stroke-opacity': 0.9, 'stroke-width': 2.4, 'stroke-linecap': 'round', 'stroke-dasharray': '0.1 14', 'pointer-events': 'none' }));  // moving dots: the caller-to-callee direction, only on a link whose far end answers
-    if (l.port != null && !ghost) { const lx = x2 + si * (ST + 18), ly = y2, wd = String(l.port).length * 7 + 14; g.append(sv('rect', { x: lx - wd / 2, y: ly - 8, width: wd, height: 16, rx: 8, fill: 'var(--panel)', stroke: c, 'stroke-width': 1.4 })); g.append(sv('text', { x: lx, y: ly + 4, 'text-anchor': 'middle', fill: 'currentColor', 'font-size': 11, 'font-weight': 600 }, l.port)); }
+    if (l.port != null && !ghost) pills.push({ l, c, pts, home: [x2 + si * (ST + 18), y2] });
     g.append(sv('title', {}, `${l.from} to ${l.to}, ${l.plane} plane, ${l.protocol}${l.port == null ? '' : ' port ' + l.port}` + (ghost ? ` (grayed: ${l.why})` : '')));
     svg.append(g);
+  });
+  // port pills last, each on a free spot of its own line: along the line's segments, away from other pills and from the groups
+  const taken = [], hit = (a, b, pad) => a.x < b.x + b.w + pad && b.x < a.x + a.w + pad && a.y < b.y + b.h + pad && b.y < a.y + a.h + pad, boxes = groups.map(g => ({ x: g.x, y: g.y, w: GW, h: g.h }));
+  const top = sv('g', {}); svg.append(top);
+  pills.forEach(({ l, c, pts, home }) => {
+    const wd = String(l.port).length * 7 + 14, at = (cx, cy) => ({ x: cx - wd / 2, y: cy - 8, w: wd, h: 16, cx, cy });
+    const segs = pts.slice(1).map((q, i) => [pts[i], q]).reverse().filter(([a, b]) => Math.hypot(b[0] - a[0], b[1] - a[1]) >= 30);
+    const spots = segs.flatMap(([a, b]) => [0.5, 0.35, 0.65, 0.2, 0.8].map(t => at(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)));
+    const r = spots.find(q => !taken.some(o => hit(q, o, 3)) && !boxes.some(o => hit(q, o, 1))) || at(home[0], home[1]);
+    taken.push(r);
+    const g = sv('g', { 'data-link': l.id, style: 'cursor:pointer' });
+    g.append(sv('rect', { x: r.x, y: r.y, width: wd, height: 16, rx: 8, fill: 'var(--panel)', stroke: c, 'stroke-width': 1.4 }), sv('text', { x: r.cx, y: r.cy + 4, 'text-anchor': 'middle', fill: 'currentColor', 'font-size': 11, 'font-weight': 600 }, l.port));
+    top.append(g);
   });
 }
 // move a group by dragging or the arrow keys; the lines re-route on every move, the offsets are remembered in this browser
