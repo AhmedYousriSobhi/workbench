@@ -578,7 +578,10 @@
   <div id="tab-traffic" role="tabpanel" aria-labelledby="tb-traffic" hidden>
     <div class="panel"><h2>Traffic &amp; Communication</h2>
       <p class="dim small">How the parts talk, as their documentation says (ports are the defaults of the real software). <b>Real</b>: real software answers; <b>simulated</b>: a mock or KWOK imitates it. <b>Observed</b>: a request counter backs the count; <b>configured</b>: documented wiring, no traffic measured.</p>
-      <div class="row"><label for="tr-plane" class="small dim">Plane</label><select id="tr-plane" class="btn small"><option value="all">All</option></select></div>
+      <div class="row"><label for="tr-plane" class="small dim">Plane</label><select id="tr-plane" class="btn small"><option value="all">All</option></select>
+        <label for="tr-sw" class="small dim">Software</label><select id="tr-sw" class="btn small"><option value="all">All</option><option value="real">Real</option><option value="simulated">Simulated</option></select>
+        <label for="tr-ev" class="small dim">Evidence</label><select id="tr-ev" class="btn small"><option value="all">All</option><option value="observed">Observed</option><option value="configured">Configured</option></select></div>
+      <div id="tr-path" class="small" hidden></div><div id="tr-insp" class="small" hidden></div>
       <div id="tr-slurm" class="small" hidden></div>
       <div class="tablewrap"><table class="conn"><thead><tr><th>From</th><th>To</th><th>Protocol and port</th><th>Plane</th><th>Software</th><th>Evidence</th><th>Requests</th><th>Probe latency</th><th>State</th></tr></thead><tbody id="tr-rows"><tr><td colspan="9" class="skel">Loading…</td></tr></tbody></table></div></div>
   </div>
@@ -1959,26 +1962,70 @@ async function poll() {
     || `<p class="dim small">${s.running ? 'The first entry appears when the next step starts.' : 'Nothing to show.'}</p>`) : '';
   if (s.running) pollTimer = setTimeout(poll, 1000);
 }
-// Traffic & Communication: the declared graph (webui/graph.py) with the measured counters beside it, nothing invented
+// Traffic & Communication: the documented links (webui/comms.py) and Prometheus's own scrape results (webui/monitoring.py)
+// with the measured counters beside them, nothing invented
+let trSel = null, trPath = null, monLinks = [];
+const trRate = {};  // service -> {t, n, rate}: requests per second from the counter, re-sampled every 3 s
+function rateOf(svc, n) {
+  const now = Date.now(), r = trRate[svc] ||= { t: now, n, rate: null };
+  if (now - r.t >= 3000) { r.rate = Math.max(n - r.n, 0) / ((now - r.t) / 1000); r.t = now; r.n = n; }
+  return r.rate;
+}
+// every link on the chain through `id`: upstream until a source, downstream until a sink
+function pathOf(links, id) {
+  const l0 = links.find(l => l.id === id), seen = new Set([id]);
+  if (!l0) return seen;
+  const walk = (key, other, from) => { for (const l of links) if (l[key] === from && !seen.has(l.id)) { seen.add(l.id); walk(key, other, l[other]); } };
+  walk('to', 'from', l0.from); walk('from', 'to', l0.to);
+  return seen;
+}
+function trView(l) {
+  const key = l.service || l.to, snap = flowSnap, mon = l.targets != null;
+  const up = mon ? l.up === l.targets : snap?.reachable[key];
+  const n = l.measured && !mon ? snap?.totals[l.service] : null, rate = n == null ? null : rateOf(l.service, n);
+  const ms = mon ? l.scrape_ms : up ? snap?.latency?.[key] : null;
+  return { up, n, rate, ms, mon, state: up === undefined ? '–' : up ? '✓ up' : mon ? `✗ ${l.up} of ${l.targets} up` : '✗ not reachable',
+    ev: l.measured ? 'observed' : 'configured', sw: l.real ? 'real' : 'simulated' };
+}
 function paintTraffic() {
   if ($('tab-traffic').hidden) return;
   paintSlurmStats();
-  const links = clusterNow().comms, sel = $('tr-plane');
-  if (!links) return;
+  const base = clusterNow().comms, sel = $('tr-plane');
+  if (!base) return;
+  const links = [...base, ...monLinks];
   if (sel.options.length === 1) [...new Set(links.map(l => l.plane))].forEach(p => sel.add(new Option(p, p)));
-  const rows = links.filter(l => sel.value === 'all' || l.plane === sel.value).map(l => {
-    const up = flowSnap?.reachable[l.service || l.to], ms = up ? flowSnap.latency?.[l.service || l.to] : null, n = l.measured ? flowSnap?.totals[l.service] : null;
-    return `<tr><td>${esc(l.from)}</td><td>${esc(l.to)}</td><td>${esc(l.protocol)} :${l.port}<br><span class="dim small">${esc(l.what)}</span></td><td>${esc(l.plane)}</td>`
-      + `<td>${l.real ? 'real' : 'simulated'}</td><td>${l.measured ? 'observed' : 'configured'}</td><td>${n == null ? '–' : n.toLocaleString()}</td><td>${ms == null ? '–' : ms + ' ms'}</td><td>${up === undefined ? '–' : up ? '✓ up' : '✗ not reachable'}</td></tr>`;
-  });
-  $('tr-rows').innerHTML = rows.join('') || '<tr><td colspan="9" class="skel">No links.</td></tr>';
+  const path = trPath && pathOf(links, trPath), f = { plane: sel.value, sw: $('tr-sw').value, ev: $('tr-ev').value };
+  const rows = links.filter(l => !path || path.has(l.id)).map(l => ({ l, v: trView(l) }))
+    .filter(({ l, v }) => (f.plane === 'all' || l.plane === f.plane) && (f.sw === 'all' || v.sw === f.sw) && (f.ev === 'all' || v.ev === f.ev));
+  $('tr-rows').innerHTML = rows.map(({ l, v }) => `<tr${l.id === trSel ? ' aria-selected="true"' : ''}><td><button class="linkbtn" data-link="${esc(l.id)}" aria-pressed="${l.id === trSel}">${esc(l.from)}</button></td><td>${esc(l.to)}</td>`
+    + `<td>${esc(l.protocol)} :${l.port}<br><span class="dim small">${esc(l.what)}</span></td><td>${esc(l.plane)}</td><td>${v.sw}</td><td>${v.ev}</td>`
+    + `<td>${v.mon ? `${l.targets} targets` : v.n == null ? '–' : v.n.toLocaleString() + (v.rate == null ? '' : ` (${+v.rate.toFixed(1)}/s)`)}</td>`
+    + `<td>${v.ms == null ? '–' : v.ms + ' ms'}</td><td>${v.state}</td></tr>`).join('') || '<tr><td colspan="9" class="skel">No links.</td></tr>';
+  const pb = $('tr-path');
+  pb.hidden = !path;
+  if (path) pb.innerHTML = `Path through <b>${esc(trPath)}</b>: ${path.size} link${path.size === 1 ? '' : 's'}. <button class="btn small" id="tr-clear">Show all links</button>`;
+  const cur = links.find(l => l.id === trSel), box = $('tr-insp');
+  box.hidden = !cur;
+  if (cur) {
+    const v = trView(cur);
+    box.innerHTML = `<b>${esc(cur.from)} → ${esc(cur.to)}</b> · ${esc(cur.protocol)} port ${cur.port} · ${esc(cur.plane)} plane · ${v.sw} · ${v.ev}<br>`
+      + `Direction: ${esc(cur.from)} calls ${esc(cur.to)}. State: ${v.state}. Latency: ${v.ms == null ? 'not measured' : v.ms + ' ms' + (v.mon ? ' (Prometheus scrape)' : ' (this page\'s probe)')}. `
+      + `Requests: ${v.mon ? cur.targets + ' targets scraped' : v.n == null ? 'not counted for this link' : v.n.toLocaleString()}${v.rate == null ? '' : `, ${+v.rate.toFixed(1)}/s`}. ${esc(cur.what)}. `
+      + `<button class="btn small" id="tr-follow">Follow the path</button> <button class="btn small" id="tr-close">Close</button>`;
+  }
 }
-$('tr-plane').onchange = paintTraffic;
-// slurmctld's own request counts (sdiag, read by the governor): refreshed every 10 s while the Traffic tab is open
+$('tr-rows').onclick = e => { const b = e.target.closest('[data-link]'); if (b) { trSel = trSel === b.dataset.link ? null : b.dataset.link; paintTraffic(); } };
+document.addEventListener('click', e => {
+  const id = e.target.id;
+  if (id === 'tr-follow') { trPath = trSel; paintTraffic(); } else if (id === 'tr-clear') { trPath = null; paintTraffic(); } else if (id === 'tr-close') { trSel = null; paintTraffic(); }
+});
+$('tr-sw').onchange = $('tr-ev').onchange = $('tr-plane').onchange = paintTraffic;
+// slurmctld's own request counts (sdiag, read by the governor) and Prometheus's scrape results: refreshed every 10 s while the Traffic tab is open
 let slurmAt = 0;
 async function paintSlurmStats() {
   if ($('tab-traffic').hidden || Date.now() - slurmAt < 10000) return;
   slurmAt = Date.now();
+  fetch('/api/monitoring').then(r => r.json()).then(j => { monLinks = j.links; paintTraffic(); }).catch(() => { monLinks = []; });
   let s = null;
   try { s = (await (await fetch('/api/slurm-stats')).json()).stats; } catch (e) { /* the governor or the stack is down: show nothing */ }
   const box = $('tr-slurm');

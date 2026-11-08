@@ -510,6 +510,12 @@ def test_scenarios_is_a_docked_drawer_with_a_toggle_not_a_modal():
     assert "$('scndlg').showModal()" not in html
 
 
+def test_traffic_has_filters_inspector_and_path_following():
+    html = (ROOT / "webui/static/index.html").read_text()
+    for needle in ('id="tr-sw"', 'id="tr-ev"', 'id="tr-insp"', 'id="tr-path"', "function pathOf", "/api/monitoring", "rateOf("):
+        assert needle in html, needle
+
+
 def test_slurm_stats_come_from_the_governor(tmp_path):
     stats = {"rpcs": 5, "threads": 2, "top": []}
     sock = str(tmp_path / "g.sock")

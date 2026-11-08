@@ -92,6 +92,13 @@ def capture(out: Path) -> dict:
                     result["shots"].append(str(tpath))
                     if page.locator("#tr-rows tr").count() < 5:
                         result["a11y"].append("traffic tab lists fewer than 5 links")
+                    page.click("#tr-rows [data-link] >> nth=0")  # inspector, then the path through that link
+                    page.wait_for_selector("#tr-insp:not([hidden])")
+                    page.click("#tr-follow")
+                    page.wait_for_selector("#tr-path:not([hidden])")
+                    if page.locator("#tr-rows tr").count() < 1:
+                        result["a11y"].append("following a path left no links")
+                    page.click("#tr-clear")
                     page.click("#tb-conn")  # connections tab: every entity listed with an address and a credential location
                     page.wait_for_selector("#conn-rows tr td code")
                     cpath = out / f"connections-{vp}-{scheme}.png"
