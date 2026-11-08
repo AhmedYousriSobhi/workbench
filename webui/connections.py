@@ -3,7 +3,7 @@
 Addresses are the containers' fixed private IPs at their standard ports (`benchctl/addressing.py`, ADR 0018): the host
 routes the Docker network, so a client on this machine connects to them directly. The ports published on 127.0.0.1 are
 the fallback (`also on`). Credentials are named by path only, never read, so this page cannot leak a secret."""
-from benchctl import addressing, compose, jira_real, logins, teleport
+from benchctl import addressing, compose, jira_real, k8s, logins, teleport
 from benchctl.describe import BMC_TLS_PORT
 
 SECRETS = "compose/generated/secrets"
@@ -74,6 +74,7 @@ def actions_for(e: dict, sim: dict, user: str) -> list[dict]:
                 {"kind": "uri", "label": "Open in SSH app (needs a handler)", "value": f"ssh://{user}@{LOCAL}:{port}"}]
     return {
         "teleport": [link("Open the Teleport web UI", f"https://{LOCAL}:{teleport.PROXY_PORT}")],
+        "k8s": [copy("Copy kubectl over SSH", f"benchctl ssh {user}@login kubectl get nodes")],
         "bmc": [link("Open Redfish API (JSON, certificate warning)", f"https://{LOCAL}:{BMC_TLS_PORT}/redfish/v1")],
         "jira": [link("Open jira-mock API (JSON)", f"http://{LOCAL}:8080")],
         "jira-real": [link("Open Jira (real)", f"http://{LOCAL}:{jira_real.PORT}"),
@@ -119,6 +120,12 @@ def _rows(sim: dict) -> list[dict]:
          "how": "Only when the Teleport part is on (`benchctl start --access teleport`). An identity file per user needs no password; for "
                 "`tsh login` or the browser, `benchctl add invite <user>` prints a one-time link (the page cannot run it: no Docker, W-3). "
                 f"Also {teleport.DNS_NAME} (a container alias; on this machine add `{teleport.proxy_ip(sim)} {teleport.DNS_NAME}` to /etc/hosts) and 127.0.0.1:{teleport.PROXY_PORT} as a fallback. Self-signed certificate, hence --insecure."},
+        {"id": "k8s", "name": "Kubernetes (kubectl)", "kind": "https", "address": f"https://{ip[k8s.API]}:{k8s.API_PORT}",
+         "command": f"{ssh} kubectl get nodes", "credential": f"{SECRETS}/k8s/viewer.kubeconfig",
+         "how": "Only when the Kubernetes part is on (`benchctl start --workload kubernetes`). On the login node every user has a read-only "
+                "~/.kube/config (cluster-wide) and ~/.kube/limited.yaml (namespace team-a only), mode 600; the file here holds the same "
+                f"token. The administrator's kubeconfig ({SECRETS}/k8s/admin.kubeconfig) is for you, never for a client. 127.0.0.1:{k8s.API_PORT} is the fallback. "
+                "KWOK nodes: pods never really run, so there are no pod logs."},
         {"id": "bmc", "name": "BMC farm (Redfish)", "kind": "https", "address": f"https://{bmc}:{BMC_TLS_PORT}/redfish/v1",
          "command": f"curl -k -H 'Host: bmc-<node>' -u admin:<password> https://{bmc}:{BMC_TLS_PORT}/redfish/v1/Systems/1",
          "credential": f"{SECRETS}/bmc_credentials", "how": "User admin; the password is the part after `admin:` in that file. One address for "

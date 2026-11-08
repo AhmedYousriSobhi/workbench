@@ -9,23 +9,23 @@ apiVersion: v1
 kind: Pod
 metadata: {name: gpu-waiting, namespace: team-b}
 spec:
-  containers: [{name: c, image: "rancher/mirrored-pause:3.6", resources: {limits: {nvidia.com/gpu: "8"}}}]
+  containers: [{name: c, image: "rancher/mirrored-pause:3.6", resources: {limits: {nvidia.com/gpu: "9"}}}]
 ---
 apiVersion: v1
 kind: Pod
-metadata: {name: badimage, namespace: team-b}
+metadata: {name: badimage, namespace: team-b, labels: {workbench_fault: imagepull}}
 spec:
   containers: [{name: c, image: "example.invalid/none:1"}]
 ---
 apiVersion: v1
 kind: Pod
-metadata: {name: crashloop, namespace: team-b}
+metadata: {name: crashloop, namespace: team-b, labels: {workbench_fault: crashloop}}
 spec:
   containers: [{name: c, image: "rancher/mirrored-library-busybox:1.36.1", command: ["sh","-c","echo failing; exit 1"]}]
 ---
 apiVersion: v1
 kind: Pod
-metadata: {name: oom, namespace: team-b}
+metadata: {name: oom, namespace: team-b, labels: {workbench_fault: oom}}
 spec:
   containers:
   - name: c

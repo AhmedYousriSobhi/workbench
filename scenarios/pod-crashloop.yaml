@@ -1,9 +1,11 @@
 name: pod-crashloop
 ref: SC-18
-description: A pod enters CrashLoopBackOff and another is OOMKilled; the app should surface both
+description: A pod enters CrashLoopBackOff and another is OOMKilled; the client should surface both
 steps:
-  - {at: 0s,  target: k8s, do: {apply: [k8s/fixtures/10-workloads.yaml]}}
-  - {at: 60s, target: k8s, do: {scale: {deploy: web, namespace: team-a, replicas: 0}}}
+  - {at: 0s, target: k8s, do: {pod: {namespace: team-b, name: loop-demo, fault: crashloop}}}
+  - {at: 5s, target: k8s, do: {pod: {namespace: team-b, name: oom-demo, fault: oom}}}
+  - {at: 5m, target: k8s, do: {delete_pod: {namespace: team-b, name: loop-demo}}}
+  - {at: 5m, target: k8s, do: {delete_pod: {namespace: team-b, name: oom-demo}}}
 expect:
-  - k8s.pod_status: {namespace: team-b, name: crashloop, reason: CrashLoopBackOff, within: 3m}
-  - k8s.pod_status: {namespace: team-b, name: oom, reason: OOMKilled, within: 3m}
+  - k8s.pod_status: {namespace: team-b, name: loop-demo, reason: CrashLoopBackOff, within: 30s}
+  - k8s.pod_status: {namespace: team-b, name: oom-demo, reason: OOMKilled, within: 30s}

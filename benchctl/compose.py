@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from . import addressing, jira_real, logins, nhc, slurmconf, teleport
+from . import addressing, jira_real, k8s, logins, nhc, slurmconf, teleport
 from .nodes import node_names
 
 OBSERVABILITY = "../observability.yml"  # static; hosts prometheus, grafana, gpu-exporter-farm
@@ -27,6 +27,8 @@ CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {
     "access": {"login": ("workbench/login:dev", 40, 2)},
     # the tag is replaced from sim.yaml teleport.version (benchctl/teleport.py); the limit is a planning estimate until measured
     "teleport": {"teleport": (f"{teleport.IMAGE}:{teleport.DEFAULT_VERSION}", 256, 2)},
+    # a real control plane with KWOK nodes (ADR 0034); the image tags are replaced from sim.yaml kubernetes.version (benchctl/k8s.py)
+    "k8s": {n: (k8s.images({})[n], k8s.LIMITS[n], 3) for n in k8s.SERVICES},
     "scenarios": {"scenario-engine": ("workbench/scenario-engine:dev", 60, 5)},
     "load": {"user-sim": ("workbench/user-sim:dev", 60, 5), "ticket-bot": ("workbench/ticket-bot:dev", 40, 5)},
 }
@@ -113,6 +115,11 @@ def generate(sim: dict, profile: dict) -> dict:
         for svc in services.values():  # sshd trusts the Teleport CA and presents its host certificate (nodes and login)
             if svc["labels"].get("workbench.node") or any(svc is services.get(n) for n in logins.via_teleport(sim)):
                 svc["volumes"].append(f"./secrets/teleport:{teleport.CONTAINER_SECRETS}:ro")
+    k8s.wire(services, sim)  # no-op unless the k8s part is on
+    if k8s.API in services:  # every login node gets the read-only kubeconfigs (login.sh puts them in each user's ~/.kube)
+        for lname, _ in logins.nodes(sim) if "login" in services else []:
+            services[lname]["volumes"] += ["./secrets/k8s/viewer.kubeconfig:/run/workbench/k8s/viewer.kubeconfig:ro",
+                                           "./secrets/k8s/limited.kubeconfig:/run/workbench/k8s/limited.kubeconfig:ro"]
     if "bmc-farm" in services:  # Redfish endpoints for every node in sim.yaml, localhost only
         # :8443 is TLS at the standard /redfish/v1, the node chosen by Host: clients reach it as bmc-<node>
         services["bmc-farm"].update({

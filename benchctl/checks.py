@@ -122,8 +122,7 @@ def check_memlock() -> Check:
 
 def check_tools(which=shutil.which) -> list[Check]:
     out = []
-    for tool, need in (("docker", True), ("virsh", False), ("vagrant", False), ("kubectl", False),
-                       ("k3d", False), ("tc", False)):
+    for tool, need in (("docker", True), ("virsh", False), ("vagrant", False), ("tc", False)):
         if which(tool):
             out.append(Check(f"tool {tool}", OK, "found"))
         else:

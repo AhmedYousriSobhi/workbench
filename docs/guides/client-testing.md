@@ -22,7 +22,7 @@ never print or commit them).
 | BMC Redfish over TLS, certificate pinning | one address per node, `10.148.0.N:443` / `10.148.100.N:443` (fallback: one listener `127.0.0.1:8443`, node chosen by the `Host: bmc-<node>` header) | `admin` and the password in `secrets/bmc_credentials` | merged (ADR 0012); plain HTTP on `:8000` also remains. Inside the cluster network (login node, containers) the BMCs also answer on the standard `bmc-<node>:443`; on the host only `8443` is published (443 needs root) |
 | BCM (`cmsh` on a head node) | the login node is the head node: `cmsh -c "device; list"` over the same SSH connection | as for SSH | built (ADR 0013, #66); read-only, with a small interactive console (modes, list, status); node state follows bcm-mock and scenarios |
 | Teleport (`tsh login`, `tsh ssh`, ssh through the proxy) | proxy `10.141.255.30:3080` or `teleport.workbench.test:3080` (self-signed; `--insecure`), optional part: `benchctl up --with teleport` | identity file per user in `secrets/teleport/identity/`, or a password and one-time code set up through `benchctl add invite <user>` | built, review (ADR 0020, #39): agentless OpenSSH nodes; not simulated: agent extras, K8s/web/DB access. Your `tsh` major must not be newer than `teleport.version` |
-| Kubernetes | not built | | SPEC section 11 |
+| Kubernetes (`kubectl` over the SSH session: `get nodes\|pods\|events`, `get --raw /readyz`, `auth can-i`, `describe`, `logs`) | the login node: `kubectl` as `alice` or `bob` with `~/.kube/config` (read-only, cluster-wide) and `~/.kube/limited.yaml` (namespace `team-a` only), both mode 600 and owned by the user; the API server `https://10.141.255.40:6443` (fallback `127.0.0.1:6443`); optional part: `benchctl up --with k8s` | the kubeconfigs above (tokens in `secrets/k8s/`); the host copy `secrets/k8s/admin.kubeconfig` is for you, never for a client | built, review (ADR 0034, #232): a real API server, scheduler and controller manager; the nodes (`kcn001`, `kgpu001`...) are KWOK fakes with `nvidia.com/gpu` and GPU Feature Discovery labels, so pods never really run: no real pod logs (`kubectl logs` has nothing to show), no `exec`, no metrics-server (the client treats it as optional); failing pods get their status from KWOK stages. Not yet tried against the client |
 
 If port 2222 refuses connections, the checkout is probably on a branch without the login node; that is not a client bug.
 
@@ -139,7 +139,7 @@ engine's targets, not in ad hoc `docker exec` commands.
 
 ## Known gaps
 
-Kubernetes is not built; Teleport is SSH access only (no dynamic labels, session recording or sharing); the fake `cmsh` console is a read-only subset.
+Kubernetes has no real kubelet (no pod logs, no metrics-server) and is not reachable through Teleport; Teleport is SSH access only (no dynamic labels, session recording or sharing); the fake `cmsh` console is a read-only subset.
 The full list is the roadmap, issue #69.
 
 ## After the dashboard or the plan changes

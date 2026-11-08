@@ -49,7 +49,7 @@ def test_each_target_changes_real_state(live):
         {"at": "0s", "target": "gpu-exporter", "do": {"nodes": ["gpu002"], "xid": 79}},
         {"at": "0s", "target": "slurm", "do": {"drain": ["cn003"], "reason": "live test"}},
         {"at": "0s", "target": "jira", "do": {"failure": {"mode": "429", "count": 1}}},
-        {"at": "0s", "target": "k8s", "do": {"kwok_node": "x", "ready": False}},
+        {"at": "0s", "target": "ticket-bot", "do": {"x": 1}},
     ], "expect": [{"slurm.node_state": {"node": "cn003", "state": "drain", "within": "20s"}}]}
     rep = scenario.run(sc, say=lambda m: None)
     assert rep.ok, rep

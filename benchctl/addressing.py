@@ -25,7 +25,8 @@ BMC_NODE_PORT_BASE = 9000          # the farm's per-node TLS port: 9000 + index 
 # service -> last octet in 10.141.255.0/24. observability.yml (a static file) repeats the three observability ones.
 SERVICE_HOSTS = {"slurmctld": 1, "slurmrestd": 2, "slurmdbd": 3, "mariadb": 4, "bcm-mock": 10, "jira-mock": 11,
                  "bmc-farm": 12, "scenario-engine": 13, "user-sim": 14, "ticket-bot": 15, "jira-real": 16, "jira-db": 17,
-                 "teleport": 30, "prometheus": 20, "grafana": 21, "gpu-exporter-farm": 22}
+                 "teleport": 30, "k8s-apiserver": 40, "k8s-etcd": 41, "k8s-controller-manager": 42, "k8s-scheduler": 43,
+                 "kwok-controller": 44, "prometheus": 20, "grafana": 21, "gpu-exporter-farm": 22}
 
 
 class AddressingError(Exception):

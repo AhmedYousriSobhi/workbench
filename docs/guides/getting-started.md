@@ -49,7 +49,7 @@ governor service needs no packages; it runs on the system `python3`.
 ./scripts/benchctl preflight --profile min    # would this profile fit in free memory right now?
 ```
 
-`WARN kubectl/k3d missing` is fine until Kubernetes profiles exist. Fix any `FAIL` first.
+A `WARN` for `virsh`, `vagrant` or `tc` is fine: only optional parts need them (Kubernetes needs no host tool). Fix any `FAIL` first.
 
 ## 2. Start the governor (outside monitoring and control)
 
@@ -110,7 +110,7 @@ Or run a named scenario (a timed list of faults) instead of injecting by hand:
 ```
 
 A scenario fails (exit 1) when a step errors or an `expect` line does not hold. Steps for parts that are not
-built yet (Kubernetes, ticket-bot) are reported as skipped.
+built yet (ticket-bot) are reported as skipped.
 
 ## 4a. Get a shell on a node
 
@@ -135,6 +135,8 @@ A client that only accepts keys under `~/.ssh` can use `./scripts/benchctl ssh-k
 See what the output looks like in [Nodes and shells](../manual/04-nodes-and-shells.md). A shell that hangs may be a node the governor paused under memory pressure (`./scripts/benchctl status`). The other machine
 with a real `sshd` is the optional fidelity VM (`cd fidelity-vm && ./bin/up.sh`, then `vagrant ssh fidelity`). Teleport
 access (`./scripts/benchctl up --with teleport`, then `tsh ... ls`) is in [Nodes and shells](../manual/04-nodes-and-shells.md#teleport-tsh-to-the-login-node-and-the-nodes). More in [Nodes and shells](../manual/04-nodes-and-shells.md).
+
+Kubernetes (a real control plane with KWOK fake nodes, about 0.3 GB) is optional: `./scripts/benchctl up --with k8s`, then `ssh ... alice@127.0.0.1 kubectl get nodes` (see [Nodes and shells](../manual/04-nodes-and-shells.md#kubernetes-optional-part)).
 
 ## 4b. The web page
 

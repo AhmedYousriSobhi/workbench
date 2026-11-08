@@ -11,7 +11,18 @@ import urllib.error
 from collections.abc import Callable
 from pathlib import Path
 
-from . import addressing, checks, compose, jira_real, logins, memory, slurmconf, teleport, workbench
+from . import (
+    addressing,
+    checks,
+    compose,
+    jira_real,
+    k8s,
+    logins,
+    memory,
+    slurmconf,
+    teleport,
+    workbench,
+)
 
 COMPOSE_FILE = Path("compose/generated/docker-compose.yml")
 PROJECT = "workbench"
@@ -23,6 +34,8 @@ STAGES = [  # (label, service-name pattern); later stages depend on earlier ones
     ("mocks", r"bmc-farm|bcm-mock|jira-mock"),
     ("jira real", r"jira-db|jira-real"),
     ("teleport", r"teleport"),
+    ("kubernetes", r"k8s-etcd|k8s-apiserver|k8s-controller-manager|k8s-scheduler"),
+    ("kubernetes nodes", r"kwok-controller"),  # starts only once the stages exist: with none it exits
     ("bmc addresses", r"bmc-(cn|gpu)\d+"),
     ("nodes", r"(cn|gpu)\d+"),
     ("login node", r"login\d*"),
@@ -209,6 +222,15 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         except (OSError, teleport.TeleportError) as e:
             say(f"FAILED teleport setup: {e}")
             return False
+    if any(n in todo for n in k8s.SERVICES):
+        if bad := k8s.problems(sim):
+            say(f"FAILED kubernetes: {bad[0]}")
+            return False
+        try:
+            k8s.prepare(sim, ips)
+        except (OSError, k8s.K8sError) as e:
+            say(f"FAILED kubernetes setup: {e}")
+            return False
     for label, svcs in stage_services(names):
         say(f"starting {label}: {', '.join(svcs)}")
         r = runner(dc("up", "-d", "--build", "--no-deps", *svcs, file=path))
@@ -220,6 +242,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
             return False
         if label == "teleport" and not teleport.bootstrap(sim, ips, runner, dc, say):  # before the nodes read their certificates
             return False
+        if label == "kubernetes" and not k8s.bootstrap(sim, ips, say):
+            return False  # the cluster content (stages, nodes, fixtures) must exist before KWOK starts
         if label == "teleport":
             teleport.snapshot()  # the identity survives a rebuild (an emptied data directory restores it)
     if (changed or acct_added or (conf_changed and "slurmctld" in before)) and "slurmctld" in todo:  # slurm.conf changed under a running controller
@@ -249,6 +273,10 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         say(f"teleport: https://{teleport.proxy_addr(sim)} (self-signed; name {teleport.DNS_NAME}, fallback 127.0.0.1:{teleport.PROXY_PORT}); "
             f"identity files in {teleport.SECRETS_DIR}/identity; password and one-time code for tsh login: ./scripts/benchctl add invite <user>")
         say(f"teleport name on this machine (optional, needs sudo, run it yourself): echo '{teleport.proxy_ip(sim)} {teleport.DNS_NAME}' | sudo tee -a /etc/hosts")
+    if "k8s-apiserver" in todo:
+        say(f"kubernetes: https://{k8s.api_ip(ips)}:{k8s.API_PORT} (127.0.0.1:{k8s.API_PORT} as a fallback); read-only kubeconfigs "
+            f"{k8s.SECRETS_DIR}/viewer.kubeconfig (cluster-wide) and limited.kubeconfig (namespace team-a); "
+            f"nodes {', '.join(n for n, _ in k8s.node_list(sim))}")
     say("stack is up")
     return True
 

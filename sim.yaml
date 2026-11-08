@@ -24,9 +24,11 @@ users:
   - {name: alice, persona: ml-trainer, qos: normal}
   - {name: bob, persona: mpi-researcher, qos: normal}
 
-kubernetes:
-  real_agents: 1
-  kwok_nodes: 0
+kubernetes:             # the optional Kubernetes part (benchctl up --with k8s, ADR 0034): a real control plane, KWOK nodes
+  version: v1.36.1      # control-plane images and kubectl
+  nodes:                # separate from the Slurm nodes (a heterogeneous cluster); --k8s-nodes N sets the GPU group's count
+    - {prefix: kcn,  count: 2, cpus: 64,  memory_gb: 256,  pool: cpu}
+    - {prefix: kgpu, count: 2, cpus: 128, memory_gb: 1024, pool: gpu, gpus: 8, gpu_type: h200}
 
 login:                  # login nodes, one auth mode each: ssh | teleport | both (ADR 0023); the first is `login`, then login2, ...
   - ssh                 # benchctl up --login ssh,teleport overrides this; a teleport/both node turns the Teleport part on

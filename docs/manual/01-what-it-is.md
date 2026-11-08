@@ -29,7 +29,7 @@ Most of what the app talks to is an API, not an operating system. So:
 | Governor | memory protection on the host | `benchctl status` |
 | `scenario-engine`, `user-sim`, `ticket-bot` | timed faults, simulated users and engineers | see [chapter 6](06-scenarios.md) |
 
-Everything listens on `127.0.0.1` only, except the governor's metrics, which bind the Docker bridge address. **Not built yet:** Kubernetes (k3d and KWOK), the Profile and Budget manager
+Everything listens on `127.0.0.1` only, except the governor's metrics, which bind the Docker bridge address. **Not built yet:** the Profile and Budget manager
 page, the user simulator and ticket bot. Teleport access is an optional part ([chapter 4](04-nodes-and-shells.md)). See [PROGRESS.md](../PROGRESS.md).
 
 ## Profiles

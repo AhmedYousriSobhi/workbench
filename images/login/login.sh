@@ -8,6 +8,13 @@ for u in $WORKBENCH_USERS; do
   # The cluster key in each user's home, as a shared home directory gives on a real cluster: `ssh cn001` just works.
   install -d -m 700 -o "${u%%:*}" -g "${u%%:*}" "/home/${u%%:*}/.ssh"
   install -m 600 -o "${u%%:*}" -g "${u%%:*}" /run/workbench/ssh/id_cluster "/home/${u%%:*}/.ssh/id_ed25519"
+  # Kubernetes (ADR 0034), when the part is on: the read-only kubeconfig where kubectl and a client's Discover step look,
+  # owned by the user and mode 600 as a real admin hand-over is; `limited` sees only namespace team-a
+  if [ -r /run/workbench/k8s/viewer.kubeconfig ]; then
+    install -d -m 700 -o "${u%%:*}" -g "${u%%:*}" "/home/${u%%:*}/.kube"
+    install -m 600 -o "${u%%:*}" -g "${u%%:*}" /run/workbench/k8s/viewer.kubeconfig "/home/${u%%:*}/.kube/config"
+    install -m 600 -o "${u%%:*}" -g "${u%%:*}" /run/workbench/k8s/limited.kubeconfig "/home/${u%%:*}/.kube/limited.yaml"
+  fi
   names="$names ${u%%:*}"
 done
 echo "AllowUsers$names" >> /etc/ssh/sshd_config

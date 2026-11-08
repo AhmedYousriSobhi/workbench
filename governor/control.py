@@ -22,7 +22,7 @@ SLURM_STEPS = ("slurmd-restart", "slurmd-stop", "slurmd-start", "slurmctld-resta
 NODE_STEPS = ("slurmd-restart", "slurmd-stop", "slurmd-start")
 REASON_RE = re.compile(r"[A-Za-z0-9 .,:_/()+-]{0,60}")  # a drain reason: short, no shell characters
 LOGIN_MODES = {"ssh", "teleport", "both"}  # mirrors benchctl.logins.MODES
-PLAN_PARTS = {"jira", "jira-real", "bmc", "bcm", "scenarios", "accounting", "load", "teleport"}  # mirrors benchctl.workbench.PARTS
+PLAN_PARTS = {"jira", "jira-real", "bmc", "bcm", "scenarios", "accounting", "load", "teleport", "k8s"}  # mirrors benchctl.workbench.PARTS
 
 
 def plan_error(req: dict) -> str | None:

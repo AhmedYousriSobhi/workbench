@@ -180,6 +180,27 @@ The web UI is at `https://10.141.255.30:3080` (same login). The proxy has its ow
 `TELEPORT_HOME` if you keep other Teleport profiles. Not simulated: the Teleport agent's extras (dynamic labels, session
 recording that survives a dropped connection, session sharing), Kubernetes, web and database access.
 
+### Kubernetes (optional part)
+
+`./scripts/benchctl up --with k8s` (or `--workload kubernetes`) adds a real Kubernetes control plane (etcd, API server,
+scheduler, controller manager) and KWOK, which plays the nodes. About 0.3 GB of memory. The nodes are fake and separate from the
+Slurm nodes: `kcn001`, `kcn002` (CPU) and `kgpu001`, `kgpu002` (8 GPUs each, labelled as GPU Feature Discovery does); change them
+under `kubernetes:` in `sim.yaml`, or set the GPU node count with `--k8s-nodes N`. Pods never really run, so there are no real pod
+logs; a pod labelled `workbench_fault` (the fixtures have crash-looping, OOM-killed, image-pull and failed-job ones) shows the status a kubelet
+would report. The first start pulls about 400 MB of images.
+
+From a login node a user has `kubectl` and a read-only kubeconfig (`~/.kube/config`, cluster-wide) and a namespace-limited one
+(`~/.kube/limited.yaml`, only `team-a`):
+
+```bash
+ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1 kubectl get nodes
+ssh -i compose/generated/secrets/ssh/id_ed25519 -p 2222 alice@127.0.0.1 kubectl get pods -A
+```
+
+You, the administrator, have `compose/generated/secrets/k8s/admin.kubeconfig` (API on `127.0.0.1:6443`); never hand it to a client.
+Faults: scenarios `k8s-node-notready` (a GPU node reports NotReady, then recovers) and `pod-crashloop`
+([chapter 6](06-scenarios.md)). Not built: a real node (real pod logs), metrics-server, Kubernetes through Teleport. See ADR 0034.
+
 ### Keep or reset the Teleport cluster
 
 A Teleport cluster has an identity: its certificate authority, its users and their passwords. A client's saved `tsh` session
