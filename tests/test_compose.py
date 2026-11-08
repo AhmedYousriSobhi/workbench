@@ -132,3 +132,50 @@ def test_exporter_image_has_its_dependency_baked_in_and_pinned():
     assert "build" in obs and "pip" not in str(obs.get("command", ""))
     pins = {(root / f"components/{c}/Dockerfile").read_text().count("pyyaml==6.0.3") for c in ("gpu-exporter-farm", "bmc-farm", "bcm-mock")}
     assert pins == {1}
+
+
+def _sim():
+    from pathlib import Path
+
+    import yaml
+    return yaml.safe_load((Path(__file__).resolve().parent.parent / "sim.yaml").read_text())
+
+
+def test_the_controller_runs_sshd_for_whitelisted_users_and_is_the_bcm_head():
+    from benchctl import compose, controller
+    sim = _sim()
+    sim["users"].append({"name": "carol", "persona": "x", "qos": "normal"})
+    sim["controller"] = {"enabled": True, "allow": {"users": ["carol"], "groups": ["admins"]}}
+    assert controller.allowed_users(sim) == ["alice", "carol"]  # bob is in no whitelisted group
+    out = compose.generate(sim, {"groups": ["core", "access", "mocks"]})["services"]
+    ctl = out["slurmctld"]
+    assert ctl["environment"]["WORKBENCH_SSH_ALLOW"] == "alice carol" and ctl["environment"]["WORKBENCH_SSHD"] == "1"
+    assert ctl["environment"]["WORKBENCH_HEAD_IP"] == "10.141.255.1" and ctl["ports"] == ["127.0.0.1:2221:22"]
+    assert any(v.endswith("/usr/local/bin/cmsh:ro") for v in ctl["volumes"]) and ctl["networks"]["default"]["aliases"] == ["controller"]
+    assert ctl["mem_limit"] == f"{200 + controller.EXTRA_MB}m"
+    assert out["login"]["environment"]["WORKBENCH_HEAD"] == "0"  # the login node is no longer the head node
+
+
+def test_without_a_controller_the_login_node_acts_as_one():
+    from benchctl import compose
+    out = compose.generate(_sim(), {"groups": ["core", "access"]})["services"]
+    assert "ports" not in out["slurmctld"] and "WORKBENCH_HEAD" not in out["login"]["environment"] and "WORKBENCH_SSHD" not in out["slurmctld"].get("environment", {})
+
+
+def test_a_controller_nobody_may_enter_is_refused():
+    import pytest
+
+    from benchctl import compose, controller
+    sim = _sim()
+    sim["controller"] = {"enabled": True, "allow": {"users": ["nobody"], "groups": []}}
+    assert len(controller.problems(sim)) == 2
+    with pytest.raises(controller.ControllerError):
+        compose.generate(sim, {"groups": ["core", "access"]})
+
+
+def test_the_jump_host_is_a_bare_sshd_on_its_own_address_and_port():
+    from benchctl import addressing, compose
+    sim = _sim()
+    out = compose.generate(sim, {"groups": ["core", "access", "jump"]})["services"]["jump"]
+    assert out["ports"] == ["127.0.0.1:2220:22"] and out["networks"]["default"]["ipv4_address"] == addressing.service_ip("jump") == "10.141.255.5"
+    assert out["build"].endswith("images/jump") and "slurm" not in " ".join(out["volumes"])

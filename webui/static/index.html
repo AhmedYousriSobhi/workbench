@@ -693,6 +693,7 @@
           <fieldset class="bmcnodes" id="pl-bmcbox" hidden><legend class="small dim">BMC: which machines get one (<span id="pl-bmcmb"></span> MB each)</legend>
             <div class="bmcgroups" id="pl-bmcgroups"></div><p class="small" id="pl-bmctotal" style="margin:6px 0"></p>
             <details class="cmdbox"><summary class="small">Exceptions: leave out single nodes</summary><div class="toggles" id="pl-bmcnodes"></div></details></fieldset>
+          <label class="tog" id="pl-ctlbox" title="A controller node: slurmctld's host with ssh for whitelisted admins, and the BCM head node (cmsh moves from the login nodes to it). CLI: --controller"><input type="checkbox" id="pl-ctl"><span>Controller node (admin ssh, BCM head)</span></label>
           <label class="tog" id="pl-bcmk8sbox" hidden title="Off: BCM does not manage the Kubernetes cluster, so its device and category lists show no Kubernetes nodes (CLI: --no-bcm-k8s)"><input type="checkbox" id="pl-bcmk8s" checked><span>BCM manages the Kubernetes nodes</span></label>
           <p class="small dim pnote">Slurm, Prometheus and Grafana are always on.</p></section>
       </div>
@@ -858,6 +859,7 @@ async function loadPlan() {
   if (loginModes.length) q.set('logins', loginModes.join(','));
   if (k8sOn()) { q.set('k8s_cpu_nodes', $('pl-kcpu').value); q.set('k8s_nodes', $('pl-kgpu').value); }
   paintPlanSummary();
+  q.set('controller', $('pl-ctl').checked ? '1' : '0');
   if (!$('pl-bcmk8sbox').hidden) q.set('bcm_k8s', $('pl-bcmk8s').checked ? '1' : '0');
   if (!$('pl-bmcbox').hidden) { q.set('bmc_groups', [...bmcOn].join(',')); const inc = bmcNames().filter(n => !bmcOff.has(n)); if (bmcOff.size) q.set('bmc_nodes', inc.join(',')); }
   const r = await fetch('/api/plan?' + q);
@@ -938,7 +940,7 @@ function syncTeleport() {  // a Teleport login needs the Teleport part: tick it,
 function loginsChanged() { syncTeleport(); planInputs(); }
 $('pl-loginadd').onclick = () => { if (loginModes.length < loginMax) { loginModes.push('ssh'); drawLogins(); loginsChanged(); } };
 function showBmcNodes() { $('pl-bmcbox').hidden = !document.querySelector('#pl-parts input[value="bmc"]:checked'); $('pl-bcmk8sbox').hidden = !(document.querySelector('#pl-parts input[value="bcm"]:checked') && k8sOn()); }
-$('pl-bcmk8s').onchange = () => planInputs();
+$('pl-bcmk8s').onchange = $('pl-ctl').onchange = () => planInputs();
 let partsDrawn = false;
 async function drawParts() {  // the options come from the backend registry (/api/settings), so a new one needs no page change
   if (partsDrawn) return;
@@ -954,6 +956,7 @@ async function drawParts() {  // the options come from the backend registry (/ap
     const lg = j.logins;  // an older page backend does not send it: the parts above still work, the login rows are hidden
     if (lg) { loginModes = [...(lg.now || ['ssh'])]; loginMax = lg.max; drawLogins(); syncTeleport(); }
     else { $('pl-loginadd').disabled = true; $('pl-loginrows').textContent = 'Login nodes need the newer page backend. Run ./scripts/benchctl stop, then ./scripts/benchctl start, and reload.'; }
+    $('pl-ctl').checked = !!(shapes.controller || {}).enabled;
     $('pl-bcmk8s').checked = !!(shapes.bcm || {}).manage_kubernetes || !shapes.bcm;
     showBmcNodes(); partsDrawn = true;
   } catch (e) { $('pl-parts').textContent = 'Could not load the options. The page and its backend may be different versions: run ./scripts/benchctl stop, then ./scripts/benchctl start, and reload.'; }
@@ -2043,6 +2046,8 @@ const TR_ICON = { server: 'M2 3h12v4H2zM2 9h12v4H2zM4.5 5h.01M4.5 11h.01', db: '
 const PART_INFO = {
   'clients': 'The monitoring client, Prometheus, scripts and people who call the cluster from outside.',
   'login': 'The Slurm login node: where users and tools ssh in, submit jobs and run Slurm commands.',
+  'jump': 'The jump host: a bare sshd bastion with nothing else installed. Use ssh -J through it to reach a login node or the controller.',
+  'controller': 'The controller node: where slurmctld runs. Admins (a whitelist of users and groups) ssh in; it is the BCM head node, so cmsh lives here instead of on the login nodes.',
   'teleport': 'The Teleport proxy: ssh access through one audited front door instead of direct ssh.',
   'slurmrestd': "Slurm's REST API daemon. Clients send HTTP requests with a JWT and it hands them to slurmctld. It sits in Access because it is an entry point for callers, not part of the scheduler.",
   'slurmctld': 'The Slurm controller: schedules jobs, tracks every node and answers all Slurm commands and API calls.',
@@ -2065,11 +2070,11 @@ const PART_INFO = {
   'sim-nodes': 'The simulated per-node metrics targets that Prometheus scrapes.',
   'storage': 'Shared storage for job data. Planned, not built yet.'
 };
-const PART_ICON = { clients: 'screen', login: 'lock', teleport: 'lock', slurmrestd: 'gear', slurmctld: 'gear', slurmdbd: 'db', slurmd: 'server', nodes: 'server', 'bmc-farm': 'server', 'bcm-mock': 'server', 'k8s-api': 'gear',
+const PART_ICON = { jump: 'lock', controller: 'gear', clients: 'screen', login: 'lock', teleport: 'lock', slurmrestd: 'gear', slurmctld: 'gear', slurmdbd: 'db', slurmd: 'server', nodes: 'server', 'bmc-farm': 'server', 'bcm-mock': 'server', 'k8s-api': 'gear',
   'kube-scheduler': 'gear', 'kube-controller-manager': 'gear', etcd: 'db', prometheus: 'chart', grafana: 'chart', 'gpu-exporter': 'chart', governor: 'gear', 'sim-nodes': 'server', storage: 'db' };
 const TR_GROUPS = [  // the fixed architecture, two rows by four columns, callers at the left: [title, grid column, grid row, colour, parts]; a part with no link in this cluster is drawn grayed, never dropped
   ['External clients', 0, 0.5, '#4cc9ff', ['clients']],
-  ['Access', 1, 0, '#8da2ff', ['login', 'teleport', 'slurmrestd']], ['Slurm', 2, 0, '#3fb950', ['slurmctld', 'slurmdbd', 'slurmd', 'nodes']], ['Storage', 3, 0, '#c9a0ff', ['storage']],
+  ['Access', 1, 0, '#8da2ff', ['jump', 'login', 'teleport', 'slurmrestd']], ['Slurm', 2, 0, '#3fb950', ['controller', 'slurmctld', 'slurmdbd', 'slurmd', 'nodes']], ['Storage', 3, 0, '#c9a0ff', ['storage']],
   ['Management', 1, 1, '#ffb02e', ['bmc-farm', 'bcm-mock', 'jira-mock', 'jira-real']], ['Kubernetes', 2, 1, '#b38cff', ['k8s-api', 'kube-scheduler', 'kube-controller-manager', 'etcd', 'kwok']],
   ['Monitoring', 3, 1, '#4cc9ff', ['prometheus', 'grafana', 'gpu-exporter', 'governor', 'sim-nodes']]];
 let trHist = [], trRange = 300;  // what this page was told since it opened (the counters are read live; nothing is stored on the server)

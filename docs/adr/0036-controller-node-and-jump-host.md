@@ -1,0 +1,26 @@
+# ADR 0036: Controller node and jump host
+
+Status: accepted (issues 415, 416). Decided by the owner.
+
+## Context
+Real sites separate login nodes (users), a controller (where slurmctld runs and admins work, usually also the BCM head node) and
+often a bastion in front of them. Until now the login node was the BCM head node and the "jump host" in the diagram, and
+`slurmctld` was a container with no way in.
+
+## Decision
+- **Controller** (`sim.yaml` `controller.enabled`, `--controller`, the Cluster architecture sheet): the existing `slurmctld`
+  container also runs sshd (alias `controller`, 10.141.255.1, fallback 127.0.0.1:2221). Only whitelisted users may log in: those in
+  `controller.allow.users` plus every user whose `groups` meet `controller.allow.groups` (default group `admins`). `cmsh` is
+  bind-mounted there and removed from the login nodes (`WORKBENCH_HEAD=0`), which keep the Slurm tools and kubectl. With no controller the
+  login node acts as one, as before. It is the same process container, not a new one, so slurmctld really runs on the controller.
+- **Jump host** (part `jump`, `--access jump`): a new image, `images/jump`, with sshd and nothing else (Ubuntu base plus
+  openssh-server), 10.141.255.5, fallback 127.0.0.1:2220, TCP forwarding on, the same users and keys, its own host key. It fronts the
+  key-login nodes (s-login, k-login) and the controller with `ssh -J`; Teleport nodes keep Teleport as their way in. The direct
+  ports stay published: the bastion is an extra path, not the only one.
+
+## Not built (open)
+- The Infrastructure architecture drawing (hand-laid SVG) has no jump or controller box yet; the Traffic & Communication diagram,
+  Connections and the graph model do.
+- The client profile export carries no jump entry: its format for a jump host is not recorded in this repository.
+- The controller is not registered in Teleport.
+- Memory for the jump host is unmeasured (`NOT_MEASURED`, planned at its 24 MB cap).

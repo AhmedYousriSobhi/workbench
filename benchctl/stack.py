@@ -348,7 +348,7 @@ def ensure_ssh_keys(path: Path = SSH_DIR, runner: Runner = _run) -> Path:
     Kept across `up`s so a client that pinned the host key keeps trusting it.
     """
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
-    for name in ("ssh_host_ed25519_key", "ssh_host_node_ed25519_key", "id_ed25519", "id_cluster"):
+    for name in ("ssh_host_ed25519_key", "ssh_host_node_ed25519_key", "ssh_host_jump_ed25519_key", "id_ed25519", "id_cluster"):
         if not (path / name).exists():
             r = runner(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", f"workbench-{name}", "-f", str(path / name)])
             if r.returncode != 0:

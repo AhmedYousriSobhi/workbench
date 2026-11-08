@@ -29,7 +29,7 @@ MEASURED_MB: dict[str, int] = {
     "k8s-etcd": 130, "k8s-apiserver": 201, "k8s-controller-manager": 47, "k8s-scheduler": 18, "kwok-controller": 11,
     "jira-db": 130, "jira-real": 2045,   # real Jira Data Center: heap 768 MB, JVM_ARGS (Serial GC, C1 only); 2176 MB cap, two clean runs
 }
-NOT_MEASURED = ("scenario-engine", "user-sim", "ticket-bot", "accounting-init")  # not built or one-shot: expected at the cap
+NOT_MEASURED = ("scenario-engine", "user-sim", "ticket-bot", "accounting-init", "jump")  # not built or one-shot: expected at the cap
 
 
 def key_of(name: str, labels: dict | None = None) -> str:

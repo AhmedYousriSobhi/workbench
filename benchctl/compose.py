@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from . import addressing, jira_real, k8s, logins, nhc, slurmconf, teleport
+from . import addressing, controller, jira_real, k8s, logins, nhc, slurmconf, teleport
 from .nodes import KIND_GROUP, hardware_nodes, node_names
 
 OBSERVABILITY = "../observability.yml"  # static; hosts prometheus, grafana, gpu-exporter-farm
@@ -25,6 +25,7 @@ CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {
     # real Jira Data Center and its Postgres (ADR 0026): off by default, about 2.4 GB, P6 (the first thing the governor stops)
     "jira-real": {"jira-db": (jira_real.DB_IMAGE, jira_real.DB_LIMIT_MB, 6), "jira-real": (jira_real.IMAGE, jira_real.LIMIT_MB, 6)},
     "access": {"login": ("workbench/login:dev", 40, 2)},
+    "jump": {"jump": ("workbench/jump:dev", 24, 2)},  # a bare sshd bastion (SPEC C-21)
     # the tag is replaced from sim.yaml teleport.version (benchctl/teleport.py); the limit is a planning estimate until measured
     "teleport": {"teleport": (f"{teleport.IMAGE}:{teleport.DEFAULT_VERSION}", 256, 2)},
     # a real control plane with KWOK nodes (ADR 0034); the image tags are replaced from sim.yaml kubernetes.version (benchctl/k8s.py)
@@ -105,6 +106,21 @@ def generate(sim: dict, profile: dict) -> dict:
         svc.update({"depends_on": ["slurmctld"] if "slurmctld" in services and lkinds[lname] != "k8s" else []})
         if mode in logins.DIRECT:
             svc["ports"] = [f"127.0.0.1:{SSH_PORT + i}:22"]
+    if controller.enabled(sim) and "slurmctld" in services:  # the controller: slurmctld's container also runs sshd for whitelisted users and is the BCM head node (issue 416)
+        if problems := controller.problems(sim):
+            raise controller.ControllerError("; ".join(problems))
+        ctl = services["slurmctld"]
+        ctl["mem_limit"] = f"{int(ctl['mem_limit'][:-1]) + controller.EXTRA_MB}m"
+        ctl.setdefault("environment", {}).update({"WORKBENCH_SSHD": "1", "WORKBENCH_CONTROLLER": "1", "WORKBENCH_SSH_ALLOW": " ".join(controller.allowed_users(sim)),
+                                                  "WORKBENCH_HEAD_IP": addressing.service_ip("slurmctld")})
+        ctl["volumes"] += ["./secrets/ssh:/run/workbench/ssh:ro", "../../images/login/cmsh.py:/usr/local/bin/cmsh:ro"]
+        ctl["ports"] = [f"127.0.0.1:{controller.SSH_PORT}:22"]
+        ctl.setdefault("networks", {}).setdefault("default", {})["aliases"] = [controller.ALIAS]
+        for lname in lkinds:  # the login nodes are no longer the head node: no cmsh there
+            services[lname].setdefault("environment", {})["WORKBENCH_HEAD"] = "0"
+    if "jump" in services:  # the bastion: sshd only, localhost fallback port, the same users and keys
+        services["jump"].update({"hostname": "jump", "ports": [f"127.0.0.1:{controller.JUMP_PORT}:22"],
+                                 "environment": {"WORKBENCH_USERS": users_env(sim)}, "volumes": ["./secrets/ssh:/run/workbench/ssh:ro"]})
     if "teleport" in services:  # auth + proxy (ADR 0020): only the proxy and diagnostics ports are published, localhost only
         services["teleport"].update({
             "image": teleport.image(sim),  # its entrypoint already is `teleport start -c /etc/teleport/teleport.yaml`

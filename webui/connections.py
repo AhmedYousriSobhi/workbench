@@ -3,7 +3,7 @@
 Addresses are the containers' fixed private IPs at their standard ports (`benchctl/addressing.py`, ADR 0018): the host
 routes the Docker network, so a client on this machine connects to them directly. The ports published on 127.0.0.1 are
 the fallback (`also on`). Credentials are named by path only, never read, so this page cannot leak a secret."""
-from benchctl import addressing, compose, jira_real, k8s, logins, teleport
+from benchctl import addressing, compose, controller, jira_real, k8s, logins, teleport
 from benchctl.describe import BMC_TLS_PORT
 
 SECRETS = "compose/generated/secrets"
@@ -75,6 +75,9 @@ def actions_for(e: dict, sim: dict, user: str) -> list[dict]:
     i, k = e["id"], e["kind"]
     if k == "ssh" and i == "nodes":
         return [copy("Copy benchctl ssh", f"benchctl ssh {user}@<node>")]  # benchctl adds the key and the jump (#275)
+    if k == "ssh" and i in ("controller", "jump"):
+        port = controller.SSH_PORT if i == "controller" else controller.JUMP_PORT
+        return [copy("Copy ssh", f"ssh {SSH_OPTS} -p {port} {user}@{LOCAL}"), {"kind": "uri", "label": "Open in SSH app (needs a handler)", "value": f"ssh://{user}@{LOCAL}:{port}"}]
     if k == "ssh":
         port = compose.SSH_PORT + [n for n, _ in logins.nodes(sim)].index(i)
         # Copy first: it works everywhere; ssh:// needs a handler the desktop may not have registered (#281)
@@ -119,6 +122,7 @@ def _rows(sim: dict) -> list[dict]:
 
     def ssh_for(ip: str) -> str:
         return f"ssh {SSH_OPTS} {user}@{ip}"
+    admin = (controller.allowed_users(sim) or [user])[0]
     bmc, bcm, jira = ip["bmc-farm"], ip["bcm-mock"], ip["jira-mock"]
     return [
         *login_rows(sim, users, user, ssh_for),
@@ -126,6 +130,14 @@ def _rows(sim: dict) -> list[dict]:
          "command": f"{ssh} ssh <node> hostname" if first else f"tsh --proxy={teleport.proxy_addr(sim)} --insecure -i {SECRETS}/teleport/identity/{user} ssh {user}@<node>",
          "credential": SSH_KEY if first else f"{SECRETS}/teleport/identity/{user}",
          "how": "Same key and users, from the login node. The exact IPs: `benchctl describe node <node>`."},
+        {"id": "controller", "name": "Controller node (slurmctld, BCM head node)", "kind": "ssh", "address": f"{ip['slurmctld']}:22 (alias `controller`)",
+         "command": f"ssh {SSH_OPTS} {admin}@{ip['slurmctld']} scontrol ping", "credential": SSH_KEY,
+         "how": f"Only with the controller on (`benchctl up --controller`). Key login for admins only: {', '.join(controller.allowed_users(sim)) or 'whitelist in sim.yaml controller.allow (users or groups)'}; others are refused. "
+                f"slurmctld runs here and `cmsh` lives here, not on the login nodes. Also 127.0.0.1:{controller.SSH_PORT}. Without it the login node acts as the head node."},
+        {"id": "jump", "name": "Jump host (bastion)", "kind": "ssh", "address": f"{ip['jump']}:22",
+         "command": f"ssh {SSH_OPTS} -J {user}@{ip['jump']} {user}@{login}", "credential": SSH_KEY,
+         "how": f"Only with the jump part on (`benchctl up --access jump`). A bare sshd with nothing else installed: use it with `ssh -J` to reach a key-login node or the controller. "
+                f"Teleport nodes keep Teleport. Also 127.0.0.1:{controller.JUMP_PORT}."},
         {"id": "teleport", "name": "Teleport (SSH through a proxy)", "kind": "https", "address": f"https://{teleport.proxy_addr(sim)}",
          "command": f"tsh --proxy={teleport.proxy_addr(sim)} --insecure -i {SECRETS}/teleport/identity/{user} ls",
          "credential": f"{SECRETS}/teleport/identity/{user}",
