@@ -271,3 +271,73 @@ def test_auto_refresh_decision_and_text(monkeypatch):
     assert jr.auto_minutes() == 30
     monkeypatch.delenv(jr.AUTO_ENV)
     assert jr.auto_minutes() == jr.AUTO_MIN
+
+
+class TokenJira(BaseHTTPRequestHandler):
+    """Personal access tokens only: who may list, create and delete (issue 307)."""
+    tokens: ClassVar[dict] = {}
+    auths: ClassVar[list] = []
+    next_id = 1
+
+    def log_message(self, *a):
+        pass
+
+    def _send(self, code, body=None):
+        data = json.dumps(body).encode() if body is not None else b""
+        self.send_response(code)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _who(self):
+        import base64
+        type(self).auths.append(self.headers.get("Authorization"))
+        return base64.b64decode(self.headers["Authorization"].split()[1]).decode().split(":")[0]
+
+    def do_GET(self):
+        who = self._who()
+        self._send(200, [{"id": i, "name": n} for i, (u, n) in type(self).tokens.items() if u == who])
+
+    def do_POST(self):
+        who, cls = self._who(), type(self)
+        self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        cls.tokens[cls.next_id] = (who, "workbench")
+        cls.next_id += 1
+        self._send(201, {"rawToken": f"new-{cls.next_id - 1}"})
+
+    def do_DELETE(self):
+        self._who()
+        type(self).tokens.pop(int(self.path.rsplit("/", 1)[1]), None)
+        self._send(204)
+
+
+@pytest.fixture
+def token_jira(tmp_path):
+    TokenJira.tokens, TokenJira.auths, TokenJira.next_id = {1: ("alice", "workbench"), 2: ("alice", "other"), 3: ("admin", "workbench")}, [], 4
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), TokenJira)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    env = tmp_path / "jira-real.env"
+    env.write_text("JIRA_ADMIN_PASSWORD=adm\nJIRA_USER_PASSWORD=usr\nJIRA_URL=x\nPAT_ADMIN=a-old\nPAT_ALICE=alice-old\n")
+    yield f"http://127.0.0.1:{srv.server_address[1]}", env
+    srv.shutdown()
+
+
+def test_revoke_deletes_only_the_users_workbench_token(token_jira):
+    base, env = token_jira
+    assert jira_real.revoke_token("alice", base, env) == 1
+    assert TokenJira.tokens == {2: ("alice", "other"), 3: ("admin", "workbench")}
+    assert jira_real.revoke_token("alice", base, env) == 0
+
+
+def test_reissue_writes_the_new_token_and_keeps_the_rest(token_jira):
+    base, env = token_jira
+    jira_real.reissue_token("alice", base, env)
+    values = jira_real.read_env(env)
+    assert values["PAT_ALICE"] == "new-4" and values["PAT_ADMIN"] == "a-old" and values["JIRA_URL"] == "x"
+    assert sorted(n for u, n in TokenJira.tokens.values() if u == "alice") == ["other", "workbench"]
+    assert oct(env.stat().st_mode & 0o777) == "0o600"
+
+
+def test_token_faults_need_the_real_jira_set_up(tmp_path):
+    with pytest.raises(jira_real.JiraRealError, match="not set up"):
+        jira_real.revoke_token("alice", "http://127.0.0.1:1", tmp_path / "missing.env")

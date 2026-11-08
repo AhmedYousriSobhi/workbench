@@ -216,6 +216,39 @@ def write_tokens(tokens: dict[str, str], env: Path = ENV, base: str = URL) -> No
     env.chmod(0o600)
 
 
+def _credentials(user: str, env: Path) -> tuple[str, str]:
+    values = read_env(env)
+    password = values.get("JIRA_ADMIN_PASSWORD" if user == "admin" else "JIRA_USER_PASSWORD", "")
+    if not password:
+        raise JiraRealError("the real Jira is not set up: benchctl start --with jira-real, then benchctl setup jira-real")
+    return user, password
+
+
+def revoke_token(user: str = "alice", base: str = URL, env: Path = ENV) -> int:
+    """Delete the user's `workbench` personal access token in Jira: a client still holding it gets a real 401 (the CAPTCHA fault
+    does not touch tokens, issue 303). The old value stays in the env file until `reissue_token`. Returns how many were deleted."""
+    s, auth, gone = Session(base), _credentials(user, env), 0
+    status, tokens, _ = s.api("GET", "/rest/pat/latest/tokens", None, auth)
+    if status != 200 or not isinstance(tokens, list):
+        raise JiraRealError(f"could not list {user}'s tokens ({status})")
+    for t in tokens:
+        if t.get("name") == "workbench" and s.api("DELETE", f"/rest/pat/latest/tokens/{t['id']}", None, auth)[0] in (200, 204):
+            gone += 1
+    return gone
+
+
+def reissue_token(user: str = "alice", base: str = URL, env: Path = ENV) -> None:
+    """Make a new `workbench` token for the user and write it to the env file as PAT_<USER> (0600, never printed)."""
+    revoke_token(user, base, env)
+    status, made, text = Session(base).api("POST", "/rest/pat/latest/tokens", {"name": "workbench", "expirationDuration": 1}, _credentials(user, env))
+    if not (isinstance(made, dict) and made.get("rawToken")):
+        raise JiraRealError(f"token for {user}: {status} {text[:160]}")
+    values = read_env(env)
+    values[f"PAT_{user.upper()}"] = made["rawToken"]
+    env.write_text("\n".join(f"{k}={v}" for k, v in values.items()) + "\n")
+    env.chmod(0o600)
+
+
 def provision(base: str = URL, licence: str | None = None, say: Callable[[str], None] = print,
               sleep: Callable[[float], None] = time.sleep, env: Path = ENV, db_env: Path = DB_ENV) -> dict[str, str]:
     """Finish a started Jira: the wizard when it is a first run, then wait for REST, seed, tokens. Returns the tokens."""

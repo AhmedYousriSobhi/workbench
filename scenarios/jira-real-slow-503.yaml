@@ -1,0 +1,8 @@
+name: jira-real-slow-503
+ref: SC-28
+description: "The real Jira answers slowly, then with 503, then with 429 and a Retry-After of 30 s, through the fault proxy (the client must use 127.0.0.1:8084, not :8083; the proxy starts with the run and ends with it). Each fault covers the next N REST calls, then Jira answers normally again."
+steps:
+  - {at: 10s, target: jira-real, do: {fault: proxy_slow, count: 5, delay: 8}}
+  - {at: 60s, target: jira-real, do: {fault: proxy_503, count: 10, retry_after: 30}}
+  - {at: 110s, target: jira-real, do: {fault: proxy_429, count: 5, retry_after: 30}}
+  - {at: 150s, target: jira-real, do: {fault: proxy_off}}
