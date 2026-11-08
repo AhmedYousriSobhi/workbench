@@ -91,6 +91,8 @@
   .trtime { margin-top:var(--sp4); border:1px solid var(--line); border-radius:8px; padding:var(--sp3); } .trtime h3 { margin:0; font-size:14px; } .trtgrid { display:grid; grid-template-columns:1fr; gap:var(--sp3); margin-top:var(--sp2); } @media (min-width:900px) { .trtgrid { grid-template-columns:minmax(0,1fr) minmax(0,1fr); } }
   #tr-range .btn[aria-pressed=true] { border-color:var(--accent); background:var(--sel); font-weight:650; }
   .trfeed { list-style:none; margin:0; padding:0; font-size:13px; } .trfeed li { display:grid; grid-template-columns:64px 1fr auto; gap:var(--sp2); padding:4px 0; border-bottom:1px solid var(--line); } .trfeed .ft { color:var(--dim); font-variant-numeric:tabular-nums; } .trfeed .f { color:var(--warn,#ffb02e); }
+  .trchip { display:inline-flex; align-items:center; gap:6px; border-radius:999px; } .trchip[aria-pressed=true] { border-color:var(--accent); background:var(--sel); font-weight:650; }
+  #tr-stage:fullscreen { background:var(--bg); padding:var(--sp4); overflow:auto; }
   .trtable { margin-top:var(--sp4); } .trtable summary { cursor:pointer; padding:var(--sp2) 0; font-weight:600; min-height:40px; }
   .trinsp { border:1px solid var(--line); border-radius:8px; padding:var(--sp3); } .trinsp h3 { margin:0 0 var(--sp2); font-size:14px; display:flex; justify-content:space-between; align-items:center; }
   .trinsp dl { display:grid; grid-template-columns:auto 1fr; gap:4px var(--sp3); margin:0 0 var(--sp3); font-size:13px; } .trinsp dt { color:var(--dim); } .trinsp dd { margin:0; word-break:break-word; }
@@ -587,11 +589,13 @@
   <div id="tab-traffic" role="tabpanel" aria-labelledby="tb-traffic" hidden>
     <div class="panel"><h2>Traffic &amp; Communication</h2>
       <p class="dim small">How the parts talk, as their documentation says (ports are the defaults of the real software). <b>Real</b>: real software answers; <b>simulated</b>: a mock or KWOK imitates it. <b>Observed</b>: a request counter backs the count; <b>configured</b>: documented wiring, no traffic measured.</p>
-      <div class="row"><label for="tr-plane" class="small dim">Plane</label><select id="tr-plane" class="btn small"><option value="all">All</option></select>
+      <div class="row"><span id="tr-chips" role="group" aria-label="Plane" class="row"></span>
+        <span class="grow"></span><span role="group" aria-label="Diagram view" class="row"><button class="btn small" id="tr-zout" aria-label="Zoom out">−</button><button class="btn small" id="tr-zin" aria-label="Zoom in">+</button><button class="btn small" id="tr-zfit">Fit</button><button class="btn small" id="tr-full" aria-label="Full screen diagram">⛶</button></span></div>
+      <div class="row">
         <label for="tr-sw" class="small dim">Software</label><select id="tr-sw" class="btn small"><option value="all">All</option><option value="real">Real</option><option value="simulated">Simulated</option></select>
         <label for="tr-ev" class="small dim">Evidence</label><select id="tr-ev" class="btn small"><option value="all">All</option><option value="observed">Observed</option><option value="configured">Configured</option></select></div>
       <div id="tr-path" class="small" hidden></div><div id="tr-slurm" class="small" hidden></div>
-      <div class="trgrid"><div><div class="tablewrap"><svg id="tr-map" role="img" aria-label="Diagram of the links listed in the table below"></svg></div>
+      <div class="trgrid"><div id="tr-stage"><div class="tablewrap"><svg id="tr-map" role="img" aria-label="Diagram of the links listed in the table below"></svg></div>
         <p class="dim small"><span id="tr-legend"></span> <button class="btn small" id="tr-reset" hidden>Reset layout</button></p></div>
         <div id="tr-insp" class="trinsp" role="group" aria-label="Traffic flow inspector"></div></div>
       <section class="trtime" aria-labelledby="tr-time-h"><div class="row"><h3 id="tr-time-h">Traffic activity timeline</h3><span class="grow"></span>
@@ -2053,7 +2057,7 @@ function paintTrafficMap(rows, ghosts = []) {
   const cols = [...new Set(TR_GROUPS.map(g => g[1]))].sort((p, q) => p - q);
   groups.forEach(g => { const o = trOff[g.title] || [0, 0]; g.x = Math.max(M / 2, M + cols.indexOf(g.c) * (GW + GAPX) + o[0]); g.y = Math.max(M / 2, rowY[g.r] + o[1]); });
   const w = Math.max(...groups.map(g => g.x + GW)) + M, h = Math.max(...groups.map(g => g.y + g.h)) + M / 2;
-  svg.setAttribute('viewBox', `0 0 ${w} ${h}`); svg.style.width = '100%'; svg.style.height = 'auto'; svg.style.minWidth = Math.min(w, 560) + 'px';
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`); svg.style.width = trZoom * 100 + '%'; svg.style.height = 'auto'; svg.style.minWidth = Math.min(w, 560) + 'px';
   const defs = sv('defs', {}); for (const [p, [c]] of Object.entries(PLANE_STYLE)) { const m = sv('marker', { id: 'tm-' + p, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, orient: 'auto' }); m.append(sv('path', { d: 'M0 0 L10 5 L0 10 z', fill: c })); defs.append(m); }
   svg.append(defs);
   groups.forEach(g => {
@@ -2134,14 +2138,14 @@ function paintTrInspector(cur) {
 function paintTraffic() {
   if ($('tab-traffic').hidden) return;
   paintSlurmStats();
-  const base = clusterNow().comms, sel = $('tr-plane');
+  const base = clusterNow().comms;
   if (!base) {  // the page is newer than the server that serves it (a server started before an update never sends the links)
     if (lastCluster) $('tr-rows').innerHTML = '<tr><td colspan="9" class="skel">The web page server is older than this page, so it sends no links. Restart it: <code>pkill -f \"python -m webui\"; ./scripts/benchctl start</code></td></tr>';
     return;
   }
   const links = [...base, ...monLinks];
-  if (sel.options.length === 1) [...new Set(links.map(l => l.plane))].forEach(p => sel.add(new Option(p, p)));
-  const path = trPath && pathOf(links, trPath), f = { plane: sel.value, sw: $('tr-sw').value, ev: $('tr-ev').value };
+  paintChips(links);
+  const path = trPath && pathOf(links, trPath), f = { plane: trPlane, sw: $('tr-sw').value, ev: $('tr-ev').value };
   const rows = links.filter(l => !path || path.has(l.id)).map(l => ({ l, v: trView(l) }))
     .filter(({ l, v }) => (f.plane === 'all' || l.plane === f.plane) && (f.sw === 'all' || v.sw === f.sw) && (f.ev === 'all' || v.ev === f.ev));
   $('tr-rows').innerHTML = rows.map(({ l, v }) => `<tr${l.id === trSel ? ' aria-selected="true"' : ''}><td><button class="linkbtn" data-link="${esc(l.id)}" aria-pressed="${l.id === trSel}">${esc(l.from)}</button></td><td>${esc(l.to)}</td>`
@@ -2160,7 +2164,21 @@ document.addEventListener('click', e => {
   const id = e.target.id;
   if (id === 'tr-follow') { trPath = trSel; paintTraffic(); } else if (id === 'tr-clear') { trPath = null; paintTraffic(); } else if (id === 'tr-close') { trSel = null; paintTraffic(); }
 });
-$('tr-sw').onchange = $('tr-ev').onchange = $('tr-plane').onchange = paintTraffic;
+$('tr-sw').onchange = $('tr-ev').onchange = paintTraffic;
+// toolbar: plane chips, zoom and full screen (the diagram already fits the width, so zoom enlarges it inside its scroll area)
+let trPlane = 'all', trZoom = 1;
+function paintChips(links) {
+  const planes = ['all', ...new Set(links.map(l => l.plane))], box = $('tr-chips');
+  if (!planes.includes(trPlane)) trPlane = 'all';
+  if (box.dataset.k === planes.join()) return;
+  box.dataset.k = planes.join();
+  box.innerHTML = planes.map(p => `<button class="btn small trchip" data-plane="${esc(p)}" aria-pressed="${p === trPlane}">${p === 'all' ? '' : `<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="${PLANE_STYLE[p]?.[0] || 'currentColor'}" stroke-width="1.6" stroke-linecap="round"><path d="${TR_ICON[PLANE_ICON[p] || 'cube']}"/></svg>`}${p === 'all' ? 'All traffic' : esc(p)}</button>`).join('');
+}
+const PLANE_ICON = { control: 'gear', data: 'db', monitoring: 'chart', management: 'server', access: 'lock' };
+$('tr-chips').onclick = e => { const b = e.target.closest('[data-plane]'); if (!b) return; trPlane = b.dataset.plane; $('tr-chips').dataset.k = ''; paintTraffic(); };
+const zoom = z => { trZoom = Math.min(3, Math.max(0.6, z)); $('tr-map').style.width = trZoom * 100 + '%'; };
+$('tr-zin').onclick = () => zoom(trZoom * 1.25); $('tr-zout').onclick = () => zoom(trZoom / 1.25); $('tr-zfit').onclick = () => zoom(1);
+if ($('tr-stage').requestFullscreen) $('tr-full').onclick = () => document.fullscreenElement ? document.exitFullscreen() : $('tr-stage').requestFullscreen(); else $('tr-full').hidden = true;
 // slurmctld's own request counts (sdiag, read by the governor) and Prometheus's scrape results: refreshed every 10 s while the Traffic tab is open
 let slurmAt = 0;
 async function paintSlurmStats() {

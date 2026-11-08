@@ -99,6 +99,14 @@ def capture(out: Path) -> dict:
                     result["shots"].append(str(tpath))
                     if page.locator("#tr-rows tr").count() < 5:
                         result["a11y"].append("traffic tab lists fewer than 5 links")
+                    page.click("#tr-chips [data-plane] >> nth=1")  # a plane chip narrows the rows, All restores them
+                    if page.locator("#tr-rows tr").count() >= page.evaluate("trRows.length") + 1:
+                        result["a11y"].append("plane chip did not narrow the links")
+                    page.click("#tr-chips [data-plane=all]")
+                    page.click("#tr-zin")
+                    if page.evaluate("trZoom") <= 1:
+                        result["a11y"].append("zoom in did nothing")
+                    page.click("#tr-zfit")
                     page.click("#tr-map [data-link] >> nth=0", force=True)  # inspector, then the path through that link
                     page.wait_for_selector("#tr-insp:not([hidden])")
                     page.click("#tr-follow")
