@@ -23,13 +23,15 @@ ticket-bot) are reported as **skipped**, not failed. From the web page ([chapter
 | SC-05 | `fan-failure` | fans fail on a GPU node and it runs hot; the BMC event log shows critical entries |
 | SC-07 | `ib-port-down` | an InfiniBand port goes down on `gpu001`, `gpu002`'s NIC flaps; the health check drains the nodes, tickets open, then both recover |
 | SC-01 | `client-stress` | five minutes of everything at once (job floods, GPU errors, heat, a node off and drained, 12 tickets, Jira mock 429/slow/503); run it while the client is open and measure the client ([how](../guides/client-testing.md)) |
-| SC-02 | `client-stress-real` | `client-stress` for a client connected to the **real** Jira: the same nodes, GPUs, heat and jobs, with Jira's own rate limit (about 75 to 180 s), a CAPTCHA lock and a 30 s hang instead of the mock's faults; no tickets (needs `jira-real` up) |
+| SC-02 | `client-stress-real` | `client-stress` for a client connected to the **real** Jira: the same nodes, GPUs, heat and jobs, with Jira's own rate limit (about 75 to 180 s), a CAPTCHA lock and a 30 s hang instead of the mock's faults, and the 12-ticket wave filed on the real Jira (needs `jira-real` up) |
 | SC-06 | `gpu-xid-storm` | GPU errors on both GPU nodes, thermal rise, Slurm drain; the app should open tickets |
 | SC-08 | `jira-429` | Jira rate-limits the next 5 calls (429 with Retry-After); the app must back off |
 | SC-10 | `jira-outage` | Jira answers 503 to the next 20 calls, then recovers |
 | SC-09 | `jira-flap` | Jira is refused, rate limited and unavailable in turn, each time healthy again, with tickets before and after |
 | SC-13 | `jira-real-outage` | the **real** Jira (`jira-real`, part must be running) hangs for 60 s (container paused, calls time out), then answers again |
 | SC-11 | `jira-real-429` | the real Jira's own rate limiting (3 requests, refill 1 per second) turns on, so bursts get a real 429 with `X-RateLimit-*` headers, then off at 120 s; each change shows up to a minute late |
+| SC-28 | `jira-real-slow-503` | the real Jira answers slowly (8 s), then 503, then 429 with `Retry-After: 30`, through the fault proxy: **point the client at `127.0.0.1:8084`** |
+| SC-29 | `jira-real-token-revoked` | alice's personal access token is revoked (a real 401 for a client using it), then a new one is written to `jira-real.env` at 90 s |
 | SC-12 | `jira-real-captcha` | six wrong-password logins make the real Jira answer 401 then 403 `CAPTCHA_CHALLENGE` (what an integration meets after a bad password), cleared after 60 s |
 | SC-26 | `ticket-lifecycle` | one ticket: Open, In Progress, a note, Resolved, Closed |
 | SC-04 | `drain-ticket` | Slurm drains `cn003`; a ticket naming the cluster and the node is filed, worked, and resolved when the node resumes |

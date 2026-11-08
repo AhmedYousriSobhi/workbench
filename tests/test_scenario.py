@@ -436,3 +436,117 @@ def test_every_scenario_has_a_unique_reference_and_loads_by_it():
     with __import__("pytest").raises(scenario.ScenarioError):
         scenario.load("SC-99")
     assert scenario.summary(first).startswith(f"{first['ref']} {first['name']}: ")
+
+
+def test_jira_real_proxy_faults_set_and_clear_the_shared_proxy(monkeypatch):
+    from benchctl import jira_proxy
+    proxy = jira_proxy.FaultProxy(port=0)
+    monkeypatch.setattr(jira_proxy, "shared", lambda: proxy)
+    step = scenario.Step(0, "jira-real", {"fault": "proxy_503", "count": 3, "retry_after": 12})
+    assert scenario.execute(step).status == "ok"
+    assert (proxy.fault.mode, proxy.fault.count, proxy.fault.retry_after) == ("503", 3, 12)
+    assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "proxy_off"})).status == "ok"
+    assert proxy.fault.take() is None
+    monkeypatch.setattr(jira_proxy, "shared", lambda: (_ for _ in ()).throw(OSError("port in use")))
+    assert "port in use" in scenario.execute(step).detail
+
+
+def test_jira_real_token_faults_call_revoke_and_reissue(monkeypatch):
+    from benchctl import jira_real
+    seen = []
+    monkeypatch.setattr(jira_real, "revoke_token", lambda user: seen.append(("revoke", user)) or 1)
+    monkeypatch.setattr(jira_real, "reissue_token", lambda user: seen.append(("reissue", user)))
+    assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "token_revoke"})).status == "ok"
+    assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "token_restore", "user": "admin"})).status == "ok"
+    assert seen == [("revoke", "alice"), ("reissue", "admin")]
+    monkeypatch.setattr(jira_real, "revoke_token", lambda user: 0)
+    assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "token_revoke"})).status == "skipped"
+
+    def broken(user):
+        raise jira_real.JiraRealError("not set up")
+    monkeypatch.setattr(jira_real, "reissue_token", broken)
+    assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "token_restore"})).detail == "not set up"
+
+
+class FakeDriver:
+    def __init__(self):
+        self.made, self.moved, self.said = [], [], []
+
+    def create(self, summary, **kw):
+        self.made.append((summary, kw))
+        return f"OPS-{len(self.made)}"
+
+    def search(self, jql):
+        return [{"key": "OPS-1"}, {"key": "OPS-2"}]
+
+    def move(self, key, to):
+        self.moved.append((key, to))
+
+    def comment(self, key, body):
+        self.said.append((key, body))
+
+
+def test_jira_real_ticket_steps_use_the_driver(monkeypatch):
+    drv = FakeDriver()
+    monkeypatch.setattr(scenario, "real_driver", lambda: drv)
+    create = {"tickets": {"action": "create", "count": 3, "summary": "Stress {n}", "labels": ["stress"], "priority": "High"}}
+    assert scenario.execute(scenario.Step(0, "jira-real", create)).status == "ok"
+    assert [m[0] for m in drv.made] == ["Stress 1", "Stress 2", "Stress 3"] and drv.made[0][1]["labels"] == ["stress"]
+    scenario.execute(scenario.Step(0, "jira-real", {"tickets": {"action": "transition", "jql": "x", "to": "In Progress"}}))
+    scenario.execute(scenario.Step(0, "jira-real", {"tickets": {"action": "comment", "jql": "x", "body": "hi"}}))
+    assert drv.moved == [("OPS-1", "In Progress"), ("OPS-2", "In Progress")] and drv.said == [("OPS-1", "hi"), ("OPS-2", "hi")]
+
+
+def test_jira_real_ticket_steps_report_errors(monkeypatch):
+    from benchctl.jira_driver import JiraError
+
+    def refuse():
+        raise JiraError(0, "the real Jira is not set up")
+    monkeypatch.setattr(scenario, "real_driver", refuse)
+    step = scenario.Step(0, "jira-real", {"tickets": {"action": "create", "summary": "x"}})
+    out = scenario.execute(step)
+    assert out.status == "failed" and "not set up" in out.detail
+
+    def down():
+        raise OSError("refused")
+    monkeypatch.setattr(scenario, "real_driver", down)
+    assert "unreachable" in scenario.execute(step).detail
+
+
+def test_validate_jira_real_ticket_steps():
+    ok = {"steps": [{"at": "0s", "target": "jira-real", "do": {"tickets": {"action": "create", "summary": "x"}}}]}
+    bad = {"steps": [{"at": "0s", "target": "jira-real", "do": {"tickets": {"action": "reset"}}},
+                     {"at": "0s", "target": "jira-real", "do": {"tickets": {"action": "transition", "jql": "x"}}}]}
+    assert scenario.validate(ok, SIM) == []
+    assert len(scenario.validate(bad, SIM)) == 2
+
+
+def test_expectation_target_real_asks_the_real_jira(monkeypatch):
+    monkeypatch.setattr(scenario, "real_search", lambda jql: [{"fields": {"status": {"name": "To Do"}}}] * 2)
+    monkeypatch.setattr(scenario, "jira_search", lambda jql: [])
+    _, holds, _ = scenario.expectation({"jira.issue_count": {"jql": "x", "count": 2, "target": "real"}})
+    assert holds()
+    _, holds, _ = scenario.expectation({"jira.issue_status": {"jql": "x", "status": "To Do", "target": "real"}})
+    assert holds()
+    _, holds, _ = scenario.expectation({"jira.issue_count": {"jql": "x", "count": 2}})
+    assert not holds()
+
+
+def test_real_search_is_empty_when_the_jira_cannot_be_asked(monkeypatch):
+    def broken():
+        raise RuntimeError("no setup")
+    monkeypatch.setattr(scenario, "real_driver", broken)
+    assert scenario.real_search("x") == []
+
+
+def test_run_starts_the_fault_proxy_only_for_proxy_scenarios(monkeypatch):
+    from benchctl import jira_proxy
+    started = []
+    monkeypatch.setattr(jira_proxy, "shared", lambda: started.append(1) or jira_proxy.FaultProxy(port=0))
+    plain = {"name": "p", "steps": []}
+    scenario.run(plain, say=lambda m: None)
+    assert started == []
+    sc = {"name": "p", "steps": [{"at": "0s", "target": "jira-real", "do": {"fault": "proxy_off"}}]}
+    lines = []
+    scenario.run(sc, say=lines.append, runner=lambda c: CP())
+    assert started and any("fault proxy" in line for line in lines)

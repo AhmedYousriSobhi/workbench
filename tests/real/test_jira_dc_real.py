@@ -100,3 +100,47 @@ def test_the_ticket_driver_does_the_same_on_the_mock_and_the_real_jira(live):
         for i in d.search(f'labels = "node-{node}"'):
             d.move(i["key"], "Closed")
         assert ticketbot.team(d, every=0, count=3, say=lambda m: None, sleep=lambda s: None) == 3
+
+
+def test_a_revoked_token_gets_a_real_401_and_a_new_one_works(live):
+    """Issue 307: the scenario fault, not the library call: revoke, 401, restore, the new value in the env file works."""
+    from benchctl import scenario
+    old = live["PAT_ALICE"]
+    assert call(REAL, "/rest/api/2/myself", token=old)[0] == 200
+    assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "token_revoke", "user": "alice"})).status == "ok"
+    assert call(REAL, "/rest/api/2/myself", token=old)[0] == 401
+    assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "token_restore", "user": "alice"})).status == "ok"
+    new = jira_real.read_env(ROOT / jira_real.ENV)["PAT_ALICE"]
+    assert new != old and call(REAL, "/rest/api/2/myself", token=new)[0] == 200
+
+
+def test_the_fault_proxy_fails_and_clears_real_calls(live):
+    """Issue 305: 503 and 429 carry Retry-After, a slow answer is late but real, :8083 is never touched."""
+    import time
+
+    from benchctl import jira_proxy, scenario
+    proxy = jira_proxy.shared()
+    through = f"http://127.0.0.1:{proxy.port}"
+    token = live["PAT_ADMIN"]
+    try:
+        assert scenario.execute(scenario.Step(0, "jira-real", {"fault": "proxy_503", "count": 1, "retry_after": 9})).status == "ok"
+        assert call(REAL, "/rest/api/2/project", token=token)[0] == 200  # direct: untouched
+        assert call(through, "/rest/api/2/project", token=token)[0] == 503
+        assert call(through, "/rest/api/2/project", token=token)[0] == 200  # count used up
+        scenario.execute(scenario.Step(0, "jira-real", {"fault": "proxy_slow", "count": 1, "delay": 3}))
+        t = time.monotonic()
+        assert call(through, "/rest/api/2/project", token=token)[0] == 200 and time.monotonic() - t >= 3
+    finally:
+        scenario.execute(scenario.Step(0, "jira-real", {"fault": "proxy_off"}))
+
+
+def test_scenario_ticket_steps_file_and_move_real_tickets(live):
+    """Issue 306: the ticket wave of client-stress-real, with its expectation, on the real Jira."""
+    from benchctl import scenario
+    jql = 'labels = steptest AND created >= -10m'
+    made = {"tickets": {"action": "create", "count": 3, "summary": "Step test {n}", "labels": ["steptest"]}}
+    assert scenario.execute(scenario.Step(0, "jira-real", made)).status == "ok"
+    assert scenario.check_expect({"jira.issue_count": {"jql": jql, "count": 3, "target": "real", "within": "30s"}}, 1.0).status == "ok"
+    moved = {"tickets": {"action": "transition", "jql": jql, "to": "In Progress"}}
+    assert scenario.execute(scenario.Step(0, "jira-real", moved)).status == "ok"
+    assert scenario.check_expect({"jira.issue_status": {"jql": jql, "status": "In Progress", "count": 3, "target": "real", "within": "30s"}}, 1.0).status == "ok"

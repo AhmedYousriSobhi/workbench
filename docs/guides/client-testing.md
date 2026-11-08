@@ -57,7 +57,7 @@ If port 2222 refuses connections, the checkout is probably on a branch without t
 
 ## Stress test: everything at once while the client runs
 
-`benchctl scenario run client-stress` (5 minutes, [scenarios/client-stress.yaml](../../scenarios/client-stress.yaml)) floods five nodes with jobs, raises GPU XID errors and fan failures, heats a GPU node, powers off and drains `cn004`, files 12 tickets, then makes the Jira mock answer 429, slow and 503 before clearing everything. With the client connected to the real Jira (`jira-real`), run `client-stress-real` instead: same nodes, GPUs, heat and jobs, but Jira's own rate limit (429, about 75 to 180 s), a CAPTCHA lock for one user (use a personal access token for the client's own account, or it is locked out too) and a 30 s hang. It files no tickets. Run it with the client open and measure the client at the same time (use a `--match` that names only the client's own processes, such as its install path; a loose word such as `name` matches unrelated programs. The tool prints `matched: <program> xN (MB)` before it samples and warns when more than 4 different programs match; read that line before `--save`):
+`benchctl scenario run client-stress` (5 minutes, [scenarios/client-stress.yaml](../../scenarios/client-stress.yaml)) floods five nodes with jobs, raises GPU XID errors and fan failures, heats a GPU node, powers off and drains `cn004`, files 12 tickets, then makes the Jira mock answer 429, slow and 503 before clearing everything. With the client connected to the real Jira (`jira-real`), run `client-stress-real` instead: same nodes, GPUs, heat and jobs, but Jira's own rate limit (429, about 75 to 180 s), a CAPTCHA lock for one user (use a personal access token for the client's own account, or it is locked out too) and a 30 s hang. It files its 12 tickets on the real Jira (only tickets made in the last 10 minutes are counted, so a repeat run does not add up). Run it with the client open and measure the client at the same time (use a `--match` that names only the client's own processes, such as its install path; a loose word such as `name` matches unrelated programs. The tool prints `matched: <program> xN (MB)` before it samples and warns when more than 4 different programs match; read that line before `--save`):
 
 ```bash
 ./scripts/benchctl scenario run client-stress &
@@ -193,8 +193,6 @@ Scenarios behave the same: one `bmc-farm` `power: "Off"` step takes the node dow
 Results of the run against the real Jira (setup, every number, what was not exercised): [client-test-report-real-jira.md](client-test-report-real-jira.md). A scenario can be run by its reference: `benchctl scenario run SC-02` (the list shows them).
 
 ## Open items after the real Jira run
-- [#305](https://github.com/AhmedYousriSobhi/workbench/issues/305) a real slow and 503 answer from Jira (fault proxy)
-- [#306](https://github.com/AhmedYousriSobhi/workbench/issues/306) tickets and a ticket check on the real Jira in `client-stress-real`
-- [#307](https://github.com/AhmedYousriSobhi/workbench/issues/307) token revoke fault (a real 401 for a token)
+- Built, not yet run against the client: a real slow, 503 and 429 through the fault proxy (#305, SC-28, the client must use `127.0.0.1:8084`), tickets and a ticket check on the real Jira in `client-stress-real` (#306), and the token revoke fault (#307, SC-29)
 - [#308](https://github.com/AhmedYousriSobhi/workbench/issues/308) verify the client's Jira panel under the real faults
 - [#309](https://github.com/AhmedYousriSobhi/workbench/issues/309) script the client stress run
