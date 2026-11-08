@@ -386,6 +386,7 @@
   .pillchip.good { background:color-mix(in srgb,var(--ok) 13%,transparent); border-color:color-mix(in srgb,var(--ok) 45%,transparent); } .pillchip.warn { background:color-mix(in srgb,var(--warn) 13%,transparent); border-color:color-mix(in srgb,var(--warn) 45%,transparent); } .pillchip.bad { background:color-mix(in srgb,var(--bad) 13%,transparent); border-color:color-mix(in srgb,var(--bad) 45%,transparent); }
   .itabs { background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:3px; gap:2px; width:fit-content; } .itabs .btn { border:0; background:transparent; border-radius:8px; } .itabs .btn[aria-pressed=true] { background:var(--panel); box-shadow:0 1px 3px rgba(0,0,0,.25); }
   @media (min-width:1100px) { .nodesmain .er.node .info .meter { display:none; } }  /* the list is narrow: the facts wrap under the name, never over the state */
+  #tr-map .trpart { rx:8px; stroke:transparent; stroke-width:2px; transition:fill .12s, stroke .12s; } #tr-map .trpart:hover, #tr-map .trpart:focus-visible { fill:color-mix(in srgb,var(--accent) 16%,transparent); stroke:var(--accent); outline:none; } #tr-map.dragging, #tr-map.dragging .trpart { cursor:grabbing; } #tr-map .trpart.drag { fill:color-mix(in srgb,var(--accent) 28%,transparent); stroke:var(--accent); }
   .trmove { display:none; } @media (pointer:coarse) { .trmove { display:inline-flex; } } #tr-map.moving { touch-action:none; }
   #subseg[hidden] { display:none; } #subseg { flex-direction:column; width:auto; margin-top:var(--sp4); } #subseg .btn { text-align:left; } @media (max-width:860px) { #subseg { flex-direction:row; margin:0; } } #nodeswrap.subnodes #trafficpanel { display:none; }
   #trafficpanel { order:0; } #nodesmain { order:2; } #inspector { order:3; } .ipane#dock { display:block; } .ipane#dock[hidden] { display:block; }  /* narrow: one column, the timeline under the list */
@@ -2004,7 +2005,7 @@ async function poll() {
 }
 // Traffic & Communication: the documented links (webui/comms.py) and Prometheus's own scrape results (webui/monitoring.py)
 // with the measured counters beside them, nothing invented
-let trSel = null, trPath = null, monLinks = [], dbdLink = null;
+let trSel = null, trPart = null, trPath = null, monLinks = [], dbdLink = null;
 const trRate = {};  // service -> {t, n, rate}: requests per second from the counter, re-sampled every 3 s
 function rateOf(svc, n) {
   const now = Date.now(), r = trRate[svc] ||= { t: now, n, rate: null, hist: [] };
@@ -2033,6 +2034,32 @@ const PLANE_STYLE = { control: ['#4cc9ff', '7 4'], data: ['#3fb950', ''], monito
 const TR_ICON = { server: 'M2 3h12v4H2zM2 9h12v4H2zM4.5 5h.01M4.5 11h.01', db: 'M3 4c0-1.1 2.2-2 5-2s5 .9 5 2-2.2 2-5 2-5-.9-5-2zM3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2',
   gear: 'M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4',
   screen: 'M2 3h12v8H2zM6 14h4M8 11v3', cube: 'M8 1.5l6 3v7l-6 3-6-3v-7zM2 4.5l6 3 6-3M8 7.5v7', chart: 'M2 13V3M2 13h12M5 10l3-3 2 2 3-4', lock: 'M4 7h8v6H4zM5.5 7V5a2.5 2.5 0 0 1 5 0v2' };
+// what each part is, in one sentence (documentation text; shown when a part is clicked)
+const PART_INFO = {
+  'clients': 'The monitoring client, Prometheus, scripts and people who call the cluster from outside.',
+  'login': 'The Slurm login node: where users and tools ssh in, submit jobs and run Slurm commands.',
+  'teleport': 'The Teleport proxy: ssh access through one audited front door instead of direct ssh.',
+  'slurmrestd': "Slurm's REST API daemon. Clients send HTTP requests with a JWT and it hands them to slurmctld. It sits in Access because it is an entry point for callers, not part of the scheduler.",
+  'slurmctld': 'The Slurm controller: schedules jobs, tracks every node and answers all Slurm commands and API calls.',
+  'slurmdbd': 'The Slurm database daemon: stores accounting records (jobs, users) in MariaDB for slurmctld and sacct.',
+  'slurmd': 'The Slurm node daemon: runs on every compute node, starts jobs when slurmctld asks and reports the node state.',
+  'nodes': 'The compute and GPU nodes themselves: simulated containers running sshd and slurmd.',
+  'bmc-farm': 'Simulated BMCs: one Redfish endpoint per node for power and sensors.',
+  'bcm-mock': 'A mock of the cluster manager (CMDaemon style JSON API) that reports node state.',
+  'jira-mock': 'A mock of Jira (a REST subset) that receives tickets and can be told to fail.',
+  'jira-real': 'The official Jira Data Center with its own database (optional).',
+  'k8s-api': 'The Kubernetes API server: every kubectl call and every control-plane component talks to it.',
+  'kube-scheduler': 'Places pods on nodes; it watches the API server.',
+  'kube-controller-manager': 'Runs the controllers that keep the cluster as declared (nodes, pods, deployments).',
+  'etcd': 'The key-value store where the API server keeps all cluster state.',
+  'kwok': 'Creates the fake Kubernetes nodes and their pods; no real kubelet runs.',
+  'prometheus': 'Scrapes metrics from the targets on a schedule and stores them.',
+  'grafana': 'Dashboards over Prometheus; also receives governor annotations.',
+  'gpu-exporter': 'The simulated GPU exporter (DCGM style metrics) that tests can also inject faults into.',
+  'governor': 'The host memory governor: keeps the machine healthy by pausing or stopping parts under pressure (real).',
+  'sim-nodes': 'The simulated per-node metrics targets that Prometheus scrapes.',
+  'storage': 'Shared storage for job data. Planned, not built yet.'
+};
 const PART_ICON = { clients: 'screen', login: 'lock', teleport: 'lock', slurmrestd: 'gear', slurmctld: 'gear', slurmdbd: 'db', slurmd: 'server', nodes: 'server', 'bmc-farm': 'server', 'bcm-mock': 'server', 'k8s-api': 'gear',
   'kube-scheduler': 'gear', 'kube-controller-manager': 'gear', etcd: 'db', prometheus: 'chart', grafana: 'chart', 'gpu-exporter': 'chart', governor: 'gear', 'sim-nodes': 'server', storage: 'db' };
 const TR_GROUPS = [  // the fixed architecture, two rows by four columns, callers at the left: [title, grid column, grid row, colour, parts]; a part with no link in this cluster is drawn grayed, never dropped
@@ -2060,16 +2087,17 @@ function paintTrTimeline(links) {
 $('tr-range').onclick = e => { const b = e.target.closest('[data-s]'); if (!b) return; trRange = +b.dataset.s; $('tr-range').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); paintTraffic(); };
 let trOff = {}; try { trOff = JSON.parse(localStorage.getItem('workbench-tr-layout5') || '{}'); } catch (e) { /* default layout */ }
 let trRows = [], trGhosts = [];
-function saveTrLayout() { try { localStorage.setItem('workbench-tr-layout5', JSON.stringify(trOff)); } catch (e) { /* not remembered */ } }
+let trOrd = {}; try { trOrd = JSON.parse(localStorage.getItem('workbench-tr-order1') || '{}'); } catch (e) { /* default order */ }
+function saveTrLayout() { try { localStorage.setItem('workbench-tr-layout5', JSON.stringify(trOff)); localStorage.setItem('workbench-tr-order1', JSON.stringify(trOrd)); } catch (e) { /* not remembered */ } }
 // auto layout from the links on show (groups with no link are left out, columns close up); a dragged group keeps its offset; lines are routed from the final positions
 function paintTrafficMap(rows, ghosts = []) {
   trRows = rows; trGhosts = ghosts;
   const svg = $('tr-map'), links = rows.map(r => r.l), live = new Set(links.flatMap(l => [l.from, l.to])), ids = new Set([...live, ...TR_GROUPS.flatMap(g => g[4])]);
   svg.replaceChildren();
   $('tr-legend').innerHTML = [...new Set(links.map(l => l.plane))].map(p => `<span class="trkey"><i style="background:${PLANE_STYLE[p]?.[0] || '#8da2ff'}"></i>${esc(p)}</span>`).join('') + '<span class="dim">Arrows run from the caller to the part called; moving dots mean the far end answers; the number is the port; grayed: not in this cluster, or not readable here. Drag a group (or use the arrow keys) to move it.</span>';
-  $('tr-reset').hidden = !Object.keys(trOff).length;
+  $('tr-reset').hidden = !Object.keys(trOff).length && !Object.keys(trOrd).length;
   const known = new Set(TR_GROUPS.flatMap(g => g[4])), other = [...ids].filter(i => !known.has(i)), groups = [...TR_GROUPS, ...(other.length ? [['Other', 1, 1, '#8da2ff', other]] : [])]
-    .map(([title, c, r, col, parts]) => ({ title, c, r, col, parts: parts.filter(p => ids.has(p)) })).filter(g => g.parts.length);
+    .map(([title, c, r, col, parts]) => ({ title, c, r, col, parts: parts.filter(p => ids.has(p)).sort((a, b) => (trOrd[title]?.indexOf(a) ?? -1) - (trOrd[title]?.indexOf(b) ?? -1) || 0) })).filter(g => g.parts.length);
   const GW = 170, PH = 40, HEAD = 30, GAPX = 140, GAPY = 40, M = 30, pos = {};
   groups.forEach(g => { g.h = HEAD + g.parts.length * (PH + 6) + 8; });
   const rowH = {}; groups.filter(g => g.r % 1 === 0).forEach(g => { rowH[g.r] = Math.max(rowH[g.r] || 0, g.h); });
@@ -2094,6 +2122,7 @@ function paintTrafficMap(rows, ghosts = []) {
       const ic = sv('path', { d: TR_ICON[PART_ICON[id] || 'cube'], transform: `translate(${g.x + 18} ${py + PH / 2 - 8})`, fill: 'none', stroke: g.col, 'stroke-width': 1.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: gone ? 0.4 : 1, 'pointer-events': 'none' });
       svg.append(ic);
       svg.append(sv('text', { x: g.x + 42, y: py + PH / 2 + 5, fill: 'currentColor', 'font-size': 14, 'opacity': gone ? 0.4 : 1, 'pointer-events': 'none' }, (gone || up === undefined ? '' : up ? '✓ ' : '✗ ') + (id.length > 14 ? id.slice(0, 13) + '…' : id)));
+      svg.append(sv('rect', { class: 'trpart', 'data-part': id, 'data-of': g.title, tabindex: 0, role: 'button', 'aria-label': `${id}: click for details, drag up or down or press Alt+Up or Alt+Down to reorder inside ${g.title}`, x: g.x + 10, y: py, width: GW - 20, height: PH, fill: 'transparent', style: 'cursor:ns-resize' }));
     });
   });
   // polyline routing: a short stub out of the box, a straight run to a stub into the target; a run that would cross a group goes along the gap between rows instead
@@ -2157,7 +2186,22 @@ function paintTrafficMap(rows, ghosts = []) {
     if (!g || !d) return; e.preventDefault(); const t = g.dataset.group; move(t, d[0], d[1]); saveTrLayout(); svg.querySelector(`[data-group="${CSS.escape(t)}"]`)?.focus();
   });
   $('tr-move').onclick = () => { const on = !svg.classList.contains('moving'); svg.classList.toggle('moving', on); $('tr-move').setAttribute('aria-pressed', on); };
-  $('tr-reset').onclick = () => { trOff = {}; saveTrLayout(); paintTrafficMap(trRows, trGhosts); };
+  // reorder the parts of a group: drag one up or down inside its group, or Alt+Up / Alt+Down; the order is remembered in this browser
+  const order = t => trRows.length ? Array.from(svg.querySelectorAll(`[data-part][data-of="${CSS.escape(t)}"]`), r => r.dataset.part) : [];
+  const shift = (id, t, to) => { const o = order(t), i = o.indexOf(id), j = Math.max(0, Math.min(o.length - 1, to)); if (i < 0 || i === j) return false; o.splice(j, 0, o.splice(i, 1)[0]); trOrd[t] = o; paintTrafficMap(trRows, trGhosts); return true; };
+  let pd = null;
+  svg.addEventListener('pointerdown', e => { const r = e.target.closest('[data-part]'); if (!r) return; pd = { id: r.dataset.part, t: r.dataset.of, y: e.clientY, y0: e.clientY, moved: false }; r.classList.add('drag'); svg.setPointerCapture(e.pointerId); });
+  svg.addEventListener('pointermove', e => { if (!pd) return; const k = svg.viewBox.baseVal.width / svg.getBoundingClientRect().width, step = ((40 + 6)) / k, i = order(pd.t).indexOf(pd.id), n = Math.round((e.clientY - pd.y) / step); if (Math.abs(e.clientY - pd.y0) > 4 && !pd.moved) { pd.moved = true; svg.classList.add('dragging'); } if (n && shift(pd.id, pd.t, i + n)) { pd.y += n * step; svg.querySelector(`[data-part="${CSS.escape(pd.id)}"]`)?.classList.add('drag'); } });
+  const stopPart = () => { svg.classList.remove('dragging'); if (pd) { const { id, moved } = pd; pd = null; if (moved) saveTrLayout(); else { trPart = trPart === id ? null : id; trSel = null; paintTraffic(); } } };
+  $('tr-insp').addEventListener('click', e => { const b = e.target.closest('[data-mv]'); const r = b && trPart && svg.querySelector(`[data-part="${CSS.escape(trPart)}"]`); if (r && shift(trPart, r.dataset.of, order(r.dataset.of).indexOf(trPart) + +b.dataset.mv)) saveTrLayout(); });  // a button for the same move, for a finger or a mouse that cannot drag
+  svg.addEventListener('pointerup', stopPart); svg.addEventListener('pointercancel', stopPart);
+  svg.addEventListener('keydown', e => {
+    const r = e.target.closest?.('[data-part]'); if (r && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); trPart = r.dataset.part; trSel = null; paintTraffic(); return; }
+    if (!r || !e.altKey || !['ArrowUp', 'ArrowDown'].includes(e.key)) return;
+    e.preventDefault(); const id = r.dataset.part, t = r.dataset.of; if (shift(id, t, order(t).indexOf(id) + (e.key === 'ArrowUp' ? -1 : 1))) saveTrLayout();
+    svg.querySelector(`[data-part="${CSS.escape(id)}"]`)?.focus();
+  });
+  $('tr-reset').onclick = () => { trOff = {}; trOrd = {}; saveTrLayout(); paintTrafficMap(trRows, trGhosts); };
 })();
 // the right-hand inspector: one link's facts, a rate chart from the counter samples taken while the tab is open
 function rateChart(hist) {
@@ -2165,9 +2209,14 @@ function rateChart(hist) {
   const max = Math.max(...hist, 1), pts = hist.map((v, i) => `${(i / (hist.length - 1)) * 240},${46 - (v / max) * 42}`).join(' ');
   return `<svg viewBox="0 0 240 50" width="100%" height="50" role="img" aria-label="Requests per second, newest on the right, peak ${+max.toFixed(1)}"><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="1.8"/></svg><div class="dim small">Peak ${+max.toFixed(1)}/s over the last ${hist.length * 3} s</div>`;
 }
+function paintTrPart(id, links) {  // a clicked part: what it is, whether it answers, and the links it has (each opens that link)
+  const up = flowSnap?.reachable[id], mine = links.filter(l => l.from === id || l.to === id), li = l => `<li><button class="linkbtn" data-link="${esc(l.id)}">${l.from === id ? `→ ${esc(l.to)}` : `← ${esc(l.from)}`}</button> <span class="dim small">${esc(l.protocol)}${l.port == null ? '' : ' :' + l.port}</span></li>`;
+  $('tr-insp').innerHTML = `<h3>${esc(id)} <button class="btn small" id="tr-close" aria-label="Close the inspector">✕</button></h3><p class="small">${esc(PART_INFO[id] || '')}</p><dl><dt>State</dt><dd>${up === undefined ? '–' : up ? '✓ answers' : '✗ not reachable'}</dd></dl><p class="row small"><span class="dim">Order in its group</span><button class="btn small" data-mv="-1" aria-label="Move ${esc(id)} up in its group">▲ Up</button><button class="btn small" data-mv="1" aria-label="Move ${esc(id)} down in its group">▼ Down</button></p>`
+    + (mine.length ? `<p class="small dim">Links of this part (click one for its details)</p><ul class="trlinks">${mine.map(li).join('')}</ul>` : '<p class="small dim">No documented link in this cluster.</p>');
+}
 function paintTrInspector(cur) {
   const box = $('tr-insp');
-  if (!cur) { box.innerHTML = '<h3>Traffic flow inspector</h3><p class="dim small">Select a link in the diagram or the table to see its details here.</p>'; return; }
+  if (!cur) { box.innerHTML = '<h3>Traffic flow inspector</h3><p class="dim small">Select a link or a part in the diagram, or a link in the table, to see its details here.</p>'; return; }
   const v = trView(cur), row = (k, val) => `<dt>${k}</dt><dd>${val}</dd>`;
   box.innerHTML = `<h3>Traffic flow inspector <button class="btn small" id="tr-close" aria-label="Close the inspector">✕</button></h3><dl>`
     + row('Source', esc(cur.from)) + row('Destination', esc(cur.to)) + row('Protocol', esc(cur.protocol)) + row('Port', cur.port)
@@ -2200,12 +2249,13 @@ function paintTraffic() {
   const pb = $('tr-path');
   pb.hidden = !path;
   if (path) pb.innerHTML = `Path through <b>${esc(trPath)}</b>: ${path.size} link${path.size === 1 ? '' : 's'}. <button class="btn small" id="tr-clear">Show all links</button>`;
-  paintTrInspector(links.find(l => l.id === trSel));
+  const cur = links.find(l => l.id === trSel);
+  if (!cur && trPart) paintTrPart(trPart, links); else paintTrInspector(cur);
 }
-$('tr-rows').onclick = $('tr-map').onclick = e => { const b = e.target.closest('[data-link]'); if (b) { trSel = trSel === (b.dataset.link) ? null : b.dataset.link; paintTraffic(); } };
+$('tr-rows').onclick = $('tr-map').onclick = $('tr-insp').onclick = e => { const b = e.target.closest('[data-link]'); if (b) { trSel = trSel === (b.dataset.link) ? null : b.dataset.link; trPart = null; paintTraffic(); } };
 document.addEventListener('click', e => {
   const id = e.target.id;
-  if (id === 'tr-follow') { trPath = trSel; paintTraffic(); } else if (id === 'tr-clear') { trPath = null; paintTraffic(); } else if (id === 'tr-close') { trSel = null; paintTraffic(); }
+  if (id === 'tr-follow') { trPath = trSel; paintTraffic(); } else if (id === 'tr-clear') { trPath = null; paintTraffic(); } else if (id === 'tr-close') { trSel = null; trPart = null; paintTraffic(); }
 });
 $('tr-sw').onchange = $('tr-ev').onchange = paintTraffic;
 // toolbar: plane chips, zoom and full screen (the diagram already fits the width, so zoom enlarges it inside its scroll area)
