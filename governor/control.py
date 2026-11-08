@@ -22,6 +22,7 @@ SLURM_STEPS = ("slurmd-restart", "slurmd-stop", "slurmd-start", "slurmctld-resta
 NODE_STEPS = ("slurmd-restart", "slurmd-stop", "slurmd-start")
 REASON_RE = re.compile(r"[A-Za-z0-9 .,:_/()+-]{0,60}")  # a drain reason: short, no shell characters
 LOGIN_MODES = {"ssh", "teleport", "both"}  # mirrors benchctl.logins.MODES
+BMC_GROUPS = {"slurm-cpu", "slurm-gpu", "k8s-cpu", "k8s-gpu"}  # mirrors benchctl.nodes.GROUPS
 LOGIN_KINDS = {"slurm", "k8s", "both"}  # mirrors benchctl.logins.KINDS; an entry is MODE or MODE:KIND
 PLAN_PARTS = {"jira", "jira-real", "bmc", "bcm", "scenarios", "accounting", "load", "teleport", "k8s"}  # mirrors benchctl.workbench.PARTS
 
@@ -43,6 +44,9 @@ def plan_error(req: dict) -> str | None:
     if nodes is not None and not (isinstance(nodes, list) and len(nodes) <= 80
                                   and all(isinstance(n, str) and NODE_RE.fullmatch(n) for n in nodes)):
         return "apply-plan bmc_nodes must be a list of node names such as cn001"
+    groups = req.get("bmc_groups")  # optional: the node groups that get BMCs; absent means every group
+    if groups is not None and not (isinstance(groups, list) and all(isinstance(g, str) and g in BMC_GROUPS for g in groups)):
+        return f"apply-plan bmc_groups must be a list of: {', '.join(sorted(BMC_GROUPS))}"
     modes = req.get("login_nodes")  # optional: one auth mode per login node; absent keeps sim.yaml's
     if modes is not None and not (isinstance(modes, list) and 1 <= len(modes) <= 8 and all(isinstance(m, str) and m.partition(":")[0] in LOGIN_MODES and (":" not in m or m.partition(":")[2] in LOGIN_KINDS) for m in modes)):
         return f"apply-plan login_nodes must be 1 to 8 of: {', '.join(sorted(LOGIN_MODES))}, each optionally :{'|'.join(sorted(LOGIN_KINDS))}"

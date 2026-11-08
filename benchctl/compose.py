@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 
 from . import addressing, jira_real, k8s, logins, nhc, slurmconf, teleport
-from .nodes import node_names
+from .nodes import KIND_GROUP, hardware_nodes, node_names
 
 OBSERVABILITY = "../observability.yml"  # static; hosts prometheus, grafana, gpu-exporter-farm
 
@@ -170,9 +170,12 @@ def _wire_jira_real(services: dict) -> None:
 
 
 def bmc_nodes(sim: dict, profile: dict | None = None) -> list[str]:
-    """The nodes that have a BMC address: `sim["bmc"]["nodes"]` when a selection names some, else every node."""
-    every = [n for n, _ in node_names(sim, (profile or {}).get("compute_nodes"))]
-    chosen = (sim.get("bmc") or {}).get("nodes")
+    """The nodes that have a BMC address: the machines whose group `sim["bmc"]["groups"]` names (default every group: Slurm CPU and
+    GPU nodes, Kubernetes CPU and GPU nodes), then only those in `sim["bmc"]["nodes"]` when a selection lists some."""
+    cfg = sim.get("bmc") or {}
+    groups = cfg.get("groups")
+    every = [n for n, k in hardware_nodes(sim, (profile or {}).get("compute_nodes")) if groups is None or KIND_GROUP[k] in groups]
+    chosen = cfg.get("nodes")
     return every if chosen is None else [n for n in every if n in chosen]
 
 

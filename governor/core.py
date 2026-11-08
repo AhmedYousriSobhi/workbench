@@ -253,6 +253,8 @@ class Governor:
                     args += ["--with" if part in req["parts"] else "--without", part]
                 if req.get("bmc_nodes") is not None:
                     args += ["--bmc-nodes", ",".join(req["bmc_nodes"])]
+                if req.get("bmc_groups") is not None:
+                    args += ["--bmc-groups", ",".join(req["bmc_groups"])]
                 if req.get("login_nodes") is not None:
                     args += ["--login", ",".join(req["login_nodes"])]
                 for key, flag in (("k8s_nodes", "--k8s-nodes"), ("k8s_cpu_nodes", "--k8s-cpu-nodes")):

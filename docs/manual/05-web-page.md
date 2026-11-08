@@ -23,8 +23,7 @@ this machine can use the page, so keep it private. The page listens on `127.0.0.
 | **Tabs and Needs attention** | the tabs *Nodes* and *Connections*, and one slim bar next to them with every item that needs you, or "All clear" |
 | **Stage** (Nodes tab) | three areas that fill the window. **Left:** the **Infrastructure architecture**, drawn to the shape of its panel (clients across the top, the access layer under them, the cluster nodes below that, the services in a column at the right). **Top right:** the **node list** (Compute, GPU and Services). **Bottom right:** **Connections**, how to reach each part (address and a Copy button), which shows the selected part instead when you click one, and a **Timeline** tab of recent traffic and faults. **Hide node list** gives the right column to Connections; the choice is remembered |
 
-Three panels open on top of the page from the top strip or its **☰ Menu** and close with **✕ Close**, Esc or a click outside: **Scenarios**,
-**Plan** and **Governor**. A node is different: it opens in the **Connections** area (below), so the Infrastructure architecture and the node list stay in view.
+Two panels open on top of the page from the top strip or its **☰ Menu** and close with **✕ Close**, Esc or a click outside: **Cluster architecture** and **Governor**. **Scenarios** is different: it is a panel docked on the right that you switch on and off with the **▶ Scenarios** button in the top strip, so the diagram stays visible and live while a scenario runs. A node is different: it opens in the **Connections** area (below), so the Infrastructure architecture and the node list stay in view.
 
 On a phone, and under 1100 px, the Infrastructure architecture, the list and the Connections area stack in one column and the diagram keeps its natural shape. The page has a skip link and
 landmarks, and honours reduced motion.
@@ -174,9 +173,7 @@ while an older one kept running). Restart it and reload:
 
 ## Scenarios
 
-Press **▶ Scenarios**, type in *Filter scenarios* if the list is long, pick a speed (one setting for all), press
-**▶ Play**, and watch each step turn ok, skipped or failed. **Stop** aborts. While one runs, the top strip shows it and
-pressing that chip reopens the sheet. The page has no Docker access by design, so its `slurm` steps (drain, resume, job and daemon steps)
+Press **▶ Scenarios** in the top strip: a panel docks on the right and the diagram stays in view. The run card is at the top (status, a progress bar, **Stop**, and the steps with the current one highlighted); below it is the library (type in *Filter scenarios*, pick a speed that applies to all, press **▶ Play** on a card; the running scenario's card is highlighted). Press the button again, or **✕ Close**, to hide it; it stays open across a reload. While one runs, the top strip also shows it, and pressing that chip opens the panel. The page has no Docker access by design, so its `slurm` steps (drain, resume, job and daemon steps)
 are done by the governor; one it refuses (memory level L2 and above) or cannot do (started without `--workdir`) shows **skipped** with the reason, and
 `./scripts/benchctl scenario run NAME` does it from the terminal. Tick **Slurm trace** before **▶ Play** to see, under the timeline, what the
 jobs and Slurm's logs did around each step ([Slurm resilience](../guides/slurm-resilience.md)).

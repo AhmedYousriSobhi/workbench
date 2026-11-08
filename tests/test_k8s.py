@@ -252,7 +252,10 @@ def test_the_selection_turns_the_part_on_and_counts_the_gpu_nodes():
     assert any("needs the Kubernetes part" in p for p in workbench.Spec(k8s_nodes=2).problems())
     on = workbench.estimate(*workbench.effective(SIM, workbench.Spec(parts=[*workbench.DEFAULT_PARTS, "k8s"])), app_mb=0)
     off = workbench.estimate(*workbench.effective(SIM, workbench.Spec()), app_mb=0)
-    assert on["total_mb"] - off["total_mb"] == sum(k8s.LIMITS.values())  # the five services' limits, nothing else
+    nbmc = len(k8s.node_list(SIM))  # the part's nodes are machines: each gets a BMC forwarder when the BMC part is on
+    assert on["total_mb"] - off["total_mb"] == sum(k8s.LIMITS.values()) + nbmc * compose.BMC_FORWARDER_MB
+    no_bmc = workbench.estimate(*workbench.effective(SIM, workbench.Spec(parts=[*workbench.DEFAULT_PARTS, "k8s"], bmc_groups=["slurm-cpu", "slurm-gpu"])), app_mb=0)
+    assert on["total_mb"] - no_bmc["total_mb"] == nbmc * compose.BMC_FORWARDER_MB   # a rule per group drops them again
 
 
 def test_k8s_cpu_and_gpu_node_counts_are_separate_and_none_keeps_sim_yaml():

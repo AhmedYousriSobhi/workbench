@@ -125,6 +125,22 @@
   .seg button[aria-pressed="true"] { background:color-mix(in srgb,var(--accent) 16%,var(--panel)); font-weight:650; } .seg button[aria-pressed="true"]::before { content:'✓ '; } .seg button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
   .psh { margin:0 0 var(--sp2); font-size:14px; } .psum { display:grid; grid-template-columns:auto 1fr; gap:4px var(--sp3); margin:0; font-size:13.5px; } .psum dt { color:var(--dim); } .psum dd { margin:0; font-variant-numeric:tabular-nums; }
   @media (max-width:860px) { .sheet-b.plan-grid { grid-template-columns:1fr; } .plan-side { position:static; } .lrow { grid-template-columns:1fr auto; } .lrow .nm { grid-column:1 / 3; } }
+
+  /* Scenarios: a docked drawer, not a modal, so the diagram stays visible and live while a scenario runs */
+  dialog.drawer { position:fixed; top:72px; right:12px; bottom:12px; left:auto; margin:0; padding:0; width:min(440px,calc(100vw - 24px)); height:auto; max-height:none; max-width:none; border:1px solid var(--line); border-radius:16px; box-shadow:0 14px 44px rgba(0,0,0,.3); background:var(--panel); color:var(--fg); }
+  dialog.drawer[open] { display:flex; flex-direction:column; z-index:30; }
+  .drawer-b { overflow-y:auto; display:flex; flex-direction:column; gap:var(--sp4); padding:var(--sp4) var(--sp5); scrollbar-width:thin; }
+  .drawer .runbox { margin:0; padding:var(--sp4); border:1px solid var(--line); border-radius:12px; border-top:1px solid var(--line); background:color-mix(in srgb,var(--accent) 5%,var(--panel)); }
+  #scn-toggle.on { background:color-mix(in srgb,var(--accent) 16%,var(--panel)); border-color:var(--accent); font-weight:650; }
+  .rhead { display:flex; align-items:center; justify-content:space-between; gap:var(--sp3); } .rhead h2 { margin:0; }
+  .drawer ul.steps { max-height:34vh; overflow-y:auto; } ul.steps li.cur { background:color-mix(in srgb,var(--accent) 12%,transparent); border-radius:6px; }
+  .scnlib { display:flex; flex-direction:column; gap:var(--sp3); } .scnlib input[type=search] { width:100%; min-height:40px; font:inherit; border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--fg); padding:0 12px; }
+  .scnopts { display:flex; flex-wrap:wrap; gap:var(--sp3); align-items:center; justify-content:space-between; } .scnopts select { min-height:36px; border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--fg); font:inherit; padding:0 8px; }
+  .drawer ul.scns { max-height:none; overflow:visible; display:flex; flex-direction:column; gap:var(--sp2); }
+  .drawer .scn { display:grid; grid-template-columns:1fr auto; gap:2px var(--sp3); align-items:center; padding:var(--sp3) var(--sp4); border:1px solid var(--line); border-radius:12px; border-bottom:1px solid var(--line); }
+  .drawer .scn.active { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 8%,var(--panel)); }
+  .drawer .scn p { -webkit-line-clamp:3; font-size:13px; } .drawer .scn .btn { grid-row:1 / span 2; min-height:40px; }
+  @media (max-width:860px) { dialog.drawer { top:auto; left:0; right:0; bottom:0; width:100vw; height:56vh; border-radius:16px 16px 0 0; } }
   .planparts { border:1px solid var(--line); border-radius:8px; } .planparts label { display:inline-block; min-height:40px; padding:8px 10px 0 0; }
   #pl-bar { width:100%; height:14px; } #pl-cmd { white-space:pre-wrap; margin:4px 0 0; }
   .node dt { color:var(--dim); } .node dd { margin:0; }
@@ -464,6 +480,7 @@
     <button class="pillchip" id="c-mem" aria-haspopup="dialog" aria-label="Free memory: open the governor panel">Memory …</button>
     <span class="pillchip" id="c-svc">Services …</span>
     <span class="pillchip" id="c-nodes">Nodes …</span>
+    <button class="pillchip" id="scn-toggle" aria-controls="scndlg" aria-expanded="false">▶ Scenarios</button>
     <button class="pillchip" id="c-run" hidden></button>
     <span id="conn" role="status"><i></i><span>connecting…</span></span>
     <span class="menuwrap"><button class="pillchip menubtn" id="menubtn" aria-expanded="false" aria-controls="menu">☰ Menu</button>
@@ -557,18 +574,21 @@
       <p class="dim small">Addresses are the cluster's fixed private IPs, reachable from this machine; 127.0.0.1 is the fallback where a row says so. Credentials are never shown here: the last column is the file that holds them. A node's own address is in its details.</p>
       <div class="tablewrap"><table class="conn"><thead><tr><th>Part</th><th>Address</th><th>Try it</th><th>Credential</th><th>Open</th></tr></thead><tbody id="conn-rows"><tr><td colspan="5" class="skel">Loading…</td></tr></tbody></table></div></div>
   </div>
-  <dialog id="scndlg" class="sheet" aria-labelledby="scn-h">
-    <div class="sheet-h"><div><h2 id="scn-h">Scenarios</h2><p class="dim small">Timed incidents against the running stack.</p></div>
+  <dialog id="scndlg" class="drawer" aria-labelledby="scn-h">
+    <div class="sheet-h"><div><h2 id="scn-h">Scenarios</h2><p class="dim small" id="scn-sub">Timed incidents against the running stack. The diagram stays live beside this panel.</p></div>
       <button class="btn small" id="scn-close" aria-label="Close the scenarios">✕ Close</button></div>
-    <div class="sheet-b">
-    <p class="dim small" style="margin-top:0">Slurm steps go through the governor (the page has no Docker) and need it started with <code>--workdir</code>; otherwise use <code>./scripts/benchctl scenario run NAME --trace</code>.</p>
-    <div class="scnbar"><input type="search" id="scnq" placeholder="Filter scenarios" aria-label="Filter scenarios"><select id="speed" aria-label="Playback speed for every scenario"><option value="1">1× real time</option><option value="5">5×</option><option value="20">20×</option></select>
-      <label class="small" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="trace"> Slurm trace</label></div>
-    <ul class="scns" id="list"><li class="skel">Loading…</li></ul>
-  <div class="runbox" id="runpanel" hidden aria-live="polite"><h2 class="rh" id="runtitle">Run</h2>
-    <div class="row"><div id="runresult"></div><div id="runctl"></div></div>
-    <div class="progress" aria-hidden="true"><div id="bar" style="width:0"></div></div>
-    <div id="runnote"></div><ul class="steps" id="timeline"></ul><div id="expects"></div><div id="trace-out"></div></div>
+    <div class="drawer-b">
+      <div class="runbox" id="runpanel" hidden aria-live="polite"><div class="rhead"><h2 class="rh" id="runtitle">Run</h2><div id="runctl"></div></div>
+        <div class="row"><div id="runresult"></div></div>
+        <div class="progress" aria-hidden="true"><div id="bar" style="width:0"></div></div>
+        <div id="runnote"></div><ul class="steps" id="timeline"></ul><div id="expects"></div><div id="trace-out"></div></div>
+      <section class="scnlib" aria-label="Scenario library">
+        <input type="search" id="scnq" placeholder="Filter scenarios" aria-label="Filter scenarios">
+        <div class="scnopts"><label class="small">Speed <select id="speed" aria-label="Playback speed for every scenario"><option value="1">1× real time</option><option value="5">5×</option><option value="20">20×</option></select></label>
+          <label class="small" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="trace"> Slurm trace</label></div>
+        <ul class="scns" id="list"><li class="skel">Loading…</li></ul>
+      </section>
+      <details class="small dim"><summary>How steps run</summary><p>Slurm steps go through the governor (the page has no Docker) and need it started with <code>--workdir</code>; otherwise use <code>./scripts/benchctl scenario run NAME --trace</code>. Kubernetes and some other steps run only from the host CLI.</p></details>
     </div>
   </dialog>
   <dialog id="govdlg" class="sheet" aria-labelledby="gov-h">
@@ -629,7 +649,9 @@
           <p class="small dim pnote" id="pl-loginnote"></p></section>
         <section class="pcard" aria-labelledby="pc-parts-h"><header class="pch"><h3 id="pc-parts-h">Optional parts</h3><span class="pbadge">memory each adds</span></header>
           <div class="toggles" id="pl-parts"></div>
-          <fieldset class="bmcnodes" id="pl-bmcbox" hidden><legend class="small dim">Nodes that get a BMC (<span id="pl-bmcmb"></span> MB each)</legend><div class="toggles" id="pl-bmcnodes"></div></fieldset>
+          <fieldset class="bmcnodes" id="pl-bmcbox" hidden><legend class="small dim">BMC: which machines get one (<span id="pl-bmcmb"></span> MB each)</legend>
+            <div class="bmcgroups" id="pl-bmcgroups"></div><p class="small" id="pl-bmctotal" style="margin:6px 0"></p>
+            <details class="cmdbox"><summary class="small">Exceptions: leave out single nodes</summary><div class="toggles" id="pl-bmcnodes"></div></details></fieldset>
           <p class="small dim pnote">Slurm, Prometheus and Grafana are always on.</p></section>
       </div>
       <div class="plan-side" role="region" aria-label="Summary">
@@ -786,7 +808,7 @@ async function loadPlan() {
   if (loginModes.length) q.set('logins', loginModes.join(','));
   if (k8sOn()) { q.set('k8s_cpu_nodes', $('pl-kcpu').value); q.set('k8s_nodes', $('pl-kgpu').value); }
   paintPlanSummary();
-  if (!$('pl-bmcbox').hidden) q.set('bmc_nodes', [...document.querySelectorAll('#pl-bmcnodes input:checked')].map(i => i.value).join(','));
+  if (!$('pl-bmcbox').hidden) { q.set('bmc_groups', [...bmcOn].join(',')); const inc = bmcNames().filter(n => !bmcOff.has(n)); if (bmcOff.size) q.set('bmc_nodes', inc.join(',')); }
   const r = await fetch('/api/plan?' + q);
   if (!r.ok) { $('pl-msg').textContent = '✗ ' + (await r.json()).detail; $('pl-cmd').textContent = ''; $('pl-bar').value = 0; $('pl-need').textContent = '–'; $('pl-free').textContent = ''; $('pl-apply').hidden = true; return; }
   const p = await r.json();
@@ -803,7 +825,24 @@ document.querySelectorAll('#plandlg input[type=number]').forEach(i => i.oninput 
 let armed = 0;
 const k8sInput = () => document.querySelector('#pl-parts input[value="k8s"]'), k8sOn = () => !!(k8sInput() && k8sInput().checked);
 let shapes = {};
-function paintPlanSummary() {  // the same numbers the cards show, as one list: how many nodes of each kind, which logins, how many parts
+// BMC rules: a switch per node group, every group on as in real hardware; single nodes are an exception list (CLI: --bmc-groups, --bmc-nodes)
+const BMC_GROUPS = [['slurm-cpu', 'Slurm CPU nodes', 'pl-cpu', 'slurm_cpu'], ['slurm-gpu', 'Slurm GPU nodes', 'pl-gpu', 'slurm_gpu'], ['k8s-cpu', 'Kubernetes CPU nodes', 'pl-kcpu', 'k8s_cpu'], ['k8s-gpu', 'Kubernetes GPU nodes', 'pl-kgpu', 'k8s_gpu']];
+let bmcSaved = null;
+let bmcOn = new Set(BMC_GROUPS.map(g => g[0])), bmcOff = new Set(), bmcMb = 32;
+const bmcActive = g => !g[0].startsWith('k8s') || k8sOn();
+const bmcCount = g => bmcActive(g) ? +$(g[2]).value || 0 : 0;
+const bmcGroupNames = g => Array.from({ length: bmcCount(g) }, (_, i) => `${(shapes[g[3]] || {}).prefix || g[0]}${String(i + 1).padStart(3, '0')}`);
+const bmcNames = () => BMC_GROUPS.filter(g => bmcOn.has(g[0])).flatMap(bmcGroupNames);
+function drawBmc() {
+  $('pl-bmcgroups').innerHTML = BMC_GROUPS.map(g => `<label class="tog${bmcActive(g) ? '' : ' dim'}"><input type="checkbox" data-g="${g[0]}"${bmcOn.has(g[0]) && bmcActive(g) ? ' checked' : ''}${bmcActive(g) ? '' : ' disabled'}><span>${esc(g[1])} <small class="dim">${bmcCount(g)} × ${bmcMb} MB</small></span></label>`).join('');
+  $('pl-bmcgroups').querySelectorAll('input').forEach(i => i.onchange = () => { i.checked ? bmcOn.add(i.dataset.g) : bmcOn.delete(i.dataset.g); planInputs(); });
+  const names = BMC_GROUPS.filter(g => bmcOn.has(g[0])).flatMap(bmcGroupNames), n = names.filter(x => !bmcOff.has(x)).length;
+  $('pl-bmctotal').textContent = `${n} BMCs × ${bmcMb} MB = ${n * bmcMb} MB` + (bmcOff.size ? ` (${[...bmcOff].filter(x => names.includes(x)).length} left out)` : '');
+  $('pl-bmcnodes').innerHTML = names.map(x => `<label class="tog"><input type="checkbox" value="${esc(x)}"${bmcOff.has(x) ? '' : ' checked'}><span>${esc(x)}</span></label>`).join('');
+  $('pl-bmcnodes').querySelectorAll('input').forEach(i => i.onchange = () => { i.checked ? bmcOff.delete(i.value) : bmcOff.add(i.value); planInputs(); });
+}
+function paintPlanSummary() {
+  if (!$('pl-bmcbox').hidden) drawBmc();  // the same numbers the cards show, as one list: how many nodes of each kind, which logins, how many parts
   const n = id => +$(id).value || 0, gpus = n('pl-gpu') * n('pl-gpus'), on = k8sOn(), kg = (shapes.k8s_gpu || {}).gpus || 8, kgpus = n('pl-kgpu') * kg;
   $('pc-slurm-sum').textContent = `${n('pl-cpu') + n('pl-gpu')} nodes`;
   $('pc-k8s-sum').textContent = `${n('pl-kcpu') + n('pl-kgpu')} nodes`; $('pc-k8s').classList.toggle('off', !on); $('pl-kon').checked = on;
@@ -856,10 +895,9 @@ async function drawParts() {  // the options come from the backend registry (/ap
     $('pl-parts').querySelectorAll('label').forEach(l => { if (l.querySelector('input[value="k8s"]')) l.hidden = true; });  // Kubernetes has its own card
     $('pl-parts').querySelectorAll('.partgroup').forEach(g => { if (![...g.querySelectorAll('label')].some(l => !l.hidden)) g.hidden = true; });
     $('pl-parts').querySelectorAll('input').forEach(i => i.oninput = i.onchange = () => { showBmcNodes(); planInputs(); });
-    shapes = j.shapes || {};
-    $('pl-bmcmb').textContent = j.bmc_node_mb;
-    $('pl-bmcnodes').innerHTML = j.nodes.map(n => `<label class="tog"><input type="checkbox" value="${esc(n.name)}"${n.bmc ? ' checked' : ''}><span>${esc(n.name)}</span></label>`).join('');
-    $('pl-bmcnodes').querySelectorAll('input').forEach(i => i.oninput = i.onchange = () => planInputs());
+    shapes = j.shapes || {}; const sb = shapes.bmc || {}; bmcOn = new Set(sb.groups || BMC_GROUPS.map(g => g[0]));  // what is built now; nothing saved means every group
+    bmcOff = new Set(); if (sb.nodes) { const keep = new Set(sb.nodes); bmcSaved = keep; }
+    $('pl-bmcmb').textContent = bmcMb = j.bmc_node_mb;
     const lg = j.logins;  // an older page backend does not send it: the parts above still work, the login rows are hidden
     if (lg) { loginModes = [...(lg.now || ['ssh'])]; loginMax = lg.max; drawLogins(); syncTeleport(); }
     else { $('pl-loginadd').disabled = true; $('pl-loginrows').textContent = 'Login nodes need the newer page backend. Run ./scripts/benchctl stop, then ./scripts/benchctl start, and reload.'; }
@@ -875,12 +913,14 @@ async function openPlan() {
   $('pl-shape-cpu').textContent = node(sh.slurm_cpu); $('pl-shape-gpu').textContent = sh.slurm_gpu && sh.slurm_gpu.gpu_type ? `${sh.slurm_gpu.gpu_type.toUpperCase()} GPUs` : '';
   $('pl-shape-kcpu').textContent = node(sh.k8s_cpu); $('pl-shape-kgpu').textContent = sh.k8s_gpu && sh.k8s_gpu.gpus ? `${sh.k8s_gpu.gpus} × ${(sh.k8s_gpu.gpu_type || '').toUpperCase()}, ${sh.k8s_gpu.cpus} CPUs each` : '';
   $('pl-now-gpus').textContent = c.gpus ? `now ${c.gpus}` : '';
+  if (bmcSaved) { bmcOff = new Set(bmcNames().filter(n => !bmcSaved.has(n))); bmcSaved = null; }  // a saved node list shows as exceptions
   $('pl-apply-msg').textContent = ''; armed = 0; paintPlanSummary(); $('plandlg').showModal(); loadPlan();
 }
 $('c-level').onclick = $('c-mem').onclick = () => $('govdlg').showModal(); $('gov-close').onclick = () => $('govdlg').close();
 $('govdlg').addEventListener('click', e => { if (e.target === $('govdlg')) $('govdlg').close(); });
-$('scnbtn').onclick = () => $('scndlg').showModal(); $('scn-close').onclick = () => $('scndlg').close();
-$('scndlg').addEventListener('click', e => { if (e.target === $('scndlg')) $('scndlg').close(); });
+function scnOpen(on) { const d = $('scndlg'); if (on && !d.open) d.show(); if (!on && d.open) d.close(); $('scn-toggle').setAttribute('aria-expanded', d.open ? 'true' : 'false'); $('scn-toggle').classList.toggle('on', d.open); try { sessionStorage.setItem('workbench-scn', d.open ? '1' : '0'); } catch (e) { /* not remembered */ } }
+$('scnbtn').onclick = () => { scnOpen(true); setMenu(false); }; $('scn-close').onclick = () => { scnOpen(false); $('scn-toggle').focus(); }; $('scn-toggle').onclick = () => scnOpen(!$('scndlg').open);
+$('scndlg').addEventListener('keydown', e => { if (e.key === 'Escape') { scnOpen(false); $('scn-toggle').focus(); } });
 $('planbtn').onclick = openPlan; $('plan-close').onclick = $('plan-cancel').onclick = () => $('plandlg').close();
 $('plandlg').addEventListener('click', e => { if (e.target === $('plandlg')) $('plandlg').close(); });  // a click on the dim backdrop closes it
 // Top menu: a disclosure (button + aria-expanded + list of buttons), closed by Escape, an outside click or choosing an item.
@@ -1072,7 +1112,7 @@ function closeNode() {
   if (openerEl && document.contains(openerEl)) openerEl.focus(); else { const b = document.querySelector('.node'); if (b) b.focus(); }
 }
 $('node-back').onclick = closeNode;
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && openNode && !document.querySelector('dialog[open]')) closeNode(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && openNode && !document.querySelector('dialog[open]:not(.drawer)')) closeNode(); });
 async function showNode(name) {
   setTree(true);  // the panel lives in the node column: open it if it was folded away
   openNode = name; openerEl = document.activeElement; paintNodeActions(name); $('nodeactmsg').textContent = '';
@@ -1566,8 +1606,8 @@ $('lens').onchange = () => { lens = $('lens').value; applyLens(); announce(lens 
 const buildFlowBase = buildFlow; buildFlow = function () { buildFlowBase(); tagEntities(); applyFocus(); applyBlast(); applyLens(); };
 $('crumb-all').onclick = () => setLevel('overview', false);
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && focusId && curLevel() === 'full' && !openNode && $('ckey').hidden && $('pop').hidden && !document.querySelector('dialog[open]')) { focusOn(null); return; }
-  if (e.key === 'Escape' && dived && curLevel() === 'full' && !openNode && $('ckey').hidden && $('pop').hidden && !document.querySelector('dialog[open]')) setLevel('overview', false); });
+  if (e.key === 'Escape' && focusId && curLevel() === 'full' && !openNode && $('ckey').hidden && $('pop').hidden && !document.querySelector('dialog[open]:not(.drawer)')) { focusOn(null); return; }
+  if (e.key === 'Escape' && dived && curLevel() === 'full' && !openNode && $('ckey').hidden && $('pop').hidden && !document.querySelector('dialog[open]:not(.drawer)')) setLevel('overview', false); });
 function buildFlow() {
   if (curLevel() === 'overview') { buildOverview(); return; }
   $('ovtable').innerHTML = ''; delete $('flow').dataset.ov;
@@ -1815,7 +1855,7 @@ async function runChip() {
   try {
     const s = await (await fetch('/api/scenarios/run')).json(), c = $('c-run');
     c.hidden = !s.running;
-    if (s.running) { const done = s.steps.filter(x => x.status !== 'pending').length; setChip('c-run', 'warn', '▶', `${s.name} running ${done}/${s.steps.length}`); c.onclick = () => $('scndlg').showModal(); }
+    if (s.running) { const done = s.steps.filter(x => x.status !== 'pending').length; setChip('c-run', 'warn', '▶', `${s.name} running ${done}/${s.steps.length}`); c.onclick = () => scnOpen(true); }
   } catch (e) { /* offline: the connection chip already says so */ }
   chipTimer = setTimeout(runChip, document.hidden ? 15000 : 3000);
 }
@@ -1858,7 +1898,7 @@ function plain(x) {
 async function loadScenarios() {
   const list = await (await fetch('/api/scenarios')).json();
   $('list').innerHTML = list.map(s =>
-    `<li class="scn"><div class="hd"><b>${esc(s.name)}</b><span class="small dim">${s.steps} ${s.steps === 1 ? 'step' : 'steps'}</span></div><p>${esc(s.description)}</p>
+    `<li class="scn" data-name="${esc(s.name)}"><div class="hd"><b>${esc(s.name)}</b><span class="pbadge">${s.steps} ${s.steps === 1 ? 'step' : 'steps'}</span></div><p>${esc(s.description)}</p>
      <button class="btn" data-name="${esc(s.name)}" aria-label="Play ${esc(s.name)}">▶ Play</button></li>`).join('') || '<li class="dim">No scenarios found.</li>';
   document.querySelectorAll('#list button').forEach(b => b.onclick = () => play(b.dataset.name));
   filterScenarios();
@@ -1870,6 +1910,7 @@ function filterScenarios() {
 }
 $('scnq').oninput = filterScenarios;
 async function play(name) {
+  scnOpen(true);
   const r = await fetch(`/api/scenarios/${name}/run?speed=${$('speed').value}${$('trace').checked ? '&trace=1' : ''}`, { method: 'POST', headers: H });
   if (!r.ok) { $('runpanel').hidden = false; $('runnote').innerHTML = `<div class="notice">${esc((await r.json()).detail)}</div>`; return; }
   poll();
@@ -1880,6 +1921,7 @@ async function poll() {
   clearTimeout(pollTimer);
   const s = await (await fetch('/api/scenarios/run')).json();
   document.querySelectorAll('#list .btn').forEach(b => { b.disabled = !!s.running; });
+  document.querySelectorAll('#list .scn').forEach(li => li.classList.toggle('active', !!s.running && li.dataset.name === s.name));
   if (!s.name) return;
   $('runpanel').hidden = false;
   $('runtitle').textContent = 'Run: ' + s.name + (s.running ? ` (${s.speed}×)` : '');
@@ -1891,8 +1933,9 @@ async function poll() {
   $('bar').style.width = (s.steps.length ? (done / s.steps.length) * 100 : 0) + '%';
   const failed = s.steps.filter(x => x.status === 'failed').length;
   $('runnote').innerHTML = !s.running && failed ? `<div class="notice">${failed} of ${s.steps.length} steps failed. If the messages say a service is unreachable, the stack is probably not running: <code>./scripts/benchctl up --profile min</code></div>` : '';
-  $('timeline').innerHTML = s.steps.map(x =>
-    `<li><span class="stt st-${x.status}"><span aria-hidden="true">${ICON[x.status]}</span> ${x.status}</span>
+  let cur = s.running ? s.steps.findIndex(x => x.status === 'pending') : -1;
+  $('timeline').innerHTML = s.steps.map((x, i) =>
+    `<li${i === cur ? ' class="cur"' : ''}><span class="stt st-${x.status}"><span aria-hidden="true">${ICON[x.status]}</span> ${x.status}</span>
      <div>${x.at.toFixed(0)} s · ${esc(describe(x))}${x.detail ? `<div class="small dim">${esc(plain(x))}</div>` : ''}</div></li>`).join('');
   $('expects').innerHTML = s.expects.length ? '<h2 class="rh" style="margin-top:14px">Expectations</h2>' + s.expects.map(x =>
     `<p class="st st-${x.status}" style="font-weight:500"><span aria-hidden="true">${ICON[x.status]}</span> ${x.status}: ${esc(x.label)} <span class="dim">${esc(x.detail)}</span></p>`).join('') : '';
@@ -1919,6 +1962,7 @@ TABS.forEach((k, i) => {
 loadCluster(); runChip(); loadScenarios(); poll();
 let savedTab = 'nodes'; try { savedTab = sessionStorage.getItem('workbench-tab') || 'nodes'; } catch (e) { /* default */ }
 selectTab(TABS.includes(savedTab) ? savedTab : 'nodes');
+try { if (sessionStorage.getItem('workbench-scn') === '1') scnOpen(true); } catch (e) { /* closed */ }
 // the live feed is only worth its CPU while the page is visible
 document.addEventListener('visibilitychange', () => { if (document.hidden || $('tab-nodes').hidden) closeFlow(); else openFlow(); });
 </script>

@@ -18,7 +18,7 @@ from benchctl import k8s, scenario, stack, workbench
 
 ROOT = Path(__file__).resolve().parents[2]
 SIM = yaml.safe_load((ROOT / "sim.yaml").read_text())
-SPEC = workbench.Spec(parts=["k8s"], cpu_nodes=1, gpu_nodes=0, login_nodes=["ssh:slurm", "ssh:k8s"])
+SPEC = workbench.Spec(parts=["k8s", "bmc", "bcm"], cpu_nodes=1, gpu_nodes=0, login_nodes=["ssh:slurm", "ssh:k8s"])
 
 
 def docker(*args: str, timeout: float = 60) -> subprocess.CompletedProcess:
@@ -175,3 +175,23 @@ def test_the_page_snapshot_groups_the_kubernetes_nodes_and_types_the_logins(clus
     g = graph.build(snap["services"], snap["nodes"], snap["logins"])
     ids = {e["id"] for e in g["edges"]}
     assert "login>nodes:jump" in ids and "login2>k8s-nodes:kubectl" in ids and "login2>nodes:jump" not in ids and "login>k8s-nodes:kubectl" not in ids
+
+
+def test_the_kubernetes_nodes_have_a_bmc_a_bcm_entry_and_gpu_metrics(cluster):
+    """Issue 380: a Kubernetes node is a machine. Rules per node group decide which get a BMC (here every group)."""
+    from urllib.request import Request, urlopen
+
+    from benchctl import addressing
+
+    plan = addressing.plan(cluster)
+    for n in ("kcn001", "kgpu002"):
+        assert wait_for(lambda n=n: docker("inspect", "-f", "{{.State.Running}}", f"workbench-bmc-{n}-1").stdout.strip() == "true", timeout=30), n
+    cred = (ROOT / "compose/generated/secrets/bmc_credentials").read_text().split(":")[-1].strip()
+    import base64
+    import ssl
+
+    ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+    req = Request(f"https://{plan['bmc']['kgpu001']}/redfish/v1/Systems/1", headers={"Authorization": "Basic " + base64.b64encode(f"admin:{cred}".encode()).decode()})
+    assert wait_for(lambda: json.load(urlopen(req, context=ctx, timeout=5)).get("HostName") == "kgpu001", timeout=30)
+    out = as_user("alice", "cmsh", "-c", "device; list", node=S_LOGIN).stdout
+    assert all(f"{n} " in out for n in ("kcn001", "kcn002", "kgpu001", "kgpu002")) and "k8s-gpu" in out and "k8s-cpu" in out, out

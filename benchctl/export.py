@@ -102,7 +102,7 @@ def build(sim: dict, services: set[str], name: str = "workbench", include_bmc: b
     if include_bmc and "bmc-farm" in services:
         if bmc_via not in ("ip", "name"):
             raise ExportError(f"bad --bmc-via {bmc_via!r}: ip or name")
-        every = [n for n, _ in nodes.node_names(sim)]
+        every = [n for n, _ in nodes.hardware_nodes(sim)]
         if loopback:  # the one published listener; the node is chosen by the Host header, so every target looks alike
             targets = [(n, "127.0.0.1", BMC_PORT) for n in every]
         else:  # each BMC has its own address on the ipmi network, reachable from here and from the login node (ADR 0018)

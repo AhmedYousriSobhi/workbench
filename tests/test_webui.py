@@ -499,3 +499,11 @@ def test_diagram_has_a_colour_legend_and_combinable_overlays(ui):
 
 def test_state_update_keeps_the_kind_class_of_a_service_box(ui):
     assert b"(k === 'teleport' ? '' : REAL_SERVICES.has(k) ? ' real' : ' sim')" in req(ui, "/")[1]  # repainting the state must not drop the colour of the kind
+
+
+def test_scenarios_is_a_docked_drawer_with_a_toggle_not_a_modal():
+    """The diagram must stay visible while a scenario runs (issue 380): a non-modal drawer, toggled from the top strip."""
+    html = (Path(__file__).resolve().parent.parent / "webui/static/index.html").read_text()
+    for needle in ('<dialog id="scndlg" class="drawer"', 'id="scn-toggle"', "function scnOpen(", "d.show()", "dialog.drawer", "dialog[open]:not(.drawer)", "li.classList.toggle('active'"):
+        assert needle in html, needle
+    assert "$('scndlg').showModal()" not in html
