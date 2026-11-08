@@ -71,6 +71,7 @@ class Spec:
     k8s_cpu_nodes: int | None = None  # Kubernetes CPU nodes; None keeps sim.yaml's count
     bmc_nodes: list[str] | None = None  # nodes that get a BMC address; None = every node (part "bmc")
     bmc_groups: list[str] | None = None  # node groups that get BMCs (nodes.GROUPS); None = every group
+    bcm_k8s: bool | None = None  # BCM manages the Kubernetes nodes; None keeps sim.yaml's bcm.manage_kubernetes (issue 413)
     login_nodes: list[str] = field(default_factory=lambda: list(logins.DEFAULT))  # auth mode of each login node (ADR 0023)
 
     def problems(self) -> list[str]:
@@ -103,7 +104,7 @@ class Spec:
                 "gpus_per_node": self.gpus_per_node, "parts": sorted(set(self.parts)), "k8s_nodes": self.k8s_nodes, "k8s_cpu_nodes": self.k8s_cpu_nodes,
                 "bmc_nodes": None if self.bmc_nodes is None else sorted(set(self.bmc_nodes)),
                 "bmc_groups": None if self.bmc_groups is None else sorted(set(self.bmc_groups)),
-                "login_nodes": list(self.login_nodes)}
+                "bcm_k8s": self.bcm_k8s, "login_nodes": list(self.login_nodes)}
 
 
 def items(category: str) -> list[str]:
@@ -186,6 +187,8 @@ def effective(sim: dict, spec: Spec) -> tuple[dict, dict]:
         s["bmc"] = {**(s.get("bmc") or {}), "nodes": sorted(set(spec.bmc_nodes))}
     if spec.bmc_groups is not None:
         s["bmc"] = {**(s.get("bmc") or {}), "groups": sorted(set(spec.bmc_groups))}
+    if spec.bcm_k8s is not None:
+        s["bcm"] = {**(s.get("bcm") or {}), "manage_kubernetes": spec.bcm_k8s}
     s["login"] = list(spec.login_nodes)
     if "k8s" in spec.parts:  # the part is on: the simulation says so, with the node groups spelled out (the BMC, BCM and GPU exporter read them)
         s["kubernetes"] = {**(s.get("kubernetes") or {}), "enabled": True, "nodes": k8s.node_groups(s, spec.k8s_nodes, spec.k8s_cpu_nodes)}

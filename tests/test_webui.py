@@ -547,3 +547,13 @@ def test_the_inline_script_has_valid_javascript_syntax(tmp_path):
     f.write_text(js)
     r = subprocess.run([node, "--check", str(f)], capture_output=True, text=True, check=False)
     assert r.returncode == 0, r.stderr[:400]
+
+
+def test_plan_names_the_bcm_kubernetes_flag_and_the_sheet_has_the_switch(ui, monkeypatch, tmp_path):
+    from benchctl import workbench
+    monkeypatch.setattr(workbench, "SAVED", tmp_path / "none.yaml")
+    off = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8&parts=bcm,k8s&bcm_k8s=0")[1])
+    on = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8&parts=bcm,k8s&bcm_k8s=1")[1])
+    assert "--no-bcm-k8s" in off["command"] and "--bcm-k8s" in on["command"] and "--no-bcm-k8s" not in on["command"]
+    assert json.loads(req(ui, "/api/settings")[1])["shapes"]["bcm"] == {"manage_kubernetes": True}
+    assert 'id="pl-bcmk8s"' in req(ui, "/")[1].decode()

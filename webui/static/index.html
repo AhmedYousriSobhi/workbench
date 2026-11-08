@@ -693,6 +693,7 @@
           <fieldset class="bmcnodes" id="pl-bmcbox" hidden><legend class="small dim">BMC: which machines get one (<span id="pl-bmcmb"></span> MB each)</legend>
             <div class="bmcgroups" id="pl-bmcgroups"></div><p class="small" id="pl-bmctotal" style="margin:6px 0"></p>
             <details class="cmdbox"><summary class="small">Exceptions: leave out single nodes</summary><div class="toggles" id="pl-bmcnodes"></div></details></fieldset>
+          <label class="tog" id="pl-bcmk8sbox" hidden title="Off: BCM does not manage the Kubernetes cluster, so its device and category lists show no Kubernetes nodes (CLI: --no-bcm-k8s)"><input type="checkbox" id="pl-bcmk8s" checked><span>BCM manages the Kubernetes nodes</span></label>
           <p class="small dim pnote">Slurm, Prometheus and Grafana are always on.</p></section>
       </div>
       <div class="plan-side" role="region" aria-label="Summary">
@@ -857,6 +858,7 @@ async function loadPlan() {
   if (loginModes.length) q.set('logins', loginModes.join(','));
   if (k8sOn()) { q.set('k8s_cpu_nodes', $('pl-kcpu').value); q.set('k8s_nodes', $('pl-kgpu').value); }
   paintPlanSummary();
+  if (!$('pl-bcmk8sbox').hidden) q.set('bcm_k8s', $('pl-bcmk8s').checked ? '1' : '0');
   if (!$('pl-bmcbox').hidden) { q.set('bmc_groups', [...bmcOn].join(',')); const inc = bmcNames().filter(n => !bmcOff.has(n)); if (bmcOff.size) q.set('bmc_nodes', inc.join(',')); }
   const r = await fetch('/api/plan?' + q);
   if (!r.ok) { $('pl-msg').textContent = '✗ ' + (await r.json()).detail; $('pl-cmd').textContent = ''; $('pl-bar').value = 0; $('pl-need').textContent = '–'; $('pl-free').textContent = ''; $('pl-apply').hidden = true; return; }
@@ -891,6 +893,7 @@ function drawBmc() {
   $('pl-bmcnodes').querySelectorAll('input').forEach(i => i.onchange = () => { i.checked ? bmcOff.delete(i.value) : bmcOff.add(i.value); planInputs(); });
 }
 function paintPlanSummary() {
+  showBmcNodes();  // the BCM-Kubernetes switch shows only with the BCM and Kubernetes parts on
   if (!$('pl-bmcbox').hidden) drawBmc();  // the same numbers the cards show, as one list: how many nodes of each kind, which logins, how many parts
   const n = id => +$(id).value || 0, gpus = n('pl-gpu') * n('pl-gpus'), on = k8sOn(), kg = (shapes.k8s_gpu || {}).gpus || 8, kgpus = n('pl-kgpu') * kg;
   $('pc-slurm-sum').textContent = `${n('pl-cpu') + n('pl-gpu')} nodes`;
@@ -934,7 +937,8 @@ function syncTeleport() {  // a Teleport login needs the Teleport part: tick it,
 }
 function loginsChanged() { syncTeleport(); planInputs(); }
 $('pl-loginadd').onclick = () => { if (loginModes.length < loginMax) { loginModes.push('ssh'); drawLogins(); loginsChanged(); } };
-function showBmcNodes() { $('pl-bmcbox').hidden = !document.querySelector('#pl-parts input[value="bmc"]:checked'); }
+function showBmcNodes() { $('pl-bmcbox').hidden = !document.querySelector('#pl-parts input[value="bmc"]:checked'); $('pl-bcmk8sbox').hidden = !(document.querySelector('#pl-parts input[value="bcm"]:checked') && k8sOn()); }
+$('pl-bcmk8s').onchange = () => planInputs();
 let partsDrawn = false;
 async function drawParts() {  // the options come from the backend registry (/api/settings), so a new one needs no page change
   if (partsDrawn) return;
@@ -950,6 +954,7 @@ async function drawParts() {  // the options come from the backend registry (/ap
     const lg = j.logins;  // an older page backend does not send it: the parts above still work, the login rows are hidden
     if (lg) { loginModes = [...(lg.now || ['ssh'])]; loginMax = lg.max; drawLogins(); syncTeleport(); }
     else { $('pl-loginadd').disabled = true; $('pl-loginrows').textContent = 'Login nodes need the newer page backend. Run ./scripts/benchctl stop, then ./scripts/benchctl start, and reload.'; }
+    $('pl-bcmk8s').checked = !!(shapes.bcm || {}).manage_kubernetes || !shapes.bcm;
     showBmcNodes(); partsDrawn = true;
   } catch (e) { $('pl-parts').textContent = 'Could not load the options. The page and its backend may be different versions: run ./scripts/benchctl stop, then ./scripts/benchctl start, and reload.'; }
 }
