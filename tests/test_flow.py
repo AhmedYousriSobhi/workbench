@@ -342,3 +342,21 @@ def test_events_carry_error_counts_only_where_a_counter_backs_them():
     ev = {e["to"]: e for e in f.since(0)["events"]}
     assert ev["bmc-farm"]["err"] == 2 and "err" not in ev["jira-mock"]  # 0 errors would be a measurement; no counter is "not measured"
     assert f.since(0)["errors"]["bmc-farm"] == 2
+
+
+def test_latency_is_the_measured_probe_time_and_goes_when_a_service_stops_answering():
+    from webui import flow as wf
+    t = iter(x / 100 for x in range(0, 1000, 5))  # every clock read advances 50 ms
+    up = {"on": True}
+
+    def fetch(url):
+        if not up["on"]:
+            raise OSError("down")
+        return {"requests": 1}
+
+    f = wf.Flow(fetch=fetch, clock=lambda: next(t), min_interval=0)
+    f.poll()
+    assert f.since(0)["latency"]["bmc-farm"] == 50
+    up["on"] = False
+    f.poll()
+    assert "bmc-farm" not in f.since(0)["latency"]

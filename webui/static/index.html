@@ -579,7 +579,7 @@
     <div class="panel"><h2>Traffic &amp; Communication</h2>
       <p class="dim small">How the parts talk, as their documentation says (ports are the defaults of the real software). <b>Real</b>: real software answers; <b>simulated</b>: a mock or KWOK imitates it. <b>Observed</b>: a request counter backs the count; <b>configured</b>: documented wiring, no traffic measured.</p>
       <div class="row"><label for="tr-plane" class="small dim">Plane</label><select id="tr-plane" class="btn small"><option value="all">All</option></select></div>
-      <div class="tablewrap"><table class="conn"><thead><tr><th>From</th><th>To</th><th>Protocol and port</th><th>Plane</th><th>Software</th><th>Evidence</th><th>Requests</th><th>State</th></tr></thead><tbody id="tr-rows"><tr><td colspan="8" class="skel">Loading…</td></tr></tbody></table></div></div>
+      <div class="tablewrap"><table class="conn"><thead><tr><th>From</th><th>To</th><th>Protocol and port</th><th>Plane</th><th>Software</th><th>Evidence</th><th>Requests</th><th>Probe latency</th><th>State</th></tr></thead><tbody id="tr-rows"><tr><td colspan="9" class="skel">Loading…</td></tr></tbody></table></div></div>
   </div>
   <div id="tab-conn" role="tabpanel" aria-labelledby="tb-conn" hidden>
     <div class="panel"><h2>How to reach each part</h2>
@@ -1965,11 +1965,11 @@ function paintTraffic() {
   if (!links) return;
   if (sel.options.length === 1) [...new Set(links.map(l => l.plane))].forEach(p => sel.add(new Option(p, p)));
   const rows = links.filter(l => sel.value === 'all' || l.plane === sel.value).map(l => {
-    const up = flowSnap?.reachable[l.service || l.to], n = l.measured ? flowSnap?.totals[l.service] : null;
+    const up = flowSnap?.reachable[l.service || l.to], ms = up ? flowSnap.latency?.[l.service || l.to] : null, n = l.measured ? flowSnap?.totals[l.service] : null;
     return `<tr><td>${esc(l.from)}</td><td>${esc(l.to)}</td><td>${esc(l.protocol)} :${l.port}<br><span class="dim small">${esc(l.what)}</span></td><td>${esc(l.plane)}</td>`
-      + `<td>${l.real ? 'real' : 'simulated'}</td><td>${l.measured ? 'observed' : 'configured'}</td><td>${n == null ? '–' : n.toLocaleString()}</td><td>${up === undefined ? '–' : up ? '✓ up' : '✗ not reachable'}</td></tr>`;
+      + `<td>${l.real ? 'real' : 'simulated'}</td><td>${l.measured ? 'observed' : 'configured'}</td><td>${n == null ? '–' : n.toLocaleString()}</td><td>${ms == null ? '–' : ms + ' ms'}</td><td>${up === undefined ? '–' : up ? '✓ up' : '✗ not reachable'}</td></tr>`;
   });
-  $('tr-rows').innerHTML = rows.join('') || '<tr><td colspan="8" class="skel">No links.</td></tr>';
+  $('tr-rows').innerHTML = rows.join('') || '<tr><td colspan="9" class="skel">No links.</td></tr>';
 }
 $('tr-plane').onchange = paintTraffic;
 // tabs: the live traffic feed runs only while its tab and the page are visible
