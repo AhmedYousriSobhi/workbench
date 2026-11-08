@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import bring_up, wait_for
+from helpers import bring_up, release, wait_for
 
 from benchctl import compose, scenario, stack
 
@@ -31,7 +31,7 @@ def head_node():
     bring_up(sim)
     assert wait_for(lambda: cmsh("device; list").returncode == 0, timeout=60), cmsh("device; list").stderr
     yield
-    stack.down(say=lambda m: None)
+    release()
 
 
 def test_device_list_has_the_head_node_and_every_simulated_node(head_node):

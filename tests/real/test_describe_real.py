@@ -6,9 +6,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import bring_up, wait_for
-
-from benchctl import stack
+from helpers import bring_up, release, wait_for
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -34,7 +32,7 @@ def cluster():
         capture_output=True, text=True, check=False).stdout, timeout=90)
     assert wait_for(_exporter_up, timeout=60), "the GPU exporter never answered"
     yield
-    stack.down(say=lambda m: None)
+    release()
 
 
 def test_describe_shows_container_slurm_bmc_and_gpus(cluster):

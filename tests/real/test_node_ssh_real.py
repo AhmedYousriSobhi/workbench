@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import bring_up, wait_for
+from helpers import bring_up, release, wait_for
 
 from benchctl import compose, stack
 
@@ -30,7 +30,7 @@ def stack_up():
     bring_up(sim)
     assert wait_for(lambda: login("ssh", "cn001", "true").returncode == 0, timeout=60), login("ssh", "cn001", "true").stderr
     yield sim
-    stack.down(say=lambda m: None)
+    release()
 
 
 def test_user_hops_from_the_login_node_to_a_node_with_no_prompt(stack_up):

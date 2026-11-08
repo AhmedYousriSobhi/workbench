@@ -13,9 +13,7 @@ from urllib.parse import quote
 
 import pytest
 import yaml
-from helpers import bring_up, wait_for
-
-from benchctl import stack
+from helpers import bring_up, release, wait_for
 
 ROOT = Path(__file__).resolve().parents[2]
 JIRA, BCM = "http://127.0.0.1:8080", "http://127.0.0.1:8081"
@@ -54,7 +52,7 @@ def mocks():
     bring_up(sim)
     assert wait_for(lambda: ready(f"{JIRA}/healthz") and ready(f"{BCM}/healthz"), timeout=30)
     yield
-    stack.down(say=lambda m: None)
+    release()
 
 
 def issue(summary: str = "t", **fields) -> str:
