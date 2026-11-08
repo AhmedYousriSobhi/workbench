@@ -533,9 +533,8 @@
   <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/benchctl start</code>.</div>
     <div class="nodeswrap" id="nodeswrap">
   <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 id="traffic-h" style="margin:0">Infrastructure architecture</h2>
-    <span class="grow"></span><button class="btn small" id="keybtn" aria-expanded="false" aria-controls="ckey">Key</button><button class="btn small" id="flowpause" aria-pressed="false" aria-label="Pause animation">Pause</button>
-    <button class="btn small" id="treetoggle" aria-expanded="true" aria-controls="nodesmain">Hide node list</button></div>
-    <div class="row viewrow"><div class="seg" id="viewseg" role="group" aria-label="View of the architecture"><button class="btn small" id="vw-iso" aria-pressed="true">2.5D</button><button class="btn small" id="vw-flat" aria-pressed="false">Flat</button><button class="btn small" id="vw-ov" aria-pressed="false">Overview</button></div>
+    <span class="grow"></span><button class="btn small" id="keybtn" aria-expanded="false" aria-controls="ckey">Key</button><button class="btn small" id="flowpause" aria-pressed="false" aria-label="Pause animation">Pause</button></div>
+    <div class="row viewrow"><div class="seg" id="viewseg" role="group" aria-label="View of the architecture"><button class="btn small" id="vw-iso" aria-pressed="true">2.5D</button><button class="btn small" id="vw-flat" aria-pressed="false">Flat</button><button class="btn small" id="vw-ov" aria-pressed="false">Clusters</button></div>
       <label class="lensl" for="lens">Lens</label><select id="lens" class="btn small"><option value="all">All planes</option><option value="access">Access</option><option value="management">Management</option><option value="telemetry">Telemetry</option><option value="tickets">Tickets</option><option value="faults">Faults</option><option value="client">Client's eye</option></select></div>
     <div class="flowscroll"><svg id="flow" viewBox="0 0 1120 470" role="img" aria-label="Infrastructure architecture: clients and users, the access layer (login nodes, each direct SSH, Teleport or both, and the Teleport proxy when on), the services, and the nodes. Each part opens its details."></svg></div>
     <div class="ovprev" id="ovprev" role="tooltip" hidden></div><div class="srtable" id="ovtable"></div>
@@ -1875,7 +1874,7 @@ $('flowpause').onclick = () => { flowPaused = !flowPaused; $('flowpause').setAtt
 
 // the node list beside the diagram folds away, so the diagram can have the whole width (remembered when storage allows)
 function setTree(open, remember = true) {
-  $('nodeswrap').classList.toggle('treeoff', !open); $('treetoggle').setAttribute('aria-expanded', open); $('treetoggle').textContent = open ? 'Hide node list' : 'Show node list';
+  $('nodeswrap').classList.toggle('treeoff', !open);
   if (remember) try { localStorage.setItem('workbench-tree', open ? 'open' : 'closed'); } catch (e) { /* not remembered */ }
 }
 function setSub(v, remember = true) {  // All | Topology (diagram, list folded) | Nodes (list, diagram hidden)
@@ -1885,7 +1884,6 @@ function setSub(v, remember = true) {  // All | Topology (diagram, list folded) 
   if (v !== 'nodes') requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
 }
 document.querySelectorAll('#subseg [data-sub]').forEach(b => b.onclick = () => setSub(b.dataset.sub));
-$('treetoggle').onclick = () => setTree($('treetoggle').getAttribute('aria-expanded') !== 'true');
 
 function setView(iso, remember) {  // 2.5D game style or the flat baseline (#320)
   $('trafficpanel').dataset.view = iso ? 'iso' : 'flat'; paintViewSeg();
