@@ -37,6 +37,9 @@ def plan_error(req: dict) -> str | None:
         v = req.get(key)
         if v is not None and not (isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= hi):
             return f"apply-plan {key} must be an int 0..{hi}"
+    v = req.get("dcgm_nodes")  # optional: GPU nodes with a real DCGM exporter (benchctl.dcgm.MAX_NODES)
+    if v is not None and not (isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 8):
+        return "apply-plan dcgm_nodes must be an int 1..8"
     parts = req.get("parts")
     if not (isinstance(parts, list) and all(isinstance(p, str) and p in PLAN_PARTS for p in parts)):
         return f"apply-plan parts must be a list of: {', '.join(sorted(PLAN_PARTS))}"

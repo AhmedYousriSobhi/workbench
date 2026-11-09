@@ -231,7 +231,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     if real_gpu.SERVICE in todo and (bad := real_gpu.problems()):
         say(f"FAILED real-gpu: {bad[0]}")
         return False
-    dcgm.prepare(COMPOSE_FILE.parent)  # the farm mounts this directory whether or not the part is on
+    dcgm.prepare(COMPOSE_FILE.parent, sim)  # the farm mounts this directory whether or not the part is on
     if any(n in todo for n in k8s.SERVICES):
         if bad := k8s.problems(sim):
             say(f"FAILED kubernetes: {bad[0]}")

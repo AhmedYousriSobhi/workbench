@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 
-from . import compose, k8s, logins, memory, nodes, real_gpu
+from . import compose, dcgm, k8s, logins, memory, nodes, real_gpu
 
 SAVED = Path("compose/generated/workbench.yaml")  # the spec `apply`/`up` last built; absent after a plain profile `up`
 OBSERVABILITY = {"prometheus": 300, "grafana": 300, "gpu-exporter-farm": 100}  # limits, compose/observability.yml
@@ -76,6 +76,7 @@ class Spec:
     bmc_groups: list[str] | None = None  # node groups that get BMCs (nodes.GROUPS); None = every group
     controller: bool | None = None  # a controller node (slurmctld host with sshd, the BCM head node); None keeps sim.yaml's (issue 416)
     bcm_k8s: bool | None = None  # BCM manages the Kubernetes nodes; None keeps sim.yaml's bcm.manage_kubernetes (issue 413)
+    dcgm_nodes: int | None = None  # GPU nodes that get a real DCGM exporter (the dcgm part); None = 1 (issue 435)
     login_nodes: list[str] = field(default_factory=lambda: list(logins.DEFAULT))  # auth mode of each login node (ADR 0023)
 
     def problems(self) -> list[str]:
@@ -95,6 +96,13 @@ class Spec:
             out += logins.problems({"login": modes}, set(self.parts))
         except logins.LoginError as e:
             out.append(str(e))
+        if self.dcgm_nodes is not None:
+            if not 1 <= self.dcgm_nodes <= dcgm.MAX_NODES:
+                out.append(f"dcgm_nodes must be 1 to {dcgm.MAX_NODES}, not {self.dcgm_nodes}")
+            elif "dcgm" not in self.parts:
+                out.append("--dcgm-nodes needs the dcgm part: add --with dcgm")
+            elif self.dcgm_nodes > self.gpu_nodes:
+                out.append(f"--dcgm-nodes {self.dcgm_nodes} is more than the GPU nodes ({self.gpu_nodes}): add --gpu-nodes or lower it")
         for key, flag, hi in (("k8s_nodes", "--k8s-nodes", 16), ("k8s_cpu_nodes", "--k8s-cpu-nodes", 64)):
             n = getattr(self, key)
             if n is not None and not 0 <= n <= hi:
@@ -108,7 +116,7 @@ class Spec:
                 "gpus_per_node": self.gpus_per_node, "parts": sorted(set(self.parts)), "k8s_nodes": self.k8s_nodes, "k8s_cpu_nodes": self.k8s_cpu_nodes,
                 "bmc_nodes": None if self.bmc_nodes is None else sorted(set(self.bmc_nodes)),
                 "bmc_groups": None if self.bmc_groups is None else sorted(set(self.bmc_groups)),
-                "bcm_k8s": self.bcm_k8s, "controller": self.controller, "login_nodes": list(self.login_nodes)}
+                "bcm_k8s": self.bcm_k8s, "controller": self.controller, "dcgm_nodes": self.dcgm_nodes, "login_nodes": list(self.login_nodes)}
 
 
 def items(category: str) -> list[str]:
@@ -196,6 +204,8 @@ def effective(sim: dict, spec: Spec) -> tuple[dict, dict]:
     if spec.controller is not None:
         s["controller"] = {**(s.get("controller") or {}), "enabled": spec.controller}
     s["login"] = list(spec.login_nodes)
+    if spec.dcgm_nodes is not None and "dcgm" in spec.parts:
+        s["dcgm"] = {**(s.get("dcgm") or {}), "nodes": spec.dcgm_nodes}
     if "k8s" in spec.parts:  # the part is on: the simulation says so, with the node groups spelled out (the BMC, BCM and GPU exporter read them)
         s["kubernetes"] = {**(s.get("kubernetes") or {}), "enabled": True, "nodes": k8s.node_groups(s, spec.k8s_nodes, spec.k8s_cpu_nodes)}
     elif spec.k8s_nodes is not None or spec.k8s_cpu_nodes is not None:

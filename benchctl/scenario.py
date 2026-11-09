@@ -16,7 +16,7 @@ from pathlib import Path
 
 import yaml
 
-from . import checks, k8s
+from . import checks, dcgm, k8s
 from .nodes import node_names
 
 ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "http://127.0.0.1:8000/sim/inject",
@@ -31,7 +31,7 @@ JIRA_REAL_URL = "http://127.0.0.1:8083"
 JIRA_REAL_MODES = ("outage", "restore", "bad_logins", "clear_logins", "rate_limit", "rate_limit_off", "token_revoke", "token_restore",
                    "proxy_503", "proxy_429", "proxy_slow", "proxy_off")  # real faults on the real Jira (issue 303); proxy_* through benchctl/jira_proxy.py (issue 305)
 JIRA_REAL_TICKET_ACTIONS = ("create", "transition", "comment")  # `tickets:` steps on the real Jira go through the REST driver (issue 306)
-HOST_TARGETS = ("slurm", "ssh", "jira-real", "k8s")  # steps that need Docker on the host
+HOST_TARGETS = ("slurm", "ssh", "jira-real", "k8s", "dcgm")  # steps that need Docker on the host
 SSH_STATES = ("down", "up", "hung")
 NODE_SSHD_STATES = ("down", "up")
 NOT_BUILT = ("ticket-bot",)
@@ -141,6 +141,8 @@ def validate(sc: dict, sim: dict) -> list[str]:
             problems += [f"step {i}: {m}" for m in jira_ticket_problems(do["tickets"])]
         if t == "slurm":
             problems += [f"step {i}: {m}" for m in daemon_problems(do)]
+        if t == "dcgm" and sum(bool(do.get(v)) for v in ("stop", "start", "restart")) != 1:
+            problems.append(f"step {i}: dcgm needs one of stop, start, restart: true")
         if t == "k8s":
             problems += [f"step {i}: {m}" for m in k8s.step_problems(do, {n for n, _ in k8s.node_list(sim)})]
         if t == "jira-real" and "tickets" in do:
@@ -310,11 +312,39 @@ def side_effects(step: Step) -> list[Step]:
         tickets += [Step(step.at, "jira", {"tickets": {"action": "fault", "node": n, "kind": k, "open": False,
                                                       "detail": "The node reports healthy again."}}) for k in recovered]
     on = do.get("power") == "On" or bool(do.get("clear"))
+    real = dcgm_steps(step, nodes)
     if step.target != "bmc-farm" or (do.get("power") != "Off" and not on):
-        return tickets
+        return [*real, *tickets]
     return [Step(step.at, "bcm-mock", {"nodes": nodes, "state": "UP" if on else "DOWN"}),
-            Step(step.at, "gpu-exporter", {"nodes": nodes, "down": not on}),
+            Step(step.at, "gpu-exporter", {"nodes": nodes, "down": not on}), *real,
             Step(step.at, "slurm", {"power_on" if on else "power_off": nodes}), *tickets]
+
+
+def dcgm_steps(step: Step, nodes: list[str]) -> list[Step]:
+    """What a fault or recovery means for the real DCGM exporters (the `dcgm` part, issue 435): a dead node's exporter stops answering and
+    comes back with the node; DCGM keeps the last XID until its host engine restarts, so a clear restarts the exporter. A node with no
+    real exporter is skipped when the step runs. Needs Docker: the Web UI plays these as skipped."""
+    do = step.do
+    if step.target == "bmc-farm":
+        action = "stop" if do.get("power") == "Off" else "restart" if do.get("clear") else "start" if do.get("power") == "On" else None
+    else:
+        action = "restart" if do.get("clear") else "stop" if do.get("down") else "start" if "down" in do else None
+    return [Step(step.at, "dcgm", {"nodes": nodes, action: True})] if action else []
+
+
+def _dcgm(step: Step, label: str, runner) -> Outcome:
+    """Stop, start or restart the real exporter of each node that has one (SPEC C-22); a node without one needs nothing."""
+    sim = k8s.current_sim()
+    verb = next(v for v in ("stop", "start", "restart") if step.do.get(v))
+    done = 0
+    for n in step.do.get("nodes", []):
+        if not (c := dcgm.container(sim, n)):
+            continue
+        r = runner(["docker", verb, *(["-t", "1"] if verb != "start" else []), c])
+        if r.returncode and "No such container" not in r.stderr:
+            return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+        done += r.returncode == 0
+    return Outcome(label, "ok", f"{verb} {done} real exporter(s)" if done else "no real exporter on these nodes")
 
 
 def execute(step: Step, poster=post, runner=checks.run, host: bool = True, slurm=None, daemon=None) -> Outcome:
@@ -386,6 +416,8 @@ def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcom
                 r = runner(cmd)
                 if r.returncode and cmd[3:4] != ["pkill"]:  # pkill exits 1 when slurmd is already down: that is the goal
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+        elif step.target == "dcgm":
+            return _dcgm(step, label, runner)
         elif step.target == "k8s":
             k8s.write_pod(step.do)
             for args in k8s.step_args(step.do):
