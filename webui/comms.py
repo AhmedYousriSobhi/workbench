@@ -111,6 +111,7 @@ LINKS = [
         "gpu-exporter",
     ),
     ("clients", "dcgm-exporter", "HTTP (Prometheus text)", 9402, "monitoring", "genuine DCGM metrics scrape (opt-in part, first GPU node)", "dcgm-exporter", True, None),
+    ("clients", "real-gpu", "HTTP (Prometheus text)", 9403, "monitoring", "real DCGM metrics of this machine's own NVIDIA card (opt-in part)", "real-gpu", True, None),
     (
         "clients",
         "jira-mock",

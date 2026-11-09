@@ -75,3 +75,9 @@ def test_the_real_dcgm_exporter_link_exists_only_when_built():
     on = {(r["from"], r["to"]): r for r in comms.build({"dcgm-exporter": True}, [], [])}
     assert on[("clients", "dcgm-exporter")]["port"] == 9402 and on[("clients", "dcgm-exporter")]["real"] and not on[("clients", "dcgm-exporter")]["measured"]
     assert ("clients", "dcgm-exporter") not in {(r["from"], r["to"]) for r in comms.build({"gpu-exporter": True}, [], [])}
+
+
+def test_the_real_gpu_link_exists_only_when_built():
+    on = {(r["from"], r["to"]): r for r in comms.build({"real-gpu": True}, [], [])}
+    assert on[("clients", "real-gpu")]["port"] == 9403 and on[("clients", "real-gpu")]["real"] and not on[("clients", "real-gpu")]["measured"]
+    assert ("clients", "real-gpu") not in {(r["from"], r["to"]) for r in comms.build({"dcgm-exporter": True}, [], [])}

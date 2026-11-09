@@ -21,6 +21,7 @@ from . import (
     k8s,
     logins,
     memory,
+    real_gpu,
     slurmconf,
     teleport,
     workbench,
@@ -226,6 +227,9 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
             return False
     if dcgm.SERVICE in todo and (bad := dcgm.problems(sim)):
         say(f"FAILED dcgm: {bad[0]}")
+        return False
+    if real_gpu.SERVICE in todo and (bad := real_gpu.problems()):
+        say(f"FAILED real-gpu: {bad[0]}")
         return False
     dcgm.prepare(COMPOSE_FILE.parent)  # the farm mounts this directory whether or not the part is on
     if any(n in todo for n in k8s.SERVICES):

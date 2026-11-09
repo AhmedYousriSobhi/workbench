@@ -11,7 +11,7 @@ import threading
 import time
 from collections import deque
 
-from .cluster import BCM, BMC, DCGM_REAL, EXPORTER, JIRA, JIRA_REAL, TELEPORT, http_json
+from .cluster import BCM, BMC, DCGM_REAL, EXPORTER, JIRA, JIRA_REAL, REAL_GPU, TELEPORT, http_json
 
 STATS = {"bmc-farm": f"{BMC}/sim/stats", "bcm-mock": f"{BCM}/sim/stats", "jira-mock": f"{JIRA}/sim/stats",
          "gpu-exporter": f"{EXPORTER}/sim/stats"}
@@ -20,7 +20,7 @@ STATS = {"bmc-farm": f"{BMC}/sim/stats", "bcm-mock": f"{BCM}/sim/stats", "jira-m
 TELEPORT_COUNTER = "teleport_connect_to_node_attempts_total"
 COUNTERS = {"teleport": f"{TELEPORT}/metrics"}
 # The real Jira publishes no request counter: only whether it answers (its /status), so its box shows up/down and says so.
-REACH_ONLY = {"jira-real": f"{JIRA_REAL}/status", "dcgm-exporter": f"{DCGM_REAL}/metrics", "k8s-api": "k8s-api"}  # the second is probed by benchctl.k8s.api_up (HTTPS with the cluster CA)
+REACH_ONLY = {"jira-real": f"{JIRA_REAL}/status", "dcgm-exporter": f"{DCGM_REAL}/metrics", "real-gpu": f"{REAL_GPU}/metrics", "k8s-api": "k8s-api"}  # the second is probed by benchctl.k8s.api_up (HTTPS with the cluster CA)
 SCENARIO_TARGETS = {"bmc-farm": "bmc-farm", "bcm-mock": "bcm-mock", "gpu-exporter": "gpu-exporter",
                     "jira": "jira-mock"}  # scenario target name -> block; slurm, k8s, ticket-bot have no block
 PAUSE_LEVEL = 3  # SPEC: the animation is a luxury; from L3 up the governor wants every MB and CPU cycle

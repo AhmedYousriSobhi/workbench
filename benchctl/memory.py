@@ -27,6 +27,7 @@ MEASURED_MB: dict[str, int] = {
     "prometheus": 22, "grafana": 54, "gpu-exporter-farm": 19,
     # Kubernetes (ADR 0034): 4 KWOK nodes and the fixtures, one run (issue 232); etcd sat at its first 128 MB cap, so 130 is a floor
     "k8s-etcd": 130, "k8s-apiserver": 201, "k8s-controller-manager": 47, "k8s-scheduler": 18, "kwok-controller": 11,
+    "real-gpu": 481,  # the real driver: host engine 404 MB + exporter 77 MB, one run on a laptop RTX card (issue 428)
     "dcgm-exporter": 125,  # exporter 97 MB + host engine 25 MB with 8 GPUs, one run (issue 426); the embedded engine was 430 MB
     "jira-db": 130, "jira-real": 2045,   # real Jira Data Center: heap 768 MB, JVM_ARGS (Serial GC, C1 only); 2176 MB cap, two clean runs
 }
