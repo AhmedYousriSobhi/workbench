@@ -58,7 +58,7 @@ from state and timing and it fits the memory budget.
 | Node health check runner | Upstream LBNL NHC | Inputs stay simulated; the runner and check semantics become real | to evaluate, #228; BSD-3 licensed, needs Bash 4.3; its GPU and IB checks need hardware, so ours stay custom scripts |
 | Jira (mock) | Real Jira Cloud/DC through the existing `cloud`/`dc` modes | Too heavy to run by default; use it to record responses for contract tests (SPEC NF-2) | proposed, #229; compare recorded response shapes, not replayed cassettes |
 | BMC (bmc-farm) | DMTF Redfish-Service-Validator against bmc-farm | Does not replace the mock; adds conformance evidence. The DMTF emulator and sushy-tools lack per-node addresses and fault injection | proposed, #230 |
-| GPU metrics (hand-written exporter) | Real DCGM with fake GPU entities | Unverified that it runs without hardware and serves the labels the client reads | research, #231; NVIDIA's mock NVML (Apache-2.0, up to 8 GPUs) lets the real dcgm-exporter run without a GPU, memory per node to measure |
+| GPU metrics (hand-written exporter) | Real DCGM with fake GPU entities | Works without hardware (spike, below); about 430 MB per exporter, so one per GPU node does not fit the default profiles | spiked, #231; decision with the owner: opt-in real exporter, farm stays the default |
 | Kubernetes (not built) | k3d/kind plus KWOK (SPEC C-2) | Real from the start; memory budget to declare | blocked on a decision, #232; kind and k3d nodes are privileged by default, which conflicts with the unprivileged-container rule |
 | Jobs (`sleep`) | Bounded `stress-ng` | Real CPU and memory load; opt-in | proposed, #233 |
 
@@ -67,3 +67,26 @@ Cannot be real, with the reason:
 - **NFS/Lustre**: excluded by SPEC C-11.
 - **GPUs and GPU binding**: real GPUs are a non-goal (SPEC section 1).
 - **cgroup enforcement, link-down and InfiniBand port injection**: need privileges that ADR 0002 rejected.
+
+## Spike result: real dcgm-exporter on NVIDIA's mock NVML (#231)
+
+Run on 2026-11-09 with `dcgm-exporter` 4.4.2-4.7.0 (official image, 863 MB on disk) and the `k8s-test-infra` mock NVML v0.6.0
+(Apache-2.0, a 16 MB `libnvidia-ml.so` built in a throwaway Go container, mounted with `LD_LIBRARY_PATH`, profile in
+`MOCK_NVML_CONFIG`). No driver, no GPU, no privileges, container limit 512 MB.
+
+| Question | Result |
+|---|---|
+| Runs without hardware | Yes. It starts, finds the mock GPUs and serves the real `/metrics`. |
+| Labels the client reads | `Hostname`, `gpu`, `UUID`, `modelName`, `device`, `pci_bus_id` are present. `Hostname` is the container name (settable); the farm's `node` label is not emitted. |
+| Framebuffer | `FB_USED + FB_FREE` equals the profile's total (40377 + 0 MiB for the A100 profile, which reserves the rest). |
+| Memory | **About 430 MB RSS for one exporter, the same with 2 GPUs as with 8** (the cost is the embedded DCGM, not the GPUs). The farm serves every GPU node from 18 MB. |
+| Values driven from outside | Yes. A file named by `MOCK_NVML_OVERRIDES` (`devices: {0: {utilization: {gpu: 93}, memory: {used_bytes: .., free_bytes: ..}}}`) changed `GPU_UTIL` and `FB_USED/FREE`; the mock re-reads it every second, the exporter shows it at its next collect (30 s by default, `-c` changes it). Memory used and free must be written together. A wrong field name is refused and logged, the old value stays. |
+| Driven by Slurm allocations or scenarios | Possible: the governor or scenario engine writes that file. Not built; the farm does it today. |
+| XID and ECC | `DCGM_FI_DEV_XID_ERRORS` is in the default counter list but no series appeared, with the default or a custom list; ECC counters need a custom list and read 0. **Not verified that XID can be injected**; the mock documents "injected Xid errors" and `nvml-mock-ctl fail`, which I did not exercise. |
+| Not in the default output | Temperature and power are on by default but static (33 C, 72 W) unless `dynamic_metrics` is enabled in the profile. |
+| Limits | At most 8 GPUs per node, static identity (name, UUID), values never follow real work. |
+
+**Recommendation (for the owner, not decided).** Keep the farm as the default: 430 MB per GPU node is 860 MB for the default two,
+against 18 MB. Offer the real exporter as an opt-in part (for example `--with dcgm`, one exporter for one chosen GPU node), so the
+client can be tested against genuine DCGM series names and formats, with XID injection verified first. Adopting it for every node
+would need a budget change (SPEC section on memory) and a decision on the farm's `node` label.
