@@ -20,7 +20,7 @@ from pathlib import Path
 
 import yaml
 
-from . import addressing, logins
+from . import addressing, controller, logins
 
 IMAGE = "public.ecr.aws/gravitational/teleport-distroless"
 DEFAULT_VERSION = "18.11.8"   # a Community Edition tag; licence note in ADR 0020. Teleport supports a tsh one major behind it.
@@ -91,8 +91,10 @@ def node_id(name: str) -> str:
 
 def targets(sim: dict, ips: dict) -> dict[str, str]:
     """node name -> address of everything a user can reach through Teleport: the login nodes whose mode says so
-    (`teleport` or `both`, ADR 0023) and every node."""
-    return {n: ips["logins"][n] for n in logins.via_teleport(sim)} | dict(ips["nodes"])
+    (`teleport` or `both`, ADR 0023), the controller when there is one (issue 416: its sshd lets only the whitelisted users in,
+    so Teleport adds a way in, not a wider one) and every node."""
+    ctl = {controller.ALIAS: ips["services"][controller.CONTROLLER]} if controller.enabled(sim) else {}
+    return {n: ips["logins"][n] for n in logins.via_teleport(sim)} | ctl | dict(ips["nodes"])
 
 
 def resources(sim: dict, ips: dict) -> str:
@@ -103,7 +105,7 @@ def resources(sim: dict, ips: dict) -> str:
              "spec": {"options": {"max_session_ttl": t["cert_ttl"]},
                       "allow": {"logins": users, "node_labels": {"*": "*"}}}}]
     for name, ip in targets(sim, ips).items():
-        kind = "login" if logins.is_login(name) else "gpu" if name.startswith("gpu") else "compute"
+        kind = "login" if logins.is_login(name) else "controller" if name == controller.ALIAS else "gpu" if name.startswith("gpu") else "compute"
         docs.append({"kind": "node", "version": "v2", "sub_kind": "openssh",
                      "metadata": {"name": node_id(name), "labels": {"kind": kind}},
                      "spec": {"addr": f"{ip}:22", "hostname": name}})
@@ -201,7 +203,7 @@ def wait_ready(runner: Callable, dc: Callable, timeout: float = 90, sleep: Calla
     return False
 
 
-_OURS = re.compile(r"(login[0-9]*|cn[0-9]+|gpu[0-9]+)")  # only names this tool registers are ever removed
+_OURS = re.compile(r"(login[0-9]*|controller|cn[0-9]+|gpu[0-9]+)")  # only names this tool registers are ever removed
 
 
 def prune(sim: dict, ips: dict, runner: Callable, dc: Callable, secrets: Path = SECRETS_DIR) -> list[str]:
@@ -271,7 +273,7 @@ def bootstrap(sim: dict, ips: dict, runner: Callable, dc: Callable, say: Callabl
     for name, ip in targets(sim, ips).items():
         if (secrets / "hosts" / f"{name}-cert.pub").is_file():
             continue
-        r = _tctl(runner, dc, "auth", "sign", f"--host={ip},{name},{node_id(name)}", "--format=openssh",
+        r = _tctl(runner, dc, "auth", "sign", f"--host={ip},{name},{node_id(name)}" + (f",{controller.CONTROLLER}" if name == controller.ALIAS else ""), "--format=openssh",
                   f"--out={CONTAINER_SECRETS}/hosts/{name}")
         if r.returncode != 0:
             say(f"FAILED teleport host certificate for {name}: {r.stderr.strip()[-300:]}")

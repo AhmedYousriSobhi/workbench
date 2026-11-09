@@ -3,8 +3,9 @@
 # certificates signed by the Teleport CA and present the host certificate. No mount (Teleport not selected): do nothing.
 # Called by the entrypoint (nodes) and login.sh (login node) before sshd starts.
 dir=/run/workbench/teleport
-name=$(hostname)
+name=${WORKBENCH_TELEPORT_NAME:-$(hostname)}  # the controller is slurmctld in Slurm and `controller` for users
 [ -f "$dir/openssh_ca.pub" ] && [ -f "$dir/hosts/$name-cert.pub" ] || exit 0
+grep -qs teleport_openssh_ca /etc/ssh/sshd_config && exit 0  # already set up (the stack runs this again on the controller after Teleport is ready)
 install -m 644 "$dir/openssh_ca.pub" /etc/ssh/teleport_openssh_ca.pub
 install -m 600 "$dir/hosts/$name" /etc/ssh/teleport_host_key
 install -m 644 "$dir/hosts/$name-cert.pub" /etc/ssh/teleport_host_key-cert.pub

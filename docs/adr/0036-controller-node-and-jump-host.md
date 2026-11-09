@@ -23,8 +23,12 @@ With the jump part on, the profile has one extra `<login>-jump` entry per key-lo
 `jumpHost` block (address, port, user, `private-key`), the shape the client's profile type defines. The key path and any secret are never
 exported; the client keeps the key. Teleport entries get no jump host (the client cannot use one with Teleport). Issue 415.
 
+## Controller and Teleport
+With Teleport on, the controller is a Teleport node named `controller` (kind `controller`; its host certificate also names `slurmctld`).
+It starts before Teleport is ready, so `benchctl up` runs `teleport-ssh` in it afterwards and reloads sshd. Teleport only adds a way in:
+sshd's `AllowUsers` still limits who gets a shell. Issue 416.
+
 ## Not built (open)
 - The Infrastructure architecture drawing (hand-laid SVG) has no jump or controller box yet; the Traffic & Communication diagram,
   Connections and the graph model do.
-- The controller is not registered in Teleport.
 - Memory for the jump host is unmeasured (`NOT_MEASURED`, planned at its 24 MB cap).

@@ -112,7 +112,8 @@ def generate(sim: dict, profile: dict) -> dict:
         ctl = services["slurmctld"]
         ctl["mem_limit"] = f"{int(ctl['mem_limit'][:-1]) + controller.EXTRA_MB}m"
         ctl.setdefault("environment", {}).update({"WORKBENCH_SSHD": "1", "WORKBENCH_CONTROLLER": "1", "WORKBENCH_SSH_ALLOW": " ".join(controller.allowed_users(sim)),
-                                                  "WORKBENCH_HEAD_IP": addressing.service_ip("slurmctld")})
+                                                  "WORKBENCH_HEAD_IP": addressing.service_ip("slurmctld"),
+                                                  "WORKBENCH_TELEPORT_NAME": controller.ALIAS})
         ctl["volumes"] += ["./secrets/ssh:/run/workbench/ssh:ro", "../../images/login/cmsh.py:/usr/local/bin/cmsh:ro"]
         ctl["ports"] = [f"127.0.0.1:{controller.SSH_PORT}:22"]
         ctl.setdefault("networks", {}).setdefault("default", {})["aliases"] = [controller.ALIAS]
@@ -131,7 +132,8 @@ def generate(sim: dict, profile: dict) -> dict:
             "ports": [f"127.0.0.1:{teleport.PROXY_PORT}:{teleport.PROXY_PORT}",  # a localhost fallback, the address clients are told is the IP
                       f"127.0.0.1:{teleport.DIAG_PORT}:{teleport.DIAG_PORT}"]})
         for svc in services.values():  # sshd trusts the Teleport CA and presents its host certificate (nodes and login)
-            if svc["labels"].get("workbench.node") or any(svc is services.get(n) for n in logins.via_teleport(sim)):
+            if svc["labels"].get("workbench.node") or any(svc is services.get(n) for n in logins.via_teleport(sim)) or (
+                    svc is services.get(controller.CONTROLLER) and controller.enabled(sim)):
                 svc["volumes"].append(f"./secrets/teleport:{teleport.CONTAINER_SECRETS}:ro")
     k8s.wire(services, sim)  # no-op unless the k8s part is on
     if k8s.API in services:  # every login node gets the read-only kubeconfigs (login.sh puts them in each user's ~/.kube)

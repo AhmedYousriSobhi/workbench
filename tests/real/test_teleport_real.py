@@ -34,7 +34,7 @@ def tele(tmp_path_factory):
     os.chdir(ROOT)
     sim, prof = workbench.effective(yaml.safe_load((ROOT / "sim.yaml").read_text()),
                                     workbench.Spec(parts=["teleport"], cpu_nodes=2, gpu_nodes=0,
-                                                    login_nodes=["both", "teleport", "ssh"]))  # login, login2, login3
+                                                    login_nodes=["both", "teleport", "ssh"], controller=True))  # with a controller (issue 416); login, login2, login3
     said: list[str] = []
     if not stack.up(sim, "workbench", say=said.append, available=64 * 1024**3, prof=prof):
         why = " | ".join(said[-4:])
@@ -57,13 +57,19 @@ def test_the_proxy_answers_with_the_cluster_name(tele):
 def test_every_node_and_the_teleport_logins_are_registered(tele):
     r = tsh(tele, "ls", "--format=json")
     names = {n["spec"]["hostname"] for n in json.loads(r.stdout)}
-    assert {"login", "login2", "cn001", "cn002"} <= names and "login3" not in names, r.stderr  # login3 is direct SSH only
+    assert {"login", "login2", "controller", "cn001", "cn002"} <= names and "login3" not in names, r.stderr  # login3 is direct SSH only
 
 
 def test_tsh_ssh_reaches_the_teleport_logins_and_a_compute_node(tele):
     for node in ("login", "login2", "cn001"):
         r = tsh(tele, "ssh", f"alice@{node}", "hostname; id -un")
         assert r.returncode == 0 and r.stdout.split() == [node, "alice"], r.stderr
+
+
+def test_the_controller_is_reachable_through_teleport_for_the_whitelist_only(tele):
+    r = tsh(tele, "ssh", "alice@controller", "hostname; id -un")  # alice is in the admins group; the host is slurmctld in Slurm
+    assert r.returncode == 0 and r.stdout.split() == ["slurmctld", "alice"], r.stderr
+    assert tsh(tele, "ssh", "bob@controller", "true", user="bob").returncode != 0  # sshd's AllowUsers refuses a user outside the whitelist
 
 
 def test_a_login_the_role_does_not_allow_is_refused(tele):
