@@ -162,3 +162,11 @@ def test_comms_lists_the_jump_and_controller_links_only_when_built():
     off = {(r["from"], r["to"]) for r in comms.build(SERVICES, NODES, logins("ssh"))}
     assert {("clients", "jump"), ("jump", "login"), ("login", "controller")} <= on
     assert not any("jump" in p or "controller" in p for p in off)
+
+
+def test_the_real_dcgm_exporter_is_a_declared_telemetry_edge_with_no_counter():
+    g = graph.build({**SERVICES, "dcgm-exporter": True}, NODES, logins("ssh"))
+    e = {x["id"]: x for x in g["edges"]}["clients>dcgm-exporter:api"]
+    assert e["plane"] == "telemetry" and not e["measured"]            # up or down only: the real exporter counts nothing
+    assert "faults>dcgm-exporter:inj" not in ids(g)                   # a scenario fault goes to the hand-written exporter, which drives this one
+    assert "clients>dcgm-exporter:api" not in ids(graph.build(SERVICES, NODES, logins("ssh")))

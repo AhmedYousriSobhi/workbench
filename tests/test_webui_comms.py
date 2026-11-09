@@ -69,3 +69,9 @@ def test_every_part_of_the_drawing_has_a_description_for_the_click_view():
     block = page[page.index("const PART_INFO = {") : page.index("const PART_ICON")]
     ends = {e for k in [*comms.LINKS, *comms.UNREADABLE, *comms.PLANNED] for e in k[:2]}
     assert [e for e in sorted(ends) if f"'{e}':" not in block] == []
+
+
+def test_the_real_dcgm_exporter_link_exists_only_when_built():
+    on = {(r["from"], r["to"]): r for r in comms.build({"dcgm-exporter": True}, [], [])}
+    assert on[("clients", "dcgm-exporter")]["port"] == 9402 and on[("clients", "dcgm-exporter")]["real"] and not on[("clients", "dcgm-exporter")]["measured"]
+    assert ("clients", "dcgm-exporter") not in {(r["from"], r["to"]) for r in comms.build({"gpu-exporter": True}, [], [])}

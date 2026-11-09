@@ -353,7 +353,7 @@
   #flow text { font-size:22px; } #flow text.sub { font-size:17.5px; } #flow .ftitle { font-size:16px; } #flow .ndt { font-size:15px; } #flow .ndt.cl { font-size:16px; }
   #flow text.elab { font:600 15px system-ui,sans-serif; fill:var(--fg); } #flow .elbg { fill:var(--panel); stroke:var(--line); stroke-width:1; }
   #flow marker path { fill:var(--dim); } #flow .lane.ssh, #flow .lane.teleport, #flow .lane.jump { stroke:var(--dim); stroke-width:2.5; opacity:.9; }
-  #flow .lane.teleport { stroke-dasharray:12 6; } #flow .lane.jump { stroke-dasharray:3 6; stroke-linecap:round; } #flow .elabs { pointer-events:none; }
+  #flow .lane.teleport { stroke-dasharray:12 6; } #flow .lane.jump { stroke-dasharray:10 8; stroke-linecap:butt; } #flow .elabs { pointer-events:none; }
   #flow .blk.lgn, #flow .blk.blkacc { stroke:var(--accent); } #flow .blk.lgn.down { stroke:var(--bad); stroke-dasharray:5 4; } #flow .blk.lgn.off { stroke:var(--line); stroke-dasharray:3 5; opacity:.8; } #flow .blk.blkacc.down { stroke:var(--bad); }
   .pop { position:fixed; z-index:30; width:min(360px,calc(100% - 16px)); background:var(--panel); border:1px solid var(--accent); border-radius:12px; padding:var(--sp3) var(--sp4); box-shadow:0 14px 40px rgba(0,0,0,.35); font-size:13.5px; }
   .pop[hidden], .tip[hidden] { display:none; } .pop-h { display:flex; align-items:center; gap:var(--sp2); margin-bottom:var(--sp2); } .pop-h b { font-size:16px; flex:1; } .pop dl.kv { margin:0 0 var(--sp2); font-size:13px; } .pop dd { overflow-wrap:break-word; } .pop dd code { overflow-wrap:anywhere; }
@@ -368,7 +368,7 @@
   .trafficpanel { position:relative; }  /* the key is a popover under the Key button (#319): the diagram keeps the whole panel */
   #ckey { position:absolute; top:58px; right:var(--sp5); z-index:20; width:min(620px,calc(100% - 2*var(--sp4))); max-height:calc(100% - 70px); overflow-y:auto; margin:0; display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:var(--sp3) var(--sp5); padding:var(--sp4); background:var(--panel); border:1px solid var(--accent); border-radius:12px; box-shadow:0 14px 40px rgba(0,0,0,.35); font-size:13px; }
   #ckey[hidden] { display:none; } #ckey .kg { display:flex; flex-direction:column; align-items:flex-start; gap:4px; } #ckey .kfoot { grid-column:1 / -1; margin:0; }
-  .ckey .ls { width:34px; height:10px; overflow:visible; } .ckey .ls .lane { fill:none; stroke:var(--dim); stroke-width:2.5; } .ckey .ls .lane.teleport { stroke-dasharray:12 6; } .ckey .ls .lane.jump { stroke-dasharray:3 6; stroke-linecap:round; } .ckey .ls .lane.api { stroke-width:1.5; }
+  .ckey .ls { width:34px; height:10px; overflow:visible; } .ckey .ls .lane { fill:none; stroke:var(--dim); stroke-width:2.5; } .ckey .ls .lane.teleport { stroke-dasharray:12 6; } .ckey .ls .lane.jump { stroke-dasharray:10 8; stroke-linecap:butt; } .ckey .ls .lane.api { stroke-width:1.5; }
   .ckey b.dia { color:var(--warn); } .ckey b[aria-hidden] { min-width:1ch; text-align:center; } #keybtn[aria-expanded=true] { border-color:var(--accent); background:var(--sel); }
   .inspector { display:flex; flex-direction:column; gap:var(--sp3); min-width:0; } .itabs { display:none; gap:var(--sp2); } .inspect-empty { display:none; } .inspect-empty[hidden] { display:none !important; }
   .itabs .btn[aria-pressed=true] { border-color:var(--accent); background:var(--sel); font-weight:650; }
@@ -1209,7 +1209,7 @@ async function nodeAction(name, action, label) {
 // ---- traffic (#74, #118): real request counters from the mocks plus injected faults, over SSE, drawn with the nodes in the cluster ----
 const SVGNS = 'http:' + '//www.w3.org/2000/svg';  // an XML namespace name, not a fetch; split so the no-external-URL test stays strict
 const BASE_SERVICES = [['bmc-farm', 'BMC farm', 'Redfish'], ['bcm-mock', 'BCM', 'CMDaemon'], ['jira-mock', 'Jira', 'tickets'], ['gpu-exporter', 'GPU exporter', 'DCGM metrics']];
-const REAL_SERVICES = new Set(['jira-real', 'k8s-api']);  // everything else the page draws is simulated: kind is colour, not a word in the box
+const REAL_SERVICES = new Set(['jira-real', 'k8s-api', 'dcgm-exporter']);  // everything else the page draws is simulated: kind is colour, not a word in the box
 const TELEPORT_BOX = ['teleport', 'Teleport proxy', 'gateway, not a node'];
 const JUMP_BOX = ['jump', 'Jump host', 'bare ssh bastion'], CTL_BOX = ['controller', 'Controller', 'slurmctld host'], ACC_PORT = { jump: 2220, controller: 2221 };  // ADR 0036; the ports are the published fallbacks on 127.0.0.1
 const accExtra = () => [...(hasService('jump') ? [JUMP_BOX] : []), ...(hasService('controller') ? [CTL_BOX] : [])];  // drawn only when built: no phantom box (#420)
@@ -1217,9 +1217,9 @@ const accUp = k => { try { return !!scoped().services[k]; } catch (e) { return f
 let activeCluster = null;  // the cluster the page is showing in full (#327); null = the single cluster, or the overview
 const scoped = () => { const c = JSON.parse(lastCluster), m = activeCluster && c.clusters && c.clusters.find(x => x.name === activeCluster); return m ? { ...c, ...m } : c; };
 function hasTeleport() { try { return !!(lastCluster && 'teleport' in scoped().services); } catch (e) { return false; } }
-const JIRA_REAL_BOX = ['jira-real', 'Jira DC', 'Data Center'], K8S_API_BOX = ['k8s-api', 'Kubernetes API', 'kube-apiserver'];
+const JIRA_REAL_BOX = ['jira-real', 'Jira DC', 'Data Center'], K8S_API_BOX = ['k8s-api', 'Kubernetes API', 'kube-apiserver'], DCGM_BOX = ['dcgm-exporter', 'DCGM (real)', 'first GPU node'];  // the opt-in real exporter on a mock NVML (issue 426)
 function hasService(k) { try { return !!(lastCluster && k in scoped().services); } catch (e) { return false; } }
-function svcList() { return [...BASE_SERVICES, ...(hasService('jira-real') ? [JIRA_REAL_BOX] : []), ...(hasService('k8s-api') ? [K8S_API_BOX] : []), ...(hasTeleport() ? [TELEPORT_BOX] : [])]; }  // Teleport only when the part is built: no phantom box
+function svcList() { return [...BASE_SERVICES, ...(hasService('jira-real') ? [JIRA_REAL_BOX] : []), ...(hasService('k8s-api') ? [K8S_API_BOX] : []), ...(hasService('dcgm-exporter') ? [DCGM_BOX] : []), ...(hasTeleport() ? [TELEPORT_BOX] : [])]; }  // Teleport only when the part is built: no phantom box
 const G = { clients: { x: 8, y: 8, w: 164, h: 272 }, injector: { x: 8, y: 300, w: 164, h: 124 }, cluster: { x: 668, y: 8, w: 504 } };  // set by buildFlow from the panel's shape
 let svcOut = {}, svcLane = {}, svcFit = {};  // svcFit: the width a box's text may use
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
@@ -1241,7 +1241,7 @@ function roundedPoly(pts, r = 16) {  // straight segments joined by small arcs, 
 }
 const dpath = b => b.poly ? roundedPoly(b.poly) : `M${b[0].x} ${b[0].y} C${b[1].x} ${b[1].y} ${b[2].x} ${b[2].y} ${b[3].x} ${b[3].y}`;
 function nodeList() { try { return lastCluster ? scoped().nodes : []; } catch (e) { return []; } }
-const SVC_CONN = { 'bmc-farm': 'bmc', 'bcm-mock': 'bcm', 'jira-mock': 'jira', 'jira-real': 'jira-real', 'k8s-api': 'k8s', 'gpu-exporter': 'gpu', 'teleport': 'teleport' };  // diagram box -> Connections row
+const SVC_CONN = { 'bmc-farm': 'bmc', 'bcm-mock': 'bcm', 'jira-mock': 'jira', 'jira-real': 'jira-real', 'k8s-api': 'k8s', 'gpu-exporter': 'gpu', 'dcgm-exporter': 'dcgm', 'teleport': 'teleport' };  // diagram box -> Connections row
 // hover tip and click pop-up on every part of the diagram (#192). The tip is one line of state; the pop-up has the address, the command and the actions.
 const tipEl = () => $('tip');
 function showTip(el, lines) {
@@ -1343,8 +1343,9 @@ function flowSig(nodes) { return nodes.map(n => n.name).join(',') + (hasTeleport
 // ---- the diagram (#192): clients -> services and access (login nodes, Teleport) -> nodes, one labelled line per way in ----
 const SVC_ICON = { 'bmc-farm': 'M4 5h16v5H4z M4 14h16v5H4z M7 7.5h.01 M7 16.5h.01', 'bcm-mock': 'M3 5h18v14H3z M3 9h18', 'jira-mock': 'M12 3l9 9-9 9-9-9z', 'jira-real': 'M12 3l9 9-9 9-9-9z M12 8l4 4-4 4-4-4z',
   'k8s-api': 'M12 3l8 4.5v9L12 21l-8-4.5v-9z M12 8v8 M8.5 10l7 4 M15.5 10l-7 4',
+  'dcgm-exporter': 'M7 7h10v10H7z M10 12l2 2 3-4 M10 3v4 M14 3v4 M10 17v4 M14 17v4',
   'gpu-exporter': 'M7 7h10v10H7z M10 3v4 M14 3v4 M10 17v4 M14 17v4 M3 10h4 M3 14h4 M17 10h4 M17 14h4', teleport: 'M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z' };  // decorative glyphs, one per kind
-const SVC_METHOD = { 'bmc-farm': 'HTTPS Redfish', 'bcm-mock': 'HTTP JSON', 'jira-mock': 'HTTP REST', 'jira-real': 'HTTP REST', 'k8s-api': 'HTTPS kubectl', 'gpu-exporter': 'HTTP metrics', teleport: 'tsh · HTTPS' };
+const SVC_METHOD = { 'bmc-farm': 'HTTPS Redfish', 'bcm-mock': 'HTTP JSON', 'jira-mock': 'HTTP REST', 'jira-real': 'HTTP REST', 'k8s-api': 'HTTPS kubectl', 'gpu-exporter': 'HTTP metrics', 'dcgm-exporter': 'HTTP metrics', teleport: 'tsh · HTTPS' };
 const MODE_TEXT = { ssh: 'Direct SSH', teleport: 'Teleport only', both: 'Direct SSH + Teleport' };
 const KIND_TEXT = { slurm: 's-login · Slurm', k8s: 'k-login · Kubernetes', both: 'login · Slurm + Kubernetes' }, KIND_NAME = { slurm: 's-login', k8s: 'k-login', both: 's+k login' };
 const loginKind = l => l.kind || 'both';
@@ -1398,7 +1399,7 @@ function flowGeom(nodes, acc, svcs, a, col, u) {
   P.tileM = { y1: 8 + tn * 0.9, y2: 8 + tn * 0.9 + tn * 1.3, y3: 8 + tn * 0.9 + tn * 2.6 };
   if (col) {  // top to bottom: Clients row, Access row, Cluster nodes; the Services column sits at the right and its lines run down a gutter and enter from the left
     const tb = 10 + UF.title * u * 0.95, chipH = Math.ceil(UF.chip * u * 1.3 + 22), R1 = Math.ceil(tb + 12 + chipH + 14), GAPY = 64, GW = 110;
-    const mA = boxM(u, 4), mS = boxM(u, 3), nT = hasTeleport() ? acc.filter(l => l.mode && l.mode !== 'ssh').length : 0, nKey = acc.filter(x => !Array.isArray(x) && x.mode !== 'teleport').length, hasJ = acc.some(x => Array.isArray(x) && x[0] === 'jump'), hasC = acc.some(x => Array.isArray(x) && x[0] === 'controller'), nU = nT + (hasJ ? nKey + (hasC ? 1 : 0) : 0) + (hasC ? nKey : 0), ACCH = 46 + mA.h + 14 + (nU ? 14 + nU * 12 : 0), top = Math.ceil(tb + 34);
+    const mA = boxM(u, 4), mS = boxM(u, 3), nT = hasTeleport() ? acc.filter(l => l.mode && l.mode !== 'ssh').length : 0, nKey = acc.filter(x => !Array.isArray(x) && x.mode !== 'teleport').length, hasJ = acc.some(x => Array.isArray(x) && x[0] === 'jump'), hasC = acc.some(x => Array.isArray(x) && x[0] === 'controller'), nU = nT + (hasJ ? nKey + (hasC ? 1 : 0) : 0) + (hasC ? nKey : 0), ACCH = 46 + mA.h + 14 + (nU ? 20 + nU * 26 : 0), top = Math.ceil(tb + 34);
     const needA = Math.max(150, ...acc.map(x => Array.isArray(x) ? Math.max(W(x[1], 'sn', 600) + 44, W('✓ up · 99 conn/min', 'sub'), W('99,999 requests seen', 'sub')) + 24
       : Math.max(W(`${x.name} · ${KIND_NAME[loginKind(x)]}`, 'sn', 600), W(MODE_TEXT[x.mode], 'sub'), W(x.ip || x.name, 'sub'), W(portLine(x), 'sub')) + 24));
     const SWD = Math.ceil(Math.max(180, ...svcs.map(([, label, sub]) => Math.max(W(label, 'sn', 600) + 44, W('✓ up · 99,999 req/min', 'sub'), W('99,999 requests seen', 'sub'), W(sub, 'sub')) + 24))), svW = SWD + 32;
@@ -1740,7 +1741,7 @@ function buildFlow() {
     for (const [l, p] of place) {
       if (Array.isArray(l)) continue;
       if (l.mode !== 'teleport') edge('ssh', poly([{ x: p.x + p.w / 2, y: cb }, { x: p.x + p.w / 2, y: p.y }]), 'direct SSH', 0.5, null, `clients>${l.name}:ssh`);
-      if (l.mode !== 'ssh' && tpBox) { const by = p.y + p.h, uy = by + 12 + (uu++) * 12, sx = tpP.x + tpP.w / 2 - 14; edge('teleport', poly([{ x: sx, y: tpP.y + tpP.h }, { x: sx, y: uy }, { x: p.x + p.w / 2 - 14, y: uy }, { x: p.x + p.w / 2 - 14, y: by }]), '', 0.5, null, `teleport>${l.name}:teleport`); }
+      if (l.mode !== 'ssh' && tpBox) { const by = p.y + p.h, uy = by + 20 + (uu++) * 26, sx = tpP.x + tpP.w / 2 - 14; edge('teleport', poly([{ x: sx, y: tpP.y + tpP.h }, { x: sx, y: uy }, { x: p.x + p.w / 2 - 14, y: uy }, { x: p.x + p.w / 2 - 14, y: by }]), '', 0.5, null, `teleport>${l.name}:teleport`); }
     }
     for (const [l, p] of place) {  // an s-login jumps to the Slurm nodes; a k-login reaches the Kubernetes nodes with kubectl; a login serving both draws both
       if (Array.isArray(l)) continue;
@@ -1762,7 +1763,7 @@ function buildFlow() {
   const posOf = id => (place.find(([x]) => Array.isArray(x) ? x[0] === id : x.name === id) || [])[1], keyLogins = lgs.filter(l => l.mode !== 'teleport');
   const hop = (src, dst, eid, text) => {  // ssh from one Access box to another (through the jump host, or login to controller): under the boxes, or down the left side when stacked
     const a = posOf(src), b = posOf(dst); if (!a || !b) return;
-    if (col) { const by = a.y + a.h, uy = by + 12 + (uu++) * 12, sx = a.x + a.w / 2 + 6, ex = b.x + b.w / 2 + 6; edge('jump', poly([{ x: sx, y: by }, { x: sx, y: uy }, { x: ex, y: uy }, { x: ex, y: b.y + b.h }]), text, 0.5, null, eid); }
+    if (col) { const by = a.y + a.h, uy = by + 20 + (uu++) * 26, sx = a.x + a.w / 2 + 6, ex = b.x + b.w / 2 + 6; edge('jump', poly([{ x: sx, y: by }, { x: sx, y: uy }, { x: ex, y: uy }, { x: ex, y: b.y + b.h }]), text, 0.5, null, eid); }
     else { const lx = a.x - 34 - (hh++) * 7, s = { x: a.x, y: a.y + a.h / 2 + 4 }, e = { x: b.x, y: b.y + b.h / 2 + 4 }; edge('jump', [s, { x: lx, y: s.y }, { x: lx, y: e.y }, e], text, 0.5, null, eid); }
   };
   for (const b of accExtra()) {  // a line from the clients to the jump host and to the controller, then the hops the declared graph has
@@ -1839,11 +1840,11 @@ function paintBlocks() {
     const up = flowSnap.reachable[k]; sent += flowSnap.totals[k] || 0;
     $('fb-' + k).setAttribute('class', 'blk ' + (up ? 'up' : allOff ? 'off' : 'down') + (k === 'teleport' ? '' : REAL_SERVICES.has(k) ? ' real' : ' sim'));  // everything off = stack not running: stay calm, not red
     const fitBox = (...alts) => { for (const t of alts) { if (fitText(t, 'sub', unitNow, svcFit[k] || 190) === t) return t; } return fitText(alts[alts.length - 1], 'sub', unitNow, svcFit[k] || 190); };  // the first wording that fits; shorter ones drop words, never end in an ellipsis
-    $('fs-' + k).textContent = fitBox(up ? (k === 'jira-real' || k === 'k8s-api' ? '✓ up · no counter' : '✓ up · ' + (rate[k] || 0) + (k === 'teleport' ? ' conn/min' : ' req/min')) : allOff ? '– offline' : '✗ not reachable');
+    $('fs-' + k).textContent = fitBox(up ? (k === 'jira-real' || k === 'k8s-api' || k === 'dcgm-exporter' ? '✓ up · no counter' : '✓ up · ' + (rate[k] || 0) + (k === 'teleport' ? ' conn/min' : ' req/min')) : allOff ? '– offline' : '✗ not reachable');
     $('ln-' + k).setAttribute('class', 'lane' + (rate[k] ? ' on' : ''));
     const flt = recent.some(r => r.fault && r.to === k && r.t > Date.now() - 30000);  // a fault was applied to it in the last 30 s
     $('ff-' + k).setAttribute('class', 'fring' + (flt ? ' on' : '')); $('fx-' + k).setAttribute('class', 'badge flt' + (flt ? ' on' : '')); $('fa-' + k).setAttribute('class', 'badge act' + (rate[k] ? ' on' : ''));
-    const si = document.getElementById('si-' + (k === 'gpu-exporter' ? 'gpu-exporter' : k)); if (si) si.textContent = k === 'jira-real' || k === 'k8s-api' ? 'no request counter (the real service publishes none)' : `${rate[k] || 0} ${k === 'teleport' ? 'conn' : 'req'}/min · ${(flowSnap.totals[k] || 0).toLocaleString()} seen`;
+    const si = document.getElementById('si-' + (k === 'gpu-exporter' ? 'gpu-exporter' : k)); if (si) si.textContent = k === 'jira-real' || k === 'k8s-api' || k === 'dcgm-exporter' ? 'no request counter (the real service publishes none)' : `${rate[k] || 0} ${k === 'teleport' ? 'conn' : 'req'}/min · ${(flowSnap.totals[k] || 0).toLocaleString()} seen`;
     const ne = flowSnap.errors && flowSnap.errors[k]; $('fc-' + k).textContent = (flowSnap.totals[k] || 0) ? (ne ? fitBox(`${flowSnap.totals[k].toLocaleString()} ${flowSnap.totals[k] === 1 ? 'request' : 'requests'} · ${ne} ${ne === 1 ? 'error' : 'errors'}`, `${flowSnap.totals[k].toLocaleString()} · ${ne} ${ne === 1 ? 'error' : 'errors'}`, `${ne} ${ne === 1 ? 'error' : 'errors'}`) : fitBox(flowSnap.totals[k].toLocaleString() + (flowSnap.totals[k] === 1 ? ' request seen' : ' requests seen'), flowSnap.totals[k].toLocaleString() + ' requests', flowSnap.totals[k].toLocaleString())) : fitBox(svcList().find(x => x[0] === k)[2]);
   }
   $('fc-clients').textContent = sent.toLocaleString() + ' requests';
@@ -2122,17 +2123,18 @@ const PART_INFO = {
   'prometheus': 'Scrapes metrics from the targets on a schedule and stores them.',
   'grafana': 'Dashboards over Prometheus; also receives governor annotations.',
   'gpu-exporter': 'The simulated GPU exporter (DCGM style metrics) that tests can also inject faults into.',
+  'dcgm-exporter': 'The official DCGM exporter on a mock NVML, standing for the first GPU node (optional, about 430 MB).',
   'governor': 'The host memory governor: keeps the machine healthy by pausing or stopping parts under pressure (real).',
   'sim-nodes': 'The simulated per-node metrics targets that Prometheus scrapes.',
   'storage': 'Shared storage for job data. Planned, not built yet.'
 };
 const PART_ICON = { jump: 'lock', controller: 'gear', clients: 'screen', login: 'lock', teleport: 'lock', slurmrestd: 'gear', slurmctld: 'gear', slurmdbd: 'db', slurmd: 'server', nodes: 'server', 'bmc-farm': 'server', 'bcm-mock': 'server', 'k8s-api': 'gear',
-  'kube-scheduler': 'gear', 'kube-controller-manager': 'gear', etcd: 'db', prometheus: 'chart', grafana: 'chart', 'gpu-exporter': 'chart', governor: 'gear', 'sim-nodes': 'server', storage: 'db' };
+  'kube-scheduler': 'gear', 'kube-controller-manager': 'gear', etcd: 'db', prometheus: 'chart', grafana: 'chart', 'gpu-exporter': 'chart', 'dcgm-exporter': 'chart', governor: 'gear', 'sim-nodes': 'server', storage: 'db' };
 const TR_GROUPS = [  // the fixed architecture, two rows by four columns, callers at the left: [title, grid column, grid row, colour, parts]; a part with no link in this cluster is drawn grayed, never dropped
   ['External clients', 0, 0.5, '#4cc9ff', ['clients']],
   ['Access', 1, 0, '#8da2ff', ['jump', 'login', 'teleport', 'slurmrestd']], ['Slurm', 2, 0, '#3fb950', ['controller', 'slurmctld', 'slurmdbd', 'slurmd', 'nodes']], ['Storage', 3, 0, '#c9a0ff', ['storage']],
   ['Management', 1, 1, '#ffb02e', ['bmc-farm', 'bcm-mock', 'jira-mock', 'jira-real']], ['Kubernetes', 2, 1, '#b38cff', ['k8s-api', 'kube-scheduler', 'kube-controller-manager', 'etcd', 'kwok']],
-  ['Monitoring', 3, 1, '#4cc9ff', ['prometheus', 'grafana', 'gpu-exporter', 'governor', 'sim-nodes']]];
+  ['Monitoring', 3, 1, '#4cc9ff', ['prometheus', 'grafana', 'gpu-exporter', 'dcgm-exporter', 'governor', 'sim-nodes']]];
 let trHist = [], trRange = 300;  // what this page was told since it opened (the counters are read live; nothing is stored on the server)
 const hhmmss = t => new Date(t).toTimeString().slice(0, 8);
 function paintTrTimeline(links) {
