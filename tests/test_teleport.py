@@ -159,11 +159,13 @@ def test_up_bootstraps_teleport_before_the_nodes_start(tmp_path, monkeypatch):
     monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
     monkeypatch.setattr(stack, "provision_token", lambda **kw: kw.get("path", tmp_path / "t"))
     monkeypatch.setattr(teleport, "fetch_ca", lambda *a, **k: "ssh-ed25519 AAAA\n")
+    monkeypatch.setattr(teleport, "tsh_problem", lambda sim, runner=None: "tsh 99.0.0 on this machine is newer than the Teleport server 18.11.8")  # issue 210
     sim, prof = workbench.effective(SIM, workbench.Spec(parts=["teleport"], cpu_nodes=1, gpu_nodes=0))
     msgs = []
     assert stack.up(sim, "workbench", runner=runner, say=msgs.append, available=12 * 1024**3, wait=1, prof=prof)
     assert order and all("cn001" not in seen and "login" not in seen and "teleport" in seen for _, seen in order)
     assert (tmp_path / "compose/generated/teleport/teleport.yaml").is_file()
+    assert "WARN tsh 99.0.0 on this machine is newer than the Teleport server 18.11.8" in msgs
     assert any(m.startswith("teleport: https://10.141.255.30:3080") and "teleport.workbench.test" in m for m in msgs) and any("/etc/hosts" in m for m in msgs)
 
 
@@ -320,3 +322,32 @@ def test_the_controller_is_a_teleport_node_when_it_is_on(tmp_path):
     teleport.bootstrap(sim, addressing.plan(sim, 2), runner, lambda *a, **k: list(a), lambda m: None, secrets=tmp_path, fetch=lambda: "k\n", sleep=lambda s: None)
     ctl_sign = [c for c in calls if any(str(a).startswith("--host=") and ",controller," in str(a) for a in c)]
     assert ctl_sign and f",{teleport.node_id('controller')},slurmctld" in " ".join(ctl_sign[0])  # the certificate also names the Slurm host
+
+
+def fake_tsh(out, rc=0):
+    return lambda cmd: type("R", (), {"returncode": rc, "stdout": out, "stderr": ""})()
+
+
+def test_tsh_newer_than_the_server_is_one_line_naming_both_versions_and_the_fix():
+    sim = {"teleport": {"version": "18.11.8"}}
+    line = teleport.tsh_problem(sim, fake_tsh("Teleport v19.0.1 git:v19.0.1-0-gabc go1.26.8\n"))
+    assert "19.0.1" in line and "18.11.8" in line and "\n" not in line and "install tsh 18.x" in line and "teleport.version" in line
+
+
+def test_tsh_the_same_or_an_older_major_or_none_is_fine():
+    sim = {"teleport": {"version": "18.11.8"}}
+    for out in ("Teleport v18.11.2 git:x go1\n", "Teleport v17.5.0 git:x go1\n"):
+        assert teleport.tsh_problem(sim, fake_tsh(out)) is None
+    assert teleport.tsh_problem(sim, fake_tsh("", rc=127)) is None and teleport.tsh_problem(sim, fake_tsh("garbage")) is None
+    assert teleport.tsh_version(lambda cmd: (_ for _ in ()).throw(FileNotFoundError())) is None  # no tsh installed
+
+
+def test_doctor_check_warns_on_a_newer_tsh_and_says_ok_otherwise():
+    from benchctl import checks
+    sim = {"teleport": {"version": "18.11.8"}}
+    warn = checks.check_tsh(sim, fake_tsh("Teleport v19.1.0 git:x\n"))
+    assert warn.status == checks.WARN and "19.1.0" in warn.detail and "18.11.8" in warn.detail
+    ok = checks.check_tsh(sim, fake_tsh("Teleport v18.11.2 git:x\n"))
+    assert ok.status == checks.OK and "18.11.8" in ok.detail
+    assert checks.check_tsh(sim, fake_tsh("", rc=127)) is None
+

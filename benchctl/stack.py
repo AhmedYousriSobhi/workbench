@@ -276,6 +276,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     if "slurmctld" in todo and controller.enabled(sim) and "teleport" in todo:
         say(f"controller: through Teleport too: tsh --proxy={teleport.proxy_addr(sim)} --insecure -i {teleport.SECRETS_DIR}/identity/<user> ssh <user>@{controller.ALIAS} "
             "(only the whitelisted users get a shell)")
+    if "teleport" in todo and (warn := teleport.tsh_problem(sim)):
+        say(f"WARN {warn}")
     if "teleport" in todo:
         say(f"teleport: https://{teleport.proxy_addr(sim)} (self-signed; name {teleport.DNS_NAME}, fallback 127.0.0.1:{teleport.PROXY_PORT}); "
             f"identity files in {teleport.SECRETS_DIR}/identity; password and one-time code for tsh login: ./scripts/benchctl add invite <user>")

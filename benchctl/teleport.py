@@ -52,6 +52,31 @@ def settings(sim: dict) -> dict:
     return t
 
 
+_TSH = re.compile(r"Teleport v(\d+)\.(\d+)\.(\d+)")
+
+
+def tsh_version(runner: Callable | None = None) -> tuple[int, int, int] | None:
+    """The version of the `tsh` on this machine (`tsh version --client`, no network), or None when there is none or it says nothing readable."""
+    import subprocess
+    run = runner or (lambda cmd: subprocess.run(cmd, capture_output=True, text=True, timeout=10, check=False))
+    try:
+        r = run(["tsh", "version", "--client"])
+    except (OSError, subprocess.SubprocessError):
+        return None
+    m = _TSH.search((r.stdout or "") + (r.stderr or "")) if r.returncode == 0 else None
+    return (int(m[1]), int(m[2]), int(m[3])) if m else None
+
+
+def tsh_problem(sim: dict, runner: Callable | None = None) -> str | None:
+    """One line when the local tsh is a newer major version than the Teleport server (it supports a client one major behind, not ahead,
+    and a newer one fails with an unclear error); None when it is fine or there is no tsh (issue 210)."""
+    have, want = tsh_version(runner), settings(sim)["version"]
+    if have is None or have[0] <= int(want.split(".")[0]):
+        return None
+    return (f"tsh {'.'.join(map(str, have))} on this machine is newer than the Teleport server {want} and will be refused: "
+            f"install tsh {want.split('.')[0]}.x or earlier, or set teleport.version in sim.yaml to {have[0]}.x")
+
+
 def image(sim: dict) -> str:
     return f"{IMAGE}:{settings(sim)['version']}"
 
