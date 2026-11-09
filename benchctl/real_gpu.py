@@ -66,4 +66,6 @@ def wire(services: dict) -> None:
     svc = services.get(SERVICE)
     if svc is None:
         return
-    svc.update({"environment": {"DCGM_HOSTNAME": HOSTNAME}, "devices": [DEVICE], "command": ["-c", "3000"], "ports": [f"127.0.0.1:{PORT}:9400"]})
+    if NODE in services:  # the node's own `dcgmi` talks to this exporter's host engine (issue 443)
+        services[NODE].setdefault("environment", {})["WORKBENCH_DCGM_HOST"] = f"{SERVICE}:5555"
+    svc.update({"environment": {"DCGM_HOSTNAME": HOSTNAME, "DCGM_ENGINE_BIND": "ALL"}, "devices": [DEVICE], "command": ["-c", "3000"], "ports": [f"127.0.0.1:{PORT}:9400"]})

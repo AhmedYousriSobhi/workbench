@@ -19,5 +19,5 @@ The node is a mode of the part, not a part of its own: `--with real-gpu` adds `r
 
 ## Not decided or not built
 - The BMC and BCM listing: issue 431. CUDA: issue 430.
-- The simulated nodes still carry no `nvidia-smi` or `dcgmi`; only the exporter containers do.
+- Nodes carry the `dcgmi` client (issue 443, copied from the exporter image into `node-base`, 5 MB) but no `nvidia-smi` and no host engine. A node with an exporter (`rgpu001`, and the GPU nodes of the dcgm part) has `WORKBENCH_DCGM_HOST` pointing at its exporter's host engine, which listens on the cluster network (`DCGM_ENGINE_BIND=ALL`, internal only, nothing published), so `dcgmi discovery -l` on `rgpu001` lists the real card; on any other node `dcgmi` says it cannot reach a host engine, as on a real machine with none running.
 - Other machines: the part skips itself everywhere there is no NVIDIA card.

@@ -11,6 +11,8 @@ SERVICE = "dcgm-exporter"
 PORT = 9402                    # the first node's exporter, published on 127.0.0.1; the farm keeps 9400, the real-gpu part 9403
 EXTRA_PORT = 9410              # the exporter of the second node; the third is 9411, and so on
 MAX_NODES = 8
+ENGINE_PORT = 5555            # the host engine inside each exporter container
+ENGINE_BIND = "ALL"            # on the cluster network, so the node's own dcgmi can reach it (internal network only, nothing is published)
 LIMIT_MB = 256                 # measured 125 MB RSS with 8 GPUs: the exporter reading from a host engine in the same container
 DIR = "dcgm"                   # under compose/generated: the override file the farm writes
 COLLECT_MS = 3000              # how often the exporter reads DCGM (its default is 30 s)
@@ -92,6 +94,9 @@ def wire(services: dict, sim: dict) -> None:
             "environment": {**env, "DCGM_HOSTNAME": name},  # the Hostname label; not the container hostname, which Docker's DNS would resolve to this container instead of the node
             "volumes": [f"./{DIR}:/{DIR}:ro"], "command": ["-c", str(COLLECT_MS)],
             "ports": [f"127.0.0.1:{port(sim, name)}:9400"]})
+        services[service(sim, name)]["environment"]["DCGM_ENGINE_BIND"] = ENGINE_BIND
+        if name in services:  # the node's own `dcgmi` talks to its exporter's host engine (issue 443)
+            services[name].setdefault("environment", {})["WORKBENCH_DCGM_HOST"] = f"{service(sim, name)}:{ENGINE_PORT}"
 
 
 def prepare(root: Path, sim: dict | None = None) -> None:

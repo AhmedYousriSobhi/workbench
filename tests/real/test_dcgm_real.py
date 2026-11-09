@@ -112,5 +112,10 @@ def test_h200_shows_its_own_model_name(built):
 def test_dcgmi_works_in_the_exporter_container_and_only_there(built):
     r = subprocess.run(["docker", "exec", "workbench-dcgm-exporter-1", "dcgmi", "discovery", "-l"], capture_output=True, text=True, timeout=30, check=False)
     assert r.returncode == 0 and "2 GPUs found" in r.stdout, r.stdout + r.stderr
-    node = subprocess.run(["docker", "exec", "workbench-gpu001-1", "sh", "-c", "command -v dcgmi nvidia-smi"], capture_output=True, text=True, timeout=30, check=False)
-    assert node.returncode != 0  # the nodes carry no NVIDIA tools (the page and docs say so)
+    node = subprocess.run(["docker", "exec", "workbench-gpu001-1", "sh", "-c", "command -v nvidia-smi nv-hostengine"], capture_output=True, text=True, timeout=30, check=False)
+    assert node.returncode != 0  # the nodes still carry no driver tools and no host engine (issue 443)
+    for n, svc in (("gpu001", "dcgm-exporter"), ("gpu002", "dcgm-exporter-gpu002")):  # but dcgmi works on the node, through its exporter's engine
+        r = subprocess.run(["docker", "exec", f"workbench-{n}-1", "dcgmi", "discovery", "-l"], capture_output=True, text=True, timeout=30, check=False)
+        assert r.returncode == 0 and "2 GPUs found" in r.stdout, (svc, r.stdout + r.stderr)
+    cn = subprocess.run(["docker", "exec", "workbench-cn001-1", "dcgmi", "discovery", "-l"], capture_output=True, text=True, timeout=30, check=False)
+    assert cn.returncode != 0 and "GPUs found" not in cn.stdout  # a node with no exporter has no host engine to ask
