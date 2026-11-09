@@ -25,6 +25,7 @@ def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool 
     names = node_names(sim, compute_override)
     compute = [n for n, k in names if k == "compute"]
     gpu = [n for n, k in names if k == "gpu"]
+    real = [n for n, k in names if k == "real-gpu"]
     t = timers()
     lines = [
         "# GENERATED from sim.yaml by `benchctl compose`; do not edit." + (" TEST TIMERS ON (WORKBENCH_TEST_TIMERS=1)." if test_timers_on() else ""),
@@ -65,11 +66,15 @@ def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool 
         gres = f"gpu:{g['type']}:{g['gpus_per_node']}"
         lines.append(f"NodeName={_range(gpu)} CPUs={c['cpus']} RealMemory={c['memory_mb']} "
                      f"Gres={gres} State=UNKNOWN")
+    if real:  # the card's own node and partition: one real GPU, a device file the driver provides (issue 428)
+        lines.append(f"NodeName={real[0]} CPUs={c['cpus']} RealMemory={c['memory_mb']} Gres=gpu:{sim['real_gpu']['type']}:1 State=UNKNOWN")
     for p in sim.get("partitions", []):
         members = compute if p["nodes"] == "compute" else gpu
         if members:
             default = " Default=YES" if p is sim["partitions"][0] else ""
             lines.append(f"PartitionName={p['name']} Nodes={_range(members)}{default} State=UP")
+    if real:
+        lines.append(f"PartitionName=real-gpu Nodes={real[0]} State=UP")
     return "\n".join(lines) + "\n"
 
 
@@ -77,12 +82,16 @@ def gres_conf(sim: dict) -> str:
     """Count-only fake GPUs need no /dev files; only the GPU nodes get a line."""
     g = sim.get("gpu", {})
     head = "# GENERATED; fake GPUs backed by stand-in device files\n"
-    if not g.get("nodes"):
-        return head
+    out = head
     gpu = [n for n, k in node_names(sim) if k == "gpu"]
-    last = g["gpus_per_node"] - 1
-    files = f"/dev/workbench-gpu[0-{last}]" if last else "/dev/workbench-gpu0"
-    return head + f"NodeName={_range(gpu)} Name=gpu Type={g['type']} File={files}\n"
+    if g.get("nodes") and gpu:
+        last = g["gpus_per_node"] - 1
+        files = f"/dev/workbench-gpu[0-{last}]" if last else "/dev/workbench-gpu0"
+        out += f"NodeName={_range(gpu)} Name=gpu Type={g['type']} File={files}\n"
+    real = [n for n, k in node_names(sim) if k == "real-gpu"]
+    if real:  # the real card: the driver's own device file, passed into the node as a CDI device
+        out += f"NodeName={real[0]} Name=gpu Type={sim['real_gpu']['type']} File=/dev/nvidia0\n"
+    return out
 
 
 def _range(names: list[str]) -> str:

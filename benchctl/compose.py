@@ -92,9 +92,11 @@ def generate(sim: dict, profile: dict) -> dict:
         svc = _service("workbench/node-base:dev", SLURMD_MB, SLURMD_PRIO, "../../images/node-base")
         svc["hostname"] = name
         svc["labels"]["workbench.node"] = kind
-        svc["environment"] = {"WORKBENCH_IB": str(sim["gpu"]["gpus_per_node"] if kind == "gpu" else 1)}  # InfiniBand ports nhc expects
+        svc["environment"] = {"WORKBENCH_IB": str(sim["gpu"]["gpus_per_node"] if kind == "gpu" else 0 if kind == "real-gpu" else 1)}  # InfiniBand ports nhc expects
         if kind == "gpu":
             svc["environment"]["WORKBENCH_GPUS"] = str(sim["gpu"]["gpus_per_node"])
+        if kind == "real-gpu":  # the real card as a CDI device: unprivileged, no stand-in files (WORKBENCH_GPUS stays 0 so nhc's simulated-GPU checks skip it)
+            svc["devices"] = [real_gpu.DEVICE]
         if "slurmctld" in services:
             svc["depends_on"] = ["slurmctld"]
         services[name] = svc

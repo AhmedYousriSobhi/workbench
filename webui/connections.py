@@ -186,7 +186,7 @@ def _rows(sim: dict) -> list[dict]:
          "how": "Only with `benchctl up --with dcgm`. The official dcgm-exporter on a mock NVML for the first GPU node (ADR 0025); no login, localhost only. A GPU a Slurm job holds reads busy; a cleared XID stays until the container restarts."},
         {"id": "real-gpu", "name": "Real GPU (this machine's NVIDIA card)", "kind": "http", "address": f"http://{LOCAL}:{real_gpu.PORT}/metrics",
          "command": f"curl -s http://{LOCAL}:{real_gpu.PORT}/metrics | head", "credential": None,
-         "how": "Only with `benchctl up --with real-gpu` on a machine with an NVIDIA card, its driver and the container toolkit (SPEC C-23). Real series from the real card, labelled Hostname gpu-real; no login, localhost only. `docker exec workbench-real-gpu-1 dcgmi discovery -l` and `nvidia-smi` work in that container."},
+         "how": "Only with `benchctl up --with real-gpu` on a machine with an NVIDIA card, its driver and the container toolkit (SPEC C-23). Real series from the real card, labelled Hostname rgpu001; no login, localhost only. `docker exec workbench-real-gpu-1 dcgmi discovery -l` and `nvidia-smi` work in that container."},
         {"id": "prometheus", "name": "Prometheus", "kind": "http", "address": f"http://{ip['prometheus']}:9090",
          "command": f"curl -s http://{ip['prometheus']}:9090/-/ready", "credential": None, "how": "No login. Also on 127.0.0.1:9090."},
         {"id": "grafana", "name": "Grafana", "kind": "http", "address": f"http://{ip['grafana']}:3000",

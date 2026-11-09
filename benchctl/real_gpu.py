@@ -4,6 +4,7 @@ One container gets the card as a CDI device (`nvidia.com/gpu=all`, the NVIDIA co
 `privileged`, no `cap_add`. The same image as the mock exporter (`components/dcgm-exporter`) runs with no mock profile, so it reads the real
 driver: real temperature, power, utilisation and framebuffer, the real model name. It sits next to the simulated GPUs, never in place of
 them. Refused with one message when the machine has no NVIDIA driver or no CDI spec."""
+import re
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -11,7 +12,10 @@ from pathlib import Path
 SERVICE = "real-gpu"
 PORT = 9403                    # published on 127.0.0.1 (the mock exporter 9402, the farm 9400)
 LIMIT_MB = 640                 # measured 481 MB with the real driver: the host engine alone takes 404 MB (125 MB in total with the mock)
-HOSTNAME = "gpu-real"          # DCGM's Hostname label, so a client tells it from gpu001, gpu002
+NODE = "rgpu001"              # the Slurm node on the card (issue 428, slice 2): a mode of this part, not a part of its own
+HOSTNAME = NODE                # DCGM's Hostname label: the exporter and the node are one machine to a client
+PARTITION = "real-gpu"         # its own Slurm partition, so no simulated job lands on the card by accident (owner decision)
+
 DEVICE = "nvidia.com/gpu=all"  # CDI name, from /var/run/cdi/nvidia.yaml (`nvidia-ctk cdi generate`)
 CDI_SPECS = (Path("/var/run/cdi/nvidia.yaml"), Path("/etc/cdi/nvidia.yaml"))
 HINT = ("install the NVIDIA driver and the NVIDIA container toolkit, then `sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml` "
@@ -22,6 +26,17 @@ Runner = Callable[[list[str]], "subprocess.CompletedProcess"]
 
 def _run(cmd: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=15, check=False)
+
+
+def enabled(sim: dict) -> bool:
+    """The part is on in this simulation (`workbench.effective` sets `real_gpu.enabled`), so the node exists."""
+    return bool((sim.get("real_gpu") or {}).get("enabled"))
+
+
+def gres_type(model: str) -> str:
+    """A Slurm GRES type from the card's model: letters, digits and hyphens (\"NVIDIA GeForce RTX 3050 Laptop GPU\" -> geforce-rtx-3050-laptop-gpu)."""
+    slug = re.sub(r"[^a-z0-9]+", "-", model.lower().replace("nvidia", "")).strip("-")
+    return slug or "real"
 
 
 def cards(runner: Runner = _run) -> list[str]:

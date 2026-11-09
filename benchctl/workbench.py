@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 
-from . import compose, k8s, logins, memory, nodes
+from . import compose, k8s, logins, memory, nodes, real_gpu
 
 SAVED = Path("compose/generated/workbench.yaml")  # the spec `apply`/`up` last built; absent after a plain profile `up`
 OBSERVABILITY = {"prometheus": 300, "grafana": 300, "gpu-exporter-farm": 100}  # limits, compose/observability.yml
@@ -200,6 +200,9 @@ def effective(sim: dict, spec: Spec) -> tuple[dict, dict]:
         s["kubernetes"] = {**(s.get("kubernetes") or {}), "enabled": True, "nodes": k8s.node_groups(s, spec.k8s_nodes, spec.k8s_cpu_nodes)}
     elif spec.k8s_nodes is not None or spec.k8s_cpu_nodes is not None:
         s["kubernetes"] = {**(s.get("kubernetes") or {}), "nodes": k8s.node_groups(s, spec.k8s_nodes, spec.k8s_cpu_nodes)}
+    if "real-gpu" in spec.parts:  # the part is on: so is its Slurm node, with the card's model as its GRES type (the host is asked once, here)
+        model = (real_gpu.cards() or ["GPU 0: real"])[0].split(": ", 1)[-1]
+        s["real_gpu"] = {"enabled": True, "node": real_gpu.NODE, "model": model, "type": real_gpu.gres_type(model)}
     s["partitions"] = [p for p in s.get("partitions", []) if have.get(p["nodes"], 1) > 0]
     groups, drop = ["core", "access"], []
     for part in spec.parts:

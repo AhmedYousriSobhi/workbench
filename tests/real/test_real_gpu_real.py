@@ -54,3 +54,17 @@ def test_the_container_is_unprivileged_and_has_the_tools(built):
     assert "GPU 0" in run("docker", "exec", CONTAINER, "dcgmi", "discovery", "-l").stdout or "1 GPU found" in run("docker", "exec", CONTAINER, "dcgmi", "discovery", "-l").stdout
     assert run("docker", "exec", CONTAINER, "nvidia-smi", "-L").returncode == 0
     assert run("docker", "exec", "workbench-gpu001-1", "sh", "-c", "command -v nvidia-smi").returncode != 0  # the simulated nodes still have none
+
+
+def slurm(*cmd: str) -> subprocess.CompletedProcess:
+    return run("docker", "exec", "-u", "alice", "workbench-login-1", *cmd, timeout=180)
+
+
+def test_a_job_in_the_real_partition_runs_on_the_card_and_a_simulated_job_cannot(built):
+    assert wait_for(lambda: "idle" in slurm("sinfo", "-h", "-p", real_gpu.PARTITION, "-o", "%T").stdout, timeout=120), slurm("sinfo").stdout
+    job = slurm("sbatch", "--wait", "-p", real_gpu.PARTITION, "--gres=gpu:1", "-o", "/tmp/real-gpu.out", "--wrap=nvidia-smi -L")
+    assert job.returncode == 0, job.stdout + job.stderr
+    assert "GPU 0: " in run("docker", "exec", f"workbench-{real_gpu.NODE}-1", "cat", "/tmp/real-gpu.out").stdout  # it ran on the node with the card
+    other = slurm("sbatch", "-p", "gpu", f"--nodelist={real_gpu.NODE}", "--wrap=true")
+    assert other.returncode != 0  # the node is in no other partition
+    assert "real" in slurm("sinfo", "-h", "-N", "-o", "%N %G").stdout

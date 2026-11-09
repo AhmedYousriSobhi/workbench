@@ -50,6 +50,7 @@ def _prefix(subnet: str) -> tuple[int, int]:
     return tuple(int(x) for x in subnet.split("/")[0].split(".")[:2])  # a /16: the first two octets
 
 
+REAL_GPU_IP = "10.141.254.1"  # the real card's node (benchctl/real_gpu.py): third octet 254 is unused by every block below
 GPU_BLOCK = 100  # the third octet GPU nodes start at; compute nodes use 0..99 (25,400 of them)
 BLOCK = {"compute": 0, "gpu": GPU_BLOCK, "k8s-cpu": 200, "k8s-gpu": 230}  # first third octet of each kind (Kubernetes nodes: BMC and BCM addresses)
 ROOM = {"compute": 100, "gpu": 100, "k8s-cpu": 30, "k8s-gpu": 24}         # how many third octets each kind may use
@@ -73,6 +74,8 @@ def plan(sim: dict, compute_override: int | None = None) -> dict:
             nodes[name] = host_ip(INTERNAL, seen[kind], kind)
         bmc[name] = host_ip(IPMI, seen[kind], kind)
         seen[kind] += 1
+    if (sim.get("real_gpu") or {}).get("enabled"):
+        nodes[sim["real_gpu"]["node"]] = REAL_GPU_IP
     logins = {logins_mod.name(i): login_ip(i) for i, _ in enumerate(logins_mod.modes(sim))}
     return {"internal": INTERNAL, "ipmi": IPMI, "login": LOGIN_IP, "logins": logins, "ipmi_logins": {n: login_ip(i, IPMI) for i, n in enumerate(logins)}, "nodes": nodes, "bmc": bmc,
             "bmc_port": {n: BMC_NODE_PORT_BASE + i for i, (n, _) in enumerate(hardware_nodes(sim, compute_override))},
