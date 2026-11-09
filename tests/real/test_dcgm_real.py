@@ -20,7 +20,11 @@ def benchctl(*args: str, timeout: int = 1200) -> subprocess.CompletedProcess:
 
 
 def scrape(port: int = dcgm.PORT) -> str:
-    return urllib.request.urlopen(f"http://127.0.0.1:{port}/metrics", timeout=5).read().decode()
+    """The metrics, or "" while the exporter is not answering yet (the port is published before it listens: a reset or a refusal)."""
+    try:
+        return urllib.request.urlopen(f"http://127.0.0.1:{port}/metrics", timeout=5).read().decode()
+    except OSError:
+        return ""
 
 
 def value(metric: str, gpu: int) -> float | None:
