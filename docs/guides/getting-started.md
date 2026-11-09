@@ -91,7 +91,7 @@ that does. Components not built yet are skipped with a note.
 | Slurm jobs | `docker exec workbench-slurmctld-1 sinfo` / `squeue` / `sbatch` |
 | Slurm REST | token: `docker exec workbench-slurmctld-1 scontrol token username=alice`; see ADR 0003 |
 | Teleport (when on) | `https://10.141.255.30:3080`; `tsh --proxy=10.141.255.30:3080 --insecure -i compose/generated/secrets/teleport/identity/alice ls`; steps in [Nodes and shells](../manual/04-nodes-and-shells.md#teleport-tsh-to-the-login-node-and-the-nodes) |
-| Real DCGM exporter (when on) | `./scripts/benchctl up --with dcgm`, then `curl http://127.0.0.1:9402/metrics`. The official dcgm-exporter on NVIDIA's mock NVML stands for the first GPU node (about 430 MB, off by default; build needs network once). It follows Slurm jobs and injected faults; a cleared XID stays until the container restarts, as in real DCGM. The hand-written exporter on `:9400` stays for every node. See ADR 0025 |
+| Real DCGM exporter (when on) | `./scripts/benchctl up --with dcgm`, then `curl http://127.0.0.1:9402/metrics`. The official dcgm-exporter on NVIDIA's mock NVML stands for the first GPU node (about 125 MB, off by default; build needs network once). It follows Slurm jobs and injected faults; a cleared XID stays until the container restarts, as in real DCGM. `dcgmi` works inside that container only: `docker exec workbench-dcgm-exporter-1 dcgmi discovery -l`. The hand-written exporter on `:9400` stays for every node. See ADR 0025 |
 | Build progress and diagrams | `docs/progress.html` |
 
 Inject a fault and watch it show up:

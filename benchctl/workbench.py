@@ -34,7 +34,7 @@ PART_INFO: dict[str, tuple[str, str]] = {
     "teleport": ("Teleport", "Teleport auth and proxy: tsh login and ssh to the login node and every node through it (not on by default)."),
     "k8s": ("Kubernetes", "A real Kubernetes control plane (etcd, API server, scheduler, controller manager) with KWOK fake CPU and GPU nodes, a read-only kubeconfig and fixtures (ADR 0034)."),
     "jump": ("Jump host", "A bare sshd bastion (nothing else installed) in front of the key-login nodes and the controller: ssh -J jump user@login (SPEC C-21). Teleport nodes keep Teleport."),
-    "dcgm": ("DCGM (real)", "The official dcgm-exporter on NVIDIA's mock NVML for the first GPU node, about 430 MB (ADR 0025). Next to the hand-written exporter, not instead of it."),
+    "dcgm": ("DCGM (real)", "The official dcgm-exporter on NVIDIA's mock NVML for the first GPU node, about 125 MB (ADR 0025). Next to the hand-written exporter, not instead of it."),
     "scenarios": ("Scenarios", "The scenario engine that plays timed faults."),
     "load": ("Load", "User and ticket simulators that generate jobs and tickets."),
 }

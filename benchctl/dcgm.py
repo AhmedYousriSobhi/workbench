@@ -3,12 +3,12 @@
 One official dcgm-exporter on NVIDIA's mock NVML stands for the first GPU node: genuine DCGM series names, labels and formats with no
 GPU and no driver. The hand-written exporter (`gpu-exporter-farm`) stays and stays the default for every node; it also drives this one:
 it writes an override file the mock re-reads every second (Slurm allocations, injected XID and temperature), see
-`components/gpu-exporter-farm/exporter.py`. About 430 MB, so it is off by default (priority P6)."""
+`components/gpu-exporter-farm/exporter.py`. About 125 MB (exporter plus host engine), off by default (priority P6)."""
 from pathlib import Path
 
 SERVICE = "dcgm-exporter"
 PORT = 9402                    # published on 127.0.0.1; the farm keeps 9400
-LIMIT_MB = 600                 # measured 430 MB RSS (one exporter serves 1 to 8 GPUs alike)
+LIMIT_MB = 256                 # measured 125 MB RSS with 8 GPUs: the exporter reading from a host engine in the same container
 DIR = "dcgm"                   # under compose/generated: the override file the farm writes
 COLLECT_MS = 3000              # how often the exporter reads DCGM (its default is 30 s)
 # sim.yaml gpu.type -> the mock's profile; a type with no profile of its own (h200) uses the nearest and says so

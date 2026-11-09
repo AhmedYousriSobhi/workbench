@@ -67,3 +67,10 @@ def test_an_injected_xid_shows_on_one_gpu_and_stays_like_real_dcgm(built):
     assert wait_for(lambda: value("DCGM_FI_DEV_XID_ERRORS", 0) == 63, timeout=60), scrape()[:400]
     assert value("DCGM_FI_DEV_XID_ERRORS", 1) in (None, 0)
     # real DCGM keeps the last XID until its host engine restarts, so a cleared fault does not reset it here (documented, ADR 0025)
+
+
+def test_dcgmi_works_in_the_exporter_container_and_only_there(built):
+    r = subprocess.run(["docker", "exec", "workbench-dcgm-exporter-1", "dcgmi", "discovery", "-l"], capture_output=True, text=True, timeout=30, check=False)
+    assert r.returncode == 0 and "2 GPUs found" in r.stdout, r.stdout + r.stderr
+    node = subprocess.run(["docker", "exec", "workbench-gpu001-1", "sh", "-c", "command -v dcgmi nvidia-smi"], capture_output=True, text=True, timeout=30, check=False)
+    assert node.returncode != 0  # the nodes carry no NVIDIA tools (the page and docs say so)
