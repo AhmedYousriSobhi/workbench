@@ -34,4 +34,5 @@ lines from Clients (`ssh`), from the jump host to the key-login nodes and the co
 controller sits in Access, not among the cluster nodes: it is where admins get in, and the frame for nodes stays one grid of machines.
 
 ## Not built (open)
-- Memory for the jump host is unmeasured (`NOT_MEASURED`, planned at its 24 MB cap).
+- Memory measured once (`benchctl measure`, 1 CPU node, five forwarded sessions): the jump host peaked at 1.9 MB (cap 24 MB), and slurmctld with the controller's sshd
+  showed no difference from slurmctld without it beyond run noise (about 37 MB against 39 MB peak); the controller's +24 MB cap is headroom for sessions, not use.

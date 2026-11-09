@@ -22,14 +22,14 @@ MEASURED_ON = "2026-11-05"
 MEASURED_SETUP = "2 cpu + 2 gpu nodes (4 GPUs each), accounting, bmc, bcm, jira, teleport, scenarios, load on; real Jira on its own"
 # key -> largest working set in MiB. "slurmd" is every compute node, "bmc-forwarder" every per-node BMC address.
 MEASURED_MB: dict[str, int] = {
-    "slurmd": 13, "bmc-forwarder": 18, "bmc-farm": 14, "bcm-mock": 12, "jira-mock": 20, "login": 10,
+    "slurmd": 13, "bmc-forwarder": 18, "bmc-farm": 14, "bcm-mock": 12, "jira-mock": 20, "login": 10, "jump": 2,  # jump host: 1.9 MB peak after five forwarded sessions (issue 415)
     "mariadb": 204, "slurmdbd": 7, "slurmctld": 41, "slurmrestd": 7, "teleport": 222,
     "prometheus": 22, "grafana": 54, "gpu-exporter-farm": 19,
     # Kubernetes (ADR 0034): 4 KWOK nodes and the fixtures, one run (issue 232); etcd sat at its first 128 MB cap, so 130 is a floor
     "k8s-etcd": 130, "k8s-apiserver": 201, "k8s-controller-manager": 47, "k8s-scheduler": 18, "kwok-controller": 11,
     "jira-db": 130, "jira-real": 2045,   # real Jira Data Center: heap 768 MB, JVM_ARGS (Serial GC, C1 only); 2176 MB cap, two clean runs
 }
-NOT_MEASURED = ("scenario-engine", "user-sim", "ticket-bot", "accounting-init", "jump")  # not built or one-shot: expected at the cap
+NOT_MEASURED = ("scenario-engine", "user-sim", "ticket-bot", "accounting-init")  # not built or one-shot: expected at the cap
 
 
 def key_of(name: str, labels: dict | None = None) -> str:

@@ -141,7 +141,7 @@ A controller node (where slurmctld runs; whitelisted admins only, and the BCM he
 ```bash
 ./scripts/benchctl up --controller --access jump           # 24 MB each; add --access teleport for Teleport to the controller too
 ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2221 alice@127.0.0.1 sinfo      # alice is in the admins group; bob is refused
-ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -J alice@127.0.0.1:2220 alice@10.141.255.254 hostname   # through the jump host to the login node's private address
+ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -o ProxyCommand='ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -W %h:%p -p 2220 alice@127.0.0.1' alice@10.141.255.254 hostname   # through the jump host (`-J` alone would not pass the key to the jump leg)
 ```
 
 Who may use the controller is set in `sim.yaml` (`controller.allow.users`, `controller.allow.groups`); see [Choose your workbench](choose-workbench.md) and ADR 0036.

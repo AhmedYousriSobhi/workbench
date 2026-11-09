@@ -46,6 +46,7 @@ added without a measurement.
 | slurmd (each compute node) | 13 | 60 | 15 |
 | BMC forwarder (each) | 18 | 32 | 21 |
 | bmc-farm / bcm-mock / jira-mock / login | 14 / 12 / 20 / 10 | 100 / 100 / 100 / 40 | 17 / 14 / 23 / 12 |
+| jump host (bare sshd bastion, `--access jump`) | 2 | 24 | 3 |
 | slurmctld / slurmrestd / slurmdbd | 41 / 7 / 7 | 200 / 60 / 80 | 48 / 9 / 9 |
 | mariadb (includes its 100 MB tmpfs) | 204 | 250 | 235 |
 | teleport | 222 | 256 | 256 (at the cap: raise it with the next measurement) |

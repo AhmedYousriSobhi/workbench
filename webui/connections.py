@@ -135,8 +135,8 @@ def _rows(sim: dict) -> list[dict]:
          "how": f"Only with the controller on (`benchctl up --controller`). Key login for admins only: {', '.join(controller.allowed_users(sim)) or 'whitelist in sim.yaml controller.allow (users or groups)'}; others are refused. "
                 f"slurmctld runs here and `cmsh` lives here, not on the login nodes. Also 127.0.0.1:{controller.SSH_PORT}. Without it the login node acts as the head node."},
         {"id": "jump", "name": "Jump host (bastion)", "kind": "ssh", "address": f"{ip['jump']}:22",
-         "command": f"ssh {SSH_OPTS} -J {user}@{ip['jump']} {user}@{login}", "credential": SSH_KEY,
-         "how": f"Only with the jump part on (`benchctl up --access jump`). A bare sshd with nothing else installed: use it with `ssh -J` to reach a key-login node or the controller. "
+         "command": f"ssh {SSH_OPTS} -o ProxyCommand='ssh {SSH_OPTS} -W %h:%p {user}@{ip['jump']}' {user}@{login}", "credential": SSH_KEY,
+         "how": f"Only with the jump part on (`benchctl up --access jump`). A bare sshd with nothing else installed: use it as a jump host (`ssh -J`, or a `ProxyCommand` that carries the key as in the command here: `-J` does not pass `-i` or `-o` to the jump leg) to reach a key-login node or the controller. "
                 f"Teleport nodes keep Teleport. Also 127.0.0.1:{controller.JUMP_PORT}."},
         {"id": "teleport", "name": "Teleport (SSH through a proxy)", "kind": "https", "address": f"https://{teleport.proxy_addr(sim)}",
          "command": f"tsh --proxy={teleport.proxy_addr(sim)} --insecure -i {SECRETS}/teleport/identity/{user} ls",
