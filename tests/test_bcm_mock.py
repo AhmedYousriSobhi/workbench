@@ -61,3 +61,20 @@ def test_power_calls_and_injection_change_state(server):
     assert rpc(base, "cmstatus", "getStatus", "cn002")["result"]["state"] == "CLOSED"
     assert post(base, "/sim/inject", {"node": "cn002", "state": "BOGUS"})[0] == 400
     assert post(base, "/sim/inject", {"node": "zzz", "state": "UP"})[0] == 400
+
+
+def test_bcm_manages_the_kubernetes_nodes_only_when_configured(tmp_path):
+    import yaml
+
+    base = yaml.safe_load((ROOT / "sim.yaml").read_text())
+    base["kubernetes"] = {**base.get("kubernetes", {}), "enabled": True}
+
+    def names(manage):
+        cfg = {**base, "bcm": {"manage_kubernetes": manage}} if manage is not None else {k: v for k, v in base.items() if k != "bcm"}
+        f = tmp_path / "sim.yaml"
+        f.write_text(yaml.safe_dump(cfg))
+        return set(bcm.load_nodes(f))
+
+    on, off = names(True), names(False)
+    assert any(n.startswith("kcn") for n in on) and names(None) == on  # unset keeps today's behaviour
+    assert not any(n.startswith(("kcn", "kgpu")) for n in off) and off < on

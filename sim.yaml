@@ -37,6 +37,9 @@ teleport:               # the optional Teleport part (benchctl up --with telepor
   version: 18.11.8      # Community Edition tag; the server must not be older than your tsh major
   cert_ttl: 12h         # user certificate lifetime (max_session_ttl of the role)
 
+bcm:
+  manage_kubernetes: true   # BCM lists the Kubernetes nodes (categories k8s-cpu, k8s-gpu); false = BCM does not manage the Kubernetes cluster (--no-bcm-k8s, issue 413)
+
 bmc:
   per_node: true   # one BMC address per node (ADR 0018); a workbench selection can limit which nodes (--bmc-nodes)
 

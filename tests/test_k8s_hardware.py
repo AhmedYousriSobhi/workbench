@@ -89,3 +89,30 @@ def test_the_cli_takes_bmc_groups(flag):
 
     r = CliRunner().invoke(cli.app, ["plan", "--with", "k8s", flag, "k8s-gpu"])
     assert r.exit_code == 0, r.output
+
+
+def test_the_governor_checks_bcm_k8s():
+    base = {"cpu_nodes": 2, "gpu_nodes": 0, "gpus_per_node": 8, "parts": ["bcm", "k8s"]}
+    assert control.plan_error({**base, "bcm_k8s": False}) is None and control.plan_error(base) is None
+    for bad in ("no", 0, [True]):
+        assert "bcm_k8s" in control.plan_error({**base, "bcm_k8s": bad}), bad
+
+
+def test_bcm_k8s_reaches_the_effective_sim_and_the_page_command():
+    from benchctl import workbench
+
+    sim = {"compute": {"prefix": "cn", "count": 1}, "gpu": {"prefix": "gpu", "nodes": 0, "gpus_per_node": 8}, "partitions": []}
+    spec = workbench.Spec(cpu_nodes=1, gpu_nodes=0, parts=["bcm", "k8s"])
+    assert "bcm" not in workbench.effective(sim, spec)[0]  # unset keeps sim.yaml
+    spec.bcm_k8s = False
+    assert workbench.effective(sim, spec)[0]["bcm"]["manage_kubernetes"] is False
+    assert workbench.from_dict({"bcm_k8s": False}, workbench.Spec()).bcm_k8s is False
+
+
+def test_the_cli_takes_no_bcm_k8s():
+    from typer.testing import CliRunner
+
+    from benchctl import cli
+
+    r = CliRunner().invoke(cli.app, ["plan", "--with", "k8s", "--with", "bcm", "--no-bcm-k8s"])
+    assert r.exit_code == 0, r.output

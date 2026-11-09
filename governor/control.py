@@ -47,6 +47,9 @@ def plan_error(req: dict) -> str | None:
     groups = req.get("bmc_groups")  # optional: the node groups that get BMCs; absent means every group
     if groups is not None and not (isinstance(groups, list) and all(isinstance(g, str) and g in BMC_GROUPS for g in groups)):
         return f"apply-plan bmc_groups must be a list of: {', '.join(sorted(BMC_GROUPS))}"
+    bcm_k8s = req.get("bcm_k8s")  # optional: whether BCM manages the Kubernetes nodes (issue 413)
+    if bcm_k8s is not None and not isinstance(bcm_k8s, bool):
+        return "apply-plan bcm_k8s must be true or false"
     modes = req.get("login_nodes")  # optional: one auth mode per login node; absent keeps sim.yaml's
     if modes is not None and not (isinstance(modes, list) and 1 <= len(modes) <= 8 and all(isinstance(m, str) and m.partition(":")[0] in LOGIN_MODES and (":" not in m or m.partition(":")[2] in LOGIN_KINDS) for m in modes)):
         return f"apply-plan login_nodes must be 1 to 8 of: {', '.join(sorted(LOGIN_MODES))}, each optionally :{'|'.join(sorted(LOGIN_KINDS))}"

@@ -198,7 +198,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
                 "k8s_cpu": {"cpus": kc.get("cpus"), "memory_gb": kc.get("memory_gb"), "prefix": kc.get("prefix", "kcn"), "count": pick(saved.k8s_cpu_nodes if saved else None, kc)},
                 "k8s_gpu": {"cpus": kg.get("cpus"), "memory_gb": kg.get("memory_gb"), "gpus": kg.get("gpus"), "gpu_type": kg.get("gpu_type", ""),
                             "prefix": kg.get("prefix", "kgpu"), "count": pick(saved.k8s_nodes if saved else None, kg)},
-                "bmc": {"groups": saved.bmc_groups if saved else None, "nodes": saved.bmc_nodes if saved else None}}
+                "bmc": {"groups": saved.bmc_groups if saved else None, "nodes": saved.bmc_nodes if saved else None},
+                "bcm": {"manage_kubernetes": saved.bcm_k8s if saved and saved.bcm_k8s is not None else bool((sim.get("bcm") or {}).get("manage_kubernetes", True))}}
 
     def build_plan(q) -> tuple:
         """Blocking (file reads, a governor call): run it with asyncio.to_thread."""
@@ -209,6 +210,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
                                        | ({"parts": [p for p in q["parts"].split(",") if p]} if "parts" in q else {})
                                        | ({"bmc_nodes": [n for n in q["bmc_nodes"].split(",") if n]} if "bmc_nodes" in q else {})
                                        | ({"bmc_groups": [g for g in q["bmc_groups"].split(",") if g]} if "bmc_groups" in q else {})
+                                       | ({"bcm_k8s": q["bcm_k8s"] == "1"} if "bcm_k8s" in q else {})
                                        | ({"login_nodes": [m for m in q["logins"].split(",") if m]} if "logins" in q else {}),
                                        workbench.defaults(sim))
         except (ValueError, workbench.SpecError) as e:
@@ -256,6 +258,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         flags += "".join(f" {f} {getattr(spec, k)}" for k, f in (("k8s_nodes", "--k8s-nodes"), ("k8s_cpu_nodes", "--k8s-cpu-nodes")) if getattr(spec, k) is not None)
         if spec.bmc_groups is not None:
             flags += f" --bmc-groups {','.join(spec.bmc_groups)}"
+        if spec.bcm_k8s is not None:
+            flags += " --bcm-k8s" if spec.bcm_k8s else " --no-bcm-k8s"
         flags += f" --login {','.join(spec.login_nodes)} --app-mb 0"
         return JSONResponse({"fits": ok, "message": msg, "total_mb": est["total_mb"], "need_mb": est["need_mb"], "expected_mb": est["expected_mb"],
                              "running_mb": est["running_mb"], "available_mb": avail,
@@ -283,6 +287,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         if spec.bmc_nodes is not None:
             req["bmc_nodes"] = spec.bmc_nodes
         req["login_nodes"] = spec.login_nodes
+        if spec.bcm_k8s is not None:
+            req["bcm_k8s"] = spec.bcm_k8s
         if spec.bmc_groups is not None:
             req["bmc_groups"] = spec.bmc_groups
         req.update({k: getattr(spec, k) for k in ("k8s_nodes", "k8s_cpu_nodes") if getattr(spec, k) is not None})
