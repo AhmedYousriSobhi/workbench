@@ -70,7 +70,7 @@ def test_page_draws_only_edges_named_in_the_model():
     """Every edge id the page builds (in both arrangements, narrow and column) is one webui/graph.py can produce."""
     page = (ROOT / "webui" / "static" / "index.html").read_text()
     used = {x for x in re.findall(r"[`']([^`']*>[^`']*:(?:api|ssh|teleport|jump|inj))[`']", page)}
-    model = graph.build({**SERVICES, "teleport": True, "jira-real": True}, NODES, logins("both", "teleport"))
+    model = graph.build({**SERVICES, "teleport": True, "jira-real": True, "jump": True, "controller": True}, NODES, logins("both", "teleport"))
     shapes = {re.sub(r"\bcn\d+|\bgn\d+", "N", e["id"]) for e in model["edges"]}
     pattern = {  # the page's template ids, turned into what the model would name them
         "${l.name}>nodes:jump": {"login>nodes:jump", "login2>nodes:jump"},
@@ -80,6 +80,10 @@ def test_page_draws_only_edges_named_in_the_model():
         "faults>${k}:inj": {f"faults>{s}:inj" for s in flow.SCENARIO_TARGETS.values()},
         "teleport>${l.name}:teleport": {"teleport>login:teleport", "teleport>login2:teleport"},
         "teleport>nodes:teleport": {"teleport>nodes:teleport"},
+        "clients>${b[0]}:ssh": {"clients>jump:ssh", "clients>controller:ssh"},  # the jump host and the controller (#420)
+        "jump>${l.name}:jump": {"jump>login:jump"},
+        "jump>controller:jump": {"jump>controller:jump"},
+        "${l.name}>controller:jump": {"login>controller:jump"},
     }
     assert used == set(pattern), used ^ set(pattern)  # a new edge in the page needs a line here and in graph.py
     for name, ids_ in pattern.items():
