@@ -37,8 +37,8 @@ def wire(services: dict, sim: dict) -> None:
         return
     svc.update({
         "hostname": node(sim) or "gpu001",  # DCGM's Hostname label is the machine's hostname
-        "environment": {"MOCK_NVML_CONFIG": f"/opt/mocknvml/configs/mock-nvml-config-{profile(sim)}.yaml",
-                        "MOCK_NVML_NUM_DEVICES": str((sim.get("gpu") or {}).get("gpus_per_node", 1)),
+        "environment": {"MOCK_NVML_PROFILE": f"/opt/mocknvml/configs/mock-nvml-config-{profile(sim)}.yaml",  # start.sh keeps the first N devices
+                        "MOCK_NVML_GPUS": str((sim.get("gpu") or {}).get("gpus_per_node", 1)),
                         "MOCK_NVML_OVERRIDES": f"/{DIR}/overrides.yaml", "MOCK_NVML_OVERRIDES_TTL": "1s"},
         "volumes": [f"./{DIR}:/{DIR}:ro"],
         "command": ["-c", str(COLLECT_MS)],
@@ -46,9 +46,15 @@ def wire(services: dict, sim: dict) -> None:
 
 
 def prepare(root: Path) -> None:
-    """The directory the farm writes into, made before the containers start (it is mounted into the farm unconditionally)."""
+    """The directory the farm writes into, made before the containers start (it is mounted into the farm unconditionally).
+    On a later start the file belongs to the farm's user: leave it alone."""
     d = root / DIR
     d.mkdir(parents=True, exist_ok=True)
-    d.chmod(0o777)  # the farm runs as `nobody`; localhost-only, generated, holds no secret
-    (d / "overrides.yaml").touch(exist_ok=True)
-    (d / "overrides.yaml").chmod(0o666)
+    f = d / "overrides.yaml"
+    for path, mode in ((d, 0o777), (f, 0o666)):  # the farm runs as `nobody`; localhost-only, generated, holds no secret
+        try:
+            if path is f:
+                f.touch(exist_ok=True)
+            path.chmod(mode)
+        except PermissionError:
+            pass  # not ours (made by the farm's user or by Docker): already writable, or the farm reports it

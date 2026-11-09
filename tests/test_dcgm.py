@@ -31,8 +31,8 @@ def test_off_by_default_and_by_name_only():
 def test_wired_with_the_mock_profile_gpu_count_and_a_localhost_port():
     svc = services(True)[dcgm.SERVICE]
     env = svc["environment"]
-    assert env["MOCK_NVML_NUM_DEVICES"] == str(SIM["gpu"]["gpus_per_node"])
-    assert env["MOCK_NVML_CONFIG"].endswith(f"mock-nvml-config-{dcgm.profile(SIM)}.yaml")
+    assert env["MOCK_NVML_GPUS"] == str(SIM["gpu"]["gpus_per_node"])
+    assert env["MOCK_NVML_PROFILE"].endswith(f"mock-nvml-config-{dcgm.profile(SIM)}.yaml")
     assert svc["hostname"] == "gpu001" and svc["ports"] == [f"127.0.0.1:{dcgm.PORT}:9400"]
     assert svc["mem_limit"] == f"{dcgm.LIMIT_MB}m" and svc["labels"]["workbench.class"] == "P6"
     assert not {"privileged", "cap_add", "security_opt"} & set(svc)  # stays unprivileged
@@ -109,3 +109,15 @@ def test_the_override_file_is_written_atomically_and_only_when_it_changes(tmp_pa
         assert not (tmp_path / "overrides.yaml.tmp").exists()
     finally:
         stop.set()
+
+
+def test_prepare_survives_a_file_owned_by_someone_else(tmp_path, monkeypatch):
+    dcgm.prepare(tmp_path)
+    real = Path.chmod
+
+    def deny(self, mode, **kw):
+        if self.name == "overrides.yaml":
+            raise PermissionError(self)
+        return real(self, mode, **kw)
+    monkeypatch.setattr(Path, "chmod", deny)
+    dcgm.prepare(tmp_path)  # the second `benchctl up`: the farm's user owns the file

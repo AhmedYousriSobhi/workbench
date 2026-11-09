@@ -12,3 +12,5 @@ COPY --from=mock /src/pkg/gpu/mocknvml/libnvidia-ml.so* /opt/mocknvml/
 COPY --from=mock /src/pkg/gpu/mocknvml/configs/ /opt/mocknvml/configs/
 COPY --from=mock /src/LICENSE /opt/mocknvml/LICENSE
 ENV LD_LIBRARY_PATH=/opt/mocknvml
+COPY start.sh /opt/mocknvml/start.sh
+ENTRYPOINT ["/opt/mocknvml/start.sh"]
