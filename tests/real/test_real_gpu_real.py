@@ -27,7 +27,7 @@ def run(*cmd: str, timeout: int = 1200) -> subprocess.CompletedProcess:
 @pytest.fixture(scope="module")
 def built():
     os.chdir(ROOT)
-    out = run(str(ROOT / "scripts/benchctl"), "up", "--cpu-nodes", "1", "--gpu-nodes", "1", "--with", "real-gpu")
+    out = run(str(ROOT / "scripts/benchctl"), "up", "--cpu-nodes", "1", "--gpu-nodes", "1", "--with", "real-gpu", "--app-mb", "0")  # no app runs here: leave its 800 MB reserve out of the plan
     assert out.returncode == 0, out.stdout + out.stderr
     assert wait_for(lambda: "DCGM_FI_DEV_GPU_UTIL" in scrape(), timeout=120), "the real exporter never answered"
     yield
