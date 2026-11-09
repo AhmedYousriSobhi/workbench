@@ -116,7 +116,7 @@ built yet (ticket-bot) are reported as skipped.
 
 ## 4a. Get a shell on a node
 
-The compute nodes run `sshd` but publish no port, so the **login node** is the SSH entry point (below); from it `ssh cn001` works. You can also open a shell on a node with `docker exec` (nodes are named
+The compute nodes run `sshd` but publish no port, so the **login node** is the SSH entry point (below); from it `ssh cn001` works. Every node, login node and the controller carry the usual troubleshooting tools (`ping`, `ip`, `ss`, `dig`, `nc`, `traceroute`, `tcpdump`, `curl`, `ps`, `lsof`, `strace`, `vi`; no sudo and no root login, by design): `ssh alice@login ping -c1 slurmctld`. Administrative Slurm commands (`scontrol update`) need the controller container, e.g. `docker exec workbench-slurmctld-1 scontrol update nodename=cn001 state=resume`. You can also open a shell on a node with `docker exec` (nodes are named
 `cn001`, `gpu001`, ... and their containers `workbench-<name>-1`):
 
 ```bash

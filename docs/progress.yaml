@@ -70,6 +70,7 @@ phases:
          how: "One ADR: what is real (scheduler, output, REST auth, node death timing), what is simulated (GPUs, cgroups, jobs), cost and what to cut first; linked from architecture 4.1 and client-testing. Issue 218."}
       - {name: Faster image rebuilds, status: review, where: "images/node-base/Dockerfile, images/login/Dockerfile, images/slurm-ctl/Dockerfile",
          how: "python3 moved into node-base's apt layer; login and slurm-ctl run no apt step, so a node-base change no longer re-installs packages twice: login + slurmctld rebuild 39.9 s before, 0.6 s after (one-time 22 s). Compute nodes carry an unused python3. Issue 225."}
+      - {name: Basic Linux tools on every node, status: review, where: "images/node-base/Dockerfile, tests/test_node_tools.py, tests/real/test_node_tools_real.py", how: "node-base's one apt layer adds ping, ip, ss, dig, nc, traceroute, tcpdump, curl, ps, lsof, strace, vi and similar, so nodes, login nodes and the controller can be troubleshot from inside. Issue 441. The live test (verify.sh --unit node_tools) is for the owner to run."}
       - {name: benchctl up / down / scale, status: done, pr: 45, where: benchctl/stack.py,
          how: "Pre-flight, staged start (observability, slurm, nodes), skips unbuilt mocks, scale regenerates slurm.conf, Grafana token created once (0600). Verified live with min; scale really stops containers."}
 
