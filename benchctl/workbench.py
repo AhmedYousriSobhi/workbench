@@ -22,7 +22,7 @@ FLOOR_MB = 1024                                   # MemAvailable that must remai
 # part -> (compose group, services it adds; None = the whole group)
 PARTS: dict[str, tuple[str, list[str] | None]] = {
     "jira": ("mocks", ["jira-mock"]), "jira-real": ("jira-real", None), "bmc": ("mocks", ["bmc-farm"]), "bcm": ("mocks", ["bcm-mock"]),
-    "accounting": ("accounting", None), "teleport": ("teleport", None), "k8s": ("k8s", None), "scenarios": ("scenarios", None), "load": ("load", None), "jump": ("jump", None)}
+    "accounting": ("accounting", None), "teleport": ("teleport", None), "k8s": ("k8s", None), "scenarios": ("scenarios", None), "load": ("load", None), "jump": ("jump", None), "dcgm": ("dcgm", None)}
 # The one registry of options that change what runs and so what memory it needs. The Cluster architecture sheet is drawn from it
 # (`catalog`): a new option is an entry here and in PARTS, not new page code.
 PART_INFO: dict[str, tuple[str, str]] = {
@@ -34,6 +34,7 @@ PART_INFO: dict[str, tuple[str, str]] = {
     "teleport": ("Teleport", "Teleport auth and proxy: tsh login and ssh to the login node and every node through it (not on by default)."),
     "k8s": ("Kubernetes", "A real Kubernetes control plane (etcd, API server, scheduler, controller manager) with KWOK fake CPU and GPU nodes, a read-only kubeconfig and fixtures (ADR 0034)."),
     "jump": ("Jump host", "A bare sshd bastion (nothing else installed) in front of the key-login nodes and the controller: ssh -J jump user@login (SPEC C-21). Teleport nodes keep Teleport."),
+    "dcgm": ("DCGM (real)", "The official dcgm-exporter on NVIDIA's mock NVML for the first GPU node, about 125 MB (ADR 0025). Next to the hand-written exporter, not instead of it."),
     "scenarios": ("Scenarios", "The scenario engine that plays timed faults."),
     "load": ("Load", "User and ticket simulators that generate jobs and tickets."),
 }
@@ -43,7 +44,7 @@ PART_INFO: dict[str, tuple[str, str]] = {
 CATEGORIES: dict[str, tuple[str, dict[str, str | None]]] = {
     "workload": ("what runs the jobs", {"slurm": None, "kubernetes": "k8s"}),
     "accounting": ("job history for sacct", {"slurmdbd": "accounting"}),
-    "monitoring": ("metrics and dashboards", {"prometheus": None, "grafana": None}),
+    "monitoring": ("metrics and dashboards", {"prometheus": None, "grafana": None, "dcgm": "dcgm"}),
     "ticketing": ("ticket systems", {"jira": "jira", "jira-real": "jira-real"}),
     "hardware": ("out-of-band management", {"bmc": "bmc", "bcm": "bcm"}),
     "access": ("how users reach the nodes", {"teleport": "teleport", "jump": "jump"}),
@@ -51,9 +52,9 @@ CATEGORIES: dict[str, tuple[str, dict[str, str | None]]] = {
 }
 NOT_BUILT: dict[str, str] = {}
 PART_CATEGORY = {part: cat for cat, (_, items) in CATEGORIES.items() for part in items.values() if part}
-BY_NAME_ONLY = ("jira-real",)  # heavy (about 2.4 GB): never turned on by `all` or `--addons`, only by its name (ADR 0026)
+BY_NAME_ONLY = ("jira-real", "dcgm")  # heavy (about 2.4 GB): never turned on by `all` or `--addons`, only by its name (ADR 0026)
 DEFAULT_PARTS = ("jira", "bmc", "bcm", "accounting", "scenarios")  # accounting: without slurmdbd, sacct says storage is disabled
-DROP_ORDER = ("jira-real", "load", "accounting", "scenarios", "bcm", "jira", "bmc")  # what to suggest removing first
+DROP_ORDER = ("dcgm", "jira-real", "load", "accounting", "scenarios", "bcm", "jira", "bmc")  # what to suggest removing first
 LIMITS = {"cpu_nodes": (0, 64), "gpu_nodes": (0, 16), "gpus_per_node": (1, 8)}
 
 

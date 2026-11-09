@@ -110,6 +110,7 @@ LINKS = [
         False,
         "gpu-exporter",
     ),
+    ("clients", "dcgm-exporter", "HTTP (Prometheus text)", 9402, "monitoring", "genuine DCGM metrics scrape (opt-in part, first GPU node)", "dcgm-exporter", True, None),
     (
         "clients",
         "jira-mock",
