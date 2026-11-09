@@ -16,7 +16,7 @@ import urllib.error
 import urllib.request
 
 BCM_URL = os.environ.get("WORKBENCH_BCM_URL", "http://bcm-mock:8081/json")
-HEAD_IP = "10.141.255.254"
+HEAD_IP = os.environ.get("WORKBENCH_HEAD_IP", "10.141.255.254")  # the controller's address when there is one
 HEALTHCHECKS = [("DeviceIsUp", "Checks whether the device is up"), ("ManagedServicesOk", "Checks that the managed services run"),
                 ("failedprejob", "Checks for jobs that failed their prejob health check")]
 MUTATING = {"add", "append", "clear", "clone", "commit", "foreach", "power", "reboot", "remove", "rename", "run", "set",

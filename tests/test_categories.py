@@ -64,6 +64,7 @@ def test_start_forwards_the_selection_as_parts(monkeypatch):
     calls = []
     monkeypatch.setattr(cli, "_launcher", lambda *a: calls.append(a))
     monkeypatch.setattr(cli, "_offer_completion", lambda: None)
+    monkeypatch.setattr(cli.workbench, "current", lambda sim, path=None: None)  # a saved workbench on this machine would be kept (issue 387)
     runner.invoke(cli.app, ["start", "--access", "teleport", "--simulation", "load"])
     args = calls[-1]
     assert args[0] == "start" and "--profile" not in args

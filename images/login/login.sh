@@ -19,7 +19,7 @@ for u in $WORKBENCH_USERS; do
 done
 echo "AllowUsers$names" >> /etc/ssh/sshd_config
 # The nodes share one host key; trusting it for every node name keeps the hop free of prompts.
-echo "cn*,gpu* $(cut -d' ' -f1,2 /run/workbench/ssh/ssh_host_node_ed25519_key.pub)" > /etc/ssh/ssh_known_hosts
+echo "cn*,gpu*,slurmctld,controller $(cut -d' ' -f1,2 /run/workbench/ssh/ssh_host_node_ed25519_key.pub)" > /etc/ssh/ssh_known_hosts
 install -m 600 /run/workbench/ssh/ssh_host_ed25519_key /etc/ssh/ssh_host_ed25519_key
 # WORKBENCH_LOGIN_AUTH (ADR 0023): `teleport` takes no key at all, so the Teleport CA (teleport-ssh below) is the only way in
 if [ "${WORKBENCH_LOGIN_AUTH:-ssh}" = "teleport" ]; then
@@ -27,5 +27,7 @@ if [ "${WORKBENCH_LOGIN_AUTH:-ssh}" = "teleport" ]; then
 else
   install -m 644 /run/workbench/ssh/authorized_keys /etc/ssh/authorized_keys
 fi
+# the controller, when there is one, is the BCM head node (issue 416): the login nodes lose cmsh
+[ "${WORKBENCH_HEAD:-1}" = 1 ] || rm -f /usr/local/bin/cmsh
 /usr/local/sbin/teleport-ssh
 exec /usr/sbin/sshd -D -e

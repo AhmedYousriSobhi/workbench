@@ -3,7 +3,17 @@
 Addresses are the containers' fixed private IPs at their standard ports (`benchctl/addressing.py`, ADR 0018): the host
 routes the Docker network, so a client on this machine connects to them directly. The ports published on 127.0.0.1 are
 the fallback (`also on`). Credentials are named by path only, never read, so this page cannot leak a secret."""
-from benchctl import addressing, compose, jira_real, k8s, logins, teleport
+from benchctl import (
+    addressing,
+    compose,
+    controller,
+    dcgm,
+    jira_real,
+    k8s,
+    logins,
+    real_gpu,
+    teleport,
+)
 from benchctl.describe import BMC_TLS_PORT
 
 SECRETS = "compose/generated/secrets"
@@ -75,6 +85,9 @@ def actions_for(e: dict, sim: dict, user: str) -> list[dict]:
     i, k = e["id"], e["kind"]
     if k == "ssh" and i == "nodes":
         return [copy("Copy benchctl ssh", f"benchctl ssh {user}@<node>")]  # benchctl adds the key and the jump (#275)
+    if k == "ssh" and i in ("controller", "jump"):
+        port = controller.SSH_PORT if i == "controller" else controller.JUMP_PORT
+        return [copy("Copy ssh", f"ssh {SSH_OPTS} -p {port} {user}@{LOCAL}"), {"kind": "uri", "label": "Open in SSH app (needs a handler)", "value": f"ssh://{user}@{LOCAL}:{port}"}]
     if k == "ssh":
         port = compose.SSH_PORT + [n for n, _ in logins.nodes(sim)].index(i)
         # Copy first: it works everywhere; ssh:// needs a handler the desktop may not have registered (#281)
@@ -88,6 +101,8 @@ def actions_for(e: dict, sim: dict, user: str) -> list[dict]:
         "jira-real": [link("Open Jira (real)", f"http://{LOCAL}:{jira_real.PORT}"),
                       {"kind": "post", "label": "Refresh licence (restarts Jira)", "value": "/api/jira-real/refresh"}],
         "gpu": [link("Open the metrics", f"http://{LOCAL}:9400/metrics")],
+        "dcgm": [link("Open the real DCGM metrics", f"http://{LOCAL}:{dcgm.PORT}/metrics")],
+        "real-gpu": [link("Open the real GPU metrics", f"http://{LOCAL}:{real_gpu.PORT}/metrics")],
         "prometheus": [link("Open Prometheus", f"http://{LOCAL}:9090")],
         "grafana": [link("Open Grafana", f"http://{LOCAL}:3000")],
         "slurm": [copy("Copy sinfo", "benchctl exec slurmctld -- sinfo")],
@@ -119,6 +134,7 @@ def _rows(sim: dict) -> list[dict]:
 
     def ssh_for(ip: str) -> str:
         return f"ssh {SSH_OPTS} {user}@{ip}"
+    admin = (controller.allowed_users(sim) or [user])[0]
     bmc, bcm, jira = ip["bmc-farm"], ip["bcm-mock"], ip["jira-mock"]
     return [
         *login_rows(sim, users, user, ssh_for),
@@ -126,6 +142,14 @@ def _rows(sim: dict) -> list[dict]:
          "command": f"{ssh} ssh <node> hostname" if first else f"tsh --proxy={teleport.proxy_addr(sim)} --insecure -i {SECRETS}/teleport/identity/{user} ssh {user}@<node>",
          "credential": SSH_KEY if first else f"{SECRETS}/teleport/identity/{user}",
          "how": "Same key and users, from the login node. The exact IPs: `benchctl describe node <node>`."},
+        {"id": "controller", "name": "Controller node (slurmctld, BCM head node)", "kind": "ssh", "address": f"{ip['slurmctld']}:22 (alias `controller`)",
+         "command": f"ssh {SSH_OPTS} {admin}@{ip['slurmctld']} scontrol ping", "credential": SSH_KEY,
+         "how": f"Only with the controller on (`benchctl up --controller`). Key login for admins only: {', '.join(controller.allowed_users(sim)) or 'whitelist in sim.yaml controller.allow (users or groups)'}; others are refused. "
+                f"slurmctld runs here and `cmsh` lives here, not on the login nodes. Also 127.0.0.1:{controller.SSH_PORT}. Without it the login node acts as the head node."},
+        {"id": "jump", "name": "Jump host (bastion)", "kind": "ssh", "address": f"{ip['jump']}:22",
+         "command": f"ssh {SSH_OPTS} -o ProxyCommand='ssh {SSH_OPTS} -W %h:%p {user}@{ip['jump']}' {user}@{login}", "credential": SSH_KEY,
+         "how": f"Only with the jump part on (`benchctl up --access jump`). A bare sshd with nothing else installed: use it as a jump host (`ssh -J`, or a `ProxyCommand` that carries the key as in the command here: `-J` does not pass `-i` or `-o` to the jump leg) to reach a key-login node or the controller. "
+                f"Teleport nodes keep Teleport. Also 127.0.0.1:{controller.JUMP_PORT}."},
         {"id": "teleport", "name": "Teleport (SSH through a proxy)", "kind": "https", "address": f"https://{teleport.proxy_addr(sim)}",
          "command": f"tsh --proxy={teleport.proxy_addr(sim)} --insecure -i {SECRETS}/teleport/identity/{user} ls",
          "credential": f"{SECRETS}/teleport/identity/{user}",
@@ -157,6 +181,12 @@ def _rows(sim: dict) -> list[dict]:
          "how": "JWT, minted per user with scontrol token (not root). Reachable on the cluster network only, not on 127.0.0.1."},
         {"id": "gpu", "name": "GPU exporter (DCGM metrics)", "kind": "http", "address": f"http://{ip['gpu-exporter-farm']}:9400/metrics",
          "command": f"curl -s http://{ip['gpu-exporter-farm']}:9400/metrics | head", "credential": None, "how": "No login. Also on 127.0.0.1:9400."},
+        {"id": "dcgm", "name": "DCGM exporter (real, first GPU node)", "kind": "http", "address": f"http://{LOCAL}:{dcgm.PORT}/metrics",
+         "command": f"curl -s http://{LOCAL}:{dcgm.PORT}/metrics | head", "credential": None,
+         "how": "Only with `benchctl up --with dcgm`. The official dcgm-exporter on a mock NVML for the first GPU node (ADR 0025); no login, localhost only. A GPU a Slurm job holds reads busy; a scenario clear restarts it (DCGM keeps the last XID), a powered-off node stops it; `--dcgm-nodes N` adds one per GPU node (ports 9410, 9411, ...)."},
+        {"id": "real-gpu", "name": "Real GPU (this machine's NVIDIA card)", "kind": "http", "address": f"http://{LOCAL}:{real_gpu.PORT}/metrics",
+         "command": f"curl -s http://{LOCAL}:{real_gpu.PORT}/metrics | head", "credential": None,
+         "how": "Only with `benchctl up --with real-gpu` on a machine with an NVIDIA card, its driver and the container toolkit (SPEC C-23). Real series from the real card, labelled Hostname rgpu001; no login, localhost only. `docker exec workbench-real-gpu-1 dcgmi discovery -l` and `nvidia-smi` work in that container."},
         {"id": "prometheus", "name": "Prometheus", "kind": "http", "address": f"http://{ip['prometheus']}:9090",
          "command": f"curl -s http://{ip['prometheus']}:9090/-/ready", "credential": None, "how": "No login. Also on 127.0.0.1:9090."},
         {"id": "grafana", "name": "Grafana", "kind": "http", "address": f"http://{ip['grafana']}:3000",

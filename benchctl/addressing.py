@@ -23,7 +23,7 @@ IPMI_LOGIN_IP = "10.148.255.254"  # the head node is also on the BMC network (th
 IPMI_FARM_IP = "10.148.255.12"    # the farm that owns every BMC's state
 BMC_NODE_PORT_BASE = 9000          # the farm's per-node TLS port: 9000 + index in node order (components/bmc-farm/bmc.py)
 # service -> last octet in 10.141.255.0/24. observability.yml (a static file) repeats the three observability ones.
-SERVICE_HOSTS = {"slurmctld": 1, "slurmrestd": 2, "slurmdbd": 3, "mariadb": 4, "bcm-mock": 10, "jira-mock": 11,
+SERVICE_HOSTS = {"slurmctld": 1, "slurmrestd": 2, "slurmdbd": 3, "mariadb": 4, "jump": 5, "bcm-mock": 10, "jira-mock": 11,
                  "bmc-farm": 12, "scenario-engine": 13, "user-sim": 14, "ticket-bot": 15, "jira-real": 16, "jira-db": 17,
                  "teleport": 30, "k8s-apiserver": 40, "k8s-etcd": 41, "k8s-controller-manager": 42, "k8s-scheduler": 43,
                  "kwok-controller": 44, "prometheus": 20, "grafana": 21, "gpu-exporter-farm": 22}
@@ -40,10 +40,17 @@ def login_ip(index: int, subnet: str = INTERNAL) -> str:
     return f"{a}.{b}.255.{254 if index == 0 else 253 - index}"
 
 
+def service_ip(name: str) -> str:
+    """The fixed address of a service (10.141.255.x)."""
+    a, b = _prefix(INTERNAL)
+    return f"{a}.{b}.255.{SERVICE_HOSTS[name]}"
+
+
 def _prefix(subnet: str) -> tuple[int, int]:
     return tuple(int(x) for x in subnet.split("/")[0].split(".")[:2])  # a /16: the first two octets
 
 
+REAL_GPU_IP = "10.141.254.1"  # the real card's node (benchctl/real_gpu.py): third octet 254 is unused by every block below
 GPU_BLOCK = 100  # the third octet GPU nodes start at; compute nodes use 0..99 (25,400 of them)
 BLOCK = {"compute": 0, "gpu": GPU_BLOCK, "k8s-cpu": 200, "k8s-gpu": 230}  # first third octet of each kind (Kubernetes nodes: BMC and BCM addresses)
 ROOM = {"compute": 100, "gpu": 100, "k8s-cpu": 30, "k8s-gpu": 24}         # how many third octets each kind may use
@@ -67,6 +74,8 @@ def plan(sim: dict, compute_override: int | None = None) -> dict:
             nodes[name] = host_ip(INTERNAL, seen[kind], kind)
         bmc[name] = host_ip(IPMI, seen[kind], kind)
         seen[kind] += 1
+    if (sim.get("real_gpu") or {}).get("enabled"):
+        nodes[sim["real_gpu"]["node"]] = REAL_GPU_IP
     logins = {logins_mod.name(i): login_ip(i) for i, _ in enumerate(logins_mod.modes(sim))}
     return {"internal": INTERNAL, "ipmi": IPMI, "login": LOGIN_IP, "logins": logins, "ipmi_logins": {n: login_ip(i, IPMI) for i, n in enumerate(logins)}, "nodes": nodes, "bmc": bmc,
             "bmc_port": {n: BMC_NODE_PORT_BASE + i for i, (n, _) in enumerate(hardware_nodes(sim, compute_override))},

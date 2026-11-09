@@ -1,0 +1,8 @@
+#!/bin/sh
+# `dcgmi` on a node: the client only. A node with a real DCGM exporter (the dcgm and real-gpu parts) names that exporter's host engine in
+# WORKBENCH_DCGM_HOST (host:port), so `dcgmi discovery -l` lists its GPUs as on a real GPU node. Any other node has no host engine: dcgmi says so.
+for a in "$@"; do
+  case "$a" in -h|--host) exec /opt/dcgm/dcgmi "$@" ;; esac
+done
+[ -n "${WORKBENCH_DCGM_HOST:-}" ] && exec /opt/dcgm/dcgmi "$@" --host "$WORKBENCH_DCGM_HOST"
+exec /opt/dcgm/dcgmi "$@"

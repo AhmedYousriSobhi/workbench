@@ -51,3 +51,11 @@ def test_slurmdbd_answers_does_not_answer_or_is_not_configured():
     assert slurmstats.dbd(lambda c: subprocess.CompletedProcess(c, 1, "", "Slurm accounting storage is disabled")) is None
     both = lambda c: subprocess.CompletedProcess(c, 0, "workbench\n" if "sacctmgr" in c else SDIAG, "")
     assert slurmstats.collect(both)["dbd"] is True
+
+
+def test_node_states_come_from_sinfo_and_the_worse_state_wins():
+    out = "cn001 idle\ncn002 drained\ncn002 idle\ngpu001 allocated*\ngpu002 draining\ngarbage here now\n"
+    assert slurmstats.node_states(run(out)) == {"cn001": "idle", "cn002": "drained", "gpu001": "allocated", "gpu002": "draining"}
+    assert slurmstats.node_states(run("", 1)) is None
+    both = lambda c: subprocess.CompletedProcess(c, 0, "cn001 drained\n" if "sinfo" in c else SDIAG, "")
+    assert slurmstats.collect(both)["node_states"] == {"cn001": "drained"}

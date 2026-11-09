@@ -16,6 +16,8 @@ BMC, BCM, JIRA, EXPORTER = ("http://127.0.0.1:8000", "http://127.0.0.1:8081", "h
                             "http://127.0.0.1:9400")
 SERVICES = {"bmc-farm": f"{BMC}/healthz", "bcm-mock": f"{BCM}/healthz", "jira-mock": f"{JIRA}/healthz",
             "gpu-exporter": f"{EXPORTER}/metrics"}
+REAL_GPU = "http://127.0.0.1:9403"  # the real card's exporter (benchctl/real_gpu.py PORT); a service only when the real-gpu part is built
+DCGM_REAL = "http://127.0.0.1:9402"  # the real DCGM exporter (benchctl/dcgm.py PORT); a service only when the dcgm part is built
 JIRA_REAL = "http://127.0.0.1:8083"  # the real Jira's /status (benchctl/jira_real.py PORT); a service only when the part is built
 TELEPORT = "http://127.0.0.1:3434"  # Teleport's diagnostics endpoint (benchctl/teleport.py DIAG_PORT); a service only when the part is built
 HOT_C = 90.0
@@ -48,6 +50,17 @@ def k8s_built() -> bool:
 
 def jira_real_built() -> bool:
     return saved_has_part("jira-real")
+
+
+def saved_controller(sim: dict) -> bool:
+    """Whether the workbench last built has a controller node (the saved selection, else sim.yaml's `controller.enabled`)."""
+    from benchctl import controller, workbench
+
+    try:
+        spec = workbench.current({})
+    except (workbench.SpecError, OSError, ValueError):
+        spec = None
+    return spec.controller if spec and spec.controller is not None else controller.enabled(sim)
 
 
 def saved_has_part(part: str) -> bool:
@@ -174,7 +187,7 @@ class Cluster:
         thermal = self._try(f"{BMC}/{name}/redfish/v1/Chassis/1/Thermal") or {}
         temps = [t.get("ReadingCelsius") for t in thermal.get("Temperatures", []) if t.get("Name") == "CPU"]
         fans = [f for f in thermal.get("Fans", []) if f.get("Status", {}).get("Health") == "Critical"]
-        return {"name": name, "kind": kind, "gpus": self.gpus if kind == "gpu" else 0,
+        return {"name": name, "kind": kind, "gpus": self.gpus if kind == "gpu" else 1 if kind == "real-gpu" else 0,
                 "power": system.get("PowerState") if isinstance(system, dict) else None,
                 "temp": temps[0] if temps else None, "fans_failed": len(fans)}
 
@@ -184,9 +197,19 @@ class Cluster:
         Sequential on purpose: localhost calls take a few ms, and a thread pool pushed the UI over its 50 MB budget.
         """
         probes = {**SERVICES, **({"teleport": f"{TELEPORT}/healthz"} if teleport_built() else {}),
-                  **({"jira-real": f"{JIRA_REAL}/status"} if jira_real_built() else {})}
+                  **({"jira-real": f"{JIRA_REAL}/status"} if jira_real_built() else {}),
+                  **({"dcgm-exporter": f"{DCGM_REAL}/metrics"} if saved_has_part("dcgm") else {}),
+                  **({"real-gpu": f"{REAL_GPU}/metrics"} if saved_has_part("real-gpu") else {})}
         names = list(probes)
         up = [self._try(probes[n]) is not None for n in names]
+        from benchctl import controller
+
+        if saved_has_part("jump"):  # a bare sshd bastion: up when its port answers (the page has no Docker)
+            names.append("jump")
+            up.append(self.probe("127.0.0.1", controller.JUMP_PORT))
+        if saved_controller(self.sim):  # the controller node: slurmctld's host with sshd (issue 416)
+            names.append("controller")
+            up.append(self.probe("127.0.0.1", controller.SSH_PORT))
         if k8s_built():  # the real API server: a box with up/down only (no request counter, like the real Jira)
             from benchctl import k8s
 
@@ -207,6 +230,17 @@ class Cluster:
             row["xid"] = xids.get(row["name"], 0)
             row["ib_down"], row["nic_flap"] = ib.get(row["name"], 0), row["name"] in flap
             row["state"], row["label"] = classify(row)
+        for row in rows:
+            if row["kind"] == "real-gpu":  # no BMC entry yet (issue 431): the card's own exporter says whether it is up and how busy it is
+                text = self._try(f"{REAL_GPU}/metrics")
+                text = text if isinstance(text, str) else ""
+                u = gpu_util_by_node(text).get(row["name"], [])
+                row["power"] = "On" if u else None
+                row["gpu_util"], row["gpus_busy"] = (round(sum(u) / len(u)), sum(1 for x in u if x >= 50)) if u else (0, 0)
+                row["xid"] = xid_by_node(text).get(row["name"], 0)
+                m = re.search(r'^DCGM_FI_DEV_GPU_TEMP\{[^}]*\} (\S+)', text, re.MULTILINE)
+                row["temp"] = float(m[1]) if m else None
+                row["state"], row["label"] = classify(row)
         if k8s_built():  # the Kubernetes nodes are their own group beside the Slurm nodes; their state is the API's (read-only user)
             from benchctl import k8s
 
@@ -222,7 +256,7 @@ class Cluster:
         if action not in ACTIONS:
             raise ActionError(f"unknown action {action!r}")
         _, gpu_only, steps = ACTIONS[action]
-        if gpu_only and kinds[node] != "gpu":
+        if gpu_only and kinds[node] not in ("gpu", "real-gpu"):
             raise ActionError(f"{ACTIONS[action][0]} only applies to GPU nodes")
         out = []
         for target, do in steps:

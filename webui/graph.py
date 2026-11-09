@@ -14,7 +14,7 @@ from .flow import SCENARIO_TARGETS
 PLANES = ("access", "management", "telemetry", "tickets", "faults")
 # service -> the plane its API belongs to (what a client uses it for)
 SERVICE_PLANE = {"bmc-farm": "management", "bcm-mock": "management", "gpu-exporter": "telemetry",
-                 "jira-mock": "tickets", "jira-real": "tickets", "k8s-api": "management"}
+                 "jira-mock": "tickets", "jira-real": "tickets", "k8s-api": "management", "dcgm-exporter": "telemetry", "real-gpu": "telemetry"}
 MEASURED = comms.MEASURED  # the real Jira publishes no counter, so it is declared only
 INJECTABLE = set(SCENARIO_TARGETS.values())  # blocks a scenario step or fault button can reach (flow.note)
 
@@ -31,10 +31,13 @@ def build(services: dict, nodes: list, logins: list, cluster: str | None = None)
     one list without clashing (#328).
     """
     teleport = "teleport" in services
-    svcs = [s for s in services if s != "teleport"]
+    jump, ctl = "jump" in services, "controller" in services
+    svcs = [s for s in services if s not in ("teleport", "jump", "controller")]
     ents = [{"id": "clients", "type": "clients"}, {"id": "faults", "type": "injector"}]
     ents += [{"id": lg["name"], "type": "login", "mode": lg["mode"], "kind": lg.get("kind", "both")} for lg in logins]
     ents += [{"id": "teleport", "type": "access"}] if teleport else []
+    ents += [{"id": "jump", "type": "access"}] if jump else []
+    ents += [{"id": "controller", "type": "controller"}] if ctl else []
     ents += [{"id": s, "type": "service"} for s in svcs]
     slurm_nodes = [n for n in nodes if n["kind"] != "k8s"]
     k8s_nodes = [n for n in nodes if n["kind"] == "k8s"]
@@ -48,6 +51,13 @@ def build(services: dict, nodes: list, logins: list, cluster: str | None = None)
             edges.append(_edge("clients", lg["name"], "access", "ssh", False))
         if lg["mode"] != "ssh" and teleport:
             edges.append(_edge("teleport", lg["name"], "access", "teleport", False))
+    if jump:  # the bastion fronts every key-login node and the controller; Teleport nodes keep Teleport
+        edges.append(_edge("clients", "jump", "access", "ssh", False))
+        edges += [_edge("jump", lg["name"], "access", "jump", False) for lg in logins if lg["mode"] != "teleport"]
+        edges += [_edge("jump", "controller", "access", "jump", False)] if ctl else []
+    if ctl:
+        edges.append(_edge("clients", "controller", "access", "ssh", False))
+        edges += [_edge(lg["name"], "controller", "access", "jump", False) for lg in logins if lg["mode"] != "teleport"]
     for s in svcs:
         edges.append(_edge("clients", s, SERVICE_PLANE.get(s, "management"), "api", s in MEASURED))
         if s in INJECTABLE:

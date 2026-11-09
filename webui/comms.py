@@ -72,6 +72,11 @@ LINKS = [
         None,
     ),
     ("login", "nodes", "SSH", 22, "access", "jump host to a node", "slurm", True, None),
+    ("clients", "jump", "SSH", 22, "access", "bastion: ssh -J through it to a login node or the controller (127.0.0.1:2220 fallback)", "jump", True, None),
+    ("jump", "login", "SSH", 22, "access", "the bastion's hop to a key-login node", "jump", True, None),
+    ("jump", "controller", "SSH", 22, "access", "the bastion's hop to the controller", "controller", True, None),
+    ("clients", "controller", "SSH", 22, "access", "admin key login, whitelisted users only (127.0.0.1:2221 fallback)", "controller", True, None),
+    ("login", "controller", "SSH", 22, "access", "admin hop from a login node", "controller", True, None),
     (
         "clients",
         "bmc-farm",
@@ -105,6 +110,8 @@ LINKS = [
         False,
         "gpu-exporter",
     ),
+    ("clients", "dcgm-exporter", "HTTP (Prometheus text)", 9402, "monitoring", "genuine DCGM metrics scrape (opt-in part, first GPU node)", "dcgm-exporter", True, None),
+    ("clients", "real-gpu", "HTTP (Prometheus text)", 9403, "monitoring", "real DCGM metrics of this machine's own NVIDIA card (opt-in part)", "real-gpu", True, None),
     (
         "clients",
         "jira-mock",

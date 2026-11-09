@@ -27,13 +27,13 @@ def command(sim: dict, node: str, gpus: int = 0, duration: int = 300, user: str 
         raise WorkloadError(f"unknown user {user!r}: sim.yaml has {', '.join(users)}")
     if not DURATION[0] <= duration <= DURATION[1]:
         raise WorkloadError(f"duration must be {DURATION[0]} to {DURATION[1]} seconds")
-    per_node = sim.get("gpu", {}).get("gpus_per_node", 0) if kinds[node] == "gpu" else 0
+    per_node = sim.get("gpu", {}).get("gpus_per_node", 0) if kinds[node] == "gpu" else 1 if kinds[node] == "real-gpu" else 0
     if not 0 <= gpus <= per_node:
         raise WorkloadError(f"{node} has {per_node} GPU(s); asked for {gpus}")
     if not 1 <= cpus <= 64:
         raise WorkloadError("cpus must be 1 to 64")
     # --output/--error: the working directory here is /, which a user cannot write, so a default slurm-N.out fails the job at launch
-    part = "gpu" if kinds[node] == "gpu" else "cpu"
+    part = "real-gpu" if kinds[node] == "real-gpu" else "gpu" if kinds[node] == "gpu" else "cpu"
     args = ["sbatch", "--parsable", f"--nodelist={node}", f"--partition={part}", f"--cpus-per-task={cpus}",
             f"--job-name=wb-{node}", f"--time={duration // 60 + 1}", "--output=/dev/null", "--error=/dev/null", *([f"--gres=gpu:{gpus}"] if gpus else []),
             f"--wrap=sleep {duration}"]

@@ -12,7 +12,7 @@ How to run workbench on your workstation and see it working. Keep this page in s
 ./scripts/benchctl stop       # stop the web page and the cluster
 ```
 
-Plain `start` is the small `min` preset, and its first line says what it starts. It does not reuse a workbench you built earlier with `up --cpu-nodes ...`: it forgets it and says so, naming the counts and parts it replaces. `./scripts/benchctl start --profile min` is the plain default, spelled out. To include the optional parts by category use `./scripts/benchctl start --ticketing jira --hardware bmc,bcm --access teleport` or `./scripts/benchctl start --addons` for all of them (Tab completes the flags). To pick your own mix (for example 2 CPU and 4 GPU nodes with Jira) and see what it costs first, use `benchctl plan` and `benchctl up --cpu-nodes ...` ([choose the workbench](choose-workbench.md); what each part uses and what to have free: [memory](memory.md)).
+Plain `start` keeps the workbench you built last (with `up --cpu-nodes ...`, `apply` or the page's Apply) and rebuilds it as it was, so restarting the page or the governor never changes your cluster; its first line names the counts and parts it keeps. With nothing built before, it is the small `min` preset. Naming a size or parts replaces what you built, and the first line says so: `./scripts/benchctl start --profile min` goes back to the small default, `start --with jira` builds the default parts plus those. To include the optional parts by category use `./scripts/benchctl start --ticketing jira --hardware bmc,bcm --access teleport` or `./scripts/benchctl start --addons` for all of them (Tab completes the flags). To pick your own mix (for example 2 CPU and 4 GPU nodes with Jira) and see what it costs first, use `benchctl plan` and `benchctl up --cpu-nodes ...` ([choose the workbench](choose-workbench.md); what each part uses and what to have free: [memory](memory.md)).
 
 Every command has the same shape, like `kubectl`: `benchctl VERB [RESOURCE] [NAME]`, for example `benchctl get nodes`,
 `benchctl exec gpu001 -- nvidia-smi`, `benchctl ssh alice@cn001`, `benchctl scenario run node-down`. `benchctl --help` lists the verbs;
@@ -45,11 +45,11 @@ governor service needs no packages; it runs on the system `python3`.
 ## 1. Check the setup (doctor)
 
 ```bash
-./scripts/benchctl doctor        # cgroup v2, PSI, Docker, swap, memlock, containers stay unprivileged
+./scripts/benchctl doctor        # cgroup v2, PSI, Docker, swap, memlock, containers stay unprivileged, and a tsh that is too new for Teleport
 ./scripts/benchctl preflight --profile min    # would this profile fit in free memory right now?
 ```
 
-A `WARN` for `virsh`, `vagrant` or `tc` is fine: only optional parts need them (Kubernetes needs no host tool). Fix any `FAIL` first.
+A `WARN` for `virsh`, `vagrant` or `tc` is fine: only optional parts need them (Kubernetes needs no host tool). Fix any `FAIL` first. If `tsh` is installed, doctor also says whether it is newer than the Teleport server (`teleport.version` in `sim.yaml`): Teleport supports a `tsh` of the same or one older major version, and a newer one is refused with an unclear error. `benchctl up` prints the same one-line warning when Teleport is on.
 
 ## 2. Start the governor (outside monitoring and control)
 
@@ -91,6 +91,8 @@ that does. Components not built yet are skipped with a note.
 | Slurm jobs | `docker exec workbench-slurmctld-1 sinfo` / `squeue` / `sbatch` |
 | Slurm REST | token: `docker exec workbench-slurmctld-1 scontrol token username=alice`; see ADR 0003 |
 | Teleport (when on) | `https://10.141.255.30:3080`; `tsh --proxy=10.141.255.30:3080 --insecure -i compose/generated/secrets/teleport/identity/alice ls`; steps in [Nodes and shells](../manual/04-nodes-and-shells.md#teleport-tsh-to-the-login-node-and-the-nodes) |
+| Real DCGM exporter (when on) | `./scripts/benchctl up --with dcgm`, then `curl http://127.0.0.1:9402/metrics`. The official dcgm-exporter on NVIDIA's mock NVML stands for the first GPU node (about 125 MB, off by default; build needs network once); `--dcgm-nodes 3` gives the first three GPU nodes one each (ports 9402, 9410, 9411; `docker exec workbench-dcgm-exporter-gpu002-1 ...` for the second). It follows Slurm jobs and injected faults. A scenario `clear` restarts the exporter (real DCGM keeps the last XID until its host engine restarts), and a node powered off stops it, so scraping it fails as for a dead host; both need Docker, so the web page's buttons leave the exporter as it is. `dcgmi` works inside that container and on the GPU node it stands for (`docker exec workbench-gpu001-1 dcgmi discovery -l`; a node with no real exporter has no host engine to ask): `docker exec workbench-dcgm-exporter-1 dcgmi discovery -l`. The hand-written exporter on `:9400` stays for every node. See ADR 0025 |
+| Real GPU (when on) | `./scripts/benchctl up --with real-gpu` on a machine with an NVIDIA card, its driver and the container toolkit with a CDI spec (`sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml`); then `curl http://127.0.0.1:9403/metrics` (real series from the real card, `Hostname="rgpu001"`) and `docker exec workbench-rgpu001-1 dcgmi discovery -l` (on the node, through the exporter's host engine) or `docker exec workbench-real-gpu-1 nvidia-smi`. It also adds the Slurm node `rgpu001` on the card in its own partition: `docker exec -u alice workbench-login-1 sbatch -p real-gpu --gres=gpu:1 --wrap="nvidia-smi -L"`, or interactively `srun -p real-gpu --gres=gpu:1 nvidia-smi -L` (always name the partition: `srun` defaults to `cpu`, and `--nodelist rgpu001` alone answers "Requested node configuration is not available"). Without a card it stops with one message. About 480 MB; never in `all`. SPEC C-23, ADR 0037 |
 | Build progress and diagrams | `docs/progress.html` |
 
 Inject a fault and watch it show up:
@@ -114,7 +116,7 @@ built yet (ticket-bot) are reported as skipped.
 
 ## 4a. Get a shell on a node
 
-The compute nodes run `sshd` but publish no port, so the **login node** is the SSH entry point (below); from it `ssh cn001` works. You can also open a shell on a node with `docker exec` (nodes are named
+The compute nodes run `sshd` but publish no port, so the **login node** is the SSH entry point (below); from it `ssh cn001` works. Every node, login node and the controller carry the usual troubleshooting tools (`ping`, `ip`, `ss`, `dig`, `nc`, `traceroute`, `tcpdump`, `curl`, `ps`, `lsof`, `strace`, `vi`; no sudo and no root login, by design): `ssh alice@login ping -c1 slurmctld`. Administrative Slurm commands (`scontrol update`) need the controller container, e.g. `docker exec workbench-slurmctld-1 scontrol update nodename=cn001 state=resume`. You can also open a shell on a node with `docker exec` (nodes are named
 `cn001`, `gpu001`, ... and their containers `workbench-<name>-1`):
 
 ```bash
@@ -135,6 +137,16 @@ A client that only accepts keys under `~/.ssh` can use `./scripts/benchctl ssh-k
 See what the output looks like in [Nodes and shells](../manual/04-nodes-and-shells.md). A shell that hangs may be a node the governor paused under memory pressure (`./scripts/benchctl status`). The other machine
 with a real `sshd` is the optional fidelity VM (`cd fidelity-vm && ./bin/up.sh`, then `vagrant ssh fidelity`). Teleport
 access (`./scripts/benchctl up --with teleport`, then `tsh ... ls`) is in [Nodes and shells](../manual/04-nodes-and-shells.md#teleport-tsh-to-the-login-node-and-the-nodes). More in [Nodes and shells](../manual/04-nodes-and-shells.md).
+
+A controller node (where slurmctld runs; whitelisted admins only, and the BCM head node) and a jump host (a bare bastion in front of the login nodes) are optional:
+
+```bash
+./scripts/benchctl up --controller --access jump           # 24 MB each; add --access teleport for Teleport to the controller too
+ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2221 alice@127.0.0.1 sinfo      # alice is in the admins group; bob is refused
+ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -o ProxyCommand='ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -W %h:%p -p 2220 alice@127.0.0.1' alice@10.141.255.254 hostname   # through the jump host (`-J` alone would not pass the key to the jump leg)
+```
+
+Who may use the controller is set in `sim.yaml` (`controller.allow.users`, `controller.allow.groups`); see [Choose your workbench](choose-workbench.md) and ADR 0036.
 
 Kubernetes (a real control plane with KWOK fake nodes, about 0.3 GB) is optional: `./scripts/benchctl up --with k8s`, then `ssh ... alice@127.0.0.1 kubectl get nodes` (see [Nodes and shells](../manual/04-nodes-and-shells.md#kubernetes-optional-part)).
 

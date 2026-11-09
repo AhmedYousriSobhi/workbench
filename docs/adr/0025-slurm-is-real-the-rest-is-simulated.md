@@ -58,7 +58,7 @@ from state and timing and it fits the memory budget.
 | Node health check runner | Upstream LBNL NHC | Inputs stay simulated; the runner and check semantics become real | to evaluate, #228; BSD-3 licensed, needs Bash 4.3; its GPU and IB checks need hardware, so ours stay custom scripts |
 | Jira (mock) | Real Jira Cloud/DC through the existing `cloud`/`dc` modes | Too heavy to run by default; use it to record responses for contract tests (SPEC NF-2) | proposed, #229; compare recorded response shapes, not replayed cassettes |
 | BMC (bmc-farm) | DMTF Redfish-Service-Validator against bmc-farm | Does not replace the mock; adds conformance evidence. The DMTF emulator and sushy-tools lack per-node addresses and fault injection | proposed, #230 |
-| GPU metrics (hand-written exporter) | Real DCGM with fake GPU entities | Unverified that it runs without hardware and serves the labels the client reads | research, #231; NVIDIA's mock NVML (Apache-2.0, up to 8 GPUs) lets the real dcgm-exporter run without a GPU, memory per node to measure |
+| GPU metrics (hand-written exporter) | Real DCGM with fake GPU entities | Works without hardware (spike, below); about 125 MB per exporter (430 MB in embedded mode), one per GPU node would cost about 250 MB for the default two | built as an opt-in part, #231 and #426 (SPEC C-22); the farm stays the default |
 | Kubernetes (not built) | k3d/kind plus KWOK (SPEC C-2) | Real from the start; memory budget to declare | blocked on a decision, #232; kind and k3d nodes are privileged by default, which conflicts with the unprivileged-container rule |
 | Jobs (`sleep`) | Bounded `stress-ng` | Real CPU and memory load; opt-in | proposed, #233 |
 
@@ -67,3 +67,30 @@ Cannot be real, with the reason:
 - **NFS/Lustre**: excluded by SPEC C-11.
 - **GPUs and GPU binding**: real GPUs are a non-goal (SPEC section 1).
 - **cgroup enforcement, link-down and InfiniBand port injection**: need privileges that ADR 0002 rejected.
+
+## Spike result: real dcgm-exporter on NVIDIA's mock NVML (#231)
+
+Run on 2026-11-09 with `dcgm-exporter` 4.4.2-4.7.0 (official image, 863 MB on disk) and the `k8s-test-infra` mock NVML v0.6.0
+(Apache-2.0, a 16 MB `libnvidia-ml.so` built in a throwaway Go container, mounted with `LD_LIBRARY_PATH`, profile in
+`MOCK_NVML_CONFIG`). No driver, no GPU, no privileges, container limit 512 MB.
+
+| Question | Result |
+|---|---|
+| Runs without hardware | Yes. It starts, finds the mock GPUs and serves the real `/metrics`. |
+| Labels the client reads | `Hostname`, `gpu`, `UUID`, `modelName`, `device`, `pci_bus_id` are present. `Hostname` is the container name (settable); the farm's `node` label is not emitted. |
+| Framebuffer | `FB_USED + FB_FREE` equals the profile's total (40377 + 0 MiB for the A100 profile, which reserves the rest). |
+| Memory | **Embedded DCGM (the exporter's default): about 430 MB RSS, the same with 2 GPUs as with 8.** With a separate `nv-hostengine` in the same container and the exporter reading from it (`-r localhost:5555`, what the part does): exporter 97 MB + host engine 25 MB = about 125 MB with 8 GPUs (76 MiB in the cgroup). The farm serves every GPU node from 18 MB. |
+| Values driven from outside | Yes. A file named by `MOCK_NVML_OVERRIDES` (`devices: {0: {utilization: {gpu: 93}, memory: {used_bytes: .., free_bytes: ..}}}`) changed `GPU_UTIL` and `FB_USED/FREE`; the mock re-reads it every second, the exporter shows it at its next collect (30 s by default, `-c` changes it). Memory used and free must be written together. A wrong field name is refused and logged, the old value stays. |
+| Driven by Slurm allocations or scenarios | Possible: the governor or scenario engine writes that file. Not built; the farm does it today. |
+| XID and ECC | The XID series exists only after an XID occurs. Writing `failure: {mode: ecc_uncorrectable, xid: {code: 63}}` for one device made `DCGM_FI_DEV_XID_ERRORS` read 63 on that GPU only, with its ECC double-bit counter rising. Removing the override does not reset it: DCGM keeps the last XID until its host engine restarts. ECC counters are not in the default list. |
+| Not in the default output | Temperature and power are on by default but static (33 C, 72 W) unless `dynamic_metrics` is enabled in the profile. |
+| Limits | At most 8 GPUs per node, static identity (name, UUID), values never follow real work. |
+
+**Decision (owner, 2026-11-09):** build the opt-in part, farm stays the default (issue 426, SPEC C-22). `--with dcgm` adds one real
+exporter for the first GPU node (`benchctl/dcgm.py`, `components/dcgm-exporter`; the mock is built from a pinned commit in the
+image). The farm writes the override file from its own state, so Slurm allocations, `xid` and `temp` injections reach it with no change
+to the scenario engine; an XID hits GPU 0. Limits: `h200` uses the mock's `h100` profile (name differs, memory total is set to the
+farm's), a cleared XID stays until the container restarts, and `down` does not stop it.
+
+**Addendum (owner, 2026-11-09, issue 435): the four limits are fixed.** (1) A scenario `clear` (the farm's or the BMC's) restarts the node's exporter, because DCGM only drops an XID when its host engine restarts; the farm writes the override file before it answers the inject, so the restart does not read a stale one. (2) A node powered off (`down`, or a BMC `power: Off`) stops its real exporter and powering it on starts it, so a scrape fails as for a dead host. Both are `dcgm` scenario steps (`stop`, `start`, `restart`), which need Docker: the web page plays them as skipped, the same as the Kubernetes steps (the page has no Docker, SPEC W-3). (3) `h200` keeps the `h100` profile and the start script rewrites the model name to `NVIDIA H200` (`MOCK_NVML_NAME`); the framebuffer total was already set. (4) `--dcgm-nodes N` (1 to 8, at most the GPU nodes) starts one exporter per node, `dcgm-exporter` for the first and `dcgm-exporter-<node>` for the others, ports 9402 then 9410 upward, one override file per node, GPU UUIDs made distinct per node (`MOCK_NVML_NODE_INDEX`); each costs about 125 MB. The count is a CLI/workbench-file option (`dcgm_nodes`); the page's Cluster architecture sheet has no field for it yet but keeps the saved value when applying.
+`nv-hostengine` is in this container only; the nodes carry the `dcgmi` client (issue 443) and reach this engine, so `docker exec workbench-gpu001-1 dcgmi discovery -l` works too (a node with no exporter has no engine to ask). In this container: `docker exec workbench-dcgm-exporter-1 dcgmi discovery -l` lists the GPUs, because the part runs the host engine on 127.0.0.1:5555 inside it.

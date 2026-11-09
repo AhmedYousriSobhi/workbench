@@ -198,17 +198,21 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
                 "k8s_cpu": {"cpus": kc.get("cpus"), "memory_gb": kc.get("memory_gb"), "prefix": kc.get("prefix", "kcn"), "count": pick(saved.k8s_cpu_nodes if saved else None, kc)},
                 "k8s_gpu": {"cpus": kg.get("cpus"), "memory_gb": kg.get("memory_gb"), "gpus": kg.get("gpus"), "gpu_type": kg.get("gpu_type", ""),
                             "prefix": kg.get("prefix", "kgpu"), "count": pick(saved.k8s_nodes if saved else None, kg)},
-                "bmc": {"groups": saved.bmc_groups if saved else None, "nodes": saved.bmc_nodes if saved else None}}
+                "bmc": {"groups": saved.bmc_groups if saved else None, "nodes": saved.bmc_nodes if saved else None},
+                "controller": {"enabled": saved.controller if saved and saved.controller is not None else bool((sim.get("controller") or {}).get("enabled"))},
+                "bcm": {"manage_kubernetes": saved.bcm_k8s if saved and saved.bcm_k8s is not None else bool((sim.get("bcm") or {}).get("manage_kubernetes", True))}}
 
     def build_plan(q) -> tuple:
         """Blocking (file reads, a governor call): run it with asyncio.to_thread."""
         from benchctl import workbench
 
         try:
-            spec = workbench.from_dict({k: int(q[k]) for k in ("cpu_nodes", "gpu_nodes", "gpus_per_node", "k8s_nodes", "k8s_cpu_nodes") if k in q}
+            spec = workbench.from_dict({k: int(q[k]) for k in ("cpu_nodes", "gpu_nodes", "gpus_per_node", "k8s_nodes", "k8s_cpu_nodes", "dcgm_nodes") if k in q}
                                        | ({"parts": [p for p in q["parts"].split(",") if p]} if "parts" in q else {})
                                        | ({"bmc_nodes": [n for n in q["bmc_nodes"].split(",") if n]} if "bmc_nodes" in q else {})
                                        | ({"bmc_groups": [g for g in q["bmc_groups"].split(",") if g]} if "bmc_groups" in q else {})
+                                       | ({"bcm_k8s": q["bcm_k8s"] == "1"} if "bcm_k8s" in q else {})
+                                       | ({"controller": q["controller"] == "1"} if "controller" in q else {})
                                        | ({"login_nodes": [m for m in q["logins"].split(",") if m]} if "logins" in q else {}),
                                        workbench.defaults(sim))
         except (ValueError, workbench.SpecError) as e:
@@ -253,9 +257,13 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             f" --with {p}" for p in sorted(spec.parts)) + "".join(f" --without {p}" for p in workbench.PARTS if p not in spec.parts)
         if spec.bmc_nodes is not None:
             flags += f" --bmc-nodes {','.join(spec.bmc_nodes)}"
-        flags += "".join(f" {f} {getattr(spec, k)}" for k, f in (("k8s_nodes", "--k8s-nodes"), ("k8s_cpu_nodes", "--k8s-cpu-nodes")) if getattr(spec, k) is not None)
+        flags += "".join(f" {f} {getattr(spec, k)}" for k, f in (("k8s_nodes", "--k8s-nodes"), ("k8s_cpu_nodes", "--k8s-cpu-nodes"), ("dcgm_nodes", "--dcgm-nodes")) if getattr(spec, k) is not None)
         if spec.bmc_groups is not None:
             flags += f" --bmc-groups {','.join(spec.bmc_groups)}"
+        if spec.controller is not None:
+            flags += " --controller" if spec.controller else " --no-controller"
+        if spec.bcm_k8s is not None:
+            flags += " --bcm-k8s" if spec.bcm_k8s else " --no-bcm-k8s"
         flags += f" --login {','.join(spec.login_nodes)} --app-mb 0"
         return JSONResponse({"fits": ok, "message": msg, "total_mb": est["total_mb"], "need_mb": est["need_mb"], "expected_mb": est["expected_mb"],
                              "running_mb": est["running_mb"], "available_mb": avail,
@@ -283,9 +291,13 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         if spec.bmc_nodes is not None:
             req["bmc_nodes"] = spec.bmc_nodes
         req["login_nodes"] = spec.login_nodes
+        if spec.bcm_k8s is not None:
+            req["bcm_k8s"] = spec.bcm_k8s
+        if spec.controller is not None:
+            req["controller"] = spec.controller
         if spec.bmc_groups is not None:
             req["bmc_groups"] = spec.bmc_groups
-        req.update({k: getattr(spec, k) for k in ("k8s_nodes", "k8s_cpu_nodes") if getattr(spec, k) is not None})
+        req.update({k: getattr(spec, k) for k in ("k8s_nodes", "k8s_cpu_nodes", "dcgm_nodes") if getattr(spec, k) is not None})
         try:
             res = await asyncio.to_thread(checks.governor_request, req, socket)
         except (OSError, ValueError) as e:
@@ -437,8 +449,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
     slurm_stats_cache: list = [float("-inf"), None]
 
     async def slurm_stats(request: Request):
-        """slurmctld's own request counts (sdiag), through the governor; cached 10 s so many tabs cost one exec."""
-        if time.monotonic() - slurm_stats_cache[0] > 10:
+        """slurmctld's own request counts (sdiag) and the Slurm node states (sinfo), through the governor; cached 4 s so many tabs cost one exec."""
+        if time.monotonic() - slurm_stats_cache[0] > 4:
             try:
                 res = await asyncio.to_thread(checks.governor_request, {"cmd": "slurm-stats"}, socket)
             except (OSError, ValueError):

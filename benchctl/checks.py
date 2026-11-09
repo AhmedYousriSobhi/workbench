@@ -163,9 +163,27 @@ def check_containers(runner=run) -> Check:
                  f"{len(ids.stdout.split())} running, unprivileged, memory-limited{note}")
 
 
+def check_tsh(sim: dict | None = None, runner=None) -> Check | None:
+    """A tsh newer than the Teleport server is refused with an unclear error; say so before it happens (issue 210). None without a tsh."""
+    from . import teleport
+
+    sim = sim if sim is not None else (yaml.safe_load(Path("sim.yaml").read_text()) if Path("sim.yaml").is_file() else {})
+    have = teleport.tsh_version(runner)
+    if have is None:
+        return None
+    name = f"tsh {'.'.join(map(str, have))}"
+    try:
+        problem = teleport.tsh_problem(sim, runner)
+        want = teleport.settings(sim)["version"]
+    except teleport.TeleportError as e:
+        return Check(name, WARN, str(e), "fix teleport.version in sim.yaml")
+    return Check(name, WARN, problem) if problem else Check(name, OK, f"not newer than the Teleport server {want}")
+
+
 def run_all() -> list[Check]:
+    tsh = check_tsh()
     return [check_cgroup_v2(), check_psi(), check_kernel(), check_docker(), check_libvirt(),
-            check_swap(), check_memlock(), *check_tools(), check_containers(), check_governor()]
+            check_swap(), check_memlock(), *check_tools(), *([tsh] if tsh else []), check_containers(), check_governor()]
 
 
 # ---- profile pre-flight (SPEC 6) ----

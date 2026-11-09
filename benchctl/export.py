@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 
-from . import addressing, compose, k8s, logins, nodes, stack, teleport, workbench
+from . import addressing, compose, controller, k8s, logins, nodes, stack, teleport, workbench
 
 LOCAL_FORMAT_FILE = Path(".git/export-format")
 BMC_PORT = 8443
@@ -31,7 +31,7 @@ def format_id(flag: str | None = None, env: dict | None = None, local: Path = LO
     return ident, int(version or 1)
 
 
-def login_routes(sim: dict, plan: dict, index: int, login: str, mode: str, user: str, loopback: bool) -> list[tuple[str, dict, dict | None]]:
+def login_routes(sim: dict, plan: dict, index: int, login: str, mode: str, user: str, loopback: bool, jump: bool = False) -> list[tuple[str, dict, dict | None]]:
     """The ways into one login node, as (route name, connection, teleport block): `ssh` and `both` connect by key, `teleport` and `both`
     go through the proxy. A client describes a Teleport route as the node's name plus a `teleport` block (proxy, user, insecure) and
     signs in itself with `tsh login` (password and one-time code, `benchctl add invite`): no identity file, no key and no port is in the file."""
@@ -39,6 +39,10 @@ def login_routes(sim: dict, plan: dict, index: int, login: str, mode: str, user:
     if mode in logins.DIRECT:
         host, port = ("127.0.0.1", compose.SSH_PORT + index) if loopback else (addressing.address_of(plan, login), 22)
         routes.append(("direct", {"host": host, "port": port, "username": user, "authMethod": "private-key"}, None))
+    if mode in logins.DIRECT and jump:  # the same login through the bastion: the client dials the jump host, which forwards to the login's private address
+        hop = {"host": "127.0.0.1" if loopback else addressing.service_ip("jump"), "port": controller.JUMP_PORT if loopback else 22,
+               "username": user, "authMethod": "private-key"}  # the key itself stays in the client: no path or secret is exported
+        routes.append(("jump", {"host": addressing.address_of(plan, login), "port": 22, "username": user, "authMethod": "private-key", "jumpHost": hop}, None))
     if mode in logins.VIA_TELEPORT:
         proxy = f"127.0.0.1:{teleport.PROXY_PORT}" if loopback else teleport.proxy_addr(sim)
         routes.append(("teleport", {"host": login, "port": 22, "username": user, "authMethod": "agent"},
@@ -75,9 +79,9 @@ def build(sim: dict, services: set[str], name: str = "workbench", include_bmc: b
     present = [(i, n, m) for i, (n, m) in enumerate(logins.nodes(sim)) if n in services]  # a login that is not built is left out
     if "login" not in services or not present:
         raise ExportError("this profile has no login node (group 'access'): a client cannot connect by SSH")
-    routes = [(n, m, r, c, t) for i, n, m in present for r, c, t in login_routes(sim, plan, i, n, m, ssh_user, loopback)]
-    routes.sort(key=lambda x: x[2] == "teleport")  # the first entry (it carries Slurm, Grafana, Jira) is a key login, if there is one
-    names = [name if k == 0 else f"{name}-{n}" + ("-teleport" if r == "teleport" and m == "both" else "") for k, (n, m, r, c, t) in enumerate(routes)]
+    routes = [(n, m, r, c, t) for i, n, m in present for r, c, t in login_routes(sim, plan, i, n, m, ssh_user, loopback, "jump" in services)]
+    routes.sort(key=lambda x: (x[2] == "teleport", x[2] == "jump"))  # the first entry (it carries Slurm, Grafana, Jira) is a key login, if there is one
+    names = [name if k == 0 else f"{name}-{n}" + ("-teleport" if r == "teleport" and m == "both" else "-jump" if r == "jump" else "") for k, (n, m, r, c, t) in enumerate(routes)]
     clusters = [login_cluster(nm, n, r, m, c, t) for nm, (n, m, r, c, t) in zip(names, routes, strict=True)]
     cluster = clusters[0]
     kinds = logins.kinds(sim)
@@ -122,6 +126,9 @@ def warnings(services: set[str], sim: dict | None = None) -> list[str]:
     if sim and any(m in logins.VIA_TELEPORT for n, m in logins.nodes(sim) if n in services):
         out.append("a login node is reached through Teleport: sign in from the client (its Log in button, password and one-time code from "
                    "`benchctl add invite <user>`); the client does not use the identity files, and the file holds no credential")
+    if "jump" in services:
+        out.append("the `-jump` entries reach each login node through the jump host (its `jumpHost` block: address, port, user, private-key); the client keeps the key, "
+                   "so set the same key file for the entry and for its jump host in the client")
     return out
 
 

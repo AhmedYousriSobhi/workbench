@@ -20,7 +20,7 @@ from pathlib import Path
 
 import yaml
 
-from . import addressing, logins
+from . import addressing, controller, logins
 
 IMAGE = "public.ecr.aws/gravitational/teleport-distroless"
 DEFAULT_VERSION = "18.11.8"   # a Community Edition tag; licence note in ADR 0020. Teleport supports a tsh one major behind it.
@@ -50,6 +50,31 @@ def settings(sim: dict) -> dict:
     if not _TTL.fullmatch(t["cert_ttl"]):
         raise TeleportError(f"teleport.cert_ttl must look like 30m or 12h, not {t['cert_ttl']!r}")
     return t
+
+
+_TSH = re.compile(r"Teleport v(\d+)\.(\d+)\.(\d+)")
+
+
+def tsh_version(runner: Callable | None = None) -> tuple[int, int, int] | None:
+    """The version of the `tsh` on this machine (`tsh version --client`, no network), or None when there is none or it says nothing readable."""
+    import subprocess
+    run = runner or (lambda cmd: subprocess.run(cmd, capture_output=True, text=True, timeout=10, check=False))
+    try:
+        r = run(["tsh", "version", "--client"])
+    except (OSError, subprocess.SubprocessError):
+        return None
+    m = _TSH.search((r.stdout or "") + (r.stderr or "")) if r.returncode == 0 else None
+    return (int(m[1]), int(m[2]), int(m[3])) if m else None
+
+
+def tsh_problem(sim: dict, runner: Callable | None = None) -> str | None:
+    """One line when the local tsh is a newer major version than the Teleport server (it supports a client one major behind, not ahead,
+    and a newer one fails with an unclear error); None when it is fine or there is no tsh (issue 210)."""
+    have, want = tsh_version(runner), settings(sim)["version"]
+    if have is None or have[0] <= int(want.split(".")[0]):
+        return None
+    return (f"tsh {'.'.join(map(str, have))} on this machine is newer than the Teleport server {want} and will be refused: "
+            f"install tsh {want.split('.')[0]}.x or earlier, or set teleport.version in sim.yaml to {have[0]}.x")
 
 
 def image(sim: dict) -> str:
@@ -91,8 +116,10 @@ def node_id(name: str) -> str:
 
 def targets(sim: dict, ips: dict) -> dict[str, str]:
     """node name -> address of everything a user can reach through Teleport: the login nodes whose mode says so
-    (`teleport` or `both`, ADR 0023) and every node."""
-    return {n: ips["logins"][n] for n in logins.via_teleport(sim)} | dict(ips["nodes"])
+    (`teleport` or `both`, ADR 0023), the controller when there is one (issue 416: its sshd lets only the whitelisted users in,
+    so Teleport adds a way in, not a wider one) and every node."""
+    ctl = {controller.ALIAS: ips["services"][controller.CONTROLLER]} if controller.enabled(sim) else {}
+    return {n: ips["logins"][n] for n in logins.via_teleport(sim)} | ctl | dict(ips["nodes"])
 
 
 def resources(sim: dict, ips: dict) -> str:
@@ -103,7 +130,7 @@ def resources(sim: dict, ips: dict) -> str:
              "spec": {"options": {"max_session_ttl": t["cert_ttl"]},
                       "allow": {"logins": users, "node_labels": {"*": "*"}}}}]
     for name, ip in targets(sim, ips).items():
-        kind = "login" if logins.is_login(name) else "gpu" if name.startswith("gpu") else "compute"
+        kind = "login" if logins.is_login(name) else "controller" if name == controller.ALIAS else "gpu" if name.startswith("gpu") else "compute"
         docs.append({"kind": "node", "version": "v2", "sub_kind": "openssh",
                      "metadata": {"name": node_id(name), "labels": {"kind": kind}},
                      "spec": {"addr": f"{ip}:22", "hostname": name}})
@@ -201,7 +228,7 @@ def wait_ready(runner: Callable, dc: Callable, timeout: float = 90, sleep: Calla
     return False
 
 
-_OURS = re.compile(r"(login[0-9]*|cn[0-9]+|gpu[0-9]+)")  # only names this tool registers are ever removed
+_OURS = re.compile(r"(login[0-9]*|controller|cn[0-9]+|gpu[0-9]+)")  # only names this tool registers are ever removed
 
 
 def prune(sim: dict, ips: dict, runner: Callable, dc: Callable, secrets: Path = SECRETS_DIR) -> list[str]:
@@ -271,7 +298,7 @@ def bootstrap(sim: dict, ips: dict, runner: Callable, dc: Callable, say: Callabl
     for name, ip in targets(sim, ips).items():
         if (secrets / "hosts" / f"{name}-cert.pub").is_file():
             continue
-        r = _tctl(runner, dc, "auth", "sign", f"--host={ip},{name},{node_id(name)}", "--format=openssh",
+        r = _tctl(runner, dc, "auth", "sign", f"--host={ip},{name},{node_id(name)}" + (f",{controller.CONTROLLER}" if name == controller.ALIAS else ""), "--format=openssh",
                   f"--out={CONTAINER_SECRETS}/hosts/{name}")
         if r.returncode != 0:
             say(f"FAILED teleport host certificate for {name}: {r.stderr.strip()[-300:]}")

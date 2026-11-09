@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 
-from . import compose, k8s, logins, memory, nodes
+from . import compose, dcgm, k8s, logins, memory, nodes, real_gpu
 
 SAVED = Path("compose/generated/workbench.yaml")  # the spec `apply`/`up` last built; absent after a plain profile `up`
 OBSERVABILITY = {"prometheus": 300, "grafana": 300, "gpu-exporter-farm": 100}  # limits, compose/observability.yml
@@ -22,7 +22,7 @@ FLOOR_MB = 1024                                   # MemAvailable that must remai
 # part -> (compose group, services it adds; None = the whole group)
 PARTS: dict[str, tuple[str, list[str] | None]] = {
     "jira": ("mocks", ["jira-mock"]), "jira-real": ("jira-real", None), "bmc": ("mocks", ["bmc-farm"]), "bcm": ("mocks", ["bcm-mock"]),
-    "accounting": ("accounting", None), "teleport": ("teleport", None), "k8s": ("k8s", None), "scenarios": ("scenarios", None), "load": ("load", None)}
+    "accounting": ("accounting", None), "teleport": ("teleport", None), "k8s": ("k8s", None), "scenarios": ("scenarios", None), "load": ("load", None), "jump": ("jump", None), "dcgm": ("dcgm", None), "real-gpu": ("real-gpu", None)}
 # The one registry of options that change what runs and so what memory it needs. The Cluster architecture sheet is drawn from it
 # (`catalog`): a new option is an entry here and in PARTS, not new page code.
 PART_INFO: dict[str, tuple[str, str]] = {
@@ -33,6 +33,9 @@ PART_INFO: dict[str, tuple[str, str]] = {
     "bcm": ("BCM", "The BCM mock (CMDaemon JSON) and its device list."),
     "teleport": ("Teleport", "Teleport auth and proxy: tsh login and ssh to the login node and every node through it (not on by default)."),
     "k8s": ("Kubernetes", "A real Kubernetes control plane (etcd, API server, scheduler, controller manager) with KWOK fake CPU and GPU nodes, a read-only kubeconfig and fixtures (ADR 0034)."),
+    "jump": ("Jump host", "A bare sshd bastion (nothing else installed) in front of the key-login nodes and the controller: ssh -J jump user@login (SPEC C-21). Teleport nodes keep Teleport."),
+    "dcgm": ("DCGM (real)", "The official dcgm-exporter on NVIDIA's mock NVML for the first GPU node, about 125 MB (ADR 0025). Next to the hand-written exporter, not instead of it."),
+    "real-gpu": ("Real GPU", "This machine's own NVIDIA card with the real dcgm-exporter (real temperature, power, utilisation), as one more GPU next to the simulated ones. Needs the NVIDIA driver and container toolkit (SPEC C-23)."),
     "scenarios": ("Scenarios", "The scenario engine that plays timed faults."),
     "load": ("Load", "User and ticket simulators that generate jobs and tickets."),
 }
@@ -42,17 +45,17 @@ PART_INFO: dict[str, tuple[str, str]] = {
 CATEGORIES: dict[str, tuple[str, dict[str, str | None]]] = {
     "workload": ("what runs the jobs", {"slurm": None, "kubernetes": "k8s"}),
     "accounting": ("job history for sacct", {"slurmdbd": "accounting"}),
-    "monitoring": ("metrics and dashboards", {"prometheus": None, "grafana": None}),
+    "monitoring": ("metrics and dashboards", {"prometheus": None, "grafana": None, "dcgm": "dcgm", "real-gpu": "real-gpu"}),
     "ticketing": ("ticket systems", {"jira": "jira", "jira-real": "jira-real"}),
     "hardware": ("out-of-band management", {"bmc": "bmc", "bcm": "bcm"}),
-    "access": ("how users reach the nodes", {"teleport": "teleport"}),
+    "access": ("how users reach the nodes", {"teleport": "teleport", "jump": "jump"}),
     "simulation": ("fault and user simulators", {"scenarios": "scenarios", "load": "load"}),
 }
 NOT_BUILT: dict[str, str] = {}
 PART_CATEGORY = {part: cat for cat, (_, items) in CATEGORIES.items() for part in items.values() if part}
-BY_NAME_ONLY = ("jira-real",)  # heavy (about 2.4 GB): never turned on by `all` or `--addons`, only by its name (ADR 0026)
+BY_NAME_ONLY = ("jira-real", "dcgm", "real-gpu")  # heavy (about 2.4 GB): never turned on by `all` or `--addons`, only by its name (ADR 0026)
 DEFAULT_PARTS = ("jira", "bmc", "bcm", "accounting", "scenarios")  # accounting: without slurmdbd, sacct says storage is disabled
-DROP_ORDER = ("jira-real", "load", "accounting", "scenarios", "bcm", "jira", "bmc")  # what to suggest removing first
+DROP_ORDER = ("real-gpu", "dcgm", "jira-real", "load", "accounting", "scenarios", "bcm", "jira", "bmc")  # what to suggest removing first
 LIMITS = {"cpu_nodes": (0, 64), "gpu_nodes": (0, 16), "gpus_per_node": (1, 8)}
 
 
@@ -71,6 +74,9 @@ class Spec:
     k8s_cpu_nodes: int | None = None  # Kubernetes CPU nodes; None keeps sim.yaml's count
     bmc_nodes: list[str] | None = None  # nodes that get a BMC address; None = every node (part "bmc")
     bmc_groups: list[str] | None = None  # node groups that get BMCs (nodes.GROUPS); None = every group
+    controller: bool | None = None  # a controller node (slurmctld host with sshd, the BCM head node); None keeps sim.yaml's (issue 416)
+    bcm_k8s: bool | None = None  # BCM manages the Kubernetes nodes; None keeps sim.yaml's bcm.manage_kubernetes (issue 413)
+    dcgm_nodes: int | None = None  # GPU nodes that get a real DCGM exporter (the dcgm part); None = 1 (issue 435)
     login_nodes: list[str] = field(default_factory=lambda: list(logins.DEFAULT))  # auth mode of each login node (ADR 0023)
 
     def problems(self) -> list[str]:
@@ -90,6 +96,13 @@ class Spec:
             out += logins.problems({"login": modes}, set(self.parts))
         except logins.LoginError as e:
             out.append(str(e))
+        if self.dcgm_nodes is not None:
+            if not 1 <= self.dcgm_nodes <= dcgm.MAX_NODES:
+                out.append(f"dcgm_nodes must be 1 to {dcgm.MAX_NODES}, not {self.dcgm_nodes}")
+            elif "dcgm" not in self.parts:
+                out.append("--dcgm-nodes needs the dcgm part: add --with dcgm")
+            elif self.dcgm_nodes > self.gpu_nodes:
+                out.append(f"--dcgm-nodes {self.dcgm_nodes} is more than the GPU nodes ({self.gpu_nodes}): add --gpu-nodes or lower it")
         for key, flag, hi in (("k8s_nodes", "--k8s-nodes", 16), ("k8s_cpu_nodes", "--k8s-cpu-nodes", 64)):
             n = getattr(self, key)
             if n is not None and not 0 <= n <= hi:
@@ -103,7 +116,7 @@ class Spec:
                 "gpus_per_node": self.gpus_per_node, "parts": sorted(set(self.parts)), "k8s_nodes": self.k8s_nodes, "k8s_cpu_nodes": self.k8s_cpu_nodes,
                 "bmc_nodes": None if self.bmc_nodes is None else sorted(set(self.bmc_nodes)),
                 "bmc_groups": None if self.bmc_groups is None else sorted(set(self.bmc_groups)),
-                "login_nodes": list(self.login_nodes)}
+                "bcm_k8s": self.bcm_k8s, "controller": self.controller, "dcgm_nodes": self.dcgm_nodes, "login_nodes": list(self.login_nodes)}
 
 
 def items(category: str) -> list[str]:
@@ -186,11 +199,20 @@ def effective(sim: dict, spec: Spec) -> tuple[dict, dict]:
         s["bmc"] = {**(s.get("bmc") or {}), "nodes": sorted(set(spec.bmc_nodes))}
     if spec.bmc_groups is not None:
         s["bmc"] = {**(s.get("bmc") or {}), "groups": sorted(set(spec.bmc_groups))}
+    if spec.bcm_k8s is not None:
+        s["bcm"] = {**(s.get("bcm") or {}), "manage_kubernetes": spec.bcm_k8s}
+    if spec.controller is not None:
+        s["controller"] = {**(s.get("controller") or {}), "enabled": spec.controller}
     s["login"] = list(spec.login_nodes)
+    if spec.dcgm_nodes is not None and "dcgm" in spec.parts:
+        s["dcgm"] = {**(s.get("dcgm") or {}), "nodes": spec.dcgm_nodes}
     if "k8s" in spec.parts:  # the part is on: the simulation says so, with the node groups spelled out (the BMC, BCM and GPU exporter read them)
         s["kubernetes"] = {**(s.get("kubernetes") or {}), "enabled": True, "nodes": k8s.node_groups(s, spec.k8s_nodes, spec.k8s_cpu_nodes)}
     elif spec.k8s_nodes is not None or spec.k8s_cpu_nodes is not None:
         s["kubernetes"] = {**(s.get("kubernetes") or {}), "nodes": k8s.node_groups(s, spec.k8s_nodes, spec.k8s_cpu_nodes)}
+    if "real-gpu" in spec.parts:  # the part is on: so is its Slurm node, with the card's model as its GRES type (the host is asked once, here)
+        model = (real_gpu.cards() or ["GPU 0: real"])[0].split(": ", 1)[-1]
+        s["real_gpu"] = {"enabled": True, "node": real_gpu.NODE, "model": model, "type": real_gpu.gres_type(model)}
     s["partitions"] = [p for p in s.get("partitions", []) if have.get(p["nodes"], 1) > 0]
     groups, drop = ["core", "access"], []
     for part in spec.parts:
@@ -298,15 +320,27 @@ def current(sim: dict, path: Path = SAVED) -> Spec | None:
     return load_file(path, defaults(sim)) if path.is_file() else None
 
 
+def describe_saved(saved: Spec) -> str:
+    return f"{saved.cpu_nodes} compute + {saved.gpu_nodes} GPU nodes, parts {', '.join(saved.parts) or 'none'}"
+
+
+def reuses_saved(saved: Spec | None, profile: str | None, parts: bool) -> bool:
+    """`benchctl start` with nothing chosen keeps the workbench last built (issue 387): restarting the page or the governor must not replace it."""
+    return saved is not None and not profile and not parts
+
+
 def start_line(saved: Spec | None, profile: str | None, parts: bool) -> str:
     """The one line `benchctl start` prints first: what it starts, and what saved workbench that replaces (issue 215).
 
     A start with parts builds the default workbench plus those parts; one without builds the size preset (default min).
     Either way it does not reuse the saved workbench, it forgets it; the plain default is `start --profile min`."""
     what = "the default workbench plus the parts you named" if parts else f"the {profile or 'min'} size preset"
+    if reuses_saved(saved, profile, parts):
+        return (f"Starting the workbench last built ({describe_saved(saved)}). Nothing was chosen, so it is kept; "
+                "name a size preset (`--profile min`) or parts (`--with jira`) to replace it.")
     if saved is None:
         return f"Starting {what}."
-    mine = f"{saved.cpu_nodes} compute + {saved.gpu_nodes} GPU nodes, parts {', '.join(saved.parts) or 'none'}"
+    mine = describe_saved(saved)
     return (f"Starting {what}. This replaces the workbench last built ({mine}); "
             "to rebuild that one, run `benchctl apply -f FILE` or `benchctl up` with its counts.")
 

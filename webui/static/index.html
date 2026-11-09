@@ -353,7 +353,7 @@
   #flow text { font-size:22px; } #flow text.sub { font-size:17.5px; } #flow .ftitle { font-size:16px; } #flow .ndt { font-size:15px; } #flow .ndt.cl { font-size:16px; }
   #flow text.elab { font:600 15px system-ui,sans-serif; fill:var(--fg); } #flow .elbg { fill:var(--panel); stroke:var(--line); stroke-width:1; }
   #flow marker path { fill:var(--dim); } #flow .lane.ssh, #flow .lane.teleport, #flow .lane.jump { stroke:var(--dim); stroke-width:2.5; opacity:.9; }
-  #flow .lane.teleport { stroke-dasharray:12 6; } #flow .lane.jump { stroke-dasharray:3 6; stroke-linecap:round; } #flow .elabs { pointer-events:none; }
+  #flow .lane.teleport { stroke-dasharray:12 6; } #flow .lane.jump { stroke-dasharray:10 8; stroke-linecap:butt; } #flow .elabs { pointer-events:none; }
   #flow .blk.lgn, #flow .blk.blkacc { stroke:var(--accent); } #flow .blk.lgn.down { stroke:var(--bad); stroke-dasharray:5 4; } #flow .blk.lgn.off { stroke:var(--line); stroke-dasharray:3 5; opacity:.8; } #flow .blk.blkacc.down { stroke:var(--bad); }
   .pop { position:fixed; z-index:30; width:min(360px,calc(100% - 16px)); background:var(--panel); border:1px solid var(--accent); border-radius:12px; padding:var(--sp3) var(--sp4); box-shadow:0 14px 40px rgba(0,0,0,.35); font-size:13.5px; }
   .pop[hidden], .tip[hidden] { display:none; } .pop-h { display:flex; align-items:center; gap:var(--sp2); margin-bottom:var(--sp2); } .pop-h b { font-size:16px; flex:1; } .pop dl.kv { margin:0 0 var(--sp2); font-size:13px; } .pop dd { overflow-wrap:break-word; } .pop dd code { overflow-wrap:anywhere; }
@@ -368,7 +368,7 @@
   .trafficpanel { position:relative; }  /* the key is a popover under the Key button (#319): the diagram keeps the whole panel */
   #ckey { position:absolute; top:58px; right:var(--sp5); z-index:20; width:min(620px,calc(100% - 2*var(--sp4))); max-height:calc(100% - 70px); overflow-y:auto; margin:0; display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:var(--sp3) var(--sp5); padding:var(--sp4); background:var(--panel); border:1px solid var(--accent); border-radius:12px; box-shadow:0 14px 40px rgba(0,0,0,.35); font-size:13px; }
   #ckey[hidden] { display:none; } #ckey .kg { display:flex; flex-direction:column; align-items:flex-start; gap:4px; } #ckey .kfoot { grid-column:1 / -1; margin:0; }
-  .ckey .ls { width:34px; height:10px; overflow:visible; } .ckey .ls .lane { fill:none; stroke:var(--dim); stroke-width:2.5; } .ckey .ls .lane.teleport { stroke-dasharray:12 6; } .ckey .ls .lane.jump { stroke-dasharray:3 6; stroke-linecap:round; } .ckey .ls .lane.api { stroke-width:1.5; }
+  .ckey .ls { width:34px; height:10px; overflow:visible; } .ckey .ls .lane { fill:none; stroke:var(--dim); stroke-width:2.5; } .ckey .ls .lane.teleport { stroke-dasharray:12 6; } .ckey .ls .lane.jump { stroke-dasharray:10 8; stroke-linecap:butt; } .ckey .ls .lane.api { stroke-width:1.5; }
   .ckey b.dia { color:var(--warn); } .ckey b[aria-hidden] { min-width:1ch; text-align:center; } #keybtn[aria-expanded=true] { border-color:var(--accent); background:var(--sel); }
   .inspector { display:flex; flex-direction:column; gap:var(--sp3); min-width:0; } .itabs { display:none; gap:var(--sp2); } .inspect-empty { display:none; } .inspect-empty[hidden] { display:none !important; }
   .itabs .btn[aria-pressed=true] { border-color:var(--accent); background:var(--sel); font-weight:650; }
@@ -548,7 +548,7 @@
       <div class="kg"><span class="grp">Lines</span>
         <span><svg class="ls" viewBox="0 0 34 10" aria-hidden="true"><path class="lane ssh" d="M1 5H31" marker-end="url(#arr)"/></svg>direct SSH</span>
         <span><svg class="ls" viewBox="0 0 34 10" aria-hidden="true"><path class="lane teleport" d="M1 5H31"/></svg>through the Teleport proxy</span>
-        <span><svg class="ls" viewBox="0 0 34 10" aria-hidden="true"><path class="lane jump" d="M1 5H31"/></svg>jump host (ssh from an s-login) · kubectl (from a k-login)</span>
+        <span><svg class="ls" viewBox="0 0 34 10" aria-hidden="true"><path class="lane jump" d="M1 5H31"/></svg>a hop inside the cluster: ssh from a login node or through the jump host (ssh -J) · kubectl (from a k-login)</span>
         <span><svg class="ls" viewBox="0 0 34 10" aria-hidden="true"><path class="lane api" d="M1 5H31"/></svg>an API call</span></div>
       <p class="dim small kfoot">They combine: one box can be up, busy and faulted at once. Hover a part for its state, click it for the address, command and actions.</p></div>
     <details class="quiet legendbox"><summary class="small dim">Reading guide</summary>
@@ -693,6 +693,8 @@
           <fieldset class="bmcnodes" id="pl-bmcbox" hidden><legend class="small dim">BMC: which machines get one (<span id="pl-bmcmb"></span> MB each)</legend>
             <div class="bmcgroups" id="pl-bmcgroups"></div><p class="small" id="pl-bmctotal" style="margin:6px 0"></p>
             <details class="cmdbox"><summary class="small">Exceptions: leave out single nodes</summary><div class="toggles" id="pl-bmcnodes"></div></details></fieldset>
+          <label class="tog" id="pl-ctlbox" title="A controller node: slurmctld's host with ssh for whitelisted admins, and the BCM head node (cmsh moves from the login nodes to it). CLI: --controller"><input type="checkbox" id="pl-ctl"><span>Controller node (admin ssh, BCM head)</span></label>
+          <label class="tog" id="pl-bcmk8sbox" hidden title="Off: BCM does not manage the Kubernetes cluster, so its device and category lists show no Kubernetes nodes (CLI: --no-bcm-k8s)"><input type="checkbox" id="pl-bcmk8s" checked><span>BCM manages the Kubernetes nodes</span></label>
           <p class="small dim pnote">Slurm, Prometheus and Grafana are always on.</p></section>
       </div>
       <div class="plan-side" role="region" aria-label="Summary">
@@ -815,7 +817,7 @@ function svcRow([k, up]) {
   return `<li><div class="er svc ${up ? 'ok' : 'fault'}"><b class="g" aria-hidden="true">${up ? '✓' : '✗'}</b><span class="nm">${esc(k)}</span><span class="st">${up ? 'answering' : 'not answering'}</span><span class="info" id="si-${esc(k)}"></span></div></li>`;
 }
 function paintKpis() {  // stack down: no cards, one notice (W-10); the cluster at a glance, all from the page's own data (nodes, reachability, applied faults); nothing is invented
-  const f = clusterFacts(), gpu = f.nodes.filter(n => n.kind === 'gpu'), gt = gpu.reduce((a, n) => a + (n.gpus || 0), 0), gb = gpu.reduce((a, n) => a + (n.gpus_busy || 0), 0);
+  const f = clusterFacts(), gpu = f.nodes.filter(n => kindOf(n) === 'gpu'), gt = gpu.reduce((a, n) => a + (n.gpus || 0), 0), gb = gpu.reduce((a, n) => a + (n.gpus_busy || 0), 0);
   const bad = f.nodes.length - f.ok, k = (cls, v, of, label) => `<div class="kpi ${cls}"><b>${v}${of == null ? '' : ` <small>of ${of}</small>`}</b><span>${label}</span></div>`;
   $('kpis').innerHTML = !f.nodes.length || f.off ? '' : k(bad ? 'warn' : 'ok', f.ok, f.nodes.length, 'nodes healthy') + k(f.off ? 'bad' : f.up < f.svcs.length ? 'warn' : 'ok', f.up, f.svcs.length, 'services up')
     + (gt ? k('', gb, gt, 'GPUs busy') : '') + k(f.faults ? 'bad' : 'ok', f.faults, null, f.faults === 1 ? 'fault applied' : 'faults applied');
@@ -832,7 +834,7 @@ function renderCluster(c) {
   const svcs = Object.entries(c.services), svcUp = svcs.filter(([, u]) => u).length;
   $('services').innerHTML = svcs.map(svcRow).join(''); $('cnt-svc').textContent = `${svcUp} of ${svcs.length} answering`; paintBlocks();
   for (const kind of ['compute', 'gpu', 'k8s']) {
-    const rows = c.nodes.filter(n => n.kind === kind);
+    const rows = c.nodes.filter(n => kindOf(n) === kind);
     $('nodes-' + kind).innerHTML = rows.map(n => node(n)).join(''); $('br-' + kind).hidden = !rows.length;
     $('cnt-' + kind).textContent = `${rows.filter(n => n.state === 'ok').length} of ${rows.length} healthy`;
   }
@@ -843,7 +845,7 @@ async function loadCluster() {
   clearTimeout(clusterTimer);
   try {
     const text = await (await fetch('/api/cluster')).text();
-    if (text !== lastCluster) { lastCluster = text; renderCluster(JSON.parse(text)); }
+    if (text !== lastCluster) { lastCluster = text; renderCluster(JSON.parse(text)); paintTraffic(); }  // the Traffic view follows node faults (issue 414)
   } catch (e) { /* keep the last view; the next poll retries */ }
   clusterTimer = setTimeout(loadCluster, document.hidden ? 15000 : 4000);
 }
@@ -857,6 +859,8 @@ async function loadPlan() {
   if (loginModes.length) q.set('logins', loginModes.join(','));
   if (k8sOn()) { q.set('k8s_cpu_nodes', $('pl-kcpu').value); q.set('k8s_nodes', $('pl-kgpu').value); }
   paintPlanSummary();
+  q.set('controller', $('pl-ctl').checked ? '1' : '0');
+  if (!$('pl-bcmk8sbox').hidden) q.set('bcm_k8s', $('pl-bcmk8s').checked ? '1' : '0');
   if (!$('pl-bmcbox').hidden) { q.set('bmc_groups', [...bmcOn].join(',')); const inc = bmcNames().filter(n => !bmcOff.has(n)); if (bmcOff.size) q.set('bmc_nodes', inc.join(',')); }
   const r = await fetch('/api/plan?' + q);
   if (!r.ok) { $('pl-msg').textContent = '✗ ' + (await r.json()).detail; $('pl-cmd').textContent = ''; $('pl-bar').value = 0; $('pl-need').textContent = '–'; $('pl-free').textContent = ''; $('pl-apply').hidden = true; return; }
@@ -891,6 +895,7 @@ function drawBmc() {
   $('pl-bmcnodes').querySelectorAll('input').forEach(i => i.onchange = () => { i.checked ? bmcOff.delete(i.value) : bmcOff.add(i.value); planInputs(); });
 }
 function paintPlanSummary() {
+  showBmcNodes();  // the BCM-Kubernetes switch shows only with the BCM and Kubernetes parts on
   if (!$('pl-bmcbox').hidden) drawBmc();  // the same numbers the cards show, as one list: how many nodes of each kind, which logins, how many parts
   const n = id => +$(id).value || 0, gpus = n('pl-gpu') * n('pl-gpus'), on = k8sOn(), kg = (shapes.k8s_gpu || {}).gpus || 8, kgpus = n('pl-kgpu') * kg;
   $('pc-slurm-sum').textContent = `${n('pl-cpu') + n('pl-gpu')} nodes`;
@@ -904,8 +909,8 @@ function paintPlanSummary() {
 function planInputs() { paintPlanSummary(); clearTimeout(planTimer); planTimer = setTimeout(loadPlan, 250); armed = 0; $('pl-apply').textContent = 'Apply to the running workbench'; }
 document.querySelectorAll('[data-step]').forEach(b => b.onclick = () => { const i = $(b.dataset.step); i.value = Math.min(+i.max, Math.max(+i.min, (+i.value || 0) + +b.dataset.d)); planInputs(); });
 function currentSize() {
-  const nodes = nodeList(), g = nodes.find(n => n.kind === 'gpu');
-  return { cpu: nodes.filter(n => n.kind === 'compute').length, gpu: nodes.filter(n => n.kind === 'gpu').length, gpus: g ? g.gpus : null };
+  const nodes = nodeList(), g = nodes.find(n => kindOf(n) === 'gpu');
+  return { cpu: nodes.filter(n => n.kind === 'compute').length, gpu: nodes.filter(n => kindOf(n) === 'gpu').length, gpus: g ? g.gpus : null };
 }
 // Login nodes: one row per node, each with its own way in. The first is `login`, then login2, ... (benchctl/logins.py)
 let loginModes = [], loginMax = 8;
@@ -934,7 +939,8 @@ function syncTeleport() {  // a Teleport login needs the Teleport part: tick it,
 }
 function loginsChanged() { syncTeleport(); planInputs(); }
 $('pl-loginadd').onclick = () => { if (loginModes.length < loginMax) { loginModes.push('ssh'); drawLogins(); loginsChanged(); } };
-function showBmcNodes() { $('pl-bmcbox').hidden = !document.querySelector('#pl-parts input[value="bmc"]:checked'); }
+function showBmcNodes() { $('pl-bmcbox').hidden = !document.querySelector('#pl-parts input[value="bmc"]:checked'); $('pl-bcmk8sbox').hidden = !(document.querySelector('#pl-parts input[value="bcm"]:checked') && k8sOn()); }
+$('pl-bcmk8s').onchange = $('pl-ctl').onchange = () => planInputs();
 let partsDrawn = false;
 async function drawParts() {  // the options come from the backend registry (/api/settings), so a new one needs no page change
   if (partsDrawn) return;
@@ -950,6 +956,8 @@ async function drawParts() {  // the options come from the backend registry (/ap
     const lg = j.logins;  // an older page backend does not send it: the parts above still work, the login rows are hidden
     if (lg) { loginModes = [...(lg.now || ['ssh'])]; loginMax = lg.max; drawLogins(); syncTeleport(); }
     else { $('pl-loginadd').disabled = true; $('pl-loginrows').textContent = 'Login nodes need the newer page backend. Run ./scripts/benchctl stop, then ./scripts/benchctl start, and reload.'; }
+    $('pl-ctl').checked = !!(shapes.controller || {}).enabled;
+    $('pl-bcmk8s').checked = !!(shapes.bcm || {}).manage_kubernetes || !shapes.bcm;
     showBmcNodes(); partsDrawn = true;
   } catch (e) { $('pl-parts').textContent = 'Could not load the options. The page and its backend may be different versions: run ./scripts/benchctl stop, then ./scripts/benchctl start, and reload.'; }
 }
@@ -1143,10 +1151,10 @@ $('pl-apply').onclick = async () => {
 function paintNodeActions(name) {
   const c = JSON.parse(lastCluster || '{"nodes":[],"actions":[]}'), n = c.nodes.find(x => x.name === name), fix = new Set(['power-on', 'clear']);
   const btns = (rows) => rows.map(a => `<button class="btn" data-node="${esc(name)}" data-action="${a.id}">${esc(a.label)}</button>`).join('');
-  const ok = n ? c.actions.filter(a => !a.gpu_only || n.kind === 'gpu') : [];
+  const ok = n ? c.actions.filter(a => !a.gpu_only || kindOf(n) === 'gpu') : [];
   $('nodeacts-fault').innerHTML = btns(ok.filter(a => !fix.has(a.id))); $('nodeacts-fix').innerHTML = btns(ok.filter(a => fix.has(a.id)));
   document.querySelectorAll('#nodepane .actions .btn').forEach(b => b.onclick = () => nodeAction(b.dataset.node, b.dataset.action, b.textContent));
-  const jobs = n && n.kind === 'gpu' ? [['1 GPU, 5 min', 1, 300], [`All ${n.gpus} GPUs, 5 min`, n.gpus, 300], ['All GPUs, 30 min', n.gpus, 1800]] : [['1 CPU, 5 min', 0, 300], ['1 CPU, 30 min', 0, 1800]];
+  const jobs = n && kindOf(n) === 'gpu' ? [['1 GPU, 5 min', 1, 300], [`All ${n.gpus} GPUs, 5 min`, n.gpus, 300], ['All GPUs, 30 min', n.gpus, 1800]] : [['1 CPU, 5 min', 0, 300], ['1 CPU, 30 min', 0, 1800]];
   $('nodeacts-job').innerHTML = n ? jobs.map(([l, g, d]) => `<button class="btn" data-gpus="${g}" data-dur="${d}">Run ${esc(l)}</button>`).join('') : '';
   document.querySelectorAll('#nodeacts-job .btn').forEach(b => b.onclick = () => nodeJob(name, +b.dataset.gpus, +b.dataset.dur));
   if (n) { $('nodestate').className = 'pill ' + n.state; $('nodestate').textContent = `${STATE_ICON[n.state]} ${n.label}`; }
@@ -1194,20 +1202,24 @@ async function nodeAction(name, action, label) {
   const skipped = res.filter(x => x.target === 'slurm' && x.status === 'skipped');
   const msg = skipped.length ? `${label} on ${name}: done, but Slurm was not told (${skipped[0].detail}); run ./scripts/benchctl set node ${name} ${action === 'power-off' ? 'off' : action === 'power-on' ? 'on' : 'resume'}` : bad.length ? `${label} on ${name}: ${bad.length} step(s) failed — is the stack running?` : `${label} on ${name}: done`;
   toast(msg); $('nodeactmsg').textContent = msg;
+  slurmAt = 0;  // read the node states now instead of at the next poll (issue 414)
   lastCluster = ''; loadCluster();
 }
 
 // ---- traffic (#74, #118): real request counters from the mocks plus injected faults, over SSE, drawn with the nodes in the cluster ----
 const SVGNS = 'http:' + '//www.w3.org/2000/svg';  // an XML namespace name, not a fetch; split so the no-external-URL test stays strict
 const BASE_SERVICES = [['bmc-farm', 'BMC farm', 'Redfish'], ['bcm-mock', 'BCM', 'CMDaemon'], ['jira-mock', 'Jira', 'tickets'], ['gpu-exporter', 'GPU exporter', 'DCGM metrics']];
-const REAL_SERVICES = new Set(['jira-real', 'k8s-api']);  // everything else the page draws is simulated: kind is colour, not a word in the box
+const REAL_SERVICES = new Set(['jira-real', 'k8s-api', 'dcgm-exporter', 'real-gpu']);  // everything else the page draws is simulated: kind is colour, not a word in the box
 const TELEPORT_BOX = ['teleport', 'Teleport proxy', 'gateway, not a node'];
+const JUMP_BOX = ['jump', 'Jump host', 'bare ssh bastion'], CTL_BOX = ['controller', 'Controller', 'slurmctld host'], ACC_PORT = { jump: 2220, controller: 2221 };  // ADR 0036; the ports are the published fallbacks on 127.0.0.1
+const accExtra = () => [...(hasService('jump') ? [JUMP_BOX] : []), ...(hasService('controller') ? [CTL_BOX] : [])];  // drawn only when built: no phantom box (#420)
+const accUp = k => { try { return !!scoped().services[k]; } catch (e) { return false; } };
 let activeCluster = null;  // the cluster the page is showing in full (#327); null = the single cluster, or the overview
 const scoped = () => { const c = JSON.parse(lastCluster), m = activeCluster && c.clusters && c.clusters.find(x => x.name === activeCluster); return m ? { ...c, ...m } : c; };
 function hasTeleport() { try { return !!(lastCluster && 'teleport' in scoped().services); } catch (e) { return false; } }
-const JIRA_REAL_BOX = ['jira-real', 'Jira DC', 'Data Center'], K8S_API_BOX = ['k8s-api', 'Kubernetes API', 'kube-apiserver'];
+const JIRA_REAL_BOX = ['jira-real', 'Jira DC', 'Data Center'], K8S_API_BOX = ['k8s-api', 'Kubernetes API', 'kube-apiserver'], DCGM_BOX = ['dcgm-exporter', 'DCGM (real)', 'first GPU node'], REAL_GPU_BOX = ['real-gpu', 'GPU card', 'this machine\'s card'];  // the opt-in real exporter on a mock NVML (issue 426) and the host's own card (issue 428)  // the opt-in real exporter on a mock NVML (issue 426)
 function hasService(k) { try { return !!(lastCluster && k in scoped().services); } catch (e) { return false; } }
-function svcList() { return [...BASE_SERVICES, ...(hasService('jira-real') ? [JIRA_REAL_BOX] : []), ...(hasService('k8s-api') ? [K8S_API_BOX] : []), ...(hasTeleport() ? [TELEPORT_BOX] : [])]; }  // Teleport only when the part is built: no phantom box
+function svcList() { return [...BASE_SERVICES, ...(hasService('jira-real') ? [JIRA_REAL_BOX] : []), ...(hasService('k8s-api') ? [K8S_API_BOX] : []), ...(hasService('dcgm-exporter') ? [DCGM_BOX] : []), ...(hasService('real-gpu') ? [REAL_GPU_BOX] : []), ...(hasTeleport() ? [TELEPORT_BOX] : [])]; }  // Teleport only when the part is built: no phantom box
 const G = { clients: { x: 8, y: 8, w: 164, h: 272 }, injector: { x: 8, y: 300, w: 164, h: 124 }, cluster: { x: 668, y: 8, w: 504 } };  // set by buildFlow from the panel's shape
 let svcOut = {}, svcLane = {}, svcFit = {};  // svcFit: the width a box's text may use
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
@@ -1228,8 +1240,9 @@ function roundedPoly(pts, r = 16) {  // straight segments joined by small arcs, 
   const z = pts[pts.length - 1]; return d + ` L${z.x} ${z.y}`;
 }
 const dpath = b => b.poly ? roundedPoly(b.poly) : `M${b[0].x} ${b[0].y} C${b[1].x} ${b[1].y} ${b[2].x} ${b[2].y} ${b[3].x} ${b[3].y}`;
+const kindOf = n => n.kind === 'real-gpu' ? 'gpu' : n.kind;  // the real card's node sits with the GPU nodes (issue 428)
 function nodeList() { try { return lastCluster ? scoped().nodes : []; } catch (e) { return []; } }
-const SVC_CONN = { 'bmc-farm': 'bmc', 'bcm-mock': 'bcm', 'jira-mock': 'jira', 'jira-real': 'jira-real', 'k8s-api': 'k8s', 'gpu-exporter': 'gpu', 'teleport': 'teleport' };  // diagram box -> Connections row
+const SVC_CONN = { 'bmc-farm': 'bmc', 'bcm-mock': 'bcm', 'jira-mock': 'jira', 'jira-real': 'jira-real', 'k8s-api': 'k8s', 'gpu-exporter': 'gpu', 'dcgm-exporter': 'dcgm', 'real-gpu': 'real-gpu', 'teleport': 'teleport' };  // diagram box -> Connections row
 // hover tip and click pop-up on every part of the diagram (#192). The tip is one line of state; the pop-up has the address, the command and the actions.
 const tipEl = () => $('tip');
 function showTip(el, lines) {
@@ -1279,13 +1292,19 @@ async function popInfo(kind, id) {
   if (kind === 'node') {
     const n = c.nodes.find(x => x.name === id) || { name: id, label: '', state: 'unknown', kind: '' }, cx = row('nodes');
     let ip = ''; try { if (n.kind !== 'k8s') { const b = await (await fetch(`/api/nodes/${id}`)).json(); ip = b.ip || ''; } } catch (e) { /* the pop-up still opens */ }
-    return { title: id, badge: `${STATE_ICON[n.state] || '?'} ${n.label}`, cls: n.state, cmd: cx ? cx.command.replace('<node>', id) : '', kv: n.kind === 'k8s' ? [['Kind', `Kubernetes node (simulated by KWOK)${n.gpus ? `, ${n.gpus} GPUs` : ''}`], ['Reached by', 'kubectl from a login node that serves Kubernetes (k-login); it has no SSH, BMC or Slurm side']] : [['Kind', n.kind === 'gpu' ? 'GPU node' : 'Compute node'], ['Address', ip ? `<code>${esc(ip)}</code> (private, from a login node)` : 'see Connections'],
+    return { title: id, badge: `${STATE_ICON[n.state] || '?'} ${n.label}`, cls: n.state, cmd: cx ? cx.command.replace('<node>', id) : '', kv: n.kind === 'k8s' ? [['Kind', `Kubernetes node (simulated by KWOK)${n.gpus ? `, ${n.gpus} GPUs` : ''}`], ['Reached by', 'kubectl from a login node that serves Kubernetes (k-login); it has no SSH, BMC or Slurm side']] : [['Kind', kindOf(n) === 'gpu' ? 'GPU node' : 'Compute node'], ['Address', ip ? `<code>${esc(ip)}</code> (private, from a login node)` : 'see Connections'],
       ['Reached by', 'ssh from any s-login (jump host)' + (tp ? ', or through the Teleport proxy' : '')]], actions: n.kind === 'k8s' ? [{ label: 'Connections', fn: () => openConnection('k8s') }] : [{ label: 'Actions and details', fn: () => showNode(id) }, { label: 'Connections', fn: () => openConnection('nodes') }] };
   }
   if (kind === 'login') {
     const l = loginList().find(x => x.name === id) || { mode: 'ssh' }, r = row(id);
     return { title: id, badge: loginRuns(l) ? `${KIND_NAME[loginKind(l)]} · ${MODE_TEXT[l.mode]}` : '✗ not running', cls: loginRuns(l) ? '' : 'fault', cmd: r ? r.command : '', kv: [['Status', loginRuns(l) ? 'running (answers on port 22)' : 'not running: it is in the selection, but nothing answers on its port 22. Build it with ./scripts/benchctl up'], ['Way in', l.mode === 'teleport' ? 'Teleport only: no published port, a key is refused' : l.mode === 'both' ? 'Direct SSH with a key, or Teleport' : 'Direct SSH with a key'], ...conn(r),
       ['Serves', KIND_TEXT[loginKind(l)]], ['To the nodes', loginKind(l) === 'k8s' ? 'kubectl from here (read-only kubeconfig in ~/.kube); no Slurm nodes' : 'ssh from here (jump host)' + (loginKind(l) === 'both' && c.nodes.some(n => n.kind === 'k8s') ? '; kubectl for the Kubernetes nodes' : '')]], actions: [{ label: 'Connections', fn: () => openConnection(id) }] };
+  }
+  if (kind === 'acc') {  // the jump host and the controller (ADR 0036)
+    const r = row(id), up = accUp(id), isJ = id === 'jump';
+    return { title: isJ ? 'Jump host' : 'Controller', badge: up ? '✓ up' : '✗ not reachable', cls: up ? 'ok' : 'fault', cmd: r ? r.command : '',
+      kv: [['What it is', isJ ? 'A bare ssh bastion, nothing else installed. Reach a key-login node or the controller with ssh -J; Teleport nodes keep Teleport' : 'The slurmctld host and BCM head node. Only whitelisted admins (users or groups in sim.yaml controller.allow) get a shell'],
+        ['Status', up ? 'answers on its ssh port' : 'not answering: build it with ./scripts/benchctl up'], ...conn(r)], actions: [{ label: 'Connections', fn: () => openConnection(id) }] };
   }
   if (kind === 'svc') {
     const r = row(SVC_CONN[id]), l = svcList().find(x => x[0] === id) || [id, id], up = flowSnap?.reachable[id], t = flowSnap?.totals[id] || 0;
@@ -1321,12 +1340,14 @@ async function openConnection(id) {  // the Connections tab, with the row for th
   const row = id && document.querySelector(`#conn-rows tr[data-id="${id}"]`); if (!row) return;
   document.querySelectorAll('#conn-rows tr.focus').forEach(r => r.classList.remove('focus')); row.classList.add('focus'); row.scrollIntoView({ block: 'center' });
 }
-function flowSig(nodes) { return nodes.map(n => n.name).join(',') + (hasTeleport() ? '+teleport' : '') + '|' + loginList().map(l => l.name + ':' + l.mode + ':' + loginKind(l) + (l.up === false ? ':down' : '')).join(','); }
+function flowSig(nodes) { return nodes.map(n => n.name).join(',') + (hasTeleport() ? '+teleport' : '') + accExtra().map(b => '+' + b[0] + (accUp(b[0]) ? '' : ':down')).join('') + '|' + loginList().map(l => l.name + ':' + l.mode + ':' + loginKind(l) + (l.up === false ? ':down' : '')).join(','); }
 // ---- the diagram (#192): clients -> services and access (login nodes, Teleport) -> nodes, one labelled line per way in ----
 const SVC_ICON = { 'bmc-farm': 'M4 5h16v5H4z M4 14h16v5H4z M7 7.5h.01 M7 16.5h.01', 'bcm-mock': 'M3 5h18v14H3z M3 9h18', 'jira-mock': 'M12 3l9 9-9 9-9-9z', 'jira-real': 'M12 3l9 9-9 9-9-9z M12 8l4 4-4 4-4-4z',
   'k8s-api': 'M12 3l8 4.5v9L12 21l-8-4.5v-9z M12 8v8 M8.5 10l7 4 M15.5 10l-7 4',
+  'real-gpu': 'M7 7h10v10H7z M9.5 12l2 2 3.5-4 M10 3v4 M14 3v4 M10 17v4 M14 17v4 M3 10h4 M3 14h4 M17 10h4 M17 14h4',
+  'dcgm-exporter': 'M7 7h10v10H7z M10 12l2 2 3-4 M10 3v4 M14 3v4 M10 17v4 M14 17v4',
   'gpu-exporter': 'M7 7h10v10H7z M10 3v4 M14 3v4 M10 17v4 M14 17v4 M3 10h4 M3 14h4 M17 10h4 M17 14h4', teleport: 'M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z' };  // decorative glyphs, one per kind
-const SVC_METHOD = { 'bmc-farm': 'HTTPS Redfish', 'bcm-mock': 'HTTP JSON', 'jira-mock': 'HTTP REST', 'jira-real': 'HTTP REST', 'k8s-api': 'HTTPS kubectl', 'gpu-exporter': 'HTTP metrics', teleport: 'tsh · HTTPS' };
+const SVC_METHOD = { 'bmc-farm': 'HTTPS Redfish', 'bcm-mock': 'HTTP JSON', 'jira-mock': 'HTTP REST', 'jira-real': 'HTTP REST', 'k8s-api': 'HTTPS kubectl', 'gpu-exporter': 'HTTP metrics', 'dcgm-exporter': 'HTTP metrics', 'real-gpu': 'HTTP metrics', teleport: 'tsh · HTTPS' };
 const MODE_TEXT = { ssh: 'Direct SSH', teleport: 'Teleport only', both: 'Direct SSH + Teleport' };
 const KIND_TEXT = { slurm: 's-login · Slurm', k8s: 'k-login · Kubernetes', both: 'login · Slurm + Kubernetes' }, KIND_NAME = { slurm: 's-login', k8s: 'k-login', both: 's+k login' };
 const loginKind = l => l.kind || 'both';
@@ -1366,7 +1387,7 @@ const fitKey = () => { const f = flowFit(); return (curLevel() === 'overview' ? 
 function tileGrid(nodes, cols, tw, th, top = 52) {  // node tiles by group, relative to the cluster frame: [label|node, ...], and the height the frame needs
   let ry = top; const items = [];
   for (const k of ['compute', 'gpu', 'k8s']) {
-    const rows = nodes.filter(n => n.kind === k); if (!rows.length) continue;
+    const rows = nodes.filter(n => kindOf(n) === k); if (!rows.length) continue;
     items.push(['label', k, ry]); ry += 26;
     rows.forEach((n, i) => items.push(['node', n, 24 + (i % cols) * (tw + GAP), ry + Math.floor(i / cols) * (th + GAP)]));
     ry += Math.ceil(rows.length / cols) * (th + GAP) + 22;
@@ -1380,7 +1401,7 @@ function flowGeom(nodes, acc, svcs, a, col, u) {
   P.tileM = { y1: 8 + tn * 0.9, y2: 8 + tn * 0.9 + tn * 1.3, y3: 8 + tn * 0.9 + tn * 2.6 };
   if (col) {  // top to bottom: Clients row, Access row, Cluster nodes; the Services column sits at the right and its lines run down a gutter and enter from the left
     const tb = 10 + UF.title * u * 0.95, chipH = Math.ceil(UF.chip * u * 1.3 + 22), R1 = Math.ceil(tb + 12 + chipH + 14), GAPY = 64, GW = 110;
-    const mA = boxM(u, 4), mS = boxM(u, 3), nU = hasTeleport() ? acc.filter(l => l.mode && l.mode !== 'ssh').length : 0, ACCH = 46 + mA.h + 14 + (nU ? 14 + nU * 12 : 0), top = Math.ceil(tb + 34);
+    const mA = boxM(u, 4), mS = boxM(u, 3), nT = hasTeleport() ? acc.filter(l => l.mode && l.mode !== 'ssh').length : 0, nKey = acc.filter(x => !Array.isArray(x) && x.mode !== 'teleport').length, hasJ = acc.some(x => Array.isArray(x) && x[0] === 'jump'), hasC = acc.some(x => Array.isArray(x) && x[0] === 'controller'), nU = nT + (hasJ ? nKey + (hasC ? 1 : 0) : 0) + (hasC ? nKey : 0), ACCH = 46 + mA.h + 14 + (nU ? 20 + nU * 26 : 0), top = Math.ceil(tb + 34);
     const needA = Math.max(150, ...acc.map(x => Array.isArray(x) ? Math.max(W(x[1], 'sn', 600) + 44, W('✓ up · 99 conn/min', 'sub'), W('99,999 requests seen', 'sub')) + 24
       : Math.max(W(`${x.name} · ${KIND_NAME[loginKind(x)]}`, 'sn', 600), W(MODE_TEXT[x.mode], 'sub'), W(x.ip || x.name, 'sub'), W(portLine(x), 'sub')) + 24));
     const SWD = Math.ceil(Math.max(180, ...svcs.map(([, label, sub]) => Math.max(W(label, 'sn', 600) + 44, W('✓ up · 99,999 req/min', 'sub'), W('99,999 requests seen', 'sub'), W(sub, 'sub')) + 24))), svW = SWD + 32;
@@ -1441,7 +1462,7 @@ const clusterTitle = () => activeCluster || clusterList()[0];
 function withCluster(name, fn) { const prev = activeCluster; activeCluster = multi() ? name : null; try { return fn(); } finally { activeCluster = prev; } }
 function enterCluster(name) { activeCluster = multi() ? name : null; $('crumb-name').textContent = clusterTitle(); setLevel('full', true); }
 function clusterFacts() {
-  const nodes = nodeList(), groups = [['Compute nodes', nodes.filter(n => n.kind === 'compute')], ['GPU nodes', nodes.filter(n => n.kind === 'gpu')], ['Kubernetes nodes', nodes.filter(n => n.kind === 'k8s')]].filter(x => x[1].length);
+  const nodes = nodeList(), groups = [['Compute nodes', nodes.filter(n => n.kind === 'compute')], ['GPU nodes', nodes.filter(n => kindOf(n) === 'gpu')], ['Kubernetes nodes', nodes.filter(n => n.kind === 'k8s')]].filter(x => x[1].length);
   const sc = lastCluster ? scoped() : {}, svcs = svcList(), snap = flowSnap && { ...flowSnap, reachable: sc.reachable || flowSnap.reachable, faults: sc.faults ?? flowSnap.faults }, off = !snap || !Object.values(snap.reachable).some(Boolean);
   const up = svcs.filter(x => snap && snap.reachable[x[0]]).length;
   return { nodes, groups, svcs, snap, off, up, ok: nodes.filter(n => n.state === 'ok').length, faults: snap ? snap.faults || 0 : 0 };
@@ -1553,11 +1574,12 @@ function buildGrid(names) {
 
 // ---- focus view (#313): double-click (or F on a focused part) isolates a part and its direct neighbours; nothing moves ----
 let focusId = null;
-const ENT_NAME = id => ({ clients: 'Clients', faults: 'Faults', nodes: 'Cluster nodes', teleport: 'Teleport proxy' })[id] || (svcList().find(x => x[0] === id) || [])[1] || id;
+const ENT_NAME = id => ({ clients: 'Clients', faults: 'Faults', nodes: 'Cluster nodes', teleport: 'Teleport proxy', jump: 'Jump host', controller: 'Controller' })[id] || (svcList().find(x => x[0] === id) || [])[1] || id;
 function tagEntities() {  // each clickable or framed part of the drawing gets the id of its entity in the declared graph
   const g = $('flow'), tag = (el, id) => { if (el) el.setAttribute('data-ent', id); };
   for (const [k] of svcList()) tag(document.getElementById('fb-' + k)?.parentNode, k);
   for (const l of loginList()) tag(document.getElementById('lg-' + l.name), l.name);
+  for (const [k] of accExtra()) tag(document.getElementById('ac-' + k), k);
   for (const n of nodeList()) tag(document.getElementById('nd-' + n.name), n.name);
   g.querySelectorAll('g.hit').forEach(h => { if (!h.hasAttribute('data-ent') && h.querySelector('.chipbg')) tag(h, 'clients'); });
   const fr = g.querySelectorAll(':scope > .frame'); if (fr.length >= 5) { tag(fr[0], 'clients'); tag(fr[1], 'faults'); tag(fr[4], 'nodes'); }
@@ -1663,7 +1685,7 @@ function buildFlow() {
   const g = $('flow'), nodes = nodeList(), lgs = loginList(), svcs = svcList().filter(x => x[0] !== 'teleport'), tpBox = svcList().find(x => x[0] === 'teleport');
   g.innerHTML = ''; dots = []; tiles = {}; svcPos = {}; svcOut = {}; svcLane = {}; flowNodes = flowSig(nodes); flowFitKey = fitKey();
   const CHIPS = [['Monitoring app', lgs[0].name], ['Prometheus', 'prometheus'], ['curl · scripts', null], ['You: ssh · tsh', lgs[0].name]];
-  const acc = [...(tpBox ? [tpBox] : []), ...lgs], fit = flowFit(), col = fit.col, nS = svcs.length;
+  const acc = [...(tpBox ? [tpBox] : []), ...accExtra(), ...lgs], fit = flowFit(), col = fit.col, nS = svcs.length;
   let u = unitNow, P;  // drawing units per screen pixel: the drawing is laid out, measured against the panel, and laid out again until the text size settles
   const r = g.getBoundingClientRect();
   for (let it = 0; it < 5; it++) {
@@ -1687,7 +1709,7 @@ function buildFlow() {
   g.append(sv('text', { class: 'sub', id: 'fc-clients', x: col ? P.clients.x + 14 + W('Clients', 'title', 700, true) + 16 : 22, y: col ? cy + tb : P.clients.y + P.clients.h - 12 }, ''),
     sv('text', { class: 'sub', id: 'fc-injector', x: ix + (col ? W('Faults', 'title', 700, true) + 16 : 0), y: col ? jy + tb : jy + 110 }, ''),
     sv('text', { class: 'sub', x: ix, y: jy + (col ? tb + sub * 1.9 : 58) }, '◆ scenarios'), sv('text', { class: 'sub', x: ix + (col ? W('◆ scenarios', 'sub') + 18 : 0), y: col ? jy + tb + sub * 1.9 : jy + 84 }, '◆ buttons'));
-  const nOut = (col ? 0 : (tpBox ? 1 : 0) + lgs.filter(l => l.mode !== 'teleport').length) + nS; let oi = 0;  // lines leave the client frame spread along its edge, so they do not pile up
+  const nOut = (col ? 0 : (tpBox ? 1 : 0) + accExtra().length + lgs.filter(l => l.mode !== 'teleport').length) + nS; let oi = 0;  // lines leave the client frame spread along its edge, so they do not pile up
   const out = () => col ? { x: P.clients.x + P.clients.w, y: P.clients.y + 30 + (oi++) * ((P.clients.h - 50) / Math.max(nS - 1, 1)) } : { x: P.clients.x + P.clients.w, y: P.clients.y + 44 + (oi++) * ((P.clients.h - 96) / Math.max(nOut - 1, 1)) };
   const injOut = { x: P.injector.x + (col ? 0 : P.injector.w), y: P.injector.y + P.injector.h / 2 };
   const lanes = sv('g', {}), labels = sv('g', { class: 'elabs' }); g.append(lanes);
@@ -1706,18 +1728,25 @@ function buildFlow() {
       sv('text', { class: 'badge act', id: 'fa-' + k, x: p.x + p.w - bx * 2.4, y: p.y + m.ys[0] }, '●'), sv('text', { class: 'badge flt', id: 'fx-' + k, x: p.x + p.w - bx * 1.2, y: p.y + m.ys[0] }, '▲'),
       sv('text', { class: 'sn', x: p.x + 12, y: p.y + m.ys[0] }, label), sv('text', { class: 'sub', id: 'fs-' + k, x: p.x + 12, y: p.y + m.ys[1] }, ''), sv('text', { class: 'sub', id: 'fc-' + k, x: p.x + 12, y: p.y + m.ys[2] }, subtxt)); svcFit[k] = p.w - 24; const ic = SVC_ICON[k]; if (ic) { const z = Math.min(p.h * 0.4, 30); bg.append(sv('path', { class: 'sico', d: ic, 'aria-hidden': 'true', transform: `translate(${p.x + p.w - z - 8} ${p.y + p.h - z - 6}) scale(${z / 24})` })); } return bg;
   };
+  const accBox = (b, p) => {  // the jump host and the controller: a box like a login node, with its state in words as well as in the outline
+    const k = b[0], up = accUp(k), word = up ? '✓ up' : stackUp() ? '✗ not reachable' : '– offline', addr = `ssh · 127.0.0.1:${ACC_PORT[k]}`;
+    const bg = asButton(sv('g', { id: 'ac-' + k }), `${b[1]}: ${word}. Details`, () => openPop(bg, 'acc', k), () => [`${b[1]} · ${word}`, k === 'jump' ? 'A bare ssh bastion · click for the address and command' : 'slurmctld host, admins only · click for the address and command']);
+    const lines = col ? [b[1], word, b[2], addr] : [b[1], word, addr];
+    bg.append(sv('rect', { class: 'blk lgn' + (up ? '' : stackUp() ? ' down' : ' off'), x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), ...lines.map((t, n) => sv('text', { class: n ? 'sub' : 'sn', x: p.x + 12, y: p.y + mA.ys[n] }, fitText(t, n ? 'sub' : 'sn', u, p.w - 24, n ? 400 : 600))));
+    return bg;
+  };
   const svTip = k => { const l = svcList().find(x => x[0] === k); const up = flowSnap?.reachable[k]; return [l[1] + (REAL_SERVICES.has(k) ? ' (real)' : k === 'teleport' ? '' : ' (simulated)') + ' · ' + (up ? 'up' : flowSnap ? 'not reachable' : 'checking'), SVC_METHOD[k] + ' · click for address and command']; };
   const place = acc.map((a2, i) => [a2, P.place[i]]), tpP = tpBox && place[0][1], cb = P.clients.y + P.clients.h;
+  let uu = 0, hh = 0;
   if (col) {  // Access row: straight lines down from the Clients frame; Teleport to a login runs in a U under the boxes; every box has a short jump line down to the nodes
     if (tpBox) { const o = svcOut.teleport = { x: tpP.x + tpP.w / 2, y: cb }; svcLane.teleport = edge('api', poly([o, { x: o.x, y: tpP.y }]), SVC_METHOD.teleport, 0.5, 'ln-teleport', 'clients>teleport:api'); }
-    let uu = 0;
     for (const [l, p] of place) {
-      if (l === tpBox) continue;
+      if (Array.isArray(l)) continue;
       if (l.mode !== 'teleport') edge('ssh', poly([{ x: p.x + p.w / 2, y: cb }, { x: p.x + p.w / 2, y: p.y }]), 'direct SSH', 0.5, null, `clients>${l.name}:ssh`);
-      if (l.mode !== 'ssh' && tpBox) { const by = p.y + p.h, uy = by + 12 + (uu++) * 12, sx = tpP.x + tpP.w / 2 - 14; edge('teleport', poly([{ x: sx, y: tpP.y + tpP.h }, { x: sx, y: uy }, { x: p.x + p.w / 2 - 14, y: uy }, { x: p.x + p.w / 2 - 14, y: by }]), '', 0.5, null, `teleport>${l.name}:teleport`); }
+      if (l.mode !== 'ssh' && tpBox) { const by = p.y + p.h, uy = by + 20 + (uu++) * 26, sx = tpP.x + tpP.w / 2 - 14; edge('teleport', poly([{ x: sx, y: tpP.y + tpP.h }, { x: sx, y: uy }, { x: p.x + p.w / 2 - 14, y: uy }, { x: p.x + p.w / 2 - 14, y: by }]), '', 0.5, null, `teleport>${l.name}:teleport`); }
     }
     for (const [l, p] of place) {  // an s-login jumps to the Slurm nodes; a k-login reaches the Kubernetes nodes with kubectl; a login serving both draws both
-      if (l === tpBox) continue;
+      if (Array.isArray(l)) continue;
       for (const [eid, jx, text] of [[`${l.name}>nodes:jump`, p.x + p.w / 2 + 22, 'jump host'], [`${l.name}>k8s-nodes:kubectl`, p.x + p.w / 2 - 22, 'kubectl']]) {
         if (gr && !gedge(eid)) continue;
         lanes.append(sv('path', { class: 'lanehalo', d: dpath(poly([{ x: jx, y: p.y + p.h }, { x: jx, y: P.access.y + P.access.h }])) })); edge('jump', poly([{ x: jx, y: p.y + p.h }, { x: jx, y: P.cluster.y }]), text, 0.5, null, eid);
@@ -1727,12 +1756,25 @@ function buildFlow() {
   } else {
     if (tpBox) { const o = svcOut.teleport = out(); svcLane.teleport = edge('api', curve(o, { x: tpP.x, y: tpP.y + tpP.h / 2 }), SVC_METHOD.teleport, 0.5, 'ln-teleport', 'clients>teleport:api'); }
     for (const [l, p] of place) {
-      if (l === tpBox) continue;
+      if (Array.isArray(l)) continue;
       const mid = p.y + p.h / 2;
       if (l.mode !== 'teleport') edge('ssh', curve(out(), { x: p.x, y: mid - 12 }), 'direct SSH', 0.3, null, `clients>${l.name}:ssh`);
       if (l.mode !== 'ssh' && tpBox) { const s = { x: tpP.x, y: tpP.y + tpP.h / 2 + 12 }, e = { x: p.x, y: mid + 12 }; edge('teleport', [s, { x: s.x - 62, y: s.y }, { x: e.x - 62, y: e.y }, e], 'Teleport', 0.5, null, `teleport>${l.name}:teleport`); }
     }
   }
+  const posOf = id => (place.find(([x]) => Array.isArray(x) ? x[0] === id : x.name === id) || [])[1], keyLogins = lgs.filter(l => l.mode !== 'teleport');
+  const hop = (src, dst, eid, text) => {  // ssh from one Access box to another (through the jump host, or login to controller): under the boxes, or down the left side when stacked
+    const a = posOf(src), b = posOf(dst); if (!a || !b) return;
+    if (col) { const by = a.y + a.h, uy = by + 20 + (uu++) * 26, sx = a.x + a.w / 2 + 6, ex = b.x + b.w / 2 + 6; edge('jump', poly([{ x: sx, y: by }, { x: sx, y: uy }, { x: ex, y: uy }, { x: ex, y: b.y + b.h }]), text, 0.5, null, eid); }
+    else { const lx = a.x - 34 - (hh++) * 7, s = { x: a.x, y: a.y + a.h / 2 + 4 }, e = { x: b.x, y: b.y + b.h / 2 + 4 }; edge('jump', [s, { x: lx, y: s.y }, { x: lx, y: e.y }, e], text, 0.5, null, eid); }
+  };
+  for (const b of accExtra()) {  // a line from the clients to the jump host and to the controller, then the hops the declared graph has
+    const p = posOf(b[0]), eid = `clients>${b[0]}:ssh`;
+    if (col) edge('ssh', poly([{ x: p.x + p.w / 2, y: cb }, { x: p.x + p.w / 2, y: p.y }]), 'ssh', 0.5, null, eid);
+    else edge('ssh', curve(out(), { x: p.x, y: p.y + p.h / 2 - 12 }), 'ssh', 0.3, null, eid);
+  }
+  if (hasService('jump')) { for (const l of keyLogins) hop('jump', l.name, `jump>${l.name}:jump`, 'ssh -J'); if (hasService('controller')) hop('jump', 'controller', 'jump>controller:jump', 'ssh -J'); }
+  if (hasService('controller')) for (const l of keyLogins) hop(l.name, 'controller', `${l.name}>controller:jump`, 'ssh');
   const outs = svcs.map(() => out()); if (!col) outs.reverse();  // stacked: the rightmost box takes the topmost origin; column: the top box does. Either way no two service lines cross
   svcs.forEach(([k], i) => {
     const p = P.svcP[i], o = svcOut[k] = outs[i];
@@ -1749,7 +1791,7 @@ function buildFlow() {
     }
   });
   if (!col) {
-    for (const [l, p] of place) if (l !== tpBox) {
+    for (const [l, p] of place) if (!Array.isArray(l)) {
       edge('jump', curve({ x: p.x + p.w, y: p.y + p.h / 2 - 8 }, { x: P.cluster.x, y: p.y + p.h / 2 - 8 }), 'jump host', 0.5, null, `${l.name}>nodes:jump`);
       edge('jump', curve({ x: p.x + p.w, y: p.y + p.h / 2 + 8 }, { x: P.cluster.x, y: p.y + p.h / 2 + 8 }), 'kubectl', 0.5, null, `${l.name}>k8s-nodes:kubectl`);
     }
@@ -1757,6 +1799,7 @@ function buildFlow() {
   }
   for (const [a2, p] of place) {
     if (a2 === tpBox) { g.append(box('teleport', tpBox[1], tpBox[2], p, 'svc', 'teleport', 'blkacc')); continue; }
+    if (Array.isArray(a2)) { g.append(accBox(a2, p)); continue; }
     const l = a2, lt = () => !loginRuns(l) ? [`${l.name} · not running`, stackUp() ? 'Selected, but nothing answers on its port 22: build it with benchctl up' : 'The stack is not running'] : [`${l.name} · ${MODE_TEXT[l.mode]}`, l.mode === 'teleport' ? 'No direct port: only through the Teleport proxy' : `${l.ip || l.name} (also 127.0.0.1:${l.port}) · click for the command`];
     const bg = asButton(sv('g', { id: 'lg-' + l.name }), `${l.name}: ${MODE_TEXT[l.mode]}${loginRuns(l) ? '' : ', not running'}. Details`, () => openPop(bg, 'login', l.name), lt);
     const lines = col ? [`${l.name} · ${KIND_NAME[loginKind(l)]}`, MODE_TEXT[l.mode], loginRuns(l) ? (l.ip || l.name) : '✗ not running', loginRuns(l) ? portLine(l) : ''] : [`${l.name} · ${KIND_NAME[loginKind(l)]}`, MODE_TEXT[l.mode], loginRuns(l) ? loginAddr(l) : '✗ not running'];
@@ -1799,11 +1842,11 @@ function paintBlocks() {
     const up = flowSnap.reachable[k]; sent += flowSnap.totals[k] || 0;
     $('fb-' + k).setAttribute('class', 'blk ' + (up ? 'up' : allOff ? 'off' : 'down') + (k === 'teleport' ? '' : REAL_SERVICES.has(k) ? ' real' : ' sim'));  // everything off = stack not running: stay calm, not red
     const fitBox = (...alts) => { for (const t of alts) { if (fitText(t, 'sub', unitNow, svcFit[k] || 190) === t) return t; } return fitText(alts[alts.length - 1], 'sub', unitNow, svcFit[k] || 190); };  // the first wording that fits; shorter ones drop words, never end in an ellipsis
-    $('fs-' + k).textContent = fitBox(up ? (k === 'jira-real' || k === 'k8s-api' ? '✓ up · no counter' : '✓ up · ' + (rate[k] || 0) + (k === 'teleport' ? ' conn/min' : ' req/min')) : allOff ? '– offline' : '✗ not reachable');
+    $('fs-' + k).textContent = fitBox(up ? (k === 'jira-real' || k === 'k8s-api' || k === 'dcgm-exporter' || k === 'real-gpu' ? '✓ up · no counter' : '✓ up · ' + (rate[k] || 0) + (k === 'teleport' ? ' conn/min' : ' req/min')) : allOff ? '– offline' : '✗ not reachable');
     $('ln-' + k).setAttribute('class', 'lane' + (rate[k] ? ' on' : ''));
     const flt = recent.some(r => r.fault && r.to === k && r.t > Date.now() - 30000);  // a fault was applied to it in the last 30 s
     $('ff-' + k).setAttribute('class', 'fring' + (flt ? ' on' : '')); $('fx-' + k).setAttribute('class', 'badge flt' + (flt ? ' on' : '')); $('fa-' + k).setAttribute('class', 'badge act' + (rate[k] ? ' on' : ''));
-    const si = document.getElementById('si-' + (k === 'gpu-exporter' ? 'gpu-exporter' : k)); if (si) si.textContent = k === 'jira-real' || k === 'k8s-api' ? 'no request counter (the real service publishes none)' : `${rate[k] || 0} ${k === 'teleport' ? 'conn' : 'req'}/min · ${(flowSnap.totals[k] || 0).toLocaleString()} seen`;
+    const si = document.getElementById('si-' + (k === 'gpu-exporter' ? 'gpu-exporter' : k)); if (si) si.textContent = k === 'jira-real' || k === 'k8s-api' || k === 'dcgm-exporter' || k === 'real-gpu' ? 'no request counter (the real service publishes none)' : `${rate[k] || 0} ${k === 'teleport' ? 'conn' : 'req'}/min · ${(flowSnap.totals[k] || 0).toLocaleString()} seen`;
     const ne = flowSnap.errors && flowSnap.errors[k]; $('fc-' + k).textContent = (flowSnap.totals[k] || 0) ? (ne ? fitBox(`${flowSnap.totals[k].toLocaleString()} ${flowSnap.totals[k] === 1 ? 'request' : 'requests'} · ${ne} ${ne === 1 ? 'error' : 'errors'}`, `${flowSnap.totals[k].toLocaleString()} · ${ne} ${ne === 1 ? 'error' : 'errors'}`, `${ne} ${ne === 1 ? 'error' : 'errors'}`) : fitBox(flowSnap.totals[k].toLocaleString() + (flowSnap.totals[k] === 1 ? ' request seen' : ' requests seen'), flowSnap.totals[k].toLocaleString() + ' requests', flowSnap.totals[k].toLocaleString())) : fitBox(svcList().find(x => x[0] === k)[2]);
   }
   $('fc-clients').textContent = sent.toLocaleString() + ' requests';
@@ -2020,12 +2063,36 @@ function pathOf(links, id) {
   walk('to', 'from', l0.from); walk('from', 'to', l0.to);
   return seen;
 }
+// node health for the parts that stand for machines (issue 414): the cluster poll (power, GPU, fans, Kubernetes API) plus Slurm's own node states (sinfo, through the governor)
+let slurmNodes = null, trPrevOut = null;
+const SLURM_OUT = /^(drain|drained|draining|down|fail|failing|maint|unknown|future)/;
+function nodeHealth() {
+  const out = {}, rows = clusterNow().nodes || [];
+  for (const n of rows) {
+    const part = n.kind === 'k8s' ? 'kwok' : 'nodes', h = out[part] ||= { total: 0, out: 0, warn: 0, why: {} }, st = slurmNodes && n.kind !== 'k8s' ? slurmNodes[n.name] : null;
+    h.total++;
+    const why = n.state === 'down' || n.state === 'fault' ? n.label : st && SLURM_OUT.test(st) ? 'Slurm: ' + st : null;
+    if (why) { h.out++; h.why[n.name] = why; } else if (n.state === 'warn') { h.warn++; h.why[n.name] = n.label; }
+  }
+  if (out.nodes) out.slurmd = out.nodes;  // slurmd runs on every Slurm node
+  return out;
+}
+const partHealth = id => nodeHealth()[id] || null;
+function noteNodeChanges(h) {  // a change in which nodes are out is a timeline event, so a drain shows up without a reload
+  const now = {}; for (const part of ['nodes', 'kwok']) for (const [n, w] of Object.entries(h[part]?.why || {})) now[n] = w;
+  if (trPrevOut) {
+    for (const n of new Set([...Object.keys(now), ...Object.keys(trPrevOut)])) if (now[n] !== trPrevOut[n])
+      trHist.push({ t: Date.now(), from: 'state', to: 'nodes', label: now[n] ? `${n}: ${now[n]}` : `${n}: back to normal`, nodes: [n], n: 0 });
+  }
+  trPrevOut = now;
+}
 function trView(l) {
   const key = l.service || l.to, snap = flowSnap, mon = l.targets != null, probe = l.probe != null;
   const up = probe ? l.probe : mon ? l.up === l.targets : snap?.reachable[key];
   const n = l.measured && !mon ? snap?.totals[l.service] : null, rate = n == null ? null : rateOf(l.service, n);
   const ms = mon ? l.scrape_ms : up ? snap?.latency?.[key] : null;
-  return { up, n, rate, ms, mon, state: up === undefined ? '–' : up ? '✓ up' : mon ? `✗ ${l.up} of ${l.targets} up` : '✗ not reachable',
+  const ph = !mon && !probe ? (partHealth(l.to) || partHealth(l.from)) : null, part = up !== false && ph && (ph.out || ph.warn) ? (ph.out ? `▲ up, ${ph.out} of ${ph.total} nodes out` : `▲ up, ${ph.warn} of ${ph.total} nodes degraded`) : null;
+  return { up, n, rate, ms, mon, state: part || (up === undefined ? '–' : up ? '✓ up' : mon ? `✗ ${l.up} of ${l.targets} up` : '✗ not reachable'),
     ev: l.measured || probe ? 'observed' : 'configured', sw: l.real ? 'real' : 'simulated' };
 }
 // the same links as a diagram: parts grouped by role in a fixed template (a group is drawn only when it has a part), one line per
@@ -2038,6 +2105,8 @@ const TR_ICON = { server: 'M2 3h12v4H2zM2 9h12v4H2zM4.5 5h.01M4.5 11h.01', db: '
 const PART_INFO = {
   'clients': 'The monitoring client, Prometheus, scripts and people who call the cluster from outside.',
   'login': 'The Slurm login node: where users and tools ssh in, submit jobs and run Slurm commands.',
+  'jump': 'The jump host: a bare sshd bastion with nothing else installed. Use ssh -J through it to reach a login node or the controller.',
+  'controller': 'The controller node: where slurmctld runs. Admins (a whitelist of users and groups) ssh in; it is the BCM head node, so cmsh lives here instead of on the login nodes.',
   'teleport': 'The Teleport proxy: ssh access through one audited front door instead of direct ssh.',
   'slurmrestd': "Slurm's REST API daemon. Clients send HTTP requests with a JWT and it hands them to slurmctld. It sits in Access because it is an entry point for callers, not part of the scheduler.",
   'slurmctld': 'The Slurm controller: schedules jobs, tracks every node and answers all Slurm commands and API calls.',
@@ -2056,29 +2125,32 @@ const PART_INFO = {
   'prometheus': 'Scrapes metrics from the targets on a schedule and stores them.',
   'grafana': 'Dashboards over Prometheus; also receives governor annotations.',
   'gpu-exporter': 'The simulated GPU exporter (DCGM style metrics) that tests can also inject faults into.',
+  'real-gpu': 'This machine\'s own NVIDIA card with the real DCGM exporter (optional, needs the driver and container toolkit).',
+  'dcgm-exporter': 'The official DCGM exporter on a mock NVML, standing for the first GPU node (optional, about 125 MB).',
   'governor': 'The host memory governor: keeps the machine healthy by pausing or stopping parts under pressure (real).',
   'sim-nodes': 'The simulated per-node metrics targets that Prometheus scrapes.',
   'storage': 'Shared storage for job data. Planned, not built yet.'
 };
-const PART_ICON = { clients: 'screen', login: 'lock', teleport: 'lock', slurmrestd: 'gear', slurmctld: 'gear', slurmdbd: 'db', slurmd: 'server', nodes: 'server', 'bmc-farm': 'server', 'bcm-mock': 'server', 'k8s-api': 'gear',
-  'kube-scheduler': 'gear', 'kube-controller-manager': 'gear', etcd: 'db', prometheus: 'chart', grafana: 'chart', 'gpu-exporter': 'chart', governor: 'gear', 'sim-nodes': 'server', storage: 'db' };
+const PART_ICON = { jump: 'lock', controller: 'gear', clients: 'screen', login: 'lock', teleport: 'lock', slurmrestd: 'gear', slurmctld: 'gear', slurmdbd: 'db', slurmd: 'server', nodes: 'server', 'bmc-farm': 'server', 'bcm-mock': 'server', 'k8s-api': 'gear',
+  'kube-scheduler': 'gear', 'kube-controller-manager': 'gear', etcd: 'db', prometheus: 'chart', grafana: 'chart', 'gpu-exporter': 'chart', 'dcgm-exporter': 'chart', 'real-gpu': 'chart', governor: 'gear', 'sim-nodes': 'server', storage: 'db' };
 const TR_GROUPS = [  // the fixed architecture, two rows by four columns, callers at the left: [title, grid column, grid row, colour, parts]; a part with no link in this cluster is drawn grayed, never dropped
   ['External clients', 0, 0.5, '#4cc9ff', ['clients']],
-  ['Access', 1, 0, '#8da2ff', ['login', 'teleport', 'slurmrestd']], ['Slurm', 2, 0, '#3fb950', ['slurmctld', 'slurmdbd', 'slurmd', 'nodes']], ['Storage', 3, 0, '#c9a0ff', ['storage']],
+  ['Access', 1, 0, '#8da2ff', ['jump', 'login', 'teleport', 'slurmrestd']], ['Slurm', 2, 0, '#3fb950', ['controller', 'slurmctld', 'slurmdbd', 'slurmd', 'nodes']], ['Storage', 3, 0, '#c9a0ff', ['storage']],
   ['Management', 1, 1, '#ffb02e', ['bmc-farm', 'bcm-mock', 'jira-mock', 'jira-real']], ['Kubernetes', 2, 1, '#b38cff', ['k8s-api', 'kube-scheduler', 'kube-controller-manager', 'etcd', 'kwok']],
-  ['Monitoring', 3, 1, '#4cc9ff', ['prometheus', 'grafana', 'gpu-exporter', 'governor', 'sim-nodes']]];
+  ['Monitoring', 3, 1, '#4cc9ff', ['prometheus', 'grafana', 'gpu-exporter', 'dcgm-exporter', 'real-gpu', 'governor', 'sim-nodes']]];
 let trHist = [], trRange = 300;  // what this page was told since it opened (the counters are read live; nothing is stored on the server)
 const hhmmss = t => new Date(t).toTimeString().slice(0, 8);
 function paintTrTimeline(links) {
   const now = Date.now(), from = now - trRange * 1000, ev = trHist.filter(h => h.t >= from), say = h => {
+    if (h.from === 'state') return `Node ${h.label}`;
     if (h.from === 'injector') return `Fault ${h.label || 'applied'} on ${(h.nodes || []).join(', ') || h.to}`;
     const l = links.find(k => k.from === h.from && (k.service || k.to) === h.to) || links.find(k => (k.service || k.to) === h.to);
     return `${l ? l.from : h.from} → ${l ? l.to : h.to}${l ? ` (${l.protocol} :${l.port})` : ''}`;
   };
-  $('tr-feed').innerHTML = ev.slice(-12).reverse().map(h => `<li><span class="ft">${hhmmss(h.t)}</span><span>${h.from === 'injector' ? '<b class="f" aria-hidden="true">◆</b> ' : ''}${esc(say(h))}</span><span class="dim">${h.from === 'injector' ? '' : h.n + ' req' + (h.ms != null ? ', ' + h.ms + ' ms' : '')}</span></li>`).join('')
+  $('tr-feed').innerHTML = ev.slice(-12).reverse().map(h => `<li><span class="ft">${hhmmss(h.t)}</span><span>${h.from === 'injector' || h.from === 'state' ? '<b class="f" aria-hidden="true">◆</b> ' : ''}${esc(say(h))}</span><span class="dim">${h.from === 'injector' || h.from === 'state' ? '' : h.n + ' req' + (h.ms != null ? ', ' + h.ms + ' ms' : '')}</span></li>`).join('')
     || `<li class="dim"><span></span><span>No requests seen in the last ${trRange >= 3600 ? '1 h' : trRange / 60 + ' min'}. A count rises only when a client calls a mock service.</span><span></span></li>`;
   const B = 60, w = 480, h = 120, bw = trRange * 1000 / B, bins = new Array(B).fill(0), faults = [];
-  ev.forEach(e => { const i = Math.min(B - 1, Math.floor((e.t - from) / bw)); if (e.from === 'injector') faults.push(i); else bins[i] += e.n; });
+  ev.forEach(e => { const i = Math.min(B - 1, Math.floor((e.t - from) / bw)); if (e.from === 'injector' || e.from === 'state') faults.push(i); else bins[i] += e.n; });
   const max = Math.max(...bins, 1), x = i => (i + 0.5) / B * w, y = v => h - 14 - v / max * (h - 26), pts = bins.map((v, i) => `${x(i)},${y(v)}`).join(' ');
   $('tr-chart').innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="100%" role="img" aria-label="Requests over the last ${trRange / 60} minutes, peak ${max} per ${Math.round(bw / 1000)} s bucket, ${faults.length} fault${faults.length === 1 ? '' : 's'} marked"><polygon points="0,${h - 14} ${pts} ${w},${h - 14}" fill="var(--accent)" fill-opacity="0.18"/><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>`
     + faults.map(i => `<path d="M${x(i)} 4V${h - 14}" stroke="#ffb02e" stroke-width="2" stroke-dasharray="3 3"/>`).join('')
@@ -2116,12 +2188,12 @@ function paintTrafficMap(rows, ghosts = []) {
     box.append(sv('text', { x: g.x + 12, y: g.y + 20, fill: g.col, 'font-size': 15, 'font-weight': 700 }, g.title));
     svg.append(box);
     g.parts.forEach((id, i) => {
-      const up = flowSnap?.reachable[id], gone = !live.has(id), py = g.y + HEAD + i * (PH + 6);
+      const up = flowSnap?.reachable[id], gone = !live.has(id), py = g.y + HEAD + i * (PH + 6), ph = gone ? null : partHealth(id), allOut = ph && ph.out === ph.total, mark = ph && (ph.out || ph.warn) ? (allOut ? '✗ ' : '▲ ') : null;
       pos[id] = { x: g.x + 10, y: py, w: GW - 20, g };
-      svg.append(sv('rect', { x: g.x + 10, y: py, width: GW - 20, height: PH, rx: 7, fill: 'var(--panel)', stroke: gone ? 'var(--line)' : g.col, 'stroke-opacity': gone ? 1 : 0.7, 'stroke-width': 1.4, 'stroke-dasharray': up === false || gone ? '4 3' : '', 'opacity': gone ? 0.4 : 1, 'pointer-events': 'none' }));
+      svg.append(sv('rect', { x: g.x + 10, y: py, width: GW - 20, height: PH, rx: 7, fill: 'var(--panel)', stroke: gone ? 'var(--line)' : g.col, 'stroke-opacity': gone ? 1 : 0.7, 'stroke-width': 1.4, 'stroke-dasharray': up === false || gone || allOut ? '4 3' : '', 'opacity': gone ? 0.4 : 1, 'pointer-events': 'none' }));
       const ic = sv('path', { d: TR_ICON[PART_ICON[id] || 'cube'], transform: `translate(${g.x + 18} ${py + PH / 2 - 8})`, fill: 'none', stroke: g.col, 'stroke-width': 1.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: gone ? 0.4 : 1, 'pointer-events': 'none' });
       svg.append(ic);
-      svg.append(sv('text', { x: g.x + 42, y: py + PH / 2 + 5, fill: 'currentColor', 'font-size': 14, 'opacity': gone ? 0.4 : 1, 'pointer-events': 'none' }, (gone || up === undefined ? '' : up ? '✓ ' : '✗ ') + (id.length > 14 ? id.slice(0, 13) + '…' : id)));
+      svg.append(sv('text', { x: g.x + 42, y: py + PH / 2 + 5, fill: 'currentColor', 'font-size': 14, 'opacity': gone ? 0.4 : 1, 'pointer-events': 'none' }, (gone ? '' : up === false ? '✗ ' : mark || (up === undefined ? '' : '✓ ')) + (ph && ph.total ? `${id} ${ph.total - ph.out}/${ph.total}` : id.length > 14 ? id.slice(0, 13) + '…' : id)));
       svg.append(sv('rect', { class: 'trpart', 'data-part': id, 'data-of': g.title, tabindex: 0, role: 'button', 'aria-label': `${id}: click for details, drag up or down or press Alt+Up or Alt+Down to reorder inside ${g.title}`, x: g.x + 10, y: py, width: GW - 20, height: PH, fill: 'transparent', style: 'cursor:ns-resize' }));
     });
   });
@@ -2211,7 +2283,7 @@ function rateChart(hist) {
 }
 function paintTrPart(id, links) {  // a clicked part: what it is, whether it answers, and the links it has (each opens that link)
   const up = flowSnap?.reachable[id], mine = links.filter(l => l.from === id || l.to === id), li = l => `<li><button class="linkbtn" data-link="${esc(l.id)}">${l.from === id ? `→ ${esc(l.to)}` : `← ${esc(l.from)}`}</button> <span class="dim small">${esc(l.protocol)}${l.port == null ? '' : ' :' + l.port}</span></li>`;
-  $('tr-insp').innerHTML = `<h3>${esc(id)} <button class="btn small" id="tr-close" aria-label="Close the inspector">✕</button></h3><p class="small">${esc(PART_INFO[id] || '')}</p><dl><dt>State</dt><dd>${up === undefined ? '–' : up ? '✓ answers' : '✗ not reachable'}</dd></dl><p class="row small"><span class="dim">Order in its group</span><button class="btn small" data-mv="-1" aria-label="Move ${esc(id)} up in its group">▲ Up</button><button class="btn small" data-mv="1" aria-label="Move ${esc(id)} down in its group">▼ Down</button></p>`
+  $('tr-insp').innerHTML = `<h3>${esc(id)} <button class="btn small" id="tr-close" aria-label="Close the inspector">✕</button></h3><p class="small">${esc(PART_INFO[id] || '')}</p><dl><dt>State</dt><dd>${up === undefined ? '–' : up ? '✓ answers' : '✗ not reachable'}</dd>${(ph => ph && (ph.out || ph.warn) ? `<dt>Nodes</dt><dd>${ph.total - ph.out} of ${ph.total} in service<br>${Object.entries(ph.why).map(([n, w]) => `${esc(n)}: ${esc(w)}`).join('<br>')}</dd>` : ph ? `<dt>Nodes</dt><dd>${ph.total} of ${ph.total} in service</dd>` : '')(partHealth(id))}</dl><p class="row small"><span class="dim">Order in its group</span><button class="btn small" data-mv="-1" aria-label="Move ${esc(id)} up in its group">▲ Up</button><button class="btn small" data-mv="1" aria-label="Move ${esc(id)} down in its group">▼ Down</button></p>`
     + (mine.length ? `<p class="small dim">Links of this part (click one for its details)</p><ul class="trlinks">${mine.map(li).join('')}</ul>` : '<p class="small dim">No documented link in this cluster.</p>');
 }
 function paintTrInspector(cur) {
@@ -2235,6 +2307,7 @@ function paintTraffic() {
     if (lastCluster) $('tr-rows').innerHTML = '<tr><td colspan="9" class="skel">The web page server is older than this page, so it sends no links. Restart it: <code>pkill -f \"python -m webui\"; ./scripts/benchctl start</code></td></tr>';
     return;
   }
+  noteNodeChanges(nodeHealth());
   const links = [...base, ...monLinks, ...(dbdLink ? [dbdLink] : [])];
   paintChips(links);
   const path = trPath && pathOf(links, trPath), f = { plane: trPlane, sw: $('tr-sw').value, ev: $('tr-ev').value };
@@ -2275,11 +2348,12 @@ if ($('tr-stage').requestFullscreen) $('tr-full').onclick = () => document.fulls
 // slurmctld's own request counts (sdiag, read by the governor) and Prometheus's scrape results: refreshed every 10 s while the Traffic tab is open
 let slurmAt = 0;
 async function paintSlurmStats() {
-  if ($('tab-traffic').hidden || Date.now() - slurmAt < 10000) return;
+  if ($('tab-traffic').hidden || Date.now() - slurmAt < 5000) return;
   slurmAt = Date.now();
   fetch('/api/monitoring').then(r => r.json()).then(j => { monLinks = j.links; paintTraffic(); }).catch(() => { monLinks = []; });
   let s = null;
   try { s = (await (await fetch('/api/slurm-stats')).json()).stats; } catch (e) { /* the governor or the stack is down: show nothing */ }
+  slurmNodes = s && s.node_states ? s.node_states : null;
   dbdLink = s && s.dbd != null ? { id: 'slurmctld>slurmdbd:6819', from: 'slurmctld', to: 'slurmdbd', protocol: 'TCP (Slurm RPC)', port: 6819, plane: 'data', what: 'accounting records; seen by a sacctmgr query (answers or not, no counter)', real: true, measured: false, probe: s.dbd, service: null } : null;
   paintTraffic();
   const box = $('tr-slurm');
@@ -2287,6 +2361,7 @@ async function paintSlurmStats() {
   if (s) box.innerHTML = `<b>slurmctld (sdiag)</b>: ${s.rpcs.toLocaleString()} requests served since it started${s.threads == null ? '' : `, ${s.threads} threads now`}. Busiest: `
     + s.top.map(t => `${esc(t.type)} ${t.count.toLocaleString()} (${t.ave_us.toLocaleString()} µs each)`).join(', ') + '.';
 }
+setInterval(() => { if (!document.hidden) paintSlurmStats(); }, 5000);  // node states are read every 5 s while the Traffic tab shows (W-11: not while hidden), so a drain appears without traffic or a reload (issue 414)
 // tabs: the live traffic feed runs only while its tab and the page are visible
 const TABS = ['nodes', 'traffic', 'conn'];
 function selectTab(t, focus) {
