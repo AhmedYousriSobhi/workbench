@@ -7,6 +7,8 @@ def node_names(sim: dict, compute_override: int | None = None) -> list[tuple[str
     count = compute_override if compute_override is not None else c.get("count", 0)
     names = [(f"{c['prefix']}{i:03d}", "compute") for i in range(1, count + 1)]
     names += [(f"{g['prefix']}{i:03d}", "gpu") for i in range(1, g.get("nodes", 0) + 1)]
+    if (sim.get("real_gpu") or {}).get("enabled"):  # the real card's Slurm node (issue 428): Slurm, ssh and Teleport have it; the BMC, BCM and exporter mocks do not (issue 431)
+        names.append((sim["real_gpu"]["node"], "real-gpu"))
     return names
 
 
@@ -23,7 +25,7 @@ def k8s_enabled(sim: dict) -> bool:
 def hardware_nodes(sim: dict, compute_override: int | None = None) -> list[tuple[str, str]]:
     """[(name, kind)] of every machine with hardware: the Slurm nodes (kind compute, gpu), then the Kubernetes nodes
     (k8s-cpu, k8s-gpu) when that part is on. BMC, BCM and the GPU exporter list these; Slurm and Teleport keep `node_names`."""
-    out = node_names(sim, compute_override)
+    out = [x for x in node_names(sim, compute_override) if x[1] != "real-gpu"]  # no BMC, BCM or exporter entry yet (issue 431)
     if k8s_enabled(sim):
         from . import k8s
 

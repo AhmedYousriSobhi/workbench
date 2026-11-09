@@ -40,7 +40,7 @@ STAGES = [  # (label, service-name pattern); later stages depend on earlier ones
     ("kubernetes", r"k8s-etcd|k8s-apiserver|k8s-controller-manager|k8s-scheduler"),
     ("kubernetes nodes", r"kwok-controller"),  # starts only once the stages exist: with none it exits
     ("bmc addresses", r"bmc-(cn|gpu)\d+"),
-    ("nodes", r"(cn|gpu)\d+"),
+    ("nodes", r"(cn|gpu|rgpu)\d+"),
     ("login node", r"login\d*"),
     ("scenarios", r"scenario-engine"),
 ]
@@ -183,14 +183,14 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         ensure_bmc_credentials()
     if "jira-real" in todo:
         jira_real.ensure_secrets()
-    if any(logins.is_login(n) for n in todo) or any(re.fullmatch(r"(cn|gpu)\d+", n) for n in todo):
+    if any(logins.is_login(n) for n in todo) or any(re.fullmatch(r"(cn|gpu|rgpu)\d+", n) for n in todo):
         try:
             ensure_ssh_keys()
         except OSError as e:
             say(f"FAILED login node keys: {e}")
             return False
     names = [n for n in data["services"] if n not in skip] + ["prometheus", "grafana", "gpu-exporter-farm"]
-    node_re = r"(cn|gpu)\d+"
+    node_re = r"(cn|gpu|rgpu)\d+"
     changed = False
     before = set(_project_services(runner))
     stale_bmc = sorted(s for s in before if re.fullmatch(r"bmc-(cn|gpu)\d+", s) and s not in names)  # a BMC switched off, or its node gone
@@ -213,7 +213,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
             remove_services(stale, runner)
     # slurmctld, slurmrestd and login build FROM node-base's tag, which only a node service rebuilds. Build it first,
     # or a changed base (new munge key) leaves the controller on the old image and every Slurm call fails to authenticate.
-    if (first := next((n for n in names if re.fullmatch(r"(cn|gpu)\d+", n)), None)):
+    if (first := next((n for n in names if re.fullmatch(r"(cn|gpu|rgpu)\d+", n)), None)):
         r = runner(dc("build", first, file=path))
         if r.returncode != 0:
             say(f"FAILED node base image: {r.stderr.strip()[-300:]}")

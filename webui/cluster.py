@@ -187,7 +187,7 @@ class Cluster:
         thermal = self._try(f"{BMC}/{name}/redfish/v1/Chassis/1/Thermal") or {}
         temps = [t.get("ReadingCelsius") for t in thermal.get("Temperatures", []) if t.get("Name") == "CPU"]
         fans = [f for f in thermal.get("Fans", []) if f.get("Status", {}).get("Health") == "Critical"]
-        return {"name": name, "kind": kind, "gpus": self.gpus if kind == "gpu" else 0,
+        return {"name": name, "kind": kind, "gpus": self.gpus if kind == "gpu" else 1 if kind == "real-gpu" else 0,
                 "power": system.get("PowerState") if isinstance(system, dict) else None,
                 "temp": temps[0] if temps else None, "fans_failed": len(fans)}
 
@@ -230,6 +230,17 @@ class Cluster:
             row["xid"] = xids.get(row["name"], 0)
             row["ib_down"], row["nic_flap"] = ib.get(row["name"], 0), row["name"] in flap
             row["state"], row["label"] = classify(row)
+        for row in rows:
+            if row["kind"] == "real-gpu":  # no BMC entry yet (issue 431): the card's own exporter says whether it is up and how busy it is
+                text = self._try(f"{REAL_GPU}/metrics")
+                text = text if isinstance(text, str) else ""
+                u = gpu_util_by_node(text).get(row["name"], [])
+                row["power"] = "On" if u else None
+                row["gpu_util"], row["gpus_busy"] = (round(sum(u) / len(u)), sum(1 for x in u if x >= 50)) if u else (0, 0)
+                row["xid"] = xid_by_node(text).get(row["name"], 0)
+                m = re.search(r'^DCGM_FI_DEV_GPU_TEMP\{[^}]*\} (\S+)', text, re.MULTILINE)
+                row["temp"] = float(m[1]) if m else None
+                row["state"], row["label"] = classify(row)
         if k8s_built():  # the Kubernetes nodes are their own group beside the Slurm nodes; their state is the API's (read-only user)
             from benchctl import k8s
 
@@ -245,7 +256,7 @@ class Cluster:
         if action not in ACTIONS:
             raise ActionError(f"unknown action {action!r}")
         _, gpu_only, steps = ACTIONS[action]
-        if gpu_only and kinds[node] != "gpu":
+        if gpu_only and kinds[node] not in ("gpu", "real-gpu"):
             raise ActionError(f"{ACTIONS[action][0]} only applies to GPU nodes")
         out = []
         for target, do in steps:

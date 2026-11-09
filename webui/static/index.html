@@ -817,7 +817,7 @@ function svcRow([k, up]) {
   return `<li><div class="er svc ${up ? 'ok' : 'fault'}"><b class="g" aria-hidden="true">${up ? '✓' : '✗'}</b><span class="nm">${esc(k)}</span><span class="st">${up ? 'answering' : 'not answering'}</span><span class="info" id="si-${esc(k)}"></span></div></li>`;
 }
 function paintKpis() {  // stack down: no cards, one notice (W-10); the cluster at a glance, all from the page's own data (nodes, reachability, applied faults); nothing is invented
-  const f = clusterFacts(), gpu = f.nodes.filter(n => n.kind === 'gpu'), gt = gpu.reduce((a, n) => a + (n.gpus || 0), 0), gb = gpu.reduce((a, n) => a + (n.gpus_busy || 0), 0);
+  const f = clusterFacts(), gpu = f.nodes.filter(n => kindOf(n) === 'gpu'), gt = gpu.reduce((a, n) => a + (n.gpus || 0), 0), gb = gpu.reduce((a, n) => a + (n.gpus_busy || 0), 0);
   const bad = f.nodes.length - f.ok, k = (cls, v, of, label) => `<div class="kpi ${cls}"><b>${v}${of == null ? '' : ` <small>of ${of}</small>`}</b><span>${label}</span></div>`;
   $('kpis').innerHTML = !f.nodes.length || f.off ? '' : k(bad ? 'warn' : 'ok', f.ok, f.nodes.length, 'nodes healthy') + k(f.off ? 'bad' : f.up < f.svcs.length ? 'warn' : 'ok', f.up, f.svcs.length, 'services up')
     + (gt ? k('', gb, gt, 'GPUs busy') : '') + k(f.faults ? 'bad' : 'ok', f.faults, null, f.faults === 1 ? 'fault applied' : 'faults applied');
@@ -834,7 +834,7 @@ function renderCluster(c) {
   const svcs = Object.entries(c.services), svcUp = svcs.filter(([, u]) => u).length;
   $('services').innerHTML = svcs.map(svcRow).join(''); $('cnt-svc').textContent = `${svcUp} of ${svcs.length} answering`; paintBlocks();
   for (const kind of ['compute', 'gpu', 'k8s']) {
-    const rows = c.nodes.filter(n => n.kind === kind);
+    const rows = c.nodes.filter(n => kindOf(n) === kind);
     $('nodes-' + kind).innerHTML = rows.map(n => node(n)).join(''); $('br-' + kind).hidden = !rows.length;
     $('cnt-' + kind).textContent = `${rows.filter(n => n.state === 'ok').length} of ${rows.length} healthy`;
   }
@@ -909,8 +909,8 @@ function paintPlanSummary() {
 function planInputs() { paintPlanSummary(); clearTimeout(planTimer); planTimer = setTimeout(loadPlan, 250); armed = 0; $('pl-apply').textContent = 'Apply to the running workbench'; }
 document.querySelectorAll('[data-step]').forEach(b => b.onclick = () => { const i = $(b.dataset.step); i.value = Math.min(+i.max, Math.max(+i.min, (+i.value || 0) + +b.dataset.d)); planInputs(); });
 function currentSize() {
-  const nodes = nodeList(), g = nodes.find(n => n.kind === 'gpu');
-  return { cpu: nodes.filter(n => n.kind === 'compute').length, gpu: nodes.filter(n => n.kind === 'gpu').length, gpus: g ? g.gpus : null };
+  const nodes = nodeList(), g = nodes.find(n => kindOf(n) === 'gpu');
+  return { cpu: nodes.filter(n => n.kind === 'compute').length, gpu: nodes.filter(n => kindOf(n) === 'gpu').length, gpus: g ? g.gpus : null };
 }
 // Login nodes: one row per node, each with its own way in. The first is `login`, then login2, ... (benchctl/logins.py)
 let loginModes = [], loginMax = 8;
@@ -1151,10 +1151,10 @@ $('pl-apply').onclick = async () => {
 function paintNodeActions(name) {
   const c = JSON.parse(lastCluster || '{"nodes":[],"actions":[]}'), n = c.nodes.find(x => x.name === name), fix = new Set(['power-on', 'clear']);
   const btns = (rows) => rows.map(a => `<button class="btn" data-node="${esc(name)}" data-action="${a.id}">${esc(a.label)}</button>`).join('');
-  const ok = n ? c.actions.filter(a => !a.gpu_only || n.kind === 'gpu') : [];
+  const ok = n ? c.actions.filter(a => !a.gpu_only || kindOf(n) === 'gpu') : [];
   $('nodeacts-fault').innerHTML = btns(ok.filter(a => !fix.has(a.id))); $('nodeacts-fix').innerHTML = btns(ok.filter(a => fix.has(a.id)));
   document.querySelectorAll('#nodepane .actions .btn').forEach(b => b.onclick = () => nodeAction(b.dataset.node, b.dataset.action, b.textContent));
-  const jobs = n && n.kind === 'gpu' ? [['1 GPU, 5 min', 1, 300], [`All ${n.gpus} GPUs, 5 min`, n.gpus, 300], ['All GPUs, 30 min', n.gpus, 1800]] : [['1 CPU, 5 min', 0, 300], ['1 CPU, 30 min', 0, 1800]];
+  const jobs = n && kindOf(n) === 'gpu' ? [['1 GPU, 5 min', 1, 300], [`All ${n.gpus} GPUs, 5 min`, n.gpus, 300], ['All GPUs, 30 min', n.gpus, 1800]] : [['1 CPU, 5 min', 0, 300], ['1 CPU, 30 min', 0, 1800]];
   $('nodeacts-job').innerHTML = n ? jobs.map(([l, g, d]) => `<button class="btn" data-gpus="${g}" data-dur="${d}">Run ${esc(l)}</button>`).join('') : '';
   document.querySelectorAll('#nodeacts-job .btn').forEach(b => b.onclick = () => nodeJob(name, +b.dataset.gpus, +b.dataset.dur));
   if (n) { $('nodestate').className = 'pill ' + n.state; $('nodestate').textContent = `${STATE_ICON[n.state]} ${n.label}`; }
@@ -1240,6 +1240,7 @@ function roundedPoly(pts, r = 16) {  // straight segments joined by small arcs, 
   const z = pts[pts.length - 1]; return d + ` L${z.x} ${z.y}`;
 }
 const dpath = b => b.poly ? roundedPoly(b.poly) : `M${b[0].x} ${b[0].y} C${b[1].x} ${b[1].y} ${b[2].x} ${b[2].y} ${b[3].x} ${b[3].y}`;
+const kindOf = n => n.kind === 'real-gpu' ? 'gpu' : n.kind;  // the real card's node sits with the GPU nodes (issue 428)
 function nodeList() { try { return lastCluster ? scoped().nodes : []; } catch (e) { return []; } }
 const SVC_CONN = { 'bmc-farm': 'bmc', 'bcm-mock': 'bcm', 'jira-mock': 'jira', 'jira-real': 'jira-real', 'k8s-api': 'k8s', 'gpu-exporter': 'gpu', 'dcgm-exporter': 'dcgm', 'real-gpu': 'real-gpu', 'teleport': 'teleport' };  // diagram box -> Connections row
 // hover tip and click pop-up on every part of the diagram (#192). The tip is one line of state; the pop-up has the address, the command and the actions.
@@ -1291,7 +1292,7 @@ async function popInfo(kind, id) {
   if (kind === 'node') {
     const n = c.nodes.find(x => x.name === id) || { name: id, label: '', state: 'unknown', kind: '' }, cx = row('nodes');
     let ip = ''; try { if (n.kind !== 'k8s') { const b = await (await fetch(`/api/nodes/${id}`)).json(); ip = b.ip || ''; } } catch (e) { /* the pop-up still opens */ }
-    return { title: id, badge: `${STATE_ICON[n.state] || '?'} ${n.label}`, cls: n.state, cmd: cx ? cx.command.replace('<node>', id) : '', kv: n.kind === 'k8s' ? [['Kind', `Kubernetes node (simulated by KWOK)${n.gpus ? `, ${n.gpus} GPUs` : ''}`], ['Reached by', 'kubectl from a login node that serves Kubernetes (k-login); it has no SSH, BMC or Slurm side']] : [['Kind', n.kind === 'gpu' ? 'GPU node' : 'Compute node'], ['Address', ip ? `<code>${esc(ip)}</code> (private, from a login node)` : 'see Connections'],
+    return { title: id, badge: `${STATE_ICON[n.state] || '?'} ${n.label}`, cls: n.state, cmd: cx ? cx.command.replace('<node>', id) : '', kv: n.kind === 'k8s' ? [['Kind', `Kubernetes node (simulated by KWOK)${n.gpus ? `, ${n.gpus} GPUs` : ''}`], ['Reached by', 'kubectl from a login node that serves Kubernetes (k-login); it has no SSH, BMC or Slurm side']] : [['Kind', kindOf(n) === 'gpu' ? 'GPU node' : 'Compute node'], ['Address', ip ? `<code>${esc(ip)}</code> (private, from a login node)` : 'see Connections'],
       ['Reached by', 'ssh from any s-login (jump host)' + (tp ? ', or through the Teleport proxy' : '')]], actions: n.kind === 'k8s' ? [{ label: 'Connections', fn: () => openConnection('k8s') }] : [{ label: 'Actions and details', fn: () => showNode(id) }, { label: 'Connections', fn: () => openConnection('nodes') }] };
   }
   if (kind === 'login') {
@@ -1386,7 +1387,7 @@ const fitKey = () => { const f = flowFit(); return (curLevel() === 'overview' ? 
 function tileGrid(nodes, cols, tw, th, top = 52) {  // node tiles by group, relative to the cluster frame: [label|node, ...], and the height the frame needs
   let ry = top; const items = [];
   for (const k of ['compute', 'gpu', 'k8s']) {
-    const rows = nodes.filter(n => n.kind === k); if (!rows.length) continue;
+    const rows = nodes.filter(n => kindOf(n) === k); if (!rows.length) continue;
     items.push(['label', k, ry]); ry += 26;
     rows.forEach((n, i) => items.push(['node', n, 24 + (i % cols) * (tw + GAP), ry + Math.floor(i / cols) * (th + GAP)]));
     ry += Math.ceil(rows.length / cols) * (th + GAP) + 22;
@@ -1461,7 +1462,7 @@ const clusterTitle = () => activeCluster || clusterList()[0];
 function withCluster(name, fn) { const prev = activeCluster; activeCluster = multi() ? name : null; try { return fn(); } finally { activeCluster = prev; } }
 function enterCluster(name) { activeCluster = multi() ? name : null; $('crumb-name').textContent = clusterTitle(); setLevel('full', true); }
 function clusterFacts() {
-  const nodes = nodeList(), groups = [['Compute nodes', nodes.filter(n => n.kind === 'compute')], ['GPU nodes', nodes.filter(n => n.kind === 'gpu')], ['Kubernetes nodes', nodes.filter(n => n.kind === 'k8s')]].filter(x => x[1].length);
+  const nodes = nodeList(), groups = [['Compute nodes', nodes.filter(n => n.kind === 'compute')], ['GPU nodes', nodes.filter(n => kindOf(n) === 'gpu')], ['Kubernetes nodes', nodes.filter(n => n.kind === 'k8s')]].filter(x => x[1].length);
   const sc = lastCluster ? scoped() : {}, svcs = svcList(), snap = flowSnap && { ...flowSnap, reachable: sc.reachable || flowSnap.reachable, faults: sc.faults ?? flowSnap.faults }, off = !snap || !Object.values(snap.reachable).some(Boolean);
   const up = svcs.filter(x => snap && snap.reachable[x[0]]).length;
   return { nodes, groups, svcs, snap, off, up, ok: nodes.filter(n => n.state === 'ok').length, faults: snap ? snap.faults || 0 : 0 };
