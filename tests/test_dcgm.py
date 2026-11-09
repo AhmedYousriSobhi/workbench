@@ -219,3 +219,11 @@ def test_every_key_of_an_exporter_service_is_a_compose_key():
         for name, svc in sv.items():
             if name.startswith("dcgm-exporter"):
                 assert set(svc) <= allowed, set(svc) - allowed
+
+
+def test_a_node_with_an_exporter_points_its_dcgmi_at_the_exporters_host_engine():
+    sv = compose.generate(MANY, {"groups": ["core", "dcgm"], "compute_nodes": 1})["services"]
+    assert sv["gpu001"]["environment"]["WORKBENCH_DCGM_HOST"] == "dcgm-exporter:5555"
+    assert sv["gpu002"]["environment"]["WORKBENCH_DCGM_HOST"] == "dcgm-exporter-gpu002:5555"
+    assert all(sv[s]["environment"]["DCGM_ENGINE_BIND"] == "ALL" for s in ("dcgm-exporter", "dcgm-exporter-gpu002"))
+    assert "WORKBENCH_DCGM_HOST" not in services(False).get("gpu001", {}).get("environment", {})

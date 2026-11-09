@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**87% built** (36 done, 57 in review, 9 partial, 5 to do, 107 items).
+**87% built** (36 done, 58 in review, 9 partial, 5 to do, 108 items).
 
 ## Roadmap
 
@@ -141,9 +141,10 @@ _A real scheduler the app can read, built from sim.yaml._
 | Real-Slurm decision record | 🔍 In review | One ADR: what is real (scheduler, output, REST auth, node death timing), what is simulated (GPUs, cgroups, jobs), cost and what to cut first; linked from architecture 4.1 and client-testing. Issue 218. | `docs/adr/0025-slurm-is-real-the-rest-is-simulated.md` | - |
 | Faster image rebuilds | 🔍 In review | python3 moved into node-base's apt layer; login and slurm-ctl run no apt step, so a node-base change no longer re-installs packages twice: login + slurmctld rebuild 39.9 s before, 0.6 s after (one-time 22 s). Compute nodes carry an unused python3. Issue 225. | `images/node-base/Dockerfile`, `images/login/Dockerfile`, `images/slurm-ctl/Dockerfile` | - |
 | Basic Linux tools on every node | 🔍 In review | node-base's one apt layer adds ping, ip, ss, dig, nc, traceroute, tcpdump, curl, ps, lsof, strace, vi and similar, so nodes, login nodes and the controller can be troubleshot from inside. Issue 441. The live test (verify.sh --unit node_tools) is for the owner to run. | `images/node-base/Dockerfile`, `tests/test_node_tools.py`, `tests/real/test_node_tools_real.py` | - |
+| dcgmi on every node | 🔍 In review | node-base copies the dcgmi client (5 MB) from the pinned exporter image; the wrapper points it at the node's exporter host engine (WORKBENCH_DCGM_HOST), which listens on the cluster network, so dcgmi discovery -l works on rgpu001 and on the GPU nodes of the dcgm part; other nodes have no engine. Issue 443. Live tests (verify.sh --unit dcgm, real_gpu) are for the owner to run. | `images/node-base/Dockerfile`, `images/node-base/dcgmi`, `benchctl/dcgm.py`, `benchctl/real_gpu.py`, `components/dcgm-exporter/start.sh` | - |
 | benchctl up / down / scale | ✅ Done | Pre-flight, staged start (observability, slurm, nodes), skips unbuilt mocks, scale regenerates slurm.conf, Grafana token created once (0600). Verified live with min; scale really stops containers. | `benchctl/stack.py` | #45 |
 
-6/9 done
+6/10 done
 
 ### Mocks (83%)
 

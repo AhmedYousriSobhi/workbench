@@ -4,6 +4,10 @@
 ARG SLURM_VERSION=26.05.5
 ARG SLURM_SHA256=4680cafc82b0689865c885eb703441e7ebf764896c40fd03a50f2fcb60664f68
 
+# The DCGM command-line client (issue 443): copied from the exporter image the dcgm part uses (keep the tag equal to components/dcgm-exporter/Dockerfile,
+# tests/test_node_tools.py), not an apt step. Built on 22.04, it runs on 24.04's newer glibc.
+FROM nvcr.io/nvidia/k8s/dcgm-exporter:4.4.2-4.7.0-ubuntu22.04 AS dcgm
+
 FROM ubuntu:24.04 AS build
 ARG SLURM_VERSION
 ARG SLURM_SHA256
@@ -50,6 +54,10 @@ COPY --from=build /tmp/slurm-${SLURM_VERSION}/contribs/slurm_completion_help/slu
 # sshd gives non-interactive sessions a minimal PATH, so the Slurm tools are linked into /usr/local/bin.
 RUN echo /opt/slurm/lib >/etc/ld.so.conf.d/slurm.conf && ldconfig \
  && for f in /opt/slurm/bin/*; do ln -sf "$f" /usr/local/bin/; done
+# dcgmi (the client only, 5 MB) and its library; the wrapper points it at the node's exporter when it has one (SPEC C-22, C-23)
+COPY --from=dcgm /usr/bin/dcgmi /opt/dcgm/dcgmi
+COPY --from=dcgm /usr/lib/x86_64-linux-gnu/libdcgm.so.4.4.2 /usr/lib/x86_64-linux-gnu/libdcgm.so.4
+COPY --chmod=755 dcgmi /usr/local/bin/dcgmi
 COPY sshd_config /etc/ssh/sshd_config
 COPY --chmod=755 nhc nhc-prolog nhc-epilog /usr/local/sbin/
 COPY --chmod=755 teleport-ssh /usr/local/sbin/teleport-ssh

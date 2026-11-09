@@ -54,6 +54,8 @@ def test_the_container_is_unprivileged_and_has_the_tools(built):
     assert "GPU 0" in run("docker", "exec", CONTAINER, "dcgmi", "discovery", "-l").stdout or "1 GPU found" in run("docker", "exec", CONTAINER, "dcgmi", "discovery", "-l").stdout
     assert run("docker", "exec", CONTAINER, "nvidia-smi", "-L").returncode == 0
     assert run("docker", "exec", "workbench-gpu001-1", "sh", "-c", "command -v nvidia-smi").returncode != 0  # the simulated nodes still have none
+    node = run("docker", "exec", "workbench-rgpu001-1", "dcgmi", "discovery", "-l")  # dcgmi on the node itself, through the exporter's host engine (issue 443)
+    assert node.returncode == 0 and "1 GPU found" in node.stdout, node.stdout + node.stderr
 
 
 def slurm(*cmd: str) -> subprocess.CompletedProcess:

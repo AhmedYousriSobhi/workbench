@@ -17,9 +17,9 @@ else
   if [ -n "${MOCK_NVML_NODE_INDEX:-}" ]; then sed -i "s|GPU-01000100-|$(printf 'GPU-%08x-' $((0x01000100 + MOCK_NVML_NODE_INDEX * 4096)))|" /tmp/mock-nvml.yaml; fi
   export MOCK_NVML_CONFIG=/tmp/mock-nvml.yaml
 fi
-# One host engine on 127.0.0.1:5555 that the exporter reads from, so `dcgmi` in this container sees the same GPUs (embedded mode listens nowhere).
+# One host engine on 127.0.0.1:5555 (DCGM_ENGINE_BIND=ALL: on the cluster network, so `dcgmi` on the node reaches it, issue 443) that the exporter reads from, so `dcgmi` in this container sees the same GPUs (embedded mode listens nowhere).
 # module 9 is SysMon (CPU metrics): it cannot load on a non-NVIDIA CPU and, with the real driver, took the host engine down
-nv-hostengine -n -b 127.0.0.1 --denylist-modules 9 -f /tmp/nv-hostengine.log > /dev/null 2>&1 &  # not daemonised: a forked daemon vanished under the real driver
+nv-hostengine -n -b "${DCGM_ENGINE_BIND:-127.0.0.1}" --denylist-modules 9 -f /tmp/nv-hostengine.log > /dev/null 2>&1 &  # not daemonised: a forked daemon vanished under the real driver
 i=0; until dcgmi discovery -l > /dev/null 2>&1; do i=$((i + 1)); [ "$i" -gt 30 ] && { echo "nv-hostengine did not start" >&2; cat /tmp/nv-hostengine.log >&2; exit 1; }; sleep 1; done
 # The exporter labels series with the host it connects to, so connect by this container's own name (mapped to 127.0.0.1 first), not `localhost`.
 me=${DCGM_HOSTNAME:-$(hostname)}  # the node this exporter stands for; never the container hostname (Docker would answer that name with this container too)
