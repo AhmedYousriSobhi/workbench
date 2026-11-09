@@ -62,8 +62,8 @@ def problems(runner: Runner = _run, specs: tuple[Path, ...] = CDI_SPECS) -> list
 
 
 def wire(services: dict) -> None:
-    """The device, the hostname and the published port; no mock profile is set, so start.sh runs the exporter on the real driver."""
+    """The device, the Hostname label (an environment variable, not the container hostname: Docker resolves a hostname to the container, so slurmctld reached this one instead of the node) and the published port; no mock profile is set, so start.sh runs the exporter on the real driver."""
     svc = services.get(SERVICE)
     if svc is None:
         return
-    svc.update({"hostname": HOSTNAME, "devices": [DEVICE], "command": ["-c", "3000"], "ports": [f"127.0.0.1:{PORT}:9400"]})
+    svc.update({"environment": {"DCGM_HOSTNAME": HOSTNAME}, "devices": [DEVICE], "command": ["-c", "3000"], "ports": [f"127.0.0.1:{PORT}:9400"]})

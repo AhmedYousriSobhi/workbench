@@ -70,7 +70,7 @@ def test_the_node_container_gets_the_card_as_a_device_and_no_fake_gpus(on):
 
 def test_the_exporter_is_the_nodes_exporter(on):
     sim, prof = on
-    assert compose.generate(sim, {**prof, "compute_nodes": 1})["services"][real_gpu.SERVICE]["hostname"] == "rgpu001"
+    assert compose.generate(sim, {**prof, "compute_nodes": 1})["services"][real_gpu.SERVICE]["environment"]["DCGM_HOSTNAME"] == "rgpu001"
 
 
 def test_a_job_for_the_card_goes_to_its_partition_with_one_gpu(on):

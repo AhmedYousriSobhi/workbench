@@ -23,7 +23,7 @@ MODEL_NAME = {"h200": "NVIDIA H200", "h100": "NVIDIA H100 80GB HBM3", "a100": "N
               "l40s": "NVIDIA L40S"}
 FS_SIZE = 500 * 1024**4
 ALLOC_URL = os.environ.get("ALLOC_URL", "http://slurmctld:9401/alloc")  # which GPUs running Slurm jobs hold
-DCGM_OVERRIDES = os.environ.get("DCGM_OVERRIDES", "")  # the real exporter's override file (issue 426); empty = the part is off
+DCGM_OVERRIDES = os.environ.get("DCGM_OVERRIDES", "")  # the directory of the real exporters' override files, one `<node>.yaml` each (issues 426, 435); empty = the part is off
 ALLOC_STALE_S = 30  # keep the last answer this long when the feed is unreachable, then show every GPU idle
 
 
@@ -97,15 +97,11 @@ class State:
         if "temp" in req:
             self.temp_override[node] = float(req["temp"])
 
-    def dcgm_node(self) -> str | None:
-        """The one GPU node the real exporter (the `dcgm` part) stands for: the first GPU node in sim.yaml."""
-        return next((n for n, g in self.nodes.items() if g), None)
-
-    def dcgm_overrides(self) -> dict:
-        """What the real DCGM exporter should show for `dcgm_node`, in the mock NVML's override format (ADR 0025): a GPU a job holds
-        works hard, the others idle; an injected XID trips GPU 0, as a real one hits a single GPU; a pinned temperature applies to all."""
-        node = self.dcgm_node()
-        if node is None:
+    def dcgm_overrides(self, node: str | None = None) -> dict:
+        """What a real DCGM exporter should show for `node` (default: the first GPU node), in the mock NVML's override format (ADR 0025): a GPU
+        a job holds works hard, the others idle; an injected XID trips GPU 0, as a real one hits a single GPU; a pinned temperature applies to all."""
+        node = node or next((n for n, g in self.nodes.items() if g), None)
+        if node is None or not self.nodes.get(node):
             return {}
         total = self.fb_total * 1024 * 1024
         devices: dict[int, dict] = {}
@@ -202,6 +198,9 @@ def counted(path: str, headers) -> bool:
     return not (path.startswith(("/healthz", "/sim/")) or headers.get(PROBE))
 
 
+dcgm_written: dict[str, str] = {}  # what write_dcgm last wrote, per node (shared with the inject handler)
+
+
 def make_handler(state: State):
     stats, lock = {"requests": 0, "errors": 0}, threading.Lock()
 
@@ -233,6 +232,8 @@ def make_handler(state: State):
             try:
                 length = int(self.headers.get("Content-Length", 0))
                 state.inject(json.loads(self.rfile.read(length)))
+                if DCGM_OVERRIDES:  # the files are current before the caller restarts an exporter (a clear then shows nothing stale, issue 435)
+                    write_dcgm_once(state, DCGM_OVERRIDES, dcgm_written)
             except (KeyError, ValueError, TypeError) as e:
                 return self._send(400, f"bad request: {e}\n")
             self._send(200, '{"ok": true}\n', "application/json")
@@ -262,20 +263,30 @@ def follow_slurm(state: State, fetch=fetch_alloc, interval: float = 3, stop: thr
         stop.wait(interval)
 
 
+def write_dcgm_once(state: State, directory: str, last: dict[str, str]) -> None:
+    """Write each GPU node's override file when its content changed (atomic rename); `last` remembers what was written."""
+    for node, gpus in state.nodes.items():
+        if not gpus:
+            continue
+        doc = yaml.safe_dump(state.dcgm_overrides(node))
+        if last.get(node) == doc:
+            continue
+        try:
+            path = Path(directory) / f"{node}.yaml"
+            tmp = path.with_name(path.name + ".tmp")
+            tmp.write_text(doc)
+            tmp.replace(path)
+            last[node] = doc
+        except OSError:
+            pass  # the directory is not there yet; try again
+
+
 def write_dcgm(state: State, path: str = DCGM_OVERRIDES, interval: float = 2, stop: threading.Event | None = None) -> None:
-    """Keep the real exporter's override file current (atomic rename; written only when it changes)."""
+    """Keep the real exporters' override files current."""
     stop = stop or threading.Event()
-    last = None
+    last = dcgm_written if path == DCGM_OVERRIDES else {}  # shared with the inject handler, which writes first
     while not stop.is_set():
-        doc = yaml.safe_dump(state.dcgm_overrides())
-        if doc != last:
-            try:
-                tmp = Path(path + ".tmp")
-                tmp.write_text(doc)
-                tmp.replace(path)
-                last = doc
-            except OSError:
-                pass  # the directory is not there yet; try again
+        write_dcgm_once(state, path, last)
         stop.wait(interval)
 
 

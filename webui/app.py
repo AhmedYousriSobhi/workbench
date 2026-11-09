@@ -207,7 +207,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         from benchctl import workbench
 
         try:
-            spec = workbench.from_dict({k: int(q[k]) for k in ("cpu_nodes", "gpu_nodes", "gpus_per_node", "k8s_nodes", "k8s_cpu_nodes") if k in q}
+            spec = workbench.from_dict({k: int(q[k]) for k in ("cpu_nodes", "gpu_nodes", "gpus_per_node", "k8s_nodes", "k8s_cpu_nodes", "dcgm_nodes") if k in q}
                                        | ({"parts": [p for p in q["parts"].split(",") if p]} if "parts" in q else {})
                                        | ({"bmc_nodes": [n for n in q["bmc_nodes"].split(",") if n]} if "bmc_nodes" in q else {})
                                        | ({"bmc_groups": [g for g in q["bmc_groups"].split(",") if g]} if "bmc_groups" in q else {})
@@ -257,7 +257,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             f" --with {p}" for p in sorted(spec.parts)) + "".join(f" --without {p}" for p in workbench.PARTS if p not in spec.parts)
         if spec.bmc_nodes is not None:
             flags += f" --bmc-nodes {','.join(spec.bmc_nodes)}"
-        flags += "".join(f" {f} {getattr(spec, k)}" for k, f in (("k8s_nodes", "--k8s-nodes"), ("k8s_cpu_nodes", "--k8s-cpu-nodes")) if getattr(spec, k) is not None)
+        flags += "".join(f" {f} {getattr(spec, k)}" for k, f in (("k8s_nodes", "--k8s-nodes"), ("k8s_cpu_nodes", "--k8s-cpu-nodes"), ("dcgm_nodes", "--dcgm-nodes")) if getattr(spec, k) is not None)
         if spec.bmc_groups is not None:
             flags += f" --bmc-groups {','.join(spec.bmc_groups)}"
         if spec.controller is not None:
@@ -297,7 +297,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             req["controller"] = spec.controller
         if spec.bmc_groups is not None:
             req["bmc_groups"] = spec.bmc_groups
-        req.update({k: getattr(spec, k) for k in ("k8s_nodes", "k8s_cpu_nodes") if getattr(spec, k) is not None})
+        req.update({k: getattr(spec, k) for k in ("k8s_nodes", "k8s_cpu_nodes", "dcgm_nodes") if getattr(spec, k) is not None})
         try:
             res = await asyncio.to_thread(checks.governor_request, req, socket)
         except (OSError, ValueError) as e:

@@ -43,7 +43,7 @@ services:
       - ./generated/sim.yaml:/sim.yaml:ro
       - ./generated/dcgm:/dcgm  # the real exporter's override file, written only when the dcgm part is on (issue 426)
     environment:
-      DCGM_OVERRIDES: /dcgm/overrides.yaml
+      DCGM_OVERRIDES: /dcgm
     ports: ["127.0.0.1:9400:9400"]  # scenario engine injects faults here
     mem_limit: 100m
     cgroup_parent: workbench-p2.slice
