@@ -67,4 +67,5 @@ def test_a_job_in_the_real_partition_runs_on_the_card_and_a_simulated_job_cannot
     assert "GPU 0: " in run("docker", "exec", f"workbench-{real_gpu.NODE}-1", "cat", "/tmp/real-gpu.out").stdout  # it ran on the node with the card
     other = slurm("sbatch", "-p", "gpu", f"--nodelist={real_gpu.NODE}", "--wrap=true")
     assert other.returncode != 0  # the node is in no other partition
-    assert "real" in slurm("sinfo", "-h", "-N", "-o", "%N %G").stdout
+    model = real_gpu.cards()[0].split(": ", 1)[1]
+    assert f"{real_gpu.NODE} gpu:{real_gpu.gres_type(model)}:1" in slurm("sinfo", "-h", "-N", "-o", "%N %G").stdout  # one GPU, typed by the card's model
