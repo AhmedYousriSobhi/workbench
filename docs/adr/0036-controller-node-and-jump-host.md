@@ -31,4 +31,5 @@ sshd's `AllowUsers` still limits who gets a shell. Issue 416.
 ## Not built (open)
 - The Infrastructure architecture drawing (hand-laid SVG) has no jump or controller box yet; the Traffic & Communication diagram,
   Connections and the graph model do.
-- Memory for the jump host is unmeasured (`NOT_MEASURED`, planned at its 24 MB cap).
+- Memory measured once (`benchctl measure`, 1 CPU node, five forwarded sessions): the jump host peaked at 1.9 MB (cap 24 MB), and slurmctld with the controller's sshd
+  showed no difference from slurmctld without it beyond run noise (about 37 MB against 39 MB peak); the controller's +24 MB cap is headroom for sessions, not use.
