@@ -15,6 +15,7 @@ from . import (
     addressing,
     checks,
     compose,
+    controller,
     jira_real,
     k8s,
     logins,
@@ -242,6 +243,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
             return False
         if label == "teleport" and not teleport.bootstrap(sim, ips, runner, dc, say):  # before the nodes read their certificates
             return False
+        if label == "teleport" and controller.enabled(sim):  # slurmctld started in an earlier stage, before its host certificate existed
+            runner(dc("exec", "-T", "slurmctld", "sh", "-c", "/usr/local/sbin/teleport-ssh && pkill -HUP -x sshd", file=path))  # trust the CA, then reload sshd
         if label == "kubernetes" and not k8s.bootstrap(sim, ips, say):
             return False  # the cluster content (stages, nodes, fixtures) must exist before KWOK starts
         if label == "teleport":
@@ -270,6 +273,9 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     for lname in logins.via_teleport(sim) if "login" in todo else []:
         say(f"{lname}: reachable through Teleport only: tsh --proxy={teleport.proxy_addr(sim)} --insecure -i "
             f"{teleport.SECRETS_DIR}/identity/<user> ssh <user>@{lname}")
+    if "slurmctld" in todo and controller.enabled(sim) and "teleport" in todo:
+        say(f"controller: through Teleport too: tsh --proxy={teleport.proxy_addr(sim)} --insecure -i {teleport.SECRETS_DIR}/identity/<user> ssh <user>@{controller.ALIAS} "
+            "(only the whitelisted users get a shell)")
     if "teleport" in todo:
         say(f"teleport: https://{teleport.proxy_addr(sim)} (self-signed; name {teleport.DNS_NAME}, fallback 127.0.0.1:{teleport.PROXY_PORT}); "
             f"identity files in {teleport.SECRETS_DIR}/identity; password and one-time code for tsh login: ./scripts/benchctl add invite <user>")
@@ -348,7 +354,7 @@ def ensure_ssh_keys(path: Path = SSH_DIR, runner: Runner = _run) -> Path:
     Kept across `up`s so a client that pinned the host key keeps trusting it.
     """
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
-    for name in ("ssh_host_ed25519_key", "ssh_host_node_ed25519_key", "id_ed25519", "id_cluster"):
+    for name in ("ssh_host_ed25519_key", "ssh_host_node_ed25519_key", "ssh_host_jump_ed25519_key", "id_ed25519", "id_cluster"):
         if not (path / name).exists():
             r = runner(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", f"workbench-{name}", "-f", str(path / name)])
             if r.returncode != 0:

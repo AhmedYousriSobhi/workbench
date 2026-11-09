@@ -135,3 +135,26 @@ def test_the_kubernetes_api_is_a_declared_management_edge_with_no_counter():
     e = {x["id"]: x for x in g["edges"]}["clients>k8s-api:api"]
     assert e["plane"] == "management" and not e["measured"]            # up or down only, like the real Jira
     assert "faults>k8s-api:inj" not in ids(g)                           # nothing injects into it
+
+
+def test_the_jump_host_and_the_controller_are_entities_with_ssh_edges_that_skip_teleport_only_logins():
+    g = graph.build({**SERVICES, "jump": True, "controller": True}, NODES, logins("ssh", "teleport"))
+    ids = {e["id"] for e in g["entities"]}
+    assert {"jump", "controller"} <= ids and "jump" not in {e["id"] for e in g["entities"] if e["type"] == "service"}
+    pairs = {(e["from"], e["to"]) for e in g["edges"]}
+    assert {("clients", "jump"), ("jump", "login"), ("jump", "controller"), ("login", "controller"), ("clients", "controller")} <= pairs
+    assert ("jump", "login2") not in pairs and ("login2", "controller") not in pairs  # Teleport nodes keep Teleport
+    assert all(e["from"] in ids and e["to"] in ids for e in g["edges"])
+
+
+def test_without_them_there_is_no_jump_or_controller():
+    g = graph.build(SERVICES, NODES, logins("ssh"))
+    assert not {"jump", "controller"} & {e["id"] for e in g["entities"]}
+
+
+def test_comms_lists_the_jump_and_controller_links_only_when_built():
+    from webui import comms
+    on = {(r["from"], r["to"]) for r in comms.build({**SERVICES, "jump": True, "controller": True}, NODES, logins("ssh"))}
+    off = {(r["from"], r["to"]) for r in comms.build(SERVICES, NODES, logins("ssh"))}
+    assert {("clients", "jump"), ("jump", "login"), ("login", "controller")} <= on
+    assert not any("jump" in p or "controller" in p for p in off)

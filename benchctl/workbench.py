@@ -22,7 +22,7 @@ FLOOR_MB = 1024                                   # MemAvailable that must remai
 # part -> (compose group, services it adds; None = the whole group)
 PARTS: dict[str, tuple[str, list[str] | None]] = {
     "jira": ("mocks", ["jira-mock"]), "jira-real": ("jira-real", None), "bmc": ("mocks", ["bmc-farm"]), "bcm": ("mocks", ["bcm-mock"]),
-    "accounting": ("accounting", None), "teleport": ("teleport", None), "k8s": ("k8s", None), "scenarios": ("scenarios", None), "load": ("load", None)}
+    "accounting": ("accounting", None), "teleport": ("teleport", None), "k8s": ("k8s", None), "scenarios": ("scenarios", None), "load": ("load", None), "jump": ("jump", None)}
 # The one registry of options that change what runs and so what memory it needs. The Cluster architecture sheet is drawn from it
 # (`catalog`): a new option is an entry here and in PARTS, not new page code.
 PART_INFO: dict[str, tuple[str, str]] = {
@@ -33,6 +33,7 @@ PART_INFO: dict[str, tuple[str, str]] = {
     "bcm": ("BCM", "The BCM mock (CMDaemon JSON) and its device list."),
     "teleport": ("Teleport", "Teleport auth and proxy: tsh login and ssh to the login node and every node through it (not on by default)."),
     "k8s": ("Kubernetes", "A real Kubernetes control plane (etcd, API server, scheduler, controller manager) with KWOK fake CPU and GPU nodes, a read-only kubeconfig and fixtures (ADR 0034)."),
+    "jump": ("Jump host", "A bare sshd bastion (nothing else installed) in front of the key-login nodes and the controller: ssh -J jump user@login (SPEC C-21). Teleport nodes keep Teleport."),
     "scenarios": ("Scenarios", "The scenario engine that plays timed faults."),
     "load": ("Load", "User and ticket simulators that generate jobs and tickets."),
 }
@@ -45,7 +46,7 @@ CATEGORIES: dict[str, tuple[str, dict[str, str | None]]] = {
     "monitoring": ("metrics and dashboards", {"prometheus": None, "grafana": None}),
     "ticketing": ("ticket systems", {"jira": "jira", "jira-real": "jira-real"}),
     "hardware": ("out-of-band management", {"bmc": "bmc", "bcm": "bcm"}),
-    "access": ("how users reach the nodes", {"teleport": "teleport"}),
+    "access": ("how users reach the nodes", {"teleport": "teleport", "jump": "jump"}),
     "simulation": ("fault and user simulators", {"scenarios": "scenarios", "load": "load"}),
 }
 NOT_BUILT: dict[str, str] = {}
@@ -71,6 +72,7 @@ class Spec:
     k8s_cpu_nodes: int | None = None  # Kubernetes CPU nodes; None keeps sim.yaml's count
     bmc_nodes: list[str] | None = None  # nodes that get a BMC address; None = every node (part "bmc")
     bmc_groups: list[str] | None = None  # node groups that get BMCs (nodes.GROUPS); None = every group
+    controller: bool | None = None  # a controller node (slurmctld host with sshd, the BCM head node); None keeps sim.yaml's (issue 416)
     bcm_k8s: bool | None = None  # BCM manages the Kubernetes nodes; None keeps sim.yaml's bcm.manage_kubernetes (issue 413)
     login_nodes: list[str] = field(default_factory=lambda: list(logins.DEFAULT))  # auth mode of each login node (ADR 0023)
 
@@ -104,7 +106,7 @@ class Spec:
                 "gpus_per_node": self.gpus_per_node, "parts": sorted(set(self.parts)), "k8s_nodes": self.k8s_nodes, "k8s_cpu_nodes": self.k8s_cpu_nodes,
                 "bmc_nodes": None if self.bmc_nodes is None else sorted(set(self.bmc_nodes)),
                 "bmc_groups": None if self.bmc_groups is None else sorted(set(self.bmc_groups)),
-                "bcm_k8s": self.bcm_k8s, "login_nodes": list(self.login_nodes)}
+                "bcm_k8s": self.bcm_k8s, "controller": self.controller, "login_nodes": list(self.login_nodes)}
 
 
 def items(category: str) -> list[str]:
@@ -189,6 +191,8 @@ def effective(sim: dict, spec: Spec) -> tuple[dict, dict]:
         s["bmc"] = {**(s.get("bmc") or {}), "groups": sorted(set(spec.bmc_groups))}
     if spec.bcm_k8s is not None:
         s["bcm"] = {**(s.get("bcm") or {}), "manage_kubernetes": spec.bcm_k8s}
+    if spec.controller is not None:
+        s["controller"] = {**(s.get("controller") or {}), "enabled": spec.controller}
     s["login"] = list(spec.login_nodes)
     if "k8s" in spec.parts:  # the part is on: the simulation says so, with the node groups spelled out (the BMC, BCM and GPU exporter read them)
         s["kubernetes"] = {**(s.get("kubernetes") or {}), "enabled": True, "nodes": k8s.node_groups(s, spec.k8s_nodes, spec.k8s_cpu_nodes)}

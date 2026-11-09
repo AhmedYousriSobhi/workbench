@@ -22,6 +22,8 @@ if [ "$WORKBENCH_SSHD" = 1 ] && [ -f /run/workbench/ssh/ssh_host_node_ed25519_ke
     usermod -p '*' "${u%%:*}"
     names="$names ${u%%:*}"
   done
+  # the controller (issue 416) lets only the whitelisted users in; every other user still exists for Slurm
+  [ -n "$WORKBENCH_SSH_ALLOW" ] && names=" $WORKBENCH_SSH_ALLOW"
   echo "AllowUsers$names" >> /etc/ssh/sshd_config
   install -m 600 /run/workbench/ssh/ssh_host_node_ed25519_key /etc/ssh/ssh_host_ed25519_key
   install -m 644 /run/workbench/ssh/authorized_keys /etc/ssh/authorized_keys

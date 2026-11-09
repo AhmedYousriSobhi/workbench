@@ -176,3 +176,20 @@ def test_set_jira_activity_switches_the_mocks_background_changes(monkeypatch):
 
     monkeypatch.setattr(cli.scenario, "post", refuse)
     assert runner.invoke(cli.app, ["set", "jira-activity", "on"]).exit_code == 1
+
+
+def test_a_jump_host_adds_a_via_jump_entry_with_address_port_user_and_key_method_only():
+    body = export.build(SIM, {*ALL, "jump"})
+    names = [c["name"] for c in body["clusters"]]
+    assert names == ["workbench", "workbench-login-jump"]  # the direct entry stays first: it carries Slurm, Grafana and Jira
+    via = body["clusters"][1]["connection"]
+    assert via == {"host": "10.141.255.254", "port": 22, "username": "alice", "authMethod": "private-key",
+                   "jumpHost": {"host": "10.141.255.5", "port": 22, "username": "alice", "authMethod": "private-key"}}
+    assert "privateKeyPath" not in json.dumps(body) and any("-jump" in w for w in export.warnings({*ALL, "jump"}, SIM))
+    loop = export.build(SIM, {*ALL, "jump"}, loopback=True)["clusters"][1]["connection"]
+    assert loop["jumpHost"]["host"] == "127.0.0.1" and loop["jumpHost"]["port"] == 2220 and loop["host"] == "10.141.255.254"
+
+
+def test_without_a_jump_host_there_is_no_jump_entry():
+    assert [c["name"] for c in export.build(SIM, ALL)["clusters"]] == ["workbench"]
+    assert not any("jump" in w for w in export.warnings(ALL, SIM))

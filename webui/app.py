@@ -199,6 +199,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
                 "k8s_gpu": {"cpus": kg.get("cpus"), "memory_gb": kg.get("memory_gb"), "gpus": kg.get("gpus"), "gpu_type": kg.get("gpu_type", ""),
                             "prefix": kg.get("prefix", "kgpu"), "count": pick(saved.k8s_nodes if saved else None, kg)},
                 "bmc": {"groups": saved.bmc_groups if saved else None, "nodes": saved.bmc_nodes if saved else None},
+                "controller": {"enabled": saved.controller if saved and saved.controller is not None else bool((sim.get("controller") or {}).get("enabled"))},
                 "bcm": {"manage_kubernetes": saved.bcm_k8s if saved and saved.bcm_k8s is not None else bool((sim.get("bcm") or {}).get("manage_kubernetes", True))}}
 
     def build_plan(q) -> tuple:
@@ -211,6 +212,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
                                        | ({"bmc_nodes": [n for n in q["bmc_nodes"].split(",") if n]} if "bmc_nodes" in q else {})
                                        | ({"bmc_groups": [g for g in q["bmc_groups"].split(",") if g]} if "bmc_groups" in q else {})
                                        | ({"bcm_k8s": q["bcm_k8s"] == "1"} if "bcm_k8s" in q else {})
+                                       | ({"controller": q["controller"] == "1"} if "controller" in q else {})
                                        | ({"login_nodes": [m for m in q["logins"].split(",") if m]} if "logins" in q else {}),
                                        workbench.defaults(sim))
         except (ValueError, workbench.SpecError) as e:
@@ -258,6 +260,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         flags += "".join(f" {f} {getattr(spec, k)}" for k, f in (("k8s_nodes", "--k8s-nodes"), ("k8s_cpu_nodes", "--k8s-cpu-nodes")) if getattr(spec, k) is not None)
         if spec.bmc_groups is not None:
             flags += f" --bmc-groups {','.join(spec.bmc_groups)}"
+        if spec.controller is not None:
+            flags += " --controller" if spec.controller else " --no-controller"
         if spec.bcm_k8s is not None:
             flags += " --bcm-k8s" if spec.bcm_k8s else " --no-bcm-k8s"
         flags += f" --login {','.join(spec.login_nodes)} --app-mb 0"
@@ -289,6 +293,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         req["login_nodes"] = spec.login_nodes
         if spec.bcm_k8s is not None:
             req["bcm_k8s"] = spec.bcm_k8s
+        if spec.controller is not None:
+            req["controller"] = spec.controller
         if spec.bmc_groups is not None:
             req["bmc_groups"] = spec.bmc_groups
         req.update({k: getattr(spec, k) for k in ("k8s_nodes", "k8s_cpu_nodes") if getattr(spec, k) is not None})

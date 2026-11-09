@@ -380,9 +380,9 @@ def test_ssh_keys_are_made_once_and_authorize_the_client_key(tmp_path):
 
     d = stack.ensure_ssh_keys(tmp_path / "ssh", fake)
     # client and cluster key are both authorized (the cluster key is what a login-node user hops to a node with)
-    assert len(calls) == 4 and (d / "authorized_keys").read_text() == "ssh-ed25519 AAAA pub\n" * 2
+    assert len(calls) == 5 and (d / "authorized_keys").read_text() == "ssh-ed25519 AAAA pub\n" * 2
     stack.ensure_ssh_keys(d, fake)
-    assert len(calls) == 4  # the host keys are stable across runs
+    assert len(calls) == 5  # the host keys are stable across runs
 
 
 def test_ssh_keygen_failure_is_reported(tmp_path):

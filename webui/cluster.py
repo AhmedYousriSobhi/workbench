@@ -50,6 +50,17 @@ def jira_real_built() -> bool:
     return saved_has_part("jira-real")
 
 
+def saved_controller(sim: dict) -> bool:
+    """Whether the workbench last built has a controller node (the saved selection, else sim.yaml's `controller.enabled`)."""
+    from benchctl import controller, workbench
+
+    try:
+        spec = workbench.current({})
+    except (workbench.SpecError, OSError, ValueError):
+        spec = None
+    return spec.controller if spec and spec.controller is not None else controller.enabled(sim)
+
+
 def saved_has_part(part: str) -> bool:
     """Whether the workbench last built has the part (read from the saved selection: the page has no Docker, W-3).
     A page for a cluster without it must not show a box that cannot exist (Teleport, the real Jira)."""
@@ -187,6 +198,14 @@ class Cluster:
                   **({"jira-real": f"{JIRA_REAL}/status"} if jira_real_built() else {})}
         names = list(probes)
         up = [self._try(probes[n]) is not None for n in names]
+        from benchctl import controller
+
+        if saved_has_part("jump"):  # a bare sshd bastion: up when its port answers (the page has no Docker)
+            names.append("jump")
+            up.append(self.probe("127.0.0.1", controller.JUMP_PORT))
+        if saved_controller(self.sim):  # the controller node: slurmctld's host with sshd (issue 416)
+            names.append("controller")
+            up.append(self.probe("127.0.0.1", controller.SSH_PORT))
         if k8s_built():  # the real API server: a box with up/down only (no request counter, like the real Jira)
             from benchctl import k8s
 

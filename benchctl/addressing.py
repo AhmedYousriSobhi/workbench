@@ -23,7 +23,7 @@ IPMI_LOGIN_IP = "10.148.255.254"  # the head node is also on the BMC network (th
 IPMI_FARM_IP = "10.148.255.12"    # the farm that owns every BMC's state
 BMC_NODE_PORT_BASE = 9000          # the farm's per-node TLS port: 9000 + index in node order (components/bmc-farm/bmc.py)
 # service -> last octet in 10.141.255.0/24. observability.yml (a static file) repeats the three observability ones.
-SERVICE_HOSTS = {"slurmctld": 1, "slurmrestd": 2, "slurmdbd": 3, "mariadb": 4, "bcm-mock": 10, "jira-mock": 11,
+SERVICE_HOSTS = {"slurmctld": 1, "slurmrestd": 2, "slurmdbd": 3, "mariadb": 4, "jump": 5, "bcm-mock": 10, "jira-mock": 11,
                  "bmc-farm": 12, "scenario-engine": 13, "user-sim": 14, "ticket-bot": 15, "jira-real": 16, "jira-db": 17,
                  "teleport": 30, "k8s-apiserver": 40, "k8s-etcd": 41, "k8s-controller-manager": 42, "k8s-scheduler": 43,
                  "kwok-controller": 44, "prometheus": 20, "grafana": 21, "gpu-exporter-farm": 22}
@@ -38,6 +38,12 @@ def login_ip(index: int, subnet: str = INTERNAL) -> str:
     the service block (hosts 1 to 30)."""
     a, b = _prefix(subnet)
     return f"{a}.{b}.255.{254 if index == 0 else 253 - index}"
+
+
+def service_ip(name: str) -> str:
+    """The fixed address of a service (10.141.255.x)."""
+    a, b = _prefix(INTERNAL)
+    return f"{a}.{b}.255.{SERVICE_HOSTS[name]}"
 
 
 def _prefix(subnet: str) -> tuple[int, int]:

@@ -20,8 +20,14 @@ partitions:
   - {name: cpu, nodes: compute}
   - {name: gpu, nodes: gpu}
 
+controller:             # a controller node (SPEC C-20, issue 416): slurmctld's host with sshd, the BCM head node (cmsh); off: the login node acts as the head node
+  enabled: false        # benchctl up --controller
+  allow:                # who may ssh in: these users, and every user in one of these groups
+    users: []
+    groups: [admins]
+
 users:
-  - {name: alice, persona: ml-trainer, qos: normal}
+  - {name: alice, persona: ml-trainer, qos: normal, groups: [admins]}
   - {name: bob, persona: mpi-researcher, qos: normal}
 
 kubernetes:             # the optional Kubernetes part (benchctl up --with k8s, ADR 0034): a real control plane, KWOK nodes
