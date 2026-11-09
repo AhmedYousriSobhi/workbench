@@ -56,3 +56,7 @@ the client once and copy the first two fields of its file.
 - **The client says the file is not a profile or is version N**: the ID or version in `.git/export-format` does not
   match the client; copy them again from an export of the client.
 - **Import works but Grafana shows 401**: the token expired when you ran `up` again; paste the current one.
+
+## Jump host entries
+
+With the jump part on (`benchctl up --access jump`), the file has one extra entry per key-login node, named `<cluster>-<login>-jump`, for example `workbench-login-jump`. It connects to the login node's private address on port 22 through a `jumpHost` block: the jump host's address and port, the user and `private-key`. The file holds no key path and no secret, so after importing, set the same private key file (`compose/generated/secrets/ssh/id_ed25519`) on the entry and on its jump host. Teleport entries get none. With `--loopback` the jump host is `127.0.0.1:2220`.

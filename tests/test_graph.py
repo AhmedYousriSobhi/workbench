@@ -70,7 +70,7 @@ def test_page_draws_only_edges_named_in_the_model():
     """Every edge id the page builds (in both arrangements, narrow and column) is one webui/graph.py can produce."""
     page = (ROOT / "webui" / "static" / "index.html").read_text()
     used = {x for x in re.findall(r"[`']([^`']*>[^`']*:(?:api|ssh|teleport|jump|inj))[`']", page)}
-    model = graph.build({**SERVICES, "teleport": True, "jira-real": True}, NODES, logins("both", "teleport"))
+    model = graph.build({**SERVICES, "teleport": True, "jira-real": True, "jump": True, "controller": True}, NODES, logins("both", "teleport"))
     shapes = {re.sub(r"\bcn\d+|\bgn\d+", "N", e["id"]) for e in model["edges"]}
     pattern = {  # the page's template ids, turned into what the model would name them
         "${l.name}>nodes:jump": {"login>nodes:jump", "login2>nodes:jump"},
@@ -80,6 +80,10 @@ def test_page_draws_only_edges_named_in_the_model():
         "faults>${k}:inj": {f"faults>{s}:inj" for s in flow.SCENARIO_TARGETS.values()},
         "teleport>${l.name}:teleport": {"teleport>login:teleport", "teleport>login2:teleport"},
         "teleport>nodes:teleport": {"teleport>nodes:teleport"},
+        "clients>${b[0]}:ssh": {"clients>jump:ssh", "clients>controller:ssh"},  # the jump host and the controller (#420)
+        "jump>${l.name}:jump": {"jump>login:jump"},
+        "jump>controller:jump": {"jump>controller:jump"},
+        "${l.name}>controller:jump": {"login>controller:jump"},
     }
     assert used == set(pattern), used ^ set(pattern)  # a new edge in the page needs a line here and in graph.py
     for name, ids_ in pattern.items():
@@ -135,3 +139,26 @@ def test_the_kubernetes_api_is_a_declared_management_edge_with_no_counter():
     e = {x["id"]: x for x in g["edges"]}["clients>k8s-api:api"]
     assert e["plane"] == "management" and not e["measured"]            # up or down only, like the real Jira
     assert "faults>k8s-api:inj" not in ids(g)                           # nothing injects into it
+
+
+def test_the_jump_host_and_the_controller_are_entities_with_ssh_edges_that_skip_teleport_only_logins():
+    g = graph.build({**SERVICES, "jump": True, "controller": True}, NODES, logins("ssh", "teleport"))
+    ids = {e["id"] for e in g["entities"]}
+    assert {"jump", "controller"} <= ids and "jump" not in {e["id"] for e in g["entities"] if e["type"] == "service"}
+    pairs = {(e["from"], e["to"]) for e in g["edges"]}
+    assert {("clients", "jump"), ("jump", "login"), ("jump", "controller"), ("login", "controller"), ("clients", "controller")} <= pairs
+    assert ("jump", "login2") not in pairs and ("login2", "controller") not in pairs  # Teleport nodes keep Teleport
+    assert all(e["from"] in ids and e["to"] in ids for e in g["edges"])
+
+
+def test_without_them_there_is_no_jump_or_controller():
+    g = graph.build(SERVICES, NODES, logins("ssh"))
+    assert not {"jump", "controller"} & {e["id"] for e in g["entities"]}
+
+
+def test_comms_lists_the_jump_and_controller_links_only_when_built():
+    from webui import comms
+    on = {(r["from"], r["to"]) for r in comms.build({**SERVICES, "jump": True, "controller": True}, NODES, logins("ssh"))}
+    off = {(r["from"], r["to"]) for r in comms.build(SERVICES, NODES, logins("ssh"))}
+    assert {("clients", "jump"), ("jump", "login"), ("login", "controller")} <= on
+    assert not any("jump" in p or "controller" in p for p in off)

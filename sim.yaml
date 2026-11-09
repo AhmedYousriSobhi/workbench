@@ -20,8 +20,14 @@ partitions:
   - {name: cpu, nodes: compute}
   - {name: gpu, nodes: gpu}
 
+controller:             # a controller node (SPEC C-20, issue 416): slurmctld's host with sshd, the BCM head node (cmsh); off: the login node acts as the head node
+  enabled: false        # benchctl up --controller
+  allow:                # who may ssh in: these users, and every user in one of these groups
+    users: []
+    groups: [admins]
+
 users:
-  - {name: alice, persona: ml-trainer, qos: normal}
+  - {name: alice, persona: ml-trainer, qos: normal, groups: [admins]}
   - {name: bob, persona: mpi-researcher, qos: normal}
 
 kubernetes:             # the optional Kubernetes part (benchctl up --with k8s, ADR 0034): a real control plane, KWOK nodes
@@ -36,6 +42,9 @@ login:                  # login nodes, one auth mode each: ssh | teleport | both
 teleport:               # the optional Teleport part (benchctl up --with teleport, ADR 0020)
   version: 18.11.8      # Community Edition tag; the server must not be older than your tsh major
   cert_ttl: 12h         # user certificate lifetime (max_session_ttl of the role)
+
+bcm:
+  manage_kubernetes: true   # BCM lists the Kubernetes nodes (categories k8s-cpu, k8s-gpu); false = BCM does not manage the Kubernetes cluster (--no-bcm-k8s, issue 413)
 
 bmc:
   per_node: true   # one BMC address per node (ADR 0018); a workbench selection can limit which nodes (--bmc-nodes)

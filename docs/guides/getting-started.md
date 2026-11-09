@@ -136,6 +136,16 @@ See what the output looks like in [Nodes and shells](../manual/04-nodes-and-shel
 with a real `sshd` is the optional fidelity VM (`cd fidelity-vm && ./bin/up.sh`, then `vagrant ssh fidelity`). Teleport
 access (`./scripts/benchctl up --with teleport`, then `tsh ... ls`) is in [Nodes and shells](../manual/04-nodes-and-shells.md#teleport-tsh-to-the-login-node-and-the-nodes). More in [Nodes and shells](../manual/04-nodes-and-shells.md).
 
+A controller node (where slurmctld runs; whitelisted admins only, and the BCM head node) and a jump host (a bare bastion in front of the login nodes) are optional:
+
+```bash
+./scripts/benchctl up --controller --access jump           # 24 MB each; add --access teleport for Teleport to the controller too
+ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2221 alice@127.0.0.1 sinfo      # alice is in the admins group; bob is refused
+ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -o ProxyCommand='ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -W %h:%p -p 2220 alice@127.0.0.1' alice@10.141.255.254 hostname   # through the jump host (`-J` alone would not pass the key to the jump leg)
+```
+
+Who may use the controller is set in `sim.yaml` (`controller.allow.users`, `controller.allow.groups`); see [Choose your workbench](choose-workbench.md) and ADR 0036.
+
 Kubernetes (a real control plane with KWOK fake nodes, about 0.3 GB) is optional: `./scripts/benchctl up --with k8s`, then `ssh ... alice@127.0.0.1 kubectl get nodes` (see [Nodes and shells](../manual/04-nodes-and-shells.md#kubernetes-optional-part)).
 
 ## 4b. The web page

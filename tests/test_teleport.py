@@ -302,3 +302,21 @@ def test_reset_deletes_data_and_the_saved_identity_and_the_command_refuses_while
     monkeypatch.setattr(inventory, "service_rows", list)
     r = runner.invoke(cli.app, ["remove", "teleport-state", "-y"])
     assert r.exit_code == 0 and calls == [1] and "benchctl add invite" in r.output
+
+
+def test_the_controller_is_a_teleport_node_when_it_is_on(tmp_path):
+    sim = {**SIM, "controller": {"enabled": True, "allow": {"users": ["alice"]}}}
+    docs = {d["spec"]["hostname"]: d for d in yaml.safe_load_all(teleport.resources(sim, addressing.plan(sim, 2))) if d["kind"] == "node"}
+    assert docs["controller"]["spec"]["addr"] == f"{addressing.service_ip('slurmctld')}:22" and docs["controller"]["metadata"]["labels"] == {"kind": "controller"}
+    assert "controller" not in {d["spec"]["hostname"] for d in yaml.safe_load_all(teleport.resources(SIM, IPS)) if d["kind"] == "node"}
+    prof = compose.load_profile("min")
+    svcs = compose.generate(sim, {**prof, "groups": [*prof["groups"], "teleport"]})["services"]
+    assert f"./secrets/teleport:{teleport.CONTAINER_SECRETS}:ro" in svcs["slurmctld"]["volumes"]
+    assert svcs["slurmctld"]["environment"]["WORKBENCH_TELEPORT_NAME"] == "controller"
+    calls = []
+    def runner(cmd):
+        calls.append(cmd)
+        return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+    teleport.bootstrap(sim, addressing.plan(sim, 2), runner, lambda *a, **k: list(a), lambda m: None, secrets=tmp_path, fetch=lambda: "k\n", sleep=lambda s: None)
+    ctl_sign = [c for c in calls if any(str(a).startswith("--host=") and ",controller," in str(a) for a in c)]
+    assert ctl_sign and f",{teleport.node_id('controller')},slurmctld" in " ".join(ctl_sign[0])  # the certificate also names the Slurm host
