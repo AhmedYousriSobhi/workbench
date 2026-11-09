@@ -19,8 +19,9 @@ def benchctl(*args: str, timeout: int = 900) -> subprocess.CompletedProcess:
     return subprocess.run([str(ROOT / "scripts/benchctl"), *args], capture_output=True, text=True, timeout=timeout, check=False)
 
 
-def ssh(user: str, host: str, port: int, command: str, jump: str | None = None) -> subprocess.CompletedProcess:
-    j = ["-J", jump] if jump else []
+def ssh(user: str, host: str, port: int, command: str, jump: tuple[str, int] | None = None) -> subprocess.CompletedProcess:
+    # `-J` does not pass -i or -o to the jump leg (ssh(1)): the documented form is a ProxyCommand that carries them
+    j = ["-o", f"ProxyCommand=ssh {' '.join(OPTS)} -W %h:%p -p {jump[1]} alice@{jump[0]}"] if jump else []
     return subprocess.run(["ssh", *OPTS, *j, "-p", str(port), f"{user}@{host}", command], capture_output=True, text=True, timeout=40, check=False)
 
 
@@ -50,7 +51,7 @@ def test_cmsh_is_on_the_controller_and_not_on_the_login_node(built):
 
 
 def test_ssh_through_the_bare_jump_host_reaches_the_login_node_and_the_controller(built):
-    jump = "alice@127.0.0.1:2220"
+    jump = ("127.0.0.1", 2220)
     assert ssh("alice", "login", 22, "hostname", jump=jump).stdout.strip() == "login"
     assert ssh("alice", "controller", 22, "hostname", jump=jump).returncode == 0
     bare = ssh("alice", "127.0.0.1", 2220, "command -v squeue sinfo scontrol python3")
