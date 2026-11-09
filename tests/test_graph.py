@@ -170,3 +170,9 @@ def test_the_real_dcgm_exporter_is_a_declared_telemetry_edge_with_no_counter():
     assert e["plane"] == "telemetry" and not e["measured"]            # up or down only: the real exporter counts nothing
     assert "faults>dcgm-exporter:inj" not in ids(g)                   # a scenario fault goes to the hand-written exporter, which drives this one
     assert "clients>dcgm-exporter:api" not in ids(graph.build(SERVICES, NODES, logins("ssh")))
+
+
+def test_the_real_gpu_is_a_declared_telemetry_edge_with_no_counter():
+    g = graph.build({**SERVICES, "real-gpu": True}, NODES, logins("ssh"))
+    e = {x["id"]: x for x in g["edges"]}["clients>real-gpu:api"]
+    assert e["plane"] == "telemetry" and not e["measured"] and "faults>real-gpu:inj" not in ids(g)

@@ -37,7 +37,7 @@ def _mark(config, items):
 # Modules that must start their own stack (issue 234): test timers, a custom selection or governor, Teleport, Jira, or the
 # stack lifecycle itself. They run after every module that shares the default stack and each begins from a stopped one.
 ISOLATED_MODULES = {"test_apply_real", "test_jira_dc_real", "test_nhc_real", "test_pressure_real", "test_slurmresilience_real",
-                    "test_k8s_real", "test_access_real", "test_dcgm_real", "test_stack_real", "test_teleport_real", "test_user_mode_real", "test_workbench_real"}
+                    "test_k8s_real", "test_access_real", "test_dcgm_real", "test_real_gpu_real", "test_stack_real", "test_teleport_real", "test_user_mode_real", "test_workbench_real"}
 
 
 def _isolated(item) -> bool:

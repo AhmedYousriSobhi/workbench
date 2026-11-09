@@ -16,6 +16,7 @@ BMC, BCM, JIRA, EXPORTER = ("http://127.0.0.1:8000", "http://127.0.0.1:8081", "h
                             "http://127.0.0.1:9400")
 SERVICES = {"bmc-farm": f"{BMC}/healthz", "bcm-mock": f"{BCM}/healthz", "jira-mock": f"{JIRA}/healthz",
             "gpu-exporter": f"{EXPORTER}/metrics"}
+REAL_GPU = "http://127.0.0.1:9403"  # the real card's exporter (benchctl/real_gpu.py PORT); a service only when the real-gpu part is built
 DCGM_REAL = "http://127.0.0.1:9402"  # the real DCGM exporter (benchctl/dcgm.py PORT); a service only when the dcgm part is built
 JIRA_REAL = "http://127.0.0.1:8083"  # the real Jira's /status (benchctl/jira_real.py PORT); a service only when the part is built
 TELEPORT = "http://127.0.0.1:3434"  # Teleport's diagnostics endpoint (benchctl/teleport.py DIAG_PORT); a service only when the part is built
@@ -197,7 +198,8 @@ class Cluster:
         """
         probes = {**SERVICES, **({"teleport": f"{TELEPORT}/healthz"} if teleport_built() else {}),
                   **({"jira-real": f"{JIRA_REAL}/status"} if jira_real_built() else {}),
-                  **({"dcgm-exporter": f"{DCGM_REAL}/metrics"} if saved_has_part("dcgm") else {})}
+                  **({"dcgm-exporter": f"{DCGM_REAL}/metrics"} if saved_has_part("dcgm") else {}),
+                  **({"real-gpu": f"{REAL_GPU}/metrics"} if saved_has_part("real-gpu") else {})}
         names = list(probes)
         up = [self._try(probes[n]) is not None for n in names]
         from benchctl import controller

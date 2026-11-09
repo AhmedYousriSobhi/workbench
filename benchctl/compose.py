@@ -6,7 +6,18 @@ from pathlib import Path
 
 import yaml
 
-from . import addressing, controller, dcgm, jira_real, k8s, logins, nhc, slurmconf, teleport
+from . import (
+    addressing,
+    controller,
+    dcgm,
+    jira_real,
+    k8s,
+    logins,
+    nhc,
+    real_gpu,
+    slurmconf,
+    teleport,
+)
 from .nodes import KIND_GROUP, hardware_nodes, node_names
 
 OBSERVABILITY = "../observability.yml"  # static; hosts prometheus, grafana, gpu-exporter-farm
@@ -26,6 +37,7 @@ CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {
     "jira-real": {"jira-db": (jira_real.DB_IMAGE, jira_real.DB_LIMIT_MB, 6), "jira-real": (jira_real.IMAGE, jira_real.LIMIT_MB, 6)},
     "access": {"login": ("workbench/login:dev", 40, 2)},
     "dcgm": {dcgm.SERVICE: ("workbench/dcgm-exporter:dev", dcgm.LIMIT_MB, 6)},  # the real DCGM exporter on a mock NVML (issue 426); off by default
+    "real-gpu": {real_gpu.SERVICE: ("workbench/dcgm-exporter:dev", real_gpu.LIMIT_MB, 6)},  # the host's own NVIDIA card with the real exporter (issue 428); off by default
     "jump": {"jump": ("workbench/jump:dev", 24, 2)},  # a bare sshd bastion (SPEC C-21)
     # the tag is replaced from sim.yaml teleport.version (benchctl/teleport.py); the limit is a planning estimate until measured
     "teleport": {"teleport": (f"{teleport.IMAGE}:{teleport.DEFAULT_VERSION}", 256, 2)},
@@ -137,6 +149,7 @@ def generate(sim: dict, profile: dict) -> dict:
                     svc is services.get(controller.CONTROLLER) and controller.enabled(sim)):
                 svc["volumes"].append(f"./secrets/teleport:{teleport.CONTAINER_SECRETS}:ro")
     dcgm.wire(services, sim)  # no-op unless the dcgm part is on
+    real_gpu.wire(services)  # no-op unless the real-gpu part is on
     k8s.wire(services, sim)  # no-op unless the k8s part is on
     if k8s.API in services:  # every login node gets the read-only kubeconfigs (login.sh puts them in each user's ~/.kube)
         for lname in [n for n, k in lkinds.items() if k in ("k8s", "both")]:  # an s-login gets none

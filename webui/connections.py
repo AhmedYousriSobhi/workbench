@@ -3,7 +3,17 @@
 Addresses are the containers' fixed private IPs at their standard ports (`benchctl/addressing.py`, ADR 0018): the host
 routes the Docker network, so a client on this machine connects to them directly. The ports published on 127.0.0.1 are
 the fallback (`also on`). Credentials are named by path only, never read, so this page cannot leak a secret."""
-from benchctl import addressing, compose, controller, dcgm, jira_real, k8s, logins, teleport
+from benchctl import (
+    addressing,
+    compose,
+    controller,
+    dcgm,
+    jira_real,
+    k8s,
+    logins,
+    real_gpu,
+    teleport,
+)
 from benchctl.describe import BMC_TLS_PORT
 
 SECRETS = "compose/generated/secrets"
@@ -92,6 +102,7 @@ def actions_for(e: dict, sim: dict, user: str) -> list[dict]:
                       {"kind": "post", "label": "Refresh licence (restarts Jira)", "value": "/api/jira-real/refresh"}],
         "gpu": [link("Open the metrics", f"http://{LOCAL}:9400/metrics")],
         "dcgm": [link("Open the real DCGM metrics", f"http://{LOCAL}:{dcgm.PORT}/metrics")],
+        "real-gpu": [link("Open the real GPU metrics", f"http://{LOCAL}:{real_gpu.PORT}/metrics")],
         "prometheus": [link("Open Prometheus", f"http://{LOCAL}:9090")],
         "grafana": [link("Open Grafana", f"http://{LOCAL}:3000")],
         "slurm": [copy("Copy sinfo", "benchctl exec slurmctld -- sinfo")],
@@ -173,6 +184,9 @@ def _rows(sim: dict) -> list[dict]:
         {"id": "dcgm", "name": "DCGM exporter (real, first GPU node)", "kind": "http", "address": f"http://{LOCAL}:{dcgm.PORT}/metrics",
          "command": f"curl -s http://{LOCAL}:{dcgm.PORT}/metrics | head", "credential": None,
          "how": "Only with `benchctl up --with dcgm`. The official dcgm-exporter on a mock NVML for the first GPU node (ADR 0025); no login, localhost only. A GPU a Slurm job holds reads busy; a cleared XID stays until the container restarts."},
+        {"id": "real-gpu", "name": "Real GPU (this machine's NVIDIA card)", "kind": "http", "address": f"http://{LOCAL}:{real_gpu.PORT}/metrics",
+         "command": f"curl -s http://{LOCAL}:{real_gpu.PORT}/metrics | head", "credential": None,
+         "how": "Only with `benchctl up --with real-gpu` on a machine with an NVIDIA card, its driver and the container toolkit (SPEC C-23). Real series from the real card, labelled Hostname gpu-real; no login, localhost only. `docker exec workbench-real-gpu-1 dcgmi discovery -l` and `nvidia-smi` work in that container."},
         {"id": "prometheus", "name": "Prometheus", "kind": "http", "address": f"http://{ip['prometheus']}:9090",
          "command": f"curl -s http://{ip['prometheus']}:9090/-/ready", "credential": None, "how": "No login. Also on 127.0.0.1:9090."},
         {"id": "grafana", "name": "Grafana", "kind": "http", "address": f"http://{ip['grafana']}:3000",
