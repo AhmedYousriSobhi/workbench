@@ -27,6 +27,7 @@ MEASURED_MB: dict[str, int] = {
     "prometheus": 22, "grafana": 54, "gpu-exporter-farm": 19,
     # Kubernetes (ADR 0034): 4 KWOK nodes and the fixtures, one run (issue 232); etcd sat at its first 128 MB cap, so 130 is a floor
     "k8s-etcd": 130, "k8s-apiserver": 201, "k8s-controller-manager": 47, "k8s-scheduler": 18, "kwok-controller": 11,
+    "dcgm-exporter": 431,  # the real DCGM exporter on the mock NVML: 430 MB RSS with 2 or 8 GPUs, one spike run (issue 426)
     "jira-db": 130, "jira-real": 2045,   # real Jira Data Center: heap 768 MB, JVM_ARGS (Serial GC, C1 only); 2176 MB cap, two clean runs
 }
 NOT_MEASURED = ("scenario-engine", "user-sim", "ticket-bot", "accounting-init")  # not built or one-shot: expected at the cap

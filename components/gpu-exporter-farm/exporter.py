@@ -23,6 +23,7 @@ MODEL_NAME = {"h200": "NVIDIA H200", "h100": "NVIDIA H100 80GB HBM3", "a100": "N
               "l40s": "NVIDIA L40S"}
 FS_SIZE = 500 * 1024**4
 ALLOC_URL = os.environ.get("ALLOC_URL", "http://slurmctld:9401/alloc")  # which GPUs running Slurm jobs hold
+DCGM_OVERRIDES = os.environ.get("DCGM_OVERRIDES", "")  # the real exporter's override file (issue 426); empty = the part is off
 ALLOC_STALE_S = 30  # keep the last answer this long when the feed is unreachable, then show every GPU idle
 
 
@@ -95,6 +96,34 @@ class State:
             self.xid_count[node] = self.xid_count.get(node, 0) + 1
         if "temp" in req:
             self.temp_override[node] = float(req["temp"])
+
+    def dcgm_node(self) -> str | None:
+        """The one GPU node the real exporter (the `dcgm` part) stands for: the first GPU node in sim.yaml."""
+        return next((n for n, g in self.nodes.items() if g), None)
+
+    def dcgm_overrides(self) -> dict:
+        """What the real DCGM exporter should show for `dcgm_node`, in the mock NVML's override format (ADR 0025): a GPU a job holds
+        works hard, the others idle; an injected XID trips GPU 0, as a real one hits a single GPU; a pinned temperature applies to all."""
+        node = self.dcgm_node()
+        if node is None:
+            return {}
+        total = self.fb_total * 1024 * 1024
+        devices: dict[int, dict] = {}
+        for g in range(self.nodes[node]):
+            busy = g in self.alloc.get(node, ())
+            used = int(total * (0.8 if busy else 0.005))
+            dev: dict = {"utilization": {"gpu": 95 if busy else 0, "memory": 60 if busy else 0},
+                         "memory": {"total_bytes": total, "used_bytes": used, "free_bytes": total - used},
+                         "power": {"current_draw_mw": 520000 if busy else 80000},
+                         "dynamic_metrics": {"power": {"base_mw": 520000 if busy else 80000, "variance_mw": 0}}}
+            if node in self.temp_override:
+                c = int(self.temp_override[node])
+                dev["thermal"] = {"temperature_gpu_c": c}
+                dev["dynamic_metrics"]["temperature"] = {"base_c": c, "ramp_c": 0, "variance_c": 0}
+            if g == 0 and node in self.xid:
+                dev["failure"] = {"mode": "ecc_uncorrectable", "xid": {"code": self.xid[node]}}
+            devices[g] = dev
+        return {"devices": devices}
 
     def render(self) -> str:
         r = self.rng
@@ -233,11 +262,30 @@ def follow_slurm(state: State, fetch=fetch_alloc, interval: float = 3, stop: thr
         stop.wait(interval)
 
 
+def write_dcgm(state: State, path: str = DCGM_OVERRIDES, interval: float = 2, stop: threading.Event | None = None) -> None:
+    """Keep the real exporter's override file current (atomic rename; written only when it changes)."""
+    stop = stop or threading.Event()
+    last = None
+    while not stop.is_set():
+        doc = yaml.safe_dump(state.dcgm_overrides())
+        if doc != last:
+            try:
+                tmp = Path(path + ".tmp")
+                tmp.write_text(doc)
+                tmp.replace(path)
+                last = doc
+            except OSError:
+                pass  # the directory is not there yet; try again
+        stop.wait(interval)
+
+
 def main() -> None:
     sim = Path(sys.argv[1] if len(sys.argv) > 1 else "sim.yaml")
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 9400
     state = State(load_nodes(sim), gpu_type=load_gpu_type(sim))
     threading.Thread(target=follow_slurm, args=(state,), daemon=True).start()
+    if DCGM_OVERRIDES:
+        threading.Thread(target=write_dcgm, args=(state,), daemon=True).start()
     ThreadingHTTPServer(("0.0.0.0", port), make_handler(state)).serve_forever()
 
 

@@ -24,7 +24,7 @@ REASON_RE = re.compile(r"[A-Za-z0-9 .,:_/()+-]{0,60}")  # a drain reason: short,
 LOGIN_MODES = {"ssh", "teleport", "both"}  # mirrors benchctl.logins.MODES
 BMC_GROUPS = {"slurm-cpu", "slurm-gpu", "k8s-cpu", "k8s-gpu"}  # mirrors benchctl.nodes.GROUPS
 LOGIN_KINDS = {"slurm", "k8s", "both"}  # mirrors benchctl.logins.KINDS; an entry is MODE or MODE:KIND
-PLAN_PARTS = {"jira", "jira-real", "bmc", "bcm", "scenarios", "accounting", "load", "teleport", "k8s", "jump"}  # mirrors benchctl.workbench.PARTS
+PLAN_PARTS = {"jira", "jira-real", "bmc", "bcm", "scenarios", "accounting", "load", "teleport", "k8s", "jump", "dcgm"}  # mirrors benchctl.workbench.PARTS
 
 
 def plan_error(req: dict) -> str | None:
