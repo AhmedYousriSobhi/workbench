@@ -211,3 +211,11 @@ def test_the_dcgm_step_runs_docker_only_for_nodes_that_have_an_exporter(monkeypa
     assert out.status == "ok" and calls == []
     assert scenario.execute(scenario.Step(0, "dcgm", {"nodes": ["gpu001"], "stop": True}), host=False).status == "skipped"
     assert scenario.validate({"steps": [{"at": 0, "target": "dcgm", "do": {"nodes": ["gpu001"]}}]}, MANY)  # needs a verb
+
+
+def test_every_key_of_an_exporter_service_is_a_compose_key():
+    allowed = {"image", "mem_limit", "cgroup_parent", "labels", "restart", "build", "hostname", "environment", "volumes", "command", "ports", "networks", "devices"}
+    for sv in (many_services(), services(True)):
+        for name, svc in sv.items():
+            if name.startswith("dcgm-exporter"):
+                assert set(svc) <= allowed, set(svc) - allowed
