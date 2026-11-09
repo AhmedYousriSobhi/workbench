@@ -845,7 +845,7 @@ async function loadCluster() {
   clearTimeout(clusterTimer);
   try {
     const text = await (await fetch('/api/cluster')).text();
-    if (text !== lastCluster) { lastCluster = text; renderCluster(JSON.parse(text)); }
+    if (text !== lastCluster) { lastCluster = text; renderCluster(JSON.parse(text)); paintTraffic(); }  // the Traffic view follows node faults (issue 414)
   } catch (e) { /* keep the last view; the next poll retries */ }
   clusterTimer = setTimeout(loadCluster, document.hidden ? 15000 : 4000);
 }
@@ -1202,6 +1202,7 @@ async function nodeAction(name, action, label) {
   const skipped = res.filter(x => x.target === 'slurm' && x.status === 'skipped');
   const msg = skipped.length ? `${label} on ${name}: done, but Slurm was not told (${skipped[0].detail}); run ./scripts/benchctl set node ${name} ${action === 'power-off' ? 'off' : action === 'power-on' ? 'on' : 'resume'}` : bad.length ? `${label} on ${name}: ${bad.length} step(s) failed — is the stack running?` : `${label} on ${name}: done`;
   toast(msg); $('nodeactmsg').textContent = msg;
+  slurmAt = 0;  // read the node states now instead of at the next poll (issue 414)
   lastCluster = ''; loadCluster();
 }
 
@@ -2059,12 +2060,36 @@ function pathOf(links, id) {
   walk('to', 'from', l0.from); walk('from', 'to', l0.to);
   return seen;
 }
+// node health for the parts that stand for machines (issue 414): the cluster poll (power, GPU, fans, Kubernetes API) plus Slurm's own node states (sinfo, through the governor)
+let slurmNodes = null, trPrevOut = null;
+const SLURM_OUT = /^(drain|drained|draining|down|fail|failing|maint|unknown|future)/;
+function nodeHealth() {
+  const out = {}, rows = clusterNow().nodes || [];
+  for (const n of rows) {
+    const part = n.kind === 'k8s' ? 'kwok' : 'nodes', h = out[part] ||= { total: 0, out: 0, warn: 0, why: {} }, st = slurmNodes && n.kind !== 'k8s' ? slurmNodes[n.name] : null;
+    h.total++;
+    const why = n.state === 'down' || n.state === 'fault' ? n.label : st && SLURM_OUT.test(st) ? 'Slurm: ' + st : null;
+    if (why) { h.out++; h.why[n.name] = why; } else if (n.state === 'warn') { h.warn++; h.why[n.name] = n.label; }
+  }
+  if (out.nodes) out.slurmd = out.nodes;  // slurmd runs on every Slurm node
+  return out;
+}
+const partHealth = id => nodeHealth()[id] || null;
+function noteNodeChanges(h) {  // a change in which nodes are out is a timeline event, so a drain shows up without a reload
+  const now = {}; for (const part of ['nodes', 'kwok']) for (const [n, w] of Object.entries(h[part]?.why || {})) now[n] = w;
+  if (trPrevOut) {
+    for (const n of new Set([...Object.keys(now), ...Object.keys(trPrevOut)])) if (now[n] !== trPrevOut[n])
+      trHist.push({ t: Date.now(), from: 'state', to: 'nodes', label: now[n] ? `${n}: ${now[n]}` : `${n}: back to normal`, nodes: [n], n: 0 });
+  }
+  trPrevOut = now;
+}
 function trView(l) {
   const key = l.service || l.to, snap = flowSnap, mon = l.targets != null, probe = l.probe != null;
   const up = probe ? l.probe : mon ? l.up === l.targets : snap?.reachable[key];
   const n = l.measured && !mon ? snap?.totals[l.service] : null, rate = n == null ? null : rateOf(l.service, n);
   const ms = mon ? l.scrape_ms : up ? snap?.latency?.[key] : null;
-  return { up, n, rate, ms, mon, state: up === undefined ? '–' : up ? '✓ up' : mon ? `✗ ${l.up} of ${l.targets} up` : '✗ not reachable',
+  const ph = !mon && !probe ? (partHealth(l.to) || partHealth(l.from)) : null, part = up !== false && ph && (ph.out || ph.warn) ? (ph.out ? `▲ up, ${ph.out} of ${ph.total} nodes out` : `▲ up, ${ph.warn} of ${ph.total} nodes degraded`) : null;
+  return { up, n, rate, ms, mon, state: part || (up === undefined ? '–' : up ? '✓ up' : mon ? `✗ ${l.up} of ${l.targets} up` : '✗ not reachable'),
     ev: l.measured || probe ? 'observed' : 'configured', sw: l.real ? 'real' : 'simulated' };
 }
 // the same links as a diagram: parts grouped by role in a fixed template (a group is drawn only when it has a part), one line per
@@ -2112,14 +2137,15 @@ let trHist = [], trRange = 300;  // what this page was told since it opened (the
 const hhmmss = t => new Date(t).toTimeString().slice(0, 8);
 function paintTrTimeline(links) {
   const now = Date.now(), from = now - trRange * 1000, ev = trHist.filter(h => h.t >= from), say = h => {
+    if (h.from === 'state') return `Node ${h.label}`;
     if (h.from === 'injector') return `Fault ${h.label || 'applied'} on ${(h.nodes || []).join(', ') || h.to}`;
     const l = links.find(k => k.from === h.from && (k.service || k.to) === h.to) || links.find(k => (k.service || k.to) === h.to);
     return `${l ? l.from : h.from} → ${l ? l.to : h.to}${l ? ` (${l.protocol} :${l.port})` : ''}`;
   };
-  $('tr-feed').innerHTML = ev.slice(-12).reverse().map(h => `<li><span class="ft">${hhmmss(h.t)}</span><span>${h.from === 'injector' ? '<b class="f" aria-hidden="true">◆</b> ' : ''}${esc(say(h))}</span><span class="dim">${h.from === 'injector' ? '' : h.n + ' req' + (h.ms != null ? ', ' + h.ms + ' ms' : '')}</span></li>`).join('')
+  $('tr-feed').innerHTML = ev.slice(-12).reverse().map(h => `<li><span class="ft">${hhmmss(h.t)}</span><span>${h.from === 'injector' || h.from === 'state' ? '<b class="f" aria-hidden="true">◆</b> ' : ''}${esc(say(h))}</span><span class="dim">${h.from === 'injector' || h.from === 'state' ? '' : h.n + ' req' + (h.ms != null ? ', ' + h.ms + ' ms' : '')}</span></li>`).join('')
     || `<li class="dim"><span></span><span>No requests seen in the last ${trRange >= 3600 ? '1 h' : trRange / 60 + ' min'}. A count rises only when a client calls a mock service.</span><span></span></li>`;
   const B = 60, w = 480, h = 120, bw = trRange * 1000 / B, bins = new Array(B).fill(0), faults = [];
-  ev.forEach(e => { const i = Math.min(B - 1, Math.floor((e.t - from) / bw)); if (e.from === 'injector') faults.push(i); else bins[i] += e.n; });
+  ev.forEach(e => { const i = Math.min(B - 1, Math.floor((e.t - from) / bw)); if (e.from === 'injector' || e.from === 'state') faults.push(i); else bins[i] += e.n; });
   const max = Math.max(...bins, 1), x = i => (i + 0.5) / B * w, y = v => h - 14 - v / max * (h - 26), pts = bins.map((v, i) => `${x(i)},${y(v)}`).join(' ');
   $('tr-chart').innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="100%" role="img" aria-label="Requests over the last ${trRange / 60} minutes, peak ${max} per ${Math.round(bw / 1000)} s bucket, ${faults.length} fault${faults.length === 1 ? '' : 's'} marked"><polygon points="0,${h - 14} ${pts} ${w},${h - 14}" fill="var(--accent)" fill-opacity="0.18"/><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>`
     + faults.map(i => `<path d="M${x(i)} 4V${h - 14}" stroke="#ffb02e" stroke-width="2" stroke-dasharray="3 3"/>`).join('')
@@ -2157,12 +2183,12 @@ function paintTrafficMap(rows, ghosts = []) {
     box.append(sv('text', { x: g.x + 12, y: g.y + 20, fill: g.col, 'font-size': 15, 'font-weight': 700 }, g.title));
     svg.append(box);
     g.parts.forEach((id, i) => {
-      const up = flowSnap?.reachable[id], gone = !live.has(id), py = g.y + HEAD + i * (PH + 6);
+      const up = flowSnap?.reachable[id], gone = !live.has(id), py = g.y + HEAD + i * (PH + 6), ph = gone ? null : partHealth(id), allOut = ph && ph.out === ph.total, mark = ph && (ph.out || ph.warn) ? (allOut ? '✗ ' : '▲ ') : null;
       pos[id] = { x: g.x + 10, y: py, w: GW - 20, g };
-      svg.append(sv('rect', { x: g.x + 10, y: py, width: GW - 20, height: PH, rx: 7, fill: 'var(--panel)', stroke: gone ? 'var(--line)' : g.col, 'stroke-opacity': gone ? 1 : 0.7, 'stroke-width': 1.4, 'stroke-dasharray': up === false || gone ? '4 3' : '', 'opacity': gone ? 0.4 : 1, 'pointer-events': 'none' }));
+      svg.append(sv('rect', { x: g.x + 10, y: py, width: GW - 20, height: PH, rx: 7, fill: 'var(--panel)', stroke: gone ? 'var(--line)' : g.col, 'stroke-opacity': gone ? 1 : 0.7, 'stroke-width': 1.4, 'stroke-dasharray': up === false || gone || allOut ? '4 3' : '', 'opacity': gone ? 0.4 : 1, 'pointer-events': 'none' }));
       const ic = sv('path', { d: TR_ICON[PART_ICON[id] || 'cube'], transform: `translate(${g.x + 18} ${py + PH / 2 - 8})`, fill: 'none', stroke: g.col, 'stroke-width': 1.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: gone ? 0.4 : 1, 'pointer-events': 'none' });
       svg.append(ic);
-      svg.append(sv('text', { x: g.x + 42, y: py + PH / 2 + 5, fill: 'currentColor', 'font-size': 14, 'opacity': gone ? 0.4 : 1, 'pointer-events': 'none' }, (gone || up === undefined ? '' : up ? '✓ ' : '✗ ') + (id.length > 14 ? id.slice(0, 13) + '…' : id)));
+      svg.append(sv('text', { x: g.x + 42, y: py + PH / 2 + 5, fill: 'currentColor', 'font-size': 14, 'opacity': gone ? 0.4 : 1, 'pointer-events': 'none' }, (gone ? '' : up === false ? '✗ ' : mark || (up === undefined ? '' : '✓ ')) + (ph && ph.total ? `${id} ${ph.total - ph.out}/${ph.total}` : id.length > 14 ? id.slice(0, 13) + '…' : id)));
       svg.append(sv('rect', { class: 'trpart', 'data-part': id, 'data-of': g.title, tabindex: 0, role: 'button', 'aria-label': `${id}: click for details, drag up or down or press Alt+Up or Alt+Down to reorder inside ${g.title}`, x: g.x + 10, y: py, width: GW - 20, height: PH, fill: 'transparent', style: 'cursor:ns-resize' }));
     });
   });
@@ -2252,7 +2278,7 @@ function rateChart(hist) {
 }
 function paintTrPart(id, links) {  // a clicked part: what it is, whether it answers, and the links it has (each opens that link)
   const up = flowSnap?.reachable[id], mine = links.filter(l => l.from === id || l.to === id), li = l => `<li><button class="linkbtn" data-link="${esc(l.id)}">${l.from === id ? `→ ${esc(l.to)}` : `← ${esc(l.from)}`}</button> <span class="dim small">${esc(l.protocol)}${l.port == null ? '' : ' :' + l.port}</span></li>`;
-  $('tr-insp').innerHTML = `<h3>${esc(id)} <button class="btn small" id="tr-close" aria-label="Close the inspector">✕</button></h3><p class="small">${esc(PART_INFO[id] || '')}</p><dl><dt>State</dt><dd>${up === undefined ? '–' : up ? '✓ answers' : '✗ not reachable'}</dd></dl><p class="row small"><span class="dim">Order in its group</span><button class="btn small" data-mv="-1" aria-label="Move ${esc(id)} up in its group">▲ Up</button><button class="btn small" data-mv="1" aria-label="Move ${esc(id)} down in its group">▼ Down</button></p>`
+  $('tr-insp').innerHTML = `<h3>${esc(id)} <button class="btn small" id="tr-close" aria-label="Close the inspector">✕</button></h3><p class="small">${esc(PART_INFO[id] || '')}</p><dl><dt>State</dt><dd>${up === undefined ? '–' : up ? '✓ answers' : '✗ not reachable'}</dd>${(ph => ph && (ph.out || ph.warn) ? `<dt>Nodes</dt><dd>${ph.total - ph.out} of ${ph.total} in service<br>${Object.entries(ph.why).map(([n, w]) => `${esc(n)}: ${esc(w)}`).join('<br>')}</dd>` : ph ? `<dt>Nodes</dt><dd>${ph.total} of ${ph.total} in service</dd>` : '')(partHealth(id))}</dl><p class="row small"><span class="dim">Order in its group</span><button class="btn small" data-mv="-1" aria-label="Move ${esc(id)} up in its group">▲ Up</button><button class="btn small" data-mv="1" aria-label="Move ${esc(id)} down in its group">▼ Down</button></p>`
     + (mine.length ? `<p class="small dim">Links of this part (click one for its details)</p><ul class="trlinks">${mine.map(li).join('')}</ul>` : '<p class="small dim">No documented link in this cluster.</p>');
 }
 function paintTrInspector(cur) {
@@ -2276,6 +2302,7 @@ function paintTraffic() {
     if (lastCluster) $('tr-rows').innerHTML = '<tr><td colspan="9" class="skel">The web page server is older than this page, so it sends no links. Restart it: <code>pkill -f \"python -m webui\"; ./scripts/benchctl start</code></td></tr>';
     return;
   }
+  noteNodeChanges(nodeHealth());
   const links = [...base, ...monLinks, ...(dbdLink ? [dbdLink] : [])];
   paintChips(links);
   const path = trPath && pathOf(links, trPath), f = { plane: trPlane, sw: $('tr-sw').value, ev: $('tr-ev').value };
@@ -2316,11 +2343,12 @@ if ($('tr-stage').requestFullscreen) $('tr-full').onclick = () => document.fulls
 // slurmctld's own request counts (sdiag, read by the governor) and Prometheus's scrape results: refreshed every 10 s while the Traffic tab is open
 let slurmAt = 0;
 async function paintSlurmStats() {
-  if ($('tab-traffic').hidden || Date.now() - slurmAt < 10000) return;
+  if ($('tab-traffic').hidden || Date.now() - slurmAt < 5000) return;
   slurmAt = Date.now();
   fetch('/api/monitoring').then(r => r.json()).then(j => { monLinks = j.links; paintTraffic(); }).catch(() => { monLinks = []; });
   let s = null;
   try { s = (await (await fetch('/api/slurm-stats')).json()).stats; } catch (e) { /* the governor or the stack is down: show nothing */ }
+  slurmNodes = s && s.node_states ? s.node_states : null;
   dbdLink = s && s.dbd != null ? { id: 'slurmctld>slurmdbd:6819', from: 'slurmctld', to: 'slurmdbd', protocol: 'TCP (Slurm RPC)', port: 6819, plane: 'data', what: 'accounting records; seen by a sacctmgr query (answers or not, no counter)', real: true, measured: false, probe: s.dbd, service: null } : null;
   paintTraffic();
   const box = $('tr-slurm');
@@ -2328,6 +2356,7 @@ async function paintSlurmStats() {
   if (s) box.innerHTML = `<b>slurmctld (sdiag)</b>: ${s.rpcs.toLocaleString()} requests served since it started${s.threads == null ? '' : `, ${s.threads} threads now`}. Busiest: `
     + s.top.map(t => `${esc(t.type)} ${t.count.toLocaleString()} (${t.ave_us.toLocaleString()} µs each)`).join(', ') + '.';
 }
+setInterval(() => { if (!document.hidden) paintSlurmStats(); }, 5000);  // node states are read every 5 s while the Traffic tab shows (W-11: not while hidden), so a drain appears without traffic or a reload (issue 414)
 // tabs: the live traffic feed runs only while its tab and the page are visible
 const TABS = ['nodes', 'traffic', 'conn'];
 function selectTab(t, focus) {

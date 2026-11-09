@@ -549,6 +549,14 @@ def test_the_inline_script_has_valid_javascript_syntax(tmp_path):
     assert r.returncode == 0, r.stderr[:400]
 
 
+def test_traffic_view_follows_node_state_and_logs_changes(ui):
+    page = req(ui, "/")[1].decode()
+    # issue 414: node health reaches the parts, the link state text, the part inspector and the timeline
+    for marker in ("function nodeHealth", "noteNodeChanges", "slurmNodes = s && s.node_states", "renderCluster(JSON.parse(text)); paintTraffic()",
+                   "from: 'state'", "nodes out"):
+        assert marker in page, marker
+
+
 def test_plan_names_the_bcm_kubernetes_flag_and_the_sheet_has_the_switch(ui, monkeypatch, tmp_path):
     from benchctl import workbench
     monkeypatch.setattr(workbench, "SAVED", tmp_path / "none.yaml")
