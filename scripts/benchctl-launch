@@ -79,11 +79,12 @@ open_link() {
 }
 
 cmd_start() {
-  profile=min; sel=()
+  profile=min; sel=(); saved=0
   while [ $# -gt 0 ]; do case "$1" in
     --profile) profile="$2"; shift ;;
+    --saved) saved=1 ;;  # nothing chosen and a workbench was built before: rebuild that one, do not replace it (issue 387)
     --with|--without|--login) sel+=("$1" "$2"); shift ;;
-    *) echo "usage: $0 start [--profile P | --with PART ... --without PART ... --login MODES]" >&2; exit 2 ;; esac; shift; done
+    *) echo "usage: $0 start [--profile P | --saved | --with PART ... --without PART ... --login MODES]" >&2; exit 2 ;; esac; shift; done
   echo "== 1/4 checking the machine"
   out=$(./scripts/check-machine.sh); rc=$?
   printf '%s\n' "$out" | grep -E "WARN|FAIL|fix:|READY"
@@ -91,7 +92,8 @@ cmd_start() {
   echo "== 2/4 tools"; ensure_venv || exit 1
   echo "== 3/4 governor"
   start_governor || exit 1
-  if [ ${#sel[@]} -gt 0 ]; then up_args=("${sel[@]}"); what="parts ${sel[*]}"; else up_args=(--profile "$profile"); what="profile $profile"; fi
+  if [ "$saved" = 1 ]; then up_args=(-f compose/generated/workbench.yaml); what="the saved workbench"
+  elif [ ${#sel[@]} -gt 0 ]; then up_args=("${sel[@]}"); what="parts ${sel[*]}"; else up_args=(--profile "$profile"); what="profile $profile"; fi
   echo "== 4/4 starting the cluster ($what; the first run builds images and takes a few minutes)"
   ./scripts/benchctl up "${up_args[@]}" || { echo "cluster did not start; ./scripts/benchctl diag collects details" >&2; exit 1; }
   refresh_governor

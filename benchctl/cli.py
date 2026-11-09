@@ -375,7 +375,7 @@ def start(profile: str = typer.Option(None, "--profile", autocompletion=completi
     except workbench.SpecError:
         saved = None
     typer.echo(workbench.start_line(saved, profile, bool(parts)))
-    _launcher("start", *(parts or ["--profile", profile or "min"]))
+    _launcher("start", *(["--saved"] if workbench.reuses_saved(saved, profile, bool(parts)) else parts or ["--profile", profile or "min"]))
 
 
 def _offer_completion() -> None:

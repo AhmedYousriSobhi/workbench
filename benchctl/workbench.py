@@ -305,15 +305,27 @@ def current(sim: dict, path: Path = SAVED) -> Spec | None:
     return load_file(path, defaults(sim)) if path.is_file() else None
 
 
+def describe_saved(saved: Spec) -> str:
+    return f"{saved.cpu_nodes} compute + {saved.gpu_nodes} GPU nodes, parts {', '.join(saved.parts) or 'none'}"
+
+
+def reuses_saved(saved: Spec | None, profile: str | None, parts: bool) -> bool:
+    """`benchctl start` with nothing chosen keeps the workbench last built (issue 387): restarting the page or the governor must not replace it."""
+    return saved is not None and not profile and not parts
+
+
 def start_line(saved: Spec | None, profile: str | None, parts: bool) -> str:
     """The one line `benchctl start` prints first: what it starts, and what saved workbench that replaces (issue 215).
 
     A start with parts builds the default workbench plus those parts; one without builds the size preset (default min).
     Either way it does not reuse the saved workbench, it forgets it; the plain default is `start --profile min`."""
     what = "the default workbench plus the parts you named" if parts else f"the {profile or 'min'} size preset"
+    if reuses_saved(saved, profile, parts):
+        return (f"Starting the workbench last built ({describe_saved(saved)}). Nothing was chosen, so it is kept; "
+                "name a size preset (`--profile min`) or parts (`--with jira`) to replace it.")
     if saved is None:
         return f"Starting {what}."
-    mine = f"{saved.cpu_nodes} compute + {saved.gpu_nodes} GPU nodes, parts {', '.join(saved.parts) or 'none'}"
+    mine = describe_saved(saved)
     return (f"Starting {what}. This replaces the workbench last built ({mine}); "
             "to rebuild that one, run `benchctl apply -f FILE` or `benchctl up` with its counts.")
 
