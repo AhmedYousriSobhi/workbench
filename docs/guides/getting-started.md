@@ -45,11 +45,11 @@ governor service needs no packages; it runs on the system `python3`.
 ## 1. Check the setup (doctor)
 
 ```bash
-./scripts/benchctl doctor        # cgroup v2, PSI, Docker, swap, memlock, containers stay unprivileged
+./scripts/benchctl doctor        # cgroup v2, PSI, Docker, swap, memlock, containers stay unprivileged, and a tsh that is too new for Teleport
 ./scripts/benchctl preflight --profile min    # would this profile fit in free memory right now?
 ```
 
-A `WARN` for `virsh`, `vagrant` or `tc` is fine: only optional parts need them (Kubernetes needs no host tool). Fix any `FAIL` first.
+A `WARN` for `virsh`, `vagrant` or `tc` is fine: only optional parts need them (Kubernetes needs no host tool). Fix any `FAIL` first. If `tsh` is installed, doctor also says whether it is newer than the Teleport server (`teleport.version` in `sim.yaml`): Teleport supports a `tsh` of the same or one older major version, and a newer one is refused with an unclear error. `benchctl up` prints the same one-line warning when Teleport is on.
 
 ## 2. Start the governor (outside monitoring and control)
 

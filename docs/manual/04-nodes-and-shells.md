@@ -140,6 +140,8 @@ The optional **Teleport** part (auth and proxy in one container, about 256 MB li
 lets a client reach the login nodes that use Teleport (`teleport` or `both`, see above) and every compute and GPU node through Teleport. Nodes keep their own `sshd` and trust
 the Teleport CA (Teleport's agentless OpenSSH mode); no Teleport process runs on a node. It is off by default.
 
+**Match your `tsh` to the server.** Teleport supports a `tsh` of the same or one older major version, not a newer one. `benchctl doctor` (and `benchctl up` with Teleport on) compares the `tsh` on your machine with `teleport.version` in `sim.yaml` and prints one line naming both versions and the fix when yours is newer: install a `tsh` of the server's major version, or set `teleport.version` to yours.
+
 ### Steps
 
 **1. Turn it on** (pick one; add `--login both` or `--login teleport` to make a login node reachable through it):
