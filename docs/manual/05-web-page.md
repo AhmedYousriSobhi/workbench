@@ -77,6 +77,9 @@ Every line says **how** it connects:
 | `direct SSH` (solid, arrow) | a client with the cluster key connects to a login node on its published port (login nodes set to *Direct SSH* or *both*) |
 | `Teleport` between the Teleport box and a login node (long dashes) | the login node is reached through the Teleport proxy (*Teleport only* or *both*) |
 | `jump host` (short dashes) | from a login node you `ssh` on to the nodes: the login node is the jump host |
+| `ssh` from Clients to the **Jump host** or **Controller** box | a key login to the bastion (`--access jump`) or to the controller (`--controller`); each box is drawn only when it is built, shows `✓ up`, `✗ not reachable` or `– offline` in words, and opens a pop-up with its address and command |
+| `ssh -J` (short dashes) from the Jump host to a login node or the Controller | the bastion forwards to key-login nodes and the controller; Teleport-only logins get no such line |
+| `ssh` (short dashes) from a login node to the Controller | an admin hops on to the controller; sshd lets only whitelisted users in |
 | `Teleport` from the Teleport box to the nodes (long dashes) | the nodes are also reachable through the proxy (agentless OpenSSH) |
 | `HTTP …` and `tsh · HTTPS` (thin) | an API call from a client to a service, or the `tsh` connection to the proxy |
 

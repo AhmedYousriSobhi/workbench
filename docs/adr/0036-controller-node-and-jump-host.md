@@ -28,8 +28,11 @@ With Teleport on, the controller is a Teleport node named `controller` (kind `co
 It starts before Teleport is ready, so `benchctl up` runs `teleport-ssh` in it afterwards and reloads sshd. Teleport only adds a way in:
 sshd's `AllowUsers` still limits who gets a shell. Issue 416.
 
+## The Infrastructure drawing
+The jump host and the controller are boxes in the Access row (issue 420), drawn only when built, with their state in words (`✓ up`, `✗ not reachable`, `– offline`),
+lines from Clients (`ssh`), from the jump host to the key-login nodes and the controller (`ssh -J`) and from each key-login node to the controller (`ssh`). The
+controller sits in Access, not among the cluster nodes: it is where admins get in, and the frame for nodes stays one grid of machines.
+
 ## Not built (open)
-- The Infrastructure architecture drawing (hand-laid SVG) has no jump or controller box yet; the Traffic & Communication diagram,
-  Connections and the graph model do.
 - Memory measured once (`benchctl measure`, 1 CPU node, five forwarded sessions): the jump host peaked at 1.9 MB (cap 24 MB), and slurmctld with the controller's sshd
   showed no difference from slurmctld without it beyond run noise (about 37 MB against 39 MB peak); the controller's +24 MB cap is headroom for sessions, not use.
