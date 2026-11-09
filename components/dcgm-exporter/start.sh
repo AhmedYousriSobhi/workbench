@@ -12,6 +12,9 @@ else
     inside && /^[a-z_]+:/ { inside = 0 }
     inside && /^  - index:/ { n++ }
     !inside || n <= N { print }' "$MOCK_NVML_PROFILE" > /tmp/mock-nvml.yaml
+  # a card of another model than the profile's (an H200 on the H100 profile), and GPU UUIDs that differ from node to node (issue 435)
+  if [ -n "${MOCK_NVML_NAME:-}" ]; then sed -i "s|^\( *name:\) \".*\"|\1 \"$MOCK_NVML_NAME\"|" /tmp/mock-nvml.yaml; fi
+  if [ -n "${MOCK_NVML_NODE_INDEX:-}" ]; then sed -i "s|GPU-01000100-|$(printf 'GPU-%08x-' $((0x01000100 + MOCK_NVML_NODE_INDEX * 4096)))|" /tmp/mock-nvml.yaml; fi
   export MOCK_NVML_CONFIG=/tmp/mock-nvml.yaml
 fi
 # One host engine on 127.0.0.1:5555 that the exporter reads from, so `dcgmi` in this container sees the same GPUs (embedded mode listens nowhere).

@@ -40,6 +40,8 @@ def key_of(name: str, labels: dict | None = None) -> str:
         return "slurmd"
     if name.startswith("bmc-") and name != "bmc-farm":
         return "bmc-forwarder"
+    if name.startswith("dcgm-exporter-"):  # one exporter per node (issue 435)
+        return "dcgm-exporter"
     return name
 
 

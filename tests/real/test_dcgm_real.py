@@ -32,6 +32,11 @@ def value(metric: str, gpu: int) -> float | None:
     return float(m[1]) if m else None
 
 
+def yaml_sim() -> dict:
+    import yaml
+    return yaml.safe_load((ROOT / "sim.yaml").read_text())
+
+
 def slurm(*cmd: str) -> subprocess.CompletedProcess:
     return subprocess.run(["docker", "exec", "-u", "alice", "workbench-login-1", *cmd], capture_output=True, text=True, timeout=30, check=False)
 
@@ -39,7 +44,7 @@ def slurm(*cmd: str) -> subprocess.CompletedProcess:
 @pytest.fixture(scope="module")
 def built():
     os.chdir(ROOT)
-    out = benchctl("up", "--cpu-nodes", "1", "--gpu-nodes", "1", "--gpus-per-node", "2", "--with", "dcgm", "--with", "scenarios")
+    out = benchctl("up", "--cpu-nodes", "1", "--gpu-nodes", "2", "--gpus-per-node", "2", "--with", "dcgm", "--dcgm-nodes", "2", "--with", "scenarios")
     assert out.returncode == 0, out.stdout + out.stderr
     assert wait_for(lambda: "DCGM_FI_DEV_GPU_UTIL" in scrape(), timeout=120), "the real exporter never answered"
     yield
@@ -64,13 +69,44 @@ def test_a_slurm_job_makes_its_gpu_busy_and_the_other_idle(built):
     assert wait_for(lambda: value("DCGM_FI_DEV_GPU_UTIL", 0) == 0, timeout=60)
 
 
-def test_an_injected_xid_shows_on_one_gpu_and_stays_like_real_dcgm(built):
-    req = urllib.request.Request("http://127.0.0.1:9400/sim/inject", data=json.dumps({"node": "gpu001", "xid": 63}).encode(), method="POST",
+def inject(**body) -> None:
+    req = urllib.request.Request("http://127.0.0.1:9400/sim/inject", data=json.dumps({"node": "gpu001", **body}).encode(), method="POST",
                                  headers={"Content-Type": "application/json"})
     assert urllib.request.urlopen(req, timeout=5).status == 200
+
+
+def test_an_injected_xid_shows_on_one_gpu_and_a_clear_restarts_the_exporter(built):
+    inject(xid=63)
     assert wait_for(lambda: value("DCGM_FI_DEV_XID_ERRORS", 0) == 63, timeout=60), scrape()[:400]
     assert value("DCGM_FI_DEV_XID_ERRORS", 1) in (None, 0)
-    # real DCGM keeps the last XID until its host engine restarts, so a cleared fault does not reset it here (documented, ADR 0025)
+    # DCGM keeps the last XID until its host engine restarts, so the scenario engine restarts the exporter on a clear (issue 435)
+    from benchctl import scenario
+    out = scenario.execute(scenario.Step(0, "gpu-exporter", {"nodes": ["gpu001"], "clear": True}))
+    assert out.status == "ok", out
+    assert wait_for(lambda: "DCGM_FI_DEV_GPU_UTIL" in scrape() and value("DCGM_FI_DEV_XID_ERRORS", 0) in (None, 0), timeout=120), scrape()[:400]
+
+
+def test_a_dead_node_stops_its_real_exporter_and_it_comes_back_with_the_node(built):
+    from benchctl import scenario
+    assert scenario.execute(scenario.Step(0, "gpu-exporter", {"nodes": ["gpu002"], "down": True})).status == "ok"
+    assert wait_for(lambda: scrape(dcgm.EXTRA_PORT) == "", timeout=30), "the stopped node's exporter still answers"
+    assert "DCGM_FI_DEV_GPU_UTIL" in scrape()  # the other node is unaffected
+    assert scenario.execute(scenario.Step(0, "gpu-exporter", {"nodes": ["gpu002"], "down": False})).status == "ok"
+    assert wait_for(lambda: "DCGM_FI_DEV_GPU_UTIL" in scrape(dcgm.EXTRA_PORT), timeout=120)
+
+
+def test_two_nodes_two_exporters_with_their_own_hostname_and_gpu_uuids(built):
+    first, second = scrape(), scrape(dcgm.EXTRA_PORT)
+    assert 'Hostname="gpu001"' in first and 'Hostname="gpu002"' in second
+    uuids = lambda text: set(re.findall(r'UUID="(GPU-[^"]+)"', text))
+    assert uuids(first) and uuids(second) and not uuids(first) & uuids(second)
+
+
+def test_h200_shows_its_own_model_name(built):
+    sim = workbench.effective(yaml_sim(), workbench.current(yaml_sim()))[0]
+    if str(sim["gpu"].get("type", "")).lower() != "h200":
+        pytest.skip("sim.yaml's GPU type is not h200")
+    assert 'modelName="NVIDIA H200"' in scrape()
 
 
 def test_dcgmi_works_in_the_exporter_container_and_only_there(built):

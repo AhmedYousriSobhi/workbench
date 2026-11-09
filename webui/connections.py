@@ -183,7 +183,7 @@ def _rows(sim: dict) -> list[dict]:
          "command": f"curl -s http://{ip['gpu-exporter-farm']}:9400/metrics | head", "credential": None, "how": "No login. Also on 127.0.0.1:9400."},
         {"id": "dcgm", "name": "DCGM exporter (real, first GPU node)", "kind": "http", "address": f"http://{LOCAL}:{dcgm.PORT}/metrics",
          "command": f"curl -s http://{LOCAL}:{dcgm.PORT}/metrics | head", "credential": None,
-         "how": "Only with `benchctl up --with dcgm`. The official dcgm-exporter on a mock NVML for the first GPU node (ADR 0025); no login, localhost only. A GPU a Slurm job holds reads busy; a cleared XID stays until the container restarts."},
+         "how": "Only with `benchctl up --with dcgm`. The official dcgm-exporter on a mock NVML for the first GPU node (ADR 0025); no login, localhost only. A GPU a Slurm job holds reads busy; a scenario clear restarts it (DCGM keeps the last XID), a powered-off node stops it; `--dcgm-nodes N` adds one per GPU node (ports 9410, 9411, ...)."},
         {"id": "real-gpu", "name": "Real GPU (this machine's NVIDIA card)", "kind": "http", "address": f"http://{LOCAL}:{real_gpu.PORT}/metrics",
          "command": f"curl -s http://{LOCAL}:{real_gpu.PORT}/metrics | head", "credential": None,
          "how": "Only with `benchctl up --with real-gpu` on a machine with an NVIDIA card, its driver and the container toolkit (SPEC C-23). Real series from the real card, labelled Hostname rgpu001; no login, localhost only. `docker exec workbench-real-gpu-1 dcgmi discovery -l` and `nvidia-smi` work in that container."},
