@@ -17,7 +17,11 @@ CONTAINER = "workbench-real-gpu-1"
 
 
 def scrape() -> str:
-    return urllib.request.urlopen(f"http://127.0.0.1:{real_gpu.PORT}/metrics", timeout=5).read().decode()
+    """The metrics, or "" while the exporter is not answering yet (the port is published before it listens: a reset or a refusal)."""
+    try:
+        return urllib.request.urlopen(f"http://127.0.0.1:{real_gpu.PORT}/metrics", timeout=5).read().decode()
+    except OSError:
+        return ""
 
 
 def run(*cmd: str, timeout: int = 1200) -> subprocess.CompletedProcess:
