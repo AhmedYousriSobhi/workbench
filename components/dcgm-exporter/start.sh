@@ -22,7 +22,7 @@ fi
 nv-hostengine -n -b 127.0.0.1 --denylist-modules 9 -f /tmp/nv-hostengine.log > /dev/null 2>&1 &  # not daemonised: a forked daemon vanished under the real driver
 i=0; until dcgmi discovery -l > /dev/null 2>&1; do i=$((i + 1)); [ "$i" -gt 30 ] && { echo "nv-hostengine did not start" >&2; cat /tmp/nv-hostengine.log >&2; exit 1; }; sleep 1; done
 # The exporter labels series with the host it connects to, so connect by this container's own name (mapped to 127.0.0.1 first), not `localhost`.
-me=$(hostname)
+me=${DCGM_HOSTNAME:-$(hostname)}  # the node this exporter stands for; never the container hostname (Docker would answer that name with this container too)
 { echo "127.0.0.1 $me"; cat /etc/hosts; } > /tmp/hosts.new && cat /tmp/hosts.new > /etc/hosts
 export DCGM_REMOTE_HOSTENGINE_INFO="$me:5555"
 exec /usr/local/dcgm/dcgm-exporter-entrypoint.sh "$@"

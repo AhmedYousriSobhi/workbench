@@ -89,8 +89,8 @@ def wire(services: dict, sim: dict) -> None:
         if model:
             env["MOCK_NVML_NAME"] = model
         services[service(sim, name)].update({
-            "hostname": name,  # DCGM's Hostname label is the machine's hostname
-            "environment": env, "volumes": [f"./{DIR}:/{DIR}:ro"], "command": ["-c", str(COLLECT_MS)],
+            "environment": {**env, "DCGM_HOSTNAME": name},  # the Hostname label; not the container hostname, which Docker's DNS would resolve to this container instead of the node
+            "environment_": None, "volumes": [f"./{DIR}:/{DIR}:ro"], "command": ["-c", str(COLLECT_MS)],
             "ports": [f"127.0.0.1:{port(sim, name)}:9400"]})
 
 

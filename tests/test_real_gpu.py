@@ -44,7 +44,7 @@ def test_off_by_default_and_by_name_only():
 
 def test_the_card_comes_in_as_a_device_not_as_privileges():
     svc = services(True)[real_gpu.SERVICE]
-    assert svc["devices"] == [real_gpu.DEVICE] and svc["hostname"] == real_gpu.HOSTNAME
+    assert svc["devices"] == [real_gpu.DEVICE] and svc["environment"]["DCGM_HOSTNAME"] == real_gpu.HOSTNAME and "hostname" not in svc
     assert svc["ports"] == [f"127.0.0.1:{real_gpu.PORT}:9400"]
     assert not {"privileged", "cap_add", "security_opt", "runtime"} & set(svc)
     assert "MOCK_NVML_PROFILE" not in svc.get("environment", {})  # no mock profile: start.sh runs on the real driver

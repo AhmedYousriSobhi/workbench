@@ -33,7 +33,7 @@ def test_wired_with_the_mock_profile_gpu_count_and_a_localhost_port():
     env = svc["environment"]
     assert env["MOCK_NVML_GPUS"] == str(SIM["gpu"]["gpus_per_node"])
     assert env["MOCK_NVML_PROFILE"].endswith(f"mock-nvml-config-{dcgm.profile(SIM)}.yaml")
-    assert svc["hostname"] == "gpu001" and svc["ports"] == [f"127.0.0.1:{dcgm.PORT}:9400"]
+    assert svc["environment"]["DCGM_HOSTNAME"] == "gpu001" and "hostname" not in svc and svc["ports"] == [f"127.0.0.1:{dcgm.PORT}:9400"]
     assert svc["mem_limit"] == f"{dcgm.LIMIT_MB}m" and svc["labels"]["workbench.class"] == "P6"
     assert not {"privileged", "cap_add", "security_opt"} & set(svc)  # stays unprivileged
 
@@ -139,7 +139,7 @@ def test_dcgm_nodes_gives_each_node_its_own_exporter_port_and_override_file():
     assert [sv[dcgm.service(MANY, n)]["ports"] for n in dcgm.nodes(MANY)] == [["127.0.0.1:9402:9400"], ["127.0.0.1:9410:9400"], ["127.0.0.1:9411:9400"]]
     for i, n in enumerate(dcgm.nodes(MANY)):
         svc = sv[dcgm.service(MANY, n)]
-        assert svc["hostname"] == n and svc["environment"]["MOCK_NVML_OVERRIDES"] == f"/dcgm/{n}.yaml" and svc["environment"]["MOCK_NVML_NODE_INDEX"] == str(i)
+        assert svc["environment"]["DCGM_HOSTNAME"] == n and "hostname" not in svc and svc["environment"]["MOCK_NVML_OVERRIDES"] == f"/dcgm/{n}.yaml" and svc["environment"]["MOCK_NVML_NODE_INDEX"] == str(i)
         assert "build" not in svc or n == "gpu001"  # the image is built once
         assert svc["mem_limit"] == f"{dcgm.LIMIT_MB}m" and not {"privileged", "cap_add"} & set(svc)
     assert dcgm.container(MANY, "gpu002") == "workbench-dcgm-exporter-gpu002-1" and dcgm.container(MANY, "cn001") is None
