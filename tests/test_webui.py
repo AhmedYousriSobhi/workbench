@@ -1,4 +1,5 @@
 import json
+import re
 import socket
 import subprocess
 import threading
@@ -12,6 +13,7 @@ import pytest
 pytest.importorskip("starlette")
 pytest.importorskip("uvicorn")
 import uvicorn
+from webui_src import page_source
 
 from governor import control
 from webui import __main__ as launcher
@@ -183,16 +185,64 @@ def test_cluster_endpoints_need_auth_csrf_and_validate(ui):
     assert code == 200 and json.loads(body)["results"][0]["status"] == "failed"  # mocks not running: reported, not crashed
 
 
+_SERVED: dict[str, bytes] = {}
+
+
+def served_page(base: str) -> bytes:
+    """What a browser gets: the page, its stylesheet and every module in the import graph from main.js, fetched over
+    HTTP (so a file the page needs but the server does not serve fails here), as one blob."""
+    if base not in _SERVED:
+        parts = [req(base, "/")[1], req(base, "/static/app.css")[1]]
+        seen, todo = set(), ["main.js"]
+        while todo:
+            name = todo.pop()
+            if name not in seen:
+                seen.add(name)
+                parts.append(req(base, f"/static/js/{name}")[1])
+                todo += re.findall(r"from '\./([\w-]+\.js)'|import\('\./([\w-]+\.js)'\)", parts[-1].decode()) and \
+                    [a or b for a, b in re.findall(r"from '\./([\w-]+\.js)'|import\('\./([\w-]+\.js)'\)", parts[-1].decode())]
+        _SERVED[base] = b"\n".join(parts)
+    return _SERVED[base]
+
+
 def test_page_has_the_app_shell(ui):
-    body = req(ui, "/")[1].decode()
+    body = served_page(ui).decode()
     for needle in ('class="skip"', '<main id="main"', 'id="govdlg"', 'id="scndlg"',
-                   'id="theme"', 'id="strip"', 'id="attn"', 'id="list"', 'id="flow"', 'id="viewseg"', 'id="crumb"', 'id="ovprev"', 'prefers-reduced-motion'):
+                   'id="theme"', 'id="strip"', 'id="attn"', 'id="list"', 'id="flow"', 'id="viewseg"', 'id="crumb"', 'id="ovprev"'):
         assert needle in body, needle
+    assert 'rel="stylesheet" href="/static/app.css"' in body and 'type="module" src="/static/js/main.js"' in body
+    assert "prefers-reduced-motion" in req(ui, "/static/app.css")[1].decode()  # the stylesheet is served too
+
+
+def test_static_files_need_the_token_and_have_the_right_type(ui):
+    """ADR 0007: the stylesheet and the ES modules are static files behind the same token as the page."""
+    for path in ("/static/app.css", "/static/js/main.js", "/static/js/state.js"):
+        assert req(ui, path, auth=False)[0] == 401, path
+    for path, kind in (("/static/app.css", "text/css"), ("/static/js/main.js", "text/javascript")):
+        r = urllib.request.Request(ui + path, headers={"Authorization": f"Bearer {TOKEN}"})
+        with urllib.request.urlopen(r, timeout=5) as resp:
+            assert resp.headers["Content-Type"].split(";")[0] == kind and resp.headers["Cache-Control"] == "no-cache", path
+
+
+def test_every_module_the_page_imports_is_served_and_nothing_else_is(ui):
+    """Walk the import graph from main.js over HTTP: every file answers, so no module is missing from static/js."""
+    seen, todo = set(), ["main.js"]
+    while todo:
+        name = todo.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        code, body = req(ui, f"/static/js/{name}")
+        assert code == 200, name
+        todo += re.findall(r"from '\./([\w-]+\.js)'", body.decode()) + re.findall(r"import\('\./([\w-]+\.js)'\)", body.decode())
+    assert {"state.js", "util.js", "shell.js"} <= seen
+    for path in ("/static/../app.py", "/static/js/../../app.py", "/static/%2e%2e/app.py", "/static/index.html", "/static/js/nope.js", "/static/js"):
+        assert req(ui, path)[0] == 404, path
 
 
 def test_page_recovery_hint_needs_no_sudo():
     """ADR 0010: a dead governor is started with `benchctl start`; the sudo service is only an optional upgrade."""
-    page = (ROOT / "webui" / "static" / "index.html").read_text()
+    page = page_source()
     offline = next(line for line in page.splitlines() if "Governor not reachable" in line)
     assert "./scripts/benchctl start" in offline and offline.index("benchctl start") < offline.index("sudo")
 
@@ -210,7 +260,7 @@ def test_help_wiki_needs_the_token_and_serves_pages_images_and_search(ui):
 
 
 def test_dashboard_links_to_the_help(ui):
-    assert b'href="/help/"' in req(ui, "/")[1]
+    assert b'href="/help/"' in served_page(ui)
 
 
 def test_node_detail_endpoint_returns_the_describe_text(ui):
@@ -219,7 +269,7 @@ def test_node_detail_endpoint_returns_the_describe_text(ui):
     assert code == 200 and data["info"]["name"] == "gpu001" and "Name:        gpu001" in data["text"]
     assert req(ui, "/api/nodes/zzz")[0] == 404
     assert req(ui, "/api/nodes/gpu001", auth=False)[0] == 401
-    assert b"showNode" in req(ui, "/")[1] and b'id="nodepane"' in req(ui, "/")[1]
+    assert b"showNode" in served_page(ui) and b'id="nodepane"' in served_page(ui)
 
 
 def test_plan_endpoint_estimates_without_side_effects(ui):
@@ -230,7 +280,7 @@ def test_plan_endpoint_estimates_without_side_effects(ui):
     assert data["command"].endswith("--app-mb 0") and "app under test" not in data["text"]  # the app already runs: no reserve, so Apply can show
     assert req(ui, "/api/plan?cpu_nodes=999")[0] == 422 and req(ui, "/api/plan?cpu_nodes=x")[0] == 422
     assert req(ui, "/api/plan", auth=False)[0] == 401
-    assert b'id="plandlg"' in req(ui, "/")[1] and b"loadPlan" in req(ui, "/")[1]
+    assert b'id="plandlg"' in served_page(ui) and b"loadPlan" in served_page(ui)
 
 
 def test_plan_takes_running_services_from_the_governor_not_from_docker(ui, monkeypatch):
@@ -266,7 +316,7 @@ def test_connections_endpoint_lists_every_entity_with_credential_paths_only(ui):
     assert rows["login"]["address"] == "10.141.255.254:22" and "127.0.0.1:2222" in rows["login"]["how"] and rows["login"]["credential"].endswith("ssh/id_ed25519")
     assert rows["bmc"]["credential"].endswith("bmc_credentials") and "admin:<password>" in rows["bmc"]["command"]
     assert req(ui, "/api/connections", auth=False)[0] == 401
-    page = req(ui, "/")[1]
+    page = served_page(ui)
     assert b'role="tablist"' in page and b'id="tab-conn"' in page and b"paintConnections" in page
     assert b'id="tab-traffic"' in page and b"paintTraffic" in page and b'aria-label="Workspaces"' in page
 
@@ -277,14 +327,14 @@ def test_plan_apply_needs_csrf_validates_and_asks_the_governor(ui):
     assert req(ui, "/api/plan/apply?cpu_nodes=999", "POST", headers={"X-Requested-With": "workbench"})[0] == 422
     code, body = req(ui, q, "POST", headers={"X-Requested-With": "workbench"})
     assert code == 200 and json.loads(body)["started"] is True
-    assert b"pl-apply" in req(ui, "/")[1]
+    assert b"pl-apply" in served_page(ui)
 
 
 def test_jira_refresh_button_needs_csrf_and_asks_the_governor(ui):
     assert req(ui, "/api/jira-real/refresh", "POST")[0] == 403
     code, body = req(ui, "/api/jira-real/refresh", "POST", headers={"X-Requested-With": "workbench"})
     assert code == 200 and json.loads(body)["started"] is True
-    assert b"data-post" in req(ui, "/")[1] and req(ui, "/api/jira-real/refresh", "POST", auth=False)[0] == 401
+    assert b"data-post" in served_page(ui) and req(ui, "/api/jira-real/refresh", "POST", auth=False)[0] == 401
 
 
 def test_export_button_downloads_the_profile_and_explains_a_missing_format(ui, monkeypatch, tmp_path):
@@ -301,7 +351,7 @@ def test_export_button_downloads_the_profile_and_explains_a_missing_format(ui, m
     data = json.loads(body)
     assert code == 200 and data["format"] == "demo" and data["version"] == 2 and len(data["bmc"]) == 6
     assert "token" not in body.decode().lower() and req(ui, "/api/export/profile", auth=False)[0] == 401
-    assert b'id="expdlg"' in req(ui, "/")[1] and b"newer than its backend" in req(ui, "/")[1] and b"ssh-key install in a terminal" in req(ui, "/")[1] and b"Jira needs no token" in req(ui, "/")[1]
+    assert b'id="expdlg"' in served_page(ui) and b"newer than its backend" in served_page(ui) and b"ssh-key install in a terminal" in served_page(ui) and b"Jira needs no token" in served_page(ui)
 
 
 def test_power_off_asks_the_governor_to_freeze_the_node_so_slurm_notices_by_itself(tmp_path):
@@ -345,12 +395,12 @@ def test_settings_endpoint_serves_the_option_registry_and_the_sheet_draws_from_i
     parts = {p["id"]: p for p in json.loads(body)["parts"]}
     assert code == 200 and set(parts) == set(workbench.PARTS) and parts["accounting"]["mb"] > 0 and parts["accounting"]["label"]
     assert req(ui, "/api/settings", auth=False)[0] == 401
-    page = req(ui, "/")[1]
+    page = served_page(ui)
     assert b"/api/settings" in page and b'id="pl-parts"' in page and b"Cluster architecture" in page
 
 
 def test_traffic_diagram_shapes_are_buttons_that_open_the_node_or_the_connection(ui):
-    page = req(ui, "/")[1].decode()
+    page = served_page(ui).decode()
     for needle in ("function asButton(", "role', 'button'", "openPop(", "showNode(id)", "openConnection(SVC_CONN[id])", "tr[data-id=",
                    "#flow #dots { pointer-events:none; }", "Enter' || e.key === ' '"):
         assert needle in page, needle
@@ -359,8 +409,9 @@ def test_traffic_diagram_shapes_are_buttons_that_open_the_node_or_the_connection
 def test_page_script_declares_every_function_once():
     """A second `function name` silently replaces the first (hoisting): that emptied the traffic diagram (issue 142)."""
     import re
-    page = (ROOT / "webui" / "static" / "index.html").read_text()
-    names = re.findall(r"^(?:async )?function ([A-Za-z_$][\w$]*)", page, re.MULTILINE)
+    page = page_source()
+    names = re.findall(r"^(?:export )?(?:async )?function ([A-Za-z_$][\w$]*)", page, re.MULTILINE)  # a name in two modules would both be exposed by the test hook
+    names = [n for n in names if not re.fullmatch(r"init\d*", n)]  # each module's own wiring entry point
     assert len(names) > 20 and [n for n in set(names) if names.count(n) > 1] == []
 
 
@@ -371,7 +422,7 @@ def test_settings_lists_the_nodes_for_the_bmc_picker_and_the_sheet_sends_the_cho
     body = json.loads(req(ui, "/api/settings")[1])
     assert [n["name"] for n in body["nodes"]] == ["cn001", "cn002", "cn003", "cn004", "gpu001", "gpu002"]
     assert all(n["bmc"] for n in body["nodes"]) and body["bmc_node_mb"] == compose.BMC_FORWARDER_MB
-    page = req(ui, "/")[1].decode()
+    page = served_page(ui).decode()
     assert 'id="pl-bmcnodes"' in page and "bmc_nodes" in page and "showBmcNodes" in page
 
 
@@ -487,12 +538,12 @@ def test_licence_watch_reads_and_renews_once_when_the_end_is_near(monkeypatch):
 def test_plan_reports_the_admitted_number_next_to_the_caps(ui):
     data = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=4&gpus_per_node=8&parts=jira")[1])
     assert data["need_mb"] == data["expected_mb"] - data["running_mb"] < data["total_mb"]  # no app reserve on the page; expected is below the caps
-    assert b"p.need_mb" in req(ui, "/")[1]
+    assert b"p.need_mb" in served_page(ui)
 
 
 def test_diagram_has_a_colour_legend_and_combinable_overlays(ui):
     """Kind is colour (simulated vs real), state is the border, traffic and fault are overlays that combine (issue 297)."""
-    page = req(ui, "/")[1]
+    page = served_page(ui)
     for needle in (b'id="ckey"', b"simulated (dashed stripe)", b"real (solid stripe)", b"a fault applied in the last 30 s",
                    b"They combine", b"const REAL_SERVICES", b"'ff-' + k", b"'fx-' + k", b"'fa-' + k"):
         assert needle in page, needle
@@ -500,19 +551,19 @@ def test_diagram_has_a_colour_legend_and_combinable_overlays(ui):
 
 
 def test_state_update_keeps_the_kind_class_of_a_service_box(ui):
-    assert b"(k === 'teleport' ? '' : REAL_SERVICES.has(k) ? ' real' : ' sim')" in req(ui, "/")[1]  # repainting the state must not drop the colour of the kind
+    assert b"(k === 'teleport' ? '' : REAL_SERVICES.has(k) ? ' real' : ' sim')" in served_page(ui)  # repainting the state must not drop the colour of the kind
 
 
 def test_scenarios_is_a_docked_drawer_with_a_toggle_not_a_modal():
     """The diagram must stay visible while a scenario runs (issue 380): a non-modal drawer, toggled from the top strip."""
-    html = (Path(__file__).resolve().parent.parent / "webui/static/index.html").read_text()
+    html = page_source()
     for needle in ('<dialog id="scndlg" class="drawer"', 'id="scn-toggle"', "function scnOpen(", "d.show()", "dialog.drawer", "dialog[open]:not(.drawer)", "li.classList.toggle('active'"):
         assert needle in html, needle
     assert "$('scndlg').showModal()" not in html
 
 
 def test_traffic_has_filters_inspector_and_path_following():
-    html = (ROOT / "webui/static/index.html").read_text()
+    html = page_source()
     for needle in ('id="tr-sw"', 'id="tr-ev"', 'id="tr-insp"', 'id="tr-path"', "function pathOf", "The web page server is older than this page", "/api/monitoring", "rateOf(", 'id="tr-map"', 'id="tr-reset"', 'id="tr-chips"', 'id="tr-zin"', 'id="tr-feed"', 'id="tr-chart"', "paintTrTimeline", 'id="kpis"', 'id="subseg"', "paintKpis", "dbdLink", 'data-part', "PART_INFO", "data-mv", "paintTrPart", "workbench-tr-order1", 'id="tr-move"', "paintTrafficMap", '<html lang="en" data-theme="midnight">'):
         assert needle in html, needle
 
@@ -541,7 +592,7 @@ def test_the_inline_script_has_valid_javascript_syntax(tmp_path):
     node = shutil.which("node")
     if not node:
         pytest.skip("node is not installed")
-    html = (ROOT / "webui/static/index.html").read_text()
+    html = page_source()
     js = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.DOTALL))
     f = tmp_path / "page.js"
     f.write_text(js)
@@ -550,7 +601,7 @@ def test_the_inline_script_has_valid_javascript_syntax(tmp_path):
 
 
 def test_traffic_view_follows_node_state_and_logs_changes(ui):
-    page = req(ui, "/")[1].decode()
+    page = served_page(ui).decode()
     # issue 414: node health reaches the parts, the link state text, the part inspector and the timeline
     for marker in ("function nodeHealth", "noteNodeChanges", "slurmNodes = s && s.node_states", "renderCluster(JSON.parse(text)); paintTraffic()",
                    "from: 'state'", "nodes out"):
@@ -564,7 +615,7 @@ def test_plan_names_the_bcm_kubernetes_flag_and_the_sheet_has_the_switch(ui, mon
     on = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8&parts=bcm,k8s&bcm_k8s=1")[1])
     assert "--no-bcm-k8s" in off["command"] and "--bcm-k8s" in on["command"] and "--no-bcm-k8s" not in on["command"]
     assert json.loads(req(ui, "/api/settings")[1])["shapes"]["bcm"] == {"manage_kubernetes": True}
-    assert 'id="pl-bcmk8s"' in req(ui, "/")[1].decode()
+    assert 'id="pl-bcmk8s"' in served_page(ui).decode()
 
 
 def test_shared_status_makes_one_governor_call_per_ttl_however_many_streams_ask():

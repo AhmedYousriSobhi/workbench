@@ -34,6 +34,7 @@ try:
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page(viewport={"width": 1280, "height": 900}, color_scheme="light")
+        pg.add_init_script("window.__WB_TEST = true")  # exposes the page modules as globals (webui/static/js/testhook.js)
         pg.route("**/api/cluster", lambda r: r.fulfill(json=cluster))
         pg.route("**/api/flow*", lambda r: r.abort())
         pg.route("**/api/connections", lambda r: r.fulfill(json={"entities": connections.entities(SIM)}))

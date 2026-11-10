@@ -2,6 +2,8 @@
 import re
 from pathlib import Path
 
+from webui_src import page_source
+
 from webui import flow, graph
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -68,7 +70,7 @@ def test_nodes_are_entities_in_the_nodes_group():
 
 def test_page_draws_only_edges_named_in_the_model():
     """Every edge id the page builds (in both arrangements, narrow and column) is one webui/graph.py can produce."""
-    page = (ROOT / "webui" / "static" / "index.html").read_text()
+    page = page_source()
     used = {x for x in re.findall(r"[`']([^`']*>[^`']*:(?:api|ssh|teleport|jump|inj))[`']", page)}
     model = graph.build({**SERVICES, "teleport": True, "jira-real": True, "jump": True, "controller": True}, NODES, logins("both", "teleport"))
     shapes = {re.sub(r"\bcn\d+|\bgn\d+", "N", e["id"]) for e in model["edges"]}
