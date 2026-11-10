@@ -162,3 +162,13 @@ def test_arrivals_flag_with_a_workdir_is_one_directory_for_root_and_user_mode(tm
     assert gm.arrivals_flag_path(ARRIVALS_FLAG, True, str(tmp_path)) == want
     assert gm.arrivals_flag_path(ARRIVALS_FLAG, False, str(tmp_path)) == want
     assert gm.arrivals_flag_path("/custom/flag", True, str(tmp_path)) == "/custom/flag"
+
+
+def test_a_pause_flag_found_at_startup_is_stale_and_removed_but_not_in_a_dry_run(tmp_path):
+    """#476: a governor that died at L1 leaves the flag; the next one starts at L0 and must not keep arrivals paused."""
+    from governor import __main__ as gm
+    flag = tmp_path / "arrivals.paused"
+    assert gm.clear_stale_flag(str(flag), False) is False  # nothing there
+    flag.touch()
+    assert gm.clear_stale_flag(str(flag), True) is False and flag.exists()  # dry run touches nothing
+    assert gm.clear_stale_flag(str(flag), False) is True and not flag.exists()

@@ -140,7 +140,7 @@ def test_l1_pause_flag_reaches_the_login_node_and_the_jira_mock_and_goes_on_calm
         r = subprocess.run(["docker", "exec", container, "sh", "-c", "touch /run/workbench-flags/x"], capture_output=True, check=False)
         return r.returncode == 0
 
-    gov, sig, sock = start_governor(tmp_path, "--no-watchdog", "--user-mode", "--workdir", str(ROOT), "--refresh-interval", "1")
+    gov, sig, sock = start_governor(tmp_path, "--no-watchdog", "--user-mode", "--workdir", str(ROOT), "--thresholds", FAST, "--refresh-interval", "1")
     try:
         assert wait_for(lambda: "workbench-login-1" in ask(sock, {"cmd": "status"})["groups"])
         assert not seen("workbench-login-1")
@@ -148,6 +148,6 @@ def test_l1_pause_flag_reaches_the_login_node_and_the_jira_mock_and_goes_on_calm
         assert wait_for(lambda: seen("workbench-login-1"), timeout=30)
         assert not writable("workbench-login-1")  # read-only from inside
         signals(sig, avail_gb=8)
-        assert wait_for(lambda: not seen("workbench-login-1"), timeout=60)  # de-escalation resumes arrivals
+        assert wait_for(lambda: not seen("workbench-login-1"), timeout=30)  # de-escalation resumes arrivals (FAST thresholds: calm_s is 1, the default 60 s would outlast the wait)
     finally:
         stop_governor(gov)
