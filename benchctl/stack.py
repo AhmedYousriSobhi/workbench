@@ -95,7 +95,8 @@ def governor_admits(need_mb: int, say: Callable[[str], None], ask=None) -> bool:
 def missing_mb(services: dict, runner: Runner, file: Path) -> int:
     """Expected memory (measured use plus tolerance, never above the cap) of the services not running yet: what a start would add."""
     up_now = set(runner(dc("ps", "--status", "running", "--format", "{{.Service}}", file=file)).stdout.split())
-    return sum(memory.expected_mb(n, int(s["mem_limit"].rstrip("m")), s.get("labels")) for n, s in services.items() if n not in up_now)
+    new = [n for n in services if n not in up_now]
+    return sum(memory.expected_mb(n, int(services[n]["mem_limit"].rstrip("m")), services[n].get("labels")) for n in new) + memory.overhead_mb(len(new))[0]
 
 
 def admit(profile: str, available: int | None = None) -> tuple[bool, str]:

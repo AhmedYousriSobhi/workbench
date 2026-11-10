@@ -1123,6 +1123,22 @@ def measure_run(label: str = typer.Argument(..., help="e.g. idle, loaded"),
     typer.echo(f"{len(snaps)} samples -> {measure.save(label, snaps)}")
 
 
+@measure_app.command("overhead")
+def measure_overhead(save: bool = typer.Option(False, "--save", help="keep it as this machine's default for the plan (compose/generated, gitignored)")) -> None:
+    """Docker's own memory (containerd-shims, dockerd, containerd), which `docker stats` does not count; run it with the stack up."""
+    raw = measure.docker_overhead()
+    ov = measure.overhead_summary({f"overhead:{k}": {"peak": v} for k, v in raw.items()})
+    if not ov:
+        typer.echo("no containerd-shim is running: start the stack (`benchctl up`) and retry", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"{ov['shims']} containers: {ov['per_container_mb']} MB each for the shim; dockerd + containerd {ov['fixed_mb']} MB fixed "
+               + (f"(private memory, not exact PSS, for {raw['estimated']} root-owned process(es); `sudo ./scripts/benchctl measure overhead` shows the exact PSS, do not `--save` it with sudo)" if raw["estimated"] else "(exact PSS)"))
+    if save:
+        typer.echo(f"saved: {memory.save_overhead(ov['per_container_mb'], ov['fixed_mb'])}; the plan adds {ov['per_container_mb']} MB for every container a start creates (delete the file to stop)")
+    else:
+        typer.echo("keep it for the plan: rerun with --save")
+
+
 APP_MATCH = typer.Option(None, "--match", help="process name or command-line text of the app (repeatable)")
 APP_PID = typer.Option(None, "--pid", help="a process id of the app (repeatable)")
 APP_SAVE = typer.Option(False, "--save", help="keep the suggested reserve as this machine's default (compose/generated, gitignored)")

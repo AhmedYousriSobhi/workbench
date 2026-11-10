@@ -29,6 +29,7 @@ def _no_app_reserve_by_default(monkeypatch, tmp_path):
     from benchctl import memory
     monkeypatch.setenv("WORKBENCH_APP_MB", "0")
     monkeypatch.setattr(memory, "APP_FILE", tmp_path / "app_reserve.json")  # never the machine's real saved measurement
+    monkeypatch.setattr(memory, "OVERHEAD_FILE", tmp_path / "overhead.json")  # nor the Docker overhead saved on this machine
 
 
 @pytest.fixture(autouse=True)

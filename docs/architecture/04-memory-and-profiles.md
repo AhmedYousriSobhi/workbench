@@ -41,6 +41,11 @@ the real Jira on its own), the plan **expects measured + 15 percent, never above
 is expected at its cap. `plan` prints both columns, the governor still enforces the caps, and a test fails when a component is
 added without a measurement.
 
+`docker stats` leaves out Docker's own processes: a `containerd-shim` per container (so a cost that grows with N), `dockerd` and
+`containerd` (fixed). `benchctl measure overhead --save` measures them and the plan adds the per-container figure for every
+container a start would create; unmeasured, it adds 0 and says so (issue 456). Each part multiplied by the node count declares a
+per-node cost (`PER_NODE_MB`), and `tests/test_overhead.py` fails when a new per-node part has no declaration or exceeds it.
+
 | Component | Measured MB | Cap MB | Expected MB |
 |---|---|---|---|
 | slurmd (each compute node) | 13 | 60 | 15 |
