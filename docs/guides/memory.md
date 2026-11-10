@@ -79,3 +79,12 @@ Every part that is multiplied by the node count declares its cost per node in `P
 1. Start the selection, then run `docker stats --no-stream` a few times, with load on if you want the loaded figure.
 2. Put the largest value per component in `MEASURED_MB` and the date in `MEASURED_ON` (`benchctl/memory.py`).
 3. Update the tables here and in the architecture doc. `tests/test_memory.py` fails when a component has no measurement or a measurement above its cap.
+
+## Is a container near its cap, or is its tmpfs the memory? (issue 455)
+
+```bash
+./scripts/benchctl measure cgroup                      # mariadb, prometheus, teleport
+./scripts/benchctl measure cgroup workbench-mariadb-1  # any container
+```
+
+`shmem` is what the container's tmpfs holds; `oom_kill` counts kills by the kernel (it must stay 0 under load). MariaDB's data moves off tmpfs only if its `shmem` is 50 MB or more (decision on issue 455).
