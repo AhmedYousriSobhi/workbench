@@ -11,17 +11,23 @@ FROM nvcr.io/nvidia/k8s/dcgm-exporter:4.4.2-4.7.0-ubuntu22.04 AS dcgm
 FROM ubuntu:24.04 AS build
 ARG SLURM_VERSION
 ARG SLURM_SHA256
-ENV DEBIAN_FRONTEND=noninteractive
+# Parallel jobs for make: every core by default (issue 448; it was two). `docker compose build --build-arg BUILD_JOBS=4 node-base` limits it on a busy machine.
+ARG BUILD_JOBS=
+# ccache keeps the compiled objects in a BuildKit cache mount: a Slurm bump, or a change to anything above this step, recompiles only what differs.
+# NOHASHDIR because the source directory name carries the version; the cache is a build aid only and never reaches the image.
+ENV DEBIAN_FRONTEND=noninteractive CCACHE_DIR=/ccache CCACHE_NOHASHDIR=1 CCACHE_MAXSIZE=500M
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      build-essential ca-certificates curl bzip2 pkg-config python3 \
+      build-essential ccache ca-certificates curl bzip2 pkg-config python3 \
       libmunge-dev libjson-c-dev libhttp-parser-dev libyaml-dev libjwt-dev libmariadb-dev libdbus-1-dev \
  && rm -rf /var/lib/apt/lists/*
-RUN curl -fsSLo /slurm.tar.bz2 "https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2" \
+RUN --mount=type=cache,target=/ccache,sharing=locked \
+    curl -fsSLo /slurm.tar.bz2 "https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2" \
  && echo "${SLURM_SHA256}  /slurm.tar.bz2" | sha256sum -c - \
  && tar -xjf /slurm.tar.bz2 -C /tmp \
  && cd /tmp/slurm-${SLURM_VERSION} \
- && ./configure --prefix=/opt/slurm --sysconfdir=/etc/slurm --with-jwt --disable-dependency-tracking >/dev/null \
- && make -j2 >/dev/null && make install >/dev/null \
+ && CC="ccache gcc" ./configure --prefix=/opt/slurm --sysconfdir=/etc/slurm --with-jwt --disable-dependency-tracking >/dev/null \
+ && make -j"${BUILD_JOBS:-$(nproc)}" >/dev/null && make install >/dev/null \
+ && ccache -s | grep -iE "hit|miss|cache size" \
  && test -f /opt/slurm/lib/slurm/cgroup_v2.so
 
 # Shared base for every Slurm node (slurmd) and the controller image. The munge key is baked in:

@@ -46,3 +46,10 @@ def _services_answer(monkeypatch):
     """The fake runners in the `up` tests cannot answer `scontrol ping` or an HTTP probe; readiness has its own tests (test_ready.py)."""
     from benchctl import stack
     monkeypatch.setattr(stack, "_answering", lambda names, runner, path, wait: [])
+
+
+@pytest.fixture(autouse=True)
+def _no_docker_state_in_plans(monkeypatch):
+    """`plan` subtracts what is already running (`docker ps`): with a developer's stack up, a plan that should not fit does. A test that wants running services passes them in."""
+    from benchctl import workbench
+    monkeypatch.setattr(workbench, "running_services", lambda: set())

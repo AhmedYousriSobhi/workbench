@@ -16,7 +16,7 @@ Plain `start` keeps the workbench you built last (with `up --cpu-nodes ...`, `ap
 
 Every command has the same shape, like `kubectl`: `benchctl VERB [RESOURCE] [NAME]`, for example `benchctl get nodes`,
 `benchctl exec gpu001 -- nvidia-smi`, `benchctl ssh alice@cn001`, `benchctl scenario run node-down`. `benchctl --help` lists the verbs;
-The first start builds the images (a few minutes). After an update that touches an image, `start` rebuilds only what changed: the first rebuild of the shared base takes about 20 s, later ones under a second. `benchctl start` offers Tab completion once in a terminal (or run `./scripts/benchctl completion install`, then open a new terminal; `completion remove` undoes it). A mistyped verb gets a `Did you mean` hint and is never run; the limits of every verb are in [the verbs guide](benchctl-verbs.md).
+The first start builds the images (a few minutes; Slurm compiles on every core, and a compiler cache in Docker's build cache makes the next compile of a changed or bumped Slurm much shorter). On a busy machine limit the compile with `docker compose -f compose/generated/docker-compose.yml build --build-arg BUILD_JOBS=4 cn001`. After an update that touches an image, `start` rebuilds only what changed: the first rebuild of the shared base takes about 20 s, later ones under a second. `benchctl start` offers Tab completion once in a terminal (or run `./scripts/benchctl completion install`, then open a new terminal; `completion remove` undoes it). A mistyped verb gets a `Did you mean` hint and is never run; the limits of every verb are in [the verbs guide](benchctl-verbs.md).
 
 The numbered sections below are the same steps one at a time, for when you want to see or change each.
 
