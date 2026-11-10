@@ -26,6 +26,16 @@ log = logging.getLogger("governor")
 FLAGS_DIR = "compose/generated/flags"  # mounted read-only into the login nodes and jira-mock (issue 476)
 
 
+def clear_stale_flag(flag: str, dry_run: bool) -> bool:
+    """The ladder starts at L0, so a pause flag found at startup is left over from a governor that died at L1: remove it, or
+    arrivals stay paused until someone deletes the file. A dry run touches nothing."""
+    f = Path(flag)
+    if dry_run or not f.exists():
+        return False
+    f.unlink(missing_ok=True)
+    return True
+
+
 def arrivals_flag_path(given: str, user_mode: bool, workdir: str | None = None) -> str:
     """Where L1 puts the pause flag. With --workdir (root service and user mode alike) it is the checkout's flags directory,
     which the containers mount read-only (never /run/workbench: gov.sock lives there). Without one, the old defaults."""
@@ -76,6 +86,8 @@ def main(argv: list[str] | None = None) -> None:
         sampler = Sampler()
     ladder = Ladder(Thresholds(**json.loads(args.thresholds or "{}")))
     executor = (UserExecutor if args.user_mode else Executor)(groups, cgroups, path, arrivals_flag=arrivals_flag_path(args.arrivals_flag, args.user_mode, args.workdir))
+    if clear_stale_flag(executor.arrivals_flag, args.dry_run):
+        log.warning("removed a stale arrivals pause flag left by an earlier governor (%s)", executor.arrivals_flag)
     watchdog = None if args.no_watchdog else Watchdog()
     token = os.environ.get("WORKBENCH_GRAFANA_TOKEN", "")
     annotator = Annotator(args.grafana_url, token) if args.grafana_url and token else None
