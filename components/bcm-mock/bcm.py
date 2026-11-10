@@ -11,6 +11,7 @@ POST /sim/inject  {"node": n, "state": "UP|DOWN|CLOSED|INSTALLING"} | {"node": n
 The call names follow CMDaemon's service/call convention but are an assumed subset (ADR 0005); extend CALLS.
 """
 import json
+import re
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -95,12 +96,52 @@ def counted(path: str, headers) -> bool:
     return not (path.startswith(("/healthz", "/sim/")) or headers.get(PROBE))
 
 
+# --- request shapes (issue 475): which paths a client calls and which 404. Method and path shape only: a segment with a digit
+# (an id, an issue key, a node name; not a version or a 1-2 digit number) becomes {id}, query values are dropped, nothing from a body or header is kept. The three
+# mocks carry the same block (tests/test_path_shapes.py checks they match). GET /sim/paths shows it.
+SHAPE_CAP = 300  # distinct shapes kept; the rest count as "other"
+
+
+def shape(path: str) -> str:
+    base, _, query = path.partition("?")
+    segs = ["{id}" if re.search(r"\d", s) and not re.fullmatch(r"v?\d{1,2}", s) else s for s in base.split("/")]
+    keys = sorted({kv.split("=")[0] for kv in query.split("&") if kv})[:8]
+    return "/".join(segs)[:120] + ("?" + "&".join(k[:30] for k in keys) if keys else "")
+
+
+class Shapes:
+    def __init__(self) -> None:
+        self.lock, self.paths, self.unknown = threading.Lock(), {}, {}
+
+    def reset(self) -> None:
+        with self.lock:
+            self.paths, self.unknown = {}, {}
+
+    def add(self, method: str, path: str, code: int, label: str | None = None, unknown: bool | None = None) -> None:
+        key = f"{method} {label or shape(path)}"
+        with self.lock:
+            for table, hit in ((self.paths, True), (self.unknown, code == 404 if unknown is None else unknown)):
+                if hit:
+                    k = key if key in table or len(table) < SHAPE_CAP else "other"
+                    table[k] = table.get(k, 0) + 1
+
+    def snapshot(self) -> dict:
+        with self.lock:
+            return {"paths": dict(sorted(self.paths.items())), "unknown": dict(sorted(self.unknown.items()))}
+
+
+SHAPES = Shapes()
+
+
 def make_handler(cluster: Cluster):
     stats, lock = {"requests": 0, "errors": 0}, threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
+        label = is_unknown = None
+
         def _send(self, code: int, obj) -> None:
             if counted(self.path, self.headers):
+                SHAPES.add(self.command, self.path, code, getattr(self, "label", None), getattr(self, "is_unknown", None))
                 with lock:
                     stats["requests"] += 1
                     if code >= 400:  # an error answer (401, 404, 503 ...): the page draws it as a different dot (#314)
@@ -117,6 +158,8 @@ def make_handler(cluster: Cluster):
                 return self._send(200, {"nodes": len(cluster.nodes)})
             if self.path == "/sim/stats":
                 return self._send(200, dict(stats))
+            if self.path == "/sim/paths":
+                return self._send(200, SHAPES.snapshot())
             self._send(404, {"error": "not found"})
 
         def do_POST(self):
@@ -126,6 +169,8 @@ def make_handler(cluster: Cluster):
                 return self._send(400, {"error": "invalid JSON"})
             if self.path == "/json":
                 result, err = cluster.call(req)
+                self.label = "/json " + re.sub(r"[^\w.]", "", f"{req.get('service')}.{req.get('call')}")[:60]  # the call, never its args
+                self.is_unknown = bool(err and err.startswith("Unknown call"))
                 return self._send(200, {"error": err} if err else {"result": result})
             if self.path == "/sim/inject":
                 try:

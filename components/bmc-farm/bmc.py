@@ -14,6 +14,7 @@ POST /sim/inject  {"node": n, "temp": 95} | {"node": n, "fan_fail": 2} | {"node"
 import base64
 import json
 import random
+import re
 import secrets
 import ssl
 import sys
@@ -169,6 +170,43 @@ def counted(path: str, headers) -> bool:
     return not (path.startswith(("/healthz", "/sim/")) or headers.get(PROBE))
 
 
+# --- request shapes (issue 475): which paths a client calls and which 404. Method and path shape only: a segment with a digit
+# (an id, an issue key, a node name; not a version or a 1-2 digit number) becomes {id}, query values are dropped, nothing from a body or header is kept. The three
+# mocks carry the same block (tests/test_path_shapes.py checks they match). GET /sim/paths shows it.
+SHAPE_CAP = 300  # distinct shapes kept; the rest count as "other"
+
+
+def shape(path: str) -> str:
+    base, _, query = path.partition("?")
+    segs = ["{id}" if re.search(r"\d", s) and not re.fullmatch(r"v?\d{1,2}", s) else s for s in base.split("/")]
+    keys = sorted({kv.split("=")[0] for kv in query.split("&") if kv})[:8]
+    return "/".join(segs)[:120] + ("?" + "&".join(k[:30] for k in keys) if keys else "")
+
+
+class Shapes:
+    def __init__(self) -> None:
+        self.lock, self.paths, self.unknown = threading.Lock(), {}, {}
+
+    def reset(self) -> None:
+        with self.lock:
+            self.paths, self.unknown = {}, {}
+
+    def add(self, method: str, path: str, code: int, label: str | None = None, unknown: bool | None = None) -> None:
+        key = f"{method} {label or shape(path)}"
+        with self.lock:
+            for table, hit in ((self.paths, True), (self.unknown, code == 404 if unknown is None else unknown)):
+                if hit:
+                    k = key if key in table or len(table) < SHAPE_CAP else "other"
+                    table[k] = table.get(k, 0) + 1
+
+    def snapshot(self) -> dict:
+        with self.lock:
+            return {"paths": dict(sorted(self.paths.items())), "unknown": dict(sorted(self.unknown.items()))}
+
+
+SHAPES = Shapes()
+
+
 class Sessions:
     """Redfish sessions for the TLS surface: login gives a token, a token or Basic auth reads. Capped like a real BMC."""
     MAX = 32
@@ -227,6 +265,7 @@ def make_handler(farm: Farm, sessions: Sessions | None = None, stats: dict | Non
     class Handler(BaseHTTPRequestHandler):
         def _send(self, code: int, obj, headers: dict | None = None) -> None:
             if counted(self.path, self.headers):
+                SHAPES.add(self.command, self.path, code, getattr(self, "label", None), getattr(self, "is_unknown", None))
                 with lock:
                     stats["requests"] += 1
                     if code >= 400:  # an error answer (401, 404, 503 ...): the page draws it as a different dot (#314)
@@ -263,6 +302,8 @@ def make_handler(farm: Farm, sessions: Sessions | None = None, stats: dict | Non
                 return self._send(200, {"nodes": len(farm.nodes)})
             if self.path == "/sim/stats":
                 return self._send(200, dict(stats))
+            if self.path == "/sim/paths":
+                return self._send(200, SHAPES.snapshot())
             hit = self._split()
             if hit and self.path.split("?")[0] not in ROOTS and self._unauthorized():
                 return

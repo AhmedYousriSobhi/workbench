@@ -137,6 +137,18 @@ engine's targets, not in ad hoc `docker exec` commands.
   after a job starts.
 - `sinfo` folds names (`cn[001-004]`); assert on the fold, not on single names.
 
+## Which surfaces did the client use?
+
+Each mock lists the paths it served and the ones it did not know, at `GET /sim/paths` (issue 475). It records only the method and the path shape (ids, issue keys and node names show as `{id}`, query values are dropped, no bodies or headers); for BCM the call is `POST /json service.call`. Health checks, `/sim/*` calls and the page's own polls are not counted. The counters start at zero when the container starts.
+
+```bash
+curl -s http://127.0.0.1:8000/sim/paths   # bmc-farm (Redfish)
+curl -s http://127.0.0.1:8081/sim/paths   # bcm-mock
+curl -s http://127.0.0.1:8080/sim/paths   # jira-mock
+```
+
+Run the client against the stack once, then read `paths` (what it called and how often) and `unknown` (what it asked for that workbench does not serve: a 404, or for BCM an unknown call). That list is what the Redfish, BCM and Kubernetes scope issues start from. The Prometheus-style exporters and the Kubernetes API are not covered. State in the issue what the client run did and did not exercise.
+
 ## Known gaps
 
 Kubernetes has no real kubelet (no pod logs, no metrics-server) and is not reachable through Teleport; Teleport is SSH access only (no dynamic labels, session recording or sharing); the fake `cmsh` console is a read-only subset.
