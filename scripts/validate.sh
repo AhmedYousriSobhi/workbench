@@ -76,6 +76,15 @@ if command -v systemd-analyze >/dev/null; then
   done
 fi
 
+step "web ui javascript"
+# The page is native ES modules (ADR 0007); their pure logic and their module graph are tested with Node's own runner, no packages.
+if command -v node >/dev/null 2>&1; then
+  out=$(node --test "webui/tests/js/*.test.mjs" 2>&1) || bad "node --test webui/tests/js (Node 22 or newer)"
+  printf '%s\n' "$out" | grep -E "^# (tests|pass|fail)|^not ok"
+else
+  bad "node not installed: the Web UI tests need Node 22 or newer (docs/guides/getting-started.md)"
+fi
+
 step "pytest"
 if python3 -c "import coverage" 2>/dev/null; then
   # coverage floor: the unit tests must keep covering the code (what needs root or a live host is in tests/real)
