@@ -47,6 +47,7 @@ WORKFLOW = {
     "Resolved": [("41", "Close", "Closed", []), ("51", "Reopen", "Open", [])],
     "Closed": [("51", "Reopen", "Open", [])],
 }
+PAUSED = "/run/workbench-flags/arrivals.paused"  # the governor's L1 flag, mounted read-only (#476)
 COOLDOWN = 20  # seconds a ticket is left alone after any change
 ENGINEERS = ("bob", "carol", "dave", "erin")
 CHATTER = ("Looking into this now.", "Can someone confirm this is still happening?", "Checked the node, nothing obvious yet.",
@@ -412,7 +413,8 @@ class Jira:
         stop.wait(5)  # the first change comes soon, not after a whole interval
         while not stop.is_set():
             try:
-                self.tick()
+                if not os.path.exists(PAUSED):  # L1 pauses the team's background changes (#476)
+                    self.tick()
             except JiraError:
                 pass
             stop.wait(self.activity["every"] * self.rng.uniform(0.7, 1.3))

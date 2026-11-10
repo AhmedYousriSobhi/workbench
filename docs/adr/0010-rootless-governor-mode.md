@@ -37,7 +37,10 @@ and a stopped one comes back with the `start` command. Running them found four d
 - `docker stop -t 2` loses the race to the OOM killer: a runaway PID 1 ignores SIGTERM for the 2 s grace. Rootless stop
   is now `docker kill` (SIGKILL, like `cgroup.kill` in the root path) followed by `docker stop`.
 - The arrivals flag defaulted to `/run/workbench/` (root-only), so every L1 action failed; it now defaults to the user's
-  runtime directory in rootless mode.
+  runtime directory in rootless mode. (Issue 476: nothing read that flag. With `--workdir`, both governors now write it
+  to `compose/generated/flags/arrivals.paused`; the login nodes and jira-mock mount that directory read-only at
+  `/run/workbench-flags`, `user-sim` skips an arrival and jira-mock skips a background change while it exists. Never
+  `/run/workbench`: `gov.sock` lives there, and the web page and containers get no socket, W-3.)
 - The one-cgroup test sampler crashed the governor when the watched container's cgroup vanished.
 - Containers the governor stopped dropped out of the inventory, so `start NAME` was refused as an unknown group in both
   modes. They are now remembered until they run again. A stop is still never undone automatically (by design).
