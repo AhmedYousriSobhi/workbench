@@ -27,6 +27,7 @@ RUN --mount=type=cache,target=/ccache,sharing=locked \
  && cd /tmp/slurm-${SLURM_VERSION} \
  && CC="ccache gcc" ./configure --prefix=/opt/slurm --sysconfdir=/etc/slurm --with-jwt --disable-dependency-tracking >/dev/null \
  && make -j"${BUILD_JOBS:-$(nproc)}" >/dev/null && make install >/dev/null \
+ && ccache -s | grep -iE "hit|miss|cache size" \
  && test -f /opt/slurm/lib/slurm/cgroup_v2.so
 
 # Shared base for every Slurm node (slurmd) and the controller image. The munge key is baked in:
