@@ -28,6 +28,27 @@ def test_governor_admission_refusal_and_absent_governor():
     assert stack.governor_admits(500, msgs.append, ask=down) and msgs[-1].startswith("WARN")
 
 
+def test_a_service_that_runs_but_does_not_answer_fails_its_stage(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    import shutil
+    root = Path(__file__).resolve().parents[1]
+    for d in ("profiles", "components", "images"):
+        shutil.copytree(root / d, tmp_path / d, dirs_exist_ok=True)
+    sim = yaml.safe_load((root / "sim.yaml").read_text())
+    started, msgs = [], []
+
+    def runner(cmd):
+        if "up" in cmd:
+            started.extend(cmd[cmd.index("--no-deps") + 1:])
+        return cp(out="\n".join(started)) if "ps" in cmd else cp()
+
+    monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
+    monkeypatch.setattr(stack, "_answering", lambda names, r, p, w: ["slurmctld"] if "slurmctld" in names else [])
+    assert not stack.up(sim, "min", runner=runner, say=msgs.append, available=12 * 1024**3, wait=1)
+    assert any("slurmctld" in m and "not answering" in m for m in msgs)
+    assert "cn001" not in started  # the nodes never start before the controller answers
+
+
 def test_refused_when_it_does_not_fit():
     calls, msgs = [], []
     sim = yaml.safe_load(Path("sim.yaml").read_text())
@@ -237,7 +258,7 @@ def test_up_warns_but_still_succeeds_when_the_token_cannot_be_made(tmp_path, mon
     monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
     monkeypatch.setattr(stack, "provision_token", no_token)
     assert stack.up(sim, "min", runner=runner, say=msgs.append, available=12 * 1024**3, wait=1)
-    assert any(m.startswith("WARN no grafana token") for m in msgs) and msgs[-1] == "stack is up"
+    assert any(m.startswith("WARN no grafana token") for m in msgs) and msgs[-1].startswith("stack is up in ")
 
 
 def test_current_profile_reads_the_file_or_falls_back(tmp_path, monkeypatch):
