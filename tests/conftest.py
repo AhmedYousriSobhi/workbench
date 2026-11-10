@@ -39,3 +39,10 @@ def _no_git_hook_variables(monkeypatch):
     and harmless, which hid it (#351)."""
     for var in ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE", "GIT_PREFIX", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY"):
         monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _services_answer(monkeypatch):
+    """The fake runners in the `up` tests cannot answer `scontrol ping` or an HTTP probe; readiness has its own tests (test_ready.py)."""
+    from benchctl import stack
+    monkeypatch.setattr(stack, "_answering", lambda names, runner, path, wait: [])

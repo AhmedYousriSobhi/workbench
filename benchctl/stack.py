@@ -21,6 +21,7 @@ from . import (
     k8s,
     logins,
     memory,
+    ready,
     real_gpu,
     slurmconf,
     teleport,
@@ -75,6 +76,18 @@ def unbuildable(services: dict, base: Path) -> list[str]:
             if s.get("build") and not (base / s["build"] / "Dockerfile").is_file()]
 
 
+def build_targets(services: dict, names: list[str]) -> list[str]:
+    """One service per distinct image to build: the nodes share an image, so building every name would repeat the work."""
+    seen, out = set(), []
+    for n in names:
+        svc = services.get(n) or {}
+        key = (svc.get("build"), svc.get("image"))
+        if svc.get("build") and key not in seen:
+            seen.add(key)
+            out.append(n)
+    return out
+
+
 def governor_admits(need_mb: int, say: Callable[[str], None], ask=None) -> bool:
     """GV-9: ask the governor to approve starting `need_mb` more. No governor reachable: warn, go on.
 
@@ -126,6 +139,11 @@ def wait_running(names: list[str], runner: Runner = _run, timeout: float = 120,
     return pending
 
 
+def _answering(names: list[str], runner: Runner, path: Path, wait: float) -> list[str]:
+    """The services among `names` that are running but do not answer yet (issue 449; benchctl/ready.py)."""
+    return ready.wait_ready(names, runner, lambda *a: dc(*a, file=path), wait)
+
+
 def network_problem(runner: Runner = _run) -> str | None:
     """Why the fixed addressing cannot be applied, or None. A network that already exists with another subnet cannot be
     changed under running containers; a new one must not overlap a route of the host (a VPN, an office network)."""
@@ -147,7 +165,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
        available: int | None = None, wait: float = 120, prof: dict | None = None) -> bool:
     """Start the profile. `prof` is a profile built from a workbench selection (benchctl apply): admitted by its own
     estimate instead of the named profile's budget."""
-    chosen = prof
+    chosen, began, stage_secs = prof, time.monotonic(), []
     prof = prof if prof is not None else compose.load_profile(profile)
     try:
         data = compose.generate(sim, prof)
@@ -219,6 +237,15 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         if r.returncode != 0:
             say(f"FAILED node base image: {r.stderr.strip()[-300:]}")
             return False
+    targets = [t for t in build_targets(todo, names) if t != first]  # the node base was built above; build once (issue 449): the per-stage `up` calls below no longer build, and a changed mock is still picked up here
+    if targets:
+        say(f"building images: {', '.join(targets)}")
+        t0 = time.monotonic()
+        r = runner(dc("build", *targets, file=path))
+        if r.returncode != 0:
+            say(f"FAILED image build: {r.stderr.strip()[-300:]}")
+            return False
+        say(f"images built in {time.monotonic() - t0:.0f} s")
     ips = addressing.plan(sim, prof.get("compute_nodes"))
     if "teleport" in todo:
         try:
@@ -244,12 +271,16 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
             return False
     for label, svcs in stage_services(names):
         say(f"starting {label}: {', '.join(svcs)}")
-        r = runner(dc("up", "-d", "--build", "--no-deps", *svcs, file=path))
+        stage_began = time.monotonic()
+        r = runner(dc("up", "-d", "--no-deps", *svcs, file=path))
         if r.returncode != 0:
             say(f"FAILED {label}: {r.stderr.strip()[-300:]}")
             return False
         if (late := wait_running(svcs, runner, wait)):
             say(f"FAILED {label}: not running: {', '.join(late)}")
+            return False
+        if (late := _answering(svcs, runner, path, wait)):
+            say(f"FAILED {label}: running but not answering: {', '.join(late)}")
             return False
         if label == "teleport" and not teleport.bootstrap(sim, ips, runner, dc, say):  # before the nodes read their certificates
             return False
@@ -259,10 +290,11 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
             return False  # the cluster content (stages, nodes, fixtures) must exist before KWOK starts
         if label == "teleport":
             teleport.snapshot()  # the identity survives a rebuild (an emptied data directory restores it)
+        stage_secs.append(f"{label} {time.monotonic() - stage_began:.0f}")
     if (changed or acct_added or (conf_changed and "slurmctld" in before)) and "slurmctld" in todo:  # slurm.conf changed under a running controller
         say("restarting slurmctld to pick up the new " + ("accounting setup" if acct_added and not changed else "node list" if changed else "slurm.conf"))
         r = runner(dc("up", "-d", "--no-deps", "--force-recreate", "slurmctld", file=path))
-        if r.returncode != 0 or wait_running(["slurmctld"], runner, wait):
+        if r.returncode != 0 or wait_running(["slurmctld"], runner, wait) or _answering(["slurmctld"], runner, path, wait):
             say(f"FAILED slurmctld restart: {r.stderr.strip()[-300:]}")
             return False
     try:
@@ -296,7 +328,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         say(f"kubernetes: https://{k8s.api_ip(ips)}:{k8s.API_PORT} (127.0.0.1:{k8s.API_PORT} as a fallback); read-only kubeconfigs "
             f"{k8s.SECRETS_DIR}/viewer.kubeconfig (cluster-wide) and limited.kubeconfig (namespace team-a); "
             f"nodes {', '.join(n for n, _ in k8s.node_list(sim))}")
-    say("stack is up")
+    say(f"stack is up in {time.monotonic() - began:.0f} s ({', '.join(stage_secs)})")
     return True
 
 

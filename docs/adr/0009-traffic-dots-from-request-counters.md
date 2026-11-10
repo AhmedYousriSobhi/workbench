@@ -22,7 +22,7 @@ SPEC W-3), and user-sim does not exist yet, so Slurm job events are not availabl
 - Slurm job dots (submit to slurmctld to node) wait for either user-sim reporting its submissions or a read-only
   scheduler feed the UI is allowed to use. Until then the page says what it does not show.
 - Counters live in memory in each mock and reset when it restarts; the feed re-baselines instead of showing a burst.
-- `benchctl up` now builds images (`up --build`), because a stale image would silently lack `/sim/stats`.
+- `benchctl up` builds every image once before it starts anything (issue 449; it used to pass `--build` to each of the ~12 stage starts), because a stale image would silently lack `/sim/stats`.
 
 ## Update (issue 118)
 The traffic diagram now sits beside the entity list and draws every node as a tile. Injection events carry
