@@ -76,7 +76,7 @@ sudo ./scripts/install-governor.sh --uninstall
 ./scripts/benchctl down                 # stops only the workbench project; your other containers are untouched
 ```
 
-`up` builds every image once, then starts the stack in stages. A stage starts only when the services before it answer (the controller to `scontrol ping`, the mocks to `/healthz`), not merely when their containers are running, so a node never starts before the controller is ready. If one does not answer in time the message names it. By default the check is made from outside the containers; `WORKBENCH_READY=healthcheck ./scripts/benchctl up ...` uses Docker healthchecks on those services instead (they run inside the containers on a timer; only for comparing start times, issue 449). `up` ends with the total and the seconds per stage (`stack is up in 38 s (observability 3, slurm core 12, ...)`); to compare the two ways, run `benchctl down` before each `up`.
+`up` builds every image once, then starts the stack in stages. A stage starts only when the services before it answer (the controller to `scontrol ping`, the mocks to `/healthz`), not merely when their containers are running, so a node never starts before the controller is ready. If one does not answer in time the message names it. `up` ends with the total and the seconds per stage (`stack is up in 6 s (observability 0, slurm core 0, ...)`).
 
 Profiles are in `profiles/` (`min`, `std`, `full`); `up` refuses a profile that does not fit and names one
 that does. Components not built yet are skipped with a note.

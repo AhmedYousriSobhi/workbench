@@ -14,7 +14,6 @@ from . import (
     k8s,
     logins,
     nhc,
-    ready,
     real_gpu,
     slurmconf,
     teleport,
@@ -174,10 +173,6 @@ def generate(sim: dict, profile: dict) -> dict:
     if "jira-real" in services:
         _wire_jira_real(services)
     _wire_slurm_services(services)
-    if ready.mode() == "healthcheck":  # WORKBENCH_READY=healthcheck: Docker reports `healthy` for the services benchctl waits on (issue 449)
-        for name in ready.CHECKED:
-            if name in services and (hc := ready.healthcheck_for(name)):
-                services[name]["healthcheck"] = hc
     ips = addressing.plan(sim, profile.get("compute_nodes"))
     for name, svc in services.items():  # a fixed address for everything (ADR 0018)
         if ip := addressing.address_of(ips, name):

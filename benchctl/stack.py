@@ -280,7 +280,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
             say(f"FAILED {label}: not running: {', '.join(late)}")
             return False
         if (late := _answering(svcs, runner, path, wait)):
-            say(f"FAILED {label}: running but not answering ({ready.mode()} check): {', '.join(late)}")
+            say(f"FAILED {label}: running but not answering: {', '.join(late)}")
             return False
         if label == "teleport" and not teleport.bootstrap(sim, ips, runner, dc, say):  # before the nodes read their certificates
             return False
