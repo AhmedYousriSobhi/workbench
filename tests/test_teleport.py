@@ -59,7 +59,7 @@ def test_compose_adds_teleport_only_when_selected():
     svcs = compose.generate(SIM, {**prof, "groups": [*prof["groups"], "teleport"]})["services"]
     t = svcs["teleport"]
     assert t["networks"]["default"]["aliases"] == ["teleport.workbench.test"]  # the name resolves inside the cluster; the IP is its address
-    assert t["ports"] == ["127.0.0.1:3080:3080", "127.0.0.1:3434:3434"] and "build" not in t and t["mem_limit"] == "256m"
+    assert t["ports"] == ["127.0.0.1:3080:3080", "127.0.0.1:3434:3434"] and "build" not in t and t["mem_limit"] == "320m"
     assert t["labels"]["workbench.class"] == "P2" and "command" not in t  # the image entrypoint starts it
     assert "privileged" not in t and "cap_add" not in t and t["networks"]["default"]["ipv4_address"].endswith(".255.30")
     mount = f"./secrets/teleport:{teleport.CONTAINER_SECRETS}:ro"

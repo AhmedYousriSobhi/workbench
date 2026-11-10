@@ -41,7 +41,7 @@ Normative requirements for workbench. [README.md](README.md) gives the overview 
 | C-8 | user-sim / ticket-bot | Personas with Poisson arrivals and failure behavior; fake engineers working Jira tickets on realistic delays. Submission via `slurmrestd` and CLI. |
 | C-9 | scenario-engine | Runs YAML scenarios (steps with `at`, `target`, `do`; optional `expect` assertions). |
 | C-10 | Fidelity VM | **Deferred** (ADR 0033, issue 366): not needed for G5. Planned as one on-demand libvirt Ubuntu VM, hard cap 2 GB, power via sushy-tools; an unverified scaffold stays in `fidelity-vm/`. No other requirement depends on it. |
-| C-11 | Storage sim | No NFS/Lustre servers. Static `node_exporter` textfile metrics for fake mounts. MariaDB and Prometheus TSDB on capped tmpfs (about 200 MB). |
+| C-11 | Storage sim | No NFS/Lustre servers. Static `node_exporter` textfile metrics for fake mounts. MariaDB (100 MB) and Prometheus TSDB (200 MB, `retention.size` 150 MB) on capped tmpfs. |
 | C-12 | Network chaos | `tc netem` on Docker bridge networks for latency, loss, partition. Toxiproxy only on the Jira HTTP path. |
 | C-14 | Login node | One `login` container (`sshd`, Slurm client tools, key login only, no root, TCP forwarding on, simulated users from `sim.yaml`) on 127.0.0.1:2222, unprivileged and memory-limited, keys generated into `compose/generated/secrets/ssh`; for SSH-based clients that run `squeue`/`sinfo`/`sacct` over SSH (ADR 0011). |
 | C-13 | Time dilation | `time_dilation` scales job durations and arrival rates inversely in user-sim and scenario-engine. |

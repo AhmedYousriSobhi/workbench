@@ -30,7 +30,7 @@ Largest working set seen (MB), the cap the container may reach, and what the pla
 | bmc-farm / bcm-mock / jira-mock / login | 14 / 12 / 20 / 10 | 100 / 100 / 100 / 40 | 17 / 14 / 23 / 12 |
 | slurmctld / slurmrestd / slurmdbd | 41 / 7 / 7 | 200 / 60 / 80 | 48 / 9 / 9 |
 | MariaDB (accounting) | 204 | 250 | 235 |
-| Teleport | 222 | 256 | 256 (at its cap) |
+| Teleport | 222 | 320 | 256 |
 | Prometheus / Grafana / GPU exporter | 22 / 54 / 19 | 300 / 300 / 100 | 26 / 62 / 22 |
 | **Jira (real), Data Center** | **2045** | **2176** | **2176** |
 | Postgres for the real Jira | 130 | 256 | 150 |
