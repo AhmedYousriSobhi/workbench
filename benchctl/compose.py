@@ -40,7 +40,7 @@ CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {
     "real-gpu": {real_gpu.SERVICE: ("workbench/dcgm-exporter:dev", real_gpu.LIMIT_MB, 6)},  # the host's own NVIDIA card with the real exporter (issue 428); off by default
     "jump": {"jump": ("workbench/jump:dev", 24, 2)},  # a bare sshd bastion (SPEC C-21)
     # the tag is replaced from sim.yaml teleport.version (benchctl/teleport.py); the limit is a planning estimate until measured
-    "teleport": {"teleport": (f"{teleport.IMAGE}:{teleport.DEFAULT_VERSION}", 256, 2)},
+    "teleport": {"teleport": (f"{teleport.IMAGE}:{teleport.DEFAULT_VERSION}", 320, 2)},
     # a real control plane with KWOK nodes (ADR 0034); the image tags are replaced from sim.yaml kubernetes.version (benchctl/k8s.py)
     "k8s": {n: (k8s.images({})[n], k8s.LIMITS[n], 3) for n in k8s.SERVICES},
     "scenarios": {"scenario-engine": ("workbench/scenario-engine:dev", 60, 5)},

@@ -8,6 +8,7 @@ services:
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.retention.time=2d
+      - --storage.tsdb.retention.size=150MB  # under the 200m tmpfs below: the oldest blocks go before the tmpfs fills and the 300m cap is hit (issue 455)
       - --storage.tsdb.path=/prometheus
     volumes:
       - ../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro

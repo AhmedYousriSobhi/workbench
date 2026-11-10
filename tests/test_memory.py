@@ -86,3 +86,14 @@ def test_the_jira_real_numbers_are_the_measured_smallest_that_works():
     from benchctl import jira_real
     assert jira_real.LIMIT_MB >= memory.MEASURED_MB["jira-real"], "the cap is below what Jira was seen using"
     assert jira_real.HEAP_MAX_MB < jira_real.LIMIT_MB and jira_real.DB_LIMIT_MB >= memory.MEASURED_MB["jira-db"]
+
+
+def test_prometheus_retention_by_size_stays_under_its_tmpfs_and_the_teleport_cap_has_room(monkeypatch):
+    """Issue 455: the TSDB must drop old blocks before its tmpfs (counted in the container's cap) fills; Teleport was 34 MB under its cap."""
+    prom = yaml.safe_load((ROOT / "compose/observability.yml").read_text())["services"]["prometheus"]
+    size = next(int(a.split("=")[1].removesuffix("MB")) for a in prom["command"] if a.startswith("--storage.tsdb.retention.size="))
+    tmpfs = int(prom["tmpfs"][0].split("size=")[1].split("m")[0])
+    cap = int(prom["mem_limit"].rstrip("m"))
+    assert size < tmpfs and tmpfs + memory.MEASURED_MB["prometheus"] <= cap  # even a full tmpfs plus the server fits the cap
+    teleport_cap = compose.CATALOG["teleport"]["teleport"][1]
+    assert teleport_cap >= math.ceil(memory.MEASURED_MB["teleport"] * 1.3), "keep 30 percent over the largest measurement"

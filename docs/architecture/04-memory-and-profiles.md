@@ -54,7 +54,7 @@ per-node cost (`PER_NODE_MB`), and `tests/test_overhead.py` fails when a new per
 | jump host (bare sshd bastion, `--access jump`) | 2 | 24 | 3 |
 | slurmctld / slurmrestd / slurmdbd | 41 / 7 / 7 | 200 / 60 / 80 | 48 / 9 / 9 |
 | mariadb (includes its 100 MB tmpfs) | 204 | 250 | 235 |
-| teleport | 222 | 256 | 256 (at the cap: raise it with the next measurement) |
+| teleport | 222 | 320 | 256 (cap raised from 256 in issue 455: 222 MB sat 34 MB under it; the expected use is unchanged) |
 | prometheus / grafana / gpu-exporter-farm | 22 / 54 / 19 | 300 / 300 / 100 | 26 / 62 / 22 |
 | jira-db (real Jira's Postgres) | 130 | 256 | 150 |
 | jira-real | 2045 (peak, setup plus ticket run, trimmed JVM) | 2176 | 2176 (at the cap by nature: a JVM keeps what it grew) |
