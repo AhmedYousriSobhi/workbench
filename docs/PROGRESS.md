@@ -100,7 +100,7 @@ _Measure real memory so budgets stop being guesses._
 |---|---|---|---|---|
 | Measurement tooling | ✅ Done | `benchctl measure run/report` samples host, Docker containers, PSS per process and libvirt domains (read-only), saves JSON, suggests budgets = peak x 1.2. | `benchctl/measure.py` | #28 |
 | Host baseline | 🟡 Partial | Idle host and a small Slurm stack were measured (slurmd 5 MiB, slurmctld 13, MariaDB 171). No loaded run with mocks yet. | - | - |
-| Budgets replaced by measured values | 🟡 Partial | min measured live (VMs off, 60 queued jobs): 0.17 GB peak across containers, budget set to 1 GB. std/full are still estimates. | `profiles/min.yaml` | #68 |
+| Budgets replaced by measured values | 🟡 Partial | Per-component working sets measured live on 2026-11-05 (benchctl/memory.py MEASURED_MB; the plan expects measured + 15 percent, never above the cap, issue 287); min was measured earlier (0.17 GB, 60 queued jobs) and its profile budget is 1 GB. Docker's own memory (containerd-shims, dockerd) is measured with `benchctl measure overhead --save` and added by the plan (issue 456); per-node parts declare a cost in PER_NODE_MB, tested. | `profiles/min.yaml` | #68 |
 
 1/3 done
 
@@ -297,5 +297,5 @@ _What keeps every change safe and debuggable._
 
 ## Known gaps
 
-- Only the min budget is measured (0.17 GB loaded with 60 queued jobs, VMs off); std/full budgets are still estimates.
+- Component working sets are measured (2026-11-05); the per-profile budgets in profiles/*.yaml and the Docker overhead are only as good as the last run: re-measure after a change (docs/guides/memory.md).
 - The governor's own locked memory is about 100-170 MB, slightly over its 0.15 GB budget.

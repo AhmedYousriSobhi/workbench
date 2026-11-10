@@ -69,6 +69,43 @@ def processes(proc: Path = Path("/proc")) -> dict[str, int]:
     return dict(sorted(sums.items(), key=lambda kv: -kv[1])[:TOP_PROCS])
 
 
+OVERHEAD = ("containerd-shim", "dockerd", "containerd")  # Docker's own processes: outside every container's cgroup, so `docker stats` never counts them
+
+
+def docker_overhead(proc: Path = Path("/proc")) -> dict[str, int]:
+    """Bytes of the Docker plumbing the containers cost (issue 456): `shim` (all containerd-shims summed), `dockerd`,
+    `containerd`, and `shims` (how many shims, a count). One shim runs per container, so `shim / shims` is the per-container
+    cost that grows with the node count. Root-owned processes hide `smaps_rollup` from a normal user: pss_kb then falls
+    back to VmRSS, which counts shared pages in every shim (the figure is then an upper bound)."""
+    out = {"shim": 0, "dockerd": 0, "containerd": 0, "shims": 0}
+    for d in proc.iterdir():
+        if not d.name.isdigit():
+            continue
+        try:
+            comm = (d / "comm").read_text().strip()
+        except OSError:
+            continue
+        if comm not in OVERHEAD:
+            continue
+        kb = pss_kb(d)
+        if kb:
+            key = "shim" if comm == "containerd-shim" else comm
+            out[key] += kb * 1024
+            out["shims"] += comm == "containerd-shim"
+    return out
+
+
+def overhead_summary(stats: dict) -> dict[str, int]:
+    """From an aggregated run: MB per container (the shims' peak over their count) and MB fixed (dockerd + containerd). {} when
+    the run has no shims (Docker was not running, or the run predates this measurement)."""
+    shims = stats.get("overhead:shims", {}).get("peak", 0)
+    if not shims:
+        return {}
+    shim = stats.get("overhead:shim", {}).get("peak", 0)
+    fixed = stats.get("overhead:dockerd", {}).get("peak", 0) + stats.get("overhead:containerd", {}).get("peak", 0)
+    return {"shims": shims, "per_container_mb": math.ceil(shim / shims / 1024**2), "fixed_mb": math.ceil(fixed / 1024**2)}
+
+
 def host() -> dict[str, int]:
     info = {}
     for line in Path("/proc/meminfo").read_text().splitlines():
@@ -99,6 +136,7 @@ def snapshot() -> dict[str, int]:
     snap.update({f"docker:{k}": v for k, v in containers().items()})
     snap.update({f"vm:{k}": v for k, v in vms().items()})
     snap.update({f"proc:{k}": v for k, v in processes().items()})
+    snap.update({f"overhead:{k}": v for k, v in docker_overhead().items()})
     return snap
 
 
@@ -134,11 +172,15 @@ def report(idle: dict, loaded: dict | None = None) -> str:
     loaded = loaded or idle
     rows = ["| Component | Idle MB | Loaded peak MB | Suggested budget MB |", "|---|---|---|---|"]
     for key in sorted(set(idle["stats"]) | set(loaded["stats"])):
-        if key.startswith("host:"):
+        if key.startswith(("host:", "overhead:")):  # overhead has its own lines below (shims is a count, not bytes)
             continue
         i = idle["stats"].get(key, {}).get("mean", 0)
         p = loaded["stats"].get(key, {}).get("peak", 0)
         rows.append(f"| {key} | {i // 1024**2} | {p // 1024**2} | {suggest_budget_mb(max(i, p))} |")
+    if ov := overhead_summary(loaded["stats"]):
+        rows += ["", (f"Docker overhead (outside every container, not in `docker stats`): {ov['shims']} containerd-shims, "
+                      f"{ov['per_container_mb']} MB each (peak, grows with every container); dockerd + containerd {ov['fixed_mb']} MB fixed. "
+                      "Keep it for the plan with `benchctl measure overhead --save`.")]
     return "\n".join(rows)
 
 
