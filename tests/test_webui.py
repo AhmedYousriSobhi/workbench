@@ -565,3 +565,27 @@ def test_plan_names_the_bcm_kubernetes_flag_and_the_sheet_has_the_switch(ui, mon
     assert "--no-bcm-k8s" in off["command"] and "--bcm-k8s" in on["command"] and "--no-bcm-k8s" not in on["command"]
     assert json.loads(req(ui, "/api/settings")[1])["shapes"]["bcm"] == {"manage_kubernetes": True}
     assert 'id="pl-bcmk8s"' in req(ui, "/")[1].decode()
+
+
+def test_shared_status_makes_one_governor_call_per_ttl_however_many_streams_ask():
+    """#451: every open stream used to call the governor socket each second."""
+    import asyncio
+
+    from webui.app import SharedStatus
+    now, calls = [0.0], []
+
+    def fetch():
+        calls.append(1)
+        return {"level": len(calls)}
+
+    async def run():
+        s = SharedStatus(fetch, 1.0, clock=lambda: now[0])
+        got = await asyncio.gather(*[s.get() for _ in range(50)])  # fifty streams at once: one call
+        assert len(calls) == 1 and all(g == {"level": 1} for g in got)
+        now[0] = 0.5
+        await asyncio.gather(*[s.get() for _ in range(50)])
+        assert len(calls) == 1  # still fresh
+        now[0] = 1.2
+        got = await asyncio.gather(*[s.get() for _ in range(50)])
+        assert len(calls) == 2 and all(g == {"level": 2} for g in got)
+    asyncio.run(run())

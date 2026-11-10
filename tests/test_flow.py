@@ -371,3 +371,59 @@ def test_the_api_server_total_is_a_total_not_dots(monkeypatch):
     f.poll()
     snap = f.since(0)
     assert snap["totals"]["k8s-api"] == 123 and all(e["to"] != "k8s-api" for e in snap["events"])
+
+
+def test_a_service_seen_down_is_skipped_with_a_growing_back_off_and_the_others_keep_their_cadence():
+    """#451: a stopped or frozen mock cost a full timeout on every pass and stalled the feed for the others."""
+    calls = {}
+
+    def fetch(url):
+        calls[url] = calls.get(url, 0) + 1
+        if "bmc-farm" in url or url.endswith(":8000/sim/stats"):
+            raise OSError("down")
+        return {"requests": 0}
+    from webui.flow import STATS
+    f = make_flow(fetch, min_interval=0)
+    times = []
+    for _ in range(40):  # 40 passes, one second apart
+        f.poll()
+        times.append(sum(n for u, n in calls.items() if u == STATS["bmc-farm"]))
+        f.tick(1.0)
+    down_calls = calls[STATS["bmc-farm"]]
+    assert down_calls <= 8, f"the down mock was asked {down_calls} times in 40 s"  # 1, 2, 4, 8, 10, 10 ... s apart, not every pass
+    assert calls[STATS["bcm-mock"]] == 40  # the others are asked on every pass
+    assert f.since(0)["reachable"]["bmc-farm"] is False and f.since(0)["reachable"]["bcm-mock"] is True
+
+
+def test_a_service_that_comes_back_is_asked_again_and_the_back_off_resets():
+    fm = FakeMocks()
+    f = make_flow(fm, min_interval=0)
+    fm.down.add("bcm-mock")
+    for _ in range(12):
+        f.poll()
+        f.tick(1.0)
+    assert f.since(0)["reachable"]["bcm-mock"] is False and f.fails["bcm-mock"] >= 3
+    fm.down.clear()
+    for _ in range(12):  # the longest wait is BACKOFF_MAX
+        f.poll()
+        f.tick(1.0)
+    assert f.since(0)["reachable"]["bcm-mock"] is True and "bcm-mock" not in f.fails
+
+
+def test_a_mock_that_never_answers_costs_the_probe_timeout_not_two_seconds(monkeypatch):
+    import socket
+
+    import webui.flow as wf
+    hung = socket.socket()
+    hung.bind(("127.0.0.1", 0))
+    hung.listen(8)  # accepts connections in the kernel, never replies: a frozen container
+    try:
+        monkeypatch.setattr(wf, "STATS", {"bmc-farm": f"http://127.0.0.1:{hung.getsockname()[1]}/sim/stats"})
+        monkeypatch.setattr(wf, "COUNTERS", {})
+        monkeypatch.setattr(wf, "REACH_ONLY", {})
+        f = wf.Flow(min_interval=0)
+        t0 = time.monotonic()
+        f.poll()
+        assert time.monotonic() - t0 < 1.0 and f.since(0)["reachable"]["bmc-farm"] is False
+    finally:
+        hung.close()

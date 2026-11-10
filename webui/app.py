@@ -53,6 +53,27 @@ def governor_status(socket: str) -> dict:
         return {"ok": False, "error": f"governor not reachable: {e}"}
 
 
+class SharedStatus:
+    """One governor status call per `ttl` seconds however many streams are open (issue 451): the first stream whose tick finds the
+    value older than `ttl` fetches it (the others wait for that one call), the rest read it. It runs only when a stream asks,
+    so with the page hidden (SPEC W-11) nothing polls."""
+
+    def __init__(self, fetch, ttl: float, clock=time.monotonic):
+        self.fetch, self.ttl, self.clock = fetch, ttl, clock
+        self.value: dict = {}
+        self.at = float("-inf")
+        self.lock = asyncio.Lock()
+
+    async def get(self) -> dict:
+        if self.clock() - self.at < self.ttl:
+            return self.value
+        async with self.lock:
+            if self.clock() - self.at >= self.ttl:  # another stream may have fetched while this one waited for the lock
+                self.value = await asyncio.to_thread(self.fetch)
+                self.at = self.clock()
+            return self.value
+
+
 class Runs:
     """At most one scenario at a time; state is what the page polls."""
 
@@ -152,10 +173,12 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
     async def status(request: Request):
         return JSONResponse(await asyncio.to_thread(governor_status, socket))
 
+    shared = SharedStatus(lambda: governor_status(socket), interval * 0.9)  # a lone stream still gets a fresh value every tick
+
     async def events(request: Request):
         async def stream():
             while True:
-                yield f"data: {json.dumps(await asyncio.to_thread(governor_status, socket))}\n\n"
+                yield f"data: {json.dumps(await shared.get())}\n\n"
                 await asyncio.sleep(interval)
         return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
@@ -170,7 +193,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         async def stream():
             nonlocal after
             while True:
-                level = (await asyncio.to_thread(governor_status, socket)).get("level") or 0
+                level = (await shared.get()).get("level") or 0
                 paused = level >= PAUSE_LEVEL
                 if not paused:
                     await asyncio.to_thread(flow.poll)
