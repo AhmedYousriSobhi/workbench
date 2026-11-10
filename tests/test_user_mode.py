@@ -153,3 +153,12 @@ def test_a_container_the_governor_stopped_can_still_be_started_by_name(tmp_path)
     inventory["found"] = [Group("web", 4)]  # and when it shows up again it is governed again
     gov._refresh(10.0, 0)
     assert "web" in {g.name for g in gov.groups}
+
+
+def test_arrivals_flag_with_a_workdir_is_one_directory_for_root_and_user_mode(tmp_path):
+    """#476: the containers mount that directory, so both governors must write there (never /run/workbench: gov.sock lives in it)."""
+    from governor.executors import ARRIVALS_FLAG
+    want = str(tmp_path / "compose/generated/flags/arrivals.paused")
+    assert gm.arrivals_flag_path(ARRIVALS_FLAG, True, str(tmp_path)) == want
+    assert gm.arrivals_flag_path(ARRIVALS_FLAG, False, str(tmp_path)) == want
+    assert gm.arrivals_flag_path("/custom/flag", True, str(tmp_path)) == "/custom/flag"

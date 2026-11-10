@@ -116,6 +116,7 @@ def generate(sim: dict, profile: dict) -> dict:
         # no port and takes no key (login.sh): the proxy is its only way in (ADR 0023)
         svc = services[lname]
         svc["volumes"].append("./secrets/ssh:/run/workbench/ssh:ro")
+        svc["volumes"].append("./flags:/run/workbench-flags:ro")  # the directory, not the file: it is made and removed at runtime (#476)
         svc.setdefault("environment", {})["WORKBENCH_LOGIN_AUTH"] = mode
         svc.setdefault("environment", {})["WORKBENCH_LOGIN_KIND"] = lkinds[lname]
         svc.update({"depends_on": ["slurmctld"] if "slurmctld" in services and lkinds[lname] != "k8s" else []})
@@ -167,7 +168,8 @@ def generate(sim: dict, profile: dict) -> dict:
         services["bcm-mock"].update({"volumes": ["./sim.yaml:/sim.yaml:ro"], "ports": ["127.0.0.1:8081:8081"]})
     if "jira-mock" in services:
         # a team works the project in the background, one change about every 45 s (benchctl set jira-activity off to stop it, #158)
-        services["jira-mock"].update({"ports": ["127.0.0.1:8080:8080"], "environment": {"JIRA_ACTIVITY_EVERY": "45"}})
+        services["jira-mock"].update({"ports": ["127.0.0.1:8080:8080"], "environment": {"JIRA_ACTIVITY_EVERY": "45"},
+                                      "volumes": ["./flags:/run/workbench-flags:ro"]})  # L1 pauses the background changes (#476)
     if "jira-real" in services:
         _wire_jira_real(services)
     _wire_slurm_services(services)
@@ -288,6 +290,7 @@ def write(compose: dict, out: Path = Path("compose/generated/docker-compose.yml"
         # workbench or `scale` changed the counts (the repository's sim.yaml is the default, not the running truth).
         shown = {**sim, "compute": {**sim.get("compute", {}), **({"count": compute_nodes} if compute_nodes is not None else {})}}
         (out.parent / "sim.yaml").write_text(yaml.safe_dump(shown, sort_keys=False))
+        (out.parent / "flags").mkdir(exist_ok=True)  # the governor's L1 pause flag; made here so Docker does not create it as root (#476)
         (out.parent / "nhc").mkdir(exist_ok=True)  # mounted by every node; filled only with checks that validate (ADR 0019)
         if errs := nhc.sync(out=out.parent / "nhc"):
             print(f"WARNING: health checks not delivered, the nodes keep the last good set (benchctl validate checks):\n{errs[0]}", file=sys.stderr)

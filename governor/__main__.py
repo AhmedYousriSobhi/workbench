@@ -23,8 +23,14 @@ from .watchdog import Watchdog
 log = logging.getLogger("governor")
 
 
-def arrivals_flag_path(given: str, user_mode: bool) -> str:
-    """The flag file defaults to /run/workbench, which only root can write: rootless mode uses the user's runtime dir."""
+FLAGS_DIR = "compose/generated/flags"  # mounted read-only into the login nodes and jira-mock (issue 476)
+
+
+def arrivals_flag_path(given: str, user_mode: bool, workdir: str | None = None) -> str:
+    """Where L1 puts the pause flag. With --workdir (root service and user mode alike) it is the checkout's flags directory,
+    which the containers mount read-only (never /run/workbench: gov.sock lives there). Without one, the old defaults."""
+    if given == ARRIVALS_FLAG and workdir:
+        return str(Path(workdir) / FLAGS_DIR / "arrivals.paused")
     if user_mode and given == ARRIVALS_FLAG:
         return str(Path(os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/workbench-{os.getuid()}") / "workbench" / "arrivals.paused")
     return given
@@ -69,7 +75,7 @@ def main(argv: list[str] | None = None) -> None:
     else:
         sampler = Sampler()
     ladder = Ladder(Thresholds(**json.loads(args.thresholds or "{}")))
-    executor = (UserExecutor if args.user_mode else Executor)(groups, cgroups, path, arrivals_flag=arrivals_flag_path(args.arrivals_flag, args.user_mode))
+    executor = (UserExecutor if args.user_mode else Executor)(groups, cgroups, path, arrivals_flag=arrivals_flag_path(args.arrivals_flag, args.user_mode, args.workdir))
     watchdog = None if args.no_watchdog else Watchdog()
     token = os.environ.get("WORKBENCH_GRAFANA_TOKEN", "")
     annotator = Annotator(args.grafana_url, token) if args.grafana_url and token else None

@@ -128,3 +128,26 @@ def test_real_freeze_and_thaw_of_live_containers(sim, tmp_path):
         assert wait_for(lambda: not frozen("workbench-cn001-1"), timeout=30)
     finally:
         stop_governor(gov)
+
+
+def test_l1_pause_flag_reaches_the_login_node_and_the_jira_mock_and_goes_on_calm(sim, tmp_path):
+    """#476: stop-arrivals is a flag the containers can see (a read-only mount); calm removes it. Only L1 runs: no pause, no throttle."""
+    def seen(container: str) -> bool:
+        r = subprocess.run(["docker", "exec", container, "test", "-e", "/run/workbench-flags/arrivals.paused"], capture_output=True, check=False)
+        return r.returncode == 0
+
+    def writable(container: str) -> bool:
+        r = subprocess.run(["docker", "exec", container, "sh", "-c", "touch /run/workbench-flags/x"], capture_output=True, check=False)
+        return r.returncode == 0
+
+    gov, sig, sock = start_governor(tmp_path, "--no-watchdog", "--user-mode", "--workdir", str(ROOT), "--refresh-interval", "1")
+    try:
+        assert wait_for(lambda: "workbench-login-1" in ask(sock, {"cmd": "status"})["groups"])
+        assert not seen("workbench-login-1")
+        signals(sig, avail_gb=1.9, some=11)  # L1 only: below 2 GB, above the L2 line
+        assert wait_for(lambda: seen("workbench-login-1"), timeout=30)
+        assert not writable("workbench-login-1")  # read-only from inside
+        signals(sig, avail_gb=8)
+        assert wait_for(lambda: not seen("workbench-login-1"), timeout=60)  # de-escalation resumes arrivals
+    finally:
+        stop_governor(gov)

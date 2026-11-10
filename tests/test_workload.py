@@ -81,3 +81,35 @@ def test_the_user_sim_builds_jobs_for_simulated_users():
         assert ("--gres=gpu" in " ".join(cmd)) == ("--partition=gpu" in cmd)
     assert seen == {"cpu", "gpu"}
     assert all("--partition=cpu" in mod.pick(rng, ["alice"], 0, 60) for _ in range(30))  # no GPU nodes: cpu jobs only
+
+
+def test_the_user_sim_submits_nothing_while_the_l1_flag_exists(tmp_path, monkeypatch):
+    """#476: the governor's pause flag stops new arrivals; they resume when it is removed."""
+    import importlib.util
+    import sys
+    spec = importlib.util.spec_from_file_location("user_sim", Path(__file__).resolve().parent.parent / "images/login/user_sim.py")
+    us = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(us)
+    flag = tmp_path / "arrivals.paused"
+    monkeypatch.setattr(us, "PAUSED", str(flag))
+    monkeypatch.setattr(sys, "argv", ["user-sim", "--seed", "1"])
+    submitted = []  # whether the flag existed at each submission
+
+    def fake_run(*cmd):
+        if "sbatch" in cmd:
+            submitted.append(flag.exists())
+        return "0"
+    ticks = {"n": 0}
+
+    def fake_sleep(_):
+        ticks["n"] += 1
+        if ticks["n"] == 6:
+            flag.unlink()  # the governor de-escalated
+        if ticks["n"] > 10:
+            raise KeyboardInterrupt
+    monkeypatch.setattr(us, "run", fake_run)
+    monkeypatch.setattr(us.time, "sleep", fake_sleep)
+    flag.touch()
+    with pytest.raises(KeyboardInterrupt):
+        us.main()
+    assert len(submitted) == 5 and not any(submitted)  # five arrivals after the flag went; none while it stood

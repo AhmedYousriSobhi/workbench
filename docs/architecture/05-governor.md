@@ -24,7 +24,7 @@ Above roughly 30% PSI the kernel struggles to hand out new memory, so the govern
 | Level | Trigger (starting values, tune them) | Action | Targets |
 |---|---|---|---|
 | L0 normal | PSI some avg10 < 5% and MemAvailable > 2.5 GB | none | n/a |
-| L1 warn | PSI some > 10% or MemAvailable < 2.0 GB | emit event/annotation; stop new job/ticket arrivals | P5 |
+| L1 warn | PSI some > 10% or MemAvailable < 2.0 GB | emit event/annotation; stop new job/ticket arrivals (a flag in `compose/generated/flags/`, mounted read-only into the login nodes and jira-mock; they skip work while it exists, issue 476) | P5 |
 | L2 throttle | PSI some > 20% for 10 s | lower `memory.high` on low classes; slow `user-sim`; scale slurmd count down | P5, P4 |
 | L3 freeze + reclaim | PSI some > 30% for 10 s | `docker pause` / `cgroup.freeze`, then `memory.reclaim` (kernel 5.19+) to push pages to zram/swap | P6, P5, P4 |
 | L4 stop | PSI **full** > 5% for 5 s, or MemAvailable < 1.0 GB (at once) | `docker stop`; `virsh managedsave` the VM (frees its RAM) | P6, then P5, P4, P3 |
