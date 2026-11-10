@@ -47,9 +47,10 @@ def test_up_starts_in_order_and_waits(tmp_path, monkeypatch):
 
     def runner(cmd):
         if "build" in cmd:
-            built.append(cmd[-1])
+            built.append(cmd[cmd.index("build") + 1:])
             started.append("<build>")
         if "up" in cmd:
+            assert "--build" not in cmd  # build once, up front (issue 449)
             started.extend(cmd[cmd.index("--no-deps") + 1:])
         if "ps" in cmd:
             return cp(out="\n".join(started))
@@ -59,7 +60,15 @@ def test_up_starts_in_order_and_waits(tmp_path, monkeypatch):
     monkeypatch.setattr(stack, "provision_token", lambda **kw: kw.get("path", tmp_path / "t"))
     assert stack.up(sim, "min", runner=runner, say=lambda m: None, available=12 * 1024**3, wait=1)
     assert started.index("prometheus") < started.index("slurmctld") < started.index("cn001")
-    assert built == ["cn001"] and started.index("<build>") < started.index("prometheus")  # node-base before its dependants
+    assert built[0] == ["cn001"]  # node-base first: slurmctld and login build FROM it
+    assert len(built) == 2 and "cn001" not in built[1] and "slurmctld" in built[1]  # then every other image once, in one call
+    assert max(i for i, x in enumerate(started) if x == "<build>") < started.index("prometheus")  # all builds before the first start
+
+
+def test_build_targets_one_service_per_image():
+    svcs = {"cn001": {"build": "images/node", "image": "w/node"}, "cn002": {"build": "images/node", "image": "w/node"},
+            "bmc-farm": {"build": "components/bmc", "image": "w/bmc"}, "grafana": {"image": "grafana"}}
+    assert stack.build_targets(svcs, list(svcs)) == ["cn001", "bmc-farm"]
 
 
 def test_down_passes_the_stop_timeout_only_when_set(monkeypatch):

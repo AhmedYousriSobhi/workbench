@@ -75,6 +75,18 @@ def unbuildable(services: dict, base: Path) -> list[str]:
             if s.get("build") and not (base / s["build"] / "Dockerfile").is_file()]
 
 
+def build_targets(services: dict, names: list[str]) -> list[str]:
+    """One service per distinct image to build: the nodes share an image, so building every name would repeat the work."""
+    seen, out = set(), []
+    for n in names:
+        svc = services.get(n) or {}
+        key = (svc.get("build"), svc.get("image"))
+        if svc.get("build") and key not in seen:
+            seen.add(key)
+            out.append(n)
+    return out
+
+
 def governor_admits(need_mb: int, say: Callable[[str], None], ask=None) -> bool:
     """GV-9: ask the governor to approve starting `need_mb` more. No governor reachable: warn, go on.
 
@@ -219,6 +231,15 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         if r.returncode != 0:
             say(f"FAILED node base image: {r.stderr.strip()[-300:]}")
             return False
+    targets = [t for t in build_targets(todo, names) if t != first]  # the node base was built above; build once (issue 449): the per-stage `up` calls below no longer build, and a changed mock is still picked up here
+    if targets:
+        say(f"building images: {', '.join(targets)}")
+        t0 = time.monotonic()
+        r = runner(dc("build", *targets, file=path))
+        if r.returncode != 0:
+            say(f"FAILED image build: {r.stderr.strip()[-300:]}")
+            return False
+        say(f"images built in {time.monotonic() - t0:.0f} s")
     ips = addressing.plan(sim, prof.get("compute_nodes"))
     if "teleport" in todo:
         try:
@@ -244,7 +265,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
             return False
     for label, svcs in stage_services(names):
         say(f"starting {label}: {', '.join(svcs)}")
-        r = runner(dc("up", "-d", "--build", "--no-deps", *svcs, file=path))
+        r = runner(dc("up", "-d", "--no-deps", *svcs, file=path))
         if r.returncode != 0:
             say(f"FAILED {label}: {r.stderr.strip()[-300:]}")
             return False
