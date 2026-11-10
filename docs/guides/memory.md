@@ -70,7 +70,7 @@ The numbers above are sizes. A start can also be stopped by the governor on a sh
 ./scripts/benchctl plan                    # now has a "docker overhead" line
 ```
 
-Until you run it the plan adds 0 and says "not measured" on that line; it never invents a figure. Root-owned shims hide their exact (proportional) size from a normal user, so the figure is then an upper bound. `benchctl measure run` records the same numbers and `measure report` prints them under the table.
+Until you run it the plan adds 0 and says "not measured" on that line; it never invents a figure. Root-owned shims hide their exact (proportional) size from a normal user, so the command uses their private memory (anonymous plus shared-memory pages) and says so; on the first live run that gave 4 MB per shim, the same as the exact figure from `sudo ./scripts/benchctl measure overhead` (do not `--save` with sudo). Plain VmRSS was tried first and gave 11 MB, because it counts the shared libraries in every shim. `benchctl measure run` records the same numbers and `measure report` prints them under the table.
 
 Every part that is multiplied by the node count declares its cost per node in `PER_NODE_MB` (`benchctl/memory.py`): slurmd 60 MB, each node's BMC address 32 MB, and the optional per-node DCGM exporter 150 MB. `tests/test_overhead.py` generates two cluster sizes, finds what was added per node, and fails when a part is missing from the table or its cap or measurement is above the declared cost.
 

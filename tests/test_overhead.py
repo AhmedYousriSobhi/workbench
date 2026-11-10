@@ -24,7 +24,17 @@ def test_docker_overhead_sums_shims_and_counts_them(tmp_path):
     p = fake_proc(tmp_path, {1: ("containerd-shim", 3072), 2: ("containerd-shim", 4096), 3: ("dockerd", 80 * 1024),
                              4: ("containerd", 40 * 1024), 5: ("bash", 9999)})
     got = measure.docker_overhead(p)
-    assert got == {"shim": 7168 * 1024, "dockerd": 80 * MIB, "containerd": 40 * MIB, "shims": 2}
+    assert got == {"shim": 7168 * 1024, "dockerd": 80 * MIB, "containerd": 40 * MIB, "shims": 2, "estimated": 0}
+
+
+def test_a_hidden_smaps_rollup_falls_back_to_private_memory_not_vmrss(tmp_path):
+    """The first live run as a normal user: VmRSS gave 11 MB per shim, the real PSS was 4 MB (issue 456)."""
+    d = tmp_path / "7"
+    d.mkdir()
+    (d / "comm").write_text("containerd-shim\n")
+    (d / "status").write_text("VmRSS: 11264 kB\nRssAnon: 2048 kB\nRssFile: 9000 kB\nRssShmem: 512 kB\n")  # no smaps_rollup
+    got = measure.docker_overhead(tmp_path)
+    assert got["shim"] == 2560 * 1024 and got["shims"] == 1 and got["estimated"] == 1
 
 
 def test_the_summary_is_per_container_and_fixed_and_empty_without_shims():
