@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Topology</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#79B8FF}a:hover{color:#B3D4FF}
+</style>
+</helmet>
+<div style="min-height: 940px; background: #0E1116; color: #E6EDF3; font-family: Inter, system-ui, sans-serif; font-size: 0.9375rem; line-height: 1.5">
+
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 24px; border-bottom: 1px solid #262D38; background: #12161C">
+    <a href="Main.dc.html" style="color: #E6EDF3; text-decoration: none; font-weight: 700">Cluster simulator</a>
+    <span style="color: #6E7C8B" aria-hidden="true">/</span>
+    <span style="font-weight: 600">Topology</span>
+    <div style="flex: 1 1 auto"></div>
+    <span style="display: inline-flex; padding: 5px 12px; border-radius: 999px; background: #2B2114; color: #FFB86B; font-size: 0.8125rem; font-weight: 600">▲ Nodes 5 of 6 in service</span>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 14px 24px; border-bottom: 1px solid #1C222B">
+    <span style="color: #9AA7B4; font-size: 0.8125rem; margin-right: 4px">Lens</span>
+    <sc-for list="{{lenses}}" as="l" hint-placeholder-count="6">
+      <button type="button" aria-pressed="{{l.on}}" style="padding: 8px 14px; border-radius: 999px; border: 1px solid {{l.border}}; background: {{l.bg}}; color: #E6EDF3; font: inherit; font-size: 0.8125rem; font-weight: 500; cursor: pointer">{{l.name}}</button>
+    </sc-for>
+    <div style="flex: 1 1 auto"></div>
+    <div role="group" aria-label="View" style="display: inline-flex; border: 1px solid #33404F; border-radius: 8px; overflow: hidden">
+      <button type="button" aria-pressed="true" style="padding: 8px 14px; border: 0; background: #2F6FEB; color: #FFFFFF; font: inherit; font-size: 0.8125rem; font-weight: 600">Flat</button>
+      <button type="button" aria-pressed="false" style="padding: 8px 14px; border: 0; background: #151A21; color: #C9D3DD; font: inherit; font-size: 0.8125rem">2.5D</button>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 20px 24px 40px; align-items: flex-start">
+    <main style="flex: 999 1 640px; min-width: 0; overflow-x: auto">
+      <div style="display: flex; align-items: stretch; gap: 0; min-width: 860px">
+
+        <section aria-label="Clients" style="flex: 1 1 0; display: flex; flex-direction: column; gap: 10px">
+          <h2 style="margin: 0 0 4px; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA7B4">Clients</h2>
+          <div style="padding: 12px; border-radius: 10px; background: #151A21; border: 1px solid #262D38"><b style="font-weight: 600">Monitoring client</b><div style="color: #9AA7B4; font-size: 0.8125rem">under test, on this host</div></div>
+          <div style="padding: 12px; border-radius: 10px; background: #151A21; border: 1px solid #262D38"><b style="font-weight: 600">Browser</b><div style="color: #9AA7B4; font-size: 0.8125rem">Grafana, this page</div></div>
+        </section>
+
+        <div aria-hidden="true" style="flex: 0 0 64px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; color: #6E7C8B; font-size: 0.6875rem">
+          <span>SSH 22</span><span style="font-size: 1.125rem; color: #79B8FF">→</span><span>HTTPS</span>
+        </div>
+
+        <section aria-label="Access" style="flex: 1 1 0; display: flex; flex-direction: column; gap: 10px">
+          <h2 style="margin: 0 0 4px; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA7B4">Access</h2>
+          <div style="padding: 12px; border-radius: 10px; background: #151A21; border: 1px solid #262D38"><b style="font-weight: 600">✓ login</b><div style="color: #9AA7B4; font-size: 0.8125rem; font-family: 'JetBrains Mono', monospace">10.141.255.254</div></div>
+          <div style="padding: 12px; border-radius: 10px; background: #151A21; border: 1px solid #262D38"><b style="font-weight: 600">✓ teleport</b><div style="color: #9AA7B4; font-size: 0.8125rem; font-family: 'JetBrains Mono', monospace">10.141.255.30:3080</div></div>
+          <div style="padding: 12px; border-radius: 10px; background: transparent; border: 1px dashed #33404F; color: #8593A1"><b style="font-weight: 600">jump host</b><div style="font-size: 0.8125rem">not selected</div></div>
+        </section>
+
+        <div aria-hidden="true" style="flex: 0 0 64px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; color: #6E7C8B; font-size: 0.6875rem">
+          <span>slurm 6817</span><span style="font-size: 1.125rem; color: #79B8FF">→</span><span>ssh hop</span>
+        </div>
+
+        <section aria-label="Slurm" style="flex: 1.3 1 0; display: flex; flex-direction: column; gap: 10px">
+          <h2 style="margin: 0 0 4px; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA7B4">Slurm</h2>
+          <div style="padding: 12px; border-radius: 10px; background: #151A21; border: 1px solid #262D38"><b style="font-weight: 600">✓ slurmctld</b> <span style="font-size: 0.75rem; color: #C9D3DD; border: 1px solid #33404F; border-radius: 6px; padding: 1px 6px">real</span><div style="color: #9AA7B4; font-size: 0.8125rem">412 RPCs · busiest REQUEST_NODE_INFO</div></div>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+            <sc-for list="{{nodes}}" as="n" hint-placeholder-count="6">
+              <button type="button" aria-pressed="{{n.sel}}" style="text-align: left; padding: 10px; border-radius: 8px; border: {{n.border}}; background: {{n.bg}}; color: #E6EDF3; font: inherit; cursor: pointer">
+                <span style="display: block; font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem">{{n.name}}</span>
+                <span style="display: block; font-size: 0.75rem; font-weight: 600; color: {{n.fg}}">{{n.state}}</span>
+              </button>
+            </sc-for>
+          </div>
+        </section>
+
+        <div aria-hidden="true" style="flex: 0 0 64px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; color: #6E7C8B; font-size: 0.6875rem">
+          <span>Redfish</span><span style="font-size: 1.125rem; color: #79B8FF">⇄</span><span>scrape</span>
+        </div>
+
+        <section aria-label="Management and monitoring" style="flex: 1.2 1 0; display: flex; flex-direction: column; gap: 10px">
+          <h2 style="margin: 0 0 4px; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: #9AA7B4">Management · Monitoring · Tickets</h2>
+          <sc-for list="{{services}}" as="s" hint-placeholder-count="6">
+            <div style="padding: 10px 12px; border-radius: 10px; background: #151A21; border: 1px solid #262D38; display: flex; align-items: center; gap: 8px">
+              <b style="font-weight: 600; color: {{s.fg}}">{{s.icon}}</b>
+              <span style="font-weight: 600">{{s.name}}</span>
+              <span style="margin-left: auto; font-size: 0.75rem; color: #C9D3DD; border: 1px solid #33404F; border-radius: 6px; padding: 1px 6px">{{s.kind}}</span>
+            </div>
+          </sc-for>
+        </section>
+      </div>
+
+      <p style="margin: 18px 0 0; color: #9AA7B4; font-size: 0.8125rem">Solid border = in this cluster · dashed = not selected · every line is labelled with its protocol and port. Flat is the default on every screen; 2.5D is an opt-in view.</p>
+    </main>
+
+    <aside aria-labelledby="ins-h" style="flex: 1 1 320px; max-width: 380px; background: #151A21; border: 1px solid #262D38; border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: center; gap: 10px">
+        <h2 id="ins-h" style="margin: 0; font-size: 1.125rem; font-weight: 700; font-family: 'JetBrains Mono', monospace">gpu001</h2>
+        <span style="padding: 2px 10px; border-radius: 999px; background: #2B2114; color: #FFB86B; font-size: 0.8125rem; font-weight: 600">▲ Drained</span>
+      </div>
+      <dl style="margin: 0; display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px 12px; font-size: 0.875rem">
+        <dt style="color: #9AA7B4">Reason</dt><dd style="margin: 0">NHC: GPU XID 79 (set 0:52 ago)</dd>
+        <dt style="color: #9AA7B4">Hardware</dt><dd style="margin: 0">8 × H200 · 88 °C · fans ok</dd>
+        <dt style="color: #9AA7B4">Address</dt><dd style="margin: 0; font-family: 'JetBrains Mono', monospace">10.141.100.1</dd>
+        <dt style="color: #9AA7B4">BMC</dt><dd style="margin: 0; font-family: 'JetBrains Mono', monospace">10.148.100.1:443</dd>
+        <dt style="color: #9AA7B4">Ticket</dt><dd style="margin: 0"><a href="#">OPS-14 Incident: gpu001 drained</a></dd>
+      </dl>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <span style="font-size: 0.8125rem; color: #9AA7B4">Break or fix</span>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+          <button type="button" style="padding: 10px; border-radius: 8px; border: 1px solid #33404F; background: #1C2633; color: #E6EDF3; font: inherit; font-size: 0.8125rem; cursor: pointer">Power off</button>
+          <button type="button" style="padding: 10px; border-radius: 8px; border: 1px solid #33404F; background: #1C2633; color: #E6EDF3; font: inherit; font-size: 0.8125rem; cursor: pointer">Overheat</button>
+          <button type="button" style="padding: 10px; border-radius: 8px; border: 1px solid #33404F; background: #1C2633; color: #E6EDF3; font: inherit; font-size: 0.8125rem; cursor: pointer">Fan failure</button>
+          <button type="button" style="padding: 10px; border-radius: 8px; border: 1px solid #33404F; background: #1C2633; color: #E6EDF3; font: inherit; font-size: 0.8125rem; cursor: pointer">GPU XID</button>
+        </div>
+        <button type="button" style="padding: 10px; border-radius: 8px; border: 1px solid #2E6B45; background: #13261A; color: #7EE2A0; font: inherit; font-size: 0.875rem; font-weight: 600; cursor: pointer">✓ Clear faults on gpu001</button>
+      </div>
+      <div style="border-top: 1px solid #262D38; padding-top: 12px; display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 0.8125rem; color: #9AA7B4">Reach it</span>
+        <code style="font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; padding: 8px 10px; border-radius: 6px; background: #0E1116">ssh -J alice@127.0.0.1:2222 gpu001</code>
+        <button type="button" style="align-self: flex-start; padding: 8px 12px; border-radius: 8px; border: 1px solid #33404F; background: transparent; color: #E6EDF3; font: inherit; font-size: 0.8125rem; cursor: pointer">Copy command</button>
+      </div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":940}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const lenses = ['All', 'Access', 'Slurm', 'Management', 'Monitoring', 'Tickets'].map((name, i) => ({
+      name, on: i === 0 ? 'true' : 'false', bg: i === 0 ? '#1C2633' : '#12161C', border: i === 0 ? '#2F6FEB' : '#33404F'
+    }));
+    const okN = { fg: '#7EE2A0', bg: '#12161C', border: '1px solid #262D38', sel: 'false' };
+    const nodes = [
+      { name: 'cn001', state: '✓ idle', ...okN },
+      { name: 'cn002', state: '✓ allocated', ...okN },
+      { name: 'cn003', state: '✓ allocated', ...okN },
+      { name: 'cn004', state: '✓ idle', ...okN },
+      { name: 'gpu001', state: '▲ drained', fg: '#FFB86B', bg: '#1E1810', border: '2px solid #FFB86B', sel: 'true' },
+      { name: 'gpu002', state: '✓ allocated', ...okN }
+    ];
+    const g = { icon: '✓', fg: '#7EE2A0' };
+    const services = [
+      { name: 'bmc farm', kind: 'simulated', ...g },
+      { name: 'bcm', kind: 'simulated', ...g },
+      { name: 'prometheus', kind: 'real', ...g },
+      { name: 'grafana', kind: 'real', ...g },
+      { name: 'gpu exporter', kind: 'simulated', ...g },
+      { name: 'jira', kind: 'simulated', icon: '▲', fg: '#FFB86B' }
+    ];
+    return { lenses, nodes, services };
+  }
+}
+</script>
+</body>
+</html>

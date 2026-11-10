@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Test run</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#79B8FF}a:hover{color:#B3D4FF}
+</style>
+</helmet>
+<div style="min-height: 940px; background: #0E1116; color: #E6EDF3; font-family: Inter, system-ui, sans-serif; font-size: 0.9375rem; line-height: 1.5">
+
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 24px; border-bottom: 1px solid #262D38; background: #12161C">
+    <a href="Main.dc.html" style="color: #E6EDF3; text-decoration: none; font-weight: 700">Cluster simulator</a>
+    <span style="color: #6E7C8B" aria-hidden="true">/</span>
+    <span style="font-weight: 600">Test run</span>
+    <div style="flex: 1 1 auto"></div>
+    <span style="display: inline-flex; padding: 5px 12px; border-radius: 999px; background: #13261A; color: #7EE2A0; font-size: 0.8125rem; font-weight: 600">✓ Governor L0</span>
+    <span style="display: inline-flex; padding: 5px 12px; border-radius: 999px; background: #1A2029; color: #C9D3DD; font-size: 0.8125rem">Memory 9.4 GB free</span>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 20px 24px 40px; align-items: flex-start">
+
+    <aside aria-label="Scenario library" style="flex: 1 1 260px; max-width: 300px; display: flex; flex-direction: column; gap: 10px">
+      <label style="display: flex; flex-direction: column; gap: 6px; font-size: 0.8125rem; color: #9AA7B4">Find a scenario
+        <input type="search" value="gpu" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #33404F; background: #12161C; color: #E6EDF3; font: inherit; font-size: 0.9375rem">
+      </label>
+      <sc-for list="{{library}}" as="s" hint-placeholder-count="6">
+        <button type="button" style="text-align: left; padding: 10px 12px; border-radius: 8px; border: 1px solid {{s.border}}; background: {{s.bg}}; color: #E6EDF3; font: inherit; cursor: pointer; display: flex; flex-direction: column; gap: 2px">
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.875rem">{{s.name}}</span>
+          <span style="color: #9AA7B4; font-size: 0.8125rem">{{s.what}}</span>
+        </button>
+      </sc-for>
+    </aside>
+
+    <main style="flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+        <h1 style="margin: 0; font-size: 1.5rem; font-weight: 700; font-family: 'JetBrains Mono', monospace">gpu-xid-storm</h1>
+        <span style="padding: 4px 12px; border-radius: 999px; background: #17212E; color: #9CC7FF; font-size: 0.8125rem; font-weight: 600">● Running · step 4 of 7 · 1:42</span>
+        <div style="flex: 1 1 auto"></div>
+        <button type="button" style="padding: 10px 16px; border-radius: 8px; border: 1px solid #6B2A2A; background: #2A1414; color: #FF9B9B; font: inherit; font-weight: 600; cursor: pointer">■ Stop</button>
+        <button type="button" style="padding: 10px 16px; border-radius: 8px; border: 1px solid #33404F; background: #1C2633; color: #E6EDF3; font: inherit; font-weight: 600; cursor: pointer">Export report</button>
+      </div>
+      <p style="margin: 0; color: #9AA7B4">An XID 79 on two GPUs, a thermal ramp on gpu001; the node health check should drain it and your client should file a ticket.</p>
+
+      <div style="display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; border-radius: 10px; background: #17212E; border: 1px solid #23415F">
+        <span style="font-weight: 700; color: #9CC7FF" aria-hidden="true">i</span>
+        <span style="font-size: 0.875rem">Step 5 needs Docker, so the page cannot run it. Shown before you press Play, not after. For a full run: <code style="font-family: 'JetBrains Mono', monospace; color: #E6EDF3">./scripts/benchctl scenario run gpu-xid-storm</code></span>
+      </div>
+
+      <section aria-labelledby="tl-h" style="background: #151A21; border: 1px solid #262D38; border-radius: 12px; padding: 16px 20px">
+        <h2 id="tl-h" style="margin: 0 0 12px; font-size: 1rem; font-weight: 600">Timeline</h2>
+        <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px">
+          <sc-for list="{{steps}}" as="st" hint-placeholder-count="7">
+            <li style="display: grid; grid-template-columns: 56px 24px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 6px; border-radius: 6px; background: {{st.rowBg}}">
+              <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; color: #9AA7B4">{{st.at}}</span>
+              <span style="font-weight: 700; color: {{st.fg}}" aria-hidden="true">{{st.icon}}</span>
+              <span><b style="font-weight: 600">{{st.target}}</b> <span style="color: #C9D3DD">{{st.what}}</span></span>
+              <span style="font-size: 0.75rem; color: {{st.fg}}; font-weight: 600">{{st.status}}</span>
+            </li>
+          </sc-for>
+        </ol>
+      </section>
+
+      <section aria-labelledby="ex-h" style="background: #151A21; border: 1px solid #262D38; border-radius: 12px; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px">
+        <h2 id="ex-h" style="margin: 0; font-size: 1rem; font-weight: 600">Expectations</h2>
+        <sc-for list="{{expects}}" as="e" hint-placeholder-count="3">
+          <div style="display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 10px 12px; border-radius: 8px; background: #12161C">
+            <span style="font-weight: 700; color: {{e.fg}}">{{e.icon}} {{e.verdict}}</span>
+            <code style="font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; flex: 1 1 280px">{{e.rule}}</code>
+            <span style="color: #9AA7B4; font-size: 0.8125rem">{{e.when}}</span>
+          </div>
+        </sc-for>
+      </section>
+    </main>
+
+    <aside aria-labelledby="eye-h" style="flex: 1 1 340px; max-width: 420px; background: #151A21; border: 1px solid #262D38; border-radius: 12px; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px">
+      <div>
+        <h2 id="eye-h" style="margin: 0; font-size: 1rem; font-weight: 600">Client's eye</h2>
+        <p style="margin: 2px 0 0; color: #9AA7B4; font-size: 0.8125rem">What your client called since Play, from the services' own counters</p>
+      </div>
+      <div style="overflow-x: auto">
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.8125rem">
+          <thead>
+            <tr style="color: #9AA7B4; text-align: left">
+              <th scope="col" style="padding: 6px 4px; font-weight: 500">Endpoint</th>
+              <th scope="col" style="padding: 6px 4px; font-weight: 500; text-align: right">Calls</th>
+              <th scope="col" style="padding: 6px 4px; font-weight: 500; text-align: right">Errors</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{calls}}" as="c" hint-placeholder-count="6">
+              <tr style="border-top: 1px solid #222934">
+                <td style="padding: 8px 4px"><code style="font-family: 'JetBrains Mono', monospace">{{c.ep}}</code><div style="color: #9AA7B4">{{c.svc}}</div></td>
+                <td style="padding: 8px 4px; text-align: right">{{c.n}}</td>
+                <td style="padding: 8px 4px; text-align: right; color: {{c.errFg}}; font-weight: 600">{{c.err}}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+      <div style="padding: 10px 12px; border-radius: 8px; background: #1E1810; border: 1px solid #5A3E1B; font-size: 0.8125rem">
+        <b style="color: #FFB86B">▲ Not called yet:</b> Redfish event log for gpu001. A real BMC records the thermal event there.
+      </div>
+      <div style="border-top: 1px solid #262D38; padding-top: 12px; display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 0.8125rem; color: #9AA7B4">The report includes</span>
+        <span style="font-size: 0.875rem">Faults injected with times · every client call and answer · expectations with pass or fail · cluster selection and versions</span>
+      </div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":940}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const library = [
+      { name: 'gpu-xid-storm', what: 'XID, thermal ramp, drain, ticket', bg: '#1C2633', border: '#2F6FEB' },
+      { name: 'fan-failure', what: 'Fans fail, temperature climbs', bg: '#12161C', border: '#262D38' },
+      { name: 'node-down', what: 'Power off one node', bg: '#12161C', border: '#262D38' },
+      { name: 'ib-port-down', what: 'InfiniBand port fails, NHC drains', bg: '#12161C', border: '#262D38' },
+      { name: 'drain-mid-job', what: 'Drain under a running job', bg: '#12161C', border: '#262D38' },
+      { name: 'jira-429', what: 'Rate limiting on ticket search', bg: '#12161C', border: '#262D38' }
+    ];
+    const done = { icon: '✓', fg: '#7EE2A0', status: 'done', rowBg: 'transparent' };
+    const run = { icon: '●', fg: '#9CC7FF', status: 'running', rowBg: '#17212E' };
+    const wait = { icon: '○', fg: '#9AA7B4', status: 'pending', rowBg: 'transparent' };
+    const cli = { icon: '↷', fg: '#FFB86B', status: 'CLI only', rowBg: 'transparent' };
+    const steps = [
+      { at: '0:00', target: 'gpu exporter', what: 'XID 79 on gpu001, gpu002', ...done },
+      { at: '0:30', target: 'bmc farm', what: 'gpu001 CPU temperature ramps to 92 °C over 2 min', ...done },
+      { at: '0:45', target: 'jira', what: 'answer 503 for 60 s', ...done },
+      { at: '1:30', target: 'watch', what: 'node health check drains gpu001 on its own', ...run },
+      { at: '2:00', target: 'slurm', what: 'restart slurmctld under the drain', ...cli },
+      { at: '3:00', target: 'clear', what: 'XID, temperature and Jira back to normal', ...wait },
+      { at: '3:30', target: 'slurm', what: 'resume gpu001 if the check passes', ...wait }
+    ];
+    const expects = [
+      { icon: '✓', verdict: 'Passed', fg: '#7EE2A0', rule: 'slurm.node_state gpu001 = drained', when: 'at 0:52' },
+      { icon: '○', verdict: 'Waiting', fg: '#9CC7FF', rule: 'jira.issue_created labels [gpu, xid] within 3m', when: '1:18 left' },
+      { icon: '✗', verdict: 'Failed', fg: '#FF9B9B', rule: 'client retried the Jira search after 503', when: 'no retry seen' }
+    ];
+    const none = '#9AA7B4', bad = '#FF9B9B';
+    const calls = [
+      { ep: '/api/v1/query', svc: 'Prometheus', n: '48', err: '0', errFg: none },
+      { ep: 'squeue, sinfo', svc: 'SSH login', n: '9', err: '0', errFg: none },
+      { ep: '/Systems/1', svc: 'Redfish gpu001', n: '12', err: '0', errFg: none },
+      { ep: 'POST /search/jql', svc: 'Jira', n: '6', err: '2 × 503', errFg: bad },
+      { ep: 'POST /issue', svc: 'Jira', n: '0', err: '0', errFg: none },
+      { ep: 'device; status', svc: 'cmsh', n: '3', err: '0', errFg: none }
+    ];
+    return { library, steps, expects, calls };
+  }
+}
+</script>
+</body>
+</html>
