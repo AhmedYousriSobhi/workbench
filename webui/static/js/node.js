@@ -1,5 +1,5 @@
 import { S } from './state.js';
-import { $, H, esc, toast } from './util.js';
+import { $, H, enc, esc, toast } from './util.js';
 import { STATE_ICON, loadCluster } from './cluster.js';
 import { kindOf } from './svg.js';
 import { dockWide, hidePop, paintInspector } from './inspector.js';
@@ -32,7 +32,7 @@ export async function showNode(name) {
   if (!dockWide()) { $('tree').hidden = true; $('treenote').hidden = true; }  // narrow: the panel takes the list's place; wide: the list stays and the panel is in the Inspector
   hidePop(false); $('nodepane').hidden = false; paintInspector(); $('nodetitle').textContent = name; $('node-back').focus();
   document.querySelectorAll('.node').forEach(b => b.classList.toggle('sel', b.dataset.node === name));
-  const r = await fetch(`/api/nodes/${name}`), body = r.ok ? await r.json() : null;
+  const r = await fetch(`/api/nodes/${enc(name)}`), body = r.ok ? await r.json() : null;
   $('nodetitle').textContent = name;
   const cx = (await connections()).find(e => e.id === 'nodes'), kv = [];
   if (cx) kv.push(['SSH', `<code>${esc(cx.command.replace('<node>', name))}</code>`], ['User and key', esc(cx.how.split('.')[0]) + ` · key file <code>${esc(cx.credential)}</code>`]);
@@ -51,12 +51,12 @@ export async function showNode(name) {
   $('nodetext').textContent = body ? body.text : `Could not read ${name}: ${(await r.json()).detail}`;
 }
 export async function nodeJob(name, gpus, dur) {
-  const r = await fetch(`/api/nodes/${name}/workload?gpus=${gpus}&duration=${dur}`, { method: 'POST', headers: H });
+  const r = await fetch(`/api/nodes/${enc(name)}/workload?gpus=${gpus}&duration=${dur}`, { method: 'POST', headers: H });
   const m = r.ok ? (await r.json()).message : `Could not submit on ${name}: ${(await r.json()).detail}`;
   toast(m); $('nodeactmsg').textContent = m;
 }
 export async function nodeAction(name, action, label) {
-  const r = await fetch(`/api/nodes/${name}/${action}`, { method: 'POST', headers: H });
+  const r = await fetch(`/api/nodes/${enc(name)}/${action}`, { method: 'POST', headers: H });
   if (!r.ok) { const m = `${label} on ${name} was refused: ${(await r.json()).detail}`; toast(m); $('nodeactmsg').textContent = m; return; }
   const res = (await r.json()).results;
   const bad = res.filter(x => x.status === 'failed');

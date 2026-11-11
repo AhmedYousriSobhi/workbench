@@ -9,7 +9,8 @@ import { paintConnections } from './connections.js';
 import { closeFlow, openFlow } from './flowfeed.js';
 import { paintTraffic } from './traffic.js';
 import { paintHome } from './home.js';
-import { loadCluster } from './cluster.js';
+import { loadCluster, pauseCluster, resumeCluster } from './cluster.js';
+import { closeGov, openGov } from './governor.js';
 import { loadScenarios, poll, runChip } from './scenarios.js';
 import { paintRunEye } from './testrun.js';
 
@@ -117,6 +118,6 @@ export function init3() {
   let savedTab = 'home'; try { savedTab = sessionStorage.getItem('workbench-tab') || 'home'; } catch (e) { /* default */ }
   selectTab(TABS.includes(savedTab) ? savedTab : 'home');
   // the live feed is only worth its CPU while the page is visible
-  document.addEventListener('visibilitychange', () => { if (document.hidden || ($('tab-nodes').hidden && $('tab-traffic').hidden && $('tab-run').hidden)) closeFlow(); else openFlow(); if (document.hidden || $('tab-traffic').hidden) stopAnalysis(); else startAnalysis(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { closeGov(); pauseCluster(); } else { openGov(); resumeCluster(); } if (document.hidden || ($('tab-nodes').hidden && $('tab-traffic').hidden && $('tab-run').hidden)) closeFlow(); else openFlow(); if (document.hidden || $('tab-traffic').hidden) stopAnalysis(); else startAnalysis(); });
 
 }

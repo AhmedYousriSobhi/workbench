@@ -155,7 +155,7 @@ export function init3() {
       if (done || Date.now() - t0 > 600000) {
         clearInterval(timer); $('pl-apply').disabled = false;
         $('pl-apply-msg').textContent = done ? (done.includes('FAILED') ? '✗ ' : '✓ ') + done : '▲ Still running after 10 minutes: check Governor activity.';
-        S.lastCluster = ''; loadCluster();
+        S.connCache = null; S.lastCluster = ''; loadCluster();  // new parts or nodes: Connections and node panels read again (U4)
       } else { S.lastCluster = ''; loadCluster(); }
     }, 4000);
   };

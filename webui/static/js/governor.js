@@ -1,5 +1,5 @@
 import { S } from './state.js';
-import { $, esc } from './util.js';
+import { $, esc, setHTML, setText } from './util.js';
 import { attentionItems } from './homemodel.js';
 import { paintHome } from './home.js';
 
@@ -42,17 +42,17 @@ export function renderLog() {
   $('audit').textContent = lines.length ? lines.join('\n') : 'Nothing to show yet: the governor has taken no actions.';
 }
 export function render(st) {
-  const live = $('conn'); live.className = st.ok ? 'live' : ''; live.lastElementChild.textContent = st.ok ? 'live' : 'governor offline';
+  const live = $('conn'); live.className = st.ok ? 'live' : ''; setText(live.lastElementChild, st.ok ? 'live' : 'governor offline');
   const banner = $('banner');
   if (!st.ok) {
     banner.style.setProperty('--lv', 'var(--bad)'); banner.className = 'banner';
-    banner.innerHTML = '<i class="orb" aria-hidden="true"></i><div><b>Governor not reachable</b><span class="m">Start it with <code>./scripts/benchctl start</code> (no sudo). Optional boot service: <code>sudo ./scripts/install-governor.sh</code>.</span></div>';
+    setHTML(banner, '<i class="orb" aria-hidden="true"></i><div><b>Governor not reachable</b><span class="m">Start it with <code>./scripts/benchctl start</code> (no sudo). Optional boot service: <code>sudo ./scripts/install-governor.sh</code>.</span></div>');
     S.lastGov = null; setChip('c-level', 'bad', '✗', 'Governor offline'); paintAttention();
     return;
   }
   const l = Math.min(st.level, 5);
   banner.style.setProperty('--lv', `var(--L${l})`); banner.className = 'banner' + (l === 0 ? ' calm' : '');
-  banner.innerHTML = `<i class="orb" aria-hidden="true"></i><div><b>L${l} · ${LEVELS[l]}${st.dry_run ? ' (dry-run: no actions taken)' : ''}</b><span class="m">${MEANING[l]}${st.violations.length ? ` ${st.violations.length} security finding(s).` : ''}</span></div>`;
+  setHTML(banner, `<i class="orb" aria-hidden="true"></i><div><b>L${l} · ${LEVELS[l]}${st.dry_run ? ' (dry-run: no actions taken)' : ''}</b><span class="m">${MEANING[l]}${st.violations.length ? ` ${st.violations.length} security finding(s).` : ''}</span></div>`);
   const gb = (st.mem_available || 0) / 2 ** 30;
   S.lastGov = st; setChip('c-level', l <= 1 ? 'good' : l <= 2 ? 'warn' : 'bad', l === 0 ? '✓' : l <= 2 ? '▲' : '✗', `L${l} ${LEVELS[l]}`);
   $('c-mem').textContent = gb.toFixed(1) + ' GB free'; paintAttention();
@@ -65,12 +65,17 @@ export function render(st) {
   S.lastLog = st.audit; renderLog();
 }
 
+let events = null;
+export function openGov() {  // the governor feed runs only while the page is visible (W-11, U1)
+  if (events || document.hidden) return;
+  events = new EventSource('/api/events');
+  events.onmessage = e => render(JSON.parse(e.data));
+  events.onerror = () => { $('conn').className = ''; setText($('conn').lastElementChild, 'reconnecting…'); };
+}
+export function closeGov() { if (events) { events.close(); events = null; } }
 export function init() {
   $('onlyactions').onchange = renderLog;
-  const es = new EventSource('/api/events');
-  es.onmessage = e => render(JSON.parse(e.data));
-  es.onerror = () => { $('conn').className = ''; $('conn').lastElementChild.textContent = 'reconnecting…'; };
-
+  openGov();
 }
 
 export function init2() {
