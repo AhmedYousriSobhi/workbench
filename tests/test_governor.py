@@ -549,6 +549,33 @@ def test_slurm_stats_is_read_only_needs_a_statser_and_pauses_under_pressure(tmp_
     assert "slurm stats failed" in g.handle("slurm-stats", {})["error"]
 
 
+def test_wire_capture_needs_a_capturer_refuses_a_dry_run_and_runs_at_l0_l1_only(tmp_path):
+    from governor.capture import Capture
+    g, _ = _calm_gov(tmp_path)
+    assert "no capture without --workdir" in g.handle("capture-start", {"node": "cn001"})["error"]
+    spawned = []
+
+    class P:
+        stdout, stderr = iter(()), None
+
+        def terminate(self):
+            pass
+
+        def wait(self):
+            return 0
+    g.capture = Capture(lambda node, s: spawned.append(node) or P(), lambda: g.ladder.level, g._record)
+    g.dry_run = True
+    assert "dry run" in g.handle("capture-start", {"node": "cn001"})["error"] and not spawned
+    g.dry_run = False
+    g.ladder.level = 2
+    assert "memory pressure" in g.handle("capture-start", {"node": "cn001"})["error"] and not spawned
+    g.ladder.level = 1
+    assert g.handle("capture-start", {"node": "cn001"})["ok"] is True and spawned == ["cn001"]
+    assert g.handle("capture-read", {"since": 0})["class"] == "P5"
+    assert g.handle("capture-stop", {})["ok"] is True
+    assert any("capture start cn001" in a for a in g.audit)  # recorded in the audit log like every action
+
+
 def test_refresh_jira_licence_runs_the_benchctl_refresh(tmp_path):
     import threading
     calls, done = [], threading.Event()

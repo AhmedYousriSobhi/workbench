@@ -660,3 +660,41 @@ def test_the_traffic_record_needs_the_token_and_a_numeric_since(ui):
     got = json.loads(body)
     assert code == 200 and isinstance(got["streams"], list) and isinstance(got["recent"], list)
     assert got["services"].keys() == {"bmc-farm", "bcm-mock", "jira-mock"}
+
+
+def test_the_capture_routes_go_only_through_the_governor_and_check_their_input(tmp_path):
+    """issue 505: start, read and stop are governor commands; the page validates the node name and needs the CSRF header to start or stop."""
+    seen = []
+
+    def handle(cmd, request):
+        seen.append((cmd, request))
+        return {"ok": True, "running": True, "messages": [], "next": 0} if cmd.startswith("capture") else STATUS
+    sock = str(tmp_path / "g.sock")
+    gov = control.serve(sock, handle, lambda: {"compute"})
+    port = free_port()
+    server = uvicorn.Server(uvicorn.Config(create_app(TOKEN, sock, tmp_path, ROOT / "sim.yaml", fetch=no_stack, poster=no_stack), host="127.0.0.1", port=port, log_level="error"))
+    threading.Thread(target=server.run, daemon=True).start()
+    while not server.started:
+        time.sleep(0.02)
+    base = f"http://127.0.0.1:{port}"
+
+    def post(path, body):
+        r = urllib.request.Request(base + path, data=json.dumps(body).encode(), method="POST", headers={"Authorization": f"Bearer {TOKEN}", "X-Requested-With": "workbench", "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(r, timeout=5) as resp:
+                return resp.status
+        except HTTPError as e:
+            return e.code
+    try:
+        assert post("/api/capture/start", {"node": "cn001"}) == 200 and seen[-1] == ("capture-start", {"cmd": "capture-start", "node": "cn001"})
+        assert post("/api/capture/start", {"node": "cn001; rm -rf /"}) == 400 and post("/api/capture/start", {}) == 400 and post("/api/capture/start", {"node": 3}) == 400
+        assert req(base, "/api/capture/read?since=7")[0] == 200 and seen[-1][1] == {"cmd": "capture-read", "since": 7}
+        assert req(base, "/api/capture/read?since=abc")[0] == 400
+        assert req(base, "/api/capture/read?since=-5")[0] == 200 and seen[-1][1]["since"] == 0
+        assert post("/api/capture/stop", {}) == 200 and seen[-1][0] == "capture-stop"
+        assert req(base, "/api/capture/start", method="POST")[0] in (400, 403)  # no CSRF header: refused before the governor is asked
+        n = len(seen)
+        assert req(base, "/api/capture/read", auth=False)[0] == 401 and len(seen) == n
+    finally:
+        server.should_exit = True
+        gov.shutdown()

@@ -12,6 +12,7 @@ import typer.completion
 from typer.core import TyperGroup
 
 from . import (
+    capture,
     checks,
     completion,
     compose,
@@ -571,6 +572,26 @@ def get_trace(node: list[str] = TRACE_NODES, since: float = TRACE_SINCE) -> None
 def get_slurm_stats() -> None:
     """slurmctld's request counts and times from `sdiag`, as JSON: the data behind the page's Traffic view. Read-only."""
     typer.echo(json.dumps(slurmstats.collect(lambda c: stack._run(c))))
+
+
+CAPTURE_NODE = typer.Argument(..., help="a Slurm node or a Kubernetes node, e.g. cn001, gpu001 or kw001")
+CAPTURE_SECONDS = typer.Option(300, "--seconds", min=1, max=300, help="stop after this many seconds (at most 300)")
+
+
+@get_app.command("capture")
+def get_capture(node: str = CAPTURE_NODE, seconds: int = CAPTURE_SECONDS) -> None:
+    """The messages on one node's wire as they happen, one JSON object per line (issue 505): Slurm messages by tcpdump inside the node,
+    or the Kubernetes API audit events about the node. Nothing from a message body; nothing written to disk. The page asks the governor
+    for it; it ends by itself after --seconds."""
+    import signal
+    import sys
+
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))  # the governor stops it with SIGTERM: let tcpdump be stopped on the way out
+    try:
+        capture.run(_sim(), node, lambda m: typer.echo(json.dumps(m), nl=True) or sys.stdout.flush(), seconds)
+    except (ValueError, RuntimeError) as e:
+        typer.echo(f"capture failed: {e}", err=True)
+        raise typer.Exit(1) from e
 
 
 @get_app.command("scenarios")
