@@ -19,6 +19,7 @@ import { init as init_circuit } from './circuit.js';
 import { init as init_pool } from './pool.js';
 import { init as init_fleet } from './fleet.js';
 import { init as init_zoom } from './zoom.js';
+import { init as init_analysis } from './analysis.js';
 
 init_governor();
 init_plan();
@@ -45,3 +46,4 @@ init_circuit();
 init_pool();
 init_fleet();
 init_zoom();
+init_analysis();
