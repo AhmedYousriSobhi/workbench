@@ -6,7 +6,7 @@ import { S } from '../../static/js/state.js';
 import { esc } from '../../static/js/util.js';
 import { roundedPoly } from '../../static/js/svg.js';
 import { nhcOrderAfterMove } from '../../static/js/nhc.js';
-import { describe, plain } from '../../static/js/scenarios.js';
+import { describe, plain } from '../../static/js/testrunmodel.js';
 import { pathOf, rateOf, trRate, SLURM_OUT } from '../../static/js/traffic.js';
 
 test('esc escapes what could end an HTML text or a double-quoted attribute', () => {

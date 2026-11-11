@@ -574,6 +574,13 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         return JSONResponse([{"name": s["name"], "description": s.get("description", ""), "steps": len(s.get("steps", []))}
                              for s in scenario.list_all(scenarios)])
 
+    async def scenario_preview(request: Request):
+        try:
+            sc = scenario.load(request.path_params["name"], scenarios)
+        except scenario.ScenarioError as e:
+            raise HTTPException(404, str(e)) from e
+        return JSONResponse(scenario.preview(sc))
+
     async def run_state(request: Request):
         return JSONResponse(runs.state)
 
@@ -651,6 +658,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/nodes/{node}/{action}", protected(node_action, write=True), methods=["POST"]),
             Route("/api/scenarios", protected(list_scenarios)),
             Route("/api/scenarios/run", protected(run_state)),
+            Route("/api/scenarios/{name}", protected(scenario_preview)),
             Route("/api/scenarios/stop", protected(stop, write=True), methods=["POST"]),
             Route("/api/scenarios/{name}/run", protected(run, write=True), methods=["POST"]),
         ],

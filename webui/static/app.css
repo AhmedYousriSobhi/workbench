@@ -139,21 +139,9 @@
   .psh { margin:0 0 var(--sp2); font-size:14px; } .psum { display:grid; grid-template-columns:auto 1fr; gap:4px var(--sp3); margin:0; font-size:13.5px; } .psum dt { color:var(--dim); } .psum dd { margin:0; font-variant-numeric:tabular-nums; }
   @media (max-width:860px) { .sheet-b.plan-grid { grid-template-columns:1fr; } .plan-side { position:static; } .lrow { grid-template-columns:1fr auto; } .lrow .nm { grid-column:1 / 3; } }
 
-  /* Scenarios: a docked drawer, not a modal, so the diagram stays visible and live while a scenario runs */
-  dialog.drawer { position:fixed; top:72px; right:12px; bottom:12px; left:auto; margin:0; padding:0; width:min(440px,calc(100vw - 24px)); height:auto; max-height:none; max-width:none; border:1px solid var(--line); border-radius:16px; box-shadow:0 14px 44px rgba(0,0,0,.3); background:var(--panel); color:var(--fg); }
-  dialog.drawer[open] { display:flex; flex-direction:column; z-index:30; }
-  .drawer-b { overflow-y:auto; display:flex; flex-direction:column; gap:var(--sp4); padding:var(--sp4) var(--sp5); scrollbar-width:thin; }
-  .drawer .runbox { margin:0; padding:var(--sp4); border:1px solid var(--line); border-radius:12px; border-top:1px solid var(--line); background:color-mix(in srgb,var(--accent) 5%,var(--panel)); }
-  #scn-toggle.on { background:color-mix(in srgb,var(--accent) 16%,var(--panel)); border-color:var(--accent); font-weight:650; }
+  /* Test run: the scenario library and the shared header bits (the old drawer is gone, issue 509) */
   .rhead { display:flex; align-items:center; justify-content:space-between; gap:var(--sp3); } .rhead h2 { margin:0; }
-  .drawer ul.steps { max-height:34vh; overflow-y:auto; } ul.steps li.cur { background:color-mix(in srgb,var(--accent) 12%,transparent); border-radius:6px; }
-  .scnlib { display:flex; flex-direction:column; gap:var(--sp3); } .scnlib input[type=search] { width:100%; min-height:40px; font:inherit; border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--fg); padding:0 12px; }
   .scnopts { display:flex; flex-wrap:wrap; gap:var(--sp3); align-items:center; justify-content:space-between; } .scnopts select { min-height:36px; border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--fg); font:inherit; padding:0 8px; }
-  .drawer ul.scns { max-height:none; overflow:visible; display:flex; flex-direction:column; gap:var(--sp2); }
-  .drawer .scn { display:grid; grid-template-columns:1fr auto; gap:2px var(--sp3); align-items:center; padding:var(--sp3) var(--sp4); border:1px solid var(--line); border-radius:12px; border-bottom:1px solid var(--line); }
-  .drawer .scn.active { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 8%,var(--panel)); }
-  .drawer .scn p { -webkit-line-clamp:3; font-size:13px; } .drawer .scn .btn { grid-row:1 / span 2; min-height:40px; }
-  @media (max-width:860px) { dialog.drawer { top:auto; left:0; right:0; bottom:0; width:100vw; height:56vh; border-radius:16px 16px 0 0; } }
   .planparts { border:1px solid var(--line); border-radius:8px; } .planparts label { display:inline-block; min-height:40px; padding:8px 10px 0 0; }
   #pl-bar { width:100%; height:14px; } #pl-cmd { white-space:pre-wrap; margin:4px 0 0; }
   .node dt { color:var(--dim); } .node dd { margin:0; }
@@ -490,3 +478,19 @@
 .hs { display:flex; align-items:center; gap:var(--sp2); padding:var(--sp2) var(--sp3); border:1px solid var(--line); border-radius:8px; background:var(--panel); } .hs.fault { border-color:var(--bad); }
 .hs .tag { margin-left:auto; font-size:12px; padding:1px 8px; border:1px solid var(--line); border-radius:6px; }
 @media (max-width:640px) { .home-start { grid-template-columns:minmax(0,1fr); } }
+
+/* Test run (redesign step 6b): library beside the run; one column on a phone. */
+#main[data-tab="run"] .subbar { display:none; }
+.trun { display:grid; grid-template-columns:minmax(260px,340px) minmax(0,1fr); gap:var(--sp5); align-items:start; max-width:1280px; }
+.trun-lib, .trun-main { display:flex; flex-direction:column; gap:var(--sp3); min-width:0; } .trun-lib input[type=search] { width:100%; min-height:40px; font:inherit; border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--fg); padding:0 12px; }
+.trun ul.scns { max-height:calc(100vh - 330px); min-height:160px; overflow-y:auto; scrollbar-width:thin; display:flex; flex-direction:column; gap:var(--sp2); border-top:0; }
+.trun .scn { display:grid; grid-template-columns:1fr auto; gap:var(--sp2); align-items:center; padding:var(--sp2) var(--sp3); border:1px solid var(--line); border-radius:12px; margin:0; }
+.trun .scn.sel { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 8%,var(--panel)); } .trun .scn.active { box-shadow:0 0 0 2px var(--accent) inset; }
+.scnsel { text-align:left; display:flex; flex-direction:column; gap:2px; min-height:40px; padding:4px 2px; border:0; background:none; color:var(--fg); font:inherit; cursor:pointer; } .scnsel:focus-visible { outline:2px solid var(--accent); border-radius:6px; }
+.scnsel .hd { display:flex; align-items:center; gap:var(--sp2); } .scnd { font-size:13px; color:var(--dim); display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+.trun .scn .btn { min-height:40px; }
+.trun .runbox { margin:0; } .runexp { display:flex; align-items:center; gap:var(--sp2); } .trun .row { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:var(--sp3); }
+.clitag { display:inline-block; margin-left:var(--sp2); padding:0 8px; border:1px dashed var(--dim); border-radius:6px; font-size:12px; }
+#runcli { margin:var(--sp3) 0; } #runcli code { word-break:break-all; }
+.trun #expects p { white-space:normal; } .trun #expects p, .trun #runcli, .trun #run-eye td { overflow-wrap:anywhere; } .trun ul.steps { max-height:none; } .trun ul.steps li { grid-template-columns:auto minmax(0,1fr); } .trun ul.steps li > div { min-width:0; overflow-wrap:anywhere; } ul.steps li.cur { background:color-mix(in srgb,var(--accent) 12%,transparent); border-radius:6px; } .trun h3.rh { margin:var(--sp4) 0 var(--sp2); font-size:1rem; }
+@media (max-width:860px) { .trun { grid-template-columns:minmax(0,1fr); } .trun ul.scns { max-height:38vh; } }

@@ -27,7 +27,7 @@ and run it again.
 
 ## Run one from the web page
 
-Open the scenarios sheet, tick **Slurm trace**, press **Play**. The page has no Docker access (SPEC W-3), so everything
+Open **Test run**, tick **Slurm trace**, press **Play**. The page has no Docker access (SPEC W-3), so everything
 goes through the governor: the job and daemon steps (`slurm-step`, `submit-job`) and the read-only trace
 (`slurm-trace`, which runs `benchctl get trace`). The governor must have been started with `--workdir` (`benchctl start`
 does that); without it the steps show **skipped** and the Slurm trace box is refused with that reason.

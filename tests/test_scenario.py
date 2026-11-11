@@ -550,3 +550,29 @@ def test_run_starts_the_fault_proxy_only_for_proxy_scenarios(monkeypatch):
     lines = []
     scenario.run(sc, say=lines.append, runner=lambda c: CP())
     assert started and any("fault proxy" in line for line in lines)
+
+
+def test_preview_marks_what_the_page_cannot_run_before_play():
+    """Issue 509 (U7): the page has no Docker, so host steps and host-only expectations are flagged up front, by the same rules `_apply` uses."""
+    sc = {"name": "t", "ref": "SC-99", "description": "d", "steps": [
+        {"at": "0s", "target": "slurm", "do": {"drain": ["cn001"]}},
+        {"at": "5s", "target": "slurm", "do": {"submit": {"node": "cn001"}}},
+        {"at": "10s", "target": "k8s", "do": {"nodes": ["k8s001"], "clear": True}},
+        {"at": "20s", "target": "bmc-farm", "do": {"nodes": ["cn001"], "power": "Off"}}],
+        "expect": [{"slurm.node_state": {"node": "cn001", "state": "drain", "within": "30s"}}, {"jira.issue_count": {"jql": "x", "count": 1}}]}
+    p = scenario.preview(sc)
+    assert [s["page"] for s in p["steps"]] == [True, True, False, True]
+    assert "host CLI" in p["steps"][2]["why"] and p["steps"][0]["why"] == ""
+    assert [e["page"] for e in p["expects"]] == [False, True]
+    assert p["cli_only"] == 2 and p["cli"] == "./scripts/benchctl scenario run t" and p["length"] == 20
+    # one source of truth: what the preview says is skipped is what a host=False run skips
+    for step, row in zip(scenario.plan(sc), p["steps"]):
+        out = scenario.execute(step, poster=lambda *a, **k: (200, {}), runner=lambda *a, **k: CP(), host=False,
+                               slurm=lambda n, s, r: (True, ""), daemon=lambda do: (True, ""))
+        assert (out.status == "skipped") == (not row["page"]), step
+
+
+def test_every_shipped_scenario_previews():
+    for sc in scenario.list_all():
+        p = scenario.preview(sc)
+        assert p["name"] == sc["name"] and len(p["steps"]) >= len(sc["steps"])

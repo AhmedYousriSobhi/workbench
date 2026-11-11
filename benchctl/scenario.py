@@ -99,6 +99,31 @@ def summary(sc: dict) -> str:
     return f"{sc.get('ref', '-')} {sc['name']}: {len(steps)} steps, {length:.0f} s, targets {targets}"
 
 
+def page_support(step: Step) -> str:
+    """"" when the Web UI can run the step (it has no Docker: only the governor's Slurm steps), else why not. The same rules as `_apply` with host=False."""
+    if step.target in NOT_BUILT:
+        return f"{step.target} is not built yet"
+    if step.target == "slurm" and (set(step.do) & set(DAEMON_KEYS) or set(step.do) & set(SLURM_STATES)):
+        return ""
+    if step.target in HOST_TARGETS:
+        return f"{step.target} steps need the host CLI (no Docker access in the page)"
+    return ""
+
+
+def preview(sc: dict) -> dict:
+    """What the Test run page shows before Play (issue 509): the timeline as the run will play it, each step and expectation marked
+    with whether the page can do it, and the command that runs all of it."""
+    steps = [{"at": s.at, "target": s.target, "do": s.do, "page": not (why := page_support(s)), "why": why} for s in plan(sc)]
+    expects = []
+    for exp in sc.get("expect") or []:
+        label, holds, _ = expectation(exp, host=False)
+        expects.append({"label": label, "page": holds is not None})
+    return {"name": sc["name"], "ref": sc.get("ref", ""), "description": sc.get("description", ""),
+            "length": max((s["at"] for s in steps), default=0), "steps": steps, "expects": expects,
+            "cli": f"./scripts/benchctl scenario run {sc['name']}",
+            "cli_only": sum(1 for s in steps if not s["page"]) + sum(1 for e in expects if not e["page"])}
+
+
 def list_all(root: Path = SCENARIOS) -> list[dict]:
     return sorted((yaml.safe_load(p.read_text()) for p in root.glob("*.yaml")), key=lambda s: s["name"])
 
