@@ -650,3 +650,13 @@ def test_every_static_folder_is_packaged():
     listed = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["setuptools"]["package-data"]["webui"]
     folders = {p.name for p in (ROOT / "webui" / "static").iterdir() if p.is_dir()}
     assert {"js"} <= folders and [f for f in folders if f"static/{f}/*" not in listed] == []
+
+
+def test_the_traffic_record_needs_the_token_and_a_numeric_since(ui):
+    """issue 501: /api/traffic merges the mocks' own record (whatever a stack on this host answers, or nothing)."""
+    assert req(ui, "/api/traffic", auth=False)[0] == 401
+    assert req(ui, "/api/traffic?since=abc")[0] == 400
+    code, body = req(ui, "/api/traffic?since=1.5")
+    got = json.loads(body)
+    assert code == 200 and isinstance(got["streams"], list) and isinstance(got["recent"], list)
+    assert got["services"].keys() == {"bmc-farm", "bcm-mock", "jira-mock"}

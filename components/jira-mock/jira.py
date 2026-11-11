@@ -29,6 +29,7 @@ Workflow: Open -> In Progress -> Resolved (needs "resolution") -> Closed; Reopen
 """
 import base64
 import calendar
+import collections
 import json
 import os
 import random
@@ -791,7 +792,8 @@ def counted(path: str, headers) -> bool:
 
 # --- request shapes (issue 475): which paths a client calls and which 404. Method and path shape only: a segment with a digit
 # (an id, an issue key, a node name; not a version or a 1-2 digit number) becomes {id}, query values are dropped, nothing from a body or header is kept. The three
-# mocks carry the same block (tests/test_path_shapes.py checks they match). GET /sim/paths shows it.
+# mocks carry the same block (tests/test_path_shapes.py checks they match). GET /sim/paths shows it; GET /sim/traffic[?since=T] adds who asked
+# (the User-Agent product token), the status class and the latency of each stream, and the last 400 requests (issue 501).
 SHAPE_CAP = 300  # distinct shapes kept; the rest count as "other"
 
 
@@ -802,25 +804,66 @@ def shape(path: str) -> str:
     return "/".join(segs)[:120] + ("?" + "&".join(k[:30] for k in keys) if keys else "")
 
 
+RING_CAP = 400  # recent requests kept; the oldest fall off
+HIST_MS = (5, 10, 25, 50, 100, 250, 500, 1000)  # latency histogram: upper edges in ms, one more bucket above the last
+
+
+def caller(headers) -> str:
+    """Who asked, as the User-Agent's product token only (no version, no other header): curl, python-requests, ... at most 24 characters."""
+    m = re.match(r"[A-Za-z][A-Za-z0-9_.-]{0,23}", headers.get("User-Agent") or "")
+    return m[0].lower() if m else "unknown"
+
+
+def elapsed_ms(handler) -> float:
+    t0 = getattr(handler, "_t0", None)
+    return 0.0 if t0 is None else (time.monotonic() - t0) * 1000
+
+
+def since_of(path: str) -> float:
+    m = re.search(r"[?&]since=([0-9.]+)", path)
+    return float(m[1]) if m else 0.0
+
+
 class Shapes:
     def __init__(self) -> None:
-        self.lock, self.paths, self.unknown = threading.Lock(), {}, {}
+        self.lock, self.paths, self.unknown, self.streams = threading.Lock(), {}, {}, {}
+        self.ring = collections.deque(maxlen=RING_CAP)
 
     def reset(self) -> None:
         with self.lock:
-            self.paths, self.unknown = {}, {}
+            self.paths, self.unknown, self.streams = {}, {}, {}
+            self.ring.clear()
 
-    def add(self, method: str, path: str, code: int, label: str | None = None, unknown: bool | None = None) -> None:
+    def add(self, method: str, path: str, code: int, label: str | None = None, unknown: bool | None = None,
+            ms: float = 0.0, who: str = "unknown", now: float | None = None) -> None:
         key = f"{method} {label or shape(path)}"
         with self.lock:
+            folded = key
             for table, hit in ((self.paths, True), (self.unknown, code == 404 if unknown is None else unknown)):
                 if hit:
                     k = key if key in table or len(table) < SHAPE_CAP else "other"
                     table[k] = table.get(k, 0) + 1
+                    if table is self.paths:
+                        folded = k
+            sk = (who, folded) if (who, folded) in self.streams or len(self.streams) < SHAPE_CAP else (who, "other")
+            row = self.streams.setdefault(sk, [0, 0, 0, 0, 0.0, [0] * (len(HIST_MS) + 1)])
+            row[0] += 1
+            row[1 + (0 if code < 400 else 1 if code < 500 else 2)] += 1
+            row[4] += ms
+            row[5][sum(1 for e in HIST_MS if ms > e)] += 1
+            self.ring.append((round(time.time() if now is None else now, 3), who, folded, code, round(ms, 1)))
 
     def snapshot(self) -> dict:
         with self.lock:
             return {"paths": dict(sorted(self.paths.items())), "unknown": dict(sorted(self.unknown.items()))}
+
+    def traffic(self, since: float = 0.0) -> dict:
+        """Streams (who called what: counts by status class and a latency histogram) and the recent requests after `since`."""
+        with self.lock:
+            return {"now": round(time.time(), 3), "edges": list(HIST_MS),
+                    "streams": [{"who": w, "shape": k, "n": r[0], "ok": r[1], "client_error": r[2], "server_error": r[3], "ms": round(r[4], 1), "hist": list(r[5])}
+                                for (w, k), r in sorted(self.streams.items())],
+                    "recent": [list(x) for x in self.ring if x[0] > since]}
 
 
 SHAPES = Shapes()
@@ -830,9 +873,14 @@ def make_handler(jira: Jira):
     stats, lock = {"requests": 0, "errors": 0}, threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
+        def parse_request(self):  # the clock for the latency of this request starts here, not at the keep-alive wait before it
+            ok = super().parse_request()
+            self._t0 = time.monotonic()
+            return ok
+
         def _send(self, code: int, obj=None, headers=None) -> None:
             if counted(self.path, self.headers):
-                SHAPES.add(self.command, self.path, code, getattr(self, "label", None), getattr(self, "is_unknown", None))
+                SHAPES.add(self.command, self.path, code, getattr(self, "label", None), getattr(self, "is_unknown", None), ms=elapsed_ms(self), who=caller(self.headers))
                 with lock:
                     stats["requests"] += 1
                     if code >= 400:  # an error answer (401, 404, 503 ...): the page draws it as a different dot (#314)
@@ -860,6 +908,8 @@ def make_handler(jira: Jira):
                 return 200, dict(stats)
             if url.path == "/sim/paths" and method == "GET":
                 return 200, SHAPES.snapshot()
+            if url.path == "/sim/traffic" and method == "GET":
+                return 200, SHAPES.traffic(since_of(self.path))
             if url.path == "/sim/failure" and method == "POST":
                 jira.set_failure(self._body())
                 return 200, {"ok": True}
