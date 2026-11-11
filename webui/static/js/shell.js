@@ -10,7 +10,8 @@ import { closeFlow, openFlow } from './flowfeed.js';
 import { paintTraffic } from './traffic.js';
 import { paintHome } from './home.js';
 import { loadCluster } from './cluster.js';
-import { loadScenarios, poll, runChip, scnOpen } from './scenarios.js';
+import { loadScenarios, poll, runChip } from './scenarios.js';
+import { paintRunEye } from './testrun.js';
 
 // Top menu: a disclosure (button + aria-expanded + list of buttons), closed by Escape, an outside click or choosing an item.
 export function setMenu(open, refocus) {
@@ -57,14 +58,15 @@ export function setTheme(t) {
   try { localStorage.setItem('workbench-theme', t); } catch (e) { /* private mode: not remembered */ }
 }
 // tabs: the live traffic feed runs only while its tab and the page are visible
-export const TABS = ['home', 'nodes', 'traffic', 'conn'];
+export const TABS = ['home', 'run', 'nodes', 'traffic', 'conn'];
 export function selectTab(t, focus) {
   TABS.forEach(k => { const on = k === t; $('tab-' + k).hidden = !on; $('tb-' + k).setAttribute('aria-selected', on); $('tb-' + k).tabIndex = on ? 0 : -1; });
   $('main').dataset.tab = t; $('subseg').hidden = t !== 'nodes';  // the view choice belongs to Infrastructure
   if (focus) $('tb-' + t).focus();
-  if ((t === 'nodes' || t === 'traffic') && !document.hidden) openFlow(); else closeFlow();
+  if ((t === 'run' || t === 'nodes' || t === 'traffic') && !document.hidden) openFlow(); else closeFlow();  // the run's Client's eye reads the same counters
   if (t === 'conn') paintConnections();
   if (t === 'home') paintHome();
+  if (t === 'run') paintRunEye();
   if (t === 'traffic') paintTraffic();
   if (t === 'traffic' && !document.hidden) startAnalysis(); else stopAnalysis();
   syncZoom();
@@ -114,8 +116,7 @@ export function init3() {
   loadCluster(); runChip(); loadScenarios(); poll();
   let savedTab = 'home'; try { savedTab = sessionStorage.getItem('workbench-tab') || 'home'; } catch (e) { /* default */ }
   selectTab(TABS.includes(savedTab) ? savedTab : 'home');
-  try { if (sessionStorage.getItem('workbench-scn') === '1') scnOpen(true); } catch (e) { /* closed */ }
   // the live feed is only worth its CPU while the page is visible
-  document.addEventListener('visibilitychange', () => { if (document.hidden || ($('tab-nodes').hidden && $('tab-traffic').hidden)) closeFlow(); else openFlow(); if (document.hidden || $('tab-traffic').hidden) stopAnalysis(); else startAnalysis(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden || ($('tab-nodes').hidden && $('tab-traffic').hidden && $('tab-run').hidden)) closeFlow(); else openFlow(); if (document.hidden || $('tab-traffic').hidden) stopAnalysis(); else startAnalysis(); });
 
 }

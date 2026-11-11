@@ -34,6 +34,9 @@ export const S = {
   raf: 0,
   recent: [],
   flowSnap: null,
+  trPrev: null,       // Test run: the preview of the chosen scenario
+  trLast: null,       // Test run: the last /api/scenarios/run state
+  trRun: null,        // Test run: the last run seen ({name, startedAt, finishedAt, base, speed})
   flowLevel: 0,
   flowNodes: '',
   tiles: {},

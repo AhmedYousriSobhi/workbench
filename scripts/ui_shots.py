@@ -143,6 +143,36 @@ def check_zoom(page) -> list[str]:
 _POLL_CHECKED = False
 
 
+def check_run(page, shot: str) -> list[str]:
+    """Test run (webui/static/js/testrun.js): the library, a chosen scenario's timeline before Play with the CLI-only steps marked in
+    words (U7), the Client's eye panel, and no sideways scroll. Returns the problems found."""
+    bad = []
+    page.click("#tb-run")
+    page.wait_for_selector("#list .scnsel", state="visible")
+    if page.locator("#tab-nodes").is_visible() or page.locator("#scndlg").count():
+        bad.append("Test run should be the only workspace shown and the scenarios drawer should be gone")
+    names = page.locator("#list .scnsel").evaluate_all("els => els.map(e => e.dataset.name)")
+    for name in names:  # the preview says what is CLI-only before anything runs, and says it in words
+        page.click(f'#list .scnsel[data-name="{name}"]')
+        page.wait_for_function("n => document.querySelector('#runtitle').textContent.startsWith(n) && document.querySelectorAll('#timeline li').length > 0", arg=name)
+        tags, notice = page.locator("#timeline .clitag").count(), page.locator("#runcli").is_visible()
+        cli_exp = "(CLI only)" in page.locator("#expects").inner_text()
+        if bool(tags or cli_exp) != notice:
+            bad.append(f"{name}: the CLI-only notice and the CLI-only marks disagree")
+        if tags and "CLI only" not in page.locator("#timeline .clitag").first.text_content():
+            bad.append(f"{name}: a CLI-only mark without words")
+        if page.locator("#run-export").is_visible():
+            bad.append(f"{name}: export offered before any run")
+    if not page.locator("#run-eye").inner_text().strip():
+        bad.append("Client's eye panel is empty")
+    if page.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth + 1"):
+        wide = page.evaluate("[...document.querySelectorAll('#tab-run *')].filter(e => e.getBoundingClientRect().right > document.documentElement.clientWidth + 1).slice(0, 3).map(e => e.tagName + '#' + e.id + '.' + e.className)")
+        bad.append(f"Test run scrolls sideways ({wide})")
+    page.screenshot(path=shot)
+    page.click("#tb-nodes")
+    return bad
+
+
 def check_home(page) -> list[str]:
     """Overview (webui/static/js/home.js): one card per node with its state in words, the three start cards, services with real or
     simulated, and a node card opens that node in Topology. Returns the problems found."""
@@ -404,14 +434,10 @@ def capture(out: Path) -> dict:
                     page.keyboard.press("Escape")
                     if page.locator("#menu:visible").count() or page.evaluate("document.activeElement.id") != "menubtn":
                         result["a11y"].append("Escape must close the menu and return focus to the Menu button")
-                    page.click("#scnbtn")  # scenarios sheet: list, filter, play buttons
-                    page.wait_for_selector("#list .btn")
-                    spath = out / f"scenarios-{vp}-{scheme}.png"
-                    page.screenshot(path=str(spath))
+                    spath = out / f"testrun-{vp}-{scheme}.png"
+                    for problem in check_run(page, str(spath)):
+                        result["a11y"].append(problem)
                     result["shots"].append(str(spath))
-                    page.click("#scn-close")
-                    if page.locator("#scndlg[open]").count():
-                        result["a11y"].append("scenarios sheet did not close")
                     page.click("#planbtn")  # planner sheet: opens, estimates, reacts to a stepper press, shows the command
                     page.wait_for_function("document.querySelector('#pl-msg').textContent.length > 5")
                     page.click("[data-step=pl-cpu][data-d='-1']")

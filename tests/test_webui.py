@@ -135,6 +135,9 @@ def test_scenario_list_and_run_sends_slurm_steps_through_the_governor(ui):
 def test_stop_ends_a_running_scenario_and_unknown_is_404(ui):
     h = {"X-Requested-With": "workbench"}
     assert req(ui, "/api/scenarios/nope/run", "POST", headers=h)[0] == 404
+    code, body = req(ui, "/api/scenarios/quick")  # the preview a page shows before Play (issue 509)
+    assert code == 200 and json.loads(body)["name"] == "quick" and "steps" in json.loads(body) and "cli" in json.loads(body)
+    assert req(ui, "/api/scenarios/nope")[0] == 404
     assert req(ui, "/api/scenarios/slow/run", "POST", headers=h)[0] == 200
     assert req(ui, "/api/scenarios/quick/run", "POST", headers=h)[0] == 409  # one at a time
     assert req(ui, "/api/scenarios/stop", "POST", headers=h)[0] == 200
@@ -207,7 +210,7 @@ def served_page(base: str) -> bytes:
 
 def test_page_has_the_app_shell(ui):
     body = served_page(ui).decode()
-    for needle in ('class="skip"', '<main id="main"', 'id="govdlg"', 'id="scndlg"',
+    for needle in ('class="skip"', '<main id="main"', 'id="govdlg"', 'id="tab-run"',
                    'id="theme"', 'id="strip"', 'id="attn"', 'id="list"', 'id="flow"', 'id="viewseg"', 'id="crumb"', 'id="ovprev"'):
         assert needle in body, needle
     assert 'rel="stylesheet" href="/static/app.css"' in body and 'rel="stylesheet" href="/static/canvas.css"' in body and 'type="module" src="/static/js/main.js"' in body
@@ -556,12 +559,13 @@ def test_state_update_keeps_the_kind_class_of_a_service_box(ui):
     assert b"(k === 'teleport' ? '' : REAL_SERVICES.has(k) ? ' real' : ' sim')" in served_page(ui)  # repainting the state must not drop the colour of the kind
 
 
-def test_scenarios_is_a_docked_drawer_with_a_toggle_not_a_modal():
-    """The diagram must stay visible while a scenario runs (issue 380): a non-modal drawer, toggled from the top strip."""
+def test_scenarios_live_in_the_test_run_workspace_not_a_drawer():
+    """Issue 509: scenario, run, expectations and Client's eye share one workspace; the drawer is gone."""
     html = page_source()
-    for needle in ('<dialog id="scndlg" class="drawer"', 'id="scn-toggle"', "function scnOpen(", "d.show()", "dialog.drawer", "dialog[open]:not(.drawer)", "li.classList.toggle('active'"):
+    for needle in ('id="tab-run"', 'id="tb-run"', 'id="scn-toggle"', 'id="run-eye"', 'id="runcli"', 'id="run-md"', 'id="run-json"', "li.classList.toggle('active'", "function scnOpen("):
         assert needle in html, needle
-    assert "$('scndlg').showModal()" not in html
+    assert "scndlg" not in html and "dialog.drawer" not in html
+
 
 
 def test_traffic_has_filters_inspector_and_path_following():

@@ -7,6 +7,7 @@ import { blastFor, setBlast } from './blast.js';
 import { paintEye } from './lens.js';
 import { buildFlow, flowNote, paintBlocks } from './diagram.js';
 import { paintTraffic } from './traffic.js';
+import { paintRunEye } from './testrun.js';
 import { fitKey } from './geometry.js';
 
 export function animating() { return !S.flowPaused && !reduced.matches && S.flowLevel < 3 && !document.hidden; }
@@ -43,7 +44,7 @@ export function onFlow(snap) {
   snap.events.forEach(e => S.recent.push({ t: Date.now(), to: e.to, n: e.from === 'clients' ? e.n : 0, fault: e.from === 'injector' }));
   snap.events.forEach(e => S.trHist.push({ t: Date.now(), from: e.from, to: e.to, n: e.n, label: e.label, nodes: e.nodes, err: e.err, ms: snap.latency?.[e.to] }));
   S.trHist = S.trHist.filter(h => h.t > Date.now() - 3600e3).slice(-800);
-  S.flowSnap = snap; paintBlocks(); paintKpis(); flowNote(); paintFeed(snap.events); paintTraffic();
+  S.flowSnap = snap; paintBlocks(); paintKpis(); flowNote(); paintFeed(snap.events); paintTraffic(); paintRunEye();
   if (S.lens === 'client') paintEye();
   const inj = snap.events.filter(e => e.from === 'injector').pop(); if (inj) { const b = blastFor(inj); if (b) setBlast(b); }
   if (animating()) snap.events.forEach(launch);

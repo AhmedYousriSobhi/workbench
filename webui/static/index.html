@@ -26,7 +26,7 @@
     <button class="pillchip" id="c-mem" aria-haspopup="dialog" aria-label="Free memory: open the governor panel">Memory …</button>
     <span class="pillchip" id="c-svc">Services …</span>
     <span class="pillchip" id="c-nodes">Nodes …</span>
-    <button class="pillchip" id="scn-toggle" aria-controls="scndlg" aria-expanded="false">▶ Scenarios</button>
+    <button class="pillchip" id="scn-toggle" aria-controls="tab-run">▶ Scenarios</button>
     <button class="pillchip" id="c-run" hidden></button>
     <span id="conn" role="status"><i></i><span>connecting…</span></span>
     <span class="menuwrap"><button class="pillchip menubtn" id="menubtn" aria-expanded="false" aria-controls="menu">☰ Menu</button>
@@ -44,11 +44,11 @@
 <nav class="side" aria-label="Workspaces">
   <div role="tablist" aria-orientation="vertical" aria-label="Workspaces">
     <button role="tab" class="sidei" id="tb-home" aria-controls="tab-home" aria-selected="true"><b aria-hidden="true">⌂</b>Overview</button>
+    <button role="tab" class="sidei" id="tb-run" aria-controls="tab-run" aria-selected="false" tabindex="-1"><b aria-hidden="true">▶</b>Test run</button>
     <button role="tab" class="sidei" id="tb-nodes" aria-controls="tab-nodes" aria-selected="false" tabindex="-1"><b aria-hidden="true">▦</b>Topology</button>
     <button role="tab" class="sidei" id="tb-traffic" aria-controls="tab-traffic" aria-selected="false" tabindex="-1"><b aria-hidden="true">⇄</b>Traffic &amp; Communication</button>
     <button role="tab" class="sidei" id="tb-conn" aria-controls="tab-conn" aria-selected="false" tabindex="-1"><b aria-hidden="true">⌖</b>Connections</button>
   </div>
-  <button class="sidei" id="scnbtn" aria-haspopup="dialog"><b aria-hidden="true">▶</b>Scenarios</button>
   <button class="sidei" id="planbtn" aria-haspopup="dialog"><b aria-hidden="true">⚙</b>Cluster architecture</button>
   <div class="itabs seg rsub" id="subseg" role="group" aria-label="Infrastructure view"><button class="btn small" data-sub="all" aria-pressed="true">All</button><button class="btn small" data-sub="topo" aria-pressed="false">Topology</button><button class="btn small" data-sub="nodes" aria-pressed="false">Nodes</button></div>
   <div class="kpis" id="kpis" role="group" aria-label="Cluster at a glance"></div>
@@ -64,7 +64,7 @@
       <div><h2 class="home-h" id="home-h">Overview</h2><p class="dim" id="home-sub">Waiting for the first snapshot…</p></div>
       <section class="home-attn" id="home-attn" aria-labelledby="home-attn-h"><h3 id="home-attn-h">…<span></span></h3><ul class="attn" id="home-attn-list"></ul></section>
       <section class="home-start" aria-label="Start here">
-        <div class="hcard"><h3>Run a test</h3><p class="dim small">Pick a scenario, watch what your client calls and sees, then export a report for the bug.</p><button type="button" class="btn" id="home-run">Open scenarios</button></div>
+        <div class="hcard"><h3>Run a test</h3><p class="dim small">Pick a scenario, watch what your client calls and sees, then export a report for the bug.</p><button type="button" class="btn" id="home-run">Open Test run</button></div>
         <div class="hcard"><h3>Break one thing</h3><p class="dim small">Power off, overheat, fan failure, GPU XID or drain, on one node, with one click to clear.</p><button type="button" class="btn" id="home-break">Choose a node</button></div>
         <div class="hcard"><h3>Connect your client</h3><p class="dim small">Download the client profile, then the addresses and commands are under Connections.</p><button type="button" class="btn" id="home-connect">Export client profile</button></div>
       </section>
@@ -152,28 +152,33 @@
         <div class="trtgrid"><ul id="tr-feed" class="trfeed" aria-live="off"></ul><div id="tr-chart"></div></div></section>
       <details class="trtable"><summary>Link table</summary><div class="tablewrap"><table class="conn"><thead><tr><th>From</th><th>To</th><th>Protocol and port</th><th>Plane</th><th>Software</th><th>Evidence</th><th>Requests</th><th>Probe latency</th><th>State</th></tr></thead><tbody id="tr-rows"><tr><td colspan="9" class="skel">Loading…</td></tr></tbody></table></div></details></div>
   </div>
+  <div id="tab-run" role="tabpanel" aria-labelledby="tb-run" class="trun" hidden>
+    <section class="trun-lib" aria-label="Scenario library">
+      <h2 class="rh">Scenarios</h2>
+      <input type="search" id="scnq" placeholder="Filter scenarios" aria-label="Filter scenarios">
+      <div class="scnopts"><label class="small">Speed <select id="speed" aria-label="Playback speed for every scenario"><option value="1">1× real time</option><option value="5">5×</option><option value="20">20×</option></select></label>
+        <label class="small" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="trace"> Slurm trace</label></div>
+      <ul class="scns" id="list"><li class="skel">Loading…</li></ul>
+      <details class="small dim"><summary>How steps run</summary><p>The page has no Docker, so it runs Slurm steps through the governor (started with <code>--workdir</code>) and the mocks' own endpoints. Steps that need the host are marked “CLI only” before you play; run those with <code>./scripts/benchctl scenario run NAME --trace</code>.</p></details>
+    </section>
+    <section class="trun-main" aria-label="Test run" aria-live="polite">
+      <div class="panel" id="run-empty"><h2>Run a test</h2><p class="dim">Pick a scenario on the left. You will see what it does, step by step, and which steps this page cannot run, before anything starts. Then play it, watch what your client calls, and export a report for the bug.</p></div>
+      <div class="panel runbox" id="runpanel" hidden>
+        <div class="rhead"><h2 class="rh" id="runtitle">Run</h2><div id="runctl"></div></div>
+        <p class="dim small" id="rundesc"></p>
+        <div class="row"><div id="runresult"></div><div id="run-export" class="runexp" hidden><span class="small dim">Export report</span> <button class="btn small" id="run-md" type="button">Markdown</button> <button class="btn small" id="run-json" type="button">JSON</button></div></div>
+        <div class="progress" aria-hidden="true"><div id="bar" style="width:0"></div></div>
+        <div id="runcli" class="notice" hidden></div>
+        <div id="runnote"></div><ul class="steps" id="timeline"></ul><div id="expects"></div><div id="trace-out"></div>
+      </div>
+      <div class="panel" id="run-eyebox"><h2 class="rh">Client's eye</h2><p class="small dim">What the monitoring client called, from the mocks' request counters. “n/a” means the mock keeps no counter for it, never zero.</p><div id="run-eye"></div></div>
+    </section>
+  </div>
   <div id="tab-conn" role="tabpanel" aria-labelledby="tb-conn" hidden>
     <div class="panel"><h2>How to reach each part</h2>
       <p class="dim small">Addresses are the cluster's fixed private IPs, reachable from this machine; 127.0.0.1 is the fallback where a row says so. Credentials are never shown here: the last column is the file that holds them. A node's own address is in its details.</p>
       <div class="tablewrap"><table class="conn"><thead><tr><th>Part</th><th>Address</th><th>Try it</th><th>Credential</th><th>Open</th></tr></thead><tbody id="conn-rows"><tr><td colspan="5" class="skel">Loading…</td></tr></tbody></table></div></div>
   </div>
-  <dialog id="scndlg" class="drawer" aria-labelledby="scn-h">
-    <div class="sheet-h"><div><h2 id="scn-h">Scenarios</h2><p class="dim small" id="scn-sub">Timed incidents against the running stack. The diagram stays live beside this panel.</p></div>
-      <button class="btn small" id="scn-close" aria-label="Close the scenarios">✕ Close</button></div>
-    <div class="drawer-b">
-      <div class="runbox" id="runpanel" hidden aria-live="polite"><div class="rhead"><h2 class="rh" id="runtitle">Run</h2><div id="runctl"></div></div>
-        <div class="row"><div id="runresult"></div></div>
-        <div class="progress" aria-hidden="true"><div id="bar" style="width:0"></div></div>
-        <div id="runnote"></div><ul class="steps" id="timeline"></ul><div id="expects"></div><div id="trace-out"></div></div>
-      <section class="scnlib" aria-label="Scenario library">
-        <input type="search" id="scnq" placeholder="Filter scenarios" aria-label="Filter scenarios">
-        <div class="scnopts"><label class="small">Speed <select id="speed" aria-label="Playback speed for every scenario"><option value="1">1× real time</option><option value="5">5×</option><option value="20">20×</option></select></label>
-          <label class="small" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="trace"> Slurm trace</label></div>
-        <ul class="scns" id="list"><li class="skel">Loading…</li></ul>
-      </section>
-      <details class="small dim"><summary>How steps run</summary><p>Slurm steps go through the governor (the page has no Docker) and need it started with <code>--workdir</code>; otherwise use <code>./scripts/benchctl scenario run NAME --trace</code>. Kubernetes and some other steps run only from the host CLI.</p></details>
-    </div>
-  </dialog>
   <dialog id="govdlg" class="sheet" aria-labelledby="gov-h">
     <div class="sheet-h"><div><h2 id="gov-h">Governor</h2><p class="dim small">Protects the host's memory. Local only, 127.0.0.1.</p></div>
       <button class="btn small" id="gov-close" aria-label="Close the governor panel">✕ Close</button></div>
