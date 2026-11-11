@@ -106,7 +106,7 @@ try:
         def union():
             a, c = pg.locator("#trafficpanel").bounding_box(), pg.locator("#inspector").bounding_box()
             x, y = min(a["x"], c["x"]), min(a["y"], c["y"]); return {"x": x, "y": y, "width": max(a["x"] + a["width"], c["x"] + c["width"]) - x, "height": max(a["y"] + a["height"], c["y"] + c["height"]) - y}
-        pg.select_option("#lens", "client"); pg.wait_for_timeout(400); box = union(); pg.select_option("#lens", "all"); pg.wait_for_timeout(300)
+        pg.click("#lens [data-lens=client]"); pg.wait_for_timeout(400); box = union(); pg.click("#lens [data-lens=all]"); pg.wait_for_timeout(300)
         strip = 46
         clip = {**box, "height": box["height"] + strip}; frames = []
         pg.evaluate("""([top, left, w]) => { const c = document.createElement('div'); c.id = 'democap'; c.setAttribute('aria-hidden', 'true');
@@ -126,9 +126,9 @@ try:
         scene("Error answers are triangles (counted by the mocks)", 10, lambda: traffic("bmc-farm", 3, 2), {1, 5})
         scene("A fault: dashed parts are affected (declared, not measured)", 14, fault, {1})
         pg.evaluate("setBlast(null)")
-        pg.select_option("#lens", "management"); scene("Lens: one plane at a time, nothing moves", 8)
-        pg.select_option("#lens", "client"); scene("Client's eye: what a client should call and what it got", 10)
-        pg.select_option("#lens", "all")
+        pg.click("#lens [data-lens=management]"); scene("Lens: one plane at a time, nothing moves", 8)
+        pg.click("#lens [data-lens=client]"); scene("Client's eye: what a client should call and what it got", 10)
+        pg.click("#lens [data-lens=all]")
         pg.evaluate("focusOn('teleport')"); scene("Focus: a part and its direct neighbours", 8)
         pg.evaluate("focusOn(null)")
         pg.evaluate("setView(false, false)"); scene("Flat view: the same diagram, calm", 7)

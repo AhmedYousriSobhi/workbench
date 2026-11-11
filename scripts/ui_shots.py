@@ -494,11 +494,14 @@ def capture(out: Path) -> dict:
                     result["shots"].append(str(dpath))
                     if page.locator("dialog[open]").count() or not page.locator("#flow").is_visible() and vp == "desktop":
                         result["a11y"].append("node panel must not cover the Infrastructure architecture")
+                    sm = page.evaluate("({keys: [...document.querySelectorAll('#nodesum dt')].map(e => e.textContent), reach: $('nodereach').hidden, chips: [...document.querySelectorAll('#lens [data-lens]')].map(b => b.getAttribute('aria-pressed'))})")  # 6c: summary first, a reach command, one pressed lens chip
+                    if not {"Reason", "Hardware", "Power", "Address", "BMC"} <= set(sm["keys"]) or sm["reach"] or sm["chips"].count("true") != 1:
+                        result["a11y"].append(f"node summary or lens chips: {sm}")
                     if vp == "desktop" and page.locator("#nodeacts-fault .btn").count() < 3:
                         result["a11y"].append("node panel is missing its fault actions")
                     page.click("#node-back")
                     if not page.locator("#nodepane").is_hidden() or page.locator("#tree").is_hidden():
-                        result["a11y"].append("node panel did not close")
+                        result["a11y"].append(f"node panel did not close ({vp} {scheme}: panel hidden={page.locator('#nodepane').is_hidden()} tree hidden={page.locator('#tree').is_hidden()})")
                     page.close()
             for w, h, count in ((1280, 900, 6), (1920, 1080, 50)):  # the architecture is the page (#319): it fills the width, the page itself never scrolls, the rails scroll
                 page = browser.new_page(viewport={"width": w, "height": h})
@@ -532,13 +535,13 @@ def capture(out: Path) -> dict:
                         result["a11y"].append("focus view moved a part of the diagram")
                     page.keyboard.press("Escape"); page.wait_for_timeout(200)
                     for choice in ("management", "client"):  # lenses (#316): the layout never moves; the client's eye reads only real counters
-                        page.select_option("#lens", choice); page.wait_for_timeout(250)
+                        page.click(f"#lens [data-lens={choice}]"); page.wait_for_timeout(250)
                         li = page.evaluate("({dim: document.querySelectorAll('#flow [data-ldim]').length, eye: $('eyepane').hidden ? '' : $('eyepane').textContent, pos: [...document.querySelectorAll('#flow [data-ent]')].map(e => { const r = e.getBoundingClientRect(); return [e.getAttribute('data-ent'), Math.round(r.x), Math.round(r.y)]; })})")
                         if li["dim"] < 2 or li["pos"] != before:
                             result["a11y"].append(f"lens {choice} dimmed nothing or moved a part")
                         if choice == "client" and ("not measured" not in li["eye"] or "BMC farm" not in li["eye"] or "Verdict" not in li["eye"]):
                             result["a11y"].append("client's-eye lens did not list the services with a verdict and 'not measured' where nothing counts")
-                    page.select_option("#lens", "all"); page.wait_for_timeout(200)
+                    page.click("#lens [data-lens=all]"); page.wait_for_timeout(200)
                     if page.evaluate("document.querySelectorAll('#flow [data-ldim]').length"):
                         result["a11y"].append("lens All planes left parts dimmed")
                     page.locator("#flow g[data-ent='login']").dblclick(); page.wait_for_timeout(200)  # focus again for the checks below

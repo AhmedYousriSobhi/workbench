@@ -101,7 +101,7 @@ the page is visible and the Infrastructure workspace is open. **Key** (top right
 
 **Blast radius.** When a fault is applied (a node button or a scenario step), the parts a client reads that the fault changes get a **dashed** outline (shape, not only colour), and Connections shows one plain sentence of what a client would observe, for example *the BMC reports the node Off, the BCM marks it down and its GPU metric series stop*. Every caption says it is **declared from the simulator's rules, not measured**. It clears after 45 seconds or with **Dismiss**. The table behind it is `webui/blast.py`, checked against the edge model by `tests/test_graph.py`.
 
-**Lenses.** The **Lens** menu next to the view switcher restyles the same layout by plane: *Access* (how users get in), *Management* (BMC and BCM), *Telemetry* (GPU metrics), *Tickets* (Jira) and *Faults*; everything outside the plane dims and nothing moves. **Client's eye** shows, for every service a client should call, how many calls the mocks counted, how many were errors, the rate per minute and a verdict (*called*, *not called yet*, *not reachable*), and says *not measured* where nothing counts (the real Jira, a service with no error counter). It is built only from the per-mock counters, so it tells you whether the client is reading everything, not which endpoint it used. With the stack down it shows one message instead.
+**Lenses.** The **Lens** chips (a row under the view switcher, one pressed at a time, a ✓ on the pressed one) restyle the same layout by plane: *All*, *Access* (how users get in), *Management* (BMC and BCM), *Monitoring* (GPU metrics; the plane's id is still `telemetry`), *Tickets* (Jira) and *Faults*; everything outside the plane dims and nothing moves. **Client's eye** shows, for every service a client should call, how many calls the mocks counted, how many were errors, the rate per minute and a verdict (*called*, *not called yet*, *not reachable*), and says *not measured* where nothing counts (the real Jira, a service with no error counter). It is built only from the per-mock counters, so it tells you whether the client is reading everything, not which endpoint it used. With the stack down it shows one message instead.
 
 **Hover** a part for a one-line tip (its state and how it is reached). **Click** it (or Tab to it and press Enter) for a pop-up window
 next to it with its address, the credential file, a command to copy, and buttons for the details:
@@ -199,9 +199,10 @@ To turn it off, untick it and apply again. Two things stay in a terminal because
 ## A node: actions and info
 
 Click a node card, or a node tile in the diagram and then **Actions and details**. Its panel opens in the **Connections** area (it is not a pop-up) and that area grows to make room, so you can watch the Infrastructure architecture and the list
-while you act. The selected node is outlined in the list. The panel has two cards and a header with **← All nodes** (Esc does the same), the node's name and its
+while you act. The selected node is outlined in the list. The panel has a header with **← All nodes** (Esc does the same), the node's name and its
 live state.
 
+- **Summary** (first): the state in words, then what the page can read: *Reason* ("none (healthy)", or where to read it: the page has no Docker, so the Slurm reason comes from `benchctl describe node NAME`), *Hardware* (GPUs, CPU temperature, fans), *Faults* (GPU XID, InfiniBand ports down, NIC flapping; only when there are some), *Power*, *Address* and *BMC*, and the **ssh command** with **Copy command**. A value it cannot read says "not measured", never zero. A Kubernetes node has a shorter summary (no BMC, no address). A per-node Jira ticket is not shown yet.
 - **Actions**: the faults first, **Power off**, **Overheat (92 °C)**, **Fan failure** and **GPU error (XID 79)** (GPU
   nodes only), then **Recover**: **Power on** and **Clear faults**. The result appears under the buttons, the card
   changes state and a diamond shows the injection. Nothing here opens a shell on a node; use

@@ -3,6 +3,7 @@ import { clusterNow, paintInspector } from './inspector.js';
 import { $, announce, esc } from './util.js';
 import { stackUp } from './geometry.js';
 import { ENT_NAME } from './focus.js';
+import { LENSES } from './nodemodel.js';
 
 export const PLANE_WORD = { access: 'how users get in', management: 'BMC and BCM', telemetry: 'GPU metrics', tickets: 'Jira', faults: 'fault injection' };
 export function lensSet() {  // entities and edges of the lens plane; the client's eye is every client edge to a service
@@ -33,7 +34,16 @@ export function paintEye() {  // what the monitoring client called, from the per
     <table class="focustab"><thead><tr><th>Service</th><th>Calls</th><th>Errors</th><th>Per min</th><th>Verdict</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
+export function paintLensChips() {
+  const box = $('lens'); box.innerHTML = '';
+  for (const l of LENSES) { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn small chip'; b.dataset.lens = l.id; b.textContent = l.label; b.setAttribute('aria-pressed', S.lens === l.id); box.appendChild(b); }
+}
+export function setLens(id) {
+  const l = LENSES.find(x => x.id === id) || LENSES[0]; S.lens = l.id;
+  $('lens').querySelectorAll('[data-lens]').forEach(b => b.setAttribute('aria-pressed', b.dataset.lens === S.lens));
+  applyLens(); announce(S.lens === 'all' ? 'Lens cleared' : `Lens: ${l.label}`);
+}
 export function init() {
-  $('lens').onchange = () => { S.lens = $('lens').value; applyLens(); announce(S.lens === 'all' ? 'Lens cleared' : `Lens: ${$('lens').selectedOptions[0].textContent}`); };
-
+  paintLensChips();
+  $('lens').addEventListener('click', e => { const b = e.target.closest('[data-lens]'); if (b) setLens(b.dataset.lens); });
 }

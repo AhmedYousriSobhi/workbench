@@ -78,7 +78,7 @@
   <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 id="traffic-h" style="margin:0">Infrastructure architecture</h2>
     <span class="grow"></span><button class="btn small" id="keybtn" aria-expanded="false" aria-controls="ckey">Key</button><button class="btn small" id="flowpause" aria-pressed="false" aria-label="Pause animation">Pause</button></div>
     <div class="row viewrow"><div class="seg" id="viewseg" role="group" aria-label="View of the architecture"><button class="btn small" id="vw-cv" aria-pressed="true">Circuit</button><button class="btn small" id="vw-iso" aria-pressed="false">2.5D (classic)</button></div>
-      <label class="lensl" for="lens">Lens</label><select id="lens" class="btn small"><option value="all">All planes</option><option value="access">Access</option><option value="management">Management</option><option value="telemetry">Telemetry</option><option value="tickets">Tickets</option><option value="faults">Faults</option><option value="client">Client's eye</option></select></div>
+      <div class="lensrow"><span class="lensl" id="lens-l">Lens</span><div class="lenschips" id="lens" role="group" aria-labelledby="lens-l"></div></div></div>
     <div class="flowscroll"><svg id="flow" viewBox="0 0 1120 470" role="img" aria-label="Infrastructure architecture: clients and users, the access layer (login nodes, each direct SSH, Teleport or both, and the Teleport proxy when on), the services, and the nodes. Each part opens its details."></svg></div><div class="canvas fleetview" id="fleetview" aria-label="Fleet: every cluster" hidden inert></div><div class="canvas poolview" id="poolview" aria-label="Pool" hidden inert></div><div class="cvstack" id="cvstack" role="group" aria-label="Traffic layers" hidden></div><p class="cvcap" id="cvcap" hidden></p>
     <div class="ovprev" id="ovprev" role="tooltip" hidden></div><div class="srtable" id="ovtable"></div>
     <div class="ckey" id="ckey" role="group" aria-label="Key to the diagram" hidden>
@@ -109,6 +109,8 @@
     <div id="pop" class="pop" role="dialog" aria-labelledby="pop-t" hidden></div>
   <section id="nodepane" hidden aria-labelledby="nodetitle">
     <div class="np-head"><button class="btn small" id="node-back">← All nodes</button><h2 id="nodetitle"></h2><span id="nodestate" class="pill"></span></div>
+    <div class="np-card" id="nodesum-card"><h3>Summary</h3><dl class="kv" id="nodesum"></dl>
+      <div class="pop-cmd" id="nodereach" hidden><code id="nodereach-cmd"></code><button class="btn small" id="nodereach-copy">Copy command</button></div></div>
     <div class="np-card"><h3>Actions</h3>
       <p class="small dim" style="margin:0 0 var(--sp2)">Break it, then watch the Infrastructure architecture.</p><div class="actions" id="nodeacts-fault"></div>
       <p class="small dim" style="margin:var(--sp3) 0 var(--sp2)">Recover</p><div class="actions" id="nodeacts-fix"></div>
