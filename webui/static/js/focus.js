@@ -4,6 +4,8 @@ import { $, announce, esc } from './util.js';
 import { clusterNow, hidePop, nodeList, paintInspector } from './inspector.js';
 import { loginList } from './geometry.js';
 import { clusterTitle, curLevel } from './overview.js';
+import { POOLS } from './circuitlayout.js';
+import { zoomTo } from './zoom.js';
 
 export const ENT_NAME = id => ({ clients: 'Clients', faults: 'Faults', nodes: 'Cluster nodes', teleport: 'Teleport proxy', jump: 'Jump host', controller: 'Controller' })[id] || (svcList().find(x => x[0] === id) || [])[1] || id;
 export function tagEntities() {  // each clickable or framed part of the drawing gets the id of its entity in the declared graph
@@ -43,14 +45,15 @@ export function paintFocusPane(fs) {
 }
 export function focusOn(id) { S.focusId = id; if (id) hidePop(false); applyFocus(); announce(id ? `Focused on ${ENT_NAME(id)} and its neighbours` : 'Focus cleared'); }
 export function paintCrumb() {
-  const ov = curLevel() === 'overview', show = !ov && (S.dived || S.focusId);
+  const ov = curLevel() === 'overview', show = !ov && (S.dived || S.focusId || S.pool);
+  $('crumb-sep3').hidden = !S.pool; $('crumb-pool').hidden = !S.pool; $('crumb-pool').textContent = S.pool ? POOLS[S.pool].join(' · ') : '';
   $('crumb').hidden = !show; $('crumb-all').hidden = !S.dived; $('crumb-sep1').hidden = !S.dived;
-  $('crumb-name').textContent = clusterTitle(); $('crumb-sep2').hidden = !S.focusId; $('crumb-focus').textContent = S.focusId ? ENT_NAME(S.focusId) : '';
+  $('crumb-name').textContent = clusterTitle(); $('crumb-sep2').hidden = !S.focusId || !!S.pool; $('crumb-focus').textContent = S.focusId ? ENT_NAME(S.focusId) : '';
 }
 
 export function init() {
   $('flow').addEventListener('dblclick', e => { const el = e.target.closest('[data-ent]'); if (curLevel() === 'overview') return; if (el) focusOn(el.getAttribute('data-ent') === S.focusId ? null : el.getAttribute('data-ent')); else if (S.focusId) focusOn(null); });
   $('flow').addEventListener('keydown', e => { if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey) { const el = e.target.closest && e.target.closest('[data-ent]'); if (el) { e.preventDefault(); focusOn(el.getAttribute('data-ent') === S.focusId ? null : el.getAttribute('data-ent')); } } });
-  $('crumb-name').onclick = () => { if (S.focusId) focusOn(null); };
+  $('crumb-name').onclick = () => { if (S.pool) zoomTo('cluster'); else if (S.focusId) focusOn(null); };
 
 }

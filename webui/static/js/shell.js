@@ -42,7 +42,7 @@ export function setCircuit(on) {  // the Cluster level of the zoom (redesign ste
 export function paintViewSeg() {  // the view switcher (#324): one control for the style (2.5D, flat) and the level (diagram, overview)
   const ov = curLevel() === 'overview', iso = $('trafficpanel').dataset.view === 'iso', cv = !ov && S.circuit;
   for (const [id, on] of [['vw-iso', !ov && !cv && iso], ['vw-flat', !ov && !cv && !iso], ['vw-cv', cv], ['vw-ov', ov]]) $(id).setAttribute('aria-pressed', on);
-  $('trafficpanel').toggleAttribute('data-circuit', cv); $('cvstack').hidden = !cv; $('cvcap').hidden = !cv;
+  $('trafficpanel').toggleAttribute('data-circuit', cv); $('cvstack').hidden = !cv || !!S.pool; $('cvcap').hidden = !cv || !!S.pool; if (!cv) $('zoomrail').hidden = true;
 }
 
 // theme: dark first (Midnight) until a choice is remembered; Auto follows the system; storage may be refused

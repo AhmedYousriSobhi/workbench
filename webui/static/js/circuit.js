@@ -11,6 +11,7 @@ import { CLIENT_INFO, asButton, clusterNow, nodeList, openPop } from './inspecto
 import { STATE_ICON } from './cluster.js';
 import { fitKey, flowSig, loginAddr, loginRuns, MODE_TEXT, KIND_NAME, loginKind, stackUp } from './geometry.js';
 import { trView } from './traffic.js';
+import { zoomTo } from './zoom.js';
 import { LAYERS, LAYER_OF, LAYER_TEXT, POOLS, CV_W, CV_H, circuitSpec, circuitFacts, layerParts, rackSquares } from './circuitlayout.js';
 
 const CLIENT_CHIPS = ['Monitoring app', 'Prometheus', 'curl · scripts', 'You: ssh · tsh'];
@@ -29,7 +30,7 @@ function linkFor(w, links) {
 }
 const allLinks = () => [...(clusterNow().comms || []), ...(S.monLinks || []), ...(S.dbdLink ? [S.dbdLink] : [])];
 
-const recentRate = () => { const r = {}, cut = Date.now() - 60000; for (const e of S.recent) if (e.t > cut) r[e.to] = (r[e.to] || 0) + e.n; return r; };
+export const recentRate = () => { const r = {}, cut = Date.now() - 60000; for (const e of S.recent) if (e.t > cut) r[e.to] = (r[e.to] || 0) + e.n; return r; };
 
 // What one wire shows right now: requests a minute and errors where a counter backs it, "declared" where nothing does.
 export function wireState(w, links, rate) {
@@ -75,8 +76,7 @@ function openFor(p) {  // the pop-up each kind of part already has
 function rackEl(p, f) {
   const nodes = f.pools[p.pool], [title, lane] = POOLS[p.pool], { per, squares } = rackSquares(nodes);
   const g = sv('g', { class: 'cv-rack', 'data-ent': lane === 'Slurm' ? 'nodes' : 'k8s-nodes' }), cols = Math.floor((p.w - 32) / 18);
-  g.append(sv('rect', { class: 'cv-box', x: p.x, y: p.y, width: p.w, height: p.h, rx: 12 }), T('cv-k', p.x + 16, p.y + 24, `${lane.toUpperCase()} · ${title.toUpperCase()}`));
-  g.append(T('cv-sub cv-count', p.x + p.w - 16, p.y + 24, nodes.length ? `${nodes.length} node${nodes.length === 1 ? '' : 's'}` : '', { 'text-anchor': 'end' }));
+  g.append(sv('rect', { class: 'cv-box', x: p.x, y: p.y, width: p.w, height: p.h, rx: 12 }), T('cv-k', p.x + 16, p.y + 24, `${lane === 'Slurm' ? 'SLURM' : 'K8S'} · ${title.toUpperCase()}`));
   squares.forEach((q, i) => {
     const x = p.x + 16 + (i % cols) * 18, y = p.y + 40 + Math.floor(i / cols) * 18, bad = q.state !== 'ok';
     const sq = sv('g', { class: 'cv-sq ' + q.state, 'data-names': q.names.join(' ') }), first = q.names[0];
@@ -85,6 +85,10 @@ function rackEl(p, f) {
     if (per === 1) { sq.setAttribute('data-ent', first); sq.addEventListener('click', e => { e.stopPropagation(); openPop(sq, 'node', first); }); }
     g.append(sq);
   });
+  if (nodes.length) {  // the rack opens its pool: the next level of the zoom
+    const open = asButton(sv('g', { 'data-ent': lane === 'Slurm' ? 'nodes' : 'k8s-nodes' }), `Open the ${lane} ${title}: ${nodes.length} nodes`, () => zoomTo('pool', { pool: p.pool, origin: g }), () => [`${lane} ${title}`, 'Zoom in to the nodes of this pool']);
+    open.append(sv('rect', { class: 'cv-open', x: p.x + p.w - 124, y: p.y + 8, width: 112, height: 24, rx: 12 }), T('cv-opentext', p.x + p.w - 68, p.y + 25, `${nodes.length} node${nodes.length === 1 ? '' : 's'} ›`, { 'text-anchor': 'middle' })); g.append(open);
+  }
   const sum = T('cv-sub cv-sum', p.x + 16, p.y + p.h - 14, '');
   g.append(sum); els[p.id + ':sum'] = sum; els[p.id] = g;
   if (per > 1) g.append(T('cv-sub', p.x + p.w - 16, p.y + p.h - 14, 'one square = 8 nodes', { 'text-anchor': 'end' }));

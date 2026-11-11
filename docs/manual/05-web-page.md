@@ -137,6 +137,21 @@ square in a rack is one node (one per 8 nodes above 64); a square that needs att
 - Click a part or a square for its details, as in the other views. Focus (double-click or **F**), the lens and the blast radius work here too.
 - The node list folds away while Circuit is on, so the drawing has the width; choosing another view brings it back.
 
+#### Zoom: Fleet, Cluster, Pool
+
+Under the view switch, a **zoom rail** (− FLEET CLUSTER POOL + TRAFFIC ↗) moves between three levels; Escape zooms out of a pool.
+
+![The Pool level: side panel with KPIs, a state bar and filters, and a grid of node tiles](img/web-pool.png)
+
+- **Pool**: click a rack's **N nodes ›** button. The side panel says what feeds the pool, how many nodes are in service, the average GPU use and a bar of node
+  states; filters show All, Busy, Idle or Needs attention. Tiles (16 a page) show the node's state in words, its busy GPUs and temperature, and a heartbeat
+  wire. What the page cannot measure says "not measured" (a CPU pool has no Busy or Idle filter). **Wire in Traffic ↗** opens the Traffic tab.
+- **Fleet**: one card per cluster with health, what it has (Slurm, Kubernetes, controller, accounting), nodes in service, requests a minute, a square per
+  node for each lane, and a footer: only the monitoring client connects to a cluster. Click a card to open it. Only the running cluster has a request rate.
+
+![The Fleet level: a card per cluster](img/web-fleet.png)
+
+
 ## Teleport from the page
 
 Teleport is a part like the others, so you control it from **left nav → ⚙ Cluster architecture**:

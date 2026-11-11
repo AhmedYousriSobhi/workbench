@@ -105,9 +105,38 @@ def check_circuit(page) -> list[str]:
     if not f["faded"] or f["lit"] or not f["opacity"]:
         bad.append(f"the Access layer does not isolate its wires: {f}")
     page.click("#cvstack button[data-layer=all]")
+    bad += check_zoom(page)
     page.click("#vw-flat")
     if page.evaluate("document.getElementById('flow').dataset.cv") is not None:
         bad.append("leaving the circuit left it on")
+    return bad
+
+
+def check_zoom(page) -> list[str]:
+    """The zoom (webui/static/js/zoom.js): Cluster to Pool to Fleet and back. After each move exactly one layer is shown and the others
+    are out of layout and inert, so a level never stays visible or clickable behind the one that replaced it. Returns the problems found."""
+    bad = []
+    probe = """() => Object.fromEntries([['fleet', '#fleetview'], ['cluster', '#trafficpanel > .flowscroll'], ['pool', '#poolview']].map(([k, s]) => {
+        const e = document.querySelector(s); return [k, e.hidden || getComputedStyle(e).display === 'none' ? (e.inert ? 'gone' : 'hidden but not inert') : 'shown']; }))"""
+
+    def only(level, step):
+        page.wait_for_timeout(1100)  # the move takes 0.7 s
+        got = page.evaluate(probe)
+        if any((v == "shown") != (k == level) or (v != "shown" and v != "gone") for k, v in got.items()):
+            bad.append(f"after {step} only the {level} layer should show: {got}")
+
+    if not page.locator("#flow .cv-rack .hit").count():
+        return bad  # a cluster with no nodes has no pool to open
+    page.locator("#flow .cv-rack .hit").first.dispatch_event("click")
+    only("pool", "opening a rack")
+    if not page.locator(".pv-tile").count() or not page.locator(".pv-filters button").count():
+        bad.append("the pool level drew no tiles or filters")
+    page.keyboard.press("Escape")
+    only("cluster", "Escape in the pool")
+    page.click("#zoomrail [data-level=fleet]")
+    only("fleet", "the FLEET stop")
+    page.click(".fl-card .fl-head")
+    only("cluster", "opening a card")
     return bad
 
 

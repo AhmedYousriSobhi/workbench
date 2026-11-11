@@ -45,6 +45,7 @@ export const S = {
   circuit: false,
   treeWas: false,
   cvLayer: 'all',
+  pool: null, poolFilter: 'all', poolPage: 0, zoomHold: false, zoomTok: 0,
   cvSig: '',
   dived: false,
   lastOvSig: '',
