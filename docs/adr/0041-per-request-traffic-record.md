@@ -26,6 +26,16 @@ The rule of #475 stays: record only method and path shape, never a value or a se
 - **Not measured says so.** A rate before two samples, a period without three repeats, a service without a record: null, shown as "not
   measured", never 0.
 
+## Addendum: the screen (step 5b, issue 503)
+- `analysis.js` draws the Traffic analysis into `#tan` at the top of the Traffic tab: river (bands use the shared wire for the moving dots; the
+  structure is rebuilt only when the set of callers or the spotlight changes, so the dots keep moving between polls), probe, findings, rhythm.
+  It polls `/api/traffic` every 3 s only while the tab and the page are visible and stops otherwise (W-11); a hidden table repeats the river.
+- **Focused wire by URL hash**, plain text `#<cluster>-<node>` (or `#<node>` with one cluster), parsed by `parseWireHash`; a hash that names no node
+  is ignored. The pool tile's "Wire in Traffic" sets it. The panel states what is known (declared wiring) and that messages are **not captured**
+  (a node name in a path is masked as `{id}`); message capture (Slurm RPC types from slurmctld, a Kubernetes request audit) is not built and needs
+  an owner decision on scope.
+- The window (last minute, 5 minutes, since the page opened) limits the rhythm and the findings; rates always use the samples the page itself took.
+
 ## Consequences
 - Two timers inside one stream make beat patterns that look like periods; the screen therefore detects per stream.
 - A client with no User-Agent is `unknown`, and its repeated requests are flagged as an unidentified timer, which is useful, not an error.

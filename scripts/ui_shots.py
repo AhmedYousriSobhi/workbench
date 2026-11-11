@@ -140,6 +140,67 @@ def check_zoom(page) -> list[str]:
     return bad
 
 
+_POLL_CHECKED = False
+
+
+def check_analysis(page) -> list[str]:
+    """The Traffic analysis screen (webui/static/js/analysis.js) with synthetic /api/traffic data: the river, the findings and the
+    rhythm appear, a rate is not shown before two readings exist, a hash opens and clears the focused wire, a stale hash clears
+    itself, and nothing polls while another tab is open (W-11). Leaves the page on the Traffic tab. Returns the problems found."""
+    global _POLL_CHECKED
+    bad, hits = [], {"n": 0}
+    now = time.time()
+    row = lambda who, svc, shape, n, se: {"who": who, "service": svc, "shape": shape, "n": n, "ok": n - se, "client_error": 0, "server_error": se, "ms": n * 4.0, "hist": [n, 0, 0, 0, 0, 0, 0, 0, 0]}
+    recent = [[round(now - 300 + i * 5, 3), "unknown", "jira-mock", "GET /rest/api/2/serverInfo", 200, 3.0] for i in range(60)]
+    recent += [[round(now - t, 3), "python-requests", "jira-mock", "GET /rest/api/2/search?jql", 503, 600.0] for t in (50, 120, 200)]
+    body = {"now": round(now, 3), "edges": [5, 10, 25, 50, 100, 250, 500, 1000], "services": {"bmc-farm": True, "bcm-mock": True, "jira-mock": True},
+            "streams": [row("unknown", "jira-mock", "GET /rest/api/2/serverInfo", 60, 0), row("python-requests", "jira-mock", "GET /rest/api/2/search?jql", 30, 3)], "recent": sorted(recent)}
+
+    def answer(route):
+        hits["n"] += 1
+        route.fulfill(json=body)
+
+    page.route("**/api/traffic*", answer)
+    page.evaluate("stopAnalysis(); startAnalysis()")
+    try:
+        page.wait_for_selector("#an-river .an-node", timeout=5000)
+        page.wait_for_function("document.querySelectorAll('#an-found-list .an-f.no-retry, #an-found-list .an-f.timer').length >= 2", timeout=5000)
+    except Exception:  # noqa: BLE001
+        page.unroute("**/api/traffic*")
+        return ["the Traffic analysis screen did not draw the river and the findings from /api/traffic"]
+    r = page.evaluate("""() => ({ status: document.getElementById('an-status').textContent, note: document.getElementById('an-river-note').textContent,
+        nodes: document.querySelectorAll('#an-river .an-node').length, cols: document.querySelectorAll('.an-col').length, unk: document.querySelectorAll('.an-col.unk').length,
+        rate: [...document.querySelectorAll('#an-river .an-ns')].some(n => /req\\/min/.test(n.textContent) && !/not measured/.test(n.textContent)) })""")
+    if "recording" not in r["status"] or r["nodes"] != 9 or r["cols"] < 1 or r["unk"] < 1:
+        bad.append(f"the analysis screen is incomplete: {r}")
+    if r["rate"] or "Waiting for two readings" not in r["note"]:
+        bad.append(f"a rate was shown before two readings existed: {r}")
+    first = page.evaluate("clusterNow().nodes[0].name")
+    page.evaluate(f"location.hash = {first!r}")
+    page.wait_for_timeout(300)
+    if not page.is_visible("#an-focus") or first not in page.inner_text("#an-focus") or "Not captured" not in page.inner_text("#an-focus"):
+        bad.append("a node hash did not open the focused wire with its honest 'not captured' line")
+    page.click("#an-clear")
+    if page.is_visible("#an-focus") or page.evaluate("location.hash") != "":
+        bad.append("Clear focus did not clear the focus and the hash")
+    page.evaluate("location.hash = 'no-such-node'")
+    page.wait_for_timeout(200)
+    if page.is_visible("#an-focus"):
+        bad.append("a hash that names no node opened a focused wire")
+    page.evaluate("history.replaceState(null, '', location.pathname + location.search)")
+    if not _POLL_CHECKED:
+        _POLL_CHECKED = True
+        page.click("#tb-nodes")
+        before = hits["n"]
+        page.wait_for_timeout(3500)  # a poll every 3 s
+        if hits["n"] != before:
+            bad.append("the Traffic analysis kept polling /api/traffic while another tab was open (W-11)")
+        page.click("#tb-traffic")
+    page.unroute("**/api/traffic*")
+    page.evaluate("stopAnalysis(); startAnalysis()")
+    return bad
+
+
 def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -210,6 +271,8 @@ def capture(out: Path) -> dict:
                         result["a11y"].append(f"circuit {vp} {scheme}: {problem}")
                     page.click("#tb-traffic")  # documented links, real or simulated, observed or configured
                     page.wait_for_selector("#tr-rows tr td:nth-child(3)", state="attached")
+                    for problem in check_analysis(page):
+                        result["a11y"].append(f"analysis {vp} {scheme}: {problem}")
                     tpath = out / f"traffic-{vp}-{scheme}.png"
                     page.screenshot(path=str(tpath), full_page=True)
                     result["shots"].append(str(tpath))
@@ -251,7 +314,8 @@ def capture(out: Path) -> dict:
                     if not page.evaluate("flowPaused || reduced.matches") and page.locator("#dots polygon.pk.err").count() < 1:
                         result["a11y"].append("an error answer was not drawn as a triangle dot (#314)")
                     if "2 errors" not in page.text_content("#timeline-feed") or "2 errors" not in page.evaluate("document.getElementById('fc-bmc-farm').textContent"):
-                        result["a11y"].append("errors have no text equivalent in the feed and the service box (#314)")
+                        svc_text = page.evaluate("document.getElementById('fc-bmc-farm').textContent")
+                        result["a11y"].append(f"errors have no text equivalent in the feed and the service box (#314): {page.text_content('#timeline-feed')[:80]!r} / {svc_text!r}")
                     b = page.evaluate("({marked: document.querySelectorAll('#flow [data-blast]').length, lanes: document.querySelectorAll('#flow path.lane[data-blast]').length, text: $('blastpane').hidden ? '' : $('blastpane').textContent})")
                     if b["marked"] < 3 or b["lanes"] < 1 or "declared" not in b["text"] or "BMC farm" not in b["text"]:
                         result["a11y"].append(f"blast radius did not mark the affected parts and say it is declared (#315): {b}")

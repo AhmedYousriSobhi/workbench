@@ -155,6 +155,19 @@ the same pages. Other ways to move: **Ctrl + scroll** (or a pinch on a trackpad)
 ![The Fleet level: a card per cluster](img/web-fleet.png)
 
 
+## Traffic analysis: who asks the mocks, and how it ends
+
+![The Traffic tab's analysis: the request river, the probe, what was found and the rhythm](img/web-traffic-analysis.png)
+
+At the top of the **Traffic** tab (the TRAFFIC stop of the zoom rail) the page reads the mocks' own record of client requests (`/api/traffic`, every 3 seconds, only while the tab is open and visible). It records only **who asked** (the User-Agent's product token, for example `curl`), the method and path shape, how it ended and how long it took; never a value, a header or a secret.
+
+- **Request river**: callers on the left, the service that answered in the middle, how it ended on the right (2xx, slower than the 95th percentile, 4xx, 5xx). A band's width follows the square root of requests a minute; moving dots are live requests; red is an error. A rate needs two readings 5 seconds apart, so the first seconds say "not measured", never 0. Pick a stream chip to look at one alone. A hidden table repeats the numbers for screen readers.
+- **Probe**: Rate, Delay, Errors, Rhythm and Path for the chosen stream, a big reading, the last two minutes as a trace, and a one-line verdict. Delay shows the edge of a latency bucket ("10 ms or less"), not an exact figure.
+- **Found in this window**: a caller that did not ask again after server errors, several calls fired in the same half second, a repeating request whose caller sent no User-Agent (nothing says what runs that timer).
+- **Rhythm**: the repeating periods found per stream (at least eight requests and three repeats), each column beating at its own pace and labelled with who runs it.
+- **Window**: last minute, last 5 minutes, or since the page opened.
+- **Focused wire**: a pool tile's **Wire in Traffic ↗**, or a link such as `http://127.0.0.1:8088/#workbench-gpu003` (`#<cluster>-<node>`), opens a node's wire: its declared wiring (BMC farm and slurmctld for a Slurm node, KWOK for a Kubernetes node), **Back to the pool** and **Clear focus**. Its messages are not captured: a node name in a path is masked, so one node's requests cannot be told from another's.
+
 ## Teleport from the page
 
 Teleport is a part like the others, so you control it from **left nav → ⚙ Cluster architecture**:

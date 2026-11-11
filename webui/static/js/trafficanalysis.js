@@ -134,3 +134,32 @@ export function findAnomalies(recent, periods = {}) {
   }
   return found;
 }
+
+// ---- the focused wire and the window ---------------------------------------------------------------------------------------
+// The URL hash is plain text, `#<cluster>-<node>` (`#workbench-gpu003`), or `#<node>` when there is one cluster to name.
+export const wireHash = (cluster, node) => cluster ? `${cluster}-${node}` : node;
+export function parseWireHash(hash, clusters, nodes) {
+  const h = String(hash || '').replace(/^#/, '');
+  if (!h) return null;
+  for (const n of nodes) {
+    if (h === n) return { cluster: clusters.length === 1 ? clusters[0] : null, node: n };
+    for (const c of clusters) if (h === `${c}-${n}`) return { cluster: c, node: n };
+  }
+  return null;
+}
+export const windowRecent = (recent, now, windowS) => !Number.isFinite(windowS) ? recent : recent.filter(r => r[0] >= now - windowS);
+// Requests per second of one stream over the last `spanS` seconds, oldest first: the mini trace of the probe.
+export function perSecond(recent, key, now, spanS = 120) {
+  const bins = Array(spanS).fill(0);
+  for (const r of recent) { if (`${r[1]}|${r[2]}|${r[3]}` !== key) continue; const i = spanS - 1 - Math.floor(now - r[0]); if (i >= 0 && i < spanS) bins[i] += 1; }
+  return bins;
+}
+// What can be said of a node's wire: only the documented wiring. Per-node counters do not exist (a node name in a path is masked as {id}).
+export function wireFacts(node) {
+  if (!node) return null;
+  const k8s = node.kind === 'k8s';
+  return {
+    links: k8s ? [{ to: 'KWOK', what: 'reports the node to the Kubernetes API', plane: 'k8s' }] : [{ to: 'BMC farm', what: 'Redfish: power, temperature, fans', plane: 'management' }, { to: 'slurmctld', what: 'Slurm control: state and jobs', plane: 'control' }],
+    capture: 'Not captured. The mocks record the path shape of each request but mask a node name as {id}, so this wire\'s own messages cannot be told apart from the other nodes\'.',
+  };
+}

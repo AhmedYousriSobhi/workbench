@@ -2,6 +2,7 @@ import { S } from './state.js';
 import { $ } from './util.js';
 import { buildFlow } from './diagram.js';
 import { syncZoom } from './zoom.js';
+import { startAnalysis, stopAnalysis } from './analysis.js';
 import { clusterList, curLevel, enterCluster, paintLevelUi, setLevel } from './overview.js';
 import { dockWide, paintReach } from './inspector.js';
 import { paintConnections } from './connections.js';
@@ -63,6 +64,7 @@ export function selectTab(t, focus) {
   if ((t === 'nodes' || t === 'traffic') && !document.hidden) openFlow(); else closeFlow();
   if (t === 'conn') paintConnections();
   if (t === 'traffic') paintTraffic();
+  if (t === 'traffic' && !document.hidden) startAnalysis(); else stopAnalysis();
   syncZoom();
   try { sessionStorage.setItem('workbench-tab', t); } catch (e) { /* not remembered */ }
 }
@@ -112,6 +114,6 @@ export function init3() {
   selectTab(TABS.includes(savedTab) ? savedTab : 'nodes');
   try { if (sessionStorage.getItem('workbench-scn') === '1') scnOpen(true); } catch (e) { /* closed */ }
   // the live feed is only worth its CPU while the page is visible
-  document.addEventListener('visibilitychange', () => { if (document.hidden || ($('tab-nodes').hidden && $('tab-traffic').hidden)) closeFlow(); else openFlow(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden || ($('tab-nodes').hidden && $('tab-traffic').hidden)) closeFlow(); else openFlow(); if (document.hidden || $('tab-traffic').hidden) stopAnalysis(); else startAnalysis(); });
 
 }

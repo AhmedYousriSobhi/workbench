@@ -60,3 +60,11 @@ node --test "webui/tests/js/poollayout.test.mjs"   # paging, filters, KPIs, stat
 ```
 
 The page's width must not depend on the view: never size `.cols` or `#nodeswrap` from a view's content. `ui_shots.py` does not catch a width jump, so look at Fleet, Cluster and Pool at two window widths after a layout change.
+
+## Traffic analysis
+
+`trafficanalysis.js` (pure, `node --test`) computes rates, river bands, probe readings, periods and findings from `/api/traffic`; `analysis.js` draws them and
+polls only while the Traffic tab is visible. To add a reading: add the pure function and its test first, return `null` where the record cannot say, and draw `null`
+as "not measured", never 0. Periods are found per stream. `ui_shots.py` feeds the screen synthetic `/api/traffic` data and checks the river, the findings, the hash
+round trip and that nothing polls while another tab is open.
+

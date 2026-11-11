@@ -1,7 +1,7 @@
 import './setup.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { streamKey, sampleOf, rateFromSamples, mergeHist, histPercentile, bandPx, riverModel, probeReading, detectPeriods, findAnomalies, RETRY_S } from '../../static/js/trafficanalysis.js';
+import { streamKey, sampleOf, rateFromSamples, mergeHist, histPercentile, bandPx, riverModel, probeReading, detectPeriods, findAnomalies, RETRY_S, wireHash, parseWireHash, windowRecent, perSecond, wireFacts } from '../../static/js/trafficanalysis.js';
 
 const EDGES = [5, 10, 25, 50, 100, 250, 500, 1000];
 const stream = (o = {}) => ({ who: 'curl', service: 'jira-mock', shape: 'GET /rest/api/2/serverInfo', n: 100, ok: 100, client_error: 0, server_error: 0, ms: 300, hist: [90, 8, 2, 0, 0, 0, 0, 0, 0], ...o });
@@ -85,4 +85,27 @@ test('anomalies: no retry after server errors, calls fired together, an unidenti
   const f = findAnomalies([], { 'unknown|jira-mock|GET /z': [{ seconds: 30, strength: 0.8 }], 'curl|jira-mock|GET /y': [{ seconds: 5, strength: 0.9 }] });
   assert.deepEqual(f.map(x => x.kind), ['timer']);
   assert.match(f[0].text, /unidentified caller/);
+});
+
+test('the wire hash is plain text and round-trips, and a stale one is not a wire', () => {
+  const nodes = ['cn001', 'gpu003'];
+  assert.equal(wireHash('cluster-a', 'gpu003'), 'cluster-a-gpu003'); assert.equal(wireHash(null, 'gpu003'), 'gpu003');
+  assert.deepEqual(parseWireHash('#cluster-a-gpu003', ['cluster-a', 'cluster-b'], nodes), { cluster: 'cluster-a', node: 'gpu003' });
+  assert.deepEqual(parseWireHash('gpu003', ['workbench'], nodes), { cluster: 'workbench', node: 'gpu003' });
+  assert.equal(parseWireHash('gpu003', ['a', 'b'], nodes).cluster, null);  // several clusters and no cluster named: the node alone
+  for (const bad of ['', '#', '#nope', '#cluster-c-gpu003x', null]) assert.equal(parseWireHash(bad, ['cluster-a'], nodes), null, String(bad));
+  assert.equal(parseWireHash('#cluster-z-gpu003', ['cluster-a'], nodes), null);
+});
+
+test('the window keeps the newer requests and the trace counts one stream per second', () => {
+  const rows = [[90, 'a', 's', 'GET /x', 200, 1], [99.5, 'a', 's', 'GET /x', 200, 1], [99.9, 'b', 's', 'GET /x', 200, 1], [20, 'a', 's', 'GET /x', 200, 1]];
+  assert.equal(windowRecent(rows, 100, 60).length, 3); assert.equal(windowRecent(rows, 100, Infinity).length, 4);
+  const bins = perSecond(rows, 'a|s|GET /x', 100, 30);
+  assert.equal(bins.length, 30); assert.equal(bins[29], 1); assert.equal(bins[19], 1); assert.equal(bins.reduce((x, y) => x + y, 0), 2);
+});
+
+test('a wire says only what is documented and that its messages are not captured', () => {
+  assert.deepEqual(wireFacts({ kind: 'gpu' }).links.map(l => l.to), ['BMC farm', 'slurmctld']);
+  assert.deepEqual(wireFacts({ kind: 'k8s' }).links.map(l => l.to), ['KWOK']);
+  assert.match(wireFacts({ kind: 'compute' }).capture, /Not captured/); assert.equal(wireFacts(null), null);
 });

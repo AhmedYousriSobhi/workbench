@@ -11,6 +11,7 @@ import { STATE_ICON } from './cluster.js';
 import { openPop } from './inspector.js';
 import { POOLS } from './circuitlayout.js';
 import { facts } from './circuit.js';
+import { openWireInTraffic } from './analysis.js';
 import { FILTERS, POOL_FED, STATE_WORD, filterCounts, gpuBars, pageOf, poolKpis, stateBar } from './poollayout.js';
 
 export const poolNodes = () => (S.pool && facts().pools[S.pool]) || [];
@@ -69,6 +70,6 @@ export function init() {
     const f = e.target.closest('[data-filter]'), p = e.target.closest('[data-page]'), t = e.target.closest('[data-traffic]');
     if (f && !f.disabled) { S.poolFilter = f.dataset.filter; S.poolPage = 0; paintPool(); host.querySelector(`[data-filter="${S.poolFilter}"]`)?.focus(); }
     if (p && !p.disabled) { S.poolPage += Number(p.dataset.page); paintPool(); host.querySelector(`[data-page="${p.dataset.page}"]:not([disabled])`)?.focus(); }
-    if (t) import('./shell.js').then(m => m.selectTab('traffic', true));
+    if (t) { openWireInTraffic(t.dataset.traffic); import('./shell.js').then(m => m.selectTab('traffic', true)); }
   });
 }
