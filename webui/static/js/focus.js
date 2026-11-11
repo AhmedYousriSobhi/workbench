@@ -24,13 +24,13 @@ export function focusSet(id) {  // the entity, its neighbours over declared edge
 export function applyFocus() {
   const g = $('flow'), fs = S.focusId ? focusSet(S.focusId) : null, gr = clusterNow().graph;
   if (S.focusId && !fs) S.focusId = null;
-  const keep = el => !!el.querySelector('.blk.down, .nd.fault, .nd.warn, .fring.on');  // faulted parts stay visible while the rest is dimmed
+  const keep = el => !!el.querySelector('.blk.down, .nd.fault, .nd.warn, .fring.on, .cv-sq:not(.ok)') || el.matches('.cv-part.down, .cv-part.flt');  // faulted parts stay visible while the rest is dimmed
   g.querySelectorAll('[data-ent]').forEach(el => {
     const id = el.getAttribute('data-ent'), ent = gr && gr.entities.find(e => e.id === id), inSet = fs && (fs.ents.has(id) || (ent && ent.group && fs.ents.has(ent.group)) || id === S.focusId);
     if (fs && !inSet && !keep(el)) el.setAttribute('data-dim', '1'); else el.removeAttribute('data-dim');
     if (fs && id === S.focusId) el.setAttribute('data-focus', '1'); else el.removeAttribute('data-focus');
   });
-  g.querySelectorAll('path.lane[data-edge]').forEach(l => { if (fs && !fs.edges.has(l.getAttribute('data-edge'))) l.setAttribute('data-dim', '1'); else l.removeAttribute('data-dim'); });
+  g.querySelectorAll('path.lane[data-edge], g.wire[data-edge]').forEach(l => { if (fs && !fs.edges.has(l.getAttribute('data-edge'))) l.setAttribute('data-dim', '1'); else l.removeAttribute('data-dim'); });
   g.querySelectorAll('.elabs, .lanehalo').forEach(el => { if (fs) el.setAttribute('data-dim', '1'); else el.removeAttribute('data-dim'); });
   paintFocusPane(fs); paintCrumb();
 }

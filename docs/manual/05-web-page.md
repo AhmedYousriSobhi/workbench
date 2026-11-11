@@ -121,6 +121,22 @@ terminal session makes the proxy connect to a node, and Teleport counts that (`t
 diagnostics port, 127.0.0.1:3434). Nothing is invented: with no connections there are no dots. The login nodes come from the saved
 workbench (`benchctl start --login ssh,teleport,both`, or the Login nodes rows of the sheet).
 
+### The Circuit view
+
+![The Circuit view: Slurm lane with its racks, the Kubernetes lane faded because this cluster has none, the services under the HTTP bus and the layer row](img/web-circuit.png)
+
+**Circuit** (in the view switch, next to 2.5D, Flat and Clusters) draws the same cluster as a live circuit: a Slurm lane (login, slurmctld or the
+controller, slurmdbd, CPU and GPU racks) and a Kubernetes lane (kubectl, kube-apiserver, etcd, KWOK, racks), and the services under an HTTP bus. One
+square in a rack is one node (one per 8 nodes above 64); a square that needs attention carries a ▲ and the rack says why in words.
+
+- **A wire that pulses is a wire something counted**: the pulse speed follows requests a minute and a red dash marks errors. A wire that is lit but still is
+  wiring nothing counts ("declared wiring, not measured"); a dark dashed wire carries nothing. Hover or focus a wire for its words.
+- **A part the cluster lacks stays where it is, faded** (a lane gets a note such as "Not in this cluster: no Kubernetes"). With a controller node the
+  controller chip says so and an admin SSH wire is drawn; without one, the login node wears **HEAD NODE · cmsh**.
+- **Layers** (the row under the drawing) show one plane at a time: Access, Control, Data, Monitoring or Management. The other wires fade to 10 %.
+- Click a part or a square for its details, as in the other views. Focus (double-click or **F**), the lens and the blast radius work here too.
+- The node list folds away while Circuit is on, so the drawing has the width; choosing another view brings it back.
+
 ## Teleport from the page
 
 Teleport is a part like the others, so you control it from **left nav → ⚙ Cluster architecture**:

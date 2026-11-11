@@ -15,7 +15,7 @@ export function applyBlast() {
   if (b) {
     for (const k of b.services) g.querySelectorAll(`[data-ent="${k}"]`).forEach(el => el.setAttribute('data-blast', '1'));
     for (const n of b.nodes) g.querySelectorAll(`[data-ent="${n}"]`).forEach(el => el.setAttribute('data-blast', '1'));
-    for (const k of b.services) g.querySelectorAll(`path.lane[data-edge="clients>${k}:api"]`).forEach(el => el.setAttribute('data-blast', '1'));
+    for (const k of b.services) g.querySelectorAll(`path.lane[data-edge="clients>${k}:api"], g.wire[data-edge="clients>${k}:api"]`).forEach(el => el.setAttribute('data-blast', '1'));
   }
   const pane = $('blastpane'); pane.hidden = !b; paintInspector();
   pane.innerHTML = b ? `<b>Blast radius: ${esc(b.title)}</b><p>${esc(b.caption)}</p><p class="small dim">Dashed parts are affected: ${b.services.map(k => esc(ENT_NAME(k))).join(', ')}${b.nodes.length ? '; node ' + b.nodes.map(esc).join(', ') : ''}. Basis: ${esc(b.basis)}.</p><button class="btn small" id="blast-x">Dismiss</button>` : '';

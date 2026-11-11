@@ -17,7 +17,7 @@ export function applyLens() {
     const id = el.getAttribute('data-ent'), ent = gr && gr.entities.find(e => e.id === id), on = !ls || ls.ents.has(id) || (ent && ent.group && ls.ents.has(ent.group));
     if (on) el.removeAttribute('data-ldim'); else el.setAttribute('data-ldim', '1');
   });
-  g.querySelectorAll('path.lane[data-edge]').forEach(l => { if (!ls || ls.edges.has(l.getAttribute('data-edge'))) l.removeAttribute('data-ldim'); else l.setAttribute('data-ldim', '1'); });
+  g.querySelectorAll('path.lane[data-edge], g.wire[data-edge]').forEach(l => { if (!ls || ls.edges.has(l.getAttribute('data-edge'))) l.removeAttribute('data-ldim'); else l.setAttribute('data-ldim', '1'); });
   g.querySelectorAll('.elabs').forEach(el => { if (ls) el.setAttribute('data-ldim', '1'); else el.removeAttribute('data-ldim'); });
   $('trafficpanel').dataset.lens = S.lens; paintEye();
 }

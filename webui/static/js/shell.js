@@ -1,4 +1,6 @@
+import { S } from './state.js';
 import { $ } from './util.js';
+import { buildFlow } from './diagram.js';
 import { clusterList, curLevel, enterCluster, paintLevelUi, setLevel } from './overview.js';
 import { dockWide, paintReach } from './inspector.js';
 import { paintConnections } from './connections.js';
@@ -30,9 +32,17 @@ export function setView(iso, remember) {  // 2.5D game style or the flat baselin
   $('trafficpanel').dataset.view = iso ? 'iso' : 'flat'; paintViewSeg();
   if (remember) try { localStorage.setItem('workbench-view', iso ? 'iso' : 'flat'); } catch (e) { /* not remembered */ }
 }
+export function setCircuit(on) {  // the Cluster level of the zoom (redesign step 3) or the diagram that was here before it
+  if (S.circuit === on) return; S.circuit = on;
+  if (on) { S.treeWas = !$('nodeswrap').classList.contains('treeoff'); setTree(false, false); } else if (S.treeWas) setTree(true, false);  // the circuit wants the width the node list uses
+  try { localStorage.setItem('workbench-circuit', on ? '1' : '0'); } catch (e) { /* not remembered */ }
+  $('nodeswrap').classList.toggle('circuit', on);
+  if (curLevel() !== 'overview') buildFlow(); paintViewSeg();
+}
 export function paintViewSeg() {  // the view switcher (#324): one control for the style (2.5D, flat) and the level (diagram, overview)
-  const ov = curLevel() === 'overview', iso = $('trafficpanel').dataset.view === 'iso';
-  for (const [id, on] of [['vw-iso', !ov && iso], ['vw-flat', !ov && !iso], ['vw-ov', ov]]) $(id).setAttribute('aria-pressed', on);
+  const ov = curLevel() === 'overview', iso = $('trafficpanel').dataset.view === 'iso', cv = !ov && S.circuit;
+  for (const [id, on] of [['vw-iso', !ov && !cv && iso], ['vw-flat', !ov && !cv && !iso], ['vw-cv', cv], ['vw-ov', ov]]) $(id).setAttribute('aria-pressed', on);
+  $('trafficpanel').toggleAttribute('data-circuit', cv); $('cvstack').hidden = !cv; $('cvcap').hidden = !cv;
 }
 
 // theme: dark first (Midnight) until a choice is remembered; Auto follows the system; storage may be refused
@@ -72,11 +82,14 @@ export function init() {
 export function init2() {
   document.querySelectorAll('#subseg [data-sub]').forEach(b => b.onclick = () => setSub(b.dataset.sub));
   const toDiagram = () => curLevel() === 'overview' ? enterCluster(clusterList()[0]) : 0;
-  $('vw-iso').onclick = () => { setView(true, true); toDiagram(); };
-  $('vw-flat').onclick = () => { setView(false, true); toDiagram(); };
+  $('vw-iso').onclick = () => { setCircuit(false); setView(true, true); toDiagram(); };
+  $('vw-flat').onclick = () => { setCircuit(false); setView(false, true); toDiagram(); };
+  $('vw-cv').onclick = () => { setCircuit(true); toDiagram(); };
   $('vw-ov').onclick = () => setLevel('overview', false);
   let viewPref = null; try { viewPref = localStorage.getItem('workbench-view'); } catch (e) { /* default */ }
   setView(viewPref ? viewPref === 'iso' : !matchMedia('(prefers-reduced-motion: reduce), (max-width: 640px)').matches, false);  // default per device: flat under reduced motion and on a phone
+  try { S.circuit = localStorage.getItem('workbench-circuit') === '1'; } catch (e) { /* default */ }
+  $('nodeswrap').classList.toggle('circuit', S.circuit);
   paintLevelUi();
   let treePref = null; try { treePref = localStorage.getItem('workbench-tree'); } catch (e) { /* default */ }
   if (treePref === 'closed') setTree(false, false);

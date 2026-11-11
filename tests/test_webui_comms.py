@@ -1,4 +1,6 @@
 
+from pathlib import Path
+
 from webui_src import page_source
 
 from webui import comms, graph
@@ -82,3 +84,15 @@ def test_the_real_gpu_link_exists_only_when_built():
     on = {(r["from"], r["to"]): r for r in comms.build({"real-gpu": True}, [], [])}
     assert on[("clients", "real-gpu")]["port"] == 9403 and on[("clients", "real-gpu")]["real"] and not on[("clients", "real-gpu")]["measured"]
     assert ("clients", "real-gpu") not in {(r["from"], r["to"]) for r in comms.build({"dcgm-exporter": True}, [], [])}
+
+
+def test_every_wire_of_the_cluster_level_stands_for_a_documented_link():
+    """The Cluster level (webui/static/js/circuitlayout.js) names the link each wire shows by its two ends; a renamed or dropped link
+    must not leave a wire that silently reads nothing."""
+    import re
+
+    src = (Path(__file__).resolve().parent.parent / "webui/static/js/circuitlayout.js").read_text()
+    pairs = {tuple(p.strip("' ") for p in m.split(",")) for m in re.findall(r"link: \[('[^']+', '[^']+')\]", src)}
+    known = {(link[0], link[1]) for link in [*comms.LINKS, *comms.UNREADABLE, *comms.PLANNED]}
+    assert len(pairs) >= 10
+    assert not (pairs - known), f"wires with no documented link: {sorted(pairs - known)}"
