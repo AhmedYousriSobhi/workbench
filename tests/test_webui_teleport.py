@@ -2,6 +2,7 @@
 from pathlib import Path
 
 import yaml
+from webui_src import page_source
 
 from webui import cluster, connections
 
@@ -47,7 +48,7 @@ def test_connections_row_names_the_proxy_identity_and_invite():
 
 
 def test_the_diagram_is_called_infrastructure_architecture_and_can_draw_teleport():
-    html = Path("webui/static/index.html").read_text()
+    html = page_source()
     assert '<h2 id="traffic-h" style="margin:0">Infrastructure architecture</h2>' in html and ">Traffic<" not in html
     assert "const TELEPORT_BOX = ['teleport'" in html and "'teleport': 'teleport'" in html  # a box, and a click to its Connections row
     assert "...(hasTeleport() ? [TELEPORT_BOX] : [])" in html                       # only when the part is built
@@ -68,7 +69,7 @@ def test_snapshot_carries_the_login_nodes_of_the_saved_workbench(tmp_path, monke
 
 
 def test_the_diagram_draws_access_paths_and_every_part_has_a_tip_and_a_pop_up():
-    html = Path("webui/static/index.html").read_text()
+    html = page_source()
     for needle in ("'direct SSH'", "'jump host'", "'Teleport'", "MODE_TEXT", "loginList()",     # one labelled line per way in
                    'id="tip"', 'role="tooltip"', 'id="pop"', 'role="dialog"', "function openPop(", "function showTip(",
                    'id="subseg"', "function setTree(", "workbench-tree"):                   # the node list folds away
@@ -76,7 +77,7 @@ def test_the_diagram_draws_access_paths_and_every_part_has_a_tip_and_a_pop_up():
 
 
 def test_the_options_sheet_survives_a_backend_without_logins():
-    html = Path("webui/static/index.html").read_text()
+    html = page_source()
     assert "const lg = j.logins;" in html and "need the newer page backend" in html          # parts still listed, the login rows say why they are off
     assert "./scripts/benchctl stop" in html and "different versions" in html               # and the failure names its cure
 
@@ -107,6 +108,6 @@ def test_snapshot_marks_a_login_node_that_nothing_answers_for(tmp_path, monkeypa
 
 
 def test_the_diagram_draws_a_login_that_is_not_running_dashed_and_says_so():
-    html = Path("webui/static/index.html").read_text()
+    html = page_source()
     for needle in ("loginRuns(l)", "'✗ not running'", "#flow .blk.lgn.down", "stackUp()", "l.up === false"):
         assert needle in html, needle

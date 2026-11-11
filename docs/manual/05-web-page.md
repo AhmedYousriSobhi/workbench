@@ -237,7 +237,7 @@ page. Start with [Which command do I use?](11-which-command.md) when the command
 
 - The Profile and Budget manager (edit `sim.yaml` in the page) is **not built**; edit the file ([chapter 8](08-configuration.md)).
 - Backend memory stays under 50 MB. Starlette and one static page, no framework, no CDN.
-- Browser debugging for developers: `.venv/bin/python scripts/ui_shots.py` ([reference](10-reference.md)).
+- Browser debugging for developers: `.venv/bin/python scripts/ui_shots.py` ([reference](10-reference.md)). The page is plain ES modules under `webui/static/js/` (no build step); `node --test "webui/tests/js/*.test.mjs"` runs its logic tests.
 
 ## Health checks: what drains a node
 

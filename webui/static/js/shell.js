@@ -1,0 +1,104 @@
+import { $ } from './util.js';
+import { clusterList, curLevel, enterCluster, paintLevelUi, setLevel } from './overview.js';
+import { dockWide, paintReach } from './inspector.js';
+import { paintConnections } from './connections.js';
+import { closeFlow, openFlow } from './flowfeed.js';
+import { paintTraffic } from './traffic.js';
+import { loadCluster } from './cluster.js';
+import { loadScenarios, poll, runChip, scnOpen } from './scenarios.js';
+
+// Top menu: a disclosure (button + aria-expanded + list of buttons), closed by Escape, an outside click or choosing an item.
+export function setMenu(open, refocus) {
+  $('menu').hidden = !open; $('menubtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open) { if (innerWidth <= 860) $('menu').style.top = ($('menubtn').getBoundingClientRect().bottom) + 'px'; $('menu').querySelector('.menuitem').focus(); }
+  else if (refocus) $('menubtn').focus();
+}
+
+// the node list beside the diagram folds away, so the diagram can have the whole width (remembered when storage allows)
+export function setTree(open, remember = true) {
+  $('nodeswrap').classList.toggle('treeoff', !open);
+  if (remember) try { localStorage.setItem('workbench-tree', open ? 'open' : 'closed'); } catch (e) { /* not remembered */ }
+}
+export function setSub(v, remember = true) {  // All | Topology (diagram, list folded) | Nodes (list, diagram hidden)
+  $('nodeswrap').classList.toggle('subnodes', v === 'nodes'); setTree(v === 'all' || v === 'nodes', false);
+  document.querySelectorAll('#subseg [data-sub]').forEach(b => b.setAttribute('aria-pressed', b.dataset.sub === v));
+  if (remember) try { localStorage.setItem('workbench-sub', v); } catch (e) { /* not remembered */ }
+  if (v !== 'nodes') requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+}
+
+export function setView(iso, remember) {  // 2.5D game style or the flat baseline (#320)
+  $('trafficpanel').dataset.view = iso ? 'iso' : 'flat'; paintViewSeg();
+  if (remember) try { localStorage.setItem('workbench-view', iso ? 'iso' : 'flat'); } catch (e) { /* not remembered */ }
+}
+export function paintViewSeg() {  // the view switcher (#324): one control for the style (2.5D, flat) and the level (diagram, overview)
+  const ov = curLevel() === 'overview', iso = $('trafficpanel').dataset.view === 'iso';
+  for (const [id, on] of [['vw-iso', !ov && iso], ['vw-flat', !ov && !iso], ['vw-ov', ov]]) $(id).setAttribute('aria-pressed', on);
+}
+
+// theme: dark first (Midnight) until a choice is remembered; Auto follows the system; storage may be refused
+export const THEMES = ['auto', 'light', 'dark', 'midnight', 'dim'],
+  THEME_ICON = { auto: '◐ Auto', light: '☀ Light', dark: '☾ Dark', midnight: '✦ Midnight', dim: '☁ Dim' };
+export function setTheme(t) {
+  if (t === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = t;
+  $('theme').textContent = THEME_ICON[t]; $('theme').setAttribute('aria-label', `Colour theme: ${t}. Press to change.`); $('theme').dataset.t = t;
+  try { localStorage.setItem('workbench-theme', t); } catch (e) { /* private mode: not remembered */ }
+}
+// tabs: the live traffic feed runs only while its tab and the page are visible
+export const TABS = ['nodes', 'traffic', 'conn'];
+export function selectTab(t, focus) {
+  TABS.forEach(k => { const on = k === t; $('tab-' + k).hidden = !on; $('tb-' + k).setAttribute('aria-selected', on); $('tb-' + k).tabIndex = on ? 0 : -1; });
+  $('subseg').hidden = t !== 'nodes';  // the view choice belongs to Infrastructure
+  if (focus) $('tb-' + t).focus();
+  if ((t === 'nodes' || t === 'traffic') && !document.hidden) openFlow(); else closeFlow();
+  if (t === 'conn') paintConnections();
+  if (t === 'traffic') paintTraffic();
+  try { sessionStorage.setItem('workbench-tab', t); } catch (e) { /* not remembered */ }
+}
+
+export function init() {
+  $('menubtn').onclick = () => setMenu($('menu').hidden);
+  $('menu').addEventListener('click', e => { if (e.target.closest('.menuitem')) setMenu(false); });  // the item's own handler opens its sheet
+  document.addEventListener('click', e => { if (!$('menu').hidden && !e.target.closest('.menuwrap')) setMenu(false); });
+  document.addEventListener('keydown', e => {
+    if ($('menu').hidden) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setMenu(false, true); return; }
+    const items = [...$('menu').querySelectorAll('.menuitem')], i = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus(); }
+    if (e.key === 'Tab' && !e.shiftKey && i === items.length - 1) setMenu(false);  // tabbing past the last item leaves the menu
+  }, true);
+
+}
+
+export function init2() {
+  document.querySelectorAll('#subseg [data-sub]').forEach(b => b.onclick = () => setSub(b.dataset.sub));
+  const toDiagram = () => curLevel() === 'overview' ? enterCluster(clusterList()[0]) : 0;
+  $('vw-iso').onclick = () => { setView(true, true); toDiagram(); };
+  $('vw-flat').onclick = () => { setView(false, true); toDiagram(); };
+  $('vw-ov').onclick = () => setLevel('overview', false);
+  let viewPref = null; try { viewPref = localStorage.getItem('workbench-view'); } catch (e) { /* default */ }
+  setView(viewPref ? viewPref === 'iso' : !matchMedia('(prefers-reduced-motion: reduce), (max-width: 640px)').matches, false);  // default per device: flat under reduced motion and on a phone
+  paintLevelUi();
+  let treePref = null; try { treePref = localStorage.getItem('workbench-tree'); } catch (e) { /* default */ }
+  if (treePref === 'closed') setTree(false, false);
+  try { const sp = localStorage.getItem('workbench-sub'); if (sp === 'topo' || sp === 'nodes') setSub(sp, false); } catch (e) { /* default */ }  // the list sits beside or under the diagram; folding it away is remembered
+  if (dockWide()) paintReach();
+  $('theme').onclick = () => setTheme(THEMES[(THEMES.indexOf($('theme').dataset.t || 'auto') + 1) % THEMES.length]);
+  let savedTheme = 'midnight'; try { savedTheme = localStorage.getItem('workbench-theme') || 'midnight'; } catch (e) { /* default */ }
+  setTheme(THEMES.includes(savedTheme) ? savedTheme : 'midnight');
+
+}
+
+export function init3() {
+  TABS.forEach((k, i) => {
+    $('tb-' + k).onclick = () => selectTab(k);
+    $('tb-' + k).onkeydown = e => { const d = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key]; if (d) { e.preventDefault(); selectTab(TABS[(i + d + TABS.length) % TABS.length], true); } };
+  });
+  // start
+  loadCluster(); runChip(); loadScenarios(); poll();
+  let savedTab = 'nodes'; try { savedTab = sessionStorage.getItem('workbench-tab') || 'nodes'; } catch (e) { /* default */ }
+  selectTab(TABS.includes(savedTab) ? savedTab : 'nodes');
+  try { if (sessionStorage.getItem('workbench-scn') === '1') scnOpen(true); } catch (e) { /* closed */ }
+  // the live feed is only worth its CPU while the page is visible
+  document.addEventListener('visibilitychange', () => { if (document.hidden || ($('tab-nodes').hidden && $('tab-traffic').hidden)) closeFlow(); else openFlow(); });
+
+}

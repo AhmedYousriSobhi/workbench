@@ -176,7 +176,7 @@ The [user manual](../manual/README.md) has a chapter for each topic: concepts, t
 
 ## 7. For developers
 
-To look at the web page without a screen: `pip install -e '.[browser]'`, `.venv/bin/python -m playwright install chromium`, then `.venv/bin/python scripts/ui_shots.py` writes screenshots to `/tmp/workbench-ui-shots` and reports problems.
+To look at the web page without a screen: `pip install -e '.[browser]'`, `.venv/bin/python -m playwright install chromium`, then `.venv/bin/python scripts/ui_shots.py` writes screenshots to `/tmp/workbench-ui-shots` and reports problems. The page is plain ES modules (`webui/static/js/`, no build step); its logic tests need Node 22 or newer: `node --test "webui/tests/js/*.test.mjs"` (`validate.sh` runs them).
 
 Once per clone: `./scripts/install-hooks.sh` (no sudo) installs the git hooks: no commits on `main`/`dev`, an issue reference in every commit message, a check that your git identity is your own GitHub noreply address (`./scripts/check-identity.sh`; GitHub credits a commit by the ID in that address, so a placeholder would credit a stranger), `validate.sh` before each commit, and a privacy scan (`./scripts/check-privacy.sh`) so no personal path, email or token is published. The repository is public, and the Claude skills under `.claude/` are symlinks into a home directory, so that folder is gitignored.
 

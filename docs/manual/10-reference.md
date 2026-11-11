@@ -55,6 +55,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 | `scripts/verify.sh [--full] [--revalidate] [--skip-browser]` | validate (skipped when it passed for this exact tree) plus real-host tests, with seconds per step: run before asking for a merge |
 | `scripts/real-test.sh` | real-host tests |
 | `scripts/ui_shots.py [OUTDIR]` | screenshots and checks of the web page |
+| `node --test "webui/tests/js/*.test.mjs"` | the web page's JavaScript tests (Node 22 or newer; `validate.sh` runs them) |
 | `scripts/check-privacy.sh` | scan for personal data before publishing |
 | `scripts/check-identity.sh` | refuse a wrong or placeholder git identity before a commit or push |
 

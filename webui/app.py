@@ -38,6 +38,7 @@ from .graph import attach as attach_graph
 from .wiki import Wiki, WikiError, esc, page
 
 STATIC = Path(__file__).parent / "static"
+_STATIC_TYPES = {".js": "text/javascript", ".css": "text/css"}
 COOKIE = "workbench_ui"
 DOCS = Path(__file__).resolve().parent.parent / "docs"
 
@@ -169,6 +170,15 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
     async def index(request: Request):
         return FileResponse(STATIC / "index.html")
+
+    async def static_file(request: Request):
+        """The page's stylesheet and ES modules (ADR 0007: native modules, no build step). Same token as the page; only
+        .js and .css files directly under static/, and revalidated on every load so an upgrade is never served stale."""
+        path = (STATIC / request.path_params["rel"]).resolve()
+        kind = _STATIC_TYPES.get(path.suffix)
+        if kind is None or not path.is_file() or STATIC.resolve() not in path.parents:
+            raise HTTPException(404, "no such file")
+        return FileResponse(path, media_type=kind, headers={"Cache-Control": "no-cache"})
 
     async def status(request: Request):
         return JSONResponse(await asyncio.to_thread(governor_status, socket))
@@ -574,6 +584,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         routes=[
             Route("/login", login),
             Route("/", protected(index)),
+            Route("/static/{rel:path}", protected(static_file)),
             Route("/help", protected(help_home)),
             Route("/help/", protected(help_home)),
             Route("/help/search", protected(help_search)),

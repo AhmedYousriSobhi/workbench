@@ -26,6 +26,7 @@ SYNTH_GRAPH = graph.build(
     [{"name": n, "kind": "compute"} for n in ("cn001", "cn002", "cn003", "cn004")] + [{"name": n, "kind": "gpu"} for n in ("gpu001", "gpu002")],
     [{"name": "login", "mode": "both"}, {"name": "login2", "mode": "teleport"}])
 SYNTH_CLUSTER = SYNTH_CLUSTER.replace("actions: [", "graph: " + json.dumps(SYNTH_GRAPH) + ", blast: " + json.dumps(blast.payload()) + ", actions: [", 1)
+TEST_HOOK = "window.__WB_TEST = true"  # main.js then exposes its modules as globals (webui/static/js/testhook.js) so the checks below can call them by name
 VIEWPORTS = {"desktop": (1280, 900), "phone": (390, 800)}
 
 
@@ -54,6 +55,7 @@ def capture(out: Path) -> dict:
             for scheme in ("light", "dark"):
                 for vp, (w, h) in VIEWPORTS.items():
                     page = browser.new_page(viewport={"width": w, "height": h}, color_scheme=scheme)
+                    page.add_init_script(TEST_HOOK)
                     page.add_init_script("localStorage.setItem('workbench-theme','auto')")  # the shots follow the system scheme; the default is checked above
                     page.on("console", lambda m, r=result: r["console_errors"].append(m.text) if m.type == "error" else None)
                     page.on("pageerror", lambda e, r=result: r["console_errors"].append(str(e)))
@@ -230,6 +232,7 @@ def capture(out: Path) -> dict:
                     page.close()
             for w, h, count in ((1280, 900, 6), (1920, 1080, 50)):  # the architecture is the page (#319): it fills the width, the page itself never scrolls, the rails scroll
                 page = browser.new_page(viewport={"width": w, "height": h})
+                page.add_init_script(TEST_HOOK)
                 page.goto(url)
                 page.wait_for_selector("#flow rect.blk")
                 page.wait_for_timeout(1200)  # the first real poll has landed: it must not overwrite the sample
@@ -306,6 +309,7 @@ def capture(out: Path) -> dict:
                 page.close()
             for w, h, count in ((1280, 900, 2), (1280, 900, 12), (1920, 1080, 12)):  # several clusters (#327): a grid of cards that fits the panel; entering one shows that cluster
                 page = browser.new_page(viewport={"width": w, "height": h})
+                page.add_init_script(TEST_HOOK)
                 page.goto(url)
                 page.wait_for_selector("#flow rect.blk")
                 page.wait_for_timeout(1200)
