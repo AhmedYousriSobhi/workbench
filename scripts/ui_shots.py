@@ -30,6 +30,60 @@ TEST_HOOK = "window.__WB_TEST = true"  # main.js then exposes its modules as glo
 VIEWPORTS = {"desktop": (1280, 900), "phone": (390, 800)}
 
 
+WIRE_PROBE = """async () => {
+  const w = await import('/static/js/wire.js');
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.id = 'wirecheck'; svg.setAttribute('width', '100'); svg.setAttribute('height', '16');
+  svg.append(w.buildWire({ d: 'M0 8 L90 8', plane: 'access', rpm: 12, errors: 2, label: 'probe' }), w.buildWire({ d: 'M0 8 L90 8', plane: 'data' }));
+  document.body.append(svg);
+  const look = sel => { const e = svg.querySelector(sel); if (!e) return null; const c = getComputedStyle(e); return { name: c.animationName, state: c.animationPlayState, dash: c.strokeDasharray, dur: c.animationDuration }; };
+  return { pulse: look('.wire-pulse'), err: look('.wire-err'), idle: look('.wire-idle'), title: svg.querySelector('title').textContent, state: svg.querySelector('.wire').dataset.state,
+           layers: svg.querySelectorAll('.wire')[0].children.length, idleLayers: svg.querySelectorAll('.wire')[1].children.length };
+}"""
+WIRE_PAUSE = """async () => {
+  const pulse = () => getComputedStyle(document.querySelector('#wirecheck .wire-pulse')).animationPlayState;
+  const before = pulse();
+  Object.defineProperty(document, 'hidden', { get: () => true, configurable: true });
+  document.dispatchEvent(new Event('visibilitychange'));
+  const hidden = { state: pulse(), flag: document.documentElement.hasAttribute('data-tab-hidden') };
+  delete document.hidden;
+  document.dispatchEvent(new Event('visibilitychange'));
+  return { before, hidden, after: pulse(), flagAfter: document.documentElement.hasAttribute('data-tab-hidden') };
+}"""
+
+
+def check_wire(page) -> list[str]:
+    """The shared wire (webui/static/js/wire.js, canvas.css): four strokes and a red dash, a text alternative, motion that stops
+    under reduced motion and while the tab is hidden, and the self-hosted fonts that really load. Returns the problems found."""
+    bad = []
+    r = page.evaluate(WIRE_PROBE)
+    if r["layers"] != 6 or r["idleLayers"] != 3:  # title + 4 strokes + error dash; title + base + idle stroke
+        bad.append(f"unexpected layers {r['layers']}/{r['idleLayers']}")
+    if r["state"] != "errors" or "probe: Access wire, 12 requests a minute, 2 errors" != r["title"]:
+        bad.append(f"no text alternative: {r['title']!r} / {r['state']}")
+    if not page.evaluate("matchMedia('(prefers-reduced-motion: reduce)').matches"):
+        for k in ("pulse", "err"):
+            if r[k]["name"] != "wire-flow" or r[k]["state"] != "running":
+                bad.append(f"{k} does not animate: {r[k]}")
+        if r["pulse"]["dash"].replace("px", "").replace(",", "") != "2 18" or r["err"]["dash"].replace("px", "").replace(",", "") != "1 60":
+            bad.append(f"dash patterns changed: {r['pulse']['dash']} / {r['err']['dash']}")
+        p = page.evaluate(WIRE_PAUSE)
+        if p["before"] != "running" or p["hidden"] != {"state": "paused", "flag": True} or p["after"] != "running" or p["flagAfter"]:
+            bad.append(f"hidden tab does not pause the wires: {p}")
+        page.emulate_media(reduced_motion="reduce")
+        names = page.evaluate("[...document.querySelectorAll('#wirecheck .wire-pulse, #wirecheck .wire-err')].map(e => getComputedStyle(e).animationName)")
+        page.emulate_media(reduced_motion="no-preference")
+        if names != ["none", "none"]:
+            bad.append(f"reduced motion leaves animation on: {names}")
+    if r["idle"]["name"] != "none":
+        bad.append("an idle wire animates")
+    fonts = page.evaluate("Promise.all([document.fonts.load('600 16px Inter'), document.fonts.load('400 13px \"JetBrains Mono\"')]).then(f => f.map(x => x.length))")
+    if fonts != [1, 1]:
+        bad.append(f"fonts did not load from /static/fonts: {fonts}")
+    page.evaluate("document.getElementById('wirecheck').remove()")
+    return bad
+
+
 def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -70,6 +124,8 @@ def capture(out: Path) -> dict:
                             time.sleep(0.3)
                     page.wait_for_timeout(2000)
                     page.evaluate("setTree(true, false)")  # a 1280 px window starts with the list folded; the checks below look at the list
+                    for problem in check_wire(page):
+                        result["a11y"].append(f"wire component {vp} {scheme}: {problem}")
                     path = out / f"dashboard-{vp}-{scheme}.png"
                     page.screenshot(path=str(path), full_page=True)
                     result["shots"].append(str(path))

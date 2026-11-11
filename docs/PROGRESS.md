@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**87% built** (36 done, 59 in review, 9 partial, 5 to do, 109 items).
+**87% built** (36 done, 60 in review, 9 partial, 5 to do, 110 items).
 
 ## Roadmap
 
@@ -16,7 +16,7 @@ flowchart LR
     p4["People and chaos<br/>25%"]:::partial
     p5["Kubernetes<br/>100%"]:::done
     p6["Fidelity VM<br/>0%"]:::todo
-    p7["Web UI and profiles<br/>87%"]:::partial
+    p7["Web UI and profiles<br/>88%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
     p0 --> p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7 --> p8
     classDef done fill:#1a7f37,stroke:#1a7f37,color:#fff
@@ -201,7 +201,7 @@ _One real Ubuntu VM with Redfish power control._
 
 0/1 done
 
-### Web UI and profiles (87%)
+### Web UI and profiles (88%)
 
 _One click from cold start to a busy cluster._
 
@@ -220,6 +220,7 @@ _One click from cold start to a busy cluster._
 | Canvas-first dashboard and fitted diagram | 🔍 In review | The Nodes tab is one grid: the Infrastructure architecture fills the left column, the node list is top right and Connections bottom right (how to reach each part with Copy, the selected part or node with its actions, a Timeline tab). The diagram is built from the measured shape of its panel (top to bottom: Clients, Access, Cluster nodes, Services column at the right) and rebuilt when the panel changes; node tiles grow to fill and show temperature and GPU load. The legend is a Key button with a popover that includes line samples. ui_shots.py checks fit, no page scroll at 1280x900 (6 nodes) and 1920x1080 (50 nodes), and the Key keyboard behaviour. Issue 319, ADR 0028; global view (issue 321), focus view (313) and 2.5D (320) follow. | `webui/static/index.html`, `scripts/ui_shots.py`, `docs/adr/0028-canvas-first-dashboard-and-fitted-diagram.md` | - |
 | Declared graph of the Infrastructure architecture | 🔍 In review | /api/cluster now carries `graph`: entities and typed edges (plane, drawn kind, measured or declared) derived from the snapshot in webui/graph.py. An edge is measured only where a counter backs it (mock request counters, Teleport connections, recorded faults); SSH, jump and Teleport hops and the real Jira are declared. The diagram draws only edges named in the model (data-edge, data-plane, data-measured on each line); the fault lane to the real Jira, which no scenario can reach, is no longer drawn. Several clusters (issue 328): a snapshot with a `clusters` list gets one graph per cluster plus a merged graph with `cluster`-prefixed ids and no edge between clusters; nothing produces more than one cluster yet. Slice 1 of the depth view (issue 312, epic 317); focus view, error-shape dots, blast radius and lenses follow. | `webui/graph.py`, `webui/app.py`, `webui/static/index.html`, `tests/test_graph.py`, `scripts/ui_shots.py` | - |
 | Web UI as native ES modules (redesign step 1) | 🔍 In review | The 2,389-line page is split into markup, one stylesheet and 24 ES module files with no build step and no behaviour change: shared mutable state is one object (state.js), each module wires its own events from init(), main.js runs them in the old order. Served by a token-protected /static route (.js and .css only, no-cache). Node's own runner tests the pure logic and that every module loads (validate.sh). Browser checks reach the modules through an opt-in test hook. Screenshots from sample data match the pre-split page pixel for pixel (animation noise only). First step of the UI redesign (docs/design/ui-redesign/). | `webui/static/index.html`, `webui/static/app.css`, `webui/static/js/`, `webui/tests/js/`, `webui/app.py`, `tests/webui_src.py`, `scripts/validate.sh`, `docs/adr/0007-web-ui-frontend-and-scenario-access.md` | - |
+| Canvas tokens and the shared wire (redesign step 2) | 🔍 In review | The redesign's colours, plane colours and fonts as CSS tokens (always-dark canvas, Inter and JetBrains Mono self-hosted, OFL), and one wire component: four SVG strokes plus a red error dash, or a dashed no-current stroke; pulse speed follows the request rate on a log scale; every animation moves by exactly its own dash period so loops never jump; all of it off under reduced motion and paused in a hidden tab; each wire has a text title. Nothing on the page uses it yet (screens 3 to 7 will). Contrast, dash-period and speed rules are Node tests; a browser check in ui_shots.py covers motion and fonts. | `webui/static/canvas.css`, `webui/static/js/wire.js`, `webui/static/fonts/`, `webui/tests/js/wire.test.mjs`, `webui/tests/js/tokens.test.mjs`, `scripts/ui_shots.py`, `docs/adr/0038-redesign-canvas-tokens-and-wire.md`, `docs/guides/web-ui-canvas.md` | - |
 | Themes and richer diagram look | 🔍 In review | The theme switch cycles Auto, Light, Dark, Midnight (deep navy, neon accents) and Dim (soft slate, low glare); tokens only, remembered in the browser. The 2.5D diagram gets gradient top faces tinted by kind and a decorative icon per service. Issue 325. | `webui/static/index.html` | - |
 | Global view (levels of detail) | 🔍 In review | The Infrastructure architecture has two levels: `overview` (one card per cluster: clients, access, node groups with a health bar, services, faults) and `full`. Above 24 nodes the page opens at the overview; the Overview / Full diagram button pins a level. Hover or focus shows the design underneath; double-click, Enter or Open full design enters, a breadcrumb and Esc leave; a phone taps once. A table of clusters is in the page for screen readers. Issue 321, ADR 0029; several clusters draw as a grid of cards (issue 327; the backend field is issue 328, tested with synthetic data); the node-group level inside a large cluster follows. | `webui/static/index.html`, `scripts/ui_shots.py`, `docs/adr/0029-levels-of-detail-global-view.md` | - |
 | Focus view | 🔍 In review | Double-click a part (or F on a focused part) focuses it and its direct neighbours from the declared graph: the rest dims by an attribute toggle (nothing moves), faulted parts stay visible, Connections lists its edges (plane, kind, measured or declared), a breadcrumb under the diagram and Esc leave. ui_shots checks that no part moves. Issue 313. | `webui/static/index.html`, `scripts/ui_shots.py` | - |
@@ -231,7 +232,7 @@ _One click from cold start to a busy cluster._
 | README demo gif | 🔍 In review | The README's animation is made from sample data and shows each capability in turn with a caption: dark 2.5D with traffic, error triangles, a fault with its declared blast radius, a lens, the client's eye, focus, the flat view and the global view. Re-run scripts/doc_shots.py after a change to the page. Issue 337. | `scripts/doc_shots.py`, `docs/manual/img/architecture-demo.gif`, `README.md` | - |
 | Budget manager | ⬜ To do | Profile/budget form (W-7). | - | - |
 
-1/23 done
+1/24 done
 
 ### macOS agent and CI (0%)
 

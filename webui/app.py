@@ -38,7 +38,7 @@ from .graph import attach as attach_graph
 from .wiki import Wiki, WikiError, esc, page
 
 STATIC = Path(__file__).parent / "static"
-_STATIC_TYPES = {".js": "text/javascript", ".css": "text/css"}
+_STATIC_TYPES = {".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2"}
 COOKIE = "workbench_ui"
 DOCS = Path(__file__).resolve().parent.parent / "docs"
 
@@ -173,7 +173,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
     async def static_file(request: Request):
         """The page's stylesheet and ES modules (ADR 0007: native modules, no build step). Same token as the page; only
-        .js and .css files directly under static/, and revalidated on every load so an upgrade is never served stale."""
+        .js, .css and .woff2 files under static/, and revalidated on every load so an upgrade is never served stale."""
         path = (STATIC / request.path_params["rel"]).resolve()
         kind = _STATIC_TYPES.get(path.suffix)
         if kind is None or not path.is_file() or STATIC.resolve() not in path.parents:

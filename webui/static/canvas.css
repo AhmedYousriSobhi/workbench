@@ -1,0 +1,40 @@
+/* The redesign's visual language for the diagram canvases (screens 5-7), from docs/design/ui-redesign/DESIGN_HANDOFF.md.
+   A canvas is always dark, in every page theme, like a terminal inside a light page: the plane colours are chosen for a dark ground.
+   Use the tokens, never the hex values. Text tokens meet 4.5:1 on ground and surfaces, plane colours 3:1 (webui/tests/js/tokens.test.mjs). */
+:root {
+  --cv-ground:#070B10; --cv-dot:#141D27; --cv-surface:#0A1017; --cv-surface-2:#0C121A;
+  --cv-border:#1B2430; --cv-border-2:#22303F;
+  --cv-text:#F1F5F9; --cv-text-2:#C9D3DD; --cv-text-muted:#8FA1B5;
+  --plane-access:#5CB8FF; --plane-control:#E2E8F0; --plane-k8s:#7C9CFF; --plane-data:#C49BFF; --plane-monitoring:#4BE3A0; --plane-management:#FFB347;
+  --cv-error:#FF5D5D; --cv-attention:#FFB347; --cv-no-current:#3A4656; --cv-wire-base:#141C26;
+  --cv-font-ui:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --cv-font-mono:"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@font-face { font-family:Inter; font-style:normal; font-weight:100 900; font-display:swap; src:url(/static/fonts/inter-latin-wght-normal.woff2) format("woff2"); }
+@font-face { font-family:"JetBrains Mono"; font-style:normal; font-weight:100 800; font-display:swap; src:url(/static/fonts/jetbrains-mono-latin-wght-normal.woff2) format("woff2"); }
+
+.canvas { position:relative; overflow:hidden; background-color:var(--cv-ground); background-image:radial-gradient(circle, var(--cv-dot) 1px, transparent 1.4px); background-size:24px 24px;
+  color:var(--cv-text); font-family:var(--cv-font-ui); }
+.canvas .mono { font-family:var(--cv-font-mono); }
+
+/* A wire: four stacked strokes, see js/wire.js. The plane sets --c; --dur is set per wire from its request rate. */
+.wire { fill:none; stroke-linecap:round; stroke-linejoin:round; transition:opacity .35s; }
+.wire[data-plane=access] { --c:var(--plane-access); } .wire[data-plane=control] { --c:var(--plane-control); } .wire[data-plane=k8s] { --c:var(--plane-k8s); }
+.wire[data-plane=data] { --c:var(--plane-data); } .wire[data-plane=monitoring] { --c:var(--plane-monitoring); } .wire[data-plane=management] { --c:var(--plane-management); }
+.wire-base { stroke:var(--cv-wire-base); stroke-width:7; }
+.wire-halo { stroke:var(--c); stroke-width:9; stroke-opacity:.12; }
+.wire-core { stroke:var(--c); stroke-width:1.5; stroke-opacity:.55; }
+.wire-idle { stroke:var(--cv-no-current); stroke-width:1.5; stroke-dasharray:4 4; }
+.wire-pulse { stroke:var(--c); stroke-width:3; stroke-dasharray:2 18; --period:20; animation:wire-flow var(--dur, 1.5s) linear infinite; }
+.wire-err { stroke:var(--cv-error); stroke-width:3; stroke-dasharray:1 60; --period:61; animation:wire-flow var(--dur, 4.6s) linear infinite; }
+/* Each stroke moves by exactly its own dash period, so the loop is seamless (a fixed distance makes other periods jump). */
+@keyframes wire-flow { to { stroke-dashoffset:calc(var(--period) * -1px); } }
+
+/* A part that needs attention breathes amber, and always says why in words (js/wire.js markAttention). */
+.breathe { animation:wire-breathe 2.4s ease-in-out infinite; }
+.attn-text { display:block; color:var(--cv-attention); font-size:12px; font-weight:600; }
+@keyframes wire-breathe { 0%,100% { box-shadow:0 0 0 1px rgba(0,0,0,.4), 0 0 10px #FFB34733; } 50% { box-shadow:0 0 0 1px rgba(0,0,0,.4), 0 0 30px #FFB34788; } }
+
+/* Motion off: reduced motion, and any hidden tab (W-11: nothing animates unseen). The dots stay drawn, they just stop. */
+@media (prefers-reduced-motion: reduce) { .wire-pulse, .wire-err, .breathe { animation:none; } }
+:root[data-tab-hidden] .wire-pulse, :root[data-tab-hidden] .wire-err, :root[data-tab-hidden] .breathe { animation-play-state:paused; }

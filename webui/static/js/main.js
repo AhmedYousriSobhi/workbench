@@ -14,6 +14,7 @@ import { init as init_lens } from './lens.js';
 import { init as init_diagram } from './diagram.js';
 import { init as init_flowfeed } from './flowfeed.js';
 import { init as init_traffic } from './traffic.js';
+import { init as init_wire } from './wire.js';
 
 init_governor();
 init_plan();
@@ -35,3 +36,4 @@ init2_shell();
 init2_scenarios();
 init_traffic();
 init3_shell();
+init_wire();
