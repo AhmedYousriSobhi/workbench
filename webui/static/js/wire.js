@@ -31,16 +31,17 @@ export function pulseSeconds(rpm) {
 export const errSeconds = pulse => pulse * ERR_PERIOD / PULSE_PERIOD;
 
 // What a wire says in words, for screen readers and the tooltip: the picture is never the only carrier of the state.
-export function wireLabel({ plane, rpm = 0, errors = 0, label = '' }) {
-  const rate = rpm > 0 ? `${Math.round(rpm * 10) / 10} requests a minute` : 'no current';
+export function wireLabel({ plane, rpm = 0, errors = 0, label = '', declared = false }) {
+  const rate = rpm > 0 ? `${Math.round(rpm * 10) / 10} requests a minute` : declared ? 'declared wiring, not measured' : 'no current';
   const err = errors > 0 ? `, ${errors} ${errors === 1 ? 'error' : 'errors'}` : '';
   return `${label ? label + ': ' : ''}${PLANE_NAME[plane] ?? plane} wire, ${rate}${err}`;
 }
 
 // The strokes of a wire, bottom to top, as data: [{ cls, d, style? }]. A wire with no current is the dark base and one
 // dashed core; a live one adds halo and pulse; errors add the red dash. `style` holds CSS variables for canvas.css.
-export function wireLayers({ d, rpm = 0, errors = 0 }) {
+export function wireLayers({ d, rpm = 0, errors = 0, declared = false }) {
   const pulse = pulseSeconds(rpm);
+  if (pulse === null && declared) return [{ cls: 'wire-base', d }, { cls: 'wire-halo', d }, { cls: 'wire-core', d }];  // how it is wired, with nothing counting it: lit, but nothing moves
   if (pulse === null) return [{ cls: 'wire-base', d }, { cls: 'wire-idle', d }];
   const layers = [{ cls: 'wire-base', d }, { cls: 'wire-halo', d }, { cls: 'wire-core', d }, { cls: 'wire-pulse', d, style: { '--dur': `${pulse.toFixed(2)}s` } }];
   if (errors > 0) layers.push({ cls: 'wire-err', d, style: { '--dur': `${errSeconds(pulse).toFixed(2)}s` } });
@@ -50,7 +51,7 @@ export function wireLayers({ d, rpm = 0, errors = 0 }) {
 function paint(g, o) {
   const plane = PLANES.includes(o.plane) ? o.plane : 'control';
   g.setAttribute('data-plane', plane);
-  g.setAttribute('data-state', !(o.rpm > 0) ? 'idle' : o.errors > 0 ? 'errors' : 'live');
+  g.setAttribute('data-state', !(o.rpm > 0) ? (o.declared ? 'declared' : 'idle') : o.errors > 0 ? 'errors' : 'live');
   const layers = wireLayers(o);
   g.replaceChildren(sv('title', {}, wireLabel({ ...o, plane })), ...layers.map(l => {
     const p = sv('path', { class: l.cls, d: l.d });

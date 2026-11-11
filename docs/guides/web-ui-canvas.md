@@ -33,3 +33,16 @@ updateWire(g, { d, plane: 'access', rpm: 60, errors: 2, label });   // on every 
 node --test "webui/tests/js/*.test.mjs"            # the wire's decisions, the token contrast, the dash-period rule
 .venv/bin/python scripts/ui_shots.py               # in a real browser: animates, stops under reduced motion, pauses when hidden, fonts load
 ```
+
+## The Cluster level (the Circuit view)
+
+`webui/static/js/circuitlayout.js` says where every part and wire of one cluster goes (pure data, tested without a browser); `circuit.js` draws it into
+`#flow` and keeps it current. To add a part or a wire, add it to `circuitSpec` (same coordinates for every cluster: a part the cluster lacks is
+greyed through `present: false`, never left out) and name the documented link a wire stands for (`link: ['from', 'to']`, a pair in `webui/comms.py`),
+or `link: null` for wiring the model does not know, which is then drawn as "declared". Give each part `data-ent` (its id in the declared graph) so
+focus, blast radius and the lens work on it. Do not draw a pulse for a link nothing counts.
+
+```bash
+node --test "webui/tests/js/circuitlayout.test.mjs"   # same template for every cluster, greyed parts, controller variants, racks, layers
+.venv/bin/python scripts/ui_shots.py                    # in a browser: wires, titles, absent parts greyed, one layer isolated at a time
+```

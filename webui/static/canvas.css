@@ -38,3 +38,46 @@
 /* Motion off: reduced motion, and any hidden tab (W-11: nothing animates unseen). The dots stay drawn, they just stop. */
 @media (prefers-reduced-motion: reduce) { .wire-pulse, .wire-err, .breathe { animation:none; } }
 :root[data-tab-hidden] .wire-pulse, :root[data-tab-hidden] .wire-err, :root[data-tab-hidden] .breathe { animation-play-state:paused; }
+
+/* ---- The Cluster level (redesign step 3, js/circuit.js): the circuit drawn into #flow. Always dark, like every canvas. ---- */
+#flow[data-cv] { max-width:none; width:100%; min-width:1100px; max-height:none; margin:var(--sp3, 12px) 0; border-radius:14px; background-color:var(--cv-ground);
+  background-image:radial-gradient(circle, var(--cv-dot) 1px, transparent 1.4px); background-size:24px 24px; font-family:var(--cv-font-ui); }
+#flow[data-cv] text { font:600 16px var(--cv-font-ui); fill:var(--cv-text); }
+#flow[data-cv] .cv-title { font-size:22px; font-weight:600; } #flow[data-cv] .cv-state { font-size:17px; font-weight:600; fill:var(--cv-text-2); }
+#flow[data-cv] .cv-sub, #flow[data-cv] .cv-wlab, #flow[data-cv] .cv-note { font-size:16px; font-weight:400; fill:var(--cv-text-muted); }
+#flow[data-cv] .cv-mono { font-family:var(--cv-font-mono); font-size:15px; }
+#flow[data-cv] .cv-k { font-size:14px; font-weight:700; letter-spacing:.14em; fill:var(--cv-text-muted); }
+#flow[data-cv] .cv-wlab { font-family:var(--cv-font-mono); font-size:14px; pointer-events:none; paint-order:stroke; stroke:var(--cv-ground); stroke-width:5px; }
+#flow[data-cv] .cv-note { font-size:17px; }
+#flow[data-cv] .cv-box { fill:var(--cv-surface-2); stroke:var(--cv-border-2); stroke-width:1.5; }
+#flow[data-cv] .cv-band rect { fill:none; stroke:var(--cv-border); stroke-width:1.5; stroke-dasharray:2 6; }
+#flow[data-cv] .cv-band.absent { opacity:.5; }
+#flow[data-cv] .cv-clients .cv-box { stroke:var(--plane-access); stroke-opacity:.6; }
+#flow[data-cv] .cv-chip { fill:var(--cv-surface); stroke:var(--cv-border-2); } #flow[data-cv] .cv-chiptext { font-size:17px; }
+#flow[data-cv] .cv-badge-bg { fill:#2E2315; stroke:var(--cv-attention); } #flow[data-cv] .cv-badge { font-size:12px; font-weight:700; fill:var(--cv-attention); letter-spacing:.04em; }
+/* a part the cluster lacks keeps its place, greyed at 8 %, and its wires with it; the lane note stays readable */
+#flow[data-cv] [data-part][data-present="false"], #flow[data-cv] .cv-wires [data-present="false"], #flow[data-cv] .cv-labels [data-present="false"] { opacity:.08; pointer-events:none; }
+#flow[data-cv] .cv-part.down .cv-box { stroke:var(--cv-error); stroke-dasharray:6 4; } #flow[data-cv] .cv-part.flt .cv-box { stroke:var(--cv-attention); }
+#flow[data-cv] .cv-part.down .cv-state { fill:var(--cv-error); } #flow[data-cv] .cv-part.flt .cv-state { fill:var(--cv-attention); }
+#flow[data-cv] .cv-rack.attn .cv-box { stroke:var(--cv-attention); stroke-width:2; }
+#flow[data-cv] .cv-sq rect { fill:#1E7F57; stroke:#2FD18A; stroke-width:1; } #flow[data-cv] .cv-rack[data-ent=k8s-nodes] .cv-sq.ok rect { fill:#3A4C80; stroke:var(--plane-k8s); }
+#flow[data-cv] .cv-sq:not(.ok) rect { fill:#5A3A0B; stroke:var(--cv-attention); stroke-width:1.6; } #flow[data-cv] .cv-sq.fault rect, #flow[data-cv] .cv-sq.down rect { fill:#5A1717; stroke:var(--cv-error); }
+#flow[data-cv] .cv-glyph { font-size:11px; font-weight:800; fill:var(--cv-text); pointer-events:none; } #flow[data-cv] .cv-sq { cursor:pointer; }
+#flow[data-cv] .cv-sum { fill:var(--cv-text-2); }
+#flow[data-cv] .hit { cursor:pointer; } #flow[data-cv] .hit:hover .cv-box, #flow[data-cv] .hit:focus-visible .cv-box { stroke:var(--plane-access); } #flow[data-cv] .hit:focus-visible { outline:2px solid var(--plane-access); outline-offset:3px; }
+/* the layer stack: an isolated plane keeps its wires, everything else fades to 10 % */
+#flow[data-cv] [data-faded="1"] { opacity:.1; }
+#flow[data-cv] .wire[data-state=declared] .wire-core { stroke-opacity:.35; }
+/* focus, lens and blast radius (js/focus.js, lens.js, blast.js) work on the circuit through the same data attributes */
+#flow[data-cv] [data-focus] .cv-box { stroke:var(--plane-access); stroke-width:3.5; }
+#flow[data-cv] [data-blast] .cv-box { stroke:var(--cv-error); stroke-dasharray:7 4; stroke-width:3.5; }
+#flow[data-cv] g.wire[data-blast] .wire-core, #flow[data-cv] g.wire[data-blast] .wire-halo { stroke:var(--cv-error); stroke-opacity:1; }
+.cvstack { display:flex; flex-wrap:wrap; gap:8px; margin:var(--sp2, 8px) 0; background:var(--cv-ground); border-radius:12px; padding:10px; } .cvstack[hidden] { display:none; }
+.cvlayer { flex:1 1 170px; display:flex; align-items:center; gap:12px; padding:8px 10px; border:1px solid var(--cv-border-2); border-radius:10px; background:var(--cv-surface-2); color:var(--cv-text); font:inherit; text-align:left; cursor:pointer; min-height:48px; }
+.cvlayer[aria-pressed=true] { border-color:var(--cv-text-2); background:#122033; } .cvlayer .lt { display:flex; flex-direction:column; } .cvlayer .n { font-size:12px; color:var(--cv-text-muted); font-family:var(--cv-font-mono); }
+.cvlayer .plate { width:44px; height:24px; border-radius:5px; border:2px solid var(--pc, var(--cv-text-muted)); background:var(--cv-surface); transform:perspective(200px) rotateX(48deg) rotateZ(-8deg); flex:none; }
+.cvlayer .plate[data-plane=access] { --pc:var(--plane-access); } .cvlayer .plate[data-plane=control] { --pc:var(--plane-control); } .cvlayer .plate[data-plane=data] { --pc:var(--plane-data); }
+.cvlayer .plate[data-plane=monitoring] { --pc:var(--plane-monitoring); } .cvlayer .plate[data-plane=management] { --pc:var(--plane-management); } .cvlayer .plate[data-plane=all] { --pc:var(--cv-text); }
+.cvcap { margin:4px 2px; font-size:13px; color:var(--dim, #8FA1B5); } .cvcap[hidden] { display:none; }
+@media (min-width:1100px) { #nodeswrap.circuit { grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto; grid-template-areas:"canvas" "side"; height:auto; min-height:0; }
+  #nodeswrap.circuit #trafficpanel { display:block; } #nodeswrap.circuit #trafficpanel > .flowscroll { display:block; overflow-x:auto; } #nodeswrap.circuit #trafficpanel #flow { height:auto; flex:none; margin:var(--sp2) 0; } }

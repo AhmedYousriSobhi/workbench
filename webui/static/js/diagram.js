@@ -3,6 +3,7 @@ import { applyFocus, focusOn, tagEntities } from './focus.js';
 import { applyBlast } from './blast.js';
 import { applyLens } from './lens.js';
 import { $ } from './util.js';
+import { buildCircuit, circuitSignature, paintCircuit } from './circuit.js';
 import { buildOverview, curLevel, refreshOverview, setLevel } from './overview.js';
 import { STATE_ICON } from './cluster.js';
 import { ACC_PORT, G, REAL_SERVICES, accExtra, accUp, hasService, reduced, svcFit, svcList } from './flowstate.js';
@@ -12,8 +13,9 @@ import { KIND_NAME, MODE_TEXT, SVC_ICON, SVC_METHOD, UF, fitKey, fitText, flowFi
 
 export function buildFlow() { buildFlowBase(); tagEntities(); applyFocus(); applyBlast(); applyLens(); }
 export function buildFlowBase() {
-  if (curLevel() === 'overview') { buildOverview(); return; }
-  $('ovtable').innerHTML = ''; delete $('flow').dataset.ov;
+  if (curLevel() === 'overview') { delete $('flow').dataset.cv; buildOverview(); return; }
+  if (S.circuit) { buildCircuit(); S.cvSig = circuitSignature(); return; }
+  $('ovtable').innerHTML = ''; delete $('flow').dataset.ov; delete $('flow').dataset.cv;
   const g = $('flow'), nodes = nodeList(), lgs = loginList(), svcs = svcList().filter(x => x[0] !== 'teleport'), tpBox = svcList().find(x => x[0] === 'teleport');
   g.innerHTML = ''; S.dots = []; S.tiles = {}; S.svcPos = {}; S.svcOut = {}; S.svcLane = {}; S.flowNodes = flowSig(nodes); S.flowFitKey = fitKey();
   const CHIPS = [['Monitoring app', lgs[0].name], ['Prometheus', 'prometheus'], ['curl · scripts', null], ['You: ssh · tsh', lgs[0].name]];
@@ -162,10 +164,12 @@ export function paintTiles() {  // node states change without a rebuild; a diffe
   const nodes = nodeList(), sig = flowSig(nodes);
   if (sig !== S.flowNodes || fitKey() !== S.flowFitKey) { buildFlow(); return; }
   if (curLevel() === 'overview') { refreshOverview(); return; }
+  if (S.circuit) { if (circuitSignature() !== S.cvSig) buildFlow(); else paintCircuit(); return; }
   for (const n of nodes) { const t = S.tiles[n.name]; if (t) { t.g.setAttribute('aria-label', `${n.name}: ${n.label}. Details`); t.g.children[0].setAttribute('class', 'nd ' + n.state); t.g.children[2].textContent = STATE_ICON[n.state] || '?'; t.g.children[3].setAttribute('class', 'busy' + (n.gpus_busy > 0 ? ' on' : '')); const [fa, fb] = tileFacts(n); t.g.children[4].textContent = fa; if (t.g.children[6]) t.g.children[6].textContent = fb; t.g.children[5].setAttribute('class', 'ndc ' + n.state); } }
 }
 export function paintBlocks() {
   if (curLevel() === 'overview') { refreshOverview(); return; }
+  if (S.circuit) { if (circuitSignature() !== S.cvSig) buildFlow(); else paintCircuit(); return; }
   if (!S.flowSnap || !S.svcPos['bmc-farm']) return;
   const rate = {}, cut = Date.now() - 60000;
   S.recent = S.recent.filter(r => r.t > cut); S.recent.forEach(r => { rate[r.to] = (rate[r.to] || 0) + r.n; });

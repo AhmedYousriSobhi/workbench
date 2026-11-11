@@ -15,6 +15,7 @@ import { init as init_diagram } from './diagram.js';
 import { init as init_flowfeed } from './flowfeed.js';
 import { init as init_traffic } from './traffic.js';
 import { init as init_wire } from './wire.js';
+import { init as init_circuit } from './circuit.js';
 
 init_governor();
 init_plan();
@@ -37,3 +38,4 @@ init2_scenarios();
 init_traffic();
 init3_shell();
 init_wire();
+init_circuit();

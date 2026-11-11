@@ -84,6 +84,33 @@ def check_wire(page) -> list[str]:
     return bad
 
 
+def check_circuit(page) -> list[str]:
+    """The Cluster level (webui/static/js/circuit.js): the same parts and wires whatever the cluster has, absent parts greyed, one
+    layer isolated at a time, a text alternative on every wire. Leaves the page on the view it found. Returns the problems found."""
+    bad = []
+    page.click("#vw-cv")
+    page.wait_for_selector("#flow[data-cv] .cv-box")
+    r = page.evaluate("""() => { const q = s => [...document.querySelectorAll(s)], wires = q('#flow g.wire');
+        return { wires: wires.length, untitled: wires.filter(w => !w.querySelector('title')?.textContent).length, parts: q('#flow [data-part]').length, layers: q('#cvstack button[data-layer]').length,
+                 pressed: q('#cvstack button[aria-pressed=true]').length, bands: q('#flow .cv-band').length,
+                 greyed: q('#flow [data-part][data-present=false]').every(e => +getComputedStyle(e).opacity <= 0.1), noteOnAbsent: q('#flow .cv-band.absent').every(b => b.querySelector('.cv-note')) } }""")
+    if r["wires"] < 25 or r["untitled"] or r["parts"] < 20 or r["layers"] != 6 or r["pressed"] != 1 or r["bands"] != 2:
+        bad.append(f"unexpected circuit: {r}")
+    if not r["greyed"] or not r["noteOnAbsent"]:
+        bad.append(f"an absent part is not greyed with a note: {r}")
+    page.click("#cvstack button[data-layer=access]")
+    page.wait_for_timeout(500)  # wires fade over 0.35 s
+    f = page.evaluate("""() => { const w = [...document.querySelectorAll('#flow g.wire')]; return { faded: w.filter(x => x.dataset.faded === '1').length, lit: w.filter(x => x.dataset.faded === '0' && x.dataset.layer !== 'access').length,
+        opacity: w.filter(x => x.dataset.faded === '1').every(x => +getComputedStyle(x).opacity <= 0.11) } }""")
+    if not f["faded"] or f["lit"] or not f["opacity"]:
+        bad.append(f"the Access layer does not isolate its wires: {f}")
+    page.click("#cvstack button[data-layer=all]")
+    page.click("#vw-flat")
+    if page.evaluate("document.getElementById('flow').dataset.cv") is not None:
+        bad.append("leaving the circuit left it on")
+    return bad
+
+
 def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -150,6 +177,8 @@ def capture(out: Path) -> dict:
                     page.click("#theme")
                     if page.evaluate("document.documentElement.dataset.theme") != "dark":
                         result["a11y"].append("theme toggle did not switch to dark")
+                    for problem in check_circuit(page):
+                        result["a11y"].append(f"circuit {vp} {scheme}: {problem}")
                     page.click("#tb-traffic")  # documented links, real or simulated, observed or configured
                     page.wait_for_selector("#tr-rows tr td:nth-child(3)", state="attached")
                     tpath = out / f"traffic-{vp}-{scheme}.png"
