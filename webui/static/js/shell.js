@@ -8,6 +8,7 @@ import { dockWide, paintReach } from './inspector.js';
 import { paintConnections } from './connections.js';
 import { closeFlow, openFlow } from './flowfeed.js';
 import { paintTraffic } from './traffic.js';
+import { paintHome } from './home.js';
 import { loadCluster } from './cluster.js';
 import { loadScenarios, poll, runChip, scnOpen } from './scenarios.js';
 
@@ -56,13 +57,14 @@ export function setTheme(t) {
   try { localStorage.setItem('workbench-theme', t); } catch (e) { /* private mode: not remembered */ }
 }
 // tabs: the live traffic feed runs only while its tab and the page are visible
-export const TABS = ['nodes', 'traffic', 'conn'];
+export const TABS = ['home', 'nodes', 'traffic', 'conn'];
 export function selectTab(t, focus) {
   TABS.forEach(k => { const on = k === t; $('tab-' + k).hidden = !on; $('tb-' + k).setAttribute('aria-selected', on); $('tb-' + k).tabIndex = on ? 0 : -1; });
-  $('subseg').hidden = t !== 'nodes';  // the view choice belongs to Infrastructure
+  $('main').dataset.tab = t; $('subseg').hidden = t !== 'nodes';  // the view choice belongs to Infrastructure
   if (focus) $('tb-' + t).focus();
   if ((t === 'nodes' || t === 'traffic') && !document.hidden) openFlow(); else closeFlow();
   if (t === 'conn') paintConnections();
+  if (t === 'home') paintHome();
   if (t === 'traffic') paintTraffic();
   if (t === 'traffic' && !document.hidden) startAnalysis(); else stopAnalysis();
   syncZoom();
@@ -110,8 +112,8 @@ export function init3() {
   });
   // start
   loadCluster(); runChip(); loadScenarios(); poll();
-  let savedTab = 'nodes'; try { savedTab = sessionStorage.getItem('workbench-tab') || 'nodes'; } catch (e) { /* default */ }
-  selectTab(TABS.includes(savedTab) ? savedTab : 'nodes');
+  let savedTab = 'home'; try { savedTab = sessionStorage.getItem('workbench-tab') || 'home'; } catch (e) { /* default */ }
+  selectTab(TABS.includes(savedTab) ? savedTab : 'home');
   try { if (sessionStorage.getItem('workbench-scn') === '1') scnOpen(true); } catch (e) { /* closed */ }
   // the live feed is only worth its CPU while the page is visible
   document.addEventListener('visibilitychange', () => { if (document.hidden || ($('tab-nodes').hidden && $('tab-traffic').hidden)) closeFlow(); else openFlow(); if (document.hidden || $('tab-traffic').hidden) stopAnalysis(); else startAnalysis(); });

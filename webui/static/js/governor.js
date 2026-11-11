@@ -1,5 +1,7 @@
 import { S } from './state.js';
 import { $, esc } from './util.js';
+import { attentionItems } from './homemodel.js';
+import { paintHome } from './home.js';
 
 export const LEVELS = ['Normal', 'Watching', 'Throttling', 'Freezing', 'Stopping', 'Emergency'];
 export const MEANING = ['Plenty of free memory. Nothing is being limited.',
@@ -15,21 +17,10 @@ export function setChip(id, kind, icon, text) {
   const c = $(id); c.className = 'pillchip ' + kind + (c.tagName === 'BUTTON' ? '' : ''); c.innerHTML = `<b aria-hidden="true">${icon}</b> ${esc(text)}`;
 }
 export function paintAttention() {
-  const items = [];
-  if (!S.lastGov) items.push(['bad', '✗', 'The governor is not reachable, so memory is not being protected.']);
-  else {
-    if (S.lastGov.level >= 2) items.push(['bad', '✗', `Memory pressure is at level L${Math.min(S.lastGov.level, 5)}: ${LEVELS[Math.min(S.lastGov.level, 5)].toLowerCase()}.`]);
-    (S.lastGov.violations || []).slice(0, 5).forEach(v => items.push(['warn', '▲', 'Security finding: ' + (typeof v === 'string' ? v : JSON.stringify(v))]));
-  }
-  if (S.lastCl) {
-    const down = Object.entries(S.lastCl.services).filter(([, up]) => !up).map(([k]) => k);
-    if (down.length === Object.keys(S.lastCl.services).length) items.push(['warn', '▲', 'The simulation stack is not running. Start it with ./scripts/benchctl start']);
-    else down.forEach(k => items.push(['bad', '✗', `Service ${k} is not answering.`]));
-    S.lastCl.nodes.filter(n => n.state !== 'ok' && !(down.length === Object.keys(S.lastCl.services).length)).forEach(n =>
-      items.push([n.state === 'fault' ? 'bad' : 'warn', n.state === 'fault' ? '✗' : '▲', `${n.name}: ${n.label}`]));
-  }
-  $('attn').innerHTML = items.length ? items.map(([k, ic, t]) => `<li><span class="ic ${k}" aria-hidden="true">${ic}</span><span>${esc(t)}</span></li>`).join('')
+  const items = attentionItems(S.lastGov, S.lastCl, LEVELS);
+  $('attn').innerHTML = items.length ? items.map(i => `<li><span class="ic ${i.kind}" aria-hidden="true">${i.icon}</span><span>${esc(i.text)}</span></li>`).join('')
     : '<li><span class="ic good" aria-hidden="true">✓</span><span>All clear. Nothing needs you right now.</span></li>';
+  paintHome();
 }
 export function paintHealth(c) {
   S.lastCl = c;

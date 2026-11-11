@@ -43,7 +43,8 @@
 <div class="shell">
 <nav class="side" aria-label="Workspaces">
   <div role="tablist" aria-orientation="vertical" aria-label="Workspaces">
-    <button role="tab" class="sidei" id="tb-nodes" aria-controls="tab-nodes" aria-selected="true"><b aria-hidden="true">▦</b>Infrastructure</button>
+    <button role="tab" class="sidei" id="tb-home" aria-controls="tab-home" aria-selected="true"><b aria-hidden="true">⌂</b>Overview</button>
+    <button role="tab" class="sidei" id="tb-nodes" aria-controls="tab-nodes" aria-selected="false" tabindex="-1"><b aria-hidden="true">▦</b>Topology</button>
     <button role="tab" class="sidei" id="tb-traffic" aria-controls="tab-traffic" aria-selected="false" tabindex="-1"><b aria-hidden="true">⇄</b>Traffic &amp; Communication</button>
     <button role="tab" class="sidei" id="tb-conn" aria-controls="tab-conn" aria-selected="false" tabindex="-1"><b aria-hidden="true">⌖</b>Connections</button>
   </div>
@@ -58,7 +59,20 @@
   <section class="attnbar" aria-label="Needs attention"><h2 class="rh">Needs attention</h2><ul class="attn" id="attn"><li class="skel">Checking…</li></ul></section>
   </div>
   <div class="zoomrail" id="zoomrail" role="group" aria-label="Zoom level" hidden><button type="button" class="btn small" id="zr-out" aria-label="Zoom out">−</button><button type="button" class="btn small" data-level="fleet" aria-pressed="false">FLEET</button><button type="button" class="btn small" data-level="cluster" aria-pressed="false">CLUSTER</button><button type="button" class="btn small" data-level="pool" aria-pressed="false">POOL</button><button type="button" class="btn small" data-level="traffic" aria-pressed="false">TRAFFIC</button><button type="button" class="btn small" id="zr-in" aria-label="Zoom in">+</button><span class="zhint dim" id="zhint">Ctrl + scroll, or pinch, to zoom</span></div>
-  <div id="tab-nodes" role="tabpanel" aria-labelledby="tb-nodes">
+  <div id="tab-home" role="tabpanel" aria-labelledby="tb-home">
+    <div class="home">
+      <div><h2 class="home-h" id="home-h">Overview</h2><p class="dim" id="home-sub">Waiting for the first snapshot…</p></div>
+      <section class="home-attn" id="home-attn" aria-labelledby="home-attn-h"><h3 id="home-attn-h">…<span></span></h3><ul class="attn" id="home-attn-list"></ul></section>
+      <section class="home-start" aria-label="Start here">
+        <div class="hcard"><h3>Run a test</h3><p class="dim small">Pick a scenario, watch what your client calls and sees, then export a report for the bug.</p><button type="button" class="btn" id="home-run">Open scenarios</button></div>
+        <div class="hcard"><h3>Break one thing</h3><p class="dim small">Power off, overheat, fan failure, GPU XID or drain, on one node, with one click to clear.</p><button type="button" class="btn" id="home-break">Choose a node</button></div>
+        <div class="hcard"><h3>Connect your client</h3><p class="dim small">Download the client profile, then the addresses and commands are under Connections.</p><button type="button" class="btn" id="home-connect">Export client profile</button></div>
+      </section>
+      <section aria-labelledby="home-nodes-h"><h3 id="home-nodes-h" class="home-sh">Nodes</h3><ul class="home-grid" id="home-nodes"></ul></section>
+      <section aria-labelledby="home-svcs-h"><h3 id="home-svcs-h" class="home-sh">Services <span class="dim small">real = upstream software answers · simulated = a mock imitates it</span></h3><ul class="home-svcs" id="home-svcs"></ul></section>
+    </div>
+  </div>
+  <div id="tab-nodes" role="tabpanel" aria-labelledby="tb-nodes" hidden>
   <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/benchctl start</code>.</div>
     <div class="nodeswrap" id="nodeswrap">
   <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 id="traffic-h" style="margin:0">Infrastructure architecture</h2>
