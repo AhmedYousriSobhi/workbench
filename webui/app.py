@@ -17,6 +17,7 @@ from pathlib import Path
 import yaml
 from starlette.applications import Starlette
 from starlette.exceptions import HTTPException
+from starlette.middleware import Middleware
 from starlette.requests import Request
 from starlette.responses import (
     FileResponse,
@@ -38,6 +39,31 @@ from .graph import attach as attach_graph
 from .wiki import Wiki, WikiError, esc, page
 
 STATIC = Path(__file__).parent / "static"
+# The page and its modules run under a strict policy: no inline script or style (#517, ADR 0047). Help pages (/help) render
+# their own inline stylesheet and are left out.
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; "
+       "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+
+
+class CSPMiddleware:
+    """Pure ASGI (no buffering, so the SSE feeds stream): add the policy to the page and /static responses."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        path = scope.get("path", "")
+        if scope["type"] != "http" or not (path == "/" or path.startswith("/static/")):
+            return await self.app(scope, receive, send)
+
+        async def send_with_csp(msg):
+            if msg["type"] == "http.response.start":
+                msg.setdefault("headers", []).append((b"content-security-policy", CSP.encode()))
+            await send(msg)
+
+        await self.app(scope, receive, send_with_csp)
+
+
 _STATIC_TYPES = {".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2"}
 COOKIE = "workbench_ui"
 DOCS = Path(__file__).resolve().parent.parent / "docs"
@@ -626,6 +652,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
     return Starlette(
         lifespan=lifespan,
+        middleware=[Middleware(CSPMiddleware)],
         routes=[
             Route("/login", login),
             Route("/", protected(index)),

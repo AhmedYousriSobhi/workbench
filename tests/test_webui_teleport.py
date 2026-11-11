@@ -49,7 +49,7 @@ def test_connections_row_names_the_proxy_identity_and_invite():
 
 def test_the_diagram_is_called_infrastructure_architecture_and_can_draw_teleport():
     html = page_source()
-    assert '<h2 id="traffic-h" style="margin:0">Infrastructure architecture</h2>' in html and ">Traffic<" not in html
+    assert '<h2 class="u-m0" id="traffic-h">Infrastructure architecture</h2>' in html and ">Traffic<" not in html
     assert "const TELEPORT_BOX = ['teleport'" in html and "'teleport': 'teleport'" in html  # a box, and a click to its Connections row
     assert "...(hasTeleport() ? [TELEPORT_BOX] : [])" in html                       # only when the part is built
 

@@ -45,10 +45,10 @@ export function paintPreview(s) {
   const got = new Map((on ? s.expects || [] : []).map(x => [x.label, x]));
   $('expects').innerHTML = p.expects.length ? '<h3 class="rh">Expectations</h3>' + p.expects.map(x => {
     const r = got.get(x.label), st = r ? r.status : !x.page ? 'skipped' : 'pending';
-    return `<p class="st st-${st}" style="font-weight:500"><span aria-hidden="true">${ICON[st]}</span> ${st}${!x.page && !r ? ' (CLI only)' : ''}: ${esc(x.label)} <span class="dim">${esc(r ? r.detail : '')}</span></p>`;
+    return `<p class="st st-${st}"><span aria-hidden="true">${ICON[st]}</span> ${st}${!x.page && !r ? ' (CLI only)' : ''}: ${esc(x.label)} <span class="dim">${esc(r ? r.detail : '')}</span></p>`;
   }).join('') : '';
   $('trace-out').innerHTML = on && s.trace ? '<h3 class="rh">Slurm trace</h3>' + (s.trace.map(e =>
-    `<details class="small"><summary>${esc(e.label)}</summary><pre style="white-space:pre-wrap;overflow-x:auto">${esc([e.before && 'before: ' + e.before, ...e.logs.map(r => `log ${r.source} ${r.where}: ${r.line}`),
+    `<details class="small"><summary>${esc(e.label)}</summary><pre class="wrap">${esc([e.before && 'before: ' + e.before, ...e.logs.map(r => `log ${r.source} ${r.where}: ${r.line}`),
       ...Object.entries(e.more).map(([k, n]) => `... ${n} more lines in docker logs ${k}`), 'after:  ' + e.after].filter(Boolean).join('\n'))}</pre></details>`).join('')
     || `<p class="dim small">${s.running ? 'The first entry appears when the next step starts.' : 'Nothing to show.'}</p>`) : '';
   const finished = on && !s.running && s.steps && s.steps.length;

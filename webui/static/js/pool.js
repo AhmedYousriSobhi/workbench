@@ -4,7 +4,7 @@
 // Each tile has a heartbeat wire. The BMC farm and the Kubernetes API keep no per-node request counter yet (per-path counters are
 // redesign step 5), so the wire is drawn "declared": lit, nothing moving, and its words say so. It pulses once a counter backs it.
 import { S } from './state.js';
-import { $, esc } from './util.js';
+import { $, esc, paintDyn } from './util.js';
 import { sv } from './svg.js';
 import { buildWire } from './wire.js';
 import { STATE_ICON } from './cluster.js';
@@ -54,11 +54,12 @@ export function paintPool() {
   host.innerHTML = `<aside class="pv-side" aria-label="${esc(title)} summary">
       <h3>${esc(lane)} · ${esc(title)}</h3><p class="pv-fed">${esc(POOL_FED[key])}</p>
       <div class="pv-kpis">${kpi(`${kp.inService} / ${kp.total}`, 'nodes in service')}${kpi(kp.attention, 'need attention')}${kpi(kp.avgUtil === null ? 'n/a' : kp.avgUtil + ' %', kp.avgUtil === null ? 'GPU use not measured' : 'GPU use, average')}</div>
-      <div class="pv-bar" role="img" aria-label="Node states: ${esc(barText)}">${bar.map(b => `<i class="${b.state}" style="flex:${b.n}"></i>`).join('')}</div>
+      <div class="pv-bar" role="img" aria-label="Node states: ${esc(barText)}">${bar.map(b => `<i class="${b.state}" data-flex="${b.n}"></i>`).join('')}</div>
       <ul class="pv-legend">${bar.map(b => `<li><span class="sw ${b.state}" aria-hidden="true"></span>${b.n} ${esc(STATE_WORD[b.state].toLowerCase())}</li>`).join('')}</ul>
       <div class="pv-filters" role="group" aria-label="Show nodes">${FILTERS.map(([k, t]) => `<button type="button" class="btn small" data-filter="${k}" aria-pressed="${S.poolFilter === k}"${counts[k].enabled ? '' : ' disabled title="Not measured in this pool"'}>${esc(t)} <span class="mono">${counts[k].n}</span></button>`).join('')}</div>
     </aside><div class="pv-main"><ul class="pv-grid" aria-label="${esc(title)} nodes, page ${page.page + 1} of ${page.pages}"></ul>
       <nav class="pv-pager" aria-label="Pages"><button type="button" class="btn small" data-page="-1"${page.page ? '' : ' disabled'}>‹ Previous</button><span aria-live="polite">Page ${page.page + 1} of ${page.pages} · ${page.total} ${page.total === 1 ? 'node' : 'nodes'}</span><button type="button" class="btn small" data-page="1"${page.page < page.pages - 1 ? '' : ' disabled'}>Next ›</button></nav></div>`;
+  paintDyn(host);
   const grid = host.querySelector('.pv-grid');
   if (!page.items.length) grid.innerHTML = `<li class="pv-empty">${nodes.length ? 'No node matches this filter.' : 'This pool has no nodes.'}</li>`;
   grid.append(...page.items.map(n => tile(n, k8s)));

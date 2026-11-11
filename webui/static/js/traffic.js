@@ -1,6 +1,6 @@
 import { S } from './state.js';
 import { clusterNow } from './inspector.js';
-import { $, esc } from './util.js';
+import { $, esc, paintDyn } from './util.js';
 import { sv } from './svg.js';
 
 export const trRate = {};  // service -> {t, n, rate}: requests per second from the counter, re-sampled every 3 s
@@ -113,7 +113,8 @@ export function paintTrafficMap(rows, ghosts = []) {
   S.trRows = rows; S.trGhosts = ghosts;
   const svg = $('tr-map'), links = rows.map(r => r.l), live = new Set(links.flatMap(l => [l.from, l.to])), ids = new Set([...live, ...TR_GROUPS.flatMap(g => g[4])]);
   svg.replaceChildren();
-  $('tr-legend').innerHTML = [...new Set(links.map(l => l.plane))].map(p => `<span class="trkey"><i style="background:${PLANE_STYLE[p]?.[0] || '#8da2ff'}"></i>${esc(p)}</span>`).join('') + '<span class="dim">Arrows run from the caller to the part called; moving dots mean the far end answers; the number is the port; grayed: not in this cluster, or not readable here. Drag a group (or use the arrow keys) to move it.</span>';
+  $('tr-legend').innerHTML = [...new Set(links.map(l => l.plane))].map(p => `<span class="trkey"><i data-bg="${PLANE_STYLE[p]?.[0] || '#8da2ff'}"></i>${esc(p)}</span>`).join('') + '<span class="dim">Arrows run from the caller to the part called; moving dots mean the far end answers; the number is the port; grayed: not in this cluster, or not readable here. Drag a group (or use the arrow keys) to move it.</span>';
+  paintDyn($('tr-legend'));
   $('tr-reset').hidden = !Object.keys(S.trOff).length && !Object.keys(S.trOrd).length;
   const known = new Set(TR_GROUPS.flatMap(g => g[4])), other = [...ids].filter(i => !known.has(i)), groups = [...TR_GROUPS, ...(other.length ? [['Other', 1, 1, '#8da2ff', other]] : [])]
     .map(([title, c, r, col, parts]) => ({ title, c, r, col, parts: parts.filter(p => ids.has(p)).sort((a, b) => (S.trOrd[title]?.indexOf(a) ?? -1) - (S.trOrd[title]?.indexOf(b) ?? -1) || 0) })).filter(g => g.parts.length);

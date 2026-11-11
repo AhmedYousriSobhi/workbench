@@ -75,7 +75,7 @@
   <div id="tab-nodes" role="tabpanel" aria-labelledby="tb-nodes" hidden>
   <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/benchctl start</code>.</div>
     <div class="nodeswrap" id="nodeswrap">
-  <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 id="traffic-h" style="margin:0">Infrastructure architecture</h2>
+  <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 class="u-m0" id="traffic-h">Infrastructure architecture</h2>
     <span class="grow"></span><button class="btn small" id="keybtn" aria-expanded="false" aria-controls="ckey">Key</button><button class="btn small" id="flowpause" aria-pressed="false" aria-label="Pause animation">Pause</button></div>
     <div class="row viewrow"><div class="seg" id="viewseg" role="group" aria-label="View of the architecture"><button class="btn small" id="vw-cv" aria-pressed="true">Circuit</button><button class="btn small" id="vw-iso" aria-pressed="false">2.5D (classic)</button></div>
       <div class="lensrow"><span class="lensl" id="lens-l">Lens</span><div class="lenschips" id="lens" role="group" aria-labelledby="lens-l"></div></div></div>
@@ -93,12 +93,12 @@
         <span><svg class="ls" viewBox="0 0 34 10" aria-hidden="true"><path class="lane api" d="M1 5H31"/></svg>an API call</span></div>
       <p class="dim small kfoot">They combine: one box can be up, busy and faulted at once. Hover a part for its state, click it for the address, command and actions.</p></div>
     <details class="quiet legendbox"><summary class="small dim">Reading guide</summary>
-    <p class="legend small dim"><span><b style="color:var(--accent)" aria-hidden="true">●</b> round dot: a request from a client (the app, Prometheus, curl) or an SSH connection through Teleport</span>
-      <span><b style="color:var(--warn)" aria-hidden="true">◆</b> diamond: a fault from a scenario or a button, travelling to the node it hits</span>
+    <p class="legend small dim"><span><b class="u-accent" aria-hidden="true">●</b> round dot: a request from a client (the app, Prometheus, curl) or an SSH connection through Teleport</span>
+      <span><b class="u-warn" aria-hidden="true">◆</b> diamond: a fault from a scenario or a button, travelling to the node it hits</span>
       <span>Lines: solid arrow = direct SSH · long dashes = through the Teleport proxy · short dashes = jump host (ssh from an s-login) or kubectl (from a k-login) · thin = an API call</span>
       <span>Hover a part for its state, click it for the address, command and actions. Node tiles: ✓ healthy · ▲ warning · ✗ fault · ⏻ off · ? unknown</span></p></details>
     <nav id="crumb" class="crumb" aria-label="Breadcrumb" hidden><button class="linkbtn" id="crumb-all">All clusters</button><span id="crumb-sep1" aria-hidden="true"> › </span><button class="linkbtn" id="crumb-name">workbench</button><span id="crumb-sep2" aria-hidden="true" hidden> › </span><span id="crumb-sep3" aria-hidden="true" hidden> › </span><span id="crumb-pool" hidden></span><span aria-current="page" id="crumb-focus"></span></nav>
-    <p id="flowstate" class="dim small" role="status" style="margin-bottom:0"></p></section>
+    <p id="flowstate" class="dim small u-mb0" role="status"></p></section>
   <section class="inspector" id="inspector" aria-label="Connections and details">
     <div class="itabs" role="group" aria-label="Show"><button class="btn small" id="it-conn" aria-pressed="true">Connections</button><button class="btn small" id="it-time" aria-pressed="false">Timeline</button></div>
     <div id="ipane-conn" class="ipane">
@@ -112,13 +112,13 @@
     <div class="np-card" id="nodesum-card"><h3>Summary</h3><dl class="kv" id="nodesum"></dl>
       <div class="pop-cmd" id="nodereach" hidden><code id="nodereach-cmd"></code><button class="btn small" id="nodereach-copy">Copy command</button></div></div>
     <div class="np-card"><h3>Actions</h3>
-      <p class="small dim" style="margin:0 0 var(--sp2)">Break it, then watch the Infrastructure architecture.</p><div class="actions" id="nodeacts-fault"></div>
-      <p class="small dim" style="margin:var(--sp3) 0 var(--sp2)">Recover</p><div class="actions" id="nodeacts-fix"></div>
+      <p class="small dim u-mb2">Break it, then watch the Infrastructure architecture.</p><div class="actions" id="nodeacts-fault"></div>
+      <p class="small dim u-mt3mb2">Recover</p><div class="actions" id="nodeacts-fix"></div>
       <p id="nodeactmsg" role="status" class="small"></p></div>
     <div class="np-card"><h3>Workload</h3>
-      <p class="small dim" style="margin:0 0 var(--sp2)">Submit a job on this node; <code>squeue</code> lists it and the node shows allocated.</p><div class="actions" id="nodeacts-job"></div></div>
+      <p class="small dim u-mb2">Submit a job on this node; <code>squeue</code> lists it and the node shows allocated.</p><div class="actions" id="nodeacts-job"></div></div>
     <div class="np-card"><h3>Info</h3><dl class="kv" id="nodeconn"></dl><pre id="nodetext"></pre>
-      <p class="dim small" style="margin:var(--sp2) 0 0">Same text as <code>benchctl describe node NAME</code>, without the Docker and Slurm lines (this page has no Docker access by design).</p></div>
+      <p class="dim small u-mt2">Same text as <code>benchctl describe node NAME</code>, without the Docker and Slurm lines (this page has no Docker access by design).</p></div>
   </section>
     </div>
     <div id="dock" class="ipane dock" hidden><p class="dim small" id="dock-empty">Requests to the services and faults you apply appear here, newest first.</p>
@@ -159,7 +159,7 @@
       <h2 class="rh">Scenarios</h2>
       <input type="search" id="scnq" placeholder="Filter scenarios" aria-label="Filter scenarios">
       <div class="scnopts"><label class="small">Speed <select id="speed" aria-label="Playback speed for every scenario"><option value="1">1× real time</option><option value="5">5×</option><option value="20">20×</option></select></label>
-        <label class="small" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="trace"> Slurm trace</label></div>
+        <label class="small u-fc6"><input type="checkbox" id="trace"> Slurm trace</label></div>
       <ul class="scns" id="list"><li class="skel">Loading…</li></ul>
       <details class="small dim"><summary>How steps run</summary><p>The page has no Docker, so it runs Slurm steps through the governor (started with <code>--workdir</code>) and the mocks' own endpoints. Steps that need the host are marked “CLI only” before you play; run those with <code>./scripts/benchctl scenario run NAME --trace</code>.</p></details>
     </section>
@@ -169,7 +169,7 @@
         <div class="rhead"><h2 class="rh" id="runtitle">Run</h2><div id="runctl"></div></div>
         <p class="dim small" id="rundesc"></p>
         <div class="row"><div id="runresult"></div><div id="run-export" class="runexp" hidden><span class="small dim">Export report</span> <button class="btn small" id="run-md" type="button">Markdown</button> <button class="btn small" id="run-json" type="button">JSON</button></div></div>
-        <div class="progress" aria-hidden="true"><div id="bar" style="width:0"></div></div>
+        <div class="progress" aria-hidden="true"><div class="u-w0" id="bar"></div></div>
         <div id="runcli" class="notice" hidden></div>
         <div id="runnote"></div><ul class="steps" id="timeline"></ul><div id="expects"></div><div id="trace-out"></div>
       </div>
@@ -194,8 +194,8 @@
     <div class="big" id="psi">–</div><div class="sub small dim">PSI, 10 s</div>
     <svg class="spark" id="sp-psi" viewBox="0 0 120 40" preserveAspectRatio="none" role="img" aria-label="Memory pressure over the last two minutes"><polygon points=""/><polyline points=""/></svg>
     <div class="axis"><span>0 %</span><span id="psi-hi"></span></div></div></div>
-    <details class="quiet" style="margin-top:var(--sp4)"><summary><h2 class="rh" style="display:inline">Governor activity <span id="logcount" class="dim"></span></h2></summary>
-    <label class="chk" style="margin-bottom:8px"><input type="checkbox" id="onlyactions" checked> Hide container inventory lines</label>
+    <details class="quiet u-mt4"><summary><h2 class="rh u-inl">Governor activity <span id="logcount" class="dim"></span></h2></summary>
+    <label class="chk u-mb8"><input type="checkbox" id="onlyactions" checked> Hide container inventory lines</label>
     <pre id="audit" tabindex="0" aria-label="Governor log, newest first">–</pre>
     </details>
     </div>
@@ -205,9 +205,9 @@
       <button class="btn small" id="exp-close" aria-label="Close the export">✕ Close</button></div>
     <div class="sheet-b">
       <div class="toggles"><label class="tog"><input type="checkbox" id="exp-bmc" checked><span>One BMC target per node</span></label>
-        <label class="small dim" for="exp-via" style="display:flex;align-items:center;gap:8px">Address
+        <label class="small dim u-fc8" for="exp-via">Address
           <select id="exp-via"><option value="ip">by IP (10.148.x.y:443, from here or the login node)</option><option value="name">by name (bmc-NODE:443, from the login node)</option></select></label>
-        <label class="small dim" for="exp-addr" style="display:flex;align-items:center;gap:8px">Addresses
+        <label class="small dim u-fc8" for="exp-addr">Addresses
           <select id="exp-addr"><option value="network">cluster IPs (10.141.x.x, standard ports)</option><option value="loopback">127.0.0.1 and published ports</option></select></label></div>
       <p class="small dim">The file holds no secrets. After importing it, set the SSH key (<code>benchctl ssh-key install</code>) and the Grafana token (<code>cat compose/generated/secrets/grafana_viewer_token</code>; it changes at every <code>benchctl up</code>).</p>
     </div>
@@ -239,7 +239,7 @@
         <section class="pcard" aria-labelledby="pc-parts-h"><header class="pch"><h3 id="pc-parts-h">Optional parts</h3><span class="pbadge">memory each adds</span></header>
           <div class="toggles" id="pl-parts"></div>
           <fieldset class="bmcnodes" id="pl-bmcbox" hidden><legend class="small dim">BMC: which machines get one (<span id="pl-bmcmb"></span> MB each)</legend>
-            <div class="bmcgroups" id="pl-bmcgroups"></div><p class="small" id="pl-bmctotal" style="margin:6px 0"></p>
+            <div class="bmcgroups" id="pl-bmcgroups"></div><p class="small u-my6" id="pl-bmctotal"></p>
             <details class="cmdbox"><summary class="small">Exceptions: leave out single nodes</summary><div class="toggles" id="pl-bmcnodes"></div></details></fieldset>
           <label class="tog" id="pl-ctlbox" title="A controller node: slurmctld's host with ssh for whitelisted admins, and the BCM head node (cmsh moves from the login nodes to it). CLI: --controller"><input type="checkbox" id="pl-ctl"><span>Controller node (admin ssh, BCM head)</span></label>
           <label class="tog" id="pl-bcmk8sbox" hidden title="Off: BCM does not manage the Kubernetes cluster, so its device and category lists show no Kubernetes nodes (CLI: --no-bcm-k8s)"><input type="checkbox" id="pl-bcmk8s" checked><span>BCM manages the Kubernetes nodes</span></label>
@@ -265,7 +265,7 @@
       <button class="btn small" id="nhc-close" aria-label="Close the health checks">✕ Close</button></div>
     <div class="sheet-b">
       <ol class="nhclist" id="nhc-list" aria-label="Health checks in run order"></ol>
-      <section aria-labelledby="nhc-add-h"><h3 id="nhc-add-h" class="small dim" style="margin:0 0 var(--sp2)">Add a check: drag a template into the list, or press it</h3>
+      <section aria-labelledby="nhc-add-h"><h3 id="nhc-add-h" class="small dim u-mb2">Add a check: drag a template into the list, or press it</h3>
         <div class="nhcpal" id="nhc-pal"></div>
         <form class="nhcnew" id="nhc-new" hidden><label>Name<input id="nhc-new-name" required pattern="[a-z][a-z0-9\-]{0,31}" placeholder="gpu-hot"></label><span id="nhc-new-params" class="nhcparams"></span><button class="btn" id="nhc-new-go">Add check</button><button type="button" class="btn small" id="nhc-new-cancel">Cancel</button></form></section>
       <p class="small dim">Your own scripts: <code>benchctl add check NAME --script FILE</code> (docs/guides/nhc-checks.md).</p>

@@ -2,7 +2,7 @@
 // Data: /api/traffic every 3 s, only while the Traffic tab and the page are visible (W-11). All numbers come from trafficanalysis.js;
 // what cannot be measured says "not measured", never 0. Drawn into #tan on the Traffic tab, always on a dark canvas.
 import { S } from './state.js';
-import { $, H, announce, esc } from './util.js';
+import { $, H, announce, esc, paintDyn } from './util.js';
 import { sv } from './svg.js';
 import { buildWire, updateWire } from './wire.js';
 import { clusterNow } from './inspector.js';
@@ -108,8 +108,9 @@ function paintFound() {
 }
 function paintRhythm() {
   const cols = Object.entries(A.periods).flatMap(([k, ps]) => ps.map(p => ({ k, ...p, who: k.split('|')[0], shape: k.split('|')[2] }))).sort((a, b) => b.strength - a.strength).slice(0, 8);
-  $('an-rhythm-body').innerHTML = cols.length ? cols.map(c => `<div class="an-col${c.who === 'unknown' ? ' unk' : ''}"><i class="an-beat" style="--p:${Math.max(0.4, Math.min(c.seconds, 10))}s" aria-hidden="true"></i><b class="mono">${c.seconds} s</b><span>${esc(c.who === 'unknown' ? 'unidentified caller' : c.who)}</span><small>${c.who === 'unknown' ? '▲ no one claims this timer · ' : ''}${esc(c.shape)}</small></div>`).join('')
+  $('an-rhythm-body').innerHTML = cols.length ? cols.map(c => `<div class="an-col${c.who === 'unknown' ? ' unk' : ''}"><i class="an-beat" data-p="${Math.max(0.4, Math.min(c.seconds, 10))}" aria-hidden="true"></i><b class="mono">${c.seconds} s</b><span>${esc(c.who === 'unknown' ? 'unidentified caller' : c.who)}</span><small>${c.who === 'unknown' ? '▲ no one claims this timer · ' : ''}${esc(c.shape)}</small></div>`).join('')
     : '<p class="dim">No steady repeat found yet. A period needs at least eight requests and three repeats in the window.</p>';
+  paintDyn($('an-rhythm-body'));
 }
 
 // ---- the focused wire and its capture ----------------------------------------------------------------------------------------

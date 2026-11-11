@@ -510,3 +510,10 @@
   .lopts { gap:var(--sp2) var(--sp4); align-items:flex-start; }
   .lopt .seg button { white-space:nowrap; }
   .lrow { grid-template-columns:4rem 1fr auto; gap:var(--sp2); } .lrow .nm small { display:none; } .lopts { gap:var(--sp2) var(--sp3); } .lopt .seg button { padding:0 9px; min-height:36px; }
+
+/* utility classes that replace inline style attributes (the page is served with a CSP that blocks them, #517) */
+.u-m0{margin:0}.u-mb0{margin-bottom:0}.u-mb2{margin:0 0 var(--sp2)}.u-mt2{margin:var(--sp2) 0 0}.u-mt3mb2{margin:var(--sp3) 0 var(--sp2)}
+.u-mt4{margin-top:var(--sp4)}.u-mb8{margin-bottom:8px}.u-my6{margin:6px 0}.u-inl{display:inline}.u-w0{width:0}
+.u-fc6{display:flex;align-items:center;gap:6px}.u-fc8{display:flex;align-items:center;gap:8px}
+.u-accent{color:var(--accent)}.u-warn{color:var(--warn)}
+.st{font-weight:500}pre.wrap{white-space:pre-wrap;overflow-x:auto}
