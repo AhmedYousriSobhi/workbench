@@ -1,7 +1,7 @@
 import './setup.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { streamKey, sampleOf, rateFromSamples, mergeHist, histPercentile, bandPx, riverModel, probeReading, detectPeriods, findAnomalies, RETRY_S, wireHash, parseWireHash, windowRecent, perSecond, wireFacts } from '../../static/js/trafficanalysis.js';
+import { streamKey, sampleOf, rateFromSamples, mergeHist, histPercentile, bandPx, riverModel, probeReading, detectPeriods, findAnomalies, RETRY_S, wireHash, parseWireHash, windowRecent, perSecond, wireFacts, captureRow, decodeFields, shortType, tubeLanes } from '../../static/js/trafficanalysis.js';
 
 const EDGES = [5, 10, 25, 50, 100, 250, 500, 1000];
 const stream = (o = {}) => ({ who: 'curl', service: 'jira-mock', shape: 'GET /rest/api/2/serverInfo', n: 100, ok: 100, client_error: 0, server_error: 0, ms: 300, hist: [90, 8, 2, 0, 0, 0, 0, 0, 0], ...o });
@@ -104,8 +104,35 @@ test('the window keeps the newer requests and the trace counts one stream per se
   assert.equal(bins.length, 30); assert.equal(bins[29], 1); assert.equal(bins[19], 1); assert.equal(bins.reduce((x, y) => x + y, 0), 2);
 });
 
-test('a wire says only what is documented and that its messages are not captured', () => {
-  assert.deepEqual(wireFacts({ kind: 'gpu' }).links.map(l => l.to), ['BMC farm', 'slurmctld']);
-  assert.deepEqual(wireFacts({ kind: 'k8s' }).links.map(l => l.to), ['KWOK']);
-  assert.match(wireFacts({ kind: 'compute' }).capture, /Not captured/); assert.equal(wireFacts(null), null);
+test('a wire says what is documented and where its messages would come from', () => {
+  assert.deepEqual(wireFacts({ kind: 'gpu' }).links.map(l => l.to), ['BMC farm', 'slurmctld']); assert.equal(wireFacts({ kind: 'gpu' }).source, 'slurm');
+  assert.deepEqual(wireFacts({ kind: 'k8s' }).links.map(l => l.to), ['KWOK']); assert.equal(wireFacts({ kind: 'k8s' }).source, 'k8s');
+  assert.match(wireFacts({ kind: 'compute' }).sourceText, /tcpdump.*no bodies/); assert.match(wireFacts({ kind: 'k8s' }).sourceText, /audit events.*no bodies/); assert.equal(wireFacts(null), null);
+});
+
+test('a capture row says what it knows and nothing else, and flags an unknown type in words', () => {
+  const m = { t: 1731319200.0125, dir: 'in', peer: '10.141.255.1', peer_name: 'slurmctld', port: 6818, size: 120, type: 'REQUEST_PING', type_id: 1008, kind: 'request', latency_ms: null };
+  const r = captureRow(m);
+  assert.match(r.time, /^\d\d:\d\d:\d\d\.\d{3}$/); assert.deepEqual([r.arrow, r.side, r.type, r.peer, r.size, r.latency, r.result, r.unknown], ['→', 'to the node', 'REQUEST_PING', 'slurmctld', '120 B', '', '', false]);
+  const u = captureRow({ t: 1, dir: 'out', peer: '10.0.0.9', size: 63, type: 'unknown', kind: 'unknown', latency_ms: 4.2 });
+  assert.deepEqual([u.arrow, u.peer, u.unknown, u.latency], ['←', '10.0.0.9', true, '4.2 ms']);
+  assert.equal(captureRow({ dir: 'in', type: 'x', kind: 'request' }).peer, 'unknown peer'); assert.equal(captureRow({ dir: 'in', type: 'x', kind: 'request' }).time, '');
+});
+
+test('the decoded view shows the header or the audit event and leaves out what is not known', () => {
+  const slurm = decodeFields({ dir: 'out', type: 'MESSAGE_NODE_REGISTRATION_STATUS', type_id: 1002, version: 11520, flags: 0x1, body_length: 900, size: 940, peer: '10.141.255.1', peer_name: 'slurmctld', port: 6817, latency_ms: null });
+  const k = Object.fromEntries(slurm);
+  assert.deepEqual([k['Message'], k['Direction'], k['Peer'], k['Slurm type number'], k['Protocol version'], k['Flags'], k['Body length'], k['Message size']], ['MESSAGE_NODE_REGISTRATION_STATUS', 'from the node', 'slurmctld · 10.141.255.1', '1002', '45 (11520)', '0x0001', '900 B', '940 B']);
+  assert.ok(!('Answered in' in k) && !('Object' in k));
+  const audit = Object.fromEntries(decodeFields({ dir: 'out', type: 'update leases', peer: '10.141.255.40', peer_name: 'kwok-controller', port: 6443, size: null, object: 'kube-node-lease/kw001', who: 'kwok', result: 200, latency_ms: 12.5 }));
+  assert.deepEqual([audit['Object'], audit['Asked by'], audit['Result'], audit['Answered in']], ['kube-node-lease/kw001', 'kwok', '200', '12.5 ms']); assert.ok(!('Message size' in audit) && !('Slurm type number' in audit));
+  assert.match(Object.fromEntries(decodeFields({ dir: 'in', type: 'unknown', kind: 'unknown', size: 63, note: 'the header does not parse' }))['Note'], /does not parse/);
+  assert.deepEqual(decodeFields(null), []);
+});
+
+test('the tube keeps the newest messages per direction and names types shortly', () => {
+  const msgs = Array.from({ length: 12 }, (_, i) => ({ t: i, dir: i % 3 ? 'in' : 'out', type: 'REQUEST_PING' }));
+  const l = tubeLanes(msgs, 3);
+  assert.deepEqual(l.toNode.map(m => m.t), [8, 10, 11]); assert.deepEqual(l.fromNode.map(m => m.t), [3, 6, 9]);
+  assert.equal(shortType('REQUEST_NODE_REGISTRATION_STATUS'), 'node registration status'); assert.equal(shortType('RESPONSE_SLURM_RC'), 'slurm rc'); assert.equal(shortType('update leases'), 'update leases');
 });
