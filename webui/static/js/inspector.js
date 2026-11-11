@@ -1,6 +1,6 @@
 import { S } from './state.js';
 import { REAL_SERVICES, accUp, hasTeleport, scoped, svcList } from './flowstate.js';
-import { $, esc } from './util.js';
+import { $, enc, esc } from './util.js';
 import { bindCopy, connections, paintConnections } from './connections.js';
 import { STATE_ICON } from './cluster.js';
 import { leaveNode, showNode } from './node.js';
@@ -52,7 +52,7 @@ export async function popInfo(kind, id) {
   const conn = (r, extra = []) => r ? [['Address', `<code>${esc(r.address)}</code>`], ...extra, ['Credential', r.credential ? `<code>${esc(r.credential)}</code>` : 'none']] : [['Details', 'Open Connections']];
   if (kind === 'node') {
     const n = c.nodes.find(x => x.name === id) || { name: id, label: '', state: 'unknown', kind: '' }, cx = row('nodes');
-    let ip = ''; try { if (n.kind !== 'k8s') { const b = await (await fetch(`/api/nodes/${id}`)).json(); ip = b.ip || ''; } } catch (e) { /* the pop-up still opens */ }
+    let ip = ''; try { if (n.kind !== 'k8s') { const b = await (await fetch(`/api/nodes/${enc(id)}`)).json(); ip = b.ip || ''; } } catch (e) { /* the pop-up still opens */ }
     return { title: id, badge: `${STATE_ICON[n.state] || '?'} ${n.label}`, cls: n.state, cmd: cx ? cx.command.replace('<node>', id) : '', kv: n.kind === 'k8s' ? [['Kind', `Kubernetes node (simulated by KWOK)${n.gpus ? `, ${n.gpus} GPUs` : ''}`], ['Reached by', 'kubectl from a login node that serves Kubernetes (k-login); it has no SSH, BMC or Slurm side']] : [['Kind', kindOf(n) === 'gpu' ? 'GPU node' : 'Compute node'], ['Address', ip ? `<code>${esc(ip)}</code> (private, from a login node)` : 'see Connections'],
       ['Reached by', 'ssh from any s-login (jump host)' + (tp ? ', or through the Teleport proxy' : '')]], actions: n.kind === 'k8s' ? [{ label: 'Connections', fn: () => openConnection('k8s') }] : [{ label: 'Actions and details', fn: () => showNode(id) }, { label: 'Connections', fn: () => openConnection('nodes') }] };
   }

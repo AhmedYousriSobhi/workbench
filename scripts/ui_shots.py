@@ -173,6 +173,22 @@ def check_run(page, shot: str) -> list[str]:
     return bad
 
 
+def check_hidden(page) -> list[str]:
+    """W-11 (U1, U2): a hidden tab closes the governor feed and stops polling the cluster; showing it again resumes both."""
+    bad = []
+    page.evaluate("(() => { window.__reqs = 0; const f = window.fetch.bind(window); window.fetch = (...a) => { if (String(a[0]).includes('/api/cluster')) window.__reqs++; return f(...a); }; })()")  # an expression that ends in a function would be called by evaluate
+    page.evaluate("Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); document.dispatchEvent(new Event('visibilitychange'))")
+    page.wait_for_timeout(5200)
+    if page.evaluate("window.__reqs") != 0:
+        bad.append("the cluster was polled while the page was hidden")
+    page.evaluate("Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); document.dispatchEvent(new Event('visibilitychange'))")
+    page.wait_for_timeout(1500)
+    page.evaluate("delete document.hidden")
+    if page.evaluate("window.__reqs") < 1:
+        bad.append("showing the page did not resume cluster polling at once")
+    return bad
+
+
 def check_home(page) -> list[str]:
     """Overview (webui/static/js/home.js): one card per node with its state in words, the three start cards, services with real or
     simulated, and a node card opens that node in Topology. Returns the problems found."""
@@ -318,7 +334,7 @@ def capture(out: Path) -> dict:
                     page = browser.new_page(viewport={"width": w, "height": h}, color_scheme=scheme)
                     page.add_init_script(TEST_HOOK)
                     page.add_init_script("localStorage.setItem('workbench-theme','auto')")  # the shots follow the system scheme; the default is checked above
-                    page.on("console", lambda m, r=result: r["console_errors"].append(m.text) if m.type == "error" else None)
+                    page.on("console", lambda m, r=result: r["console_errors"].append(m.text + " " + m.location.get("url", "")) if m.type == "error" else None)
                     page.on("pageerror", lambda e, r=result: r["console_errors"].append(str(e)))
                     deadline = time.time() + 15
                     while True:
@@ -502,6 +518,8 @@ def capture(out: Path) -> dict:
                     page.click("#node-back")
                     if not page.locator("#nodepane").is_hidden() or page.locator("#tree").is_hidden():
                         result["a11y"].append(f"node panel did not close ({vp} {scheme}: panel hidden={page.locator('#nodepane').is_hidden()} tree hidden={page.locator('#tree').is_hidden()})")
+                    if vp == "desktop" and scheme == "dark":
+                        result["a11y"].extend(check_hidden(page))
                     page.close()
             for w, h, count in ((1280, 900, 6), (1920, 1080, 50)):  # the architecture is the page (#319): it fills the width, the page itself never scrolls, the rails scroll
                 page = browser.new_page(viewport={"width": w, "height": h})
@@ -525,6 +543,7 @@ def capture(out: Path) -> dict:
                 if m["list"] < 120 or m["insp"] < 300:
                     result["a11y"].append(f"node list or inspector too small at {w}x{h}: {m}")
                 if count == 6:  # focus view (#313): a part and its neighbours stay, the rest dims, nothing moves, Esc returns
+                    rel0 = page.evaluate("[...document.querySelectorAll('#flow [data-ent]')].map(e => { const r = e.getBoundingClientRect(), o = document.querySelector('#flow').getBoundingClientRect(); return [e.getAttribute('data-ent'), Math.round(r.x - o.x), Math.round(r.y - o.y)]; })")  # positions inside the diagram: clicking a chip may scroll the page, which is not a move
                     before = page.evaluate("[...document.querySelectorAll('#flow [data-ent]')].map(e => { const r = e.getBoundingClientRect(); return [e.getAttribute('data-ent'), Math.round(r.x), Math.round(r.y)]; })")
                     page.locator("#flow g[data-ent='login']").dblclick(); page.wait_for_timeout(300)
                     f = page.evaluate("({dim: document.querySelectorAll('#flow [data-dim]').length, crumb: !!document.querySelector('#crumb:not([hidden])'), rows: document.querySelectorAll('#focuspane tbody tr').length, faulted: document.querySelectorAll('#flow [data-dim] .nd.fault').length})")
@@ -536,9 +555,9 @@ def capture(out: Path) -> dict:
                     page.keyboard.press("Escape"); page.wait_for_timeout(200)
                     for choice in ("management", "client"):  # lenses (#316): the layout never moves; the client's eye reads only real counters
                         page.click(f"#lens [data-lens={choice}]"); page.wait_for_timeout(250)
-                        li = page.evaluate("({dim: document.querySelectorAll('#flow [data-ldim]').length, eye: $('eyepane').hidden ? '' : $('eyepane').textContent, pos: [...document.querySelectorAll('#flow [data-ent]')].map(e => { const r = e.getBoundingClientRect(); return [e.getAttribute('data-ent'), Math.round(r.x), Math.round(r.y)]; })})")
-                        if li["dim"] < 2 or li["pos"] != before:
-                            result["a11y"].append(f"lens {choice} dimmed nothing or moved a part")
+                        li = page.evaluate("({dim: document.querySelectorAll('#flow [data-ldim]').length, eye: $('eyepane').hidden ? '' : $('eyepane').textContent, pos: [...document.querySelectorAll('#flow [data-ent]')].map(e => { const r = e.getBoundingClientRect(), o = document.querySelector('#flow').getBoundingClientRect(); return [e.getAttribute('data-ent'), Math.round(r.x - o.x), Math.round(r.y - o.y)]; })})")
+                        if li["dim"] < 2 or li["pos"] != rel0:
+                            result["a11y"].append(f"lens {choice} dimmed nothing or moved a part (dimmed {li['dim']}, moved {[(a, b) for a, b in zip(rel0, li['pos']) if a != b][:3]})")
                         if choice == "client" and ("not measured" not in li["eye"] or "BMC farm" not in li["eye"] or "Verdict" not in li["eye"]):
                             result["a11y"].append("client's-eye lens did not list the services with a verdict and 'not measured' where nothing counts")
                     page.click("#lens [data-lens=all]"); page.wait_for_timeout(200)

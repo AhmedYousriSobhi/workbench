@@ -44,11 +44,14 @@ export function renderCluster(c) {
   document.querySelectorAll('.node').forEach(b => b.onclick = () => { const n = c.nodes.find(x => x.name === b.dataset.node); if (n && n.kind === 'k8s') openConnection('k8s'); else showNode(b.dataset.node); });  // a Kubernetes node has no BMC or Slurm actions: its row is Connections
   if (S.openNode) { const n = c.nodes.find(x => x.name === S.openNode); if (n) { $('nodestate').className = 'pill ' + n.state; $('nodestate').textContent = `${STATE_ICON[n.state]} ${n.label}`; } }
 }
+let paused = false;
+export function pauseCluster() { paused = true; clearTimeout(S.clusterTimer); }  // hidden page: no polling (W-11, U2)
+export function resumeCluster() { if (paused) { paused = false; loadCluster(); } }  // only if it was paused: a show event alone does not re-poll
 export async function loadCluster() {
   clearTimeout(S.clusterTimer);
   try {
     const text = await (await fetch('/api/cluster')).text();
     if (text !== S.lastCluster) { S.lastCluster = text; renderCluster(JSON.parse(text)); paintTraffic(); }  // the Traffic view follows node faults (issue 414)
   } catch (e) { /* keep the last view; the next poll retries */ }
-  S.clusterTimer = setTimeout(loadCluster, document.hidden ? 15000 : 4000);
+  if (!document.hidden) S.clusterTimer = setTimeout(loadCluster, 4000);  // a hidden page does not poll (W-11, U2); showing it polls at once
 }

@@ -2,7 +2,7 @@ import { S } from './state.js';
 import { applyFocus, focusOn, tagEntities } from './focus.js';
 import { applyBlast } from './blast.js';
 import { applyLens } from './lens.js';
-import { $ } from './util.js';
+import { $, setText } from './util.js';
 import { refreshZoom, syncZoom } from './zoom.js';
 import { buildCircuit, circuitSignature, paintCircuit } from './circuit.js';
 import { buildOverview, curLevel, refreshOverview, setLevel } from './overview.js';
@@ -192,7 +192,7 @@ export function paintBlocks() {
 export function flowNote() {
   const why = S.flowPaused ? 'Animation paused by you.' : reduced.matches ? 'Animation off: your system asks for reduced motion; counts still update.'
     : S.flowLevel >= 3 ? `Animation paused: the governor is at level L${S.flowLevel} and needs the resources.` : 'Live. Dots appear when a service gets a request or a fault is applied.';
-  $('flowstate').textContent = why;
+  setText($('flowstate'), why);
 }
 
 export function init() {
