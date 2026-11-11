@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**88% built** (36 done, 62 in review, 9 partial, 5 to do, 112 items).
+**88% built** (36 done, 63 in review, 9 partial, 5 to do, 113 items).
 
 ## Roadmap
 
@@ -16,7 +16,7 @@ flowchart LR
     p4["People and chaos<br/>25%"]:::partial
     p5["Kubernetes<br/>100%"]:::done
     p6["Fidelity VM<br/>0%"]:::todo
-    p7["Web UI and profiles<br/>88%"]:::partial
+    p7["Web UI and profiles<br/>89%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
     p0 --> p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7 --> p8
     classDef done fill:#1a7f37,stroke:#1a7f37,color:#fff
@@ -201,7 +201,7 @@ _One real Ubuntu VM with Redfish power control._
 
 0/1 done
 
-### Web UI and profiles (88%)
+### Web UI and profiles (89%)
 
 _One click from cold start to a busy cluster._
 
@@ -223,6 +223,7 @@ _One click from cold start to a busy cluster._
 | Canvas tokens and the shared wire (redesign step 2) | 🔍 In review | The redesign's colours, plane colours and fonts as CSS tokens (always-dark canvas, Inter and JetBrains Mono self-hosted, OFL), and one wire component: four SVG strokes plus a red error dash, or a dashed no-current stroke; pulse speed follows the request rate on a log scale; every animation moves by exactly its own dash period so loops never jump; all of it off under reduced motion and paused in a hidden tab; each wire has a text title. Nothing on the page uses it yet (screens 3 to 7 will). Contrast, dash-period and speed rules are Node tests; a browser check in ui_shots.py covers motion and fonts. | `webui/static/canvas.css`, `webui/static/js/wire.js`, `webui/static/fonts/`, `webui/tests/js/wire.test.mjs`, `webui/tests/js/tokens.test.mjs`, `scripts/ui_shots.py`, `docs/adr/0038-redesign-canvas-tokens-and-wire.md`, `docs/guides/web-ui-canvas.md` | - |
 | Cluster level | 🔍 In review | A new Circuit view of one cluster: Slurm and Kubernetes lanes, pool racks (a square per node, one per 8 above 64), a services row on an HTTP bus, and a layer stack that isolates one plane. The same template for every cluster; a part or lane the cluster lacks stays in place, faded, with a note; controller variants (admin SSH wire, or a HEAD NODE badge on login). Wires come from the documented links already sent by the server: they pulse only where a request counter backs them, lit-but-still where it is declared wiring. Focus, blast radius and the lens work on it; the old diagram stays until step 6. Layout is pure data tested with node --test; a Python test ties every wire to a documented link; a browser check covers wires, greyed parts and layer isolation. | `webui/static/js/circuitlayout.js`, `webui/static/js/circuit.js`, `webui/static/canvas.css`, `webui/static/js/wire.js`, `webui/tests/js/circuitlayout.test.mjs`, `scripts/ui_shots.py`, `docs/adr/0039-redesign-cluster-level-circuit.md`, `docs/guides/web-ui-canvas.md` | - |
 | Pool and Fleet levels and the zoom (redesign step 4) | 🔍 In review | Circuit is the default view (Flat and Clusters removed), Traffic is the rail's last stop with a Back button, Ctrl+scroll zooms, the page keeps one width. Pool level (side panel, filters, 4 x 4 tiles with declared heartbeat wires, GPU bars, not-measured where the page has no data), Fleet level (a card per cluster from the snapshot, same structure for every cluster) and a 0.7 s zoom transition after which the old level is hidden and inert; zoom rail, breadcrumb and Escape. The canvas palette is lifted to a lighter slate. No new endpoint: the inventory endpoint waits for several running clusters. Issue 498. | `webui/static/js/zoom.js`, `webui/static/js/pool.js`, `webui/static/js/poollayout.js`, `webui/static/js/fleet.js`, `webui/static/js/fleetlayout.js`, `webui/static/canvas.css`, `webui/tests/js/poollayout.test.mjs`, `scripts/ui_shots.py`, `docs/adr/0040-redesign-pool-fleet-zoom.md`, `docs/guides/web-ui-canvas.md` | [#499](https://github.com/AhmedYousriSobhi/workbench/pull/499) |
+| Per-request traffic record and its analysis (redesign step 5a) | 🔍 In review | The three mocks record per caller (User-Agent product token only) and path shape the status class, a latency histogram and the last 400 requests (GET /sim/traffic); the page merges them at /api/traffic; pure tested JavaScript turns them into rates, river bands, probe readings, repeat periods and findings. Not measured says so. The screen is step 5b. Issue 501. | `components/bmc-farm/bmc.py`, `components/bcm-mock/bcm.py`, `components/jira-mock/jira.py`, `webui/traffic.py`, `webui/app.py`, `webui/static/js/trafficanalysis.js`, `webui/tests/js/trafficanalysis.test.mjs`, `tests/test_path_shapes.py`, `tests/test_webui_traffic.py`, `tests/real/test_traffic_record_real.py`, `docs/adr/0041-per-request-traffic-record.md`, `docs/guides/client-testing.md` | - |
 | Themes and richer diagram look | 🔍 In review | The theme switch cycles Auto, Light, Dark, Midnight (deep navy, neon accents) and Dim (soft slate, low glare); tokens only, remembered in the browser. The 2.5D diagram gets gradient top faces tinted by kind and a decorative icon per service. Issue 325. | `webui/static/index.html` | - |
 | Global view (levels of detail) | 🔍 In review | The Infrastructure architecture has two levels: `overview` (one card per cluster: clients, access, node groups with a health bar, services, faults) and `full`. Above 24 nodes the page opens at the overview; the Overview / Full diagram button pins a level. Hover or focus shows the design underneath; double-click, Enter or Open full design enters, a breadcrumb and Esc leave; a phone taps once. A table of clusters is in the page for screen readers. Issue 321, ADR 0029; several clusters draw as a grid of cards (issue 327; the backend field is issue 328, tested with synthetic data); the node-group level inside a large cluster follows. | `webui/static/index.html`, `scripts/ui_shots.py`, `docs/adr/0029-levels-of-detail-global-view.md` | - |
 | Focus view | 🔍 In review | Double-click a part (or F on a focused part) focuses it and its direct neighbours from the declared graph: the rest dims by an attribute toggle (nothing moves), faulted parts stay visible, Connections lists its edges (plane, kind, measured or declared), a breadcrumb under the diagram and Esc leave. ui_shots checks that no part moves. Issue 313. | `webui/static/index.html`, `scripts/ui_shots.py` | - |
@@ -234,7 +235,7 @@ _One click from cold start to a busy cluster._
 | README demo gif | 🔍 In review | The README's animation is made from sample data and shows each capability in turn with a caption: dark 2.5D with traffic, error triangles, a fault with its declared blast radius, a lens, the client's eye, focus, the flat view and the global view. Re-run scripts/doc_shots.py after a change to the page. Issue 337. | `scripts/doc_shots.py`, `docs/manual/img/architecture-demo.gif`, `README.md` | - |
 | Budget manager | ⬜ To do | Profile/budget form (W-7). | - | - |
 
-1/26 done
+1/27 done
 
 ### macOS agent and CI (0%)
 

@@ -149,6 +149,16 @@ curl -s http://127.0.0.1:8080/sim/paths   # jira-mock
 
 Run the client against the stack once, then read `paths` (what it called and how often) and `unknown` (what it asked for that workbench does not serve: a 404, or for BCM an unknown call). That list is what the Redfish, BCM and Kubernetes scope issues start from. The Prometheus-style exporters and the Kubernetes API are not covered. State in the issue what the client run did and did not exercise.
 
+### Who asked, how it ended and how long it took
+
+`GET /sim/traffic` (issue 501, same three mocks) adds to those counts, per **caller** (the request's `User-Agent` product token only, for example `curl` or `python-requests`; no version, no other header value, at most 24 characters, `unknown` when there is none) and path shape: how many answers were 2xx, 4xx and 5xx, a latency histogram, and the last 400 requests with their time. `?since=T` (seconds since the epoch) returns only the newer ones. Asking for it is not counted as client traffic.
+
+```bash
+curl -s http://127.0.0.1:8080/sim/traffic | python3 -m json.tool | head -40   # jira-mock; 8081 bcm-mock, 8000 bmc-farm
+```
+
+The web page merges the three at `/api/traffic` (the Traffic tab's analysis reads it). The latency is the time the mock spent between reading the request line and sending the answer, so it measures the mock, not the network; a client that reuses one connection is not charged for idle time between requests. A client that sends a User-Agent shows as its own caller, so you can see which of its timers hits which surface.
+
 ## Known gaps
 
 Kubernetes has no real kubelet (no pod logs, no metrics-server) and is not reachable through Teleport; Teleport is SSH access only (no dynamic labels, session recording or sharing); the fake `cmsh` console is a read-only subset.

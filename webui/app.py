@@ -30,7 +30,7 @@ from starlette.routing import Route
 
 from benchctl import checks, nhc, scenario, slurmtrace
 
-from . import monitoring
+from . import monitoring, traffic
 from .blast import payload as blast_payload
 from .cluster import ActionError, Cluster
 from .flow import PAUSE_LEVEL, Flow
@@ -491,6 +491,14 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             slurm_stats_cache[:] = [time.monotonic(), res.get("stats") if res.get("ok") else None]
         return JSONResponse({"stats": slurm_stats_cache[1]})
 
+    async def traffic_record(request: Request):
+        """Who called which mock, how it ended and how long it took (the mocks' own record, GET /sim/traffic); `?since=T` limits `recent`."""
+        try:
+            since = max(0.0, float(request.query_params.get("since") or 0))
+        except ValueError:
+            return JSONResponse({"error": "since must be a number"}, status_code=400)
+        return JSONResponse(await asyncio.to_thread(traffic.collect, since))
+
     monitoring_cache: list = [float("-inf"), []]
 
     async def monitoring_links(request: Request):
@@ -590,6 +598,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/help/search", protected(help_search)),
             Route("/help/files/{rel:path}", protected(help_file)),
             Route("/help/{slug:path}", protected(help_page)),
+            Route("/api/traffic", protected(traffic_record)),
             Route("/api/status", protected(status)),
             Route("/api/events", protected(events)),
             Route("/api/cluster", protected(cluster_state)),
