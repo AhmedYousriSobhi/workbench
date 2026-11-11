@@ -217,6 +217,22 @@ def check_analysis(page) -> list[str]:
         hits["n"] += 1
         route.fulfill(json=body)
 
+    cap = {"starts": 0, "stops": 0, "reads": 0}
+
+    def capture(route):
+        url = route.request.url
+        if url.endswith("/api/capture/start"):
+            cap["starts"] += 1
+            return route.fulfill(json={"ok": True, "node": "x", "seconds": 300})
+        if url.endswith("/api/capture/stop"):
+            cap["stops"] += 1
+            return route.fulfill(json={"ok": True, "running": False})
+        cap["reads"] += 1
+        msgs = [{"t": now - 2, "dir": "in", "peer": "10.141.255.1", "peer_name": "slurmctld", "port": 6818, "size": 120, "type": "REQUEST_PING", "type_id": 1008, "kind": "request", "latency_ms": None, "version": 11520, "flags": 0, "body_length": 8},
+                {"t": now - 1, "dir": "in", "peer": "10.141.0.9", "port": 6818, "size": 63, "type": "unknown", "type_id": None, "kind": "unknown", "latency_ms": None, "note": "the header does not parse"}]
+        route.fulfill(json={"ok": True, "running": True, "node": "x", "messages": msgs if cap["reads"] == 1 else [], "next": 2, "ended": None, "error": None, "seconds_left": 290, "class": "P5"})
+
+    page.route("**/api/capture/*", capture)
     page.route("**/api/traffic*", answer)
     page.evaluate("stopAnalysis(); startAnalysis()")
     try:
@@ -224,6 +240,7 @@ def check_analysis(page) -> list[str]:
         page.wait_for_function("document.querySelectorAll('#an-found-list .an-f.no-retry, #an-found-list .an-f.timer').length >= 2", timeout=5000)
     except Exception:  # noqa: BLE001
         page.unroute("**/api/traffic*")
+        page.unroute("**/api/capture/*")
         return ["the Traffic analysis screen did not draw the river and the findings from /api/traffic"]
     r = page.evaluate("""() => ({ status: document.getElementById('an-status').textContent, note: document.getElementById('an-river-note').textContent,
         nodes: document.querySelectorAll('#an-river .an-node').length, cols: document.querySelectorAll('.an-col').length, unk: document.querySelectorAll('.an-col.unk').length,
@@ -235,9 +252,18 @@ def check_analysis(page) -> list[str]:
     first = page.evaluate("clusterNow().nodes[0].name")
     page.evaluate(f"location.hash = {first!r}")
     page.wait_for_timeout(300)
-    if not page.is_visible("#an-focus") or first not in page.inner_text("#an-focus") or "Not captured" not in page.inner_text("#an-focus"):
-        bad.append("a node hash did not open the focused wire with its honest 'not captured' line")
+    if not page.is_visible("#an-focus") or first not in page.inner_text("#an-focus"):
+        bad.append("a node hash did not open the focused wire")
+    try:
+        page.wait_for_function("document.getElementById('an-capstate') && /Capturing/.test(document.getElementById('an-capstate').textContent) && document.querySelectorAll('#an-log tbody tr[data-i]').length >= 2", timeout=5000)
+    except Exception:  # noqa: BLE001
+        bad.append(f"the focused wire did not start a capture and show its messages: {page.inner_text('#an-capstate')!r}")
+    if "unknown type" not in page.inner_text("#an-log") or page.locator(".an-cap").count() < 2 or "decoded" not in page.inner_text("#an-decoded").lower() or cap["starts"] != 1:
+        bad.append(f"the capture panel is incomplete (an unknown type must say so in words; one capture started): starts={cap['starts']}")
+    stops = cap["stops"]
     page.click("#an-clear")
+    if cap["stops"] != stops + 1:
+        bad.append("closing the focused wire did not stop the capture")
     if page.is_visible("#an-focus") or page.evaluate("location.hash") != "":
         bad.append("Clear focus did not clear the focus and the hash")
     page.evaluate("location.hash = 'no-such-node'")
@@ -247,13 +273,20 @@ def check_analysis(page) -> list[str]:
     page.evaluate("history.replaceState(null, '', location.pathname + location.search)")
     if not _POLL_CHECKED:
         _POLL_CHECKED = True
+        page.evaluate(f"location.hash = {first!r}")
+        page.wait_for_function("document.getElementById('an-capstate') && /Capturing/.test(document.getElementById('an-capstate').textContent)", timeout=5000)
+        stops = cap["stops"]
         page.click("#tb-nodes")
-        before = hits["n"]
-        page.wait_for_timeout(3500)  # a poll every 3 s
-        if hits["n"] != before:
-            bad.append("the Traffic analysis kept polling /api/traffic while another tab was open (W-11)")
+        before, reads = hits["n"], cap["reads"]
+        page.wait_for_timeout(3500)  # a poll every 3 s, a capture read every 2 s
+        if hits["n"] != before or cap["reads"] != reads:
+            bad.append("the Traffic analysis or its capture kept polling while another tab was open (W-11)")
+        if cap["stops"] != stops + 1:
+            bad.append("leaving the Traffic tab did not stop the capture")
+        page.evaluate("history.replaceState(null, '', location.pathname + location.search)")
         page.click("#tb-traffic")
     page.unroute("**/api/traffic*")
+    page.unroute("**/api/capture/*")
     page.evaluate("stopAnalysis(); startAnalysis()")
     return bad
 

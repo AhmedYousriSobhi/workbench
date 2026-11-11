@@ -499,6 +499,36 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             return JSONResponse({"error": "since must be a number"}, status_code=400)
         return JSONResponse(await asyncio.to_thread(traffic.collect, since))
 
+    async def capture_call(req: dict) -> JSONResponse:
+        """One wire's messages, on demand and only through the governor (issue 505): it starts, reads and stops the capture; this page never touches Docker."""
+        try:
+            res = await asyncio.to_thread(checks.governor_request, req, socket)
+        except (OSError, ValueError) as e:
+            raise HTTPException(503, "the governor is not reachable: start it with ./scripts/benchctl start") from e
+        if not res.get("ok"):
+            raise HTTPException(409, res.get("error", "the governor refused"))
+        return JSONResponse(res)
+
+    async def capture_start(request: Request):
+        try:
+            body = await request.json()
+        except ValueError:
+            body = {}
+        node = body.get("node") if isinstance(body, dict) else None
+        if not (isinstance(node, str) and re.fullmatch(r"[a-z]{2,8}[0-9]{3}", node)):
+            raise HTTPException(400, "node must be a node name such as cn001")
+        return await capture_call({"cmd": "capture-start", "node": node})
+
+    async def capture_read(request: Request):
+        try:
+            since = max(0, int(request.query_params.get("since") or 0))
+        except ValueError:
+            raise HTTPException(400, "since must be a whole number") from None
+        return await capture_call({"cmd": "capture-read", "since": since})
+
+    async def capture_stop(request: Request):
+        return await capture_call({"cmd": "capture-stop"})
+
     monitoring_cache: list = [float("-inf"), []]
 
     async def monitoring_links(request: Request):
@@ -606,6 +636,9 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/help/files/{rel:path}", protected(help_file)),
             Route("/help/{slug:path}", protected(help_page)),
             Route("/api/traffic", protected(traffic_record)),
+            Route("/api/capture/start", protected(capture_start, write=True), methods=["POST"]),
+            Route("/api/capture/read", protected(capture_read)),
+            Route("/api/capture/stop", protected(capture_stop, write=True), methods=["POST"]),
             Route("/api/status", protected(status)),
             Route("/api/events", protected(events)),
             Route("/api/cluster", protected(cluster_state)),

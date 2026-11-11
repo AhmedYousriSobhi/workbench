@@ -2,12 +2,12 @@
 // Data: /api/traffic every 3 s, only while the Traffic tab and the page are visible (W-11). All numbers come from trafficanalysis.js;
 // what cannot be measured says "not measured", never 0. Drawn into #tan on the Traffic tab, always on a dark canvas.
 import { S } from './state.js';
-import { $, announce, esc } from './util.js';
+import { $, H, announce, esc } from './util.js';
 import { sv } from './svg.js';
 import { buildWire, updateWire } from './wire.js';
 import { clusterNow } from './inspector.js';
 import { clusterList, clusterTitle } from './overview.js';
-import { PROBE_MODES, bandPx, detectPeriods, findAnomalies, parseWireHash, perSecond, probeReading, rateFromSamples, riverModel, sampleOf, streamKey, wireFacts, wireHash, windowRecent } from './trafficanalysis.js';
+import { PROBE_MODES, bandPx, detectPeriods, findAnomalies, parseWireHash, perSecond, probeReading, rateFromSamples, riverModel, sampleOf, streamKey, wireFacts, wireHash, windowRecent, captureRow, decodeFields, shortType, tubeLanes } from './trafficanalysis.js';
 
 const POLL_MS = 3000, KEEP_S = 3600, KEEP_ROWS = 3000, MAX_CHIPS = 10, MAX_PERIOD_STREAMS = 12;
 const PLANE_OF = { 'bmc-farm': 'management', 'bcm-mock': 'access', 'jira-mock': 'data' };
@@ -32,7 +32,7 @@ async function pollTraffic() {
   paintAnalysis();
 }
 export function startAnalysis() { if (A.timer) return; pollTraffic(); A.timer = setInterval(pollTraffic, POLL_MS); }
-export function stopAnalysis() { clearInterval(A.timer); A.timer = 0; }
+export function stopAnalysis() { clearInterval(A.timer); A.timer = 0; captureStop(false); }
 
 const rates = () => { const w = Number.isFinite(A.windowS) ? Math.min(A.windowS, 300) : KEEP_S; return Object.fromEntries(A.streams.map(s => [streamKey(s), rateFromSamples(A.samples, streamKey(s), A.now, w)])); };
 const label = s => `${s.who} → ${SERVICE_NAME[s.service] || s.service} ${s.shape}`;
@@ -112,22 +112,90 @@ function paintRhythm() {
     : '<p class="dim">No steady repeat found yet. A period needs at least eight requests and three repeats in the window.</p>';
 }
 
-// ---- the focused wire --------------------------------------------------------------------------------------------------
+// ---- the focused wire and its capture ----------------------------------------------------------------------------------------
+// A capture (the governor, class P5, ADR 0042) runs only while this panel is open: it starts when the panel opens and stops when the panel
+// closes, the tab or page hides, or after 5 minutes. Messages stay in this page's memory; nothing is stored.
+const C = { node: null, running: false, next: 0, messages: [], err: null, ended: null, left: 0, timer: 0, sel: null, sig: '' };
+const CAP_POLL_MS = 2000, CAP_KEEP = 300, CAP_ROWS = 60;
+async function captureCall(path, body) {
+  const r = await fetch(path, body === undefined ? { headers: H } : { method: 'POST', headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  let j = {}; try { j = await r.json(); } catch (e) { /* no body */ }
+  if (!r.ok) throw new Error(j.detail || `HTTP ${r.status}`);
+  return j;
+}
+async function captureStart(node) {
+  if (C.running) await fetch('/api/capture/stop', { method: 'POST', headers: H }).catch(() => {});  // one wire at a time: the old one ends first
+  Object.assign(C, { node, running: false, next: 0, messages: [], err: null, ended: null, left: 0, sel: null });
+  clearInterval(C.timer);
+  try { await captureCall('/api/capture/start', { node }); C.running = true; C.timer = setInterval(captureRead, CAP_POLL_MS); captureRead(); } catch (e) { C.err = e.message; }
+  paintCapture();
+}
+async function captureRead() {
+  if (!C.running) return;
+  try {
+    const j = await captureCall(`/api/capture/read?since=${C.next}`);
+    C.next = j.next; C.messages = [...C.messages, ...j.messages].slice(-CAP_KEEP); C.left = j.seconds_left;
+    if (!j.running) { C.running = false; C.ended = j.ended || 'ended'; C.err = j.error; clearInterval(C.timer); }
+  } catch (e) { C.err = e.message; C.running = false; clearInterval(C.timer); }
+  paintCapture();
+}
+// `tell`: the person pressed Stop (the panel stays and says so); otherwise the panel or the tab closed and the capture just ends.
+function captureStop(tell = true) {
+  clearInterval(C.timer); C.timer = 0;
+  if (C.running) fetch('/api/capture/stop', { method: 'POST', headers: H }).catch(() => {});
+  C.running = false; C.sig = '';
+  if (tell && C.node) { C.ended = C.ended || 'stopped by you'; paintCapture(); } else C.node = null;
+}
+function laneSvg(host, node, peerLabel) {
+  const lanes = tubeLanes(C.messages), svg = host; svg.replaceChildren();
+  svg.append(sv('rect', { class: 'an-tubebody', x: 150, y: 34, width: 400, height: 52, rx: 26 }), sv('text', { class: 'an-tubelab', x: 140, y: 64, 'text-anchor': 'end' }, peerLabel), sv('text', { class: 'an-tubelab', x: 560, y: 64 }, node));
+  const put = (list, y, arrow) => list.forEach((m, i) => {
+    const x = 180 + i * 72, g = sv('g', { class: `an-cap ${m.kind}`, 'data-t': m.t });
+    g.append(sv('title', {}, `${arrow} ${m.type}`), sv('rect', { x, y: y - 9, width: 66, height: 18, rx: 9 }), sv('text', { x: x + 33, y: y + 4, 'text-anchor': 'middle' }, shortType(m.type).slice(0, 10) + (m.kind === 'unknown' ? ' ▲' : '')));
+    svg.append(g);
+  });
+  put(lanes.toNode, 48, 'to the node →'); put(lanes.fromNode, 72, 'from the node ←');
+  svg.append(sv('text', { class: 'an-tubedir', x: 150, y: 24 }, '→ requests to the node'), sv('text', { class: 'an-tubedir', x: 550, y: 106, 'text-anchor': 'end' }, 'what the node sends ←'));
+}
+function paintCapture() {
+  const host = $('an-capstate'); if (!host) return;
+  const m = Math.floor(C.left / 60), sec = String(C.left % 60).padStart(2, '0');
+  host.textContent = C.err ? `Capture not running: ${C.err}` : C.running ? `● Capturing · ${m}:${sec} left · class P5 · stops when you close this panel` : C.ended ? `Capture stopped: ${C.ended}.` : 'Starting the capture…';
+  host.className = 'an-capstate' + (C.err ? ' bad' : C.running ? ' on' : '');
+  $('an-capstop').hidden = !C.running; $('an-capagain').hidden = C.running || !C.node;
+  const rows = C.messages.slice(-CAP_ROWS).reverse();
+  $('an-log').querySelector('tbody').innerHTML = rows.length ? rows.map(msg => { const r = captureRow(msg), i = C.messages.indexOf(msg); return `<tr data-i="${i}" class="${r.unknown ? 'unk' : ''}${C.sel === i ? ' sel' : ''}" tabindex="0"><td class="mono">${esc(r.time)}</td><td aria-label="${esc(r.side)}">${r.arrow}</td><td class="mono">${esc(r.type)}${r.unknown ? ' <b>▲ unknown type</b>' : ''}</td><td>${esc(r.peer)}</td><td>${esc(r.size)}</td><td>${esc(r.latency)}</td><td>${esc(r.result)}</td></tr>`; }).join('')
+    : `<tr><td colspan="7" class="dim">${C.running ? 'Waiting for the first message…' : 'No message captured.'}</td></tr>`;
+  const shown = C.sel !== null ? C.messages[C.sel] : C.messages[C.messages.length - 1];
+  $('an-decoded').innerHTML = shown ? `<dt class="an-dh" id="an-dh">${C.sel !== null ? 'Decoded · selected' : 'Decoded · latest'}</dt>` + decodeFields(shown).map(([k, v]) => `<dt>${esc(k)}</dt><dd class="mono">${esc(v)}</dd>`).join('') : '';
+  const sig = JSON.stringify([C.next, C.sel, C.running]);
+  if (sig !== C.sig) { C.sig = sig; laneSvg($('an-tube'), $('an-focus').dataset.node, 'peers'); }
+}
 export function currentWire() { const c = clusterNow(); return parseWireHash(location.hash, clusterList(), (c.nodes || []).map(n => n.name)); }
 function paintFocus() {
   const host = $('an-focus'), w = currentWire();
   host.hidden = !w;
-  if (!w) return;
+  if (!w) { if (C.node) captureStop(false); host.dataset.node = ''; return; }
+  if (host.dataset.node === w.node) { if (!C.node) captureStart(w.node); return; }  // already showing this wire; if its capture ended with the tab, the panel starts it again
+  host.dataset.node = w.node;
   const node = (clusterNow().nodes || []).find(n => n.name === w.node), f = wireFacts(node), planeName = { management: 'Management', control: 'Control', k8s: 'Kubernetes control' };
   host.innerHTML = `<h4>Focused wire <small class="dim">from the infrastructure</small></h4><p class="an-path mono">${esc(w.cluster || clusterTitle())} › ${esc(w.node)}</p>
-    <p>${node ? `${esc(node.name)} is ${esc(node.label)}.` : 'This node is not in the cluster.'} What is known of its wires:</p>
-    <ul class="an-links">${(f ? f.links : []).map(l => `<li><span class="plate" data-plane="${l.plane === 'k8s' ? 'k8s' : l.plane}" aria-hidden="true"></span><b>${esc(l.to)}</b> · ${esc(l.what)} <small class="dim">(${planeName[l.plane]}, declared wiring: counted per service, not per node)</small></li>`).join('')}</ul>
-    <p class="an-capture">Messages: ${esc(f ? f.capture : '')}</p>
-    <div class="row"><button type="button" class="btn small" id="an-back">‹ Back to the pool</button><button type="button" class="btn small" id="an-clear">Clear focus</button></div>`;
+    <p>${node ? `${esc(node.name)} is ${esc(node.label)}.` : 'This node is not in the cluster.'} Its wires, as documented:</p>
+    <ul class="an-links">${(f ? f.links : []).map(l => `<li><span class="plate" data-plane="${l.plane}" aria-hidden="true"></span><b>${esc(l.to)}</b> · ${esc(l.what)} <small class="dim">(${planeName[l.plane]}; the always-on counters are per service, not per node)</small></li>`).join('')}</ul>
+    <p class="an-capture">Messages, on demand: ${esc(f ? f.sourceText : 'this node is not in the cluster, so nothing can be captured.')}</p>
+    <p class="an-capstate" id="an-capstate" role="status"></p>
+    <svg id="an-tube" class="an-tube" viewBox="0 0 700 120" role="img" aria-label="The last messages on this wire: requests to the node on the upper lane, what the node sends on the lower lane"></svg>
+    <div class="an-logwrap"><table id="an-log" class="an-log"><caption class="srtable">Captured messages, newest first</caption><thead><tr><th>Time</th><th><span class="srtable">Direction</span></th><th>Message</th><th>Peer</th><th>Size</th><th>Answered in</th><th>Result</th></tr></thead><tbody></tbody></table></div>
+    <dl class="an-decoded" id="an-decoded" aria-live="off"></dl>
+    <div class="row"><button type="button" class="btn small" id="an-capstop">Stop capture</button><button type="button" class="btn small" id="an-capagain" hidden>Capture again</button><button type="button" class="btn small" id="an-back">‹ Back to the pool</button><button type="button" class="btn small" id="an-clear">Clear focus</button></div>`;
   $('an-back').onclick = () => import('./zoom.js').then(m => { clearWire(); m.zoomTo('pool', { pool: node && node.kind === 'k8s' ? (node.gpus ? 'kg' : 'kc') : node && node.kind !== 'compute' ? 'sg' : 'sc' }); });
   $('an-clear').onclick = clearWire;
+  $('an-capstop').onclick = () => captureStop(true);
+  $('an-capagain').onclick = () => captureStart(w.node);
+  $('an-log').querySelector('tbody').onclick = e => { const tr = e.target.closest('tr[data-i]'); if (tr) { C.sel = C.sel === Number(tr.dataset.i) ? null : Number(tr.dataset.i); C.sig = ''; paintCapture(); } };
+  if (node && f) captureStart(w.node); else { C.node = null; C.err = null; paintCapture(); }
 }
-function clearWire() { history.replaceState(null, '', location.pathname + location.search); paintFocus(); }
+function clearWire() { captureStop(false); history.replaceState(null, '', location.pathname + location.search); paintFocus(); }
 export function openWireInTraffic(node) {
   location.hash = wireHash(clusterList().length > 1 ? clusterTitle() : clusterList()[0], node);
 }

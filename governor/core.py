@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from . import metrics
 from .annotate import Annotator
+from .capture import Capture
 from .control import PLAN_PARTS
 from .executors import UserExecutor
 from .ladder import Ladder
@@ -27,7 +28,7 @@ class Governor:
                  executor: Executor, dry_run: bool = True, watchdog: Watchdog | None = None,
                  watch_interval: float = 15.0, annotator: Annotator | None = None,
                  inventory: Callable[[], tuple[list[Group], dict]] | None = None,
-                 refresh_interval: float = 30.0, effector: Effector | None = None, tracer: Callable | None = None, statser: Callable | None = None):
+                 refresh_interval: float = 30.0, effector: Effector | None = None, tracer: Callable | None = None, statser: Callable | None = None, capturer: Callable | None = None):
         self.sampler, self.ladder, self.groups = sampler, ladder, groups
         self.executor, self.dry_run = executor, dry_run
         self.signals: Signals | None = None
@@ -46,6 +47,7 @@ class Governor:
         self.annotator = annotator
         self.effector = effector
         self.tracer = tracer
+        self.capture = Capture(capturer, lambda: self.ladder.level, self._record) if capturer else None  # on-demand wire capture, one at a time (issue 505)
         self.statser = statser
         self.inventory, self.refresh_interval = inventory, refresh_interval
         self._next_refresh = refresh_interval
@@ -219,6 +221,13 @@ class Governor:
                 return {"ok": True, "stats": self.statser()}
             except Exception as e:  # noqa: BLE001
                 return {"ok": False, "error": f"slurm stats failed: {e}"}
+        if cmd in ("capture-start", "capture-read", "capture-stop"):  # a P5 workload: a tcpdump or an audit-log read for the Focused wire panel only
+            if not self.capture:
+                return {"ok": False, "error": "no capture without --workdir (the governor runs `benchctl get capture`)"}
+            if self.dry_run:
+                return {"ok": False, "error": "dry run: no capture"}
+            return (self.capture.start(req["node"]) if cmd == "capture-start" else self.capture.read(int(req.get("since", 0))) if cmd == "capture-read"
+                    else self.capture.stop("stopped by the page"))
         if cmd in ("freeze", "thaw", "stop", "start"):  # slow, so not under the lock: it would hold `status` up like a plan does
             self._act(Action(cmd, req["target"], self.ladder.level))
             return {"ok": True}

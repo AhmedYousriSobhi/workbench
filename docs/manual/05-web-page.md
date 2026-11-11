@@ -170,7 +170,15 @@ At the top of the **Traffic** tab (the TRAFFIC stop of the zoom rail) the page r
 - **Found in this window**: a caller that did not ask again after server errors, several calls fired in the same half second, a repeating request whose caller sent no User-Agent (nothing says what runs that timer).
 - **Rhythm**: the repeating periods found per stream (at least eight requests and three repeats), each column beating at its own pace and labelled with who runs it.
 - **Window**: last minute, last 5 minutes, or since the page opened.
-- **Focused wire**: a pool tile's **Wire in Traffic ↗**, or a link such as `http://127.0.0.1:8088/#workbench-gpu003` (`#<cluster>-<node>`), opens a node's wire: its declared wiring (BMC farm and slurmctld for a Slurm node, KWOK for a Kubernetes node), **Back to the pool** and **Clear focus**. Its messages are not captured: a node name in a path is masked, so one node's requests cannot be told from another's.
+- **Focused wire**: a pool tile's **Wire in Traffic ↗**, or a link such as `http://127.0.0.1:8088/#workbench-gpu003` (`#<cluster>-<node>`), opens a node's wire: its declared wiring (BMC farm and slurmctld for a Slurm node, KWOK for a Kubernetes node), **Back to the pool** and **Clear focus**, and a **capture of its messages**.
+
+  ![The Focused wire panel: the tube, the message log and the decoded latest message](img/web-wire-capture.png)
+
+  The capture is **off unless the panel is open**: it starts when the panel opens and stops when you close it, switch tab, or after 5 minutes, and a bar says how long is left. It is a class P5 job of the governor, one wire at a time, and it only starts at L0 to L1: at L2 or above the panel says "paused: memory pressure". The always-on counters stay masked; the capture tells nodes apart by their fixed IP address instead.
+  - **A Slurm node**: `tcpdump` inside the node's container, on ports 6817 and 6818, limited by time and packet count. The message type comes from the Slurm message header (decoded for the pinned Slurm release); a header that does not parse shows as **▲ unknown type** with only its direction, size and timing, never a guess.
+  - **A Kubernetes node**: the API server's audit log, narrowed to the node's lease and node object and its pods (who asked, what, the answer code and time). The audit log is enabled with a metadata-only policy for nodes, leases and pods; it holds no request or response body.
+  - The **tube** shows the newest messages: requests to the node on the upper lane, what the node sends on the lower one. Click a row of the **log** for its decoded view (type, direction, peer, protocol version, flags, length, answer time).
+  - Messages stay in the page's memory, nothing is written to disk, and nothing from a message body is read. Run one by hand: `./scripts/benchctl get capture gpu001 --seconds 30`.
 
 ## Teleport from the page
 
