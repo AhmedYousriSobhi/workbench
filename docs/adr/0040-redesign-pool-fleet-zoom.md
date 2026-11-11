@@ -29,6 +29,19 @@ condenses clusters to cards. The running stack is one cluster; the snapshot carr
 - **Owner feedback, same step:** the canvas palette read too dark and heavy. The ground and surfaces are lifted to a lighter slate (`#111A26`,
   `#16202E`, `#1A2636`; muted text `#A3B5C9`); the plane colours are unchanged and every contrast test still passes.
 
+## Addendum: one way through the views (owner feedback, same step)
+- **The page keeps one width.** `.cols` was a grid item with `margin: 0 auto`, so it shrank to its content and the page was a different width in every
+  view (phone-like in one, wide in the next). It now has `width: 100%`. With the Circuit on, the old node list never takes a grid column (the Pool level is
+  the list).
+- **Circuit is the default view.** The view switch is Circuit and 2.5D (classic); Flat and Clusters are removed (the circuit shows the same parts and the
+  zoom's FLEET stop replaces Clusters). The All / Topology / Nodes switch of the left bar is hidden while the Circuit is on. 2.5D and the lenses return in
+  screen 3 (Topology), as decided.
+- **Traffic is a level.** The zoom rail moved above the tab panels and gained **TRAFFIC** as its last stop; the Traffic tab shows a **Back to the
+  cluster** button. Going to or from Traffic zooms the leaving tab away over half the time and grows the arriving one in. The page content of Traffic is
+  unchanged until step 5 rebuilds it per cluster.
+- **Zoom by gesture:** Ctrl + scroll or a trackpad pinch (one level per gesture, toward the card or rack under the pointer), `+` / `-` and Escape. A plain
+  scroll still scrolls the page, which must stay possible (the Connections panel and long pools are below).
+
 ## Consequences
 - Fleet for several clusters shows structure and health per cluster but no live rate for any but the running one, until the inventory and per-cluster
   counters exist.

@@ -128,3 +128,8 @@
 #flow[data-cv] .cv-open { fill:var(--cv-surface); stroke:var(--plane-access); stroke-width:1.5; } #flow[data-cv] .cv-opentext { font-size:15px; font-weight:600; fill:var(--plane-access); pointer-events:none; }
 #flow[data-cv] g.hit:hover .cv-open, #flow[data-cv] g.hit:focus-visible .cv-open { fill:var(--cv-surface-2); }
 .canvas :focus-visible { outline:2px solid var(--plane-access); outline-offset:2px; }
+/* the rail sits above the tab panels, so it is there on the infrastructure and on Traffic: one way up and down the zoom */
+.zoomrail { margin:0 0 var(--sp3, 12px); } .zhint { font-size:13px; margin-left:8px; } @media (max-width:700px) { .zhint { display:none; } }
+.zback { gap:10px; align-items:center; margin-bottom:var(--sp2, 8px); } .zback[hidden] { display:none; }
+/* the Pool level is the node list of the circuit, so the old list never takes a grid column beside it */
+#nodeswrap.circuit #nodesmain, #nodeswrap.circuit .nodesmain { display:none; }

@@ -125,7 +125,7 @@ workbench (`benchctl start --login ssh,teleport,both`, or the Login nodes rows o
 
 ![The Circuit view: Slurm lane with its racks, the Kubernetes lane faded because this cluster has none, the services under the HTTP bus and the layer row](img/web-circuit.png)
 
-**Circuit** (in the view switch, next to 2.5D, Flat and Clusters) draws the same cluster as a live circuit: a Slurm lane (login, slurmctld or the
+**Circuit** (the default view; **2.5D (classic)** is the other choice in the view switch, and the Flat style and the Clusters button are gone: the circuit and the zoom below replace them) draws the same cluster as a live circuit: a Slurm lane (login, slurmctld or the
 controller, slurmdbd, CPU and GPU racks) and a Kubernetes lane (kubectl, kube-apiserver, etcd, KWOK, racks), and the services under an HTTP bus. One
 square in a rack is one node (one per 8 nodes above 64); a square that needs attention carries a ▲ and the rack says why in words.
 
@@ -139,7 +139,10 @@ square in a rack is one node (one per 8 nodes above 64); a square that needs att
 
 #### Zoom: Fleet, Cluster, Pool
 
-Under the view switch, a **zoom rail** (− FLEET CLUSTER POOL + TRAFFIC ↗) moves between three levels; Escape zooms out of a pool.
+Above the page's panels, one **zoom rail** (− FLEET CLUSTER POOL TRAFFIC +) is the way up and down. **Traffic** is its deepest stop: the Traffic &
+Communication page of the cluster you are in, with a **Back to the cluster** button, so you never need the left bar to get back. The left bar still opens
+the same pages. Other ways to move: **Ctrl + scroll** (or a pinch on a trackpad) zooms in on the card or rack under the pointer and out from anywhere, **+** and
+**-** step a level, **Escape** steps out of a pool or Traffic. Each move takes about 0.7 s (none under reduced motion) and the old level is gone afterwards.
 
 ![The Pool level: side panel with KPIs, a state bar and filters, and a grid of node tiles](img/web-pool.png)
 

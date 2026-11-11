@@ -13,7 +13,7 @@ import { fitKey, flowSig, loginList } from './geometry.js';
 // ---- global view (#321): levels of detail. `overview` condenses a cluster to one card, `full` is the diagram. ----
 export const OVERVIEW_AT = 24,
   CLUSTER_NAME = 'workbench';  // above this many nodes the page opens at the overview; the user can pin either level
-export const curLevel = () => S.levelPin || (clusterList().length > 1 || nodeList().length > OVERVIEW_AT ? 'overview' : 'full');
+export const curLevel = () => S.levelPin || (clusterList().length > 1 || (!S.circuit && nodeList().length > OVERVIEW_AT) ? 'overview' : 'full');
 export function paintLevelUi() {
   const ov = curLevel() === 'overview';
   paintViewSeg();

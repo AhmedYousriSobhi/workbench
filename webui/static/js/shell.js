@@ -1,6 +1,7 @@
 import { S } from './state.js';
 import { $ } from './util.js';
 import { buildFlow } from './diagram.js';
+import { syncZoom } from './zoom.js';
 import { clusterList, curLevel, enterCluster, paintLevelUi, setLevel } from './overview.js';
 import { dockWide, paintReach } from './inspector.js';
 import { paintConnections } from './connections.js';
@@ -41,8 +42,8 @@ export function setCircuit(on) {  // the Cluster level of the zoom (redesign ste
 }
 export function paintViewSeg() {  // the view switcher (#324): one control for the style (2.5D, flat) and the level (diagram, overview)
   const ov = curLevel() === 'overview', iso = $('trafficpanel').dataset.view === 'iso', cv = !ov && S.circuit;
-  for (const [id, on] of [['vw-iso', !ov && !cv && iso], ['vw-flat', !ov && !cv && !iso], ['vw-cv', cv], ['vw-ov', ov]]) $(id).setAttribute('aria-pressed', on);
-  $('trafficpanel').toggleAttribute('data-circuit', cv); $('cvstack').hidden = !cv || !!S.pool; $('cvcap').hidden = !cv || !!S.pool; if (!cv) $('zoomrail').hidden = true;
+  for (const [id, on] of [['vw-iso', !cv], ['vw-cv', cv]]) $(id).setAttribute('aria-pressed', on);
+  $('trafficpanel').toggleAttribute('data-circuit', cv); $('cvstack').hidden = !cv || !!S.pool; $('cvcap').hidden = !cv || !!S.pool;
 }
 
 // theme: dark first (Midnight) until a choice is remembered; Auto follows the system; storage may be refused
@@ -62,6 +63,7 @@ export function selectTab(t, focus) {
   if ((t === 'nodes' || t === 'traffic') && !document.hidden) openFlow(); else closeFlow();
   if (t === 'conn') paintConnections();
   if (t === 'traffic') paintTraffic();
+  syncZoom();
   try { sessionStorage.setItem('workbench-tab', t); } catch (e) { /* not remembered */ }
 }
 
@@ -83,12 +85,10 @@ export function init2() {
   document.querySelectorAll('#subseg [data-sub]').forEach(b => b.onclick = () => setSub(b.dataset.sub));
   const toDiagram = () => curLevel() === 'overview' ? enterCluster(clusterList()[0]) : 0;
   $('vw-iso').onclick = () => { setCircuit(false); setView(true, true); toDiagram(); };
-  $('vw-flat').onclick = () => { setCircuit(false); setView(false, true); toDiagram(); };
   $('vw-cv').onclick = () => { setCircuit(true); toDiagram(); };
-  $('vw-ov').onclick = () => setLevel('overview', false);
   let viewPref = null; try { viewPref = localStorage.getItem('workbench-view'); } catch (e) { /* default */ }
   setView(viewPref ? viewPref === 'iso' : !matchMedia('(prefers-reduced-motion: reduce), (max-width: 640px)').matches, false);  // default per device: flat under reduced motion and on a phone
-  try { S.circuit = localStorage.getItem('workbench-circuit') === '1'; } catch (e) { /* default */ }
+  try { S.circuit = localStorage.getItem('workbench-circuit') !== '0'; } catch (e) { S.circuit = true; }  // the circuit is the way in; the classic diagram is a choice
   $('nodeswrap').classList.toggle('circuit', S.circuit);
   paintLevelUi();
   let treePref = null; try { treePref = localStorage.getItem('workbench-tree'); } catch (e) { /* default */ }

@@ -75,7 +75,7 @@ function openFor(p) {  // the pop-up each kind of part already has
 
 function rackEl(p, f) {
   const nodes = f.pools[p.pool], [title, lane] = POOLS[p.pool], { per, squares } = rackSquares(nodes);
-  const g = sv('g', { class: 'cv-rack', 'data-ent': lane === 'Slurm' ? 'nodes' : 'k8s-nodes' }), cols = Math.floor((p.w - 32) / 18);
+  const g = sv('g', { class: 'cv-rack', 'data-pool': p.pool, 'data-ent': lane === 'Slurm' ? 'nodes' : 'k8s-nodes' }), cols = Math.floor((p.w - 32) / 18);
   g.append(sv('rect', { class: 'cv-box', x: p.x, y: p.y, width: p.w, height: p.h, rx: 12 }), T('cv-k', p.x + 16, p.y + 24, `${lane === 'Slurm' ? 'SLURM' : 'K8S'} · ${title.toUpperCase()}`));
   squares.forEach((q, i) => {
     const x = p.x + 16 + (i % cols) * 18, y = p.y + 40 + Math.floor(i / cols) * 18, bad = q.state !== 'ok';
