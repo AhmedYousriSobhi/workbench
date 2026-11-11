@@ -5,6 +5,7 @@ import { kindOf } from './svg.js';
 import { dockWide, hidePop, paintInspector } from './inspector.js';
 import { bindCopy, connections } from './connections.js';
 import { setTree } from './shell.js';
+import { nodeSummary } from './nodemodel.js';
 
 export function paintNodeActions(name) {
   const c = JSON.parse(S.lastCluster || '{"nodes":[],"actions":[]}'), n = c.nodes.find(x => x.name === name), fix = new Set(['power-on', 'clear']);
@@ -41,6 +42,11 @@ export async function showNode(name) {
   kv.push(['BMC', `<code>${esc(bm ? bm.address : '')}</code> (HTTPS) with Host header <code>bmc-${esc(name)}</code>, user admin, password in <code>compose/generated/secrets/bmc_credentials</code>`],
     ['IP address', body && body.ip ? `<code>${esc(body.ip)}</code> (fixed; reach it from the login node)` : `run <code>./scripts/benchctl describe node ${esc(name)}</code>`]);
   if (body) kv[kv.findIndex(r => r[0] === 'BMC')] = ['BMC', body.bmc_ip ? `<code>${esc(body.bmc_ip)}:443</code> (HTTPS), user admin, password in <code>compose/generated/secrets/bmc_credentials</code>` : 'none for this node (switched off in Cluster architecture)'];
+  const row = JSON.parse(S.lastCluster || '{"nodes":[]}').nodes.find(x => x.name === name);
+  $('nodesum').innerHTML = nodeSummary(row, body).map(r => `<dt>${esc(r.k)}</dt><dd>${r.code ? `<code>${esc(r.v)}</code>` : esc(r.v)}</dd>`).join('');
+  const reach = cx && row && row.kind !== 'k8s' ? cx.command.replace('<node>', name) : '';
+  $('nodereach').hidden = !reach; $('nodereach-cmd').textContent = reach;
+  $('nodereach-copy').onclick = async () => { try { await navigator.clipboard.writeText(reach); $('nodereach-copy').textContent = 'Copied'; } catch (e) { $('nodereach-copy').textContent = 'Select and copy'; } };
   $('nodeconn').innerHTML = kv.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join(''); bindCopy();
   $('nodetext').textContent = body ? body.text : `Could not read ${name}: ${(await r.json()).detail}`;
 }

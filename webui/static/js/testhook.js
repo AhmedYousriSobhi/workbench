@@ -27,13 +27,14 @@ import * as m_zoom from './zoom.js';
 import * as m_analysis from './analysis.js';
 import * as m_home from './home.js';
 import * as m_homemodel from './homemodel.js';
+import * as m_nodemodel from './nodemodel.js';
 import * as m_testrun from './testrun.js';
 import * as m_testrunmodel from './testrunmodel.js';
 import * as m_pool from './pool.js';
 import * as m_fleet from './fleet.js';
 
 const expose = (name, desc) => { try { Object.defineProperty(window, name, { configurable: true, ...desc }); } catch (e) { console.warn('testhook: cannot expose', name); } };
-for (const ns of [m_blast, m_cluster, m_connections, m_diagram, m_exportdlg, m_flowfeed, m_flowstate, m_focus, m_geometry, m_governor, m_inspector, m_lens, m_nhc, m_node, m_overview, m_plan, m_scenarios, m_shell, m_svg, m_traffic, m_util, m_zoom, m_pool, m_fleet, m_analysis, m_home, m_homemodel, m_testrun, m_testrunmodel, ]) {
+for (const ns of [m_blast, m_cluster, m_connections, m_diagram, m_exportdlg, m_flowfeed, m_flowstate, m_focus, m_geometry, m_governor, m_inspector, m_lens, m_nhc, m_node, m_overview, m_plan, m_scenarios, m_shell, m_svg, m_traffic, m_util, m_zoom, m_pool, m_fleet, m_analysis, m_home, m_homemodel, m_nodemodel, m_testrun, m_testrunmodel, ]) {
   for (const k of Object.keys(ns)) if (!/^init\d*$/.test(k)) expose(k, { get: () => ns[k] });
 }
 for (const k of Object.keys(S)) expose(k, { get: () => S[k], set: v => { S[k] = v; } });
