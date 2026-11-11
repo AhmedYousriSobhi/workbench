@@ -13,7 +13,7 @@ phases:
     goal: Measure real memory so budgets stop being guesses
     items:
       - {name: Measurement tooling, status: done, pr: 28, where: benchctl/measure.py,
-         how: "`benchctl measure run/report` samples host, Docker containers, PSS per process and libvirt domains (read-only), saves JSON, suggests budgets = peak x 1.2."}
+         how: "`benchctl measure run/report` samples host, Docker containers, PSS per process and libvirt domains (read-only), saves JSON, suggests budgets = peak x 1.2. `benchctl measure cgroup` reads a container's memory.stat (shmem, file, anon) and OOM-kill count (issue 455)."}
       - {name: Host baseline, status: partial,
          how: "Idle host and a small Slurm stack were measured (slurmd 5 MiB, slurmctld 13, MariaDB 171). No loaded run with mocks yet."}
       - {name: Budgets replaced by measured values, status: partial, pr: 68, where: profiles/min.yaml,
