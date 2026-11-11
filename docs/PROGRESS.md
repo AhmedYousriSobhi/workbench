@@ -98,7 +98,7 @@ _Measure real memory so budgets stop being guesses._
 
 | Part | Status | How it is built | Where | PR |
 |---|---|---|---|---|
-| Measurement tooling | ✅ Done | `benchctl measure run/report` samples host, Docker containers, PSS per process and libvirt domains (read-only), saves JSON, suggests budgets = peak x 1.2. | `benchctl/measure.py` | #28 |
+| Measurement tooling | ✅ Done | `benchctl measure run/report` samples host, Docker containers, PSS per process and libvirt domains (read-only), saves JSON, suggests budgets = peak x 1.2. `benchctl measure cgroup` reads a container's memory.stat (shmem, file, anon) and OOM-kill count (issue 455). | `benchctl/measure.py` | #28 |
 | Host baseline | 🟡 Partial | Idle host and a small Slurm stack were measured (slurmd 5 MiB, slurmctld 13, MariaDB 171). No loaded run with mocks yet. | - | - |
 | Budgets replaced by measured values | 🟡 Partial | Per-component working sets measured live on 2026-11-05 (benchctl/memory.py MEASURED_MB; the plan expects measured + 15 percent, never above the cap, issue 287); min was measured earlier (0.17 GB, 60 queued jobs) and its profile budget is 1 GB. Docker's own memory (containerd-shims, dockerd) is measured with `benchctl measure overhead --save` and added by the plan (issue 456); per-node parts declare a cost in PER_NODE_MB, tested. | `profiles/min.yaml` | #68 |
 

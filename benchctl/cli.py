@@ -1139,6 +1139,32 @@ def measure_overhead(save: bool = typer.Option(False, "--save", help="keep it as
         typer.echo("keep it for the plan: rerun with --save")
 
 
+CGROUP_DEFAULT = ["mariadb", "prometheus", "teleport"]
+CGROUP_NAMES = typer.Argument(None, help=f"container names (default {' '.join(CGROUP_DEFAULT)}; the compose project prefix is added)")
+
+
+def _mb(b: int) -> str:
+    return f"{b / 1024**2:.0f} MB"
+
+
+@measure_app.command("cgroup")
+def measure_cgroup(name: list[str] = CGROUP_NAMES) -> None:
+    """Per container: memory in use, the tmpfs part (`shmem`), page cache, anon and OOM kills, from its cgroup (read-only, no root). Issue 455: MariaDB moves off tmpfs only if shmem is 50 MB or more."""
+    typer.echo(f"{'container':28}{'current':>9}{'shmem':>9}{'file':>9}{'anon':>9}{'limit':>9}  oom_kill")
+    missing = 0
+    for short in name or CGROUP_DEFAULT:
+        full = f"workbench-{short}-1" if not short.startswith("workbench-") else short
+        m = measure.cgroup_memory(full)
+        if m is None:
+            missing += 1
+            typer.echo(f"{full:28}not running (or its cgroup is not readable)")
+            continue
+        typer.echo(f"{full:28}{_mb(m['current']):>9}{_mb(m['shmem']):>9}{_mb(m['file']):>9}{_mb(m['anon']):>9}"
+                   f"{(_mb(m['limit']) if m['limit'] else 'none'):>9}  {m['oom_kill']}")
+    if missing:
+        raise typer.Exit(1)
+
+
 APP_MATCH = typer.Option(None, "--match", help="process name or command-line text of the app (repeatable)")
 APP_PID = typer.Option(None, "--pid", help="a process id of the app (repeatable)")
 APP_SAVE = typer.Option(False, "--save", help="keep the suggested reserve as this machine's default (compose/generated, gitignored)")
