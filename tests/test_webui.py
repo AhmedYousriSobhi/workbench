@@ -192,7 +192,7 @@ def served_page(base: str) -> bytes:
     """What a browser gets: the page, its stylesheet and every module in the import graph from main.js, fetched over
     HTTP (so a file the page needs but the server does not serve fails here), as one blob."""
     if base not in _SERVED:
-        parts = [req(base, "/")[1], req(base, "/static/app.css")[1]]
+        parts = [req(base, "/")[1], req(base, "/static/app.css")[1], req(base, "/static/canvas.css")[1]]
         seen, todo = set(), ["main.js"]
         while todo:
             name = todo.pop()
@@ -210,15 +210,17 @@ def test_page_has_the_app_shell(ui):
     for needle in ('class="skip"', '<main id="main"', 'id="govdlg"', 'id="scndlg"',
                    'id="theme"', 'id="strip"', 'id="attn"', 'id="list"', 'id="flow"', 'id="viewseg"', 'id="crumb"', 'id="ovprev"'):
         assert needle in body, needle
-    assert 'rel="stylesheet" href="/static/app.css"' in body and 'type="module" src="/static/js/main.js"' in body
+    assert 'rel="stylesheet" href="/static/app.css"' in body and 'rel="stylesheet" href="/static/canvas.css"' in body and 'type="module" src="/static/js/main.js"' in body
     assert "prefers-reduced-motion" in req(ui, "/static/app.css")[1].decode()  # the stylesheet is served too
 
 
 def test_static_files_need_the_token_and_have_the_right_type(ui):
     """ADR 0007: the stylesheet and the ES modules are static files behind the same token as the page."""
-    for path in ("/static/app.css", "/static/js/main.js", "/static/js/state.js"):
+    font = "/static/fonts/inter-latin-wght-normal.woff2"
+    for path in ("/static/app.css", "/static/canvas.css", "/static/js/main.js", "/static/js/state.js", font):
         assert req(ui, path, auth=False)[0] == 401, path
-    for path, kind in (("/static/app.css", "text/css"), ("/static/js/main.js", "text/javascript")):
+    assert req(ui, "/static/fonts/LICENSE-Inter.txt")[0] == 404  # only the font files are served, not their licence texts
+    for path, kind in (("/static/app.css", "text/css"), ("/static/canvas.css", "text/css"), ("/static/js/main.js", "text/javascript"), (font, "font/woff2")):
         r = urllib.request.Request(ui + path, headers={"Authorization": f"Bearer {TOKEN}"})
         with urllib.request.urlopen(r, timeout=5) as resp:
             assert resp.headers["Content-Type"].split(";")[0] == kind and resp.headers["Cache-Control"] == "no-cache", path
