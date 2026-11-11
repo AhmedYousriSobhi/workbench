@@ -286,3 +286,46 @@ def app_summary(samples: list[tuple[int, int]]) -> dict[str, int]:
     peak = sizes[-1]
     return {"samples": len(samples), "peak": peak, "typical": sizes[len(sizes) // 2],
             "processes": max(n for _, n in seen), "suggested_mb": suggest_app_mb(peak)}
+
+
+CGROUP_KEYS = ("anon", "file", "shmem", "slab")
+CGROUP_ROOT = Path("/sys/fs/cgroup")
+
+
+def parse_flat_keyed(text: str) -> dict[str, int]:
+    """`key value` lines (memory.stat, memory.events) as a dict."""
+    out = {}
+    for line in text.splitlines():
+        k, _, v = line.partition(" ")
+        if v.strip().isdigit():
+            out[k] = int(v)
+    return out
+
+
+def container_cgroup(name: str, runner=checks.run, root: Path = CGROUP_ROOT) -> Path | None:
+    """The container's cgroup directory on the host (systemd or cgroupfs driver), readable without root."""
+    r = runner(["docker", "inspect", "-f", "{{.Id}}", name])
+    cid = r.stdout.strip() if r.returncode == 0 else ""
+    for path in (root / "system.slice" / f"docker-{cid}.scope", root / "docker" / cid):
+        if cid and path.is_dir():
+            return path
+    return None
+
+
+def cgroup_memory(name: str, runner=checks.run, root: Path = CGROUP_ROOT) -> dict[str, int] | None:
+    """Bytes in use (`current`), the tmpfs part (`shmem`), page cache (`file`), `anon`, the limit and the OOM-kill count of one container."""
+    path = container_cgroup(name, runner, root)
+    if path is None:
+        return None
+    def read(f: str) -> str:
+        try:
+            return (path / f).read_text()
+        except OSError:
+            return ""
+    stat, events = parse_flat_keyed(read("memory.stat")), parse_flat_keyed(read("memory.events"))
+    current, limit = read("memory.current").strip(), read("memory.max").strip()
+    out = {k: stat.get(k, 0) for k in CGROUP_KEYS}
+    out["current"] = int(current) if current.isdigit() else 0
+    out["limit"] = int(limit) if limit.isdigit() else 0
+    out["oom_kill"] = events.get("oom_kill", 0)
+    return out
