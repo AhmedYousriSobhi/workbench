@@ -214,28 +214,27 @@
     <div class="sheet-f"><p id="exp-msg" role="status" class="small"></p><button class="btn small" id="exp-cancel">Cancel</button><button class="btn" id="exp-go">Download bench-profile.json</button></div>
   </dialog>
   <dialog id="plandlg" class="sheet" aria-labelledby="plan-h">
-    <div class="sheet-h"><div><h2 id="plan-h">Cluster architecture</h2><p class="dim small">Choose the Slurm and Kubernetes nodes, the login nodes and the optional parts. The summary shows what it costs in memory. Check that it fits, then apply.</p></div>
+    <div class="sheet-h"><div><h2 id="plan-h">Cluster architecture</h2><p class="dim small">Choose nodes, login nodes and parts. Review the changes and the memory cost, then apply.</p></div>
       <button class="btn small" id="plan-close" aria-label="Close the plan">✕ Close</button></div>
     <div class="sheet-b plan-grid">
       <div class="plan-main">
         <section class="pcard" aria-labelledby="pc-slurm-h"><header class="pch"><h3 id="pc-slurm-h">Slurm cluster</h3><span class="pbadge" id="pc-slurm-sum"></span></header>
-          <div class="prow"><div class="plab"><label for="pl-cpu">CPU nodes</label><span class="small dim" id="pl-shape-cpu"></span></div><div class="stpin"><button type="button" class="btn small" data-step="pl-cpu" data-d="-1" aria-label="Fewer cpu nodes">−</button><input type="number" id="pl-cpu" min="0" max="64" value="4"><button type="button" class="btn small" data-step="pl-cpu" data-d="1" aria-label="More cpu nodes">+</button></div></div>
+          <div class="prows"><div class="prow"><div class="plab"><label for="pl-cpu">CPU nodes</label><span class="small dim" id="pl-shape-cpu"></span></div><div class="stpin"><button type="button" class="btn small" data-step="pl-cpu" data-d="-1" aria-label="Fewer cpu nodes">−</button><input type="number" id="pl-cpu" min="0" max="64" value="4"><button type="button" class="btn small" data-step="pl-cpu" data-d="1" aria-label="More cpu nodes">+</button></div></div>
           <div class="prow"><div class="plab"><label for="pl-gpu">GPU nodes</label><span class="small dim" id="pl-shape-gpu"></span></div><div class="stpin"><button type="button" class="btn small" data-step="pl-gpu" data-d="-1" aria-label="Fewer gpu nodes">−</button><input type="number" id="pl-gpu" min="0" max="16" value="2"><button type="button" class="btn small" data-step="pl-gpu" data-d="1" aria-label="More gpu nodes">+</button></div></div>
-          <div class="prow"><div class="plab"><label for="pl-gpus">GPUs per GPU node</label><span class="small dim" id="pl-now-gpus"></span></div><div class="stpin"><button type="button" class="btn small" data-step="pl-gpus" data-d="-1" aria-label="Fewer gpus per gpu node">−</button><input type="number" id="pl-gpus" min="1" max="8" value="8"><button type="button" class="btn small" data-step="pl-gpus" data-d="1" aria-label="More gpus per gpu node">+</button></div></div>
+          <div class="prow"><div class="plab"><label for="pl-gpus">GPUs per GPU node</label><span class="small dim" id="pl-now-gpus"></span></div><div class="stpin"><button type="button" class="btn small" data-step="pl-gpus" data-d="-1" aria-label="Fewer gpus per gpu node">−</button><input type="number" id="pl-gpus" min="1" max="8" value="8"><button type="button" class="btn small" data-step="pl-gpus" data-d="1" aria-label="More gpus per gpu node">+</button></div></div></div>
         </section>
         <section class="pcard" id="pc-k8s" aria-labelledby="pc-k8s-h"><header class="pch"><h3 id="pc-k8s-h">Kubernetes cluster</h3><span class="pbadge" id="pc-k8s-sum"></span>
             <label class="tog pswitch"><input type="checkbox" id="pl-kon"><span>Enabled</span></label></header>
-          <p class="small dim pnote" id="pc-k8s-off">Off. Turn it on for a real control plane (API server, etcd, scheduler) with simulated KWOK nodes, about 0.9 GB.</p>
-          <div id="pc-k8s-body">
+          <p class="small dim pnote" id="pc-k8s-off">Off. On: a real control plane with simulated KWOK nodes (pods never run), about 0.9 GB.</p>
+          <div id="pc-k8s-body" class="prows">
           <div class="prow"><div class="plab"><label for="pl-kcpu">CPU nodes</label><span class="small dim" id="pl-shape-kcpu"></span></div><div class="stpin"><button type="button" class="btn small" data-step="pl-kcpu" data-d="-1" aria-label="Fewer cpu nodes">−</button><input type="number" id="pl-kcpu" min="0" max="64" value="2"><button type="button" class="btn small" data-step="pl-kcpu" data-d="1" aria-label="More cpu nodes">+</button></div></div>
           <div class="prow"><div class="plab"><label for="pl-kgpu">GPU nodes</label><span class="small dim" id="pl-shape-kgpu"></span></div><div class="stpin"><button type="button" class="btn small" data-step="pl-kgpu" data-d="-1" aria-label="Fewer gpu nodes">−</button><input type="number" id="pl-kgpu" min="0" max="16" value="2"><button type="button" class="btn small" data-step="pl-kgpu" data-d="1" aria-label="More gpu nodes">+</button></div></div>
-          <p class="small dim pnote">Kubernetes nodes are separate from the Slurm nodes. Pods never really run on them (KWOK).</p></div>
+          </div>
         </section>
         <section class="pcard" id="pl-logins" aria-labelledby="pc-login-h"><header class="pch"><h3 id="pc-login-h">Login nodes</h3><span class="pbadge" id="pl-loginmb"></span></header>
-          <p class="small dim pnote">Each login node has a way in (SSH key, Teleport or both) and serves a scheduler: an <b>s-login</b> has the Slurm tools, a <b>k-login</b> has kubectl, a shared login has both.</p>
-          <div class="presets" role="group" aria-label="Login layouts"><button type="button" class="btn small" id="pl-lg-one">One shared login</button><button type="button" class="btn small" id="pl-lg-split">Separate s-login and k-login</button></div>
+          <p class="small dim pnote">Way in: SSH key, Teleport or both. Serves: <b>s-login</b> Slurm tools, <b>k-login</b> kubectl, shared both.</p>
+          <div class="presets" role="group" aria-label="Login layouts"><button type="button" class="btn small" id="pl-lg-one">One shared login</button><button type="button" class="btn small" id="pl-lg-split">Separate s-login and k-login</button><button type="button" class="btn small" id="pl-loginadd">＋ Add login node</button></div>
           <div id="pl-loginrows"></div>
-          <button type="button" class="btn small" id="pl-loginadd">＋ Add login node</button>
           <p class="small dim pnote" id="pl-loginnote"></p></section>
         <section class="pcard" aria-labelledby="pc-parts-h"><header class="pch"><h3 id="pc-parts-h">Optional parts</h3><span class="pbadge">memory each adds</span></header>
           <div class="toggles" id="pl-parts"></div>
@@ -247,6 +246,10 @@
           <p class="small dim pnote">Slurm, Prometheus and Grafana are always on.</p></section>
       </div>
       <div class="plan-side" role="region" aria-label="Summary">
+        <section class="fit review" aria-labelledby="pl-rev-h"><h3 class="psh" id="pl-rev-h">Review changes</h3>
+          <ul class="revlines" id="pl-review"></ul>
+          <div class="revjobs" id="pl-jobs" role="status" hidden></div>
+          <label class="tog revack" id="pl-ackrow" hidden><input type="checkbox" id="pl-ack"><span id="pl-ack-t"></span></label></section>
         <section class="fit" aria-label="Your cluster"><h3 class="psh">Your cluster</h3>
           <dl class="psum" id="pl-sum"></dl></section>
         <section class="fit" aria-label="Does it fit"><div class="fitnum"><b id="pl-need">–</b><span class="dim small" id="pl-free"></span></div>

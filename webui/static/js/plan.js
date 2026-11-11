@@ -4,6 +4,7 @@ import { KIND_NAME, KIND_TEXT } from './geometry.js';
 import { kindOf } from './svg.js';
 import { nodeList } from './inspector.js';
 import { loadCluster } from './cluster.js';
+import { jobsWarning, planDiff, reviewLines } from './planmodel.js';
 
 export async function loadPlan() {
   const parts = [...document.querySelectorAll('#pl-parts input:checked')].map(i => i.value).join(',');
@@ -20,11 +21,37 @@ export async function loadPlan() {
   $('pl-bar').value = Math.min(100, Math.round(100 * p.need_mb / Math.max(p.available_mb, 1)));  // the number admission compares with free memory, not the caps
   $('pl-msg').textContent = (p.fits ? '✓ ' : '✗ ') + p.message;
   $('pl-need').textContent = (p.need_mb / 1024).toFixed(1) + ' GB needed'; $('pl-need').title = `expected use ${p.expected_mb} MB` + (p.running_mb ? `, minus ${p.running_mb} MB already running` : '') + `; the containers may reach ${p.total_mb} MB in total (their caps). Your app is counted as already running (0 MB); benchctl reserves 4096 MB for it unless you pass --app-mb 0.`; $('pl-free').textContent = ` of ${(p.available_mb / 1024).toFixed(1)} GB free`;
-  const c = currentSize(), d = (name, a, b) => a === b ? `${name} ${b} (no change)` : `${name} ${a} → ${b} (${b > a ? '+' : ''}${b - a})`;
-  $('pl-diff').textContent = c.cpu + c.gpu ? d('CPU nodes', c.cpu, +$('pl-cpu').value) + ' · ' + d('GPU nodes', c.gpu, +$('pl-gpu').value) : '';
+  paintReview();
   $('pl-cmd').textContent = p.fits ? p.command : 'Does not fit. Change the selection, or free memory.';
-  $('pl-copy').hidden = !p.fits; $('pl-apply').hidden = !p.fits; S.planQuery = q.toString();
+  $('pl-copy').hidden = !p.fits; $('pl-apply').hidden = !p.fits; S.planQuery = q.toString(); syncApply();
   $('pl-copy').onclick = async () => { try { await navigator.clipboard.writeText(p.command); $('pl-copy').textContent = 'Copied'; } catch (e) { $('pl-copy').textContent = 'Select and copy'; } setTimeout(() => { $('pl-copy').textContent = 'Copy command'; }, 1500); };
+}
+// Review changes (U6): what Apply will add, remove and restart, and whether removing a node stops jobs. Computed in the browser from the
+// cluster the page already holds and the Slurm node states read when the sheet opened (planmodel.js).
+export function planWanted() {
+  const n = id => +$(id).value || 0, sh = S.shapes || {};
+  return { nodes: nodeList(), want: { cpu: n('pl-cpu'), gpu: n('pl-gpu'), kcpu: n('pl-kcpu'), kgpu: n('pl-kgpu'), k8s: k8sOn() },
+    prefixes: { cpu: (sh.slurm_cpu || {}).prefix || 'cn', gpu: (sh.slurm_gpu || {}).prefix || 'gpu', kcpu: (sh.k8s_cpu || {}).prefix || 'kcn', kgpu: (sh.k8s_gpu || {}).prefix || 'kgpu' },
+    states: S.planStates || null, partsNow: S.partsNow || new Set(), partsWant: new Set([...document.querySelectorAll('#pl-parts input:checked')].map(i => i.value)),
+    labels: S.partLabels || {}, loginsNow: S.loginsNow || [], loginsWant: S.loginModes.map((m, i) => loginName(i)) };
+}
+export function paintReview() {
+  if (!S.partsDrawn) return;
+  const d = planDiff(planWanted()), j = jobsWarning(d);
+  $('pl-review').innerHTML = reviewLines(d).map(l => `<li class="rev-${l.kind}"><b class="revk"><span aria-hidden="true">${l.icon}</span> ${esc(l.label)}</b><span>${esc(l.text)}</span></li>`).join('');
+  const box = $('pl-jobs'); box.hidden = !j;
+  if (j) { box.className = 'revjobs ' + j.kind; box.innerHTML = `<b><span aria-hidden="true">${j.icon}</span> ${esc(j.title)}</b><span class="small">${esc(j.text)}</span>`; }
+  $('pl-ackrow').hidden = !(j && j.needsAck); if (!(j && j.needsAck)) $('pl-ack').checked = false;
+  if (j && j.needsAck) $('pl-ack-t').textContent = `I understand jobs will stop on ${planDiff(planWanted()).jobs.nodes.join(', ')}`;
+  syncApply();
+}
+export function syncApply() {  // Apply waits for the tick when a removal stops running jobs
+  const j = jobsWarning(planDiff(planWanted())), need = !!(j && j.needsAck && !$('pl-ack').checked);
+  $('pl-apply').disabled = need || !!S.applying; $('pl-apply').title = need ? 'Tick "I understand" first: running jobs will stop' : '';
+}
+export async function readStates() {  // one sinfo through the governor (cached 4 s on the server); null when it gives no answer
+  try { const s = (await (await fetch('/api/slurm-stats')).json()).stats; S.planStates = s && s.node_states ? s.node_states : null; } catch (e) { S.planStates = null; }
+  paintReview();
 }
 export const k8sInput = () => document.querySelector('#pl-parts input[value="k8s"]'),
   k8sOn = () => !!(k8sInput() && k8sInput().checked);
@@ -92,11 +119,12 @@ export async function drawParts() {  // the options come from the backend regist
     $('pl-parts').querySelectorAll('label').forEach(l => { if (l.querySelector('input[value="k8s"]')) l.hidden = true; });  // Kubernetes has its own card
     $('pl-parts').querySelectorAll('.partgroup').forEach(g => { if (![...g.querySelectorAll('label')].some(l => !l.hidden)) g.hidden = true; });
     $('pl-parts').querySelectorAll('input').forEach(i => i.oninput = i.onchange = () => { showBmcNodes(); planInputs(); });
+    S.partsNow = new Set(j.parts.filter(x => x.on).map(x => x.id)); S.partLabels = Object.fromEntries(j.parts.map(x => [x.id, x.label]));
     S.shapes = j.shapes || {}; const sb = S.shapes.bmc || {}; S.bmcOn = new Set(sb.groups || BMC_GROUPS.map(g => g[0]));  // what is built now; nothing saved means every group
     S.bmcOff = new Set(); if (sb.nodes) { const keep = new Set(sb.nodes); S.bmcSaved = keep; }
     $('pl-bmcmb').textContent = S.bmcMb = j.bmc_node_mb;
     const lg = j.logins;  // an older page backend does not send it: the parts above still work, the login rows are hidden
-    if (lg) { S.loginModes = [...(lg.now || ['ssh'])]; S.loginMax = lg.max; drawLogins(); syncTeleport(); }
+    if (lg) { S.loginModes = [...(lg.now || ['ssh'])]; S.loginsNow = S.loginModes.map((m, i) => loginName(i)); S.loginMax = lg.max; drawLogins(); syncTeleport(); }
     else { $('pl-loginadd').disabled = true; $('pl-loginrows').textContent = 'Login nodes need the newer page backend. Run ./scripts/benchctl stop, then ./scripts/benchctl start, and reload.'; }
     $('pl-ctl').checked = !!(S.shapes.controller || {}).enabled;
     $('pl-bcmk8s').checked = !!(S.shapes.bcm || {}).manage_kubernetes || !S.shapes.bcm;
@@ -113,7 +141,7 @@ export async function openPlan() {
   $('pl-shape-kcpu').textContent = node(sh.k8s_cpu); $('pl-shape-kgpu').textContent = sh.k8s_gpu && sh.k8s_gpu.gpus ? `${sh.k8s_gpu.gpus} × ${(sh.k8s_gpu.gpu_type || '').toUpperCase()}, ${sh.k8s_gpu.cpus} CPUs each` : '';
   $('pl-now-gpus').textContent = c.gpus ? `now ${c.gpus}` : '';
   if (S.bmcSaved) { S.bmcOff = new Set(bmcNames().filter(n => !S.bmcSaved.has(n))); S.bmcSaved = null; }  // a saved node list shows as exceptions
-  $('pl-apply-msg').textContent = ''; S.armed = 0; paintPlanSummary(); $('plandlg').showModal(); loadPlan();
+  $('pl-apply-msg').textContent = ''; S.armed = 0; paintPlanSummary(); $('plandlg').showModal(); loadPlan(); S.planStates = null; readStates();
 }
 
 export function init() {
@@ -125,6 +153,7 @@ export function init() {
   $('pl-kon').onchange = () => { const k = k8sInput(); if (k) k.checked = $('pl-kon').checked; if (!$('pl-kon').checked) { S.loginModes = S.loginModes.map(m => entryKind(m) === 'k8s' ? entryOf(entryAuth(m), 'slurm') : m); drawLogins(); } syncTeleport(); planInputs(); };
   $('pl-loginadd').onclick = () => { if (S.loginModes.length < S.loginMax) { S.loginModes.push('ssh'); drawLogins(); loginsChanged(); } };
   $('pl-bcmk8s').onchange = $('pl-ctl').onchange = () => planInputs();
+  $('pl-ack').onchange = syncApply;
 
 }
 
@@ -138,22 +167,22 @@ export function init3() {
   $('pl-apply').onclick = async () => {
     if (!S.armed) {  // first press asks; the second one (within 8 s) applies
       S.armed = Date.now(); $('pl-apply').textContent = 'Confirm: rebuild now';
-      $('pl-apply-msg').textContent = 'Nodes you no longer want are removed. Press again to apply.';
+      $('pl-apply-msg').textContent = $('pl-review').textContent.includes('Removes') ? 'Review the changes above: removed nodes lose their jobs. Press again to apply.' : 'Press again to apply.';
       setTimeout(() => { if (S.armed && Date.now() - S.armed >= 8000) { S.armed = 0; $('pl-apply').textContent = 'Apply to the running workbench'; $('pl-apply-msg').textContent = ''; } }, 8100);
       return;
     }
     S.armed = 0; $('pl-apply').textContent = 'Apply to the running workbench';
     const before = new Set(S.lastLog.filter(l => l.includes('apply-plan')));
-    $('pl-apply').disabled = true; $('pl-apply-msg').textContent = 'Asking the governor…';
+    S.applying = true; $('pl-apply').disabled = true; $('pl-apply-msg').textContent = 'Asking the governor…';
     const r = await fetch('/api/plan/apply?' + S.planQuery, { method: 'POST', headers: H });
     const j = await r.json();
-    if (!r.ok) { $('pl-apply-msg').textContent = '✗ ' + j.detail; $('pl-apply').disabled = false; return; }
+    if (!r.ok) { $('pl-apply-msg').textContent = '✗ ' + j.detail; S.applying = false; syncApply(); return; }
     $('pl-apply-msg').textContent = (j.started ? '▶ ' : '▲ ') + j.message;
-    if (!j.started) { $('pl-apply').disabled = false; return; }
+    if (!j.started) { S.applying = false; syncApply(); return; }
     const t0 = Date.now(), timer = setInterval(() => {
       const done = S.lastLog.find(l => l.includes('apply-plan') && /: (done|FAILED)|^FAILED /.test(l) && !before.has(l));
       if (done || Date.now() - t0 > 600000) {
-        clearInterval(timer); $('pl-apply').disabled = false;
+        clearInterval(timer); S.applying = false; syncApply(); readStates();
         $('pl-apply-msg').textContent = done ? (done.includes('FAILED') ? '✗ ' : '✓ ') + done : '▲ Still running after 10 minutes: check Governor activity.';
         S.connCache = null; S.lastCluster = ''; loadCluster();  // new parts or nodes: Connections and node panels read again (U4)
       } else { S.lastCluster = ''; loadCluster(); }
