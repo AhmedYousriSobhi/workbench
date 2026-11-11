@@ -23,9 +23,12 @@ import * as m_shell from './shell.js';
 import * as m_svg from './svg.js';
 import * as m_traffic from './traffic.js';
 import * as m_util from './util.js';
+import * as m_zoom from './zoom.js';
+import * as m_pool from './pool.js';
+import * as m_fleet from './fleet.js';
 
 const expose = (name, desc) => { try { Object.defineProperty(window, name, { configurable: true, ...desc }); } catch (e) { console.warn('testhook: cannot expose', name); } };
-for (const ns of [m_blast, m_cluster, m_connections, m_diagram, m_exportdlg, m_flowfeed, m_flowstate, m_focus, m_geometry, m_governor, m_inspector, m_lens, m_nhc, m_node, m_overview, m_plan, m_scenarios, m_shell, m_svg, m_traffic, m_util, ]) {
+for (const ns of [m_blast, m_cluster, m_connections, m_diagram, m_exportdlg, m_flowfeed, m_flowstate, m_focus, m_geometry, m_governor, m_inspector, m_lens, m_nhc, m_node, m_overview, m_plan, m_scenarios, m_shell, m_svg, m_traffic, m_util, m_zoom, m_pool, m_fleet, ]) {
   for (const k of Object.keys(ns)) if (!/^init\d*$/.test(k)) expose(k, { get: () => ns[k] });
 }
 for (const k of Object.keys(S)) expose(k, { get: () => S[k], set: v => { S[k] = v; } });

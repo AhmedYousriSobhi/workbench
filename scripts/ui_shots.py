@@ -26,7 +26,7 @@ SYNTH_GRAPH = graph.build(
     [{"name": n, "kind": "compute"} for n in ("cn001", "cn002", "cn003", "cn004")] + [{"name": n, "kind": "gpu"} for n in ("gpu001", "gpu002")],
     [{"name": "login", "mode": "both"}, {"name": "login2", "mode": "teleport"}])
 SYNTH_CLUSTER = SYNTH_CLUSTER.replace("actions: [", "graph: " + json.dumps(SYNTH_GRAPH) + ", blast: " + json.dumps(blast.payload()) + ", actions: [", 1)
-TEST_HOOK = "window.__WB_TEST = true"  # main.js then exposes its modules as globals (webui/static/js/testhook.js) so the checks below can call them by name
+TEST_HOOK = "window.__WB_TEST = true; try { localStorage.setItem('workbench-circuit', '0'); } catch (e) {}"  # (the classic diagram: the circuit is the default and has its own checks) main.js then exposes its modules as globals (webui/static/js/testhook.js) so the checks below can call them by name
 VIEWPORTS = {"desktop": (1280, 900), "phone": (390, 800)}
 
 
@@ -105,9 +105,38 @@ def check_circuit(page) -> list[str]:
     if not f["faded"] or f["lit"] or not f["opacity"]:
         bad.append(f"the Access layer does not isolate its wires: {f}")
     page.click("#cvstack button[data-layer=all]")
-    page.click("#vw-flat")
+    bad += check_zoom(page)
+    page.click("#vw-iso")
     if page.evaluate("document.getElementById('flow').dataset.cv") is not None:
         bad.append("leaving the circuit left it on")
+    return bad
+
+
+def check_zoom(page) -> list[str]:
+    """The zoom (webui/static/js/zoom.js): Cluster to Pool to Fleet and back. After each move exactly one layer is shown and the others
+    are out of layout and inert, so a level never stays visible or clickable behind the one that replaced it. Returns the problems found."""
+    bad = []
+    probe = """() => Object.fromEntries([['fleet', '#fleetview'], ['cluster', '#trafficpanel > .flowscroll'], ['pool', '#poolview']].map(([k, s]) => {
+        const e = document.querySelector(s); return [k, e.hidden || getComputedStyle(e).display === 'none' ? (e.inert ? 'gone' : 'hidden but not inert') : 'shown']; }))"""
+
+    def only(level, step):
+        page.wait_for_timeout(1100)  # the move takes 0.7 s
+        got = page.evaluate(probe)
+        if any((v == "shown") != (k == level) or (v != "shown" and v != "gone") for k, v in got.items()):
+            bad.append(f"after {step} only the {level} layer should show: {got}")
+
+    if not page.locator("#flow .cv-rack .hit").count():
+        return bad  # a cluster with no nodes has no pool to open
+    page.locator("#flow .cv-rack .hit").first.dispatch_event("click")
+    only("pool", "opening a rack")
+    if not page.locator(".pv-tile").count() or not page.locator(".pv-filters button").count():
+        bad.append("the pool level drew no tiles or filters")
+    page.keyboard.press("Escape")
+    only("cluster", "Escape in the pool")
+    page.click("#zoomrail [data-level=fleet]")
+    only("fleet", "the FLEET stop")
+    page.click(".fl-card .fl-head")
+    only("cluster", "opening a card")
     return bad
 
 
@@ -357,15 +386,12 @@ def capture(out: Path) -> dict:
                     if page.evaluate("document.querySelectorAll('#flow [data-ldim]').length"):
                         result["a11y"].append("lens All planes left parts dimmed")
                     page.locator("#flow g[data-ent='login']").dblclick(); page.wait_for_timeout(200)  # focus again for the checks below
-                    page.click("#vw-flat"); page.wait_for_timeout(200)  # the view switcher (#324): style and level change, the focus stays
-                    if page.evaluate("focusId") != "login" or page.get_attribute("#trafficpanel", "data-view") != "flat" or page.get_attribute("#vw-flat", "aria-pressed") != "true":
-                        result["a11y"].append("switching to the flat view lost the focus or did not change the style")
-                    page.click("#vw-ov"); page.wait_for_timeout(300)
-                    if not page.locator("#flow .ovcard").count() or page.get_attribute("#vw-ov", "aria-pressed") != "true":
-                        result["a11y"].append("the Overview button of the view switcher did not open the overview")
+                    page.click("#vw-cv"); page.wait_for_timeout(300)  # the view switcher: the circuit and the classic diagram; the focus stays
+                    if page.evaluate("focusId") != "login" or page.get_attribute("#vw-cv", "aria-pressed") != "true":
+                        result["a11y"].append("switching to the circuit lost the focus or did not change the view")
                     page.click("#vw-iso"); page.wait_for_timeout(400)
-                    if page.locator("#flow .nd").count() != 6 or page.get_attribute("#trafficpanel", "data-view") != "iso":
-                        result["a11y"].append("the 2.5D button of the view switcher did not return to the diagram in 2.5D")
+                    if page.locator("#flow .nd").count() != 6 or page.get_attribute("#vw-iso", "aria-pressed") != "true":
+                        result["a11y"].append("the classic button of the view switcher did not return to the 2.5D diagram")
                     page.locator("#flow g[data-ent='login']").dblclick(); page.wait_for_timeout(200)  # focus again for the Esc check
                     page.keyboard.press("Escape"); page.wait_for_timeout(200)
                     if page.evaluate("document.querySelectorAll('#flow [data-dim]').length") or page.evaluate("focusId"):

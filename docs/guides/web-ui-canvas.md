@@ -46,3 +46,17 @@ focus, blast radius and the lens work on it. Do not draw a pulse for a link noth
 node --test "webui/tests/js/circuitlayout.test.mjs"   # same template for every cluster, greyed parts, controller variants, racks, layers
 .venv/bin/python scripts/ui_shots.py                    # in a browser: wires, titles, absent parts greyed, one layer isolated at a time
 ```
+
+## The zoom: Fleet, Cluster and Pool
+
+`zoom.js` owns the level (`levelNow()`: `fleet`, `cluster`, `pool`, `traffic`; `infraLevel()` is the same without Traffic) and the move between levels (`zoomTo(level, {origin, pool, cluster})`, ADR 0040). Fleet
+is `fleet.js` + `fleetlayout.js`, Pool is `pool.js` + `poollayout.js` (the pure parts are tested with `node --test`). To show a new fact on a card or
+tile add it to the pure module first and say "not measured" where the page has no data; never default a missing number to 0. After any move exactly one
+layer is visible and the others are `hidden` and `inert`; `syncZoom()` is the one place that decides that, so call it (not `hidden = ...`) after a state change.
+
+```bash
+node --test "webui/tests/js/poollayout.test.mjs"   # paging, filters, KPIs, state bar, GPU bars, card health and structure
+.venv/bin/python scripts/ui_shots.py                 # in a browser: one layer shown after opening a rack, Escape, the FLEET stop, opening a card
+```
+
+The page's width must not depend on the view: never size `.cols` or `#nodeswrap` from a view's content. `ui_shots.py` does not catch a width jump, so look at Fleet, Cluster and Pool at two window widths after a layout change.

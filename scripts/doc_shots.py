@@ -34,7 +34,7 @@ try:
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page(viewport={"width": 1280, "height": 900}, color_scheme="light")
-        pg.add_init_script("window.__WB_TEST = true")  # exposes the page modules as globals (webui/static/js/testhook.js)
+        pg.add_init_script("window.__WB_TEST = true; try { localStorage.setItem('workbench-circuit', '0'); } catch (e) {}")  # exposes the page modules as globals (webui/static/js/testhook.js)
         pg.route("**/api/cluster", lambda r: r.fulfill(json=cluster))
         pg.route("**/api/flow*", lambda r: r.abort())
         pg.route("**/api/connections", lambda r: r.fulfill(json={"entities": connections.entities(SIM)}))
@@ -49,7 +49,7 @@ try:
         pg.click("#nd-gpu001"); pg.wait_for_selector("#pop dl"); pg.wait_for_timeout(500); pg.screenshot(path=str(OUT / "web-architecture-popup.png")); pg.keyboard.press("Escape")
         pg.evaluate("setLevel('overview', false)"); pg.wait_for_timeout(500); pg.mouse.move(420, 480); pg.wait_for_timeout(250); pg.screenshot(path=str(OUT / "web-global-view.png")); pg.mouse.move(2, 2); pg.evaluate("setLevel('full', false)"); pg.wait_for_timeout(500)  # the global view (#321)
         pg.evaluate("setTree(false, false)"); pg.wait_for_timeout(400); pg.screenshot(path=str(OUT / "web-architecture-wide.png")); pg.evaluate("setTree(true, false)"); pg.wait_for_timeout(300)
-        pg.click("#vw-cv"); pg.wait_for_selector("#flow[data-cv] .cv-box"); pg.wait_for_timeout(600); pg.add_style_tag(content="header.top{position:static!important}"); pg.locator("#trafficpanel").screenshot(path=str(OUT / "web-circuit.png")); pg.click("#vw-flat"); pg.wait_for_timeout(300)
+        pg.click("#vw-cv"); pg.wait_for_selector("#flow[data-cv] .cv-box"); pg.wait_for_timeout(600); pg.add_style_tag(content="header.top{position:static!important}"); pg.locator("#trafficpanel").screenshot(path=str(OUT / "web-circuit.png")); pg.evaluate("zoomTo('pool', {pool: 'sg'})"); pg.wait_for_timeout(1100); pg.locator("#trafficpanel").screenshot(path=str(OUT / "web-pool.png")); pg.evaluate("zoomTo('fleet')"); pg.wait_for_timeout(1100); pg.locator("#trafficpanel").screenshot(path=str(OUT / "web-fleet.png")); pg.evaluate("sessionStorage.removeItem('workbench-level'); setCircuit(false); setView(false, false)"); pg.wait_for_timeout(300)
         pg.click("#tb-conn"); pg.wait_for_selector("#conn-rows tr td code"); pg.wait_for_timeout(300)
         pg.locator("#conn-rows tr[data-id='teleport']").scroll_into_view_if_needed()
         pg.evaluate("document.querySelector('#conn-rows tr[data-id=teleport]').classList.add('focus')")

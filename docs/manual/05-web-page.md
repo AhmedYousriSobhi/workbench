@@ -125,7 +125,7 @@ workbench (`benchctl start --login ssh,teleport,both`, or the Login nodes rows o
 
 ![The Circuit view: Slurm lane with its racks, the Kubernetes lane faded because this cluster has none, the services under the HTTP bus and the layer row](img/web-circuit.png)
 
-**Circuit** (in the view switch, next to 2.5D, Flat and Clusters) draws the same cluster as a live circuit: a Slurm lane (login, slurmctld or the
+**Circuit** (the default view; **2.5D (classic)** is the other choice in the view switch, and the Flat style and the Clusters button are gone: the circuit and the zoom below replace them) draws the same cluster as a live circuit: a Slurm lane (login, slurmctld or the
 controller, slurmdbd, CPU and GPU racks) and a Kubernetes lane (kubectl, kube-apiserver, etcd, KWOK, racks), and the services under an HTTP bus. One
 square in a rack is one node (one per 8 nodes above 64); a square that needs attention carries a ▲ and the rack says why in words.
 
@@ -136,6 +136,24 @@ square in a rack is one node (one per 8 nodes above 64); a square that needs att
 - **Layers** (the row under the drawing) show one plane at a time: Access, Control, Data, Monitoring or Management. The other wires fade to 10 %.
 - Click a part or a square for its details, as in the other views. Focus (double-click or **F**), the lens and the blast radius work here too.
 - The node list folds away while Circuit is on, so the drawing has the width; choosing another view brings it back.
+
+#### Zoom: Fleet, Cluster, Pool
+
+Above the page's panels, one **zoom rail** (− FLEET CLUSTER POOL TRAFFIC +) is the way up and down. **Traffic** is its deepest stop: the Traffic &
+Communication page of the cluster you are in, with a **Back to the cluster** button, so you never need the left bar to get back. The left bar still opens
+the same pages. Other ways to move: **Ctrl + scroll** (or a pinch on a trackpad) zooms in on the card or rack under the pointer and out from anywhere, **+** and
+**-** step a level, **Escape** steps out of a pool or Traffic. Each move takes about 0.7 s (none under reduced motion) and the old level is gone afterwards.
+
+![The Pool level: side panel with KPIs, a state bar and filters, and a grid of node tiles](img/web-pool.png)
+
+- **Pool**: click a rack's **N nodes ›** button. The side panel says what feeds the pool, how many nodes are in service, the average GPU use and a bar of node
+  states; filters show All, Busy, Idle or Needs attention. Tiles (16 a page) show the node's state in words, its busy GPUs and temperature, and a heartbeat
+  wire. What the page cannot measure says "not measured" (a CPU pool has no Busy or Idle filter). **Wire in Traffic ↗** opens the Traffic tab.
+- **Fleet**: one card per cluster with health, what it has (Slurm, Kubernetes, controller, accounting), nodes in service, requests a minute, a square per
+  node for each lane, and a footer: only the monitoring client connects to a cluster. Click a card to open it. Only the running cluster has a request rate.
+
+![The Fleet level: a card per cluster](img/web-fleet.png)
+
 
 ## Teleport from the page
 

@@ -3,6 +3,7 @@ import { applyFocus, focusOn, tagEntities } from './focus.js';
 import { applyBlast } from './blast.js';
 import { applyLens } from './lens.js';
 import { $ } from './util.js';
+import { refreshZoom, syncZoom } from './zoom.js';
 import { buildCircuit, circuitSignature, paintCircuit } from './circuit.js';
 import { buildOverview, curLevel, refreshOverview, setLevel } from './overview.js';
 import { STATE_ICON } from './cluster.js';
@@ -11,9 +12,9 @@ import { at, curve, dpath, poly, sv } from './svg.js';
 import { CLIENT_INFO, asButton, clusterNow, nodeList, openPop } from './inspector.js';
 import { KIND_NAME, MODE_TEXT, SVC_ICON, SVC_METHOD, UF, fitKey, fitText, flowFit, flowGeom, flowSig, loginAddr, loginKind, loginList, loginRuns, portLine, stackUp, textW } from './geometry.js';
 
-export function buildFlow() { buildFlowBase(); tagEntities(); applyFocus(); applyBlast(); applyLens(); }
+export function buildFlow() { buildFlowBase(); tagEntities(); applyFocus(); applyBlast(); applyLens(); syncZoom(); }
 export function buildFlowBase() {
-  if (curLevel() === 'overview') { delete $('flow').dataset.cv; buildOverview(); return; }
+  if (curLevel() === 'overview') { if (S.circuit) { S.flowNodes = flowSig(nodeList()); S.flowFitKey = fitKey(); return; } delete $('flow').dataset.cv; buildOverview(); return; }  // in the Circuit view the Fleet level is its own layer (zoom.js)
   if (S.circuit) { buildCircuit(); S.cvSig = circuitSignature(); return; }
   $('ovtable').innerHTML = ''; delete $('flow').dataset.ov; delete $('flow').dataset.cv;
   const g = $('flow'), nodes = nodeList(), lgs = loginList(), svcs = svcList().filter(x => x[0] !== 'teleport'), tpBox = svcList().find(x => x[0] === 'teleport');
@@ -163,13 +164,13 @@ export const tileFacts = n => n.kind === 'k8s' ? ['KWOK', n.gpus ? `${n.gpus} GP
 export function paintTiles() {  // node states change without a rebuild; a different node list does rebuild
   const nodes = nodeList(), sig = flowSig(nodes);
   if (sig !== S.flowNodes || fitKey() !== S.flowFitKey) { buildFlow(); return; }
-  if (curLevel() === 'overview') { refreshOverview(); return; }
-  if (S.circuit) { if (circuitSignature() !== S.cvSig) buildFlow(); else paintCircuit(); return; }
+  if (curLevel() === 'overview') { if (S.circuit) refreshZoom(); else refreshOverview(); return; }
+  if (S.circuit) { if (circuitSignature() !== S.cvSig) buildFlow(); else { paintCircuit(); refreshZoom(); } return; }
   for (const n of nodes) { const t = S.tiles[n.name]; if (t) { t.g.setAttribute('aria-label', `${n.name}: ${n.label}. Details`); t.g.children[0].setAttribute('class', 'nd ' + n.state); t.g.children[2].textContent = STATE_ICON[n.state] || '?'; t.g.children[3].setAttribute('class', 'busy' + (n.gpus_busy > 0 ? ' on' : '')); const [fa, fb] = tileFacts(n); t.g.children[4].textContent = fa; if (t.g.children[6]) t.g.children[6].textContent = fb; t.g.children[5].setAttribute('class', 'ndc ' + n.state); } }
 }
 export function paintBlocks() {
-  if (curLevel() === 'overview') { refreshOverview(); return; }
-  if (S.circuit) { if (circuitSignature() !== S.cvSig) buildFlow(); else paintCircuit(); return; }
+  if (curLevel() === 'overview') { if (S.circuit) refreshZoom(); else refreshOverview(); return; }
+  if (S.circuit) { if (circuitSignature() !== S.cvSig) buildFlow(); else { paintCircuit(); refreshZoom(); } return; }
   if (!S.flowSnap || !S.svcPos['bmc-farm']) return;
   const rate = {}, cut = Date.now() - 60000;
   S.recent = S.recent.filter(r => r.t > cut); S.recent.forEach(r => { rate[r.to] = (rate[r.to] || 0) + r.n; });
@@ -197,7 +198,7 @@ export function flowNote() {
 export function init() {
   $('crumb-all').onclick = () => setLevel('overview', false);
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && S.focusId && curLevel() === 'full' && !S.openNode && $('ckey').hidden && $('pop').hidden && !document.querySelector('dialog[open]:not(.drawer)')) { focusOn(null); return; }
-    if (e.key === 'Escape' && S.dived && curLevel() === 'full' && !S.openNode && $('ckey').hidden && $('pop').hidden && !document.querySelector('dialog[open]:not(.drawer)')) setLevel('overview', false); });
+    if (e.key === 'Escape' && S.focusId && !S.pool && curLevel() === 'full' && !S.openNode && $('ckey').hidden && $('pop').hidden && !document.querySelector('dialog[open]:not(.drawer)')) { focusOn(null); return; }
+    if (e.key === 'Escape' && S.dived && !S.pool && curLevel() === 'full' && !S.openNode && $('ckey').hidden && $('pop').hidden && !document.querySelector('dialog[open]:not(.drawer)')) setLevel('overview', false); });
 
 }
