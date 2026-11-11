@@ -20,7 +20,7 @@ build-backend = "setuptools.build_meta"
 packages = ["benchctl", "governor", "webui"]
 
 [tool.setuptools.package-data]
-webui = ["static/*"]
+webui = ["static/*", "static/js/*", "static/fonts/*"]
 
 [tool.ruff]
 line-length = 100

@@ -640,3 +640,11 @@ def test_shared_status_makes_one_governor_call_per_ttl_however_many_streams_ask(
         got = await asyncio.gather(*[s.get() for _ in range(50)])
         assert len(calls) == 2 and all(g == {"level": 2} for g in got)
     asyncio.run(run())
+
+
+def test_every_static_folder_is_packaged():
+    """A non-editable install ships only the files `package-data` names: a new folder under static/ must be listed."""
+    import tomllib
+    listed = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["setuptools"]["package-data"]["webui"]
+    folders = {p.name for p in (ROOT / "webui" / "static").iterdir() if p.is_dir()}
+    assert {"js"} <= folders and [f for f in folders if f"static/{f}/*" not in listed] == []
