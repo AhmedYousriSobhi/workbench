@@ -48,6 +48,22 @@ def traffic_route(calls=[0]):  # noqa: B006  sample /api/traffic data whose coun
                             "streams": streams, "recent": sorted(recent) if k == 1 else []})
     return answer
 
+
+def capture_route():  # sample /api/capture answers: a few Slurm messages and one the parser cannot read
+    import time as _t
+
+    def answer(route):
+        url, now = route.request.url, _t.time()
+        if url.endswith(("/api/capture/start", "/api/capture/stop")):
+            return route.fulfill(json={"ok": True, "node": "gpu001", "seconds": 300, "running": False})
+        base = {"peer": "10.141.255.1", "peer_name": "slurmctld", "port": 6818, "version": 11520, "flags": 0}
+        msgs = [{**base, "t": now - 6, "dir": "in", "size": 120, "type": "REQUEST_PING", "type_id": 1008, "kind": "request", "latency_ms": None, "body_length": 8},
+                {**base, "t": now - 5.99, "dir": "out", "size": 70, "type": "RESPONSE_SLURM_RC", "type_id": 8001, "kind": "response", "latency_ms": 9.5, "body_length": 4},
+                {**base, "t": now - 3, "dir": "out", "size": 940, "type": "MESSAGE_NODE_REGISTRATION_STATUS", "type_id": 1002, "kind": "message", "latency_ms": None, "port": 6817, "body_length": 900},
+                {"t": now - 1, "dir": "in", "peer": "10.141.0.9", "peer_name": "login", "port": 6818, "size": 63, "type": "unknown", "type_id": None, "kind": "unknown", "latency_ms": None, "note": "the header does not parse as a Slurm 26.05.5 message"}]
+        route.fulfill(json={"ok": True, "running": True, "node": "gpu001", "messages": msgs, "next": 4, "ended": None, "error": None, "seconds_left": 262, "class": "P5"})
+    return answer
+
 port = 8199
 proc = subprocess.Popen([sys.executable, "-m", "webui", str(port)], cwd=ROOT, stdout=subprocess.PIPE, text=True)
 try:
@@ -70,7 +86,7 @@ try:
         pg.click("#nd-gpu001"); pg.wait_for_selector("#pop dl"); pg.wait_for_timeout(500); pg.screenshot(path=str(OUT / "web-architecture-popup.png")); pg.keyboard.press("Escape")
         pg.evaluate("setLevel('overview', false)"); pg.wait_for_timeout(500); pg.mouse.move(420, 480); pg.wait_for_timeout(250); pg.screenshot(path=str(OUT / "web-global-view.png")); pg.mouse.move(2, 2); pg.evaluate("setLevel('full', false)"); pg.wait_for_timeout(500)  # the global view (#321)
         pg.evaluate("setTree(false, false)"); pg.wait_for_timeout(400); pg.screenshot(path=str(OUT / "web-architecture-wide.png")); pg.evaluate("setTree(true, false)"); pg.wait_for_timeout(300)
-        pg.click("#vw-cv"); pg.wait_for_selector("#flow[data-cv] .cv-box"); pg.wait_for_timeout(600); pg.add_style_tag(content="header.top{position:static!important}"); pg.locator("#trafficpanel").screenshot(path=str(OUT / "web-circuit.png")); pg.evaluate("zoomTo('pool', {pool: 'sg'})"); pg.wait_for_timeout(1100); pg.locator("#trafficpanel").screenshot(path=str(OUT / "web-pool.png")); pg.evaluate("zoomTo('fleet')"); pg.wait_for_timeout(1100); pg.locator("#trafficpanel").screenshot(path=str(OUT / "web-fleet.png")); pg.route("**/api/traffic*", traffic_route()); pg.evaluate("zoomTo('cluster'); zoomTo('traffic')"); pg.wait_for_timeout(8500); pg.locator("#tan").screenshot(path=str(OUT / "web-traffic-analysis.png")); pg.unroute("**/api/traffic*"); pg.evaluate("zoomTo('fleet')"); pg.wait_for_timeout(1100); pg.evaluate("sessionStorage.removeItem('workbench-level'); setCircuit(false); setView(false, false)"); pg.wait_for_timeout(300)
+        pg.click("#vw-cv"); pg.wait_for_selector("#flow[data-cv] .cv-box"); pg.wait_for_timeout(600); pg.add_style_tag(content="header.top{position:static!important}"); pg.locator("#trafficpanel").screenshot(path=str(OUT / "web-circuit.png")); pg.evaluate("zoomTo('pool', {pool: 'sg'})"); pg.wait_for_timeout(1100); pg.locator("#trafficpanel").screenshot(path=str(OUT / "web-pool.png")); pg.evaluate("zoomTo('fleet')"); pg.wait_for_timeout(1100); pg.locator("#trafficpanel").screenshot(path=str(OUT / "web-fleet.png")); pg.route("**/api/traffic*", traffic_route()); pg.evaluate("zoomTo('cluster'); zoomTo('traffic')"); pg.wait_for_timeout(8500); pg.locator("#tan").screenshot(path=str(OUT / "web-traffic-analysis.png")); pg.route("**/api/capture/*", capture_route()); pg.evaluate("location.hash = 'workbench-gpu001'"); pg.wait_for_timeout(3500); pg.locator("#an-focus").screenshot(path=str(OUT / "web-wire-capture.png")); pg.evaluate("history.replaceState(null, '', location.pathname + location.search)"); pg.wait_for_timeout(300); pg.unroute("**/api/capture/*"); pg.unroute("**/api/traffic*"); pg.evaluate("zoomTo('fleet')"); pg.wait_for_timeout(1100); pg.evaluate("sessionStorage.removeItem('workbench-level'); setCircuit(false); setView(false, false)"); pg.wait_for_timeout(300)
         pg.click("#tb-conn"); pg.wait_for_selector("#conn-rows tr td code"); pg.wait_for_timeout(300)
         pg.locator("#conn-rows tr[data-id='teleport']").scroll_into_view_if_needed()
         pg.evaluate("document.querySelector('#conn-rows tr[data-id=teleport]').classList.add('focus')")

@@ -154,12 +154,38 @@ export function perSecond(recent, key, now, spanS = 120) {
   for (const r of recent) { if (`${r[1]}|${r[2]}|${r[3]}` !== key) continue; const i = spanS - 1 - Math.floor(now - r[0]); if (i >= 0 && i < spanS) bins[i] += 1; }
   return bins;
 }
-// What can be said of a node's wire: only the documented wiring. Per-node counters do not exist (a node name in a path is masked as {id}).
+// What can be said of a node's wire without a capture: only the documented wiring. Per-node counters do not exist (a node name in a path is
+// masked as {id}); the messages come from an on-demand capture (the governor, class P5): tcpdump in a Slurm node, the API audit log for a Kubernetes node.
 export function wireFacts(node) {
   if (!node) return null;
   const k8s = node.kind === 'k8s';
   return {
+    source: k8s ? 'k8s' : 'slurm',
     links: k8s ? [{ to: 'KWOK', what: 'reports the node to the Kubernetes API', plane: 'k8s' }] : [{ to: 'BMC farm', what: 'Redfish: power, temperature, fans', plane: 'management' }, { to: 'slurmctld', what: 'Slurm control: state and jobs', plane: 'control' }],
-    capture: 'Not captured. The mocks record the path shape of each request but mask a node name as {id}, so this wire\'s own messages cannot be told apart from the other nodes\'.',
+    sourceText: k8s ? 'Kubernetes API audit events about this node: its lease and node object and its pods (who asked, what, how it ended; no bodies).'
+      : 'Slurm messages seen by tcpdump inside this node on ports 6817 and 6818: direction, size, timing and the type from the message header (no bodies).',
   };
 }
+
+// ---- a capture: rows, the decoded message, the tube -----------------------------------------------------------------------------
+export const clockOf = t => { const d = new Date(t * 1000); return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0'); };
+const side = m => m.dir === 'in' ? 'to the node' : 'from the node';
+export function captureRow(m) {
+  return { time: m.t == null ? '' : clockOf(m.t), arrow: m.dir === 'in' ? '→' : '←', side: side(m), type: m.type, peer: m.peer_name || m.peer || 'unknown peer',
+    size: m.size == null ? '' : `${m.size} B`, latency: m.latency_ms == null ? '' : `${m.latency_ms} ms`, result: m.result == null ? '' : String(m.result), unknown: m.kind === 'unknown' };
+}
+// The decoded view of one message: what the header or the audit event said, never a body. Missing facts are left out, not made up.
+export function decodeFields(m) {
+  if (!m) return [];
+  const f = [['Message', m.type], ['Direction', side(m)], ['Peer', [m.peer_name, m.peer].filter(Boolean).join(' · ') || 'unknown'], ['Service port', m.port == null ? null : String(m.port)]];
+  if (m.type_id != null) f.push(['Slurm type number', String(m.type_id)]);
+  if (m.version != null) f.push(['Protocol version', `${m.version >> 8} (${m.version})`]);
+  if (m.flags != null) f.push(['Flags', '0x' + m.flags.toString(16).padStart(4, '0')]);
+  if (m.body_length != null) f.push(['Body length', `${m.body_length} B`]);
+  if (m.size != null) f.push(['Message size', `${m.size} B`]);
+  for (const [k, v] of [['Object', m.object], ['Asked by', m.who], ['Result', m.result == null ? null : String(m.result)], ['Answered in', m.latency_ms == null ? null : `${m.latency_ms} ms`], ['Note', m.note]]) if (v) f.push([k, v]);
+  return f.filter(x => x[1] !== null && x[1] !== undefined);
+}
+export const shortType = t => String(t).replace(/^(REQUEST|RESPONSE|MESSAGE)_/, '').replace(/_/g, ' ').toLowerCase();
+// The tube: the newest messages in each direction, requests to the node on one lane and what the node sends on the other.
+export const tubeLanes = (msgs, n = 5) => ({ toNode: msgs.filter(m => m.dir === 'in').slice(-n), fromNode: msgs.filter(m => m.dir === 'out').slice(-n) });

@@ -302,3 +302,22 @@ def test_api_requests_sums_the_counter_and_is_none_when_unreadable(monkeypatch):
     assert k8s.api_requests() is None
     monkeypatch.setattr(k8s, "api_json", lambda *a, **kw: "# no counter yet\n")
     assert k8s.api_requests() is None
+
+
+def test_the_api_audit_log_is_narrow_metadata_only_on_stdout_and_bounded(tmp_path):
+    """issue 505: the on-demand capture reads the audit log, so it is enabled, but only for what a node's wire carries and never with a body."""
+    policy = yaml.safe_load(k8s.AUDIT_POLICY)
+    assert policy["kind"] == "Policy" and "RequestReceived" in policy["omitStages"]
+    levels = [r["level"] for r in policy["rules"]]
+    assert levels == ["Metadata", "None"] and policy["rules"][-1] == {"level": "None"}  # everything not listed is not logged
+    listed = {res for r in policy["rules"] for g in r.get("resources", []) for res in g["resources"]}
+    assert listed == {"nodes", "nodes/status", "pods", "pods/status", "pods/binding", "leases"} and not any("secret" in x or "configmap" in x for x in listed)
+    assert "Request" not in levels and "RequestResponse" not in levels  # no bodies
+    api = compose.generate(SIM, {"groups": ["core", "k8s"]})["services"]["k8s-apiserver"]
+    assert "--audit-log-path=-" in api["command"] and any(a.startswith("--audit-policy-file=") and a.endswith("/audit-policy.yaml") for a in api["command"])
+    assert api["logging"]["options"] == {"max-size": "5m", "max-file": "2"}  # Docker keeps at most 10 MB of the audit log
+    k8s.prepare(SIM, addressing.plan(SIM), tmp_path / "s", tmp_path / "st")
+    assert (tmp_path / "s" / "audit-policy.yaml").read_text() == k8s.AUDIT_POLICY and (tmp_path / "s" / "audit-policy.yaml").stat().st_mode & 0o777 == 0o600
+    (tmp_path / "s" / "audit-policy.yaml").write_text("old")
+    k8s.prepare(SIM, addressing.plan(SIM), tmp_path / "s", tmp_path / "st")
+    assert (tmp_path / "s" / "audit-policy.yaml").read_text() == k8s.AUDIT_POLICY  # a cluster made before this gets it on its next start
