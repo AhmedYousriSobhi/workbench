@@ -63,7 +63,7 @@ def test_dots_move_in_a_real_browser_and_pause(ui, tmp_path):  # noqa: F811
         page = browser.new_page(viewport={"width": 1100, "height": 900})
         errors = []
         page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
-        page.add_init_script("window.__WB_TEST = true; try { localStorage.setItem('workbench-circuit', '0'); } catch (e) {}")  # the module globals (flowEs below) and the classic diagram and list: the circuit is the default view
+        page.add_init_script("window.__WB_TEST = true; try { localStorage.setItem('workbench-circuit', '0'); sessionStorage.getItem('workbench-tab') || sessionStorage.setItem('workbench-tab', 'nodes'); } catch (e) {}")  # the module globals (flowEs below) and the classic diagram and list: the circuit is the default view
         page.goto(f"{base}/login?token={token}")
         page.wait_for_selector("#fb-jira-mock.up")  # block turns green once the feed reports it reachable
         shot = {"done": False}

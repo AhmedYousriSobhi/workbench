@@ -47,6 +47,10 @@ the quick facts:
 Healthy cards are quiet; warning, fault and off cards are tinted and bold, so what needs you stands out. Slurm node
 states and CPU load are not shown, because the page has no Docker access by design; use `benchctl describe node NAME`.
 
+## Overview: where the page opens
+
+The page opens on **Overview**, the first item of the left nav. It answers four questions without a click: is everything up (**Needs attention**, the same list as the top strip, or "All clear"), what do I want to do (three cards: **Run a test** opens Scenarios, **Break one thing** opens Topology to choose a node, **Connect your client** opens Export), how is each node (a card with its state as an icon and words, and a load bar only where the GPU exporter measured one; a node with no reading says "no live reading"), and which services answer (each tagged real or simulated). Pressing a node card, or **Open gpu001** in an attention line, opens that node in **Topology** (the workspace formerly called Infrastructure). Overview adds no polling of its own.
+
 ## Infrastructure architecture
 
 The **Infrastructure architecture** is the main view: everything on it is a part you can point at.

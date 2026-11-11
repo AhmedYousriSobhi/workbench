@@ -20,6 +20,7 @@ import { init as init_pool } from './pool.js';
 import { init as init_fleet } from './fleet.js';
 import { init as init_zoom } from './zoom.js';
 import { init as init_analysis } from './analysis.js';
+import { init as init_home } from './home.js';
 
 init_governor();
 init_plan();
@@ -47,3 +48,4 @@ init_pool();
 init_fleet();
 init_zoom();
 init_analysis();
+init_home();

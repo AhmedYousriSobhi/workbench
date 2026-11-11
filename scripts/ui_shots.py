@@ -26,7 +26,7 @@ SYNTH_GRAPH = graph.build(
     [{"name": n, "kind": "compute"} for n in ("cn001", "cn002", "cn003", "cn004")] + [{"name": n, "kind": "gpu"} for n in ("gpu001", "gpu002")],
     [{"name": "login", "mode": "both"}, {"name": "login2", "mode": "teleport"}])
 SYNTH_CLUSTER = SYNTH_CLUSTER.replace("actions: [", "graph: " + json.dumps(SYNTH_GRAPH) + ", blast: " + json.dumps(blast.payload()) + ", actions: [", 1)
-TEST_HOOK = "window.__WB_TEST = true; try { localStorage.setItem('workbench-circuit', '0'); } catch (e) {}"  # (the classic diagram: the circuit is the default and has its own checks) main.js then exposes its modules as globals (webui/static/js/testhook.js) so the checks below can call them by name
+TEST_HOOK = "window.__WB_TEST = true; try { localStorage.setItem('workbench-circuit', '0'); sessionStorage.getItem('workbench-tab') || sessionStorage.setItem('workbench-tab', 'nodes'); } catch (e) {}"  # (the classic diagram: the circuit is the default and has its own checks) main.js then exposes its modules as globals (webui/static/js/testhook.js) so the checks below can call them by name
 VIEWPORTS = {"desktop": (1280, 900), "phone": (390, 800)}
 
 
@@ -141,6 +141,33 @@ def check_zoom(page) -> list[str]:
 
 
 _POLL_CHECKED = False
+
+
+def check_home(page) -> list[str]:
+    """Overview (webui/static/js/home.js): one card per node with its state in words, the three start cards, services with real or
+    simulated, and a node card opens that node in Topology. Returns the problems found."""
+    bad = []
+    page.click("#tb-home")
+    page.wait_for_selector("#home-nodes .hn", state="visible")
+    if page.locator("#tab-home").is_hidden() or page.locator("#tab-nodes").is_visible():
+        bad.append("Overview should be the only workspace shown")
+    if page.locator("#home-nodes .hn").count() != page.evaluate("lastCl.nodes.length"):
+        bad.append("Overview shows a different number of node cards than the snapshot has nodes")
+    if page.locator("#home-nodes .hn .pill").evaluate_all("els => els.some(e => !e.textContent.trim().replace(/[^A-Za-z]/g, ''))"):
+        bad.append("a node card shows its state without words")
+    if page.locator(".home-start .hcard").count() != 3 or not page.locator("#home-svcs .hs .tag").count():
+        bad.append("Overview lacks the start cards or the services row")
+    if page.locator("#home-attn-list li").count() < 1:
+        bad.append("Needs attention shows neither an item nor the all-clear line")
+    if page.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth"):
+        bad.append("Overview scrolls sideways")
+    first = page.locator("#home-nodes .hn").first.get_attribute("data-open")
+    page.locator("#home-nodes .hn").first.click()
+    page.wait_for_selector("#nodepane", state="visible")
+    if page.locator("#tab-home").is_visible() or first not in page.inner_text("#nodetitle"):
+        bad.append("a node card did not open that node in Topology")
+    page.click("#node-back")
+    return bad
 
 
 def check_analysis(page) -> list[str]:
@@ -302,6 +329,12 @@ def capture(out: Path) -> dict:
                         result["a11y"].append("theme toggle did not switch to dark")
                     for problem in check_circuit(page):
                         result["a11y"].append(f"circuit {vp} {scheme}: {problem}")
+                    for problem in check_home(page):
+                        result["a11y"].append(f"overview {vp} {scheme}: {problem}")
+                    hpath = out / f"overview-{vp}-{scheme}.png"
+                    page.click("#tb-home")
+                    page.screenshot(path=str(hpath), full_page=True)
+                    result["shots"].append(str(hpath))
                     page.click("#tb-traffic")  # documented links, real or simulated, observed or configured
                     page.wait_for_selector("#tr-rows tr td:nth-child(3)", state="attached")
                     for problem in check_analysis(page):

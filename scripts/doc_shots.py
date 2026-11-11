@@ -71,7 +71,7 @@ try:
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page(viewport={"width": 1280, "height": 900}, color_scheme="light")
-        pg.add_init_script("window.__WB_TEST = true; try { localStorage.setItem('workbench-circuit', '0'); } catch (e) {}")  # exposes the page modules as globals (webui/static/js/testhook.js)
+        pg.add_init_script("window.__WB_TEST = true; try { localStorage.setItem('workbench-circuit', '0'); sessionStorage.getItem('workbench-tab') || sessionStorage.setItem('workbench-tab', 'nodes'); } catch (e) {}")  # exposes the page modules as globals (webui/static/js/testhook.js)
         pg.route("**/api/cluster", lambda r: r.fulfill(json=cluster))
         pg.route("**/api/flow*", lambda r: r.abort())
         pg.route("**/api/connections", lambda r: r.fulfill(json={"entities": connections.entities(SIM)}))
