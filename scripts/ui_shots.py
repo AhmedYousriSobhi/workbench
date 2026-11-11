@@ -491,6 +491,16 @@ def capture(out: Path) -> dict:
                     page.wait_for_function("document.querySelector('#pl-msg').textContent.length > 5")
                     page.click("[data-step=pl-cpu][data-d='-1']")
                     page.wait_for_function("document.querySelector('#pl-cmd').textContent.includes('--cpu-nodes') || document.querySelector('#pl-cmd').textContent.startsWith('Does not fit')")
+                    page.wait_for_function("document.querySelector('#pl-review').textContent.includes('Removes')")  # 6d: the review names what Apply removes and restarts
+                    rv = page.evaluate("({lines: document.querySelector('#pl-review').textContent, jobs: !document.querySelector('#pl-jobs').hidden, apply: document.querySelector('#pl-apply').disabled})")
+                    if "cn004" not in rv["lines"] or "slurmctld" not in rv["lines"] or not rv["jobs"]:
+                        result["a11y"].append(f"plan review ({vp} {scheme}): {rv}")
+                    page.evaluate("planStates = {cn004: 'allocated'}; paintReview()")  # a removed node with jobs: the tick gates Apply
+                    ak = page.evaluate("({row: !document.querySelector('#pl-ackrow').hidden, blocked: document.querySelector('#pl-apply').disabled, stop: document.querySelector('#pl-jobs').className.includes('stop')})")
+                    page.check("#pl-ack")
+                    if not (ak["row"] and ak["blocked"] and ak["stop"]) or page.evaluate("document.querySelector('#pl-apply').disabled"):
+                        result["a11y"].append(f"plan review: running jobs must block Apply until ticked ({vp} {scheme}): {ak}")
+                    page.evaluate("planStates = null; paintReview()")
                     ppath = out / f"plan-{vp}-{scheme}.png"
                     page.screenshot(path=str(ppath))
                     result["shots"].append(str(ppath))

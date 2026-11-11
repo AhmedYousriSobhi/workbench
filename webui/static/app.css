@@ -494,3 +494,19 @@
 #runcli { margin:var(--sp3) 0; } #runcli code { word-break:break-all; }
 .trun #expects p { white-space:normal; } .trun #expects p, .trun #runcli, .trun #run-eye td { overflow-wrap:anywhere; } .trun ul.steps { max-height:none; } .trun ul.steps li { grid-template-columns:auto minmax(0,1fr); } .trun ul.steps li > div { min-width:0; overflow-wrap:anywhere; } ul.steps li.cur { background:color-mix(in srgb,var(--accent) 12%,transparent); border-radius:6px; } .trun h3.rh { margin:var(--sp4) 0 var(--sp2); font-size:1rem; }
 @media (max-width:860px) { .trun { grid-template-columns:minmax(0,1fr); } .trun ul.scns { max-height:38vh; } }
+
+  .revlines { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:var(--sp2); font-size:13.5px; } .revlines li { display:flex; gap:var(--sp3); align-items:baseline; }
+  .revk { flex:0 0 84px; font-weight:650; } .rev-add .revk { color:var(--ok); } .rev-remove .revk { color:var(--bad); } .rev-restart .revk { color:var(--accent); }
+  .revjobs { margin-top:var(--sp3); padding:var(--sp3); border:1px solid var(--line); border-radius:10px; display:flex; flex-direction:column; gap:var(--sp1); } .revjobs.stop { border-color:var(--bad); } .revjobs.unknown { border-color:var(--warn); }
+  .revack { margin-top:var(--sp2); font-size:13.5px; }
+
+  /* compact configuration (6d): steppers side by side, tighter cards, a collapsed Kubernetes card when off */
+  .plan-main { gap:var(--sp3); } .pcard { padding:var(--sp3) var(--sp4); gap:var(--sp2); border-radius:12px; } .pch h3 { font-size:15px; }
+  .prows { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:var(--sp2) var(--sp4); } .prows .prow { flex-direction:column; align-items:stretch; flex-wrap:nowrap; gap:4px; } .prows .prow .stpin { flex:0 0 auto; }
+  .prows .plab label { font-size:13px; } .prows .plab .small { font-size:12px; min-height:1.2em; }
+  .pcard.off #pc-k8s-body { display:none; } .pcard.off { padding-block:var(--sp2); }
+  .presets { display:flex; flex-wrap:wrap; gap:var(--sp2); } .lrow { padding:var(--sp2) var(--sp3); margin-bottom:var(--sp1); }
+  .plan-side { gap:var(--sp3); } .fit { padding:var(--sp3); } .sheet-b.plan-grid { gap:var(--sp3); }
+  .lopts { gap:var(--sp2) var(--sp4); align-items:flex-start; }
+  .lopt .seg button { white-space:nowrap; }
+  .lrow { grid-template-columns:4rem 1fr auto; gap:var(--sp2); } .lrow .nm small { display:none; } .lopts { gap:var(--sp2) var(--sp3); } .lopt .seg button { padding:0 9px; min-height:36px; }
