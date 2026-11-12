@@ -353,6 +353,7 @@ def capture(out: Path) -> dict:
                                 raise
                             time.sleep(0.3)
                     page.wait_for_timeout(2000)
+                    page.wait_for_function("typeof setTree === 'function'", timeout=15000)  # main.js loads the test hook after its own imports
                     page.evaluate("setTree(true, false)")  # a 1280 px window starts with the list folded; the checks below look at the list
                     for problem in check_wire(page):
                         result["a11y"].append(f"wire component {vp} {scheme}: {problem}")

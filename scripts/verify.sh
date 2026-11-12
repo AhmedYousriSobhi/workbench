@@ -107,6 +107,9 @@ else
     if [ "$revalidate" = 0 ] && age=$(stamp_fresh); then echo "SKIP  validate.sh  (passed ${age}s ago for this exact tree; --revalidate runs it again)"
     else step "validate.sh" ./scripts/validate.sh; fi
   fi
+  # the tests start their own stacks: a cluster running with your selection would meet them half way (issue 535)
+  step "clean start (benchctl down)" ./scripts/benchctl down --yes
+  for f in $SELECTION_FILES; do rm -f "$f"; done
   sel=(); [ -n "$only" ] && sel=(-k "$only") || { [ "$full" = 0 ] && sel=(-k "not stack"); }
   [ "$nobrowser" = 1 ] && sel+=(-m "not browser")
   step "real tests ${sel[*]:-}" ./scripts/real-test.sh "${sel[@]}"
