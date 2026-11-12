@@ -1,0 +1,6 @@
+name: auth-teleport-cert-expiry
+ref: SC-31
+description: "alice's Teleport identity file (compose/generated/secrets/teleport/identity/alice) is re-signed to live 60 s, so after that the login node refuses it as expired (the client says login needed); at 180 s it is signed again with the normal life. Needs --with teleport; the Teleport outage scenario of issue 209 is separate."
+steps:
+  - {at: 0s,   target: auth, do: {teleport_cert_ttl: {user: alice, ttl: 60s}}}
+  - {at: 180s, target: auth, do: {teleport_cert_restore: [alice]}}
