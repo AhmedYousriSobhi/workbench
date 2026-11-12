@@ -43,6 +43,17 @@ def _no_host_tools(request, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _plain_help_text(monkeypatch):
+    """Typer forces terminal styling when GITHUB_ACTIONS, FORCE_COLOR or PY_COLORS is set (read at import), which puts escape codes in
+    the help text the tests match on. The first CI run showed it (#473)."""
+    try:
+        from typer import rich_utils
+    except ImportError:
+        return
+    monkeypatch.setattr(rich_utils, "FORCE_TERMINAL", None)
+
+
+@pytest.fixture(autouse=True)
 def _no_teleport_from_this_machine(monkeypatch):
     """The page shows Teleport when the workbench last built has it (compose/generated/workbench.yaml). A developer's own
     build must not change what a test sees; a test that wants Teleport sets webui.cluster.teleport_built itself."""
