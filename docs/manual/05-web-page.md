@@ -281,6 +281,10 @@ The last column, **Open**, has one-click actions for the parts that have one:
 
 The page never opens a terminal itself (it has no Docker or root access, W-3). A part with nothing to open shows "none".
 
+## Text size
+
+Text is sized in `rem`, so the browser's own font-size setting (and zoom) scales it; running text is at least 14 px at the default setting. The diagrams' labels are drawn in fixed units inside the picture and scale with the picture, not with that setting.
+
 ## Content-Security-Policy
 
 The page and its files are served with a strict Content-Security-Policy: scripts and styles only from the page's own origin, no inline script or style, no framing, no objects. If you add a template, set sizes through classes or the `data-w`, `data-flex`, `data-p` and `data-bg` attributes (`paintDyn` applies them); a `style="..."` attribute is blocked and a test fails. The help pages (`/help`) are not covered yet.

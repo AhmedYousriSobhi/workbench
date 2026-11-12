@@ -715,3 +715,16 @@ def test_the_capture_routes_go_only_through_the_governor_and_check_their_input(t
     finally:
         server.should_exit = True
         gov.shutdown()
+
+
+def test_html_text_sizes_are_rem_and_only_the_svg_diagrams_keep_px():
+    """Review 11.4 (issue 521): the browser's font-size setting is honoured by every HTML rule; a diagram's text is in px because
+    its geometry is fixed in user units and would otherwise overflow its boxes."""
+    svg_rule = re.compile(r"#flow|svg|\btext\b|tspan|\.an-(nt|ns|tubelab|tubedir)\b|#tr-map")
+    bad = []
+    for css in sorted((ROOT / "webui/static").glob("*.css")):
+        for sel, body in re.findall(r"([^{}]*)\{([^{}]*)\}", css.read_text()):
+            if not svg_rule.search(sel) and re.search(r"font(?:-size)?:[^;]*?\d(?:\.\d+)?px", body):
+                bad.append(f"{css.name}: {sel.strip()[:60]}")
+    assert not bad, bad
+    assert re.search(r"\.small\s*\{\s*font-size:\s*0\.875rem", (ROOT / "webui/static/app.css").read_text())  # 14 px floor for running text
