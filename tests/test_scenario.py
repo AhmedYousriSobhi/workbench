@@ -21,8 +21,9 @@ def test_parse_duration():
 
 
 def test_every_shipped_scenario_is_valid():
+    with_topology = {**SIM, "topology": {"plugin": "tree", "spines": 1, "leaves_per_spine": 2}}  # the switch scenario needs one (issue 543)
     for sc in scenario.list_all():
-        assert scenario.validate(sc, SIM) == [], sc["name"]
+        assert scenario.validate(sc, with_topology) == [], sc["name"]
 
 
 def test_validate_flags_unknown_target_node_and_time():

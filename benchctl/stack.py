@@ -26,6 +26,7 @@ from . import (
     real_gpu,
     slurmconf,
     teleport,
+    topology,
     workbench,
 )
 
@@ -188,12 +189,18 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     except logins.LoginError as e:
         say(f"FAILED login nodes: {e}")
         return False
+    except topology.TopologyError as e:
+        say(f"FAILED topology: {e}")
+        return False
     if slurmconf.test_timers_on():
         say(f"NOTE test timers are on ({slurmconf.TEST_TIMERS_ENV}=1): {slurmconf.timers()}; not for client testing")
     conf = COMPOSE_FILE.parent / "slurm" / "slurm.conf"  # a changed file needs a controller restart (it only rereads at start)
-    old_conf = conf.read_text() if conf.is_file() else None
+    topo = conf.with_name("topology.conf")  # the switches are read at start too (issue 543)
+    def conf_text():
+        return (conf.read_text() if conf.is_file() else None, topo.read_text() if topo.is_file() else None)
+    old_conf = conf_text() if conf.is_file() else None
     path = compose.write(data, sim=sim, compute_nodes=prof.get("compute_nodes"))
-    conf_changed = old_conf is not None and conf.is_file() and conf.read_text() != old_conf
+    conf_changed = old_conf is not None and conf.is_file() and conf_text() != old_conf
     skip = unbuildable(data["services"], path.parent)
     todo = {n: v for n, v in data["services"].items() if n not in skip}
     if (problem := network_problem(runner)):

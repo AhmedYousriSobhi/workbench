@@ -73,7 +73,7 @@ def _mark(config, items):
 # stack lifecycle itself. test_real starts real governors that discover every labelled container, so they would freeze the
 # shared stack's cn004 (issue 530). They run after every module that shares the default stack and each begins from a stopped one.
 ISOLATED_MODULES = {"test_real", "test_apply_real", "test_jira_dc_real", "test_nhc_real", "test_pressure_real", "test_slurmresilience_real",
-                    "test_k8s_real", "test_access_real", "test_dcgm_real", "test_real_gpu_real", "test_stack_real", "test_teleport_real", "test_user_mode_real", "test_workbench_real"}
+                    "test_k8s_real", "test_access_real", "test_dcgm_real", "test_real_gpu_real", "test_stack_real", "test_teleport_real", "test_user_mode_real", "test_workbench_real", "test_topology_real"}
 
 
 def _isolated(item) -> bool:

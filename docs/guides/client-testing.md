@@ -102,6 +102,10 @@ Fastest start: import the whole cluster from a file with `benchctl export profil
 
 SSH connection handling (hung, down, changed host key, session limit), step by step with screenshots: [ssh-connection-testing.md](ssh-connection-testing.md).
 
+## Switch topology
+
+With a `topology:` in `sim.yaml` (see [topology.md](topology.md)) `scontrol show topology` lists the switches, and `benchctl scenario run switch-leaf-down` (SC-35) drains one leaf's nodes for 90 s and resumes them: check the client shows the switch tree and the reason `switch leaf1 down`.
+
 ## Write a scenario and watch the client
 
 A scenario is a YAML file in `scenarios/` (see [scenarios and faults](../manual/06-scenarios.md)); steps run at

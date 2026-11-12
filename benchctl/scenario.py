@@ -16,7 +16,7 @@ from pathlib import Path
 
 import yaml
 
-from . import checks, dcgm, k8s
+from . import checks, dcgm, k8s, topology
 from .nodes import node_names
 
 ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "http://127.0.0.1:8000/sim/inject",
@@ -103,7 +103,7 @@ def page_support(step: Step) -> str:
     """"" when the Web UI can run the step (it has no Docker: only the governor's Slurm steps), else why not. The same rules as `_apply` with host=False."""
     if step.target in NOT_BUILT:
         return f"{step.target} is not built yet"
-    if step.target == "slurm" and (set(step.do) & set(DAEMON_KEYS) or set(step.do) & set(SLURM_STATES)):
+    if step.target == "switch" or step.target == "slurm" and (set(step.do) & set(DAEMON_KEYS) or set(step.do) & set(SLURM_STATES)):
         return ""
     if step.target in HOST_TARGETS:
         return f"{step.target} steps need the host CLI (no Docker access in the page)"
@@ -156,6 +156,9 @@ def validate(sc: dict, sim: dict) -> list[str]:
         t = s.get("target")
         if t in ("jira-tickets", "jira-activity"):  # the endpoint key, not a target: steps say `jira` with `tickets:`
             problems.append(f"step {i}: unknown target {t!r}")
+            continue
+        if t == "switch":
+            problems += [f"step {i}: {m}" for m in topology.switch_problems(s.get("do") or {}, sim)]
             continue
         if t not in ENDPOINTS and t not in HOST_TARGETS and t not in NOT_BUILT:
             problems.append(f"step {i}: unknown target {t!r}")
@@ -395,6 +398,12 @@ def execute(step: Step, poster=post, runner=checks.run, host: bool = True, slurm
 
 def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcome:
     label = f"{step.target} {json.dumps(step.do, sort_keys=True)}"
+    if step.target == "switch":  # a leaf switch is its nodes: down drains exactly those, up resumes exactly those (issue 543)
+        sim = k8s.current_sim()
+        if topology.switch_problems(step.do, sim):
+            return Outcome(label, "failed", "; ".join(topology.switch_problems(step.do, sim)))
+        inner = _apply(Step(step.at, "slurm", topology.switch_step(step.do, sim)), poster, runner, host, slurm, daemon)
+        return Outcome(label, inner.status, inner.detail)
     if step.target in NOT_BUILT:
         return Outcome(label, "skipped", f"{step.target} is not built yet")
     if step.target == "slurm" and not host and daemon and set(step.do) & set(DAEMON_KEYS):  # no Docker: the governor does it
