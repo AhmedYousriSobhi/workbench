@@ -214,6 +214,8 @@ phases:
     items:
       - {name: validate.sh gate, status: done, pr: 18, where: scripts/validate.sh,
          how: "Secrets scan, compile, ruff, shellcheck, YAML/JSON, systemd verify, pytest and a governor smoke run before every commit."}
+      - {name: verify.sh clean start and paused-container check, status: done, where: "scripts/verify.sh, tests/real/conftest.py, tests/real/test_scenario_real.py", pr: 535,
+         how: "verify.sh --full stops the cluster and clears the saved selection before the real tests (restored on exit); an autouse fixture fails the test or module that leaves a workbench container paused and thaws it; test_real runs isolated; the scenario test unpauses cn004. Issues 530, 532, 534."}
       - {name: Public-repo privacy guard and git hooks, status: review, pr: 105, where: "scripts/check-privacy.sh, .githooks/, scripts/install-hooks.sh, SECURITY.md",
          how: "check-privacy.sh blocks home paths, the local username, personal emails, tokens and keys, local-only paths (.claude/, graphify-out/) and symlinks that leave the repo, and prints only file:line and the rule. Tracked hooks: pre-commit (no commits on main/dev, privacy, validate.sh), commit-msg (issue reference), pre-push (no push to main/dev, full scan); installed by install-hooks.sh. validate.sh runs the scan too. Issue 54."}
       - {name: Unit-test coverage gate, status: done, pr: 81, where: "tests/, scripts/validate.sh",
