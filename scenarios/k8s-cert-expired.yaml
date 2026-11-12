@@ -1,0 +1,6 @@
+name: k8s-cert-expired
+ref: SC-34
+description: "The Kubernetes API server restarts with a serving certificate (same CA) that ended yesterday for 90 s: kubectl and a client that verifies dates say 'certificate has expired'; then the good one is back. Needs --with k8s"
+steps:
+  - {at: 0s,  target: auth, do: {k8s_cert_expired: true}}
+  - {at: 90s, target: auth, do: {k8s_cert_expired: false}}

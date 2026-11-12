@@ -1,0 +1,5 @@
+name: auth-slurm-token-expiry
+ref: SC-30
+description: "A Slurm REST token for alice that lives 60 s is saved to compose/generated/secrets/slurm_token (not printed); after 60 s slurmrestd answers 401 to it, so a client holding it must ask for a new one. Read it with: cat compose/generated/secrets/slurm_token"
+steps:
+  - {at: 0s, target: auth, do: {slurm_token_ttl: {user: alice, ttl: 60s}}}
