@@ -32,6 +32,7 @@ def cluster():
         capture_output=True, text=True, check=False).stdout, timeout=90)
     assert wait_for(_exporter_up, timeout=60), "the GPU exporter never answered"
     yield
+    subprocess.run(["docker", "exec", "workbench-login-1", "scancel", "-u", "alice"], capture_output=True, check=False)  # the sleep 120 must not keep gpu001 busy for the next module (issue 528)
     release()
 
 
