@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from invhelp import inv
 
 from benchctl import compose
 
@@ -27,7 +28,7 @@ def test_mocks_publish_on_localhost_only():
     svcs = compose.generate(SIM, compose.load_profile("min"))["services"]
     assert svcs["bcm-mock"]["ports"] == ["127.0.0.1:8081:8081"]
     assert svcs["jira-mock"]["ports"] == ["127.0.0.1:8080:8080"]
-    assert "./sim.yaml:/sim.yaml:ro" in svcs["bcm-mock"]["volumes"]
+    assert "./inventory.json:/inventory.json:ro" in svcs["bcm-mock"]["volumes"]  # the mocks read the generated inventory, not sim.yaml (issue 462)
     assert svcs["bcm-mock"]["build"] == "../../components/bcm-mock"
 
 
@@ -46,7 +47,7 @@ def test_node_names_match_gpu_exporter():
         spec.loader.exec_module(exporter)
     except ModuleNotFoundError:
         pytest.skip("pyyaml missing")
-    expected = set(exporter.load_nodes(Path("sim.yaml")))
+    expected = set(exporter.load_nodes(inv(Path("sim.yaml"))))
     generated = {n for n, _ in compose.node_names(SIM)}
     assert generated == expected
 
@@ -112,12 +113,13 @@ def test_the_jira_mock_starts_with_a_team_working_the_project():
 
 
 def test_exporter_image_has_its_dependency_baked_in_and_pinned():
-    """Issue 235: no `pip install` at container start; every Dockerfile that needs pyyaml pins the same version."""
+    """Issue 235: no `pip install` at container start; the exporter (the one image that still reads YAML) pins pyyaml. The BMC and BCM mocks read the
+    generated inventory.json and need none (issue 462)."""
     root = Path(__file__).resolve().parents[1]
     obs = yaml.safe_load((root / "compose/observability.yml").read_text())["services"]["gpu-exporter-farm"]
     assert "build" in obs and "pip" not in str(obs.get("command", ""))
-    pins = {(root / f"components/{c}/Dockerfile").read_text().count("pyyaml==6.0.3") for c in ("gpu-exporter-farm", "bmc-farm", "bcm-mock")}
-    assert pins == {1}
+    assert (root / "components/gpu-exporter-farm/Dockerfile").read_text().count("pyyaml==6.0.3") == 1
+    assert all("pyyaml" not in (root / f"components/{c}/Dockerfile").read_text() for c in ("bmc-farm", "bcm-mock"))
 
 
 def _sim():

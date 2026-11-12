@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 
 import pytest
 import yaml
+from invhelp import inv
 
 from benchctl import authfaults, scenario
 
@@ -94,7 +95,7 @@ def test_the_farm_swaps_its_certificate_on_sim_tls():
     spec = importlib.util.spec_from_file_location("bmc", "components/bmc-farm/bmc.py")
     bmc = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(bmc)
-    farm = bmc.Farm(bmc.load_nodes(Path("sim.yaml")))
+    farm = bmc.Farm(bmc.load_nodes(inv(Path("sim.yaml"))))
     srv = ThreadingHTTPServer(("127.0.0.1", 0), bmc.make_handler(farm))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     url = f"http://127.0.0.1:{srv.server_port}/sim/tls"

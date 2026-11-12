@@ -4,8 +4,7 @@ COPY gen_cert.py /gen_cert.py
 RUN python /gen_cert.py /certs
 
 FROM python:3.12-slim
-RUN pip install --no-cache-dir pyyaml==6.0.3
 COPY bmc.py /app/bmc.py
 COPY --from=cert --chown=nobody /certs /app/certs
 USER nobody
-CMD ["python", "/app/bmc.py", "/sim.yaml", "8000", "8443"]
+CMD ["python", "/app/bmc.py", "/inventory.json", "8000", "8443"]

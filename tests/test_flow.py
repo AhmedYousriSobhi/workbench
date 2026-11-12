@@ -10,6 +10,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+from invhelp import inv
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -36,11 +37,11 @@ def serve(handler):
 
 # (name, handler factory, a path a real client would request)
 MOCKS = [
-    ("bmc", lambda: bmc.make_handler(bmc.Farm(bmc.load_nodes(SIM))), "/cn001/redfish/v1/Systems/1"),
-    ("bcm", lambda: bcm.make_handler(bcm.Cluster(bcm.load_nodes(SIM))), None),
+    ("bmc", lambda: bmc.make_handler(bmc.Farm(bmc.load_nodes(inv(SIM)))), "/cn001/redfish/v1/Systems/1"),
+    ("bcm", lambda: bcm.make_handler(bcm.Cluster(bcm.load_nodes(inv(SIM)))), None),
     ("jira", lambda: jira.make_handler(jira.Jira(deliver=lambda *a: None, sleep=lambda s: None)),
      "/rest/api/2/search?jql=project%3DOPS"),
-    ("exporter", lambda: exporter.make_handler(exporter.State(exporter.load_nodes(SIM), random.Random(1))), "/metrics"),
+    ("exporter", lambda: exporter.make_handler(exporter.State(exporter.load_nodes(inv(SIM)), random.Random(1))), "/metrics"),
 ]
 
 
@@ -314,7 +315,7 @@ def test_the_real_jira_is_reachability_only_no_counter():
 
 def test_mocks_count_error_answers_beside_requests():
     """#314: `errors` rises for 4xx/5xx answers to real clients only; `requests` keeps its meaning."""
-    srv, base = serve(bmc.make_handler(bmc.Farm(bmc.load_nodes(SIM))))
+    srv, base = serve(bmc.make_handler(bmc.Farm(bmc.load_nodes(inv(SIM)))))
     try:
         get(base + "/cn001/redfish/v1/Systems/1")  # ok
         assert get(base + "/cn001/redfish/v1/NoSuchThing")[0] == 404  # an error a client would see

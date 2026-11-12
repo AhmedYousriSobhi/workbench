@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from invhelp import inv
 
 from benchctl import addressing, compose, stack
 
@@ -38,7 +39,7 @@ def test_bcm_mock_shows_the_same_addresses_as_the_plan():
     spec = importlib.util.spec_from_file_location("bcm", ROOT / "components" / "bcm-mock" / "bcm.py")
     bcm = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(bcm)
-    state = bcm.Cluster(bcm.load_nodes(ROOT / "sim.yaml"))
+    state = bcm.Cluster(bcm.load_nodes(inv(ROOT / "sim.yaml")))
     p = addressing.plan(SIM)
     assert {n: state.ip(n) for n in p["nodes"]} == p["nodes"]
 
