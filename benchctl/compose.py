@@ -18,6 +18,7 @@ from . import (
     real_gpu,
     slurmconf,
     teleport,
+    topology,
 )
 from .nodes import KIND_GROUP, hardware_nodes, node_names
 
@@ -74,6 +75,8 @@ def _service(image: str, mem_mb: int, prio: int, build: str | None = None) -> di
 
 
 def generate(sim: dict, profile: dict) -> dict:
+    if bad := topology.problems(sim, profile.get("compute_nodes")):  # one message per condition, before anything is written (issue 543)
+        raise topology.TopologyError("; ".join(bad))
     services: dict = {}
     for group in profile["groups"]:
         for name, (image, mem, prio) in CATALOG.get(group, {}).items():

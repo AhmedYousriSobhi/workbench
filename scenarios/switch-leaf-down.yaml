@@ -1,0 +1,6 @@
+name: switch-leaf-down
+ref: SC-35
+description: "One leaf switch (leaf1) goes down: exactly the nodes under it are drained with reason 'switch leaf1 down'; at 90 s it is back and only those nodes resume. Needs a `topology:` in sim.yaml (see docs/guides/topology.md); `scontrol show topology` names the nodes under each leaf"
+steps:
+  - {at: 0s,  target: switch, do: {leaf: leaf1, state: down}}
+  - {at: 90s, target: switch, do: {leaf: leaf1, state: up}}

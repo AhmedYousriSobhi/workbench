@@ -3,7 +3,7 @@ import os
 import secrets
 from pathlib import Path
 
-from . import hwinventory
+from . import hwinventory, topology
 from .nodes import node_names
 
 CTLD = "slurmctld"
@@ -59,6 +59,8 @@ def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool 
         "AuthAltTypes=auth/jwt",
         "AuthAltParameters=jwt_key=/var/spool/slurmctld/jwt_hs256.key",
     ]
+    if plugin := topology.plugin_line(sim):  # issue 543: the switches are in topology.conf beside this file
+        lines.append(plugin)
     if accounting:
         lines += ["AccountingStorageType=accounting_storage/slurmdbd", "AccountingStorageHost=slurmdbd"]
     if compute:
@@ -131,6 +133,11 @@ def write(sim: dict, out_dir: Path, compute_override: int | None = None,
     out_dir.mkdir(parents=True, exist_ok=True)
     files = {"slurm.conf": slurm_conf(sim, compute_override, accounting), "gres.conf": gres_conf(sim),
              "cgroup.conf": "CgroupPlugin=disabled\n"}
+    topo = topology.conf(sim, compute_override)
+    if topo:
+        files["topology.conf"] = topo
+    else:
+        (out_dir / "topology.conf").unlink(missing_ok=True)  # an earlier run's switches must not outlive the `topology:` key
     if accounting:
         files["accounting.sh"] = accounting_script(sim)
     for name, text in files.items():
