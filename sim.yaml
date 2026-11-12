@@ -15,6 +15,8 @@ gpu:
   prefix: gpu
   gpus_per_node: 8
   type: h200
+  cpus: 64                # per GPU node, 8 per GPU: the same in Slurm, Redfish and BCM (issue 462)
+  memory_mb: 16384        # fake RealMemory per GPU node, 2048 per GPU
 
 partitions:
   - {name: cpu, nodes: compute}

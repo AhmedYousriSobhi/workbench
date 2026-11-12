@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from invhelp import inv
 
 from benchctl import addressing, compose, export, nodes, workbench
 from governor import control
@@ -55,7 +56,7 @@ def test_bmc_bcm_and_gpu_exporter_list_the_kubernetes_nodes(tmp_path):
     f = tmp_path / "sim.yaml"
     f.write_text(yaml.safe_dump(on()))
     bmc, bcm, gpu = (load(n, f"components/{d}/{m}.py") for n, d, m in (("bmc", "bmc-farm", "bmc"), ("bcm", "bcm-mock", "bcm"), ("exp", "gpu-exporter-farm", "exporter")))
-    b, m, g = bmc.load_nodes(f), bcm.load_nodes(f), gpu.load_nodes(f)
+    b, m, g = bmc.load_nodes(inv(f)), bcm.load_nodes(inv(f)), gpu.load_nodes(inv(f))
     assert list(b)[-4:] == list(m)[-4:] == list(g)[-4:] == ["kcn001", "kcn002", "kgpu001", "kgpu002"]
     assert b["kgpu001"]["gpus"] == 8 and b["kcn001"]["gpus"] == 0 and b["kcn001"]["cpus"] == 64 and b["kcn001"]["memory_mb"] == 256 * 1024
     assert m["kgpu001"]["category"] == "k8s-gpu" and m["kcn001"]["category"] == "k8s-cpu"
@@ -64,7 +65,7 @@ def test_bmc_bcm_and_gpu_exporter_list_the_kubernetes_nodes(tmp_path):
     assert state.ip("kcn001") == "10.141.200.1" and state.ip("kgpu001") == "10.141.230.1"
     off = tmp_path / "off.yaml"
     off.write_text(yaml.safe_dump(SIM))
-    assert "kcn001" not in bmc.load_nodes(off) and "kcn001" not in bcm.load_nodes(off) and "kcn001" not in gpu.load_nodes(off)
+    assert "kcn001" not in bmc.load_nodes(inv(off)) and "kcn001" not in bcm.load_nodes(inv(off)) and "kcn001" not in gpu.load_nodes(inv(off))
 
 
 def test_the_client_export_lists_a_bmc_for_each_kubernetes_node():

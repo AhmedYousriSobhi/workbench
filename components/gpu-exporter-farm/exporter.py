@@ -27,25 +27,14 @@ DCGM_OVERRIDES = os.environ.get("DCGM_OVERRIDES", "")  # the directory of the re
 ALLOC_STALE_S = 30  # keep the last answer this long when the feed is unreachable, then show every GPU idle
 
 
-def load_nodes(sim_yaml: Path) -> dict[str, int]:
-    """Return {node_name: gpu_count}; compute nodes have 0 GPUs."""
-    cfg = yaml.safe_load(sim_yaml.read_text())
-    nodes: dict[str, int] = {}
-    c = cfg.get("compute", {})
-    for i in range(1, c.get("count", 0) + 1):
-        nodes[f"{c['prefix']}{i:03d}"] = 0
-    g = cfg.get("gpu", {})
-    for i in range(1, g.get("nodes", 0) + 1):
-        nodes[f"{g['prefix']}{i:03d}"] = g["gpus_per_node"]
-    k = cfg.get("kubernetes") or {}
-    for grp in (k.get("nodes") or []) if k.get("enabled") else []:  # the Kubernetes GPU nodes publish GPU metrics too, as a real GPU node does
-        for i in range(1, int(grp.get("count", 0)) + 1):
-            nodes[f"{grp['prefix']}{i:03d}"] = int(grp.get("gpus", 0))
-    return nodes
+def load_nodes(inventory: Path) -> dict[str, int]:
+    """Return {node_name: gpu_count} from the generated inventory.json (benchctl/hwinventory.py); compute nodes have 0 GPUs and the
+    Kubernetes nodes are there when that part is on."""
+    return {n["name"]: n["gpus"] for n in json.loads(Path(inventory).read_text())["nodes"]}
 
 
-def load_gpu_type(sim_yaml: Path) -> str:
-    return str(yaml.safe_load(sim_yaml.read_text()).get("gpu", {}).get("type", "")).lower()
+def load_gpu_type(inventory: Path) -> str:
+    return str(json.loads(Path(inventory).read_text()).get("gpu_type", "")).lower()
 
 
 class State:
@@ -291,9 +280,9 @@ def write_dcgm(state: State, path: str = DCGM_OVERRIDES, interval: float = 2, st
 
 
 def main() -> None:
-    sim = Path(sys.argv[1] if len(sys.argv) > 1 else "sim.yaml")
+    inventory = Path(sys.argv[1] if len(sys.argv) > 1 else "/inventory.json")
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 9400
-    state = State(load_nodes(sim), gpu_type=load_gpu_type(sim))
+    state = State(load_nodes(inventory), gpu_type=load_gpu_type(inventory))
     threading.Thread(target=follow_slurm, args=(state,), daemon=True).start()
     if DCGM_OVERRIDES:
         threading.Thread(target=write_dcgm, args=(state,), daemon=True).start()

@@ -4,7 +4,7 @@ import random
 from pathlib import Path
 
 import pytest
-import yaml
+from invhelp import inv
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -21,7 +21,7 @@ gen = load("observability/gen_targets.py", "gen_targets")
 
 
 def test_nodes_from_sim_yaml():
-    nodes = exporter.load_nodes(ROOT / "sim.yaml")
+    nodes = exporter.load_nodes(inv(ROOT / "sim.yaml"))
     assert nodes["cn001"] == 0 and nodes["gpu001"] == 8
     assert len(nodes) == 6
 
@@ -57,14 +57,14 @@ def test_used_and_free_framebuffer_add_up_to_the_gpu_total():
 
 
 def test_gpu_type_comes_from_sim_yaml_and_unknown_types_get_a_default():
-    assert exporter.load_gpu_type(ROOT / "sim.yaml") == "h200"
+    assert exporter.load_gpu_type(inv(ROOT / "sim.yaml")) == "h200"
     s = exporter.State({"gpu001": 1}, random.Random(1), "mystery")
     assert s.fb_total == exporter.FB_DEFAULT_MIB and s.model == "MYSTERY"
     assert exporter.State({"gpu001": 1}).model == "NVIDIA GPU"
 
 
 def test_render_has_gpu_and_fs_metrics():
-    s = exporter.State(exporter.load_nodes(ROOT / "sim.yaml"), random.Random(1))
+    s = exporter.State(exporter.load_nodes(inv(ROOT / "sim.yaml")), random.Random(1))
     text = s.render()
     assert text.count("DCGM_FI_DEV_GPU_UTIL{") == 16
     assert 'node_filesystem_free_bytes{node="cn001",mountpoint="/mnt/lustre"}' in text
@@ -89,7 +89,7 @@ def test_inject_unknown_node():
 
 
 def test_gen_targets_names_agree():
-    t = gen.targets(yaml.safe_load((ROOT / "sim.yaml").read_text()))
+    t = gen.targets(gen.load_inventory(ROOT / "sim.yaml"))
     assert t[0]["labels"]["nodes"] == "cn001,cn002,cn003,cn004,gpu001,gpu002"
 
 
@@ -104,7 +104,7 @@ def test_http_handler_serves_metrics_injects_and_rejects_bad_requests():
     from urllib.error import HTTPError
     from urllib.request import Request, urlopen
 
-    state = exporter.State(exporter.load_nodes(ROOT / "sim.yaml"), random.Random(1))
+    state = exporter.State(exporter.load_nodes(inv(ROOT / "sim.yaml")), random.Random(1))
     srv = ThreadingHTTPServer(("127.0.0.1", 0), exporter.make_handler(state))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{srv.server_port}"

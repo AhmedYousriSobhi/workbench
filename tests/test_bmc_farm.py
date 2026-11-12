@@ -9,6 +9,7 @@ from urllib.request import Request, urlopen
 
 import pytest
 import yaml
+from invhelp import inv
 
 ROOT = Path(__file__).resolve().parent.parent
 spec = importlib.util.spec_from_file_location("bmc", ROOT / "components/bmc-farm/bmc.py")
@@ -18,7 +19,7 @@ spec.loader.exec_module(bmc)
 
 @pytest.fixture
 def server():
-    nodes = bmc.load_nodes(ROOT / "sim.yaml")
+    nodes = bmc.load_nodes(inv(ROOT / "sim.yaml"))
     srv = ThreadingHTTPServer(("127.0.0.1", 0), bmc.make_handler(bmc.Farm(nodes)))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{srv.server_port}", nodes
@@ -94,7 +95,7 @@ def raw(url, method="GET", body=None, headers=None):
 
 @pytest.fixture
 def secure():
-    nodes = bmc.load_nodes(ROOT / "sim.yaml")
+    nodes = bmc.load_nodes(inv(ROOT / "sim.yaml"))
     farm = bmc.Farm(nodes)
     srv = ThreadingHTTPServer(("127.0.0.1", 0), bmc.make_handler(farm, bmc.Sessions(("ops", "pw"))))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -196,7 +197,7 @@ def test_bmc_also_listens_on_the_standard_redfish_port_inside_the_cluster():
 
 
 def test_a_listener_pinned_to_a_node_ignores_the_host_header():
-    nodes = bmc.load_nodes(ROOT / "sim.yaml")
+    nodes = bmc.load_nodes(inv(ROOT / "sim.yaml"))
     farm = bmc.Farm(nodes)
     last = list(nodes)[-1]
     srv = ThreadingHTTPServer(("127.0.0.1", 0), bmc.make_handler(farm, bmc.Sessions(("ops", "pw")), fixed_node=last))
@@ -212,6 +213,6 @@ def test_a_listener_pinned_to_a_node_ignores_the_host_header():
 def test_the_farm_ports_match_the_addressing_plan():
     from benchctl import addressing
     assert bmc.NODE_PORT_BASE == addressing.BMC_NODE_PORT_BASE
-    nodes = bmc.load_nodes(ROOT / "sim.yaml")
+    nodes = bmc.load_nodes(inv(ROOT / "sim.yaml"))
     plan = addressing.plan(yaml.safe_load((ROOT / "sim.yaml").read_text()))
     assert [plan["bmc_port"][n] for n in nodes] == [bmc.NODE_PORT_BASE + i for i in range(len(nodes))]
