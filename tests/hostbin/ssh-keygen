@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+"""Unit-test stand-in for `ssh-keygen -f PATH` (tests/conftest.py, #473): writes a placeholder private and public key, mode 0600, no real key."""
+import os
+import sys
+
+a = sys.argv[1:]
+path = a[a.index("-f") + 1] if "-f" in a else ""
+if not path:
+    sys.stderr.write("stub ssh-keygen: only -f PATH is supported\n")
+    sys.exit(2)
+comment = a[a.index("-C") + 1] if "-C" in a else "stub"
+with open(path, "w") as f:
+    f.write("-----BEGIN STUB KEY-----\nnot a real key\n-----END STUB KEY-----\n")
+os.chmod(path, 0o600)
+with open(path + ".pub", "w") as f:
+    f.write(f"ssh-ed25519 AAAASTUBKEY{os.path.basename(path)} {comment}\n")
