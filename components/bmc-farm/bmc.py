@@ -8,6 +8,7 @@ Host header: bmc-<node> or <node>, e.g. the compose-network alias bmc-cn001; any
 Everything but the service root needs a session (POST /redfish/v1/SessionService/Sessions, X-Auth-Token) or Basic
 auth with the account in the credentials file; with no file, auth is off.
 
+POST /sim/tls  {"expired": true|false}: present an expired certificate (or the good one again) on the TLS ports
 POST /sim/inject  {"node": n, "temp": 95} | {"node": n, "fan_fail": 2} | {"node": n, "power": "Off"}
                   | {"node": n, "event": "text"} | {"node": n, "clear": true}
 """
@@ -44,6 +45,7 @@ class Farm:
         self.fans_failed: dict[str, int] = {}
         self.log: dict[str, list[dict]] = {n: [] for n in nodes}
         self.account = "admin"  # the read-only account the AccountService lists; main() sets it from the credentials
+        self.set_tls = None  # main() sets it when TLS is served: set_tls(True) presents the expired certificate, set_tls(False) the good one
 
     def event(self, node: str, message: str, severity: str = "OK") -> None:
         entries = self.log[node]
@@ -362,6 +364,11 @@ def make_handler(farm: Farm, sessions: Sessions | None = None, stats: dict | Non
                 if path == "/sim/inject":
                     farm.inject(req)
                     return self._send(200, {"ok": True})
+                if path == "/sim/tls":  # {"expired": true|false}: the next handshakes see a certificate that ended yesterday (issue 549)
+                    if farm.set_tls is None:
+                        return self._send(400, {"error": "this farm serves no TLS"})
+                    farm.set_tls(bool(req.get("expired")))
+                    return self._send(200, {"ok": True, "expired": bool(req.get("expired"))})
                 if sessions is not None and path.rstrip("/") == SESSIONS:
                     made = sessions.login(str(req.get("UserName", "")), str(req.get("Password", "")))
                     if made is None:
@@ -410,6 +417,9 @@ def main() -> None:
     if tls_port and cert.is_file():
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.load_cert_chain(cert, key)
+        expired = Path("/app/certs/expired.pem")
+        if expired.is_file():  # same key and name, validity in the past: only the expiry differs (gen_cert.py)
+            farm.set_tls = lambda gone: ctx.load_cert_chain(expired if gone else cert, key)
         sessions = Sessions(creds)
         for p in dict.fromkeys((tls_port, STANDARD_TLS_PORT)):  # 443 is where a client looks when it is given no port
             try:

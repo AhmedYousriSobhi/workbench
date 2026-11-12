@@ -1,0 +1,6 @@
+name: bmc-tls-expired
+ref: SC-33
+description: "The BMC farm presents a TLS certificate that ended yesterday (same key and name) on 8443, 443 and every node's BMC address for 60 s: a client that verifies dates must say 'certificate has expired'; then the good certificate is back"
+steps:
+  - {at: 0s,  target: auth, do: {bmc_tls_expired: true}}
+  - {at: 60s, target: auth, do: {bmc_tls_expired: false}}
