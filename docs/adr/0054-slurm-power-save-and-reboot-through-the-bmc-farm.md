@@ -13,3 +13,7 @@ Status: accepted (design of epic 557, A-8 and A-9). Issue 545.
 ## Consequences
 
 A Slurm power down does not stop the node container or its `slurmd` (slurmctld has no Docker access): the node is simply not scheduled or pinged while `POWERED_DOWN`. Whether it registers again on `power up` without a restart, and how a reboot is seen to finish when the container shares the host's boot time, are not known until the live test runs (`docs/guides/power-and-reboot.md`). If either fails, the fix belongs in `reboot.sh` or a node-side step, not in slurmctld.
+
+## Addendum (live run, 2026-11-12)
+
+The first live run changed three details, recorded in docs/guides/power-and-reboot.md: slurmd restarts with `-b` after a power up or reboot (containers share the host uptime, so Slurm never saw a boot), `slurmd-run` follows Slurm's own power state to stop and start slurmd, and `RebootProgram` runs its cycle in the foreground (Slurm ends a detached child).

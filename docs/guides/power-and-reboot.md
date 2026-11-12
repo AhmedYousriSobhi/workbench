@@ -37,6 +37,12 @@ These steps need the host CLI; the page skips them.
 - **Jira:** a Slurm power down is an administrator's act, so no ticket is filed (a BMC power-off in a scenario, `power: Off`, still files one).
 - **Existing power-off (issues 136, 151, 154):** unchanged; `ReturnToService=1` brings a node back when slurmd answers.
 
-## Not exercised yet
+## What the live run showed (2026-11-12, `./scripts/verify.sh --unit power`: 3 passed)
 
-The live test `tests/real/test_power_real.py` is written and has not been run (`./scripts/verify.sh --unit power`). Open until it has: whether slurmctld accepts `scontrol power down` with `SuspendTime` unset, how `POWERED_DOWN` prints in `sinfo -o %T`, whether a node whose slurmd keeps running while powered down registers again on `power up` or only after `ResumeTimeout`, and how slurmctld decides a reboot has finished when the container shares the host's boot time. Not run against the monitoring client. After the first live run, write each difference here with the log lines that show it.
+Three things differ from what the Slurm manual suggests, and the images handle them:
+
+- **A container shares the host's uptime.** Slurm decides a node has booted (and so left `POWERING_UP` or `REBOOT_ISSUED`) from the uptime in its registration, so a restarted slurmd was never believed: the node ended `down~` after `ResumeTimeout`. `slurmd-run` now starts slurmd with `-b` ("just booted") after a power up or a reboot.
+- **No slurmd on a powered-down node.** `slurmd-run` follows Slurm's own state (`scontrol show node`): `POWERED_DOWN` or `POWERING_DOWN` holds slurmd down, `POWERING_UP` lets it start. Without that the slurmd of a "powered down" node kept running and never registered again.
+- **`RebootProgram` runs in the foreground.** slurmd waits for it and Slurm ends anything the program leaves behind, so a detached copy never ran. `reboot.sh` does the whole cycle itself, and slurmd is killed in the middle of it.
+
+Still not exercised: a node with a running job through `scontrol reboot ASAP` (the node should drain first), the monitoring client.

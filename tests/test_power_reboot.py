@@ -76,8 +76,12 @@ def test_a_bmc_that_refuses_fails_the_program_and_another_name_is_refused(tmp_pa
 def test_reboot_script_cycles_through_the_bmc_and_uses_the_hold_file():
     text = (ROOT / "images/node-base/reboot.sh").read_text()
     assert text.index("ForceOff") < text.index("touch \"$HOLD\"") < text.index('"ResetType":"On"') < text.index("rm -f \"$HOLD\"")
-    assert "HOLD=/run/workbench/slurmd.hold" in text and "pkill -x slurmd" in text and "setsid" in text
-    assert "HOLD=/run/workbench/slurmd.hold" in (ROOT / "images/node-base/slurmd-run").read_text()  # the same file the supervisor waits on
+    assert "HOLD=/run/workbench/slurmd.hold" in text and "pkill -x slurmd" in text
+    assert "setsid" not in text  # Slurm ends a child that outlives the program: the whole cycle runs in the foreground (found on the live stack)
+    run = (ROOT / "images/node-base/slurmd-run").read_text()
+    assert "HOLD=/run/workbench/slurmd.hold" in run  # the same file the supervisor waits on
+    assert "BOOTED=/run/workbench/slurmd.booted" in text and "BOOTED=/run/workbench/slurmd.booted" in run and "slurmd -D $boot" in run  # -b after a power up or reboot
+    assert "POWERING_UP" in run and "POWERED_DOWN" not in run.replace("*POWER*_DOWN*", "")  # follows Slurm's own power state
 
 
 def test_scenario_steps_ask_slurmctld_for_power_and_reboot():

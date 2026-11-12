@@ -1,7 +1,7 @@
 """Slurm power save and reboot through the BMC farm on the live min stack (issue 545, config lab A-8 and A-9).
 
 Asserts on the real components: slurmctld's own node state (`sinfo`) and the farm's Redfish answers, never on config text.
-Observed behaviour that differs from the Slurm documentation belongs in docs/guides/power-and-reboot.md (not yet recorded: first run pending).
+Observed behaviour that differs from the Slurm documentation belongs in docs/guides/power-and-reboot.md (recorded there).
 """
 import json
 import os
