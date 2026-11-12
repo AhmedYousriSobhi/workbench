@@ -29,10 +29,11 @@ function ingest(j) {
 }
 async function pollTraffic() {
   try { ingest(await (await fetch(`/api/traffic?since=${A.since}`)).json()); A.failed = false; } catch (e) { A.failed = true; }
-  paintAnalysis();
+  if (!$('tab-traffic').hidden) paintAnalysis();  // the readings accumulate on every screen; only the Traffic screen draws them
 }
 export function startAnalysis() { if (A.timer) return; pollTraffic(); A.timer = setInterval(pollTraffic, POLL_MS); }
 export function stopAnalysis() { clearInterval(A.timer); A.timer = 0; captureStop(false); }
+export function leaveTraffic() { captureStop(false); }  // one wire at a time and only while Traffic shows
 
 const rates = () => { const w = Number.isFinite(A.windowS) ? Math.min(A.windowS, 300) : KEEP_S; return Object.fromEntries(A.streams.map(s => [streamKey(s), rateFromSamples(A.samples, streamKey(s), A.now, w)])); };
 const label = s => `${s.who} → ${SERVICE_NAME[s.service] || s.service} ${s.shape}`;

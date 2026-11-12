@@ -379,6 +379,10 @@ def test_scale_and_set_profile_run_effector_only_when_calm(tmp_path):
     done.clear()
     g.handle("set-profile", {"profile": "min"})
     assert done.wait(5) and calls[-1] == ["up", "--profile", "min"]
+    import time
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and not any("scale=3: done" in a for a in g.audit):
+        time.sleep(0.01)  # the effector signals before the governor thread writes its audit line
     assert any("scale=3: done" in a for a in g.audit)
 
 

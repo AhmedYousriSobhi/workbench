@@ -165,7 +165,7 @@ the same pages. Other ways to move: **Ctrl + scroll** (or a pinch on a trackpad)
 
 ![The Traffic tab's analysis: the request river, the probe, what was found and the rhythm](img/web-traffic-analysis.png)
 
-At the top of the **Traffic** tab (the TRAFFIC stop of the zoom rail) the page reads the mocks' own record of client requests (`/api/traffic`, every 3 seconds, only while the tab is open and visible). It records only **who asked** (the User-Agent's product token, for example `curl`), the method and path shape, how it ended and how long it took; never a value, a header or a secret.
+At the top of the **Traffic** tab (the TRAFFIC stop of the zoom rail) the page reads the mocks' own record of client requests (`/api/traffic`, every 3 seconds, on every screen while the page is visible and never while it is hidden, so a rate exists when you open the tab; only the Traffic tab draws it). It records only **who asked** (the User-Agent's product token, for example `curl`), the method and path shape, how it ended and how long it took; never a value, a header or a secret.
 
 - **Request river**: callers on the left, the service that answered in the middle, how it ended on the right (2xx, slower than the 95th percentile, 4xx, 5xx). A band's width follows the square root of requests a minute; moving dots are live requests; red is an error. A rate needs two readings 5 seconds apart, so the first seconds say "not measured", never 0. Pick a stream chip to look at one alone. A hidden table repeats the numbers for screen readers.
 - **Probe**: Rate, Delay, Errors, Rhythm and Path for the chosen stream, a big reading, the last two minutes as a trace, and a one-line verdict. Delay shows the edge of a latency bucket ("10 ms or less"), not an exact figure.

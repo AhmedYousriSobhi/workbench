@@ -29,7 +29,7 @@ The rule of #475 stays: record only method and path shape, never a value or a se
 ## Addendum: the screen (step 5b, issue 503)
 - `analysis.js` draws the Traffic analysis into `#tan` at the top of the Traffic tab: river (bands use the shared wire for the moving dots; the
   structure is rebuilt only when the set of callers or the spotlight changes, so the dots keep moving between polls), probe, findings, rhythm.
-  It polls `/api/traffic` every 3 s only while the tab and the page are visible and stops otherwise (W-11); a hidden table repeats the river.
+  It polls `/api/traffic` every 3 s while the page is visible, on every screen, and stops when it is hidden (W-11); since issue 538 it no longer waits for the tab to open, because a rate needs two readings and would otherwise appear 4 to 6 s late. Only the Traffic tab draws it; a hidden table repeats the river.
 - **Focused wire by URL hash**, plain text `#<cluster>-<node>` (or `#<node>` with one cluster), parsed by `parseWireHash`; a hash that names no node
   is ignored. The pool tile's "Wire in Traffic" sets it. The panel states what is known (declared wiring) and that messages are **not captured**
   (a node name in a path is masked as `{id}`); message capture (Slurm RPC types from slurmctld, a Kubernetes request audit) is not built and needs
