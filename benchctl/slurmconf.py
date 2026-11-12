@@ -55,6 +55,10 @@ def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool 
         "HealthCheckProgram=/usr/local/sbin/nhc", f"HealthCheckInterval={t['HealthCheckInterval']}", "HealthCheckNodeState=ANY",
         # The same checks before a job starts (a failure drains the node and requeues the job) and after it ends.
         "Prolog=/usr/local/sbin/nhc-prolog", "Epilog=/usr/local/sbin/nhc-epilog",
+        # Power saving and reboot through the BMC farm (issue 545): `scontrol power down|up` runs these (images/slurm-ctl/power.sh), `scontrol reboot`
+        # runs RebootProgram on the node (images/node-base/reboot.sh). SuspendTime stays at its default (off), so nothing idles off by itself.
+        "SuspendProgram=/usr/local/sbin/power-off", "ResumeProgram=/usr/local/sbin/power-on", "SuspendTimeout=30", "ResumeTimeout=60",
+        "RebootProgram=/usr/local/sbin/reboot.sh",
         # slurmrestd authenticates callers with JWT; the key is baked into the lab image (ADR 0002).
         "AuthAltTypes=auth/jwt",
         "AuthAltParameters=jwt_key=/var/spool/slurmctld/jwt_hs256.key",

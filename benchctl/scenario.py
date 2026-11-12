@@ -177,7 +177,7 @@ def validate(sc: dict, sim: dict) -> list[str]:
         if t == "k8s":  # its node names are Kubernetes nodes, checked above
             continue
         names = [n for key in ("nodes", "drain", "down", "resume", "power_off", "power_on", "slurmd_stop", "slurmd_start",
-                               "slurmd_restart") for n in do.get(key) or []]
+                               "slurmd_restart", "power_down", "power_up", "reboot") for n in do.get(key) or []]
         if isinstance(do.get("submit"), dict) and do["submit"].get("node"):
             names.append(do["submit"]["node"])
         problems += [f"step {i}: unknown node {n!r}" for n in names if n not in nodes]
@@ -299,6 +299,21 @@ def daemon_commands(do: dict) -> list[list[str]]:
     return cmds
 
 
+def power_commands(do: dict) -> list[list[str]]:
+    """Slurm's own power save and reboot (issue 545), asked of the real slurmctld: `power_down` and `power_up` are `scontrol power down|up`
+    (POWERED_DOWN, POWERING_UP; the BMC farm is told by SuspendProgram and ResumeProgram), `reboot` is `scontrol reboot ASAP` (the node's
+    RebootProgram cycles it through the BMC and restarts slurmd, and it returns to service: nextstate=resume). `power_off` and `power_on`
+    stay what they were: a node that dies and is revived behind Slurm's back, as a power cut would."""
+    cmds: list[list[str]] = []
+    for key, verb in (("power_down", "down"), ("power_up", "up")):
+        if do.get(key):
+            cmds.append(["docker", "exec", SLURMCTLD, "scontrol", "power", verb, ",".join(do[key])])
+    if do.get("reboot"):
+        cmds.append(["docker", "exec", SLURMCTLD, "scontrol", "reboot", "ASAP", "nextstate=resume",
+                     f"reason={do.get('reason', 'scenario reboot')}", ",".join(do["reboot"])])
+    return cmds
+
+
 def side_effects(step: Step) -> list[Step]:
     """A power change on the BMC is also a change on the BCM, the GPU exporter and the node itself (and so in Slurm):
     a scenario says it once, as the page's Power off does. `clear` powers the node on again, so it thaws it too. Every
@@ -400,7 +415,7 @@ def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcom
     if step.target == "slurm" and not host and daemon and set(step.do) & set(DAEMON_KEYS):  # no Docker: the governor does it
         ok, detail = daemon(step.do)
         return Outcome(label, "ok" if ok else "skipped", detail)  # a refusal (calm levels only) is not a failure of the scenario
-    if step.target == "slurm" and not host and slurm and not set(step.do) & set(DAEMON_KEYS):  # no Docker: the governor does it
+    if step.target == "slurm" and not host and slurm and not set(step.do) & set(DAEMON_KEYS) and set(step.do) & set(SLURM_STATES):  # no Docker: the governor does it
         for key, state in SLURM_STATES.items():
             for n in step.do.get(key, []):
                 ok, detail = slurm(n, state, step.do.get("reason"))
@@ -440,6 +455,10 @@ def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcom
             for cmd in daemon_commands(step.do):
                 r = runner(cmd)
                 if r.returncode and cmd[3:4] != ["pkill"]:  # pkill exits 1 when slurmd is already down: that is the goal
+                    return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+            for cmd in power_commands(step.do):
+                r = runner(cmd)
+                if r.returncode:
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip())
         elif step.target == "dcgm":
             return _dcgm(step, label, runner)

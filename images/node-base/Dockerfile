@@ -68,6 +68,7 @@ COPY sshd_config /etc/ssh/sshd_config
 COPY --chmod=755 nhc nhc-prolog nhc-epilog /usr/local/sbin/
 COPY --chmod=755 teleport-ssh /usr/local/sbin/teleport-ssh
 COPY --chmod=755 slurmd-run /usr/local/sbin/slurmd-run
+COPY --chmod=755 reboot.sh /usr/local/sbin/reboot.sh
 # The checks the runner uses when the host mounts none (/etc/workbench/nhc, from compose/generated/nhc, wins).
 COPY nhc.d/checks.conf nhc.d/*.sh /usr/local/lib/nhc.d/
 COPY entrypoint.sh /entrypoint.sh

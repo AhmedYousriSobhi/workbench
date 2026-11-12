@@ -1,0 +1,7 @@
+name: reboot-asap
+ref: SC-36
+description: "Slurm reboots cn002 as soon as its jobs end (scontrol reboot ASAP): the node power-cycles through the BMC farm (Redfish log: Reset ForceOff, then Reset On), slurmd restarts and the node returns to service; then cn003 is powered down through Slurm (POWERED_DOWN, BMC Off) and up again at 90 s"
+steps:
+  - {at: 0s,  target: slurm, do: {reboot: [cn002], reason: "scenario reboot"}}
+  - {at: 40s, target: slurm, do: {power_down: [cn003]}}
+  - {at: 90s, target: slurm, do: {power_up: [cn003]}}
