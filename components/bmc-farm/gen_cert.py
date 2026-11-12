@@ -18,6 +18,12 @@ cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_ke
         .not_valid_after(now + datetime.timedelta(days=3650))
         .add_extension(x509.SubjectAlternativeName([x509.DNSName("bmc-farm")]), critical=False)
         .sign(key, hashes.SHA256()))
+old = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())  # same key and name, ended yesterday (issue 549)
+       .serial_number(x509.random_serial_number()).not_valid_before(now - datetime.timedelta(days=40))
+       .not_valid_after(now - datetime.timedelta(days=1))
+       .add_extension(x509.SubjectAlternativeName([x509.DNSName("bmc-farm")]), critical=False)
+       .sign(key, hashes.SHA256()))
+(out / "expired.pem").write_bytes(old.public_bytes(serialization.Encoding.PEM))
 (out / "cert.pem").write_bytes(cert.public_bytes(serialization.Encoding.PEM))
 (out / "key.pem").write_bytes(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
                                                 serialization.NoEncryption()))

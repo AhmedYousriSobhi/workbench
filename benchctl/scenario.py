@@ -16,7 +16,7 @@ from pathlib import Path
 
 import yaml
 
-from . import checks, dcgm, k8s, topology
+from . import authfaults, checks, dcgm, k8s, topology
 from .nodes import node_names
 
 ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "http://127.0.0.1:8000/sim/inject",
@@ -31,7 +31,7 @@ JIRA_REAL_URL = "http://127.0.0.1:8083"
 JIRA_REAL_MODES = ("outage", "restore", "bad_logins", "clear_logins", "rate_limit", "rate_limit_off", "token_revoke", "token_restore",
                    "proxy_503", "proxy_429", "proxy_slow", "proxy_off")  # real faults on the real Jira (issue 303); proxy_* through benchctl/jira_proxy.py (issue 305)
 JIRA_REAL_TICKET_ACTIONS = ("create", "transition", "comment")  # `tickets:` steps on the real Jira go through the REST driver (issue 306)
-HOST_TARGETS = ("slurm", "ssh", "jira-real", "k8s", "dcgm")  # steps that need Docker on the host
+HOST_TARGETS = ("slurm", "ssh", "jira-real", "k8s", "dcgm", "auth")  # steps that need Docker on the host
 SSH_STATES = ("down", "up", "hung")
 NODE_SSHD_STATES = ("down", "up")
 NOT_BUILT = ("ticket-bot",)
@@ -171,6 +171,9 @@ def validate(sc: dict, sim: dict) -> list[str]:
             problems += [f"step {i}: {m}" for m in daemon_problems(do)]
         if t == "dcgm" and sum(bool(do.get(v)) for v in ("stop", "start", "restart")) != 1:
             problems.append(f"step {i}: dcgm needs one of stop, start, restart: true")
+        if t == "auth":
+            problems += [f"step {i}: {m}" for m in authfaults.problems(do, nodes, {u["name"] for u in sim.get("users", [])})]
+            continue
         if t == "k8s":
             problems += [f"step {i}: {m}" for m in k8s.step_problems(do, {n for n, _ in k8s.node_list(sim)})]
         if t == "jira-real" and "tickets" in do:
@@ -460,6 +463,9 @@ def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcom
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip()[-300:])
         elif step.target == "jira-real":
             return jira_real_fault(step, label, runner)
+        elif step.target == "auth":
+            bad = authfaults.apply(step.do, runner, poster, k8s.current_sim())
+            return Outcome(label, "failed", bad) if bad else Outcome(label, "ok")
         elif step.target == "jira":
             if "tickets" in step.do:  # {tickets: {action: create|transition|comment|reset, ...}}
                 poster(ENDPOINTS["jira-tickets"], step.do["tickets"])

@@ -106,6 +106,20 @@ SSH connection handling (hung, down, changed host key, session limit), step by s
 
 With a `topology:` in `sim.yaml` (see [topology.md](topology.md)) `scontrol show topology` lists the switches, and `benchctl scenario run switch-leaf-down` (SC-35) drains one leaf's nodes for 90 s and resumes them: check the client shows the switch tree and the reason `switch leaf1 down`.
 
+## Expiry and authentication faults
+
+Real errors from the real components, for a client's "login needed", "certificate expired" and "unauthorised" paths (target `auth`, issue 549; they need the host CLI, the page cannot play them):
+
+| Scenario | What the client meets | Put right by |
+|---|---|---|
+| `auth-slurm-token-expiry` (SC-30) | slurmrestd 401 after the token's 60 s; the token is in `compose/generated/secrets/slurm_token` (`cat` it, it is not printed) | ask for a new one: `docker exec workbench-slurmctld-1 scontrol token username=alice` |
+| `auth-teleport-cert-expiry` (SC-31) | the identity file `compose/generated/secrets/teleport/identity/alice` lives 60 s, then the login node refuses it | the scenario signs it again at 180 s |
+| `auth-munge-wrong-key` (SC-32) | `cn001` is rejected by slurmctld (`Invalid credential`), goes down after SlurmdTimeout | the scenario puts the node's own key back at 120 s (`munge_restore`) |
+| `bmc-tls-expired` (SC-33) | `certificate has expired` on the BMC TLS ports (8443, 443, each node's address); same key and name, so a client that pins by key still connects | back at 60 s |
+| `k8s-cert-expired` (SC-34) | `certificate has expired` from `kubectl` and any client that checks dates; the API server restarts twice (10 to 20 s each) | back at 90 s |
+
+A scenario that stops half-way leaves the fault in place. Undo it with the matching step: `{auth: {munge_restore: [cn001]}}`, `bmc_tls_expired: false`, `k8s_cert_expired: false`, `teleport_cert_restore: [alice]` (write it as a one-step scenario). The Teleport outage half of issue 209 is separate.
+
 ## Write a scenario and watch the client
 
 A scenario is a YAML file in `scenarios/` (see [scenarios and faults](../manual/06-scenarios.md)); steps run at
