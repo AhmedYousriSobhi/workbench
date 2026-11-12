@@ -93,7 +93,7 @@ def test_screenshot_of_a_faulted_cluster(ui, tmp_path):
     with sync_playwright() as p:
         browser = p.chromium.launch()
         for vp, size in (("desktop", (1280, 900)), ("phone", (390, 800))):
-            page = browser.new_page(viewport={"width": size[0], "height": size[1]})
+            page = browser.new_page(viewport={"width": size[0], "height": size[1]}, bypass_csp=True)
             page.add_init_script("localStorage.setItem('workbench-tree', 'open')")  # the list is folded by default at 1100-1500 px (#192)
             page.add_init_script("try { localStorage.setItem('workbench-circuit', '0'); sessionStorage.getItem('workbench-tab') || sessionStorage.setItem('workbench-tab', 'nodes'); } catch (e) {}")  # the classic diagram and list: the circuit is the default view
             page.goto(f"{base}/login?token={token}")
