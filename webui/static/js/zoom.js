@@ -29,11 +29,14 @@ const firstPool = () => Object.keys(POOLS).find(k => facts().pools[k].length);
 function paintLevel(lv) { if (lv === 'fleet') paintFleet(); else if (lv === 'pool') paintPool(); }
 export const refreshZoom = () => { if (!S.zoomHold) paintLevel(infraLevel()); };
 
+// On Home and Test run there is no diagram: no level is marked, and a click opens the Infrastructure tab at that level.
+const offInfra = () => !onTraffic() && $('tab-nodes').hidden;
 function paintRail(lv) {
   const rail = $('zoomrail'); rail.hidden = !lv || onConn();
   if (rail.hidden) return;
+  const none = offInfra();
   rail.querySelectorAll('[data-level]').forEach(b => {
-    const on = b.dataset.level === lv; b.setAttribute('aria-pressed', on); if (on) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+    const on = !none && b.dataset.level === lv; b.setAttribute('aria-pressed', on); if (on) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
     if (b.dataset.level === 'pool') b.disabled = !firstPool() && lv !== 'pool';
   });
   $('zr-out').disabled = lv === 'fleet'; $('zr-in').disabled = lv === 'traffic';
@@ -105,6 +108,10 @@ function viaTab(level, o) {
 export function zoomTo(level, o = {}) {
   if (!S.circuit) return;
   settle(); S.zoomHold = false; syncZoom();  // a move still running ends where it was going
+  if (S.circuit && offInfra() && !onConn()) {  // from Home or Test run: open the diagram first, then it is at the level asked for
+    if (level === 'traffic') { selectTab('traffic', false); syncZoom(); return; }
+    setInfra(level, o); selectTab('nodes', false); syncZoom(); return;
+  }
   const from = levelNow();
   if (level === from && !(level === 'pool' && o.pool && o.pool !== S.pool)) return;
   if (level === 'pool' && !(o.pool || firstPool())) return;  // nothing to open: a cluster with no nodes has no pool

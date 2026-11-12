@@ -174,3 +174,8 @@
 .an-log th { position:sticky; top:0; background:var(--cv-surface-2); color:var(--cv-text-muted); text-align:left; font-weight:600; padding:6px 8px; } .an-log td { padding:5px 8px; border-top:1px solid var(--cv-border); white-space:nowrap; }
 .an-log tbody tr { cursor:pointer; } .an-log tbody tr.sel { background:var(--cv-surface-2); outline:1px solid var(--plane-access); } .an-log tr.unk td { color:var(--cv-text); } .an-log tr.unk b { color:var(--cv-attention); font-weight:600; }
 .an-decoded { display:grid; grid-template-columns:max-content 1fr; gap:4px 14px; margin:0; font-size:0.875rem; } .an-decoded dt { color:var(--cv-text-muted); } .an-decoded dd { margin:0; color:var(--cv-text); word-break:break-all; } .an-decoded .an-dh { grid-column:1 / -1; color:var(--cv-text-2); font-weight:600; letter-spacing:.08em; text-transform:uppercase; }
+
+/* The Cluster circuit fits the panel's width (it was clipped on the right when the height cap made it wider than the panel) and is capped near one screen; the six layer cards share one row. */
+@media (min-width:1100px) { #nodeswrap.circuit #trafficpanel #flow[data-cv] { min-width:0; } }  /* the 1100 px floor made it scroll sideways inside a 960 px panel */
+#nodeswrap.circuit #trafficpanel #flow[data-cv] { width:100%; max-width:100%; max-height:max(520px, calc(100vh - 250px)); }
+.cvlayer { flex:1 1 118px; gap:8px; padding:6px 8px; } .cvlayer .plate { width:30px; height:18px; }

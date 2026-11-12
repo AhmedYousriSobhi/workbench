@@ -47,3 +47,20 @@ def test_the_answer_carries_no_header_value_or_body():
     import json
     got = json.dumps(traffic.collect(0.0, fake({traffic.BMC: answer(1, 1.0), traffic.BCM: answer(0, 1.0), traffic.JIRA: answer(0, 1.0)})))
     assert "Authorization" not in got and "Bearer" not in got
+
+
+def test_the_diagrams_get_the_slurm_facts_on_every_visible_tab():
+    """Issue 567: slurmctld 'not probed' and a missing accounting/monitoring lane until the Traffic tab had been opened once."""
+    from pathlib import Path
+    src = (Path(__file__).resolve().parent.parent / "webui/static/js/traffic.js").read_text()
+    body = src.split("export async function paintSlurmStats()")[1].split("\n}\n")[0]
+    assert "tab-traffic" not in body.split("S.slurmAt = Date.now()")[0]  # the gate is the page being visible, not the Traffic tab
+    assert "document.hidden" in body and body.count("paintBlocks()") == 2  # the diagrams repaint when the facts arrive
+
+
+def test_the_zoom_bar_on_home_opens_the_diagram_instead_of_doing_nothing():
+    """Issue 567 follow-up: Home has no diagram, yet the bar showed Cluster pressed and a click changed nothing."""
+    from pathlib import Path
+    src = (Path(__file__).resolve().parent.parent / "webui/static/js/zoom.js").read_text()
+    assert "const on = !none && b.dataset.level === lv" in src  # no level is marked on Home or Test run
+    assert "offInfra() && !onConn()" in src.split("export function zoomTo")[1]  # a click there selects the Infrastructure tab at that level
