@@ -7,6 +7,8 @@ import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
+from invhelp import inv
+
 ROOT = Path(__file__).resolve().parent.parent
 FILES = {"bmc": "components/bmc-farm/bmc.py", "bcm": "components/bcm-mock/bcm.py", "jira": "components/jira-mock/jira.py"}
 
@@ -78,7 +80,7 @@ def test_jira_counts_paths_and_lists_the_unknown_ones():
 
 def test_bcm_counts_the_call_name_and_marks_unknown_calls_but_never_the_arguments():
     m = load("bcm")
-    srv, base = serve(m.make_handler(m.Cluster(m.load_nodes(ROOT / "sim.yaml"))))
+    srv, base = serve(m.make_handler(m.Cluster(m.load_nodes(inv(ROOT / "sim.yaml")))))
     m.SHAPES.reset()
     call(base + "/json", {"service": "cmdevice", "call": "getDevices"})
     call(base + "/json", {"service": "cmdevice", "call": "getDevice", "args": ["cn001"]})
@@ -93,7 +95,7 @@ def test_bcm_counts_the_call_name_and_marks_unknown_calls_but_never_the_argument
 
 def test_bmc_counts_redfish_paths_by_shape():
     m = load("bmc")
-    srv, base = serve(m.make_handler(m.Farm(m.load_nodes(ROOT / "sim.yaml"))))
+    srv, base = serve(m.make_handler(m.Farm(m.load_nodes(inv(ROOT / "sim.yaml")))))
     m.SHAPES.reset()
     call(base + "/cn001/redfish/v1/Systems/1")
     call(base + "/cn001/redfish/v1/Chassis/1/Power")  # not served: a 404 a client would hit
@@ -158,8 +160,8 @@ def test_traffic_is_served_read_only_and_does_not_count_itself():
 
 
 def test_every_mock_serves_traffic_with_a_measured_latency():
-    for name, make in (("bcm", lambda m: m.make_handler(m.Cluster(m.load_nodes(ROOT / "sim.yaml")))),
-                       ("bmc", lambda m: m.make_handler(m.Farm(m.load_nodes(ROOT / "sim.yaml"))))):
+    for name, make in (("bcm", lambda m: m.make_handler(m.Cluster(m.load_nodes(inv(ROOT / "sim.yaml"))))),
+                       ("bmc", lambda m: m.make_handler(m.Farm(m.load_nodes(inv(ROOT / "sim.yaml")))))):
         m = load(name)
         srv, base = serve(make(m))
         m.SHAPES.reset()

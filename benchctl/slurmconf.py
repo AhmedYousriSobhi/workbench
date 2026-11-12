@@ -3,6 +3,7 @@ import os
 import secrets
 from pathlib import Path
 
+from . import hwinventory
 from .nodes import node_names
 
 CTLD = "slurmctld"
@@ -64,7 +65,8 @@ def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool 
         lines.append(f"NodeName={_range(compute)} CPUs={c['cpus']} RealMemory={c['memory_mb']} State=UNKNOWN")
     if gpu:
         gres = f"gpu:{g['type']}:{g['gpus_per_node']}"
-        lines.append(f"NodeName={_range(gpu)} CPUs={c['cpus']} RealMemory={c['memory_mb']} "
+        shape = hwinventory.gpu_shape(sim)  # one shape for a GPU node in Slurm, Redfish and BCM (issue 462)
+        lines.append(f"NodeName={_range(gpu)} CPUs={shape['cpus']} RealMemory={shape['memory_mb']} "
                      f"Gres={gres} State=UNKNOWN")
     if real:  # the card's own node and partition: one real GPU, a device file the driver provides (issue 428)
         lines.append(f"NodeName={real[0]} CPUs={c['cpus']} RealMemory={c['memory_mb']} Gres=gpu:{sim['real_gpu']['type']}:1 State=UNKNOWN")

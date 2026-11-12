@@ -41,7 +41,7 @@ services:
     image: workbench/gpu-exporter-farm
     build: ../components/gpu-exporter-farm  # pyyaml is baked in (issue 235); `benchctl up` passes --build
     volumes:
-      - ./generated/sim.yaml:/sim.yaml:ro
+      - ./generated/inventory.json:/inventory.json:ro
       - ./generated/dcgm:/dcgm  # the real exporter's override file, written only when the dcgm part is on (issue 426)
     environment:
       DCGM_OVERRIDES: /dcgm

@@ -10,6 +10,7 @@ from . import (
     addressing,
     controller,
     dcgm,
+    hwinventory,
     jira_real,
     k8s,
     logins,
@@ -161,11 +162,11 @@ def generate(sim: dict, profile: dict) -> dict:
     if "bmc-farm" in services:  # Redfish endpoints for every node in sim.yaml, localhost only
         # :8443 is TLS at the standard /redfish/v1, the node chosen by Host: clients reach it as bmc-<node>
         services["bmc-farm"].update({
-            "volumes": ["./sim.yaml:/sim.yaml:ro", "./secrets/bmc_credentials:/run/workbench/bmc_credentials:ro"],
+            "volumes": ["./inventory.json:/inventory.json:ro", "./secrets/bmc_credentials:/run/workbench/bmc_credentials:ro"],
             "ports": ["127.0.0.1:8000:8000", "127.0.0.1:8443:8443"]})
         _bmc_forwarders(services, sim, profile)
     if "bcm-mock" in services:  # CMDaemon JSON API on the same node inventory, localhost only
-        services["bcm-mock"].update({"volumes": ["./sim.yaml:/sim.yaml:ro"], "ports": ["127.0.0.1:8081:8081"]})
+        services["bcm-mock"].update({"volumes": ["./inventory.json:/inventory.json:ro"], "ports": ["127.0.0.1:8081:8081"]})
     if "jira-mock" in services:
         # a team works the project in the background, one change about every 45 s (benchctl set jira-activity off to stop it, #158)
         services["jira-mock"].update({"ports": ["127.0.0.1:8080:8080"], "environment": {"JIRA_ACTIVITY_EVERY": "45"},
@@ -290,6 +291,7 @@ def write(compose: dict, out: Path = Path("compose/generated/docker-compose.yml"
         # workbench or `scale` changed the counts (the repository's sim.yaml is the default, not the running truth).
         shown = {**sim, "compute": {**sim.get("compute", {}), **({"count": compute_nodes} if compute_nodes is not None else {})}}
         (out.parent / "sim.yaml").write_text(yaml.safe_dump(shown, sort_keys=False))
+        hwinventory.write(shown, out.parent / hwinventory.FILE)  # the one node inventory the mocks and the exporter read (issue 462)
         (out.parent / "flags").mkdir(exist_ok=True)  # the governor's L1 pause flag; made here so Docker does not create it as root (#476)
         (out.parent / "nhc").mkdir(exist_ok=True)  # mounted by every node; filled only with checks that validate (ADR 0019)
         if errs := nhc.sync(out=out.parent / "nhc"):

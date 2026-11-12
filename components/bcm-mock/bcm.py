@@ -1,4 +1,4 @@
-"""Fake BCM CMDaemon: the JSON API subset the app reads, one process, nodes from sim.yaml.
+"""Fake BCM CMDaemon: the JSON API subset the app reads, one process, nodes from the generated inventory.json.
 
 POST /json  {"service": "cmdevice", "call": "getDevices"}
             {"service": "cmdevice", "call": "getDevice", "args": ["cn001"]}
@@ -19,30 +19,16 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-import yaml
-
 STATES = ("UP", "DOWN", "CLOSED", "INSTALLING")
 POWER_TO_STATE = {"powerOn": "UP", "powerOff": "DOWN", "powerReset": "UP"}
 
 
-def load_nodes(sim_yaml: Path) -> dict[str, dict]:
-    """{node: {"category": c, "gpus": n, "memory_mb": m, "cpus": c}} for compute then GPU nodes."""
-    cfg = yaml.safe_load(sim_yaml.read_text())
-    out: dict[str, dict] = {}
-    c, g = cfg.get("compute", {}), cfg.get("gpu", {})
-    for i in range(1, c.get("count", 0) + 1):
-        out[f"{c['prefix']}{i:03d}"] = {"category": "compute", "gpus": 0, "memory_mb": c.get("memory_mb", 4096),
-                                        "cpus": c.get("cpus", 8)}
-    for i in range(1, g.get("nodes", 0) + 1):
-        out[f"{g['prefix']}{i:03d}"] = {"category": "gpu", "gpus": g["gpus_per_node"],
-                                        "memory_mb": 2048 * g["gpus_per_node"], "cpus": 8 * g["gpus_per_node"]}
-    k = cfg.get("kubernetes") or {}
-    manages_k8s = (cfg.get("bcm") or {}).get("manage_kubernetes", True)  # false: the Kubernetes cluster is not BCM's (issue 413)
-    for grp in (k.get("nodes") or []) if k.get("enabled") and manages_k8s else []:  # Kubernetes nodes are devices too, in their own categories
-        for i in range(1, int(grp.get("count", 0)) + 1):
-            out[f"{grp['prefix']}{i:03d}"] = {"category": "k8s-gpu" if grp.get("gpus") else "k8s-cpu", "gpus": int(grp.get("gpus", 0)),
-                                              "memory_mb": int(grp.get("memory_gb", 32)) * 1024, "cpus": int(grp.get("cpus", 8))}
-    return out
+def load_nodes(inventory: Path) -> dict[str, dict]:
+    """{node: {"category": c, "gpus": n, "memory_mb": m, "cpus": c}} from the generated inventory.json (benchctl/hwinventory.py), in its order.
+    Kubernetes nodes are listed only when BCM manages them (`bcm_manages_kubernetes`, issue 413)."""
+    inv = json.loads(Path(inventory).read_text())
+    return {n["name"]: {"category": n["kind"], "gpus": n["gpus"], "memory_mb": n["memory_mb"], "cpus": n["cpus"]}
+            for n in inv["nodes"] if inv.get("bcm_manages_kubernetes", True) or not n["kind"].startswith("k8s")}
 
 
 class Cluster:
@@ -238,9 +224,9 @@ def make_handler(cluster: Cluster):
 
 
 def main() -> None:
-    sim = Path(sys.argv[1] if len(sys.argv) > 1 else "sim.yaml")
+    inventory = Path(sys.argv[1] if len(sys.argv) > 1 else "/inventory.json")
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 8081
-    ThreadingHTTPServer(("0.0.0.0", port), make_handler(Cluster(load_nodes(sim)))).serve_forever()
+    ThreadingHTTPServer(("0.0.0.0", port), make_handler(Cluster(load_nodes(inventory)))).serve_forever()
 
 
 if __name__ == "__main__":

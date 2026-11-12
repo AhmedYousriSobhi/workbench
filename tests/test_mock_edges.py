@@ -8,6 +8,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import pytest
+from invhelp import inv
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -42,14 +43,14 @@ def call(url, body=None, raw=None, method=None):
 
 @pytest.fixture
 def bmc_url():
-    srv, url = serve(bmc.make_handler(bmc.Farm(bmc.load_nodes(ROOT / "sim.yaml"))))
+    srv, url = serve(bmc.make_handler(bmc.Farm(bmc.load_nodes(inv(ROOT / "sim.yaml")))))
     yield url
     srv.shutdown()
 
 
 @pytest.fixture
 def bcm_url():
-    srv, url = serve(bcm.make_handler(bcm.Cluster(bcm.load_nodes(ROOT / "sim.yaml"))))
+    srv, url = serve(bcm.make_handler(bcm.Cluster(bcm.load_nodes(inv(ROOT / "sim.yaml")))))
     yield url
     srv.shutdown()
 
@@ -157,7 +158,7 @@ def test_entry_points_bind_all_interfaces_on_their_default_port(monkeypatch, mod
             bound["served"] = True
 
     monkeypatch.setattr(mod, "ThreadingHTTPServer", FakeServer)
-    monkeypatch.setattr(mod.sys, "argv", argv + ([str(ROOT / "sim.yaml")] if mod is not jira else []))
+    monkeypatch.setattr(mod.sys, "argv", argv + ([str(inv(ROOT / "sim.yaml"))] if mod is not jira else []))
     mod.main()
     assert bound == {"addr": ("0.0.0.0", default_port), "served": True}  # inside the container; compose publishes on 127.0.0.1
 

@@ -25,7 +25,7 @@ Normative requirements for workbench. [README.md](README.md) gives the overview 
 
 ## 3. Configuration: `sim.yaml`
 
-`sim.yaml` is the single source of truth. It MUST define: nodes (count, GPUs per node, GPU type), users/QOS/partitions, `time_dilation` (float, default 1.0), Jira mode, and per-profile memory budgets. All generated artifacts (compose files, `slurm.conf`, Prometheus targets, BMC and BCM inventories) MUST derive from it so node names agree everywhere.
+`sim.yaml` is the single source of truth. It MUST define: nodes (count, GPUs per node, GPU type), users/QOS/partitions, `time_dilation` (float, default 1.0), Jira mode, and per-profile memory budgets. All generated artifacts (compose files, `slurm.conf`, Prometheus targets, BMC and BCM inventories) MUST derive from it so node names agree everywhere. Node shapes are decided once, in the generated `compose/generated/inventory.json` (`benchctl/hwinventory.py`, ADR 0051): Slurm, bmc-farm, bcm-mock and the GPU exporter read it and no mock parses `sim.yaml`; a GPU node has `gpu.cpus` and `gpu.memory_mb` (default 8 CPUs and 2048 MB per GPU) in all of them.
 
 ## 4. Components
 

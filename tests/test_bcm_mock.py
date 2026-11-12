@@ -7,6 +7,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import pytest
+from invhelp import inv
 
 ROOT = Path(__file__).resolve().parent.parent
 spec = importlib.util.spec_from_file_location("bcm", ROOT / "components/bcm-mock/bcm.py")
@@ -16,7 +17,7 @@ spec.loader.exec_module(bcm)
 
 @pytest.fixture
 def server():
-    nodes = bcm.load_nodes(ROOT / "sim.yaml")
+    nodes = bcm.load_nodes(inv(ROOT / "sim.yaml"))
     srv = ThreadingHTTPServer(("127.0.0.1", 0), bcm.make_handler(bcm.Cluster(nodes)))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{srv.server_port}", nodes
@@ -73,7 +74,7 @@ def test_bcm_manages_the_kubernetes_nodes_only_when_configured(tmp_path):
         cfg = {**base, "bcm": {"manage_kubernetes": manage}} if manage is not None else {k: v for k, v in base.items() if k != "bcm"}
         f = tmp_path / "sim.yaml"
         f.write_text(yaml.safe_dump(cfg))
-        return set(bcm.load_nodes(f))
+        return set(bcm.load_nodes(inv(f)))
 
     on, off = names(True), names(False)
     assert any(n.startswith("kcn") for n in on) and names(None) == on  # unset keeps today's behaviour

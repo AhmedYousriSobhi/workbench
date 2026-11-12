@@ -24,29 +24,16 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-import yaml
-
 FANS = 6
 FIRMWARE = {"BMC": ("BMC firmware", "2.4.0"), "BIOS": ("BIOS", "1.0.0")}
 RESET_TO = {"On": "On", "ForceOn": "On", "ForceOff": "Off", "GracefulShutdown": "Off",
             "ForceRestart": "On", "GracefulRestart": "On", "PowerCycle": "On"}
 
 
-def load_nodes(sim_yaml: Path) -> dict[str, dict]:
-    """{node: {"gpus": n, "memory_mb": m, "cpus": c}} for compute then GPU nodes."""
-    cfg = yaml.safe_load(sim_yaml.read_text())
-    out: dict[str, dict] = {}
-    c, g = cfg.get("compute", {}), cfg.get("gpu", {})
-    for i in range(1, c.get("count", 0) + 1):
-        out[f"{c['prefix']}{i:03d}"] = {"gpus": 0, "memory_mb": c.get("memory_mb", 4096), "cpus": c.get("cpus", 8)}
-    for i in range(1, g.get("nodes", 0) + 1):
-        out[f"{g['prefix']}{i:03d}"] = {"gpus": g["gpus_per_node"], "memory_mb": 2048 * g["gpus_per_node"],
-                                        "cpus": 8 * g["gpus_per_node"]}
-    k = cfg.get("kubernetes") or {}
-    for grp in (k.get("nodes") or []) if k.get("enabled") else []:  # Kubernetes nodes are machines too: they have a BMC (listed after the Slurm nodes)
-        for i in range(1, int(grp.get("count", 0)) + 1):
-            out[f"{grp['prefix']}{i:03d}"] = {"gpus": int(grp.get("gpus", 0)), "memory_mb": int(grp.get("memory_gb", 32)) * 1024, "cpus": int(grp.get("cpus", 8))}
-    return out
+def load_nodes(inventory: Path) -> dict[str, dict]:
+    """{node: {"gpus": n, "memory_mb": m, "cpus": c, "serial": s}} from the generated inventory.json (benchctl/hwinventory.py), in its order."""
+    return {n["name"]: {"gpus": n["gpus"], "memory_mb": n["memory_mb"], "cpus": n["cpus"], "serial": n["serial"]}
+            for n in json.loads(Path(inventory).read_text())["nodes"]}
 
 
 class Farm:
@@ -106,7 +93,7 @@ class Farm:
                  "AccountService": {"@odata.id": base + "/AccountService"},
                  "SessionService": {"@odata.id": base + "/SessionService"}},
             "Systems/1": {"@odata.id": f"{base}/Systems/1", "Id": "1", "Name": node, "HostName": node, "Manufacturer": "workbench", "Model": "SimServer",
-                          "SerialNumber": f"SIM-{node.upper()}", "BiosVersion": "1.0.0",
+                          "SerialNumber": info["serial"], "BiosVersion": "1.0.0",
                           "PowerState": self.power[node], "Status": healthy,
                           "ProcessorSummary": {"Count": info["cpus"], "Status": healthy},
                           "MemorySummary": {"TotalSystemMemoryGiB": info["memory_mb"] // 1024, "Status": healthy},
@@ -412,10 +399,10 @@ STANDARD_TLS_PORT = 443  # not published on the host (binding it there needs roo
 
 
 def main() -> None:
-    sim = Path(sys.argv[1] if len(sys.argv) > 1 else "sim.yaml")
+    inventory = Path(sys.argv[1] if len(sys.argv) > 1 else "/inventory.json")
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 8000
     tls_port = int(sys.argv[3]) if len(sys.argv) > 3 else 8443
-    farm, stats, lock = Farm(load_nodes(sim)), {"requests": 0, "errors": 0}, threading.Lock()
+    farm, stats, lock = Farm(load_nodes(inventory)), {"requests": 0, "errors": 0}, threading.Lock()
     creds = read_credentials(Path("/run/workbench/bmc_credentials"))
     if creds:
         farm.account = creds[0]
