@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Overview</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#79B8FF}a:hover{color:#B3D4FF}
+</style>
+</helmet>
+<div style="min-height: 940px; background: #0E1116; color: #E6EDF3; font-family: Inter, system-ui, sans-serif; font-size: 0.9375rem; line-height: 1.5">
+
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 24px; border-bottom: 1px solid #262D38; background: #12161C">
+    <div style="display: flex; align-items: center; gap: 10px; margin-right: 12px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#79B8FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="6" rx="1.5"></rect><rect x="3" y="14" width="18" height="6" rx="1.5"></rect><path d="M7 7h.01M7 17h.01"></path></svg>
+      <span style="font-weight: 700; font-size: 1rem">Cluster simulator</span>
+    </div>
+    <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; background: #13261A; color: #7EE2A0; font-size: 0.8125rem; font-weight: 600">✓ Governor L0 · calm</span>
+    <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; background: #1A2029; color: #C9D3DD; font-size: 0.8125rem">Memory 9.4 GB free</span>
+    <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; background: #2B2114; color: #FFB86B; font-size: 0.8125rem; font-weight: 600">▲ Nodes 5 of 6 in service</span>
+    <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; background: #2B2114; color: #FFB86B; font-size: 0.8125rem; font-weight: 600">▲ Services 8 of 9</span>
+    <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; background: #17212E; color: #9CC7FF; font-size: 0.8125rem">● Test running: gpu-xid-storm</span>
+    <div style="flex: 1 1 auto"></div>
+    <a href="#" style="font-size: 0.875rem">Help</a>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; align-items: flex-start">
+    <nav aria-label="Workspaces" style="flex: 1 1 220px; max-width: 260px; padding: 20px 12px; display: flex; flex-direction: column; gap: 4px">
+      <a href="#" style="display: block; padding: 10px 14px; border-radius: 8px; background: #1C2633; color: #E6EDF3; text-decoration: none; font-weight: 600">Overview</a>
+      <a href="TestRun.dc.html" style="display: block; padding: 10px 14px; border-radius: 8px; color: #C9D3DD; text-decoration: none">Test run</a>
+      <a href="Topology.dc.html" style="display: block; padding: 10px 14px; border-radius: 8px; color: #C9D3DD; text-decoration: none">Topology</a>
+      <a href="#" style="display: block; padding: 10px 14px; border-radius: 8px; color: #C9D3DD; text-decoration: none">Connections</a>
+      <div style="height: 1px; background: #262D38; margin: 10px 4px"></div>
+      <a href="Setup.dc.html" style="display: block; padding: 10px 14px; border-radius: 8px; color: #C9D3DD; text-decoration: none">Cluster setup</a>
+      <a href="#" style="display: block; padding: 10px 14px; border-radius: 8px; color: #C9D3DD; text-decoration: none">Health checks</a>
+      <a href="#" style="display: block; padding: 10px 14px; border-radius: 8px; color: #C9D3DD; text-decoration: none">Governor</a>
+    </nav>
+
+    <main style="flex: 999 1 560px; min-width: 0; padding: 24px 32px 40px; display: flex; flex-direction: column; gap: 24px; max-width: 1180px">
+      <div>
+        <h1 style="margin: 0; font-size: 1.625rem; font-weight: 700">Overview</h1>
+        <p style="margin: 4px 0 0; color: #9AA7B4">Sample data · profile std · 4 CPU nodes, 2 GPU nodes, login on 127.0.0.1:2222</p>
+      </div>
+
+      <section aria-label="Needs attention" style="border: 1px solid #5A3E1B; background: #1E1810; border-radius: 12px; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px">
+        <h2 style="margin: 0; font-size: 1rem; font-weight: 600; color: #FFB86B">▲ Needs attention (2)</h2>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center">
+          <span style="flex: 1 1 380px">gpu001 drained by the node health check: <code style="font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; color: #E6EDF3">NHC: GPU XID 79</code></span>
+          <span style="color: #9AA7B4; font-size: 0.875rem">caused by the running test</span>
+          <a href="TestRun.dc.html" style="font-size: 0.875rem; font-weight: 600">View test run</a>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center">
+          <span style="flex: 1 1 380px">jira-mock answers 503 (fault injected)</span>
+          <span style="color: #9AA7B4; font-size: 0.875rem">until step 6 clears it</span>
+          <a href="TestRun.dc.html" style="font-size: 0.875rem; font-weight: 600">View test run</a>
+        </div>
+      </section>
+
+      <section aria-label="Start here" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+        <div style="background: #151A21; border: 1px solid #262D38; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 10px">
+          <h2 style="margin: 0; font-size: 1.0625rem; font-weight: 600">Run a test</h2>
+          <p style="margin: 0; color: #9AA7B4; font-size: 0.875rem">Pick a scenario, watch what your client calls and sees, export a report for the bug.</p>
+          <a href="TestRun.dc.html" style="align-self: flex-start; margin-top: auto; padding: 10px 16px; border-radius: 8px; background: #2F6FEB; color: #FFFFFF; text-decoration: none; font-weight: 600; font-size: 0.875rem">Start a test run</a>
+        </div>
+        <div style="background: #151A21; border: 1px solid #262D38; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 10px">
+          <h2 style="margin: 0; font-size: 1.0625rem; font-weight: 600">Break one thing</h2>
+          <p style="margin: 0; color: #9AA7B4; font-size: 0.875rem">Power off, overheat, fan failure, GPU XID or drain, on one node, with one click to clear.</p>
+          <a href="Topology.dc.html" style="align-self: flex-start; margin-top: auto; padding: 10px 16px; border-radius: 8px; background: #1C2633; border: 1px solid #33404F; color: #E6EDF3; text-decoration: none; font-weight: 600; font-size: 0.875rem">Choose a node</a>
+        </div>
+        <div style="background: #151A21; border: 1px solid #262D38; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 10px">
+          <h2 style="margin: 0; font-size: 1.0625rem; font-weight: 600">Connect your client</h2>
+          <p style="margin: 0; color: #9AA7B4; font-size: 0.875rem">Download the client profile, install the SSH key, copy each address and command.</p>
+          <a href="#" style="align-self: flex-start; margin-top: auto; padding: 10px 16px; border-radius: 8px; background: #1C2633; border: 1px solid #33404F; color: #E6EDF3; text-decoration: none; font-weight: 600; font-size: 0.875rem">Export client profile</a>
+        </div>
+      </section>
+
+      <section aria-labelledby="nodes-h" style="display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px">
+          <h2 id="nodes-h" style="margin: 0; font-size: 1.0625rem; font-weight: 600">Nodes</h2>
+          <span style="color: #9AA7B4; font-size: 0.875rem">Slurm state from sinfo, power and temperature from the BMC, GPU load from DCGM</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+          <sc-for list="{{nodes}}" as="n" hint-placeholder-count="6">
+            <a href="Topology.dc.html" style="display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-radius: 10px; background: #151A21; border: 1px solid #262D38; color: #E6EDF3; text-decoration: none">
+              <div style="display: flex; align-items: center; gap: 8px">
+                <span style="font-family: 'JetBrains Mono', monospace; font-weight: 500">{{n.name}}</span>
+                <span style="color: #9AA7B4; font-size: 0.8125rem">{{n.kind}}</span>
+                <span style="margin-left: auto; font-size: 0.8125rem; font-weight: 600; padding: 2px 10px; border-radius: 999px; background: {{n.badgeBg}}; color: {{n.badgeFg}}">{{n.state}}</span>
+              </div>
+              <div style="height: 6px; border-radius: 3px; background: #262D38; overflow: hidden"><div style="height: 6px; width: {{n.load}}; background: #4C9AFF"></div></div>
+              <div style="color: #9AA7B4; font-size: 0.8125rem">{{n.detail}}</div>
+            </a>
+          </sc-for>
+        </div>
+      </section>
+
+      <section aria-labelledby="svc-h" style="display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px">
+          <h2 id="svc-h" style="margin: 0; font-size: 1.0625rem; font-weight: 600">Services</h2>
+          <span style="color: #9AA7B4; font-size: 0.875rem">real = upstream software answers · simulated = a mock imitates it</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+          <sc-for list="{{services}}" as="s" hint-placeholder-count="9">
+            <div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; background: #12161C; border: 1px solid #222934">
+              <span style="font-weight: 700; color: {{s.fg}}" aria-hidden="true">{{s.icon}}</span>
+              <span style="font-weight: 500">{{s.name}}</span>
+              <span style="color: #9AA7B4; font-size: 0.8125rem">{{s.note}}</span>
+              <span style="margin-left: auto; font-size: 0.75rem; padding: 2px 8px; border-radius: 6px; border: 1px solid #33404F; color: #C9D3DD">{{s.kind}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":940}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const ok = { badgeBg: '#13261A', badgeFg: '#7EE2A0' };
+    const warn = { badgeBg: '#2B2114', badgeFg: '#FFB86B' };
+    const nodes = [
+      { name: 'cn001', kind: 'CPU', state: '✓ Idle', load: '0%', detail: '8 CPUs · 41 °C · no jobs', ...ok },
+      { name: 'cn002', kind: 'CPU', state: '✓ Allocated', load: '50%', detail: '8 CPUs · 47 °C · 1 job (bob)', ...ok },
+      { name: 'cn003', kind: 'CPU', state: '✓ Allocated', load: '100%', detail: '8 CPUs · 52 °C · 2 jobs (alice)', ...ok },
+      { name: 'cn004', kind: 'CPU', state: '✓ Idle', load: '0%', detail: '8 CPUs · 40 °C · no jobs', ...ok },
+      { name: 'gpu001', kind: 'GPU · 8 × H200', state: '▲ Drained', load: '12%', detail: 'NHC: XID 79 · 88 °C rising', ...warn },
+      { name: 'gpu002', kind: 'GPU · 8 × H200', state: '✓ Allocated', load: '62%', detail: '5 of 8 GPUs busy · 61 °C', ...ok }
+    ];
+    const good = { icon: '✓', fg: '#7EE2A0' };
+    const services = [
+      { name: 'slurmctld', note: ':6817', kind: 'real', ...good },
+      { name: 'slurmrestd', note: 'JWT', kind: 'real', ...good },
+      { name: 'login', note: '127.0.0.1:2222', kind: 'real', ...good },
+      { name: 'prometheus', note: ':9090', kind: 'real', ...good },
+      { name: 'grafana', note: ':3000', kind: 'real', ...good },
+      { name: 'gpu exporter', note: ':9400', kind: 'simulated', ...good },
+      { name: 'bmc farm', note: 'Redfish :8443', kind: 'simulated', ...good },
+      { name: 'bcm', note: ':8081', kind: 'simulated', ...good },
+      { name: 'jira', note: '503 injected', kind: 'simulated', icon: '▲', fg: '#FFB86B' }
+    ];
+    return { nodes, services };
+  }
+}
+</script>
+</body>
+</html>

@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 from typer.testing import CliRunner
+from webui_src import page_source
 
 from benchctl import addressing, cli, completion, compose, export, logins, teleport, workbench
 from governor import control
@@ -136,8 +137,8 @@ def test_governor_checks_the_login_modes_it_will_put_on_a_command_line():
 
 
 def test_the_sheet_has_a_login_row_and_sends_the_modes():
-    html = (ROOT / "webui/static/index.html").read_text()
-    assert 'id="pl-loginrows"' in html and "q.set('logins', loginModes.join(','))" in html
+    html = page_source()
+    assert 'id="pl-loginrows"' in html and "q.set('logins', S.loginModes.join(','))" in html
     assert "LOGIN_LABEL = { ssh: 'Direct SSH', teleport: 'Teleport only', both: 'Direct SSH and Teleport' }" in html
 
 
@@ -206,7 +207,7 @@ def test_the_cli_and_the_governor_accept_a_login_kind():
 
 
 def test_the_page_has_a_type_per_login_a_kubernetes_group_and_a_kubectl_line():
-    html = (ROOT / "webui/static/index.html").read_text()
+    html = page_source()
     for needle in ("KIND_LABEL", "seg(i, 'kind'", "pl-lg-split", "pl-kon", "pl-kcpu", "pl-sum", "GROUP_TITLE", "br-k8s", "k8s-nodes:kubectl", "'kubectl'", "KIND_NAME[loginKind(l)]"):
         assert needle in html, needle
 

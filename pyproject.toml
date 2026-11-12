@@ -1,6 +1,6 @@
 [project]
 name = "workbench"
-version = "0.6.0"
+version = "0.8.0"
 requires-python = ">=3.11"
 license = {text = "Apache-2.0 OR MIT"}
 dependencies = ["typer", "pyyaml", "starlette", "uvicorn"]
@@ -20,7 +20,7 @@ build-backend = "setuptools.build_meta"
 packages = ["benchctl", "governor", "webui"]
 
 [tool.setuptools.package-data]
-webui = ["static/*"]
+webui = ["static/*", "static/js/*", "static/fonts/*"]
 
 [tool.ruff]
 line-length = 100

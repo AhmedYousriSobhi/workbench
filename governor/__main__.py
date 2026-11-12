@@ -7,7 +7,9 @@ import pwd
 import signal
 import subprocess
 import sys
+import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from . import control, metrics
@@ -23,8 +25,24 @@ from .watchdog import Watchdog
 log = logging.getLogger("governor")
 
 
-def arrivals_flag_path(given: str, user_mode: bool) -> str:
-    """The flag file defaults to /run/workbench, which only root can write: rootless mode uses the user's runtime dir."""
+FLAGS_DIR = "compose/generated/flags"  # mounted read-only into the login nodes and jira-mock (issue 476)
+
+
+def clear_stale_flag(flag: str, dry_run: bool) -> bool:
+    """The ladder starts at L0, so a pause flag found at startup is left over from a governor that died at L1: remove it, or
+    arrivals stay paused until someone deletes the file. A dry run touches nothing."""
+    f = Path(flag)
+    if dry_run or not f.exists():
+        return False
+    f.unlink(missing_ok=True)
+    return True
+
+
+def arrivals_flag_path(given: str, user_mode: bool, workdir: str | None = None) -> str:
+    """Where L1 puts the pause flag. With --workdir (root service and user mode alike) it is the checkout's flags directory,
+    which the containers mount read-only (never /run/workbench: gov.sock lives there). Without one, the old defaults."""
+    if given == ARRIVALS_FLAG and workdir:
+        return str(Path(workdir) / FLAGS_DIR / "arrivals.paused")
     if user_mode and given == ARRIVALS_FLAG:
         return str(Path(os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/workbench-{os.getuid()}") / "workbench" / "arrivals.paused")
     return given
@@ -69,7 +87,9 @@ def main(argv: list[str] | None = None) -> None:
     else:
         sampler = Sampler()
     ladder = Ladder(Thresholds(**json.loads(args.thresholds or "{}")))
-    executor = (UserExecutor if args.user_mode else Executor)(groups, cgroups, path, arrivals_flag=arrivals_flag_path(args.arrivals_flag, args.user_mode))
+    executor = (UserExecutor if args.user_mode else Executor)(groups, cgroups, path, arrivals_flag=arrivals_flag_path(args.arrivals_flag, args.user_mode, args.workdir))
+    if clear_stale_flag(executor.arrivals_flag, args.dry_run):
+        log.warning("removed a stale arrivals pause flag left by an earlier governor (%s)", executor.arrivals_flag)
     watchdog = None if args.no_watchdog else Watchdog()
     token = os.environ.get("WORKBENCH_GRAFANA_TOKEN", "")
     annotator = Annotator(args.grafana_url, token) if args.grafana_url and token else None
@@ -81,6 +101,25 @@ def main(argv: list[str] | None = None) -> None:
         if os.geteuid() == 0 and owner != 0:  # run as the checkout's owner so generated files stay theirs
             cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]
         return subprocess.run(cmd, cwd=args.workdir, capture_output=True, timeout=600, check=False).returncode
+
+    def streamer(a: list[str], on_line: Callable[[str], None]) -> int:
+        """Like the effector, but hands each output line over as it appears so the governor can report stages (issue 519)."""
+        cmd = [sys.executable, "-m", "benchctl.cli", *a]
+        owner = Path(args.workdir).stat().st_uid
+        if os.geteuid() == 0 and owner != 0:
+            cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]
+        proc = subprocess.Popen(cmd, cwd=args.workdir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                env={**os.environ, "WORKBENCH_STAGE_LINES": "1"})
+        timer = threading.Timer(600, proc.kill)  # the effector's 10-minute limit
+        timer.start()
+        try:
+            for line in proc.stdout:
+                on_line(line.rstrip("\n"))
+            return proc.wait()
+        finally:
+            timer.cancel()
+            if proc.poll() is None:
+                proc.kill()
 
     def tracer(nodes: list[str], since: float) -> dict:
         cmd = [sys.executable, "-m", "benchctl.cli", "get", "trace", "--since", str(max(1.0, time.time() - since)),
@@ -103,10 +142,19 @@ def main(argv: list[str] | None = None) -> None:
             raise RuntimeError((r.stderr or r.stdout).strip()[:200])
         return json.loads(r.stdout)
 
+    def capturer(node: str, seconds: int):
+        """`benchctl get capture NODE` as the repository's owner, its JSON lines on stdout (issue 505)."""
+        cmd = [sys.executable, "-m", "benchctl.cli", "get", "capture", node, "--seconds", str(seconds)]
+        owner = Path(args.workdir).stat().st_uid
+        if os.geteuid() == 0 and owner != 0:
+            cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]
+        return subprocess.Popen(cmd, cwd=args.workdir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
     gov = Governor(sampler, ladder, groups, executor, args.dry_run, watchdog, args.watch_interval,
                    annotator, discover_docker, args.refresh_interval,
                    effector if args.workdir else None, tracer=tracer if args.workdir else None,
-                   statser=statser if args.workdir else None)
+                   statser=statser if args.workdir else None, capturer=capturer if args.workdir else None,
+                   streamer=streamer if args.workdir else None)
     srv = control.serve(args.socket, gov.handle, gov.group_names, gid=args.socket_gid) \
         if args.socket else None
     msrv = None

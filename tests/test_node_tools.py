@@ -20,3 +20,13 @@ def test_dcgmi_comes_from_the_exporter_image_the_dcgm_part_uses_and_not_from_apt
     assert "COPY --from=dcgm /usr/bin/dcgmi" in DOCKERFILE and "libdcgm.so" in DOCKERFILE and "dcgm" not in RUNTIME.split("apt-get install")[1].split("&&")[0]
     wrapper = (Path(__file__).resolve().parent.parent / "images/node-base/dcgmi").read_text()
     assert "WORKBENCH_DCGM_HOST" in wrapper and wrapper.startswith("#!/bin/sh")
+
+
+def test_slurm_is_built_on_every_core_with_a_compiler_cache_and_stays_pinned():
+    """#448: make -j2 and no cache made a cold build slow and every Slurm bump a full recompile. The pin (ADR 0002) must survive."""
+    build = DOCKERFILE.split("FROM ubuntu:24.04 AS build")[1].split("\nFROM ubuntu:24.04\n")[0]
+    assert 'make -j"${BUILD_JOBS:-$(nproc)}"' in build and "-j2" not in build
+    assert "--mount=type=cache,target=/ccache" in build and "ccache" in build.split("apt-get install")[1].split("&&")[0]
+    assert 'CC="ccache gcc"' in build
+    assert "sha256sum -c" in build and "ARG SLURM_SHA256=" in DOCKERFILE and "ARG SLURM_VERSION=" in DOCKERFILE
+    assert "/ccache" not in DOCKERFILE.split("\nFROM ubuntu:24.04\n")[1]  # the cache never reaches the image

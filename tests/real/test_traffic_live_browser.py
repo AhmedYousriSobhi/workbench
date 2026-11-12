@@ -40,10 +40,11 @@ def test_a_drained_node_shows_in_the_traffic_diagram_and_timeline():
         slurm = {"s": {n: "idle" for n in NAMES}}
         with sync_playwright() as p:
             b = p.chromium.launch()
-            pg = b.new_page(viewport={"width": 1280, "height": 900})
+            pg = b.new_page(viewport={"width": 1280, "height": 900}, bypass_csp=True)
             pg.route("**/api/cluster", lambda r: r.fulfill(json=cluster(NODES)))
             pg.route("**/api/slurm-stats", lambda r: r.fulfill(json=stats(slurm["s"])))
             pg.route("**/api/flow*", lambda r: r.abort())
+            pg.add_init_script("try { localStorage.setItem('workbench-circuit', '0'); sessionStorage.getItem('workbench-tab') || sessionStorage.setItem('workbench-tab', 'nodes'); } catch (e) {}")  # the classic diagram and list: the circuit is the default view
             pg.goto(url)
             pg.click("#tb-traffic")
             pg.wait_for_selector("#tr-map text")

@@ -153,6 +153,21 @@ def _b64(p: Path) -> str:
     return base64.b64encode(p.read_bytes()).decode()
 
 
+# The API audit log (issue 505, ADR 0042): metadata only (who, verb, object, time, status; never a request or a response body) and only for
+# what a node's wire carries: node objects, leases (the heartbeat) and pods. Every other request, secrets included, is not logged at all.
+# It goes to the API server's stdout, so the on-demand capture reads it with `docker logs`; Docker bounds the file (see `wire`).
+AUDIT_POLICY = """apiVersion: audit.k8s.io/v1
+kind: Policy
+omitStages: [RequestReceived]
+rules:
+- level: Metadata
+  resources:
+  - {group: "", resources: [nodes, nodes/status, pods, pods/status, pods/binding]}
+  - {group: coordination.k8s.io, resources: [leases]}
+- level: None
+"""
+
+
 def kubeconfig(server: str, user: dict, ca_b64: str | None = None, ca_file: str | None = None, namespace: str | None = None) -> str:
     cluster = {"server": server, **({"certificate-authority-data": ca_b64} if ca_b64 else {"certificate-authority": ca_file})}
     ctx = {"cluster": "workbench-k8s", "user": user["name"], **({"namespace": namespace} if namespace else {})}
@@ -200,6 +215,8 @@ def prepare(sim: dict, ips: dict, secrets_dir: Path | None = None, state_dir: Pa
     if metrics_token(d) is None:  # a cluster made before this user existed gets it without a new PKI (the API server reads it on its next start)
         with (d / "tokens.csv").open("a") as f:
             f.write(f"{secrets.token_hex(24)},{METRICS_USER},{METRICS_USER}-uid\n")
+    (d / "audit-policy.yaml").write_text(AUDIT_POLICY)  # always rewritten: a cluster made before this existed gets it on its next start
+    (d / "audit-policy.yaml").chmod(0o600)
     (st / "nodes.yaml").write_text(nodes_yaml(sim, gpu_override))
 
 
@@ -222,7 +239,8 @@ def wire(services: dict, sim: dict) -> None:
                           f"--client-ca-file={CONTAINER_PKI}/ca.crt", f"--token-auth-file={CONTAINER_PKI}/tokens.csv",
                           f"--service-account-key-file={CONTAINER_PKI}/sa.pub", f"--service-account-signing-key-file={CONTAINER_PKI}/sa.key",
                           "--service-account-issuer=https://kubernetes.default.svc.cluster.local",
-                          f"--proxy-client-cert-file={CONTAINER_PKI}/admin.crt", f"--proxy-client-key-file={CONTAINER_PKI}/admin.key"],
+                          f"--proxy-client-cert-file={CONTAINER_PKI}/admin.crt", f"--proxy-client-key-file={CONTAINER_PKI}/admin.key",
+                          f"--audit-policy-file={CONTAINER_PKI}/audit-policy.yaml", "--audit-log-path=-", "--audit-log-format=json"],
         "k8s-controller-manager": [kc, "--authorization-always-allow-paths=/healthz,/readyz,/livez,/metrics", "--bind-address=0.0.0.0",
                                    "--secure-port=10257", f"--root-ca-file={CONTAINER_PKI}/ca.crt",
                                    f"--service-account-private-key-file={CONTAINER_PKI}/sa.key", "--use-service-account-credentials=true",
@@ -245,6 +263,7 @@ def wire(services: dict, sim: dict) -> None:
             svc["depends_on"] = ["k8s-etcd"] if name == API else [API]
     if API in services:
         services[API]["ports"] = [f"127.0.0.1:{API_PORT}:{API_PORT}"]  # the host's fallback; clients use the fixed IP
+        services[API]["logging"] = {"driver": "json-file", "options": {"max-size": "5m", "max-file": "2"}}  # the audit log goes to stdout: Docker keeps at most 10 MB of it
 
 
 # ---- running the cluster ----

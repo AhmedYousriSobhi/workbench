@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cluster setup</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#79B8FF}a:hover{color:#B3D4FF}
+</style>
+</helmet>
+<div style="min-height: 940px; background: #0E1116; color: #E6EDF3; font-family: Inter, system-ui, sans-serif; font-size: 0.9375rem; line-height: 1.5">
+
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 24px; border-bottom: 1px solid #262D38; background: #12161C">
+    <a href="Main.dc.html" style="color: #E6EDF3; text-decoration: none; font-weight: 700">Cluster simulator</a>
+    <span style="color: #6E7C8B" aria-hidden="true">/</span>
+    <span style="font-weight: 600">Cluster setup</span>
+    <div style="flex: 1 1 auto"></div>
+    <span style="display: inline-flex; padding: 5px 12px; border-radius: 999px; background: #13261A; color: #7EE2A0; font-size: 0.8125rem; font-weight: 600">✓ Governor L0 · changes allowed</span>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 24px; padding: 24px 24px 40px; align-items: flex-start">
+
+    <main style="flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 18px">
+      <div>
+        <h1 style="margin: 0; font-size: 1.5rem; font-weight: 700">What runs</h1>
+        <p style="margin: 4px 0 0; color: #9AA7B4">Change counts and parts on the left; the right side shows exactly what Apply will do before you press it.</p>
+      </div>
+
+      <section aria-labelledby="slurm-h" style="background: #151A21; border: 1px solid #262D38; border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px">
+        <h2 id="slurm-h" style="margin: 0; font-size: 1rem; font-weight: 600">Slurm nodes</h2>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+          <label style="display: flex; flex-direction: column; gap: 6px; font-size: 0.875rem; color: #C9D3DD">CPU nodes <span style="color: #9AA7B4; font-size: 0.8125rem">8 CPUs, 4 GB each · now 4</span>
+            <input type="number" value="2" min="0" max="32" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #FFB86B; background: #12161C; color: #E6EDF3; font: inherit; width: 120px">
+          </label>
+          <label style="display: flex; flex-direction: column; gap: 6px; font-size: 0.875rem; color: #C9D3DD">GPU nodes <span style="color: #9AA7B4; font-size: 0.8125rem">8 × H200 each · now 2</span>
+            <input type="number" value="4" min="0" max="16" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #4C9AFF; background: #12161C; color: #E6EDF3; font: inherit; width: 120px">
+          </label>
+        </div>
+      </section>
+
+      <section aria-labelledby="parts-h" style="background: #151A21; border: 1px solid #262D38; border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px">
+        <h2 id="parts-h" style="margin: 0; font-size: 1rem; font-weight: 600">Optional parts</h2>
+        <sc-for list="{{parts}}" as="p" hint-placeholder-count="6">
+          <label style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; background: #12161C; cursor: pointer">
+            <input type="checkbox" checked="{{p.on}}" style="width: 20px; height: 20px; accent-color: #4C9AFF">
+            <span style="flex: 1 1 auto"><b style="font-weight: 600">{{p.name}}</b> <span style="color: #9AA7B4; font-size: 0.8125rem">{{p.what}}</span></span>
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; color: #C9D3DD">{{p.mb}}</span>
+          </label>
+        </sc-for>
+      </section>
+    </main>
+
+    <aside aria-labelledby="rev-h" style="flex: 1 1 400px; max-width: 480px; background: #151A21; border: 1px solid #33404F; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+      <h2 id="rev-h" style="margin: 0; font-size: 1.125rem; font-weight: 700">Review changes</h2>
+
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; gap: 10px; align-items: baseline"><b style="color: #7EE2A0; width: 64px; flex: 0 0 64px">+ Adds</b><span>gpu003, gpu004, teleport</span></div>
+        <div style="display: flex; gap: 10px; align-items: baseline"><b style="color: #FF9B9B; width: 64px; flex: 0 0 64px">− Removes</b><span>cn003, cn004</span></div>
+        <div style="display: flex; gap: 10px; align-items: baseline"><b style="color: #9CC7FF; width: 64px; flex: 0 0 64px">↻ Restarts</b><span>slurmctld (node list changed)</span></div>
+      </div>
+
+      <div style="padding: 12px 14px; border-radius: 10px; background: #2A1414; border: 1px solid #6B2A2A; display: flex; flex-direction: column; gap: 4px">
+        <b style="color: #FF9B9B">✗ 2 running jobs will stop</b>
+        <span style="font-size: 0.875rem">Job 1042 (alice, cn003) and job 1047 (alice, cn003). Removing a node kills its jobs.</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; justify-content: space-between; font-size: 0.875rem"><span>Expected use after Apply</span><b>1.4 GB</b></div>
+        <div style="height: 12px; border-radius: 6px; background: #262D38; overflow: hidden; display: flex">
+          <div style="width: 12%; background: #4C9AFF"></div>
+          <div style="width: 10%; background: #2F4F7A"></div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.8125rem; color: #9AA7B4">
+          <span><b style="color: #4C9AFF">■</b> simulation 1.4 GB</span>
+          <span><b style="color: #2F4F7A">■</b> client reserve 1.0 GB</span>
+          <span>9.4 GB free · floor 1 GB</span>
+        </div>
+        <span style="font-size: 0.875rem; color: #7EE2A0; font-weight: 600">✓ Fits: 7.0 GB stays free above the floor</span>
+      </div>
+
+      <label style="display: flex; gap: 10px; align-items: flex-start; font-size: 0.875rem; cursor: pointer">
+        <input type="checkbox" style="width: 20px; height: 20px; margin-top: 1px; accent-color: #FF9B9B">
+        <span>I understand 2 jobs will stop</span>
+      </label>
+
+      <button type="button" disabled="disabled" style="padding: 12px 16px; border-radius: 8px; border: 0; background: #2A3442; color: #8593A1; font: inherit; font-weight: 600; cursor: not-allowed">Apply changes</button>
+
+      <div style="border-top: 1px solid #262D38; padding-top: 14px; display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 0.8125rem; color: #9AA7B4">Progress (from the governor's stages, not the log text)</span>
+        <sc-for list="{{stages}}" as="s" hint-placeholder-count="5">
+          <div style="display: flex; gap: 10px; font-size: 0.875rem"><b style="color: {{s.fg}}; width: 16px" aria-hidden="true">{{s.icon}}</b><span>{{s.name}}</span><span style="margin-left: auto; color: #9AA7B4">{{s.t}}</span></div>
+        </sc-for>
+      </div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":940}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const parts = [
+      { name: 'Accounting', what: 'slurmdbd and MariaDB, sacct history', mb: '+244 MB', on: true },
+      { name: 'Teleport', what: 'certificate SSH access', mb: '+256 MB', on: true },
+      { name: 'BMC addresses', what: 'one Redfish address per node', mb: '+21 MB each', on: true },
+      { name: 'Kubernetes', what: 'real control plane, KWOK nodes', mb: '+0.3 GB', on: false },
+      { name: 'Real DCGM exporter', what: 'genuine DCGM series, first GPU node', mb: '+256 MB', on: false },
+      { name: 'Jump host', what: 'bare sshd bastion', mb: '+3 MB', on: false }
+    ];
+    const stages = [
+      { name: 'Build images', icon: '○', fg: '#9AA7B4', t: 'waiting' },
+      { name: 'Observability · mocks · Teleport (in parallel)', icon: '○', fg: '#9AA7B4', t: 'waiting' },
+      { name: 'Slurm core, healthy', icon: '○', fg: '#9AA7B4', t: 'waiting' },
+      { name: 'Nodes', icon: '○', fg: '#9AA7B4', t: 'waiting' },
+      { name: 'Login nodes', icon: '○', fg: '#9AA7B4', t: 'waiting' }
+    ];
+    return { parts, stages };
+  }
+}
+</script>
+</body>
+</html>

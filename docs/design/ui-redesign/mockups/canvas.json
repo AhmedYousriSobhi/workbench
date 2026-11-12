@@ -1,0 +1,92 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Architecture.dc.html": {
+      "h": 1040,
+      "is_interactive": true,
+      "title": "5 \u00b7 Infrastructure architecture: live circuit with traffic layers",
+      "w": 2080,
+      "x": 0,
+      "y": 2120
+    },
+    "Main.dc.html": {
+      "expand": "fill",
+      "h": 940,
+      "title": "1 \u00b7 Overview: task-first home",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "Setup.dc.html": {
+      "expand": "fill",
+      "h": 940,
+      "title": "4 \u00b7 Cluster setup: review changes before Apply",
+      "w": 1440,
+      "x": 1520,
+      "y": 1060
+    },
+    "TestRun.dc.html": {
+      "expand": "fill",
+      "h": 940,
+      "title": "2 \u00b7 Test run: scenario, expectations and Client's eye together",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "Topology.dc.html": {
+      "expand": "fill",
+      "h": 940,
+      "title": "3 \u00b7 Topology: flat by default, lenses, inspector",
+      "w": 1440,
+      "x": 0,
+      "y": 1060
+    },
+    "Traffic.dc.html": {
+      "expand": "fill",
+      "h": 1560,
+      "is_interactive": true,
+      "title": "6 \u00b7 Traffic analysis: scoped to a cluster, focused wire, request river, rhythm",
+      "w": 1440,
+      "x": 2160,
+      "y": 2120
+    },
+    "Zoom.dc.html": {
+      "x": 0,
+      "y": 3300,
+      "w": 2080,
+      "h": 1120,
+      "is_interactive": true,
+      "title": "7 \u00b7 Infrastructure zoom: fleet \u2192 cluster \u2192 pool (signal opens in Traffic)"
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-11-10T18:30:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "title": {
+      "kind": "title1",
+      "maxW": 2960,
+      "text": "Recommended UI: four task-first screens (sample data)",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "TestRun.dc.html",
+    "Topology.dc.html",
+    "Setup.dc.html",
+    "Architecture.dc.html",
+    "Traffic.dc.html",
+    "Zoom.dc.html"
+  ],
+  "pages": [],
+  "title": "Cluster Simulator UI Redesign"
+}

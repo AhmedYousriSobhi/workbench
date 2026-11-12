@@ -21,11 +21,11 @@ this machine can use the page, so keep it private. The page listens on `127.0.0.
 |---|---|
 | **Overview cards** | in the left rail: nodes healthy, services up, GPUs busy (only with GPU nodes) and faults applied, all counted from the cluster data the page already reads |
 | **View choice** | under the nav on Infrastructure: **All** (diagram and node list), **Topology** (diagram only, wider) or **Nodes** (list and details only); remembered in this browser |
-| **Left nav** | the workspaces: **Infrastructure**, **Traffic & Communication** (the documented links: protocol, port, real or simulated, observed or configured, the measured probe latency, above the table slurmctld's own request counts from `sdiag`, slurmdbd's answer to one `sacctmgr` query, and Prometheus's scrape links). The links are also drawn as a diagram (the plane is the line's colour and dash pattern). The page opens in the dark Midnight theme until you pick another with the theme button. Filter by plane, software or evidence, click a link's source to open its inspector; a toolbar of plane chips with zoom, Fit and full screen; below the diagram, a **Traffic activity timeline** (requests and faults this page was told about, 1 m to 1 h, kept only while the page is open); the diagram is one fixed architecture (every group always drawn; a part this cluster lacks, the page cannot read yet (slurmdbd, until it answers a query), or that is planned and not built (shared storage), is grayed, never dropped) and clicking a part shows what it is, whether it answers and its links; the node parts (`nodes`, `slurmd`, and `kwok` for Kubernetes) show how many nodes are in service (`▲ nodes 5/6`) and follow a drain, power-off, GPU or Kubernetes fault within about 5 seconds without a reload (Slurm's states come from one `sinfo` through the governor, the rest from the cluster poll), the links to them say `▲ up, 1 of 6 nodes out`, and every change is a line in the activity timeline; the parts inside a group can be reordered (drag a part up or down, press Alt+Up / Alt+Down, or use the **▲ Up** / **▼ Down** buttons in its inspector, which also work with a finger; a press that barely moves is a click), a group can be dragged (or moved with the arrow keys; on a touch screen turn on the **Move** button first, otherwise a finger scrolls the page) with the lines re-routing, kept in the browser, **Reset layout** undoes it, and press **Follow the path** to see the chain it belongs to, **Connections**, then **Scenarios** and **Cluster architecture**. **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **☰ Menu** (Health checks, Export), help and the theme switch (press it to cycle Auto, Light, Dark, **Midnight** with deep navy and neon accents, and **Dim** with soft slate and low glare; the choice is remembered). The strip is for status only. **☰ Menu** lists the actions in three groups, each with a one-line hint: *Run* (**▶ Scenarios**), *Configure* (**▦ Cluster architecture**: nodes, GPUs per node, optional parts and the plan; **✚ Health checks**) and *Share* (**⇩ Export**). Esc closes it. Pressing the level or memory chip opens the **Governor** panel |
+| **Left nav** | the workspaces: **Overview**, **Test run**, **Topology** (the Infrastructure diagram), **Traffic & Communication** (the documented links: protocol, port, real or simulated, observed or configured, the measured probe latency, above the table slurmctld's own request counts from `sdiag`, slurmdbd's answer to one `sacctmgr` query, and Prometheus's scrape links). The links are also drawn as a diagram (the plane is the line's colour and dash pattern). The page opens in the dark Midnight theme until you pick another with the theme button. Filter by plane, software or evidence, click a link's source to open its inspector; a toolbar of plane chips with zoom, Fit and full screen; below the diagram, a **Traffic activity timeline** (requests and faults this page was told about, 1 m to 1 h, kept only while the page is open); the diagram is one fixed architecture (every group always drawn; a part this cluster lacks, the page cannot read yet (slurmdbd, until it answers a query), or that is planned and not built (shared storage), is grayed, never dropped) and clicking a part shows what it is, whether it answers and its links; the node parts (`nodes`, `slurmd`, and `kwok` for Kubernetes) show how many nodes are in service (`▲ nodes 5/6`) and follow a drain, power-off, GPU or Kubernetes fault within about 5 seconds without a reload (Slurm's states come from one `sinfo` through the governor, the rest from the cluster poll), the links to them say `▲ up, 1 of 6 nodes out`, and every change is a line in the activity timeline; the parts inside a group can be reordered (drag a part up or down, press Alt+Up / Alt+Down, or use the **▲ Up** / **▼ Down** buttons in its inspector, which also work with a finger; a press that barely moves is a click), a group can be dragged (or moved with the arrow keys; on a touch screen turn on the **Move** button first, otherwise a finger scrolls the page) with the lines re-routing, kept in the browser, **Reset layout** undoes it, and press **Follow the path** to see the chain it belongs to, **Connections**, then **Scenarios** and **Cluster architecture**. **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **☰ Menu** (Health checks, Export), help and the theme switch (press it to cycle Auto, Light, Dark, **Midnight** with deep navy and neon accents, and **Dim** with soft slate and low glare; the choice is remembered). The strip is for status only. **☰ Menu** lists the actions in three groups, each with a one-line hint: *Run* (**▶ Scenarios**), *Configure* (**▦ Cluster architecture**: nodes, GPUs per node, optional parts and the plan; **✚ Health checks**) and *Share* (**⇩ Export**). Esc closes it. Pressing the level or memory chip opens the **Governor** panel |
 | **Tabs and Needs attention** | the tabs *Nodes* and *Connections*, and one slim bar next to them with every item that needs you, or "All clear" |
 | **Stage** (Infrastructure) | three areas that fill the window. **Left:** the **Infrastructure architecture**, drawn to the shape of its panel (clients across the top, the access layer under them, the cluster nodes below that, the services in a column at the right). **Top right:** the **node list** (Compute, GPU and Services). **Bottom right:** **Connections**, how to reach each part (address and a Copy button), which shows the selected part instead when you click one, and a **Timeline** tab of recent traffic and faults. **Topology** (left rail) gives the right column to Connections; the choice is remembered |
 
-Two panels open on top of the page from the top strip or its **☰ Menu** and close with **✕ Close**, Esc or a click outside: **Cluster architecture** and **Governor**. **Scenarios** is different: it is a panel docked on the right that you switch on and off with the **▶ Scenarios** button in the top strip, so the diagram stays visible and live while a scenario runs. A node is different: it opens in the **Connections** area (below), so the Infrastructure architecture and the node list stay in view.
+Two panels open on top of the page from the top strip or its **☰ Menu** and close with **✕ Close**, Esc or a click outside: **Cluster architecture** and **Governor**. Scenarios are no longer a panel: they are the **Test run** workspace. A node is different: it opens in the **Connections** area (below), so the Infrastructure architecture and the node list stay in view.
 
 On a phone, and under 1100 px, the Infrastructure architecture, the list and the Connections area stack in one column and the diagram keeps its natural shape. The page has a skip link and
 landmarks, and honours reduced motion.
@@ -46,6 +46,10 @@ the quick facts:
 
 Healthy cards are quiet; warning, fault and off cards are tinted and bold, so what needs you stands out. Slurm node
 states and CPU load are not shown, because the page has no Docker access by design; use `benchctl describe node NAME`.
+
+## Overview: where the page opens
+
+The page opens on **Overview**, the first item of the left nav. It answers four questions without a click: is everything up (**Needs attention**, the same list as the top strip, or "All clear"), what do I want to do (three cards: **Run a test** opens Scenarios, **Break one thing** opens Topology to choose a node, **Connect your client** opens Export), how is each node (a card with its state as an icon and words, and a load bar only where the GPU exporter measured one; a node with no reading says "no live reading"), and which services answer (each tagged real or simulated). Pressing a node card, or **Open gpu001** in an attention line, opens that node in **Topology** (the workspace formerly called Infrastructure). Overview adds no polling of its own.
 
 ## Infrastructure architecture
 
@@ -97,7 +101,9 @@ the page is visible and the Infrastructure workspace is open. **Key** (top right
 
 **Blast radius.** When a fault is applied (a node button or a scenario step), the parts a client reads that the fault changes get a **dashed** outline (shape, not only colour), and Connections shows one plain sentence of what a client would observe, for example *the BMC reports the node Off, the BCM marks it down and its GPU metric series stop*. Every caption says it is **declared from the simulator's rules, not measured**. It clears after 45 seconds or with **Dismiss**. The table behind it is `webui/blast.py`, checked against the edge model by `tests/test_graph.py`.
 
-**Lenses.** The **Lens** menu next to the view switcher restyles the same layout by plane: *Access* (how users get in), *Management* (BMC and BCM), *Telemetry* (GPU metrics), *Tickets* (Jira) and *Faults*; everything outside the plane dims and nothing moves. **Client's eye** shows, for every service a client should call, how many calls the mocks counted, how many were errors, the rate per minute and a verdict (*called*, *not called yet*, *not reachable*), and says *not measured* where nothing counts (the real Jira, a service with no error counter). It is built only from the per-mock counters, so it tells you whether the client is reading everything, not which endpoint it used. With the stack down it shows one message instead.
+**A hidden tab does nothing (W-11).** While the browser tab is hidden or minimised the page closes its governor feed, stops polling the cluster and pauses every animation; showing it again reopens the feed and reads the cluster at once. Status text that a screen reader announces (the connection line, the governor banner, the diagram's state line) is rewritten only when its content changes. After an applied plan finishes, the Connections table and node panels read again, so new parts and nodes show without a reload.
+
+**Lenses.** The **Lens** chips (a row under the view switcher, one pressed at a time, a ✓ on the pressed one) restyle the same layout by plane: *All*, *Access* (how users get in), *Management* (BMC and BCM), *Monitoring* (GPU metrics; the plane's id is still `telemetry`), *Tickets* (Jira) and *Faults*; everything outside the plane dims and nothing moves. **Client's eye** shows, for every service a client should call, how many calls the mocks counted, how many were errors, the rate per minute and a verdict (*called*, *not called yet*, *not reachable*), and says *not measured* where nothing counts (the real Jira, a service with no error counter). It is built only from the per-mock counters, so it tells you whether the client is reading everything, not which endpoint it used. With the stack down it shows one message instead.
 
 **Hover** a part for a one-line tip (its state and how it is reached). **Click** it (or Tab to it and press Enter) for a pop-up window
 next to it with its address, the credential file, a command to copy, and buttons for the details:
@@ -121,6 +127,61 @@ terminal session makes the proxy connect to a node, and Teleport counts that (`t
 diagnostics port, 127.0.0.1:3434). Nothing is invented: with no connections there are no dots. The login nodes come from the saved
 workbench (`benchctl start --login ssh,teleport,both`, or the Login nodes rows of the sheet).
 
+### The Circuit view
+
+![The Circuit view: Slurm lane with its racks, the Kubernetes lane faded because this cluster has none, the services under the HTTP bus and the layer row](img/web-circuit.png)
+
+**Circuit** (the default view; **2.5D (classic)** is the other choice in the view switch, and the Flat style and the Clusters button are gone: the circuit and the zoom below replace them) draws the same cluster as a live circuit: a Slurm lane (login, slurmctld or the
+controller, slurmdbd, CPU and GPU racks) and a Kubernetes lane (kubectl, kube-apiserver, etcd, KWOK, racks), and the services under an HTTP bus. One
+square in a rack is one node (one per 8 nodes above 64); a square that needs attention carries a ▲ and the rack says why in words.
+
+- **A wire that pulses is a wire something counted**: the pulse speed follows requests a minute and a red dash marks errors. A wire that is lit but still is
+  wiring nothing counts ("declared wiring, not measured"); a dark dashed wire carries nothing. Hover or focus a wire for its words.
+- **A part the cluster lacks stays where it is, faded** (a lane gets a note such as "Not in this cluster: no Kubernetes"). With a controller node the
+  controller chip says so and an admin SSH wire is drawn; without one, the login node wears **HEAD NODE · cmsh**.
+- **Layers** (the row under the drawing) show one plane at a time: Access, Control, Data, Monitoring or Management. The other wires fade to 10 %.
+- Click a part or a square for its details, as in the other views. Focus (double-click or **F**), the lens and the blast radius work here too.
+- The node list folds away while Circuit is on, so the drawing has the width; choosing another view brings it back.
+
+#### Zoom: Fleet, Cluster, Pool
+
+Above the page's panels, one **zoom rail** (− FLEET CLUSTER POOL TRAFFIC +) is the way up and down. **Traffic** is its deepest stop: the Traffic &
+Communication page of the cluster you are in, with a **Back to the cluster** button, so you never need the left bar to get back. The left bar still opens
+the same pages. Other ways to move: **Ctrl + scroll** (or a pinch on a trackpad) zooms in on the card or rack under the pointer and out from anywhere, **+** and
+**-** step a level, **Escape** steps out of a pool or Traffic. Each move takes about 0.7 s (none under reduced motion) and the old level is gone afterwards.
+
+![The Pool level: side panel with KPIs, a state bar and filters, and a grid of node tiles](img/web-pool.png)
+
+- **Pool**: click a rack's **N nodes ›** button. The side panel says what feeds the pool, how many nodes are in service, the average GPU use and a bar of node
+  states; filters show All, Busy, Idle or Needs attention. Tiles (16 a page) show the node's state in words, its busy GPUs and temperature, and a heartbeat
+  wire. What the page cannot measure says "not measured" (a CPU pool has no Busy or Idle filter). **Wire in Traffic ↗** opens the Traffic tab.
+- **Fleet**: one card per cluster with health, what it has (Slurm, Kubernetes, controller, accounting), nodes in service, requests a minute, a square per
+  node for each lane, and a footer: only the monitoring client connects to a cluster. Click a card to open it. Only the running cluster has a request rate.
+
+![The Fleet level: a card per cluster](img/web-fleet.png)
+
+
+## Traffic analysis: who asks the mocks, and how it ends
+
+![The Traffic tab's analysis: the request river, the probe, what was found and the rhythm](img/web-traffic-analysis.png)
+
+At the top of the **Traffic** tab (the TRAFFIC stop of the zoom rail) the page reads the mocks' own record of client requests (`/api/traffic`, every 3 seconds, on every screen while the page is visible and never while it is hidden, so a rate exists when you open the tab; only the Traffic tab draws it). It records only **who asked** (the User-Agent's product token, for example `curl`), the method and path shape, how it ended and how long it took; never a value, a header or a secret.
+
+- **Request river**: callers on the left, the service that answered in the middle, how it ended on the right (2xx, slower than the 95th percentile, 4xx, 5xx). A band's width follows the square root of requests a minute; moving dots are live requests; red is an error. A rate needs two readings 5 seconds apart, so the first seconds say "not measured", never 0. Pick a stream chip to look at one alone. A hidden table repeats the numbers for screen readers.
+- **Probe**: Rate, Delay, Errors, Rhythm and Path for the chosen stream, a big reading, the last two minutes as a trace, and a one-line verdict. Delay shows the edge of a latency bucket ("10 ms or less"), not an exact figure.
+- **Found in this window**: a caller that did not ask again after server errors, several calls fired in the same half second, a repeating request whose caller sent no User-Agent (nothing says what runs that timer).
+- **Rhythm**: the repeating periods found per stream (at least eight requests and three repeats), each column beating at its own pace and labelled with who runs it.
+- **Window**: last minute, last 5 minutes, or since the page opened.
+- **Focused wire**: a pool tile's **Wire in Traffic ↗**, or a link such as `http://127.0.0.1:8088/#workbench-gpu003` (`#<cluster>-<node>`), opens a node's wire: its declared wiring (BMC farm and slurmctld for a Slurm node, KWOK for a Kubernetes node), **Back to the pool** and **Clear focus**, and a **capture of its messages**.
+
+  ![The Focused wire panel: the tube, the message log and the decoded latest message](img/web-wire-capture.png)
+
+  The capture is **off unless the panel is open**: it starts when the panel opens and stops when you close it, switch tab, or after 5 minutes, and a bar says how long is left. It is a class P5 job of the governor, one wire at a time, and it only starts at L0 to L1: at L2 or above the panel says "paused: memory pressure". The always-on counters stay masked; the capture tells nodes apart by their fixed IP address instead.
+  - **A Slurm node**: `tcpdump` inside the node's container, on ports 6817 and 6818, limited by time and packet count. The message type comes from the Slurm message header (decoded for the pinned Slurm release); a header that does not parse shows as **▲ unknown type** with only its direction, size and timing, never a guess.
+  - **A Kubernetes node**: the API server's audit log, narrowed to the node's lease and node object and its pods (who asked, what, the answer code and time). The audit log is enabled with a metadata-only policy for nodes, leases and pods; it holds no request or response body.
+  - The **tube** shows the newest messages: requests to the node on the upper lane, what the node sends on the lower one. Click a row of the **log** for its decoded view (type, direction, peer, protocol version, flags, length, answer time).
+  - Messages stay in the page's memory, nothing is written to disk, and nothing from a message body is read. Run one by hand: `./scripts/benchctl get capture gpu001 --seconds 30`.
+
 ## Teleport from the page
 
 Teleport is a part like the others, so you control it from **left nav → ⚙ Cluster architecture**:
@@ -140,9 +201,10 @@ To turn it off, untick it and apply again. Two things stay in a terminal because
 ## A node: actions and info
 
 Click a node card, or a node tile in the diagram and then **Actions and details**. Its panel opens in the **Connections** area (it is not a pop-up) and that area grows to make room, so you can watch the Infrastructure architecture and the list
-while you act. The selected node is outlined in the list. The panel has two cards and a header with **← All nodes** (Esc does the same), the node's name and its
+while you act. The selected node is outlined in the list. The panel has a header with **← All nodes** (Esc does the same), the node's name and its
 live state.
 
+- **Summary** (first): the state in words, then what the page can read: *Reason* ("none (healthy)", or where to read it: the page has no Docker, so the Slurm reason comes from `benchctl describe node NAME`), *Hardware* (GPUs, CPU temperature, fans), *Faults* (GPU XID, InfiniBand ports down, NIC flapping; only when there are some), *Power*, *Address* and *BMC*, and the **ssh command** with **Copy command**. A value it cannot read says "not measured", never zero. A Kubernetes node has a shorter summary (no BMC, no address). A per-node Jira ticket is not shown yet.
 - **Actions**: the faults first, **Power off**, **Overheat (92 °C)**, **Fan failure** and **GPU error (XID 79)** (GPU
   nodes only), then **Recover**: **Power on** and **Clear faults**. The result appears under the buttons, the card
   changes state and a diamond shows the injection. Nothing here opens a shell on a node; use
@@ -166,9 +228,9 @@ live state.
 ![The Cluster architecture sheet: Slurm and Kubernetes node counts, login nodes, optional parts, and the summary](img/web-cluster-architecture.png)
 
 **▦ Cluster architecture** opens a wide sheet with one card per concern and a summary beside it that stays in view. **Slurm cluster**: steppers for CPU nodes, GPU nodes and GPUs per node, each with what one node is (for example 8 CPUs, 4 GB; H200). **Kubernetes cluster**: an Enabled switch and steppers for its own CPU and GPU nodes (KWOK), separate from the Slurm nodes. **Login nodes**: one card per login node with two choices, *Way in* (SSH, Teleport, Both) and *Serves* (Slurm, Kubernetes, Both: an s-login, a k-login or a shared login), and two presets, *One shared login* and *Separate s-login and k-login*. **Optional parts**: toggles grouped by category as in the `--ticketing`, `--hardware` flags (accounting, Jira, BMC, BCM, Teleport, scenarios, load; each shows the memory limit it adds, and the toggles show what is built now). The summary lists the node counts per scheduler, the logins, the memory it needs against free memory, and the command for a terminal; on a phone it stacks under the cards. The memory bar reads like "1.7 GB needed of 4.5 GB free". The sheet shows the change against what runs now ("GPU nodes 2 → 3 (+1)") and the
-`benchctl up ...` command for a terminal. Editing the numbers only estimates. **Apply to the running workbench** (press
+`benchctl up ...` command for a terminal. Editing the numbers only estimates. **Review changes** (top of the summary) says what Apply will do before you press it: **+ Adds** (nodes, parts, login nodes), **− Removes** and **↻ Restarts** (slurmctld, only when the Slurm node list changed or accounting was added). When a node to be removed is `allocated` or `mixed` in Slurm (one `sinfo`, read when the sheet opens), the sheet says jobs will stop and **Apply** stays disabled until you tick **I understand**. If Slurm's states cannot be read it says so; it does not guess. It does not list job ids: the page has no Slurm access beyond node states. The cards are compact: the three Slurm steppers share a row, and the Kubernetes card collapses to one line while it is off. **Apply to the running workbench** (press
 twice: the second press confirms) asks the governor to rebuild it; new nodes start and nodes you no longer want are
-removed. See [choose the workbench](../guides/choose-workbench.md).
+removed. While it runs, a **Progress** list shows the governor's stages (Build images, each start stage, Restart slurmctld) as waiting, running, done with seconds, or failed, and the sheet names the job (`Job #7: nodes (1 of 3 stages done)`); the stages come from the governor, not from the log text. If a governor older than the page reports no stages, the sheet says so and points to Governor activity. See [choose the workbench](../guides/choose-workbench.md).
 
 **If the sheet says "Could not load the options".** The page and the process behind it are different versions (the page was updated
 while an older one kept running). Restart it and reload:
@@ -178,12 +240,16 @@ while an older one kept running). Restart it and reload:
 ./scripts/benchctl start
 ```
 
-## Scenarios
+## Test run
 
-Press **▶ Scenarios** in the top strip: a panel docks on the right and the diagram stays in view. The run card is at the top (status, a progress bar, **Stop**, and the steps with the current one highlighted); below it is the library (type in *Filter scenarios*, pick a speed that applies to all, press **▶ Play** on a card; the running scenario's card is highlighted). Press the button again, or **✕ Close**, to hide it; it stays open across a reload. While one runs, the top strip also shows it, and pressing that chip opens the panel. The page has no Docker access by design, so its `slurm` steps (drain, resume, job and daemon steps)
-are done by the governor; one it refuses (memory level L2 and above) or cannot do (started without `--workdir`) shows **skipped** with the reason, and
-`./scripts/benchctl scenario run NAME` does it from the terminal. Tick **Slurm trace** before **▶ Play** to see, under the timeline, what the
-jobs and Slurm's logs did around each step ([Slurm resilience](../guides/slurm-resilience.md)).
+**▶ Test run** in the left nav (or the **▶ Scenarios** chip in the top strip, or **Open Test run** on Overview) opens one workspace for a whole test: the library on the left, the chosen scenario on the right.
+
+1. **Pick.** Click a scenario's name: you see its description, its length and every step as it will play, **before anything starts**. Steps this page cannot run are marked **↷ CLI only** with the reason, and a notice gives the command that runs everything: `./scripts/benchctl scenario run NAME` (**Copy** puts it on the clipboard). The page has no Docker by design, so only its `slurm` steps (drain, resume, job and daemon steps, done by the governor) and the mocks' own steps run here; the rest, and the expectations that need the host, are skipped. A skip is not a pass, and the result says **Passed, with skipped steps** when there were any.
+2. **Play.** Type in *Filter scenarios*, pick a speed that applies to all, tick **Slurm trace** if you want what the jobs and Slurm's logs did around each step ([Slurm resilience](../guides/slurm-resilience.md)), press **▶ Play**. The steps, a progress bar, **Stop**, the expectations (pending, then passed or failed) and **Client's eye** update live. A step the governor refuses (memory level L2 and above) or cannot do (started without `--workdir`) shows **skipped** with the reason.
+3. **Client's eye.** Per service, the calls the mock counted during the run and the errors where the mock counts them. **n/a** means the mock keeps no counter (never zero); the basis is counters, not a trace of which endpoint was used.
+4. **Export.** When the run ends, **Markdown** or **JSON** downloads a report built in the browser: what was injected and what each step did, the expectations, and what the client called during the run. Nothing is stored on the server or in the repository; the report holds no hostnames, tokens or paths.
+
+While one runs, the top strip also shows it, and pressing that chip opens Test run. A run started from the CLI or another tab is shown too.
 
 ![Run panel showing node-down, step 2 of 6, with each step marked ok or pending and a Stop button (older layout)](img/web-scenario-running.png)
 
@@ -215,6 +281,14 @@ The last column, **Open**, has one-click actions for the parts that have one:
 
 The page never opens a terminal itself (it has no Docker or root access, W-3). A part with nothing to open shows "none".
 
+## Text size
+
+Text is sized in `rem`, so the browser's own font-size setting (and zoom) scales it; running text is at least 14 px at the default setting. The diagrams' labels are drawn in fixed units inside the picture and scale with the picture, not with that setting.
+
+## Content-Security-Policy
+
+The page and its files are served with a strict Content-Security-Policy: scripts and styles only from the page's own origin, no inline script or style, no framing, no objects. If you add a template, set sizes through classes or the `data-w`, `data-flex`, `data-p` and `data-bg` attributes (`paintDyn` applies them); a `style="..."` attribute is blocked and a test fails. The help pages (`/help`) are not covered yet.
+
 ## One message per condition
 
 If the cluster is down the page shows one notice and one *Needs attention* entry, hides data that cannot exist (the entity
@@ -237,7 +311,7 @@ page. Start with [Which command do I use?](11-which-command.md) when the command
 
 - The Profile and Budget manager (edit `sim.yaml` in the page) is **not built**; edit the file ([chapter 8](08-configuration.md)).
 - Backend memory stays under 50 MB. Starlette and one static page, no framework, no CDN.
-- Browser debugging for developers: `.venv/bin/python scripts/ui_shots.py` ([reference](10-reference.md)).
+- Browser debugging for developers: `.venv/bin/python scripts/ui_shots.py` ([reference](10-reference.md)). The page is plain ES modules under `webui/static/js/` (no build step); `node --test "webui/tests/js/*.test.mjs"` runs its logic tests.
 
 ## Health checks: what drains a node
 

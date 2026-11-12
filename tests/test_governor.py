@@ -379,6 +379,10 @@ def test_scale_and_set_profile_run_effector_only_when_calm(tmp_path):
     done.clear()
     g.handle("set-profile", {"profile": "min"})
     assert done.wait(5) and calls[-1] == ["up", "--profile", "min"]
+    import time
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and not any("scale=3: done" in a for a in g.audit):
+        time.sleep(0.01)  # the effector signals before the governor thread writes its audit line
     assert any("scale=3: done" in a for a in g.audit)
 
 
@@ -549,6 +553,33 @@ def test_slurm_stats_is_read_only_needs_a_statser_and_pauses_under_pressure(tmp_
     assert "slurm stats failed" in g.handle("slurm-stats", {})["error"]
 
 
+def test_wire_capture_needs_a_capturer_refuses_a_dry_run_and_runs_at_l0_l1_only(tmp_path):
+    from governor.capture import Capture
+    g, _ = _calm_gov(tmp_path)
+    assert "no capture without --workdir" in g.handle("capture-start", {"node": "cn001"})["error"]
+    spawned = []
+
+    class P:
+        stdout, stderr = iter(()), None
+
+        def terminate(self):
+            pass
+
+        def wait(self):
+            return 0
+    g.capture = Capture(lambda node, s: spawned.append(node) or P(), lambda: g.ladder.level, g._record)
+    g.dry_run = True
+    assert "dry run" in g.handle("capture-start", {"node": "cn001"})["error"] and not spawned
+    g.dry_run = False
+    g.ladder.level = 2
+    assert "memory pressure" in g.handle("capture-start", {"node": "cn001"})["error"] and not spawned
+    g.ladder.level = 1
+    assert g.handle("capture-start", {"node": "cn001"})["ok"] is True and spawned == ["cn001"]
+    assert g.handle("capture-read", {"since": 0})["class"] == "P5"
+    assert g.handle("capture-stop", {})["ok"] is True
+    assert any("capture start cn001" in a for a in g.audit)  # recorded in the audit log like every action
+
+
 def test_refresh_jira_licence_runs_the_benchctl_refresh(tmp_path):
     import threading
     calls, done = [], threading.Event()
@@ -588,3 +619,44 @@ def test_status_answers_while_a_plan_with_slow_actions_runs(tmp_path):
     finally:
         release.set()
         t.join(10)
+
+
+def test_a_change_reports_a_job_id_and_its_stages_in_status(tmp_path):
+    """Issue 519: the page reads status.change for its own job; log wording is not consulted."""
+    import json
+    import threading
+    release, seen = threading.Event(), threading.Event()
+
+    def streamer(args, on_line):
+        on_line("starting something noisy")  # ordinary output is ignored
+        on_line('@stage {"plan": ["Build images", "Nodes"]}')
+        on_line('@stage {"stage": "Build images", "state": "running"}')
+        on_line('@stage {"stage": "Build images", "state": "done"}')
+        on_line('@stage {"stage": "Nodes", "state": "running"}')
+        on_line("@stage not json")  # a bad line is dropped, not fatal
+        seen.set()
+        release.wait(5)
+        return 1  # the change then fails while Nodes is still running
+
+    g, _ = _calm_gov(tmp_path, effector=lambda a: 0)
+    g.streamer = streamer
+    r = g.handle("scale", {"group": "compute", "n": 2})
+    assert r["started"] and r["job"] == 1
+    assert seen.wait(5)
+    ch = g.handle("status", {})["change"]
+    assert ch["job"] == 1 and ch["state"] == "running"
+    assert [(s["name"], s["state"]) for s in ch["stages"]] == [("Build images", "done"), ("Nodes", "running")]
+    json.dumps(ch)  # status must serialise
+    release.set()
+    for _ in range(100):
+        if g.change["state"] != "running":
+            break
+        threading.Event().wait(0.05)
+    ch = g.handle("status", {})["change"]
+    assert ch["state"] == "failed" and ch["stages"][1]["state"] == "failed" and ch["stages"][0]["state"] == "done"
+    assert ch["finished"] is not None and g.audit[-1].endswith(")") and "FAILED (exit 1)" in g.audit[-1]
+
+
+def test_status_has_no_change_before_one_runs(tmp_path):
+    g, _ = _calm_gov(tmp_path)
+    assert g.handle("status", {})["change"] is None

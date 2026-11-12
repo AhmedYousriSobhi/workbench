@@ -4,12 +4,14 @@
 Arrivals are a Poisson process (exponential gaps, mean 60/rate s). Each job is a `sleep` in the cpu partition, or the gpu
 partition holding 1 to 4 GPUs, run as one of the simulated users. It stops adding work while the queue is long."""
 import argparse
+import os
 import random
 import subprocess
 import sys
 import time
 
 MAX_PENDING = 20
+PAUSED = "/run/workbench-flags/arrivals.paused"  # the governor's L1 flag, mounted read-only (issue 476)
 
 
 def run(*cmd: str) -> str:
@@ -39,6 +41,8 @@ def main() -> int:
     rng, users = random.Random(a.seed), a.users.split(",")
     while True:
         time.sleep(rng.expovariate(a.rate / 60))
+        if os.path.exists(PAUSED):
+            continue  # L1: no new work until the governor de-escalates
         try:
             if int(run("sh", "-c", "squeue -h -t PD | wc -l") or 0) < MAX_PENDING:
                 run(*pick(rng, users, a.gpus, a.duration))

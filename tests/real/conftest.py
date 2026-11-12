@@ -1,4 +1,5 @@
 import os
+import subprocess
 
 import helpers
 import pytest
@@ -23,6 +24,40 @@ def test_timers():
         os.environ["WORKBENCH_TEST_TIMERS"] = old
 
 
+def paused_workbench() -> set[str]:
+    """Names of the stack's containers that are paused right now (a frozen node, a hung login)."""
+    try:
+        r = subprocess.run(["docker", "ps", "--filter", "status=paused", "--filter", "name=workbench-", "--format", "{{.Names}}"],
+                           capture_output=True, text=True, timeout=20, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    return set(r.stdout.split())
+
+
+def _thaw_and_fail(who: str, left: set[str]) -> None:
+    """A test or module that leaves a container paused breaks every later module with `cannot start a paused container` and the
+    log never says who did it (issue 532). Name it, and thaw so the remaining modules still run."""
+    for name in sorted(left):
+        subprocess.run(["docker", "unpause", name], capture_output=True, check=False)
+    pytest.fail(f"{who} left paused: {', '.join(sorted(left))} (thawed here so the later modules can run)", pytrace=False)
+
+
+@pytest.fixture(autouse=True)
+def _no_container_left_paused(request):
+    before = paused_workbench()
+    yield
+    if left := paused_workbench() - before:
+        _thaw_and_fail(request.node.nodeid, left)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _no_container_left_paused_by_module(request):
+    before = paused_workbench()
+    yield
+    if left := paused_workbench() - before:
+        _thaw_and_fail(f"module {request.module.__name__} (fixture setup or teardown)", left)
+
+
 def _mark(config, items):
     for item in items:
         if "tests/real" in str(item.fspath):
@@ -35,8 +70,9 @@ def _mark(config, items):
 
 
 # Modules that must start their own stack (issue 234): test timers, a custom selection or governor, Teleport, Jira, or the
-# stack lifecycle itself. They run after every module that shares the default stack and each begins from a stopped one.
-ISOLATED_MODULES = {"test_apply_real", "test_jira_dc_real", "test_nhc_real", "test_pressure_real", "test_slurmresilience_real",
+# stack lifecycle itself. test_real starts real governors that discover every labelled container, so they would freeze the
+# shared stack's cn004 (issue 530). They run after every module that shares the default stack and each begins from a stopped one.
+ISOLATED_MODULES = {"test_real", "test_apply_real", "test_jira_dc_real", "test_nhc_real", "test_pressure_real", "test_slurmresilience_real",
                     "test_k8s_real", "test_access_real", "test_dcgm_real", "test_real_gpu_real", "test_stack_real", "test_teleport_real", "test_user_mode_real", "test_workbench_real"}
 
 

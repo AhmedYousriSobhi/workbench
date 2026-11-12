@@ -23,6 +23,8 @@ COUNTERS = {"teleport": f"{TELEPORT}/metrics"}
 REACH_ONLY = {"jira-real": f"{JIRA_REAL}/status", "dcgm-exporter": f"{DCGM_REAL}/metrics", "real-gpu": f"{REAL_GPU}/metrics", "k8s-api": "k8s-api"}  # the second is probed by benchctl.k8s.api_up (HTTPS with the cluster CA)
 SCENARIO_TARGETS = {"bmc-farm": "bmc-farm", "bcm-mock": "bcm-mock", "gpu-exporter": "gpu-exporter",
                     "jira": "jira-mock"}  # scenario target name -> block; slurm, k8s, ticket-bot have no block
+PROBE_TIMEOUT = 0.2  # s: the mocks are on this machine; a frozen one (governor L3 freezes P2+) must not stall the feed for the others (issue 451)
+BACKOFF_MAX = 10.0  # s: a service seen down is skipped for 1, 2, 4 ... up to this many seconds, and asked again after that
 PAUSE_LEVEL = 3  # SPEC: the animation is a luxury; from L3 up the governor wants every MB and CPU cycle
 
 
@@ -35,8 +37,11 @@ def counter_total(scrape, name: str) -> int:
 
 
 class Flow:
-    def __init__(self, fetch=http_json, clock=time.monotonic, keep: int = 300, min_interval: float = 0.8):
-        self.fetch, self.clock, self.min_interval = fetch, clock, min_interval
+    def __init__(self, fetch=None, clock=time.monotonic, keep: int = 300, min_interval: float = 0.8):
+        self.fetch = fetch or (lambda url: http_json(url, timeout=PROBE_TIMEOUT))
+        self.clock, self.min_interval = clock, min_interval
+        self.fails: dict[str, int] = {}  # consecutive failed probes per service
+        self.retry_at: dict[str, float] = {}  # a service seen down is not asked again before this time
         self.events: deque = deque(maxlen=keep)
         self.seq = 0
         self.last: dict[str, int] = {}
@@ -62,6 +67,14 @@ class Flow:
             with self.lock:
                 self._add("injector", dst, 1, label, [n for n in nodes or [] if isinstance(n, str)][:8])
 
+    def _down(self, svc: str, now: float) -> None:
+        self.fails[svc] = self.fails.get(svc, 0) + 1
+        self.retry_at[svc] = now + min(BACKOFF_MAX, 2 ** (self.fails[svc] - 1))
+
+    def _up(self, svc: str) -> None:
+        self.fails.pop(svc, None)
+        self.retry_at.pop(svc, None)
+
     def poll(self) -> None:
         """Read every mock's request counter; a rise becomes events. Rate-limited, so many tabs cost one pass."""
         with self.lock:
@@ -70,6 +83,8 @@ class Flow:
                 return
             self.polled = now
             for svc, url in {**STATS, **COUNTERS}.items():
+                if now < self.retry_at.get(svc, float("-inf")):
+                    continue  # seen down a moment ago: it keeps its "not reachable" state without costing a timeout
                 errs, t0 = None, self.clock()
                 try:
                     if svc in COUNTERS:
@@ -83,7 +98,9 @@ class Flow:
                     self.last_err.pop(svc, None)
                     self.reachable[svc] = False
                     self.latency.pop(svc, None)
+                    self._down(svc, now)
                     continue
+                self._up(svc)
                 self.reachable[svc] = True
                 self.latency[svc] = round((self.clock() - t0) * 1000)
                 prev = self.last.get(svc)
@@ -98,6 +115,8 @@ class Flow:
                         self.errors[svc] += bad
                     self._add("clients", svc, got - prev, "requests", err=bad)
             for svc, url in REACH_ONLY.items():
+                if now < self.retry_at.get(svc, float("-inf")):
+                    continue
                 try:
                     if svc == "k8s-api":
                         from benchctl import k8s
@@ -105,20 +124,24 @@ class Flow:
                         t0 = self.clock()
                         self.reachable[svc] = k8s.api_up()
                         if self.reachable[svc]:
+                            self._up(svc)
                             self.latency[svc] = round((self.clock() - t0) * 1000)
                             n = k8s.api_requests()  # all callers, since the API server started: shown as a total, never as dots
                             if n is not None:
                                 self.totals[svc] = n
                         else:
                             self.latency.pop(svc, None)
+                            self._down(svc, now)
                         continue
                     t0 = self.clock()
                     self.fetch(url)
+                    self._up(svc)
                     self.reachable[svc] = True
                     self.latency[svc] = round((self.clock() - t0) * 1000)
                 except (OSError, ValueError, KeyError, TypeError):
                     self.reachable[svc] = False
                     self.latency.pop(svc, None)
+                    self._down(svc, now)
 
     def since(self, after: int) -> dict:
         with self.lock:

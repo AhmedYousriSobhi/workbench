@@ -12,6 +12,7 @@ import typer.completion
 from typer.core import TyperGroup
 
 from . import (
+    capture,
     checks,
     completion,
     compose,
@@ -573,6 +574,26 @@ def get_slurm_stats() -> None:
     typer.echo(json.dumps(slurmstats.collect(lambda c: stack._run(c))))
 
 
+CAPTURE_NODE = typer.Argument(..., help="a Slurm node or a Kubernetes node, e.g. cn001, gpu001 or kw001")
+CAPTURE_SECONDS = typer.Option(300, "--seconds", min=1, max=300, help="stop after this many seconds (at most 300)")
+
+
+@get_app.command("capture")
+def get_capture(node: str = CAPTURE_NODE, seconds: int = CAPTURE_SECONDS) -> None:
+    """The messages on one node's wire as they happen, one JSON object per line (issue 505): Slurm messages by tcpdump inside the node,
+    or the Kubernetes API audit events about the node. Nothing from a message body; nothing written to disk. The page asks the governor
+    for it; it ends by itself after --seconds."""
+    import signal
+    import sys
+
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))  # the governor stops it with SIGTERM: let tcpdump be stopped on the way out
+    try:
+        capture.run(_sim(), node, lambda m: typer.echo(json.dumps(m), nl=True) or sys.stdout.flush(), seconds)
+    except (ValueError, RuntimeError) as e:
+        typer.echo(f"capture failed: {e}", err=True)
+        raise typer.Exit(1) from e
+
+
 @get_app.command("scenarios")
 def get_scenarios(output: str = OUTPUT, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
     """The fault and workload scenarios for `benchctl scenario run`."""
@@ -1121,6 +1142,48 @@ def measure_run(label: str = typer.Argument(..., help="e.g. idle, loaded"),
     """Sample host, containers, processes (PSS) and VMs; save docs/measurements/<label>.json."""
     snaps = measure.sample(duration, interval)
     typer.echo(f"{len(snaps)} samples -> {measure.save(label, snaps)}")
+
+
+@measure_app.command("overhead")
+def measure_overhead(save: bool = typer.Option(False, "--save", help="keep it as this machine's default for the plan (compose/generated, gitignored)")) -> None:
+    """Docker's own memory (containerd-shims, dockerd, containerd), which `docker stats` does not count; run it with the stack up."""
+    raw = measure.docker_overhead()
+    ov = measure.overhead_summary({f"overhead:{k}": {"peak": v} for k, v in raw.items()})
+    if not ov:
+        typer.echo("no containerd-shim is running: start the stack (`benchctl up`) and retry", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"{ov['shims']} containers: {ov['per_container_mb']} MB each for the shim; dockerd + containerd {ov['fixed_mb']} MB fixed "
+               + (f"(private memory, not exact PSS, for {raw['estimated']} root-owned process(es); `sudo ./scripts/benchctl measure overhead` shows the exact PSS, do not `--save` it with sudo)" if raw["estimated"] else "(exact PSS)"))
+    if save:
+        typer.echo(f"saved: {memory.save_overhead(ov['per_container_mb'], ov['fixed_mb'])}; the plan adds {ov['per_container_mb']} MB for every container a start creates (delete the file to stop)")
+    else:
+        typer.echo("keep it for the plan: rerun with --save")
+
+
+CGROUP_DEFAULT = ["mariadb", "prometheus", "teleport"]
+CGROUP_NAMES = typer.Argument(None, help=f"container names (default {' '.join(CGROUP_DEFAULT)}; the compose project prefix is added)")
+
+
+def _mb(b: int) -> str:
+    return f"{b / 1024**2:.0f} MB"
+
+
+@measure_app.command("cgroup")
+def measure_cgroup(name: list[str] = CGROUP_NAMES) -> None:
+    """Per container: memory in use, the tmpfs part (`shmem`), page cache, anon and OOM kills, from its cgroup (read-only, no root). Issue 455: MariaDB moves off tmpfs only if shmem is 50 MB or more."""
+    typer.echo(f"{'container':28}{'current':>9}{'shmem':>9}{'file':>9}{'anon':>9}{'limit':>9}  oom_kill")
+    missing = 0
+    for short in name or CGROUP_DEFAULT:
+        full = f"workbench-{short}-1" if not short.startswith("workbench-") else short
+        m = measure.cgroup_memory(full)
+        if m is None:
+            missing += 1
+            typer.echo(f"{full:28}not running (or its cgroup is not readable)")
+            continue
+        typer.echo(f"{full:28}{_mb(m['current']):>9}{_mb(m['shmem']):>9}{_mb(m['file']):>9}{_mb(m['anon']):>9}"
+                   f"{(_mb(m['limit']) if m['limit'] else 'none'):>9}  {m['oom_kill']}")
+    if missing:
+        raise typer.Exit(1)
 
 
 APP_MATCH = typer.Option(None, "--match", help="process name or command-line text of the app (repeatable)")

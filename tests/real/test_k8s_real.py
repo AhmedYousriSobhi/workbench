@@ -195,3 +195,20 @@ def test_the_kubernetes_nodes_have_a_bmc_a_bcm_entry_and_gpu_metrics(cluster):
     assert wait_for(lambda: json.load(urlopen(req, context=ctx, timeout=5)).get("HostName") == "kgpu001", timeout=30)
     out = as_user("alice", "cmsh", "-c", "device; list", node=S_LOGIN).stdout
     assert all(f"{n} " in out for n in ("kcn001", "kcn002", "kgpu001", "kgpu002")) and "k8s-gpu" in out and "k8s-cpu" in out, out
+
+
+def test_the_api_audit_log_is_on_and_the_capture_reads_a_nodes_own_events(cluster):
+    """issue 505: the audit log is enabled (metadata only, narrow) and `benchctl get capture` keeps the events about one node."""
+    import sys
+
+    logs = docker("logs", "--tail", "400", "workbench-k8s-apiserver-1").stdout + docker("logs", "--tail", "400", "workbench-k8s-apiserver-1").stderr
+    assert '"auditID"' in logs, "the audit log is not on"
+    assert '"requestObject"' not in logs and '"responseObject"' not in logs  # metadata only: no request or response bodies
+    assert '"resource":"secrets"' not in logs and '"resource":"configmaps"' not in logs  # not in the policy
+    node = k8s.node_list(SIM)[0][0]
+    r = subprocess.run([sys.executable, "-m", "benchctl.cli", "get", "capture", node, "--seconds", "30"], cwd=ROOT, capture_output=True, text=True, timeout=90, check=False)
+    msgs = [json.loads(ln) for ln in r.stdout.splitlines() if ln.startswith("{")]
+    assert r.returncode == 0, r.stderr
+    assert msgs, "KWOK's lease renewals and node status updates should have been seen within 30 s"
+    assert all(m["object"].endswith(node) or m["type"].split()[-1].startswith("pods") for m in msgs)  # only this node's lease and node object, or its pods
+    assert any("leases" in m["type"] or "nodes" in m["type"] for m in msgs) and all(m["who"] and m["result"] for m in msgs)

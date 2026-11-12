@@ -56,6 +56,6 @@ Put **Toxiproxy** in front of the Jira mode only (an HTTP path, where it is chea
 
 ### 4.9 Storage, network and time simulation
 - **Fake shared filesystems.** No NFS/Lustre servers. Emit static `node_exporter` textfile metrics (`node_filesystem_size_bytes`, `node_filesystem_free_bytes`) for dummy mounts such as `/mnt/lustre`; scenarios like `disk-full` just change the numbers.
-- **tmpfs for ephemeral state.** MariaDB (Slurm accounting) and the Prometheus TSDB live on a capped tmpfs (about 200 MB each). State need not survive a host reboot, and this avoids IO saturation next to 30+ containers.
+- **tmpfs for ephemeral state.** MariaDB (Slurm accounting) and the Prometheus TSDB live on a capped tmpfs (MariaDB 100 MB, Prometheus 200 MB, with `retention.size` 150 MB so it never fills it). State need not survive a host reboot, and this avoids IO saturation next to 30+ containers.
 - **Network chaos with `tc netem`.** Latency, loss and partitions are applied on the Docker bridge networks between `core` and `mocks`/`compute`; no proxy process, no extra RAM.
 - **Time dilation.** `time_dilation` in `sim.yaml` scales synthetic job durations and arrival rates (inversely) in `user-sim` and `scenario-engine`, so a 24 h queue pattern can run in minutes.

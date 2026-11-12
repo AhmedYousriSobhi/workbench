@@ -17,6 +17,7 @@ from pathlib import Path
 import yaml
 from starlette.applications import Starlette
 from starlette.exceptions import HTTPException
+from starlette.middleware import Middleware
 from starlette.requests import Request
 from starlette.responses import (
     FileResponse,
@@ -30,7 +31,7 @@ from starlette.routing import Route
 
 from benchctl import checks, nhc, scenario, slurmtrace
 
-from . import monitoring
+from . import monitoring, traffic
 from .blast import payload as blast_payload
 from .cluster import ActionError, Cluster
 from .flow import PAUSE_LEVEL, Flow
@@ -38,6 +39,32 @@ from .graph import attach as attach_graph
 from .wiki import Wiki, WikiError, esc, page
 
 STATIC = Path(__file__).parent / "static"
+# The page and its modules run under a strict policy: no inline script or style (#517, ADR 0047). Help pages (/help) render
+# their own inline stylesheet and are left out.
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; "
+       "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+
+
+class CSPMiddleware:
+    """Pure ASGI (no buffering, so the SSE feeds stream): add the policy to the page and /static responses."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        path = scope.get("path", "")
+        if scope["type"] != "http" or not (path == "/" or path.startswith("/static/")):
+            return await self.app(scope, receive, send)
+
+        async def send_with_csp(msg):
+            if msg["type"] == "http.response.start":
+                msg.setdefault("headers", []).append((b"content-security-policy", CSP.encode()))
+            await send(msg)
+
+        await self.app(scope, receive, send_with_csp)
+
+
+_STATIC_TYPES = {".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2"}
 COOKIE = "workbench_ui"
 DOCS = Path(__file__).resolve().parent.parent / "docs"
 
@@ -51,6 +78,27 @@ def governor_status(socket: str) -> dict:
         return checks.governor_request({"cmd": "status"}, socket)
     except OSError as e:
         return {"ok": False, "error": f"governor not reachable: {e}"}
+
+
+class SharedStatus:
+    """One governor status call per `ttl` seconds however many streams are open (issue 451): the first stream whose tick finds the
+    value older than `ttl` fetches it (the others wait for that one call), the rest read it. It runs only when a stream asks,
+    so with the page hidden (SPEC W-11) nothing polls."""
+
+    def __init__(self, fetch, ttl: float, clock=time.monotonic):
+        self.fetch, self.ttl, self.clock = fetch, ttl, clock
+        self.value: dict = {}
+        self.at = float("-inf")
+        self.lock = asyncio.Lock()
+
+    async def get(self) -> dict:
+        if self.clock() - self.at < self.ttl:
+            return self.value
+        async with self.lock:
+            if self.clock() - self.at >= self.ttl:  # another stream may have fetched while this one waited for the lock
+                self.value = await asyncio.to_thread(self.fetch)
+                self.at = self.clock()
+            return self.value
 
 
 class Runs:
@@ -149,13 +197,24 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
     async def index(request: Request):
         return FileResponse(STATIC / "index.html")
 
+    async def static_file(request: Request):
+        """The page's stylesheet and ES modules (ADR 0007: native modules, no build step). Same token as the page; only
+        .js, .css and .woff2 files under static/, and revalidated on every load so an upgrade is never served stale."""
+        path = (STATIC / request.path_params["rel"]).resolve()
+        kind = _STATIC_TYPES.get(path.suffix)
+        if kind is None or not path.is_file() or STATIC.resolve() not in path.parents:
+            raise HTTPException(404, "no such file")
+        return FileResponse(path, media_type=kind, headers={"Cache-Control": "no-cache"})
+
     async def status(request: Request):
         return JSONResponse(await asyncio.to_thread(governor_status, socket))
+
+    shared = SharedStatus(lambda: governor_status(socket), interval * 0.9)  # a lone stream still gets a fresh value every tick
 
     async def events(request: Request):
         async def stream():
             while True:
-                yield f"data: {json.dumps(await asyncio.to_thread(governor_status, socket))}\n\n"
+                yield f"data: {json.dumps(await shared.get())}\n\n"
                 await asyncio.sleep(interval)
         return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
@@ -170,7 +229,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         async def stream():
             nonlocal after
             while True:
-                level = (await asyncio.to_thread(governor_status, socket)).get("level") or 0
+                level = (await shared.get()).get("level") or 0
                 paused = level >= PAUSE_LEVEL
                 if not paused:
                     await asyncio.to_thread(flow.poll)
@@ -306,7 +365,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             raise HTTPException(409, res.get("error", "the governor refused"))
         if res.get("dry_run"):
             return JSONResponse({"started": False, "message": "The governor is in dry-run mode or has no --workdir, so nothing was applied. Run the command shown instead."})
-        return JSONResponse({"started": True, "message": "Applying. Nodes appear and disappear as they change; progress is in Governor activity."})
+        return JSONResponse({"started": True, "job": res.get("job"), "message": "Applying. Nodes appear and disappear as they change; the stages are listed below."})
 
     async def nhc_state(request: Request):
         """The health checks in run order, the templates the page may add from, and any problem with the files."""
@@ -458,6 +517,44 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             slurm_stats_cache[:] = [time.monotonic(), res.get("stats") if res.get("ok") else None]
         return JSONResponse({"stats": slurm_stats_cache[1]})
 
+    async def traffic_record(request: Request):
+        """Who called which mock, how it ended and how long it took (the mocks' own record, GET /sim/traffic); `?since=T` limits `recent`."""
+        try:
+            since = max(0.0, float(request.query_params.get("since") or 0))
+        except ValueError:
+            return JSONResponse({"error": "since must be a number"}, status_code=400)
+        return JSONResponse(await asyncio.to_thread(traffic.collect, since))
+
+    async def capture_call(req: dict) -> JSONResponse:
+        """One wire's messages, on demand and only through the governor (issue 505): it starts, reads and stops the capture; this page never touches Docker."""
+        try:
+            res = await asyncio.to_thread(checks.governor_request, req, socket)
+        except (OSError, ValueError) as e:
+            raise HTTPException(503, "the governor is not reachable: start it with ./scripts/benchctl start") from e
+        if not res.get("ok"):
+            raise HTTPException(409, res.get("error", "the governor refused"))
+        return JSONResponse(res)
+
+    async def capture_start(request: Request):
+        try:
+            body = await request.json()
+        except ValueError:
+            body = {}
+        node = body.get("node") if isinstance(body, dict) else None
+        if not (isinstance(node, str) and re.fullmatch(r"[a-z]{2,8}[0-9]{3}", node)):
+            raise HTTPException(400, "node must be a node name such as cn001")
+        return await capture_call({"cmd": "capture-start", "node": node})
+
+    async def capture_read(request: Request):
+        try:
+            since = max(0, int(request.query_params.get("since") or 0))
+        except ValueError:
+            raise HTTPException(400, "since must be a whole number") from None
+        return await capture_call({"cmd": "capture-read", "since": since})
+
+    async def capture_stop(request: Request):
+        return await capture_call({"cmd": "capture-stop"})
+
     monitoring_cache: list = [float("-inf"), []]
 
     async def monitoring_links(request: Request):
@@ -502,6 +599,13 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
     async def list_scenarios(request: Request):
         return JSONResponse([{"name": s["name"], "description": s.get("description", ""), "steps": len(s.get("steps", []))}
                              for s in scenario.list_all(scenarios)])
+
+    async def scenario_preview(request: Request):
+        try:
+            sc = scenario.load(request.path_params["name"], scenarios)
+        except scenario.ScenarioError as e:
+            raise HTTPException(404, str(e)) from e
+        return JSONResponse(scenario.preview(sc))
 
     async def run_state(request: Request):
         return JSONResponse(runs.state)
@@ -548,14 +652,20 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
     return Starlette(
         lifespan=lifespan,
+        middleware=[Middleware(CSPMiddleware)],
         routes=[
             Route("/login", login),
             Route("/", protected(index)),
+            Route("/static/{rel:path}", protected(static_file)),
             Route("/help", protected(help_home)),
             Route("/help/", protected(help_home)),
             Route("/help/search", protected(help_search)),
             Route("/help/files/{rel:path}", protected(help_file)),
             Route("/help/{slug:path}", protected(help_page)),
+            Route("/api/traffic", protected(traffic_record)),
+            Route("/api/capture/start", protected(capture_start, write=True), methods=["POST"]),
+            Route("/api/capture/read", protected(capture_read)),
+            Route("/api/capture/stop", protected(capture_stop, write=True), methods=["POST"]),
             Route("/api/status", protected(status)),
             Route("/api/events", protected(events)),
             Route("/api/cluster", protected(cluster_state)),
@@ -575,6 +685,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/nodes/{node}/{action}", protected(node_action, write=True), methods=["POST"]),
             Route("/api/scenarios", protected(list_scenarios)),
             Route("/api/scenarios/run", protected(run_state)),
+            Route("/api/scenarios/{name}", protected(scenario_preview)),
             Route("/api/scenarios/stop", protected(stop, write=True), methods=["POST"]),
             Route("/api/scenarios/{name}/run", protected(run, write=True), methods=["POST"]),
         ],

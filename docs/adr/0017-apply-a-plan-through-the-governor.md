@@ -12,7 +12,7 @@ only at L0-L1 (GV-8, ADR 0010).
   integers and an allow-list of part names (nothing free-form reaches a command line) and runs
   `benchctl up --cpu-nodes ... --with/--without ...` in the background. Refused above L1, in dry-run, or without `--workdir`.
 - The page posts `POST /api/plan/apply` (CSRF header, same estimate and fit check as the plan) and shows the governor's
-  audit line when the change finishes.
+  audit line when the change finishes (since ADR 0048 it follows the governor's job id and stages instead).
 - `benchctl up` for a selection removes node containers the new selection no longer lists and recreates slurmctld so
   `slurm.conf` matches (`stack.up`).
 

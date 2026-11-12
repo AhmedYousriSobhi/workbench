@@ -22,7 +22,7 @@ SPEC W-3), and user-sim does not exist yet, so Slurm job events are not availabl
 - Slurm job dots (submit to slurmctld to node) wait for either user-sim reporting its submissions or a read-only
   scheduler feed the UI is allowed to use. Until then the page says what it does not show.
 - Counters live in memory in each mock and reset when it restarts; the feed re-baselines instead of showing a burst.
-- `benchctl up` now builds images (`up --build`), because a stale image would silently lack `/sim/stats`.
+- `benchctl up` builds every image once before it starts anything (issue 449; it used to pass `--build` to each of the ~12 stage starts), because a stale image would silently lack `/sim/stats`.
 
 ## Update (issue 118)
 The traffic diagram now sits beside the entity list and draws every node as a tile. Injection events carry
@@ -38,3 +38,8 @@ k8s have no such counter and the event has no `err`, which the page reads as "no
 in the feed. The page draws up to five dots per event as before, the first `err` of them as triangles instead of circles (shape,
 not only colour), and says it in text: the Timeline line ("3 requests to BMC farm, 2 errors") and the service box ("3 requests,
 2 errors"). Latency stays out of scope: the mocks answer in microseconds, so a speed encoding would imply a measurement that is not real.
+
+## Addendum (issue 451): a down mock must not stall the feed, and tabs must not multiply governor calls
+
+- `webui/flow.py` probes each mock with a 0.2 s timeout (they are on this machine; a container the governor froze at L3 accepts the connection and never answers, which used to cost 2 s a pass, while the lock was held). A service seen down is skipped for 1, 2, 4 ... up to 10 s and asked again after that, so one stopped mock no longer slows the others; coming back is noticed within 10 s.
+- `webui/app.py` `SharedStatus`: the two SSE streams (`/api/events`, `/api/flow`) read one cached governor status, refreshed at most once per 0.9 s whatever the number of tabs. It runs only when a stream asks, so with the page hidden (SPEC W-11) nothing polls.

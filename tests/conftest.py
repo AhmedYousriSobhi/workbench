@@ -29,6 +29,7 @@ def _no_app_reserve_by_default(monkeypatch, tmp_path):
     from benchctl import memory
     monkeypatch.setenv("WORKBENCH_APP_MB", "0")
     monkeypatch.setattr(memory, "APP_FILE", tmp_path / "app_reserve.json")  # never the machine's real saved measurement
+    monkeypatch.setattr(memory, "OVERHEAD_FILE", tmp_path / "overhead.json")  # nor the Docker overhead saved on this machine
 
 
 @pytest.fixture(autouse=True)
@@ -38,3 +39,17 @@ def _no_git_hook_variables(monkeypatch):
     and harmless, which hid it (#351)."""
     for var in ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE", "GIT_PREFIX", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY"):
         monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _services_answer(monkeypatch):
+    """The fake runners in the `up` tests cannot answer `scontrol ping` or an HTTP probe; readiness has its own tests (test_ready.py)."""
+    from benchctl import stack
+    monkeypatch.setattr(stack, "_answering", lambda names, runner, path, wait: [])
+
+
+@pytest.fixture(autouse=True)
+def _no_docker_state_in_plans(monkeypatch):
+    """`plan` subtracts what is already running (`docker ps`): with a developer's stack up, a plan that should not fit does. A test that wants running services passes them in."""
+    from benchctl import workbench
+    monkeypatch.setattr(workbench, "running_services", lambda: set())

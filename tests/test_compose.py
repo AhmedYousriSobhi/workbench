@@ -179,3 +179,10 @@ def test_the_jump_host_is_a_bare_sshd_on_its_own_address_and_port():
     out = compose.generate(sim, {"groups": ["core", "access", "jump"]})["services"]["jump"]
     assert out["ports"] == ["127.0.0.1:2220:22"] and out["networks"]["default"]["ipv4_address"] == addressing.service_ip("jump") == "10.141.255.5"
     assert out["build"].endswith("images/jump") and "slurm" not in " ".join(out["volumes"])
+
+
+def test_the_l1_pause_flag_directory_is_mounted_read_only_on_the_login_and_the_jira_mock():
+    """#476: the directory, not the file (Docker would turn a missing file into a directory); never writable from inside."""
+    svcs = compose.generate(SIM, compose.load_profile("std"))["services"]
+    assert "./flags:/run/workbench-flags:ro" in svcs["login"]["volumes"]
+    assert "./flags:/run/workbench-flags:ro" in svcs["jira-mock"]["volumes"]

@@ -6,6 +6,8 @@ import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from webui_src import page_source
+
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "docs/assets"
 
@@ -42,5 +44,5 @@ def test_readme_shows_the_logo_with_alt_text_and_stays_short():
 
 
 def test_web_page_title_has_the_logo_not_a_text_glyph():
-    page = (ROOT / "webui/static/index.html").read_text()
+    page = page_source()
     assert '<svg class="logo"' in page and "◈" not in page

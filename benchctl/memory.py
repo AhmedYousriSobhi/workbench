@@ -31,6 +31,14 @@ MEASURED_MB: dict[str, int] = {
     "dcgm-exporter": 125,  # exporter 97 MB + host engine 25 MB with 8 GPUs, one run (issue 426); the embedded engine was 430 MB
     "jira-db": 130, "jira-real": 2045,   # real Jira Data Center: heap 768 MB, JVM_ARGS (Serial GC, C1 only); 2176 MB cap, two clean runs
 }
+# What each part that is multiplied by the node count may cost per node, in MB (the declared cost; issue 456). A new per-node part
+# must be listed here (tests/test_memory.py finds it by generating two sizes), and its cap and measurement must fit under it. A
+# part that cannot be a few MB per node is shared (one container for every node) or optional.
+PER_NODE_MB: dict[str, int] = {
+    "slurmd": 60,          # every compute node; 13 MB measured
+    "bmc-forwarder": 32,   # every per-node BMC address; 18 MB measured
+    "dcgm-exporter": 150,  # optional (--with dcgm), real-gpu nodes only; 125 MB measured, the one part that is not a few MB
+}
 NOT_MEASURED = ("scenario-engine", "user-sim", "ticket-bot", "accounting-init")  # not built or one-shot: expected at the cap
 
 
@@ -49,6 +57,33 @@ def expected_mb(name: str, limit_mb: int, labels: dict | None = None, tolerance:
     """What the plan expects the component to use: measured use plus the tolerance, never above its cap."""
     seen = MEASURED_MB.get(key_of(name, labels))
     return limit_mb if seen is None else min(limit_mb, math.ceil(seen * (1 + tolerance)))
+
+
+OVERHEAD_FILE = Path(__file__).resolve().parent.parent / "compose" / "generated" / "overhead.json"  # gitignored; `benchctl measure overhead --save`
+
+
+def saved_overhead() -> dict | None:
+    """What `benchctl measure overhead --save` wrote: {"per_container_mb": N, "fixed_mb": N, "measured": "YYYY-MM-DD"}, else None."""
+    try:
+        data = json.loads(OVERHEAD_FILE.read_text())
+        return {"per_container_mb": int(data["per_container_mb"]), "fixed_mb": int(data.get("fixed_mb", 0)), "measured": str(data.get("measured", "?"))}
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def save_overhead(per_container_mb: int, fixed_mb: int) -> Path:
+    OVERHEAD_FILE.parent.mkdir(parents=True, exist_ok=True)
+    OVERHEAD_FILE.write_text(json.dumps({"per_container_mb": per_container_mb, "fixed_mb": fixed_mb, "measured": time.strftime("%Y-%m-%d")}) + "\n")
+    return OVERHEAD_FILE
+
+
+def overhead_mb(new_containers: int) -> tuple[int, str]:
+    """MB Docker's own processes add for containers a start would create (one containerd-shim each; `docker stats` does not count
+    them), and where the figure comes from. Not measured on this machine: 0, and the note says so (never a guessed number)."""
+    saved = saved_overhead()
+    if not saved:
+        return 0, "not measured: run `benchctl measure overhead --save` with the stack up"
+    return saved["per_container_mb"] * max(0, new_containers), f"measured on {saved['measured']}: {saved['per_container_mb']} MB per container"
 
 
 def saved_app() -> dict | None:

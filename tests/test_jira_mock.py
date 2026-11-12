@@ -387,3 +387,21 @@ def test_a_slurm_report_joins_the_nodes_open_ticket_instead_of_opening_a_second(
     assert f["summary"] == "cn002: Slurm took the node out of service" and "fault-slurm" in f["labels"]
     assert fault(open=False, kind="slurm", detail="back")["resolved"] == [own]
     assert fault(kind="ib", detail="1 InfiniBand port(s) down")["created"] and fault(kind="nic", detail="flap")["created"]
+
+
+def test_the_l1_flag_pauses_the_background_changes(tmp_path, monkeypatch):
+    """#476: while the governor's pause flag exists the team does nothing; it carries on when the flag goes."""
+    flag = tmp_path / "arrivals.paused"
+    monkeypatch.setattr(jira, "PAUSED", str(flag))
+    j = jira.Jira(deliver=lambda *a: None)
+    ticks = []
+    monkeypatch.setattr(j, "tick", lambda: ticks.append(1))
+    stop = threading.Event()
+    j.activity["every"] = 0.01
+    flag.touch()
+    t = threading.Thread(target=j._run_activity, args=(stop,), daemon=True)
+    monkeypatch.setattr(stop, "wait", lambda s=None: stop.is_set() or time.sleep(0.01) or None)
+    t.start(); time.sleep(0.2)
+    assert ticks == []
+    flag.unlink(); time.sleep(0.2); stop.set(); t.join(2)
+    assert ticks

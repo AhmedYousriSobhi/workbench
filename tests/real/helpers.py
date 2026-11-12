@@ -44,7 +44,25 @@ def bring_up(sim: dict, profile: str = "min") -> None:
     why = " | ".join(said[-4:]) or "no output"
     if "REFUSED by governor" in why:
         raise AssertionError(f"ENVIRONMENT, not a code defect: the governor refused `up` (free host memory, then rerun): {why}")
-    raise AssertionError(f"stack.up failed: {why}")
+    raise AssertionError(f"stack.up failed: {why}\n{diagnostics()}")
+
+
+def diagnostics() -> str:
+    """Why a stack may not start, for a failure message (issue 528): containers left paused, and the governor's level with its
+    last audit lines (a freeze names who paused what). Best effort: a missing Docker or governor is itself said."""
+    out = []
+    try:
+        r = subprocess.run(["docker", "ps", "-a", "--filter", "status=paused", "--format", "{{.Names}}"], capture_output=True, text=True, timeout=20, check=False)
+        out.append("paused containers: " + (", ".join(r.stdout.split()) or "none"))
+    except (OSError, subprocess.SubprocessError) as e:
+        out.append(f"paused containers: not read ({e})")
+    try:
+        from benchctl import checks
+        st = checks.governor_request({"cmd": "status"}, os.environ.get("WORKBENCH_GOV_SOCKET", "/run/workbench/gov.sock"))
+        out.append(f"governor: level L{st.get('level')}, mem_available {int(st.get('mem_available') or 0) // 2**20} MB; last audit: " + " | ".join(st.get("audit", [])[-6:]))
+    except (OSError, ValueError, KeyError) as e:
+        out.append(f"governor: not read ({e})")
+    return "\n".join(out)
 
 
 def release() -> None:

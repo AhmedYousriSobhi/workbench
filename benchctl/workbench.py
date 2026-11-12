@@ -255,11 +255,13 @@ def estimate(sim: dict, profile: dict, app_mb: int | None = None, running: set[s
     app, app_note = memory.app_reserve() if app_mb is None else (app_mb, "given")
     up = set(running or ())
     running_mb = sum(v for n, v in {**seen, **obs}.items() if n in up)
+    overhead, overhead_note = memory.overhead_mb(len({**seen, **obs}.keys() - up))  # a containerd-shim per container a start creates
     return {"nodes_mb": sum(nodes.values()), "node_count": len(nodes), "services_mb": services,
             "observability_mb": OBSERVABILITY_MB, "total_mb": sum(nodes.values()) + sum(services.values()) + OBSERVABILITY_MB,
             "expected_mb": expected, "expected_nodes_mb": sum(seen[n] for n in nodes),
             "expected_services_mb": {n: seen[n] for n in services}, "expected_observability_mb": sum(obs.values()),
-            "app_mb": app, "app_note": app_note, "running_mb": running_mb, "need_mb": expected - running_mb + app}
+            "app_mb": app, "app_note": app_note, "running_mb": running_mb, "overhead_mb": overhead, "overhead_note": overhead_note,
+            "need_mb": expected - running_mb + app + overhead}
 
 
 def verdict(est: dict, available_mb: int, floor_mb: int = FLOOR_MB, spec: Spec | None = None) -> tuple[bool, str]:
@@ -299,9 +301,10 @@ def render(spec: Spec, est: dict) -> str:
              f"  {'total':<18} {est['expected_mb']:>8} {est['total_mb']:>8}"]
     if est.get("running_mb"):
         rows += [f"  {'already running':<18} {-est['running_mb']:>8}   (already in the used memory)"]
+    rows += [f"  {'docker overhead':<18} {est.get('overhead_mb', 0):>8}   ({est.get('overhead_note', 'not measured')}; the containerd-shims `docker stats` does not count)"]
     if est["app_mb"]:
         rows += [f"  {'app under test':<18} {est['app_mb']:>8}   ({est.get('app_note', 'given')})"]
-    if est["app_mb"] or est.get("running_mb"):
+    if est["app_mb"] or est.get("running_mb") or est.get("overhead_mb"):
         rows += [f"  {'needs':<18} {est['need_mb']:>8}   (admitted against this)"]
     return "\n".join(rows)
 

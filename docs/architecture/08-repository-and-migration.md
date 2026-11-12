@@ -18,7 +18,7 @@ workbench/
 ├── components/
 │   ├── bmc-farm/  bcm-mock/  jira-mock/  gpu-exporter-farm/
 │   └── user-sim/  ticket-bot/  scenario-engine/
-├── webui/                    # Starlette + one vanilla-JS page (ADR 0007, 0008)
+├── webui/                    # Starlette + a vanilla-JS page of native ES modules, static/js/ (ADR 0007, 0008)
 ├── compose/                  # static + generated compose files (cgroup_parent per class)
 ├── k8s/                      # k3d config, KWOK node/stage templates
 ├── fidelity-vm/Vagrantfile   # vagrant-libvirt, 2 GB cap, on-demand

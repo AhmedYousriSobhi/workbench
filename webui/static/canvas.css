@@ -1,0 +1,176 @@
+/* The redesign's visual language for the diagram canvases (screens 5-7), from docs/design/ui-redesign/DESIGN_HANDOFF.md.
+   A canvas is always dark, in every page theme, like a terminal inside a light page (a lifted slate, not black: the first palette read too heavy): the plane colours are chosen for a dark ground.
+   Use the tokens, never the hex values. Text tokens meet 4.5:1 on ground and surfaces, plane colours 3:1 (webui/tests/js/tokens.test.mjs). */
+:root {
+  --cv-ground:#111A26; --cv-dot:#223044; --cv-surface:#16202E; --cv-surface-2:#1A2636;
+  --cv-border:#2B3A50; --cv-border-2:#374A64;
+  --cv-text:#F1F5F9; --cv-text-2:#C9D3DD; --cv-text-muted:#A3B5C9;
+  --plane-access:#5CB8FF; --plane-control:#E2E8F0; --plane-k8s:#7C9CFF; --plane-data:#C49BFF; --plane-monitoring:#4BE3A0; --plane-management:#FFB347;
+  --cv-error:#FF5D5D; --cv-attention:#FFB347; --cv-no-current:#51627A; --cv-wire-base:#1E2A3A;
+  --cv-font-ui:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --cv-font-mono:"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@font-face { font-family:Inter; font-style:normal; font-weight:100 900; font-display:swap; src:url(/static/fonts/inter-latin-wght-normal.woff2) format("woff2"); }
+@font-face { font-family:"JetBrains Mono"; font-style:normal; font-weight:100 800; font-display:swap; src:url(/static/fonts/jetbrains-mono-latin-wght-normal.woff2) format("woff2"); }
+
+.canvas { position:relative; overflow:hidden; background-color:var(--cv-ground); background-image:radial-gradient(circle, var(--cv-dot) 1px, transparent 1.4px); background-size:24px 24px;
+  color:var(--cv-text); font-family:var(--cv-font-ui); }
+.canvas .mono { font-family:var(--cv-font-mono); }
+
+/* A wire: four stacked strokes, see js/wire.js. The plane sets --c; --dur is set per wire from its request rate. */
+.wire { fill:none; stroke-linecap:round; stroke-linejoin:round; transition:opacity .35s; }
+.wire[data-plane=access] { --c:var(--plane-access); } .wire[data-plane=control] { --c:var(--plane-control); } .wire[data-plane=k8s] { --c:var(--plane-k8s); }
+.wire[data-plane=data] { --c:var(--plane-data); } .wire[data-plane=monitoring] { --c:var(--plane-monitoring); } .wire[data-plane=management] { --c:var(--plane-management); }
+.wire-base { stroke:var(--cv-wire-base); stroke-width:7; }
+.wire-halo { stroke:var(--c); stroke-width:9; stroke-opacity:.12; }
+.wire-core { stroke:var(--c); stroke-width:1.5; stroke-opacity:.55; }
+.wire-idle { stroke:var(--cv-no-current); stroke-width:1.5; stroke-dasharray:4 4; }
+.wire-pulse { stroke:var(--c); stroke-width:3; stroke-dasharray:2 18; --period:20; animation:wire-flow var(--dur, 1.5s) linear infinite; }
+.wire-err { stroke:var(--cv-error); stroke-width:3; stroke-dasharray:1 60; --period:61; animation:wire-flow var(--dur, 4.6s) linear infinite; }
+/* Each stroke moves by exactly its own dash period, so the loop is seamless (a fixed distance makes other periods jump). */
+@keyframes wire-flow { to { stroke-dashoffset:calc(var(--period) * -1px); } }
+
+/* A part that needs attention breathes amber, and always says why in words (js/wire.js markAttention). */
+.breathe { animation:wire-breathe 2.4s ease-in-out infinite; }
+.attn-text { display:block; color:var(--cv-attention); font-size:12px; font-weight:600; }
+@keyframes wire-breathe { 0%,100% { box-shadow:0 0 0 1px rgba(0,0,0,.4), 0 0 10px #FFB34733; } 50% { box-shadow:0 0 0 1px rgba(0,0,0,.4), 0 0 30px #FFB34788; } }
+
+/* Motion off: reduced motion, and any hidden tab (W-11: nothing animates unseen). The dots stay drawn, they just stop. */
+@media (prefers-reduced-motion: reduce) { .wire-pulse, .wire-err, .breathe { animation:none; } }
+:root[data-tab-hidden] .wire-pulse, :root[data-tab-hidden] .wire-err, :root[data-tab-hidden] .breathe { animation-play-state:paused; }
+
+/* ---- The Cluster level (redesign step 3, js/circuit.js): the circuit drawn into #flow. Always dark, like every canvas. ---- */
+#flow[data-cv] { max-width:none; width:100%; min-width:1100px; max-height:none; margin:var(--sp3, 12px) 0; border-radius:14px; background-color:var(--cv-ground);
+  background-image:radial-gradient(circle, var(--cv-dot) 1px, transparent 1.4px); background-size:24px 24px; font-family:var(--cv-font-ui); }
+#flow[data-cv] text { font:600 16px var(--cv-font-ui); fill:var(--cv-text); }
+#flow[data-cv] .cv-title { font-size:22px; font-weight:600; } #flow[data-cv] .cv-state { font-size:17px; font-weight:600; fill:var(--cv-text-2); }
+#flow[data-cv] .cv-sub, #flow[data-cv] .cv-wlab, #flow[data-cv] .cv-note { font-size:16px; font-weight:400; fill:var(--cv-text-muted); }
+#flow[data-cv] .cv-mono { font-family:var(--cv-font-mono); font-size:15px; }
+#flow[data-cv] .cv-k { font-size:14px; font-weight:700; letter-spacing:.14em; fill:var(--cv-text-muted); }
+#flow[data-cv] .cv-wlab { font-family:var(--cv-font-mono); font-size:14px; pointer-events:none; paint-order:stroke; stroke:var(--cv-ground); stroke-width:5px; }
+#flow[data-cv] .cv-note { font-size:17px; }
+#flow[data-cv] .cv-box { fill:var(--cv-surface-2); stroke:var(--cv-border-2); stroke-width:1.5; }
+#flow[data-cv] .cv-band rect { fill:none; stroke:var(--cv-border); stroke-width:1.5; stroke-dasharray:2 6; }
+#flow[data-cv] .cv-band.absent { opacity:.5; }
+#flow[data-cv] .cv-clients .cv-box { stroke:var(--plane-access); stroke-opacity:.6; }
+#flow[data-cv] .cv-chip { fill:var(--cv-surface); stroke:var(--cv-border-2); } #flow[data-cv] .cv-chiptext { font-size:17px; }
+#flow[data-cv] .cv-badge-bg { fill:#2E2315; stroke:var(--cv-attention); } #flow[data-cv] .cv-badge { font-size:12px; font-weight:700; fill:var(--cv-attention); letter-spacing:.04em; }
+/* a part the cluster lacks keeps its place, greyed at 8 %, and its wires with it; the lane note stays readable */
+#flow[data-cv] [data-part][data-present="false"], #flow[data-cv] .cv-wires [data-present="false"], #flow[data-cv] .cv-labels [data-present="false"] { opacity:.08; pointer-events:none; }
+#flow[data-cv] .cv-part.down .cv-box { stroke:var(--cv-error); stroke-dasharray:6 4; } #flow[data-cv] .cv-part.flt .cv-box { stroke:var(--cv-attention); }
+#flow[data-cv] .cv-part.down .cv-state { fill:var(--cv-error); } #flow[data-cv] .cv-part.flt .cv-state { fill:var(--cv-attention); }
+#flow[data-cv] .cv-rack.attn .cv-box { stroke:var(--cv-attention); stroke-width:2; }
+#flow[data-cv] .cv-sq rect { fill:#1E7F57; stroke:#2FD18A; stroke-width:1; } #flow[data-cv] .cv-rack[data-ent=k8s-nodes] .cv-sq.ok rect { fill:#3A4C80; stroke:var(--plane-k8s); }
+#flow[data-cv] .cv-sq:not(.ok) rect { fill:#5A3A0B; stroke:var(--cv-attention); stroke-width:1.6; } #flow[data-cv] .cv-sq.fault rect, #flow[data-cv] .cv-sq.down rect { fill:#5A1717; stroke:var(--cv-error); }
+#flow[data-cv] .cv-glyph { font-size:11px; font-weight:800; fill:var(--cv-text); pointer-events:none; } #flow[data-cv] .cv-sq { cursor:pointer; }
+#flow[data-cv] .cv-sum { fill:var(--cv-text-2); }
+#flow[data-cv] .hit { cursor:pointer; } #flow[data-cv] .hit:hover .cv-box, #flow[data-cv] .hit:focus-visible .cv-box { stroke:var(--plane-access); } #flow[data-cv] .hit:focus-visible { outline:2px solid var(--plane-access); outline-offset:3px; }
+/* the layer stack: an isolated plane keeps its wires, everything else fades to 10 % */
+#flow[data-cv] [data-faded="1"] { opacity:.1; }
+#flow[data-cv] .wire[data-state=declared] .wire-core { stroke-opacity:.35; }
+/* focus, lens and blast radius (js/focus.js, lens.js, blast.js) work on the circuit through the same data attributes */
+#flow[data-cv] [data-focus] .cv-box { stroke:var(--plane-access); stroke-width:3.5; }
+#flow[data-cv] [data-blast] .cv-box { stroke:var(--cv-error); stroke-dasharray:7 4; stroke-width:3.5; }
+#flow[data-cv] g.wire[data-blast] .wire-core, #flow[data-cv] g.wire[data-blast] .wire-halo { stroke:var(--cv-error); stroke-opacity:1; }
+.cvstack { display:flex; flex-wrap:wrap; gap:8px; margin:var(--sp2, 8px) 0; background:var(--cv-ground); border-radius:12px; padding:10px; } .cvstack[hidden] { display:none; }
+.cvlayer { flex:1 1 170px; display:flex; align-items:center; gap:12px; padding:8px 10px; border:1px solid var(--cv-border-2); border-radius:10px; background:var(--cv-surface-2); color:var(--cv-text); font:inherit; text-align:left; cursor:pointer; min-height:48px; }
+.cvlayer[aria-pressed=true] { border-color:var(--cv-text-2); background:#122033; } .cvlayer .lt { display:flex; flex-direction:column; } .cvlayer .n { font-size:0.75rem; color:var(--cv-text-muted); font-family:var(--cv-font-mono); }
+.cvlayer .plate { width:44px; height:24px; border-radius:5px; border:2px solid var(--pc, var(--cv-text-muted)); background:var(--cv-surface); transform:perspective(200px) rotateX(48deg) rotateZ(-8deg); flex:none; }
+.cvlayer .plate[data-plane=access] { --pc:var(--plane-access); } .cvlayer .plate[data-plane=control] { --pc:var(--plane-control); } .cvlayer .plate[data-plane=data] { --pc:var(--plane-data); }
+.cvlayer .plate[data-plane=monitoring] { --pc:var(--plane-monitoring); } .cvlayer .plate[data-plane=management] { --pc:var(--plane-management); } .cvlayer .plate[data-plane=all] { --pc:var(--cv-text); }
+.cvcap { margin:4px 2px; font-size:0.8125rem; color:var(--dim, #A3B5C9); } .cvcap[hidden] { display:none; }
+@media (min-width:1100px) { #nodeswrap.circuit { grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto; grid-template-areas:"canvas" "side"; height:auto; min-height:0; }
+  #nodeswrap.circuit #trafficpanel { display:block; } #nodeswrap.circuit #trafficpanel > .flowscroll { display:block; overflow-x:auto; } #nodeswrap.circuit #trafficpanel #flow { height:auto; flex:none; margin:var(--sp2) 0; } }
+
+/* ---- The zoom (redesign step 4): the rail, the Fleet layer and the Pool layer. Canvases stay dark in every page theme. ---- */
+.zoomrail { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:var(--sp2, 8px) 0; } .zoomrail[hidden] { display:none; }
+.zoomrail .btn { min-height:40px; min-width:40px; letter-spacing:.08em; } .zoomrail .btn[aria-pressed="true"] { outline:2px solid var(--plane-access); outline-offset:1px; }
+.fleetview, .poolview { border-radius:14px; padding:18px; margin:var(--sp3, 12px) 0; min-height:320px; }
+.fleetview[hidden], .poolview[hidden] { display:none; }
+.zout { z-index:2; pointer-events:none; }  /* the outgoing layer, while it leaves: it lies over the incoming one and takes no click */
+@media (prefers-reduced-motion: reduce) { .zout { display:none; } }
+.canvas .pv-pill { display:inline-flex; gap:6px; align-items:center; padding:3px 10px; border-radius:999px; font-size:0.875rem; font-weight:600; border:1.5px solid var(--cv-border-2); color:var(--cv-text); background:var(--cv-surface-2); }
+.canvas .pv-pill.ok { border-color:var(--plane-monitoring); } .canvas .pv-pill.warn { border-color:var(--cv-attention); } .canvas .pv-pill.fault { border-color:var(--cv-error); border-style:double; border-width:3px; } .canvas .pv-pill.down, .canvas .pv-pill.unknown { border-style:dashed; border-color:var(--cv-no-current); }
+.canvas .pv-kpi { background:var(--cv-surface-2); border:1px solid var(--cv-border); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:2px; min-width:0; }
+.canvas .pv-kpi b { font-size:1.375rem; font-weight:600; } .canvas .pv-kpi span { font-size:0.875rem; color:var(--cv-text-muted); }
+/* Fleet */
+.fleetview { display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr)); gap:16px; align-content:start; }
+.fl-card { background:var(--cv-surface); border:1.5px solid var(--cv-border-2); border-radius:14px; padding:16px; display:flex; flex-direction:column; gap:12px; cursor:pointer; transition:border-color .15s; }
+.fl-card:hover, .fl-card:focus-within { border-color:var(--plane-access); } .fl-card.warn, .fl-card.fault { border-color:var(--cv-attention); }
+.fl-head { all:unset; box-sizing:border-box; display:flex; justify-content:space-between; align-items:center; gap:10px; cursor:pointer; min-height:40px; color:var(--cv-text); } .fl-head:focus-visible { outline:2px solid var(--plane-access); outline-offset:3px; border-radius:8px; }
+.fl-name { font-size:1.375rem; font-weight:600; }
+.fl-badges { display:flex; flex-wrap:wrap; gap:6px; list-style:none; margin:0; padding:0; } .fl-badges li { font-size:0.875rem; padding:3px 10px; border-radius:999px; border:1px solid var(--cv-border-2); color:var(--cv-text-2); } .fl-badges li.on { color:var(--cv-text); border-color:var(--plane-monitoring); } .fl-badges li.dashed { border-style:dashed; color:var(--cv-text-muted); }
+.fl-kpis { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+.fl-lane { display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; padding:8px 10px; border:1px dashed var(--cv-border-2); border-radius:10px; } .fl-lane.absent { opacity:.08; } .fl-lt { font-size:0.875rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--cv-text-muted); min-width:92px; } .fl-lc { font-size:0.875rem; color:var(--cv-text-muted); }
+.fl-sqs { display:flex; flex-wrap:wrap; gap:3px; flex:1 1 120px; }
+.fl-sq { width:14px; height:14px; border-radius:3px; background:var(--plane-monitoring); display:inline-flex; align-items:center; justify-content:center; font-size:0.625rem; font-style:normal; font-weight:700; color:#0B1118; }
+.fl-sq.warn { background:var(--cv-attention); } .fl-sq.fault { background:var(--cv-error); } .fl-sq.down { background:var(--cv-no-current); color:var(--cv-text); } .fl-sq.unknown { background:transparent; border:1.5px dashed var(--cv-no-current); color:var(--cv-text-muted); }
+.fl-foot { display:flex; align-items:center; gap:10px; font-size:0.875rem; color:var(--cv-text-muted); } .fl-wire { width:140px; height:12px; flex:none; }
+/* Pool */
+.poolview { display:grid; grid-template-columns:minmax(240px, 300px) minmax(0, 1fr); gap:20px; align-items:start; }
+@media (max-width:820px) { .poolview { grid-template-columns:1fr; } }
+.pv-side { background:var(--cv-surface); border:1px solid var(--cv-border-2); border-radius:14px; padding:16px; display:flex; flex-direction:column; gap:12px; } .pv-side h3 { margin:0; font-size:1.375rem; font-weight:600; color:var(--cv-text); } .pv-fed { margin:0; font-size:0.9375rem; color:var(--cv-text-2); }
+.pv-kpis { display:grid; grid-template-columns:1fr; gap:8px; }
+.pv-bar { display:flex; height:14px; border-radius:7px; overflow:hidden; border:1px solid var(--cv-border-2); } .pv-bar i { display:block; min-width:4px; } .pv-bar .ok, .pv-legend .ok { background:var(--plane-monitoring); } .pv-bar .warn, .pv-legend .warn { background:var(--cv-attention); } .pv-bar .fault, .pv-legend .fault { background:var(--cv-error); } .pv-bar .down, .pv-legend .down { background:var(--cv-no-current); } .pv-bar .unknown, .pv-legend .unknown { background:var(--cv-border-2); }
+.pv-legend { list-style:none; margin:0; padding:0; display:flex; flex-wrap:wrap; gap:4px 12px; font-size:0.875rem; color:var(--cv-text-2); } .pv-legend .sw { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:6px; }
+.pv-filters { display:flex; flex-wrap:wrap; gap:6px; } .pv-filters .btn { min-height:40px; } .pv-filters .btn[aria-pressed="true"] { outline:2px solid var(--plane-access); outline-offset:1px; } .pv-filters .btn:disabled { opacity:.45; }
+.pv-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; list-style:none; margin:0; padding:0; }
+@media (max-width:1180px) { .pv-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); } } @media (max-width:560px) { .pv-grid { grid-template-columns:1fr; } }
+.pv-tile { background:var(--cv-surface); border:1.5px solid var(--cv-border-2); border-radius:12px; padding:10px 12px; display:flex; flex-direction:column; gap:8px; min-width:0; }
+.pv-tile.attn { border-color:var(--cv-attention); } .pv-tile.fault { border-color:var(--cv-error); } .pv-tile.down, .pv-tile.unknown { border-style:dashed; border-color:var(--cv-no-current); }
+.pv-hb { width:100%; height:12px; } .pv-open { all:unset; box-sizing:border-box; display:flex; flex-direction:column; gap:6px; cursor:pointer; min-height:40px; color:var(--cv-text); } .pv-open:focus-visible, .pv-wirelink:focus-visible { outline:2px solid var(--plane-access); outline-offset:2px; border-radius:6px; }
+.pv-name { font-size:1.0625rem; font-weight:600; } .pv-pill { align-self:flex-start; }
+.pv-meter { display:flex; flex-direction:column; gap:4px; } .pv-mt { font-size:0.875rem; color:var(--cv-text-2); } .pv-mt.dim { color:var(--cv-text-muted); }
+.pv-bars { display:flex; gap:3px; align-items:flex-end; height:26px; } .pv-bars i { flex:1; height:6px; border-radius:2px; background:var(--cv-border-2); } .pv-bars i.on { height:26px; background:var(--plane-monitoring); }
+.canvas .pv-wirelink { all:unset; cursor:pointer; font-size:0.875rem; color:var(--plane-access); min-height:32px; display:flex; align-items:center; } .canvas .pv-wirelink:hover { text-decoration:underline; }
+.pv-pager { display:flex; justify-content:center; align-items:center; gap:14px; margin-top:14px; font-size:0.9375rem; color:var(--cv-text-2); } .pv-empty { grid-column:1/-1; padding:24px; text-align:center; color:var(--cv-text-muted); border:1px dashed var(--cv-border-2); border-radius:12px; }
+/* the rack's way in, in the Cluster level */
+#flow[data-cv] .cv-open { fill:var(--cv-surface); stroke:var(--plane-access); stroke-width:1.5; } #flow[data-cv] .cv-opentext { font-size:15px; font-weight:600; fill:var(--plane-access); pointer-events:none; }
+#flow[data-cv] g.hit:hover .cv-open, #flow[data-cv] g.hit:focus-visible .cv-open { fill:var(--cv-surface-2); }
+.canvas :focus-visible { outline:2px solid var(--plane-access); outline-offset:2px; }
+/* the rail sits above the tab panels, so it is there on the infrastructure and on Traffic: one way up and down the zoom */
+.zoomrail { margin:0 0 var(--sp3, 12px); } .zhint { font-size:0.8125rem; margin-left:8px; } @media (max-width:700px) { .zhint { display:none; } }
+.zback { gap:10px; align-items:center; margin-bottom:var(--sp2, 8px); } .zback[hidden] { display:none; }
+/* the Pool level is the node list of the circuit, so the old list never takes a grid column beside it */
+#nodeswrap.circuit #nodesmain, #nodeswrap.circuit .nodesmain { display:none; }
+
+/* ---- Traffic analysis (redesign step 5b): the river, the probe, what is found, the rhythm and the focused wire ---- */
+.tan { border-radius:14px; padding:18px; margin:0 0 var(--sp4, 16px); display:flex; flex-direction:column; gap:16px; }
+.tan h3, .tan h4 { margin:0; color:var(--cv-text); } .tan h3 { font-size:1.375rem; } .tan h4 { font-size:1.0625rem; }
+.tan .dim { color:var(--cv-text-muted); } .tan p { margin:0; }
+.an-head { display:flex; flex-wrap:wrap; align-items:center; gap:10px; } .an-scope { color:var(--cv-text-2); font-size:0.9375rem; } .an-status { color:var(--cv-text-2); }
+.tan select.btn { background:var(--cv-surface-2); color:var(--cv-text); border-color:var(--cv-border-2); }
+.tan .btn { background:var(--cv-surface-2); color:var(--cv-text); border-color:var(--cv-border-2); min-height:36px; } .tan .btn[aria-pressed="true"] { outline:2px solid var(--plane-access); outline-offset:1px; }
+.an-river, .an-probe, .an-found, .an-rhythm, .an-focus { background:var(--cv-surface); border:1px solid var(--cv-border-2); border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:10px; }
+.an-chips, .an-modes { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.an-svg { width:100%; height:auto; min-height:260px; overflow:visible; }
+.an-node rect { fill:var(--cv-surface-2); stroke:var(--cv-border-2); stroke-width:1.5; } .an-nt { font:600 17px var(--cv-font-ui); fill:var(--cv-text); } .an-ns { font:500 14px var(--cv-font-mono); fill:var(--cv-text-muted); }
+.an-band { fill:none; stroke-linecap:butt; opacity:.22; transition:stroke-width .4s; }
+.an-band[data-plane=management] { stroke:var(--plane-management); } .an-band[data-plane=access] { stroke:var(--plane-access); } .an-band[data-plane=data] { stroke:var(--plane-data); } .an-band[data-plane=monitoring] { stroke:var(--plane-monitoring); } .an-band[data-plane=control] { stroke:var(--plane-control); }
+.an-band[data-k=server_error] { stroke:var(--cv-error); opacity:.35; } .an-band[data-k=slow], .an-band[data-k=client_error] { stroke:var(--cv-attention); }
+@media (prefers-reduced-motion: reduce) { .an-band { transition:none; } }
+.an-two { display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); gap:16px; } @media (max-width:900px) { .an-two { grid-template-columns:1fr; } }
+.an-pname { font-size:0.9375rem; color:var(--cv-text-2); word-break:break-word; } .an-big { font-size:2.5rem; font-weight:600; color:var(--cv-text); } .an-unit { font-size:1rem; color:var(--cv-text-muted); font-weight:400; }
+.an-trace { width:100%; height:48px; } .an-trace polyline { fill:none; stroke:var(--plane-monitoring); stroke-width:1.5; } .an-verdict { font-size:0.9375rem; color:var(--cv-text-2); }
+.an-found ul, .an-links { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
+.an-f { display:flex; gap:10px; align-items:flex-start; } .an-f b { color:var(--cv-attention); } .an-f.none b { color:var(--plane-monitoring); } .an-f small { display:block; color:var(--cv-text-muted); font-size:0.875rem; } .an-f strong { color:var(--cv-text); font-weight:600; }
+.an-cols { display:flex; flex-wrap:wrap; gap:12px; }
+.an-col { background:var(--cv-surface-2); border:1px solid var(--cv-border-2); border-radius:10px; padding:10px 12px; min-width:150px; max-width:220px; display:flex; flex-direction:column; gap:3px; color:var(--cv-text-2); } .an-col.unk { border-color:var(--cv-attention); border-style:dashed; }
+.an-col b { font-size:1.25rem; color:var(--cv-text); } .an-col small { color:var(--cv-text-muted); font-size:0.8125rem; word-break:break-word; }
+.an-beat { display:block; height:34px; width:12px; border-radius:3px; background:var(--plane-access); animation:an-beat var(--p, 2s) ease-in-out infinite; transform-origin:bottom; } .an-col.unk .an-beat { background:var(--cv-attention); }
+@keyframes an-beat { 0%, 100% { transform:scaleY(.25); } 12% { transform:scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .an-beat { animation:none; } }
+:root[data-tab-hidden] .an-beat { animation-play-state:paused; }
+.an-path { font-size:1.0625rem; color:var(--cv-text); } .an-links li { display:flex; gap:8px; align-items:center; flex-wrap:wrap; } .an-capture { color:var(--cv-text-2); font-size:0.9375rem; }
+.an-focus { border-color:var(--plane-access); } .an-focus[hidden] { display:none; }
+.tan .plate { display:inline-block; width:22px; height:10px; border-radius:3px; background:var(--plane-management); } .tan .plate[data-plane=control] { background:var(--plane-control); } .tan .plate[data-plane=k8s] { background:var(--plane-k8s); }
+/* the focused wire's capture (issue 505): the tube, the message log and the decoded message */
+.an-capstate { padding:6px 10px; border-radius:8px; border:1px solid var(--cv-border-2); color:var(--cv-text-2); } .an-capstate.on { border-color:var(--plane-monitoring); color:var(--cv-text); } .an-capstate.bad { border-color:var(--cv-attention); color:var(--cv-text); border-style:dashed; }
+.an-tube { width:100%; max-width:760px; height:auto; } .an-tubebody { fill:var(--cv-surface-2); stroke:var(--cv-border-2); stroke-width:1.5; } .an-tubelab { font:600 15px var(--cv-font-ui); fill:var(--cv-text); } .an-tubedir { font:500 12px var(--cv-font-ui); fill:var(--cv-text-muted); }
+.an-cap rect { fill:var(--cv-surface); stroke:var(--plane-access); stroke-width:1.2; } .an-cap text { font:600 10px var(--cv-font-mono); fill:var(--cv-text); } .an-cap.response rect { stroke:var(--plane-monitoring); } .an-cap.unknown rect { stroke:var(--cv-attention); stroke-dasharray:3 2; }
+.an-cap { animation:an-slide .35s ease-out; } @keyframes an-slide { from { opacity:0; transform:translateX(-14px); } }
+@media (prefers-reduced-motion: reduce) { .an-cap { animation:none; } } :root[data-tab-hidden] .an-cap { animation-play-state:paused; }
+.an-logwrap { max-height:260px; overflow:auto; border:1px solid var(--cv-border-2); border-radius:8px; } .an-log { width:100%; border-collapse:collapse; font-size:0.875rem; color:var(--cv-text-2); }
+.an-log th { position:sticky; top:0; background:var(--cv-surface-2); color:var(--cv-text-muted); text-align:left; font-weight:600; padding:6px 8px; } .an-log td { padding:5px 8px; border-top:1px solid var(--cv-border); white-space:nowrap; }
+.an-log tbody tr { cursor:pointer; } .an-log tbody tr.sel { background:var(--cv-surface-2); outline:1px solid var(--plane-access); } .an-log tr.unk td { color:var(--cv-text); } .an-log tr.unk b { color:var(--cv-attention); font-weight:600; }
+.an-decoded { display:grid; grid-template-columns:max-content 1fr; gap:4px 14px; margin:0; font-size:0.875rem; } .an-decoded dt { color:var(--cv-text-muted); } .an-decoded dd { margin:0; color:var(--cv-text); word-break:break-all; } .an-decoded .an-dh { grid-column:1 / -1; color:var(--cv-text-2); font-weight:600; letter-spacing:.08em; text-transform:uppercase; }

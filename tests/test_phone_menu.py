@@ -1,8 +1,9 @@
 """The phone menu rule must come after the desktop `.menu` rule, or it never applies (#182, #310)."""
 import re
-from pathlib import Path
 
-HTML = Path("webui/static/index.html").read_text()
+from webui_src import page_source
+
+HTML = page_source()
 
 
 def test_the_phone_menu_rule_comes_after_the_desktop_one():

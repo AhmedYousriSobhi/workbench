@@ -1,4 +1,5 @@
 import json
+import re
 import socket
 import subprocess
 import threading
@@ -12,6 +13,7 @@ import pytest
 pytest.importorskip("starlette")
 pytest.importorskip("uvicorn")
 import uvicorn
+from webui_src import page_source
 
 from governor import control
 from webui import __main__ as launcher
@@ -133,6 +135,9 @@ def test_scenario_list_and_run_sends_slurm_steps_through_the_governor(ui):
 def test_stop_ends_a_running_scenario_and_unknown_is_404(ui):
     h = {"X-Requested-With": "workbench"}
     assert req(ui, "/api/scenarios/nope/run", "POST", headers=h)[0] == 404
+    code, body = req(ui, "/api/scenarios/quick")  # the preview a page shows before Play (issue 509)
+    assert code == 200 and json.loads(body)["name"] == "quick" and "steps" in json.loads(body) and "cli" in json.loads(body)
+    assert req(ui, "/api/scenarios/nope")[0] == 404
     assert req(ui, "/api/scenarios/slow/run", "POST", headers=h)[0] == 200
     assert req(ui, "/api/scenarios/quick/run", "POST", headers=h)[0] == 409  # one at a time
     assert req(ui, "/api/scenarios/stop", "POST", headers=h)[0] == 200
@@ -183,16 +188,79 @@ def test_cluster_endpoints_need_auth_csrf_and_validate(ui):
     assert code == 200 and json.loads(body)["results"][0]["status"] == "failed"  # mocks not running: reported, not crashed
 
 
+_SERVED: dict[str, bytes] = {}
+
+
+def served_page(base: str) -> bytes:
+    """What a browser gets: the page, its stylesheet and every module in the import graph from main.js, fetched over
+    HTTP (so a file the page needs but the server does not serve fails here), as one blob."""
+    if base not in _SERVED:
+        parts = [req(base, "/")[1], req(base, "/static/app.css")[1], req(base, "/static/canvas.css")[1]]
+        seen, todo = set(), ["main.js"]
+        while todo:
+            name = todo.pop()
+            if name not in seen:
+                seen.add(name)
+                parts.append(req(base, f"/static/js/{name}")[1])
+                todo += re.findall(r"from '\./([\w-]+\.js)'|import\('\./([\w-]+\.js)'\)", parts[-1].decode()) and \
+                    [a or b for a, b in re.findall(r"from '\./([\w-]+\.js)'|import\('\./([\w-]+\.js)'\)", parts[-1].decode())]
+        _SERVED[base] = b"\n".join(parts)
+    return _SERVED[base]
+
+
 def test_page_has_the_app_shell(ui):
-    body = req(ui, "/")[1].decode()
-    for needle in ('class="skip"', '<main id="main"', 'id="govdlg"', 'id="scndlg"',
-                   'id="theme"', 'id="strip"', 'id="attn"', 'id="list"', 'id="flow"', 'id="viewseg"', 'id="crumb"', 'id="ovprev"', 'prefers-reduced-motion'):
+    body = served_page(ui).decode()
+    for needle in ('class="skip"', '<main id="main"', 'id="govdlg"', 'id="tab-run"',
+                   'id="theme"', 'id="strip"', 'id="attn"', 'id="list"', 'id="flow"', 'id="viewseg"', 'id="crumb"', 'id="ovprev"'):
         assert needle in body, needle
+    assert 'rel="stylesheet" href="/static/app.css"' in body and 'rel="stylesheet" href="/static/canvas.css"' in body and 'type="module" src="/static/js/main.js"' in body
+    assert "prefers-reduced-motion" in req(ui, "/static/app.css")[1].decode()  # the stylesheet is served too
+
+
+def test_static_files_need_the_token_and_have_the_right_type(ui):
+    """ADR 0007: the stylesheet and the ES modules are static files behind the same token as the page."""
+    font = "/static/fonts/inter-latin-wght-normal.woff2"
+    for path in ("/static/app.css", "/static/canvas.css", "/static/js/main.js", "/static/js/state.js", font):
+        assert req(ui, path, auth=False)[0] == 401, path
+    assert req(ui, "/static/fonts/LICENSE-Inter.txt")[0] == 404  # only the font files are served, not their licence texts
+    for path, kind in (("/static/app.css", "text/css"), ("/static/canvas.css", "text/css"), ("/static/js/main.js", "text/javascript"), (font, "font/woff2")):
+        r = urllib.request.Request(ui + path, headers={"Authorization": f"Bearer {TOKEN}"})
+        with urllib.request.urlopen(r, timeout=5) as resp:
+            assert resp.headers["Content-Type"].split(";")[0] == kind and resp.headers["Cache-Control"] == "no-cache", path
+
+
+def test_page_and_static_files_carry_a_strict_csp_and_the_page_has_no_inline_style(ui):
+    """#517: the policy blocks inline script and style, so none may remain in the markup or in the modules' templates."""
+    for path in ("/", "/static/app.css", "/static/js/main.js"):
+        r = urllib.request.Request(ui + path, headers={"Authorization": f"Bearer {TOKEN}"})
+        with urllib.request.urlopen(r, timeout=5) as resp:
+            csp = resp.headers["Content-Security-Policy"]
+        assert "script-src 'self'" in csp and "style-src 'self'" in csp and "unsafe-inline" not in csp and "unsafe-eval" not in csp, path
+    src = page_source()
+    assert not re.search(r"\sstyle=\"", src) and not re.search(r"<style\b", (ROOT / "webui/static/index.html").read_text())
+    assert not re.search(r"\son[a-z]+=\"", (ROOT / "webui/static/index.html").read_text())
+    assert not re.search(r"setAttribute\('style'", src)
+
+
+def test_every_module_the_page_imports_is_served_and_nothing_else_is(ui):
+    """Walk the import graph from main.js over HTTP: every file answers, so no module is missing from static/js."""
+    seen, todo = set(), ["main.js"]
+    while todo:
+        name = todo.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        code, body = req(ui, f"/static/js/{name}")
+        assert code == 200, name
+        todo += re.findall(r"from '\./([\w-]+\.js)'", body.decode()) + re.findall(r"import\('\./([\w-]+\.js)'\)", body.decode())
+    assert {"state.js", "util.js", "shell.js"} <= seen
+    for path in ("/static/../app.py", "/static/js/../../app.py", "/static/%2e%2e/app.py", "/static/index.html", "/static/js/nope.js", "/static/js"):
+        assert req(ui, path)[0] == 404, path
 
 
 def test_page_recovery_hint_needs_no_sudo():
     """ADR 0010: a dead governor is started with `benchctl start`; the sudo service is only an optional upgrade."""
-    page = (ROOT / "webui" / "static" / "index.html").read_text()
+    page = page_source()
     offline = next(line for line in page.splitlines() if "Governor not reachable" in line)
     assert "./scripts/benchctl start" in offline and offline.index("benchctl start") < offline.index("sudo")
 
@@ -210,7 +278,7 @@ def test_help_wiki_needs_the_token_and_serves_pages_images_and_search(ui):
 
 
 def test_dashboard_links_to_the_help(ui):
-    assert b'href="/help/"' in req(ui, "/")[1]
+    assert b'href="/help/"' in served_page(ui)
 
 
 def test_node_detail_endpoint_returns_the_describe_text(ui):
@@ -219,7 +287,7 @@ def test_node_detail_endpoint_returns_the_describe_text(ui):
     assert code == 200 and data["info"]["name"] == "gpu001" and "Name:        gpu001" in data["text"]
     assert req(ui, "/api/nodes/zzz")[0] == 404
     assert req(ui, "/api/nodes/gpu001", auth=False)[0] == 401
-    assert b"showNode" in req(ui, "/")[1] and b'id="nodepane"' in req(ui, "/")[1]
+    assert b"showNode" in served_page(ui) and b'id="nodepane"' in served_page(ui)
 
 
 def test_plan_endpoint_estimates_without_side_effects(ui):
@@ -230,7 +298,7 @@ def test_plan_endpoint_estimates_without_side_effects(ui):
     assert data["command"].endswith("--app-mb 0") and "app under test" not in data["text"]  # the app already runs: no reserve, so Apply can show
     assert req(ui, "/api/plan?cpu_nodes=999")[0] == 422 and req(ui, "/api/plan?cpu_nodes=x")[0] == 422
     assert req(ui, "/api/plan", auth=False)[0] == 401
-    assert b'id="plandlg"' in req(ui, "/")[1] and b"loadPlan" in req(ui, "/")[1]
+    assert b'id="plandlg"' in served_page(ui) and b"loadPlan" in served_page(ui)
 
 
 def test_plan_takes_running_services_from_the_governor_not_from_docker(ui, monkeypatch):
@@ -266,7 +334,7 @@ def test_connections_endpoint_lists_every_entity_with_credential_paths_only(ui):
     assert rows["login"]["address"] == "10.141.255.254:22" and "127.0.0.1:2222" in rows["login"]["how"] and rows["login"]["credential"].endswith("ssh/id_ed25519")
     assert rows["bmc"]["credential"].endswith("bmc_credentials") and "admin:<password>" in rows["bmc"]["command"]
     assert req(ui, "/api/connections", auth=False)[0] == 401
-    page = req(ui, "/")[1]
+    page = served_page(ui)
     assert b'role="tablist"' in page and b'id="tab-conn"' in page and b"paintConnections" in page
     assert b'id="tab-traffic"' in page and b"paintTraffic" in page and b'aria-label="Workspaces"' in page
 
@@ -277,14 +345,14 @@ def test_plan_apply_needs_csrf_validates_and_asks_the_governor(ui):
     assert req(ui, "/api/plan/apply?cpu_nodes=999", "POST", headers={"X-Requested-With": "workbench"})[0] == 422
     code, body = req(ui, q, "POST", headers={"X-Requested-With": "workbench"})
     assert code == 200 and json.loads(body)["started"] is True
-    assert b"pl-apply" in req(ui, "/")[1]
+    assert b"pl-apply" in served_page(ui)
 
 
 def test_jira_refresh_button_needs_csrf_and_asks_the_governor(ui):
     assert req(ui, "/api/jira-real/refresh", "POST")[0] == 403
     code, body = req(ui, "/api/jira-real/refresh", "POST", headers={"X-Requested-With": "workbench"})
     assert code == 200 and json.loads(body)["started"] is True
-    assert b"data-post" in req(ui, "/")[1] and req(ui, "/api/jira-real/refresh", "POST", auth=False)[0] == 401
+    assert b"data-post" in served_page(ui) and req(ui, "/api/jira-real/refresh", "POST", auth=False)[0] == 401
 
 
 def test_export_button_downloads_the_profile_and_explains_a_missing_format(ui, monkeypatch, tmp_path):
@@ -301,7 +369,7 @@ def test_export_button_downloads_the_profile_and_explains_a_missing_format(ui, m
     data = json.loads(body)
     assert code == 200 and data["format"] == "demo" and data["version"] == 2 and len(data["bmc"]) == 6
     assert "token" not in body.decode().lower() and req(ui, "/api/export/profile", auth=False)[0] == 401
-    assert b'id="expdlg"' in req(ui, "/")[1] and b"newer than its backend" in req(ui, "/")[1] and b"ssh-key install in a terminal" in req(ui, "/")[1] and b"Jira needs no token" in req(ui, "/")[1]
+    assert b'id="expdlg"' in served_page(ui) and b"newer than its backend" in served_page(ui) and b"ssh-key install in a terminal" in served_page(ui) and b"Jira needs no token" in served_page(ui)
 
 
 def test_power_off_asks_the_governor_to_freeze_the_node_so_slurm_notices_by_itself(tmp_path):
@@ -345,12 +413,12 @@ def test_settings_endpoint_serves_the_option_registry_and_the_sheet_draws_from_i
     parts = {p["id"]: p for p in json.loads(body)["parts"]}
     assert code == 200 and set(parts) == set(workbench.PARTS) and parts["accounting"]["mb"] > 0 and parts["accounting"]["label"]
     assert req(ui, "/api/settings", auth=False)[0] == 401
-    page = req(ui, "/")[1]
+    page = served_page(ui)
     assert b"/api/settings" in page and b'id="pl-parts"' in page and b"Cluster architecture" in page
 
 
 def test_traffic_diagram_shapes_are_buttons_that_open_the_node_or_the_connection(ui):
-    page = req(ui, "/")[1].decode()
+    page = served_page(ui).decode()
     for needle in ("function asButton(", "role', 'button'", "openPop(", "showNode(id)", "openConnection(SVC_CONN[id])", "tr[data-id=",
                    "#flow #dots { pointer-events:none; }", "Enter' || e.key === ' '"):
         assert needle in page, needle
@@ -359,8 +427,9 @@ def test_traffic_diagram_shapes_are_buttons_that_open_the_node_or_the_connection
 def test_page_script_declares_every_function_once():
     """A second `function name` silently replaces the first (hoisting): that emptied the traffic diagram (issue 142)."""
     import re
-    page = (ROOT / "webui" / "static" / "index.html").read_text()
-    names = re.findall(r"^(?:async )?function ([A-Za-z_$][\w$]*)", page, re.MULTILINE)
+    page = page_source()
+    names = re.findall(r"^(?:export )?(?:async )?function ([A-Za-z_$][\w$]*)", page, re.MULTILINE)  # a name in two modules would both be exposed by the test hook
+    names = [n for n in names if not re.fullmatch(r"init\d*", n)]  # each module's own wiring entry point
     assert len(names) > 20 and [n for n in set(names) if names.count(n) > 1] == []
 
 
@@ -371,7 +440,7 @@ def test_settings_lists_the_nodes_for_the_bmc_picker_and_the_sheet_sends_the_cho
     body = json.loads(req(ui, "/api/settings")[1])
     assert [n["name"] for n in body["nodes"]] == ["cn001", "cn002", "cn003", "cn004", "gpu001", "gpu002"]
     assert all(n["bmc"] for n in body["nodes"]) and body["bmc_node_mb"] == compose.BMC_FORWARDER_MB
-    page = req(ui, "/")[1].decode()
+    page = served_page(ui).decode()
     assert 'id="pl-bmcnodes"' in page and "bmc_nodes" in page and "showBmcNodes" in page
 
 
@@ -487,12 +556,12 @@ def test_licence_watch_reads_and_renews_once_when_the_end_is_near(monkeypatch):
 def test_plan_reports_the_admitted_number_next_to_the_caps(ui):
     data = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=4&gpus_per_node=8&parts=jira")[1])
     assert data["need_mb"] == data["expected_mb"] - data["running_mb"] < data["total_mb"]  # no app reserve on the page; expected is below the caps
-    assert b"p.need_mb" in req(ui, "/")[1]
+    assert b"p.need_mb" in served_page(ui)
 
 
 def test_diagram_has_a_colour_legend_and_combinable_overlays(ui):
     """Kind is colour (simulated vs real), state is the border, traffic and fault are overlays that combine (issue 297)."""
-    page = req(ui, "/")[1]
+    page = served_page(ui)
     for needle in (b'id="ckey"', b"simulated (dashed stripe)", b"real (solid stripe)", b"a fault applied in the last 30 s",
                    b"They combine", b"const REAL_SERVICES", b"'ff-' + k", b"'fx-' + k", b"'fa-' + k"):
         assert needle in page, needle
@@ -500,19 +569,20 @@ def test_diagram_has_a_colour_legend_and_combinable_overlays(ui):
 
 
 def test_state_update_keeps_the_kind_class_of_a_service_box(ui):
-    assert b"(k === 'teleport' ? '' : REAL_SERVICES.has(k) ? ' real' : ' sim')" in req(ui, "/")[1]  # repainting the state must not drop the colour of the kind
+    assert b"(k === 'teleport' ? '' : REAL_SERVICES.has(k) ? ' real' : ' sim')" in served_page(ui)  # repainting the state must not drop the colour of the kind
 
 
-def test_scenarios_is_a_docked_drawer_with_a_toggle_not_a_modal():
-    """The diagram must stay visible while a scenario runs (issue 380): a non-modal drawer, toggled from the top strip."""
-    html = (Path(__file__).resolve().parent.parent / "webui/static/index.html").read_text()
-    for needle in ('<dialog id="scndlg" class="drawer"', 'id="scn-toggle"', "function scnOpen(", "d.show()", "dialog.drawer", "dialog[open]:not(.drawer)", "li.classList.toggle('active'"):
+def test_scenarios_live_in_the_test_run_workspace_not_a_drawer():
+    """Issue 509: scenario, run, expectations and Client's eye share one workspace; the drawer is gone."""
+    html = page_source()
+    for needle in ('id="tab-run"', 'id="tb-run"', 'id="scn-toggle"', 'id="run-eye"', 'id="runcli"', 'id="run-md"', 'id="run-json"', "li.classList.toggle('active'", "function scnOpen("):
         assert needle in html, needle
-    assert "$('scndlg').showModal()" not in html
+    assert "scndlg" not in html and "dialog.drawer" not in html
+
 
 
 def test_traffic_has_filters_inspector_and_path_following():
-    html = (ROOT / "webui/static/index.html").read_text()
+    html = page_source()
     for needle in ('id="tr-sw"', 'id="tr-ev"', 'id="tr-insp"', 'id="tr-path"', "function pathOf", "The web page server is older than this page", "/api/monitoring", "rateOf(", 'id="tr-map"', 'id="tr-reset"', 'id="tr-chips"', 'id="tr-zin"', 'id="tr-feed"', 'id="tr-chart"', "paintTrTimeline", 'id="kpis"', 'id="subseg"', "paintKpis", "dbdLink", 'data-part', "PART_INFO", "data-mv", "paintTrPart", "workbench-tr-order1", 'id="tr-move"', "paintTrafficMap", '<html lang="en" data-theme="midnight">'):
         assert needle in html, needle
 
@@ -541,7 +611,7 @@ def test_the_inline_script_has_valid_javascript_syntax(tmp_path):
     node = shutil.which("node")
     if not node:
         pytest.skip("node is not installed")
-    html = (ROOT / "webui/static/index.html").read_text()
+    html = page_source()
     js = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.DOTALL))
     f = tmp_path / "page.js"
     f.write_text(js)
@@ -550,7 +620,7 @@ def test_the_inline_script_has_valid_javascript_syntax(tmp_path):
 
 
 def test_traffic_view_follows_node_state_and_logs_changes(ui):
-    page = req(ui, "/")[1].decode()
+    page = served_page(ui).decode()
     # issue 414: node health reaches the parts, the link state text, the part inspector and the timeline
     for marker in ("function nodeHealth", "noteNodeChanges", "slurmNodes = s && s.node_states", "renderCluster(JSON.parse(text)); paintTraffic()",
                    "from: 'state'", "nodes out"):
@@ -564,4 +634,97 @@ def test_plan_names_the_bcm_kubernetes_flag_and_the_sheet_has_the_switch(ui, mon
     on = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8&parts=bcm,k8s&bcm_k8s=1")[1])
     assert "--no-bcm-k8s" in off["command"] and "--bcm-k8s" in on["command"] and "--no-bcm-k8s" not in on["command"]
     assert json.loads(req(ui, "/api/settings")[1])["shapes"]["bcm"] == {"manage_kubernetes": True}
-    assert 'id="pl-bcmk8s"' in req(ui, "/")[1].decode()
+    assert 'id="pl-bcmk8s"' in served_page(ui).decode()
+
+
+def test_shared_status_makes_one_governor_call_per_ttl_however_many_streams_ask():
+    """#451: every open stream used to call the governor socket each second."""
+    import asyncio
+
+    from webui.app import SharedStatus
+    now, calls = [0.0], []
+
+    def fetch():
+        calls.append(1)
+        return {"level": len(calls)}
+
+    async def run():
+        s = SharedStatus(fetch, 1.0, clock=lambda: now[0])
+        got = await asyncio.gather(*[s.get() for _ in range(50)])  # fifty streams at once: one call
+        assert len(calls) == 1 and all(g == {"level": 1} for g in got)
+        now[0] = 0.5
+        await asyncio.gather(*[s.get() for _ in range(50)])
+        assert len(calls) == 1  # still fresh
+        now[0] = 1.2
+        got = await asyncio.gather(*[s.get() for _ in range(50)])
+        assert len(calls) == 2 and all(g == {"level": 2} for g in got)
+    asyncio.run(run())
+
+
+def test_every_static_folder_is_packaged():
+    """A non-editable install ships only the files `package-data` names: a new folder under static/ must be listed."""
+    import tomllib
+    listed = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["setuptools"]["package-data"]["webui"]
+    folders = {p.name for p in (ROOT / "webui" / "static").iterdir() if p.is_dir()}
+    assert {"js"} <= folders and [f for f in folders if f"static/{f}/*" not in listed] == []
+
+
+def test_the_traffic_record_needs_the_token_and_a_numeric_since(ui):
+    """issue 501: /api/traffic merges the mocks' own record (whatever a stack on this host answers, or nothing)."""
+    assert req(ui, "/api/traffic", auth=False)[0] == 401
+    assert req(ui, "/api/traffic?since=abc")[0] == 400
+    code, body = req(ui, "/api/traffic?since=1.5")
+    got = json.loads(body)
+    assert code == 200 and isinstance(got["streams"], list) and isinstance(got["recent"], list)
+    assert got["services"].keys() == {"bmc-farm", "bcm-mock", "jira-mock"}
+
+
+def test_the_capture_routes_go_only_through_the_governor_and_check_their_input(tmp_path):
+    """issue 505: start, read and stop are governor commands; the page validates the node name and needs the CSRF header to start or stop."""
+    seen = []
+
+    def handle(cmd, request):
+        seen.append((cmd, request))
+        return {"ok": True, "running": True, "messages": [], "next": 0} if cmd.startswith("capture") else STATUS
+    sock = str(tmp_path / "g.sock")
+    gov = control.serve(sock, handle, lambda: {"compute"})
+    port = free_port()
+    server = uvicorn.Server(uvicorn.Config(create_app(TOKEN, sock, tmp_path, ROOT / "sim.yaml", fetch=no_stack, poster=no_stack), host="127.0.0.1", port=port, log_level="error"))
+    threading.Thread(target=server.run, daemon=True).start()
+    while not server.started:
+        time.sleep(0.02)
+    base = f"http://127.0.0.1:{port}"
+
+    def post(path, body):
+        r = urllib.request.Request(base + path, data=json.dumps(body).encode(), method="POST", headers={"Authorization": f"Bearer {TOKEN}", "X-Requested-With": "workbench", "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(r, timeout=5) as resp:
+                return resp.status
+        except HTTPError as e:
+            return e.code
+    try:
+        assert post("/api/capture/start", {"node": "cn001"}) == 200 and seen[-1] == ("capture-start", {"cmd": "capture-start", "node": "cn001"})
+        assert post("/api/capture/start", {"node": "cn001; rm -rf /"}) == 400 and post("/api/capture/start", {}) == 400 and post("/api/capture/start", {"node": 3}) == 400
+        assert req(base, "/api/capture/read?since=7")[0] == 200 and seen[-1][1] == {"cmd": "capture-read", "since": 7}
+        assert req(base, "/api/capture/read?since=abc")[0] == 400
+        assert req(base, "/api/capture/read?since=-5")[0] == 200 and seen[-1][1]["since"] == 0
+        assert post("/api/capture/stop", {}) == 200 and seen[-1][0] == "capture-stop"
+        assert req(base, "/api/capture/start", method="POST")[0] in (400, 403)  # no CSRF header: refused before the governor is asked
+        n = len(seen)
+        assert req(base, "/api/capture/read", auth=False)[0] == 401 and len(seen) == n
+    finally:
+        server.should_exit = True
+        gov.shutdown()
+
+
+def test_html_text_sizes_are_rem_and_only_the_svg_diagrams_keep_px():
+    """Review 11.4 (issue 521): the browser's font-size setting is honoured by every HTML rule; a diagram's text is in px because
+    its geometry is fixed in user units and would otherwise overflow its boxes."""
+    svg_rule = re.compile(r"#flow|svg|\btext\b|tspan|\.an-(nt|ns|tubelab|tubedir)\b|#tr-map")
+    bad = []
+    for css in sorted((ROOT / "webui/static").glob("*.css")):
+        for sel, body in re.findall(r"([^{}]*)\{([^{}]*)\}", css.read_text()):
+            if not svg_rule.search(sel) and re.search(r"font(?:-size)?:[^;]*?\d(?:\.\d+)?px", body):
+                bad.append(f"{css.name}: {sel.strip()[:60]}")
+    assert not bad, bad
+    assert re.search(r"\.small\s*\{\s*font-size:\s*0\.875rem", (ROOT / "webui/static/app.css").read_text())  # 14 px floor for running text

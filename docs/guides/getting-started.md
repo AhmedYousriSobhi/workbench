@@ -16,7 +16,7 @@ Plain `start` keeps the workbench you built last (with `up --cpu-nodes ...`, `ap
 
 Every command has the same shape, like `kubectl`: `benchctl VERB [RESOURCE] [NAME]`, for example `benchctl get nodes`,
 `benchctl exec gpu001 -- nvidia-smi`, `benchctl ssh alice@cn001`, `benchctl scenario run node-down`. `benchctl --help` lists the verbs;
-The first start builds the images (a few minutes). After an update that touches an image, `start` rebuilds only what changed: the first rebuild of the shared base takes about 20 s, later ones under a second. `benchctl start` offers Tab completion once in a terminal (or run `./scripts/benchctl completion install`, then open a new terminal; `completion remove` undoes it). A mistyped verb gets a `Did you mean` hint and is never run; the limits of every verb are in [the verbs guide](benchctl-verbs.md).
+The first start builds the images (a few minutes; Slurm compiles on every core, and a compiler cache in Docker's build cache makes the next compile of a changed or bumped Slurm much shorter). On a busy machine limit the compile with `docker compose -f compose/generated/docker-compose.yml build --build-arg BUILD_JOBS=4 cn001`. After an update that touches an image, `start` rebuilds only what changed: the first rebuild of the shared base takes about 20 s, later ones under a second. `benchctl start` offers Tab completion once in a terminal (or run `./scripts/benchctl completion install`, then open a new terminal; `completion remove` undoes it). A mistyped verb gets a `Did you mean` hint and is never run; the limits of every verb are in [the verbs guide](benchctl-verbs.md).
 
 The numbered sections below are the same steps one at a time, for when you want to see or change each.
 
@@ -75,6 +75,8 @@ sudo ./scripts/install-governor.sh --uninstall
 ./scripts/benchctl scale 2              # compute nodes (slurm.conf regenerated, slurmd started/stopped)
 ./scripts/benchctl down                 # stops only the workbench project; your other containers are untouched
 ```
+
+`up` builds every image once, then starts the stack in stages. A stage starts only when the services before it answer (the controller to `scontrol ping`, the mocks to `/healthz`), not merely when their containers are running, so a node never starts before the controller is ready. If one does not answer in time the message names it. `up` ends with the total and the seconds per stage (`stack is up in 6 s (observability 0, slurm core 0, ...)`).
 
 Profiles are in `profiles/` (`min`, `std`, `full`); `up` refuses a profile that does not fit and names one
 that does. Components not built yet are skipped with a note.
@@ -174,8 +176,8 @@ The [user manual](../manual/README.md) has a chapter for each topic: concepts, t
 
 ## 7. For developers
 
-To look at the web page without a screen: `pip install -e '.[browser]'`, `.venv/bin/python -m playwright install chromium`, then `.venv/bin/python scripts/ui_shots.py` writes screenshots to `/tmp/workbench-ui-shots` and reports problems.
+To look at the web page without a screen: `pip install -e '.[browser]'`, `.venv/bin/python -m playwright install chromium`, then `.venv/bin/python scripts/ui_shots.py` writes screenshots to `/tmp/workbench-ui-shots` and reports problems. The page is plain ES modules (`webui/static/js/`, no build step); its logic tests need Node 22 or newer: `node --test "webui/tests/js/*.test.mjs"` (`validate.sh` runs them).
 
 Once per clone: `./scripts/install-hooks.sh` (no sudo) installs the git hooks: no commits on `main`/`dev`, an issue reference in every commit message, a check that your git identity is your own GitHub noreply address (`./scripts/check-identity.sh`; GitHub credits a commit by the ID in that address, so a placeholder would credit a stranger), `validate.sh` before each commit, and a privacy scan (`./scripts/check-privacy.sh`) so no personal path, email or token is published. The repository is public, and the Claude skills under `.claude/` are symlinks into a home directory, so that folder is gitignored.
 
-`./scripts/verify.sh` (add `--full` for the live stack) before asking for a merge; see CLAUDE.md. To check one component, `./scripts/verify.sh --unit teleport --clean` (list them with `--list-units`). Every step prints its seconds and a `TIME` line closes the run; `validate.sh` is skipped when it already passed for this exact tree (the commit hook ran it), `--revalidate` forces it, `--skip-browser` leaves out the Chromium tests.
+`./scripts/verify.sh` (add `--full` for the live stack) before asking for a merge; see CLAUDE.md. To check one component, `./scripts/verify.sh --unit teleport --clean` (list them with `--list-units`). Every step prints its seconds and a `TIME` line closes the run; `validate.sh` is skipped when it already passed for this exact tree (the commit hook ran it), `--revalidate` forces it, `--skip-browser` leaves out the Chromium tests. The full run stops your cluster and sets aside your saved selection first, then puts the selection back; run `./scripts/benchctl up` afterwards.

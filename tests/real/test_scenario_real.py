@@ -66,6 +66,7 @@ def test_each_target_changes_real_state(live):
         scenario.post("http://127.0.0.1:8000/sim/inject", {"node": node, "clear": True})
         scenario.post("http://127.0.0.1:8081/sim/inject", {"node": node, "state": "UP"})
     scenario.post("http://127.0.0.1:9400/sim/inject", {"node": "gpu002", "clear": True})
+    subprocess.run(["docker", "unpause", "workbench-cn004-1"], check=False, capture_output=True)  # power Off froze the node's container (issue 535)
     subprocess.run(["docker", "exec", scenario.SLURMCTLD, "scontrol", "update", "nodename=cn003", "state=resume"], check=True)
 
 

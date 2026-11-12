@@ -1,4 +1,7 @@
+
 from pathlib import Path
+
+from webui_src import page_source
 
 from webui import comms, graph
 
@@ -59,13 +62,13 @@ def test_absent_lists_the_links_a_cluster_lacks_and_the_unreadable_ones():
 
 
 def test_every_link_endpoint_has_a_place_in_the_fixed_drawing():
-    page = (Path(__file__).parent.parent / "webui/static/index.html").read_text()
+    page = page_source()
     ends = {e for k in [*comms.LINKS, *comms.UNREADABLE, *comms.PLANNED] for e in k[:2]}
     assert [e for e in sorted(ends) if f"'{e}'" not in page] == []
 
 
 def test_every_part_of_the_drawing_has_a_description_for_the_click_view():
-    page = (Path(__file__).parent.parent / "webui/static/index.html").read_text()
+    page = page_source()
     block = page[page.index("const PART_INFO = {") : page.index("const PART_ICON")]
     ends = {e for k in [*comms.LINKS, *comms.UNREADABLE, *comms.PLANNED] for e in k[:2]}
     assert [e for e in sorted(ends) if f"'{e}':" not in block] == []
@@ -81,3 +84,15 @@ def test_the_real_gpu_link_exists_only_when_built():
     on = {(r["from"], r["to"]): r for r in comms.build({"real-gpu": True}, [], [])}
     assert on[("clients", "real-gpu")]["port"] == 9403 and on[("clients", "real-gpu")]["real"] and not on[("clients", "real-gpu")]["measured"]
     assert ("clients", "real-gpu") not in {(r["from"], r["to"]) for r in comms.build({"dcgm-exporter": True}, [], [])}
+
+
+def test_every_wire_of_the_cluster_level_stands_for_a_documented_link():
+    """The Cluster level (webui/static/js/circuitlayout.js) names the link each wire shows by its two ends; a renamed or dropped link
+    must not leave a wire that silently reads nothing."""
+    import re
+
+    src = (Path(__file__).resolve().parent.parent / "webui/static/js/circuitlayout.js").read_text()
+    pairs = {tuple(p.strip("' ") for p in m.split(",")) for m in re.findall(r"link: \[('[^']+', '[^']+')\]", src)}
+    known = {(link[0], link[1]) for link in [*comms.LINKS, *comms.UNREADABLE, *comms.PLANNED]}
+    assert len(pairs) >= 10
+    assert not (pairs - known), f"wires with no documented link: {sorted(pairs - known)}"

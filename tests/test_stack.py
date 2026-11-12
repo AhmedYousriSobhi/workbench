@@ -28,6 +28,27 @@ def test_governor_admission_refusal_and_absent_governor():
     assert stack.governor_admits(500, msgs.append, ask=down) and msgs[-1].startswith("WARN")
 
 
+def test_a_service_that_runs_but_does_not_answer_fails_its_stage(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    import shutil
+    root = Path(__file__).resolve().parents[1]
+    for d in ("profiles", "components", "images"):
+        shutil.copytree(root / d, tmp_path / d, dirs_exist_ok=True)
+    sim = yaml.safe_load((root / "sim.yaml").read_text())
+    started, msgs = [], []
+
+    def runner(cmd):
+        if "up" in cmd:
+            started.extend(cmd[cmd.index("--no-deps") + 1:])
+        return cp(out="\n".join(started)) if "ps" in cmd else cp()
+
+    monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
+    monkeypatch.setattr(stack, "_answering", lambda names, r, p, w: ["slurmctld"] if "slurmctld" in names else [])
+    assert not stack.up(sim, "min", runner=runner, say=msgs.append, available=12 * 1024**3, wait=1)
+    assert any("slurmctld" in m and "not answering" in m for m in msgs)
+    assert "cn001" not in started  # the nodes never start before the controller answers
+
+
 def test_refused_when_it_does_not_fit():
     calls, msgs = [], []
     sim = yaml.safe_load(Path("sim.yaml").read_text())
@@ -47,9 +68,10 @@ def test_up_starts_in_order_and_waits(tmp_path, monkeypatch):
 
     def runner(cmd):
         if "build" in cmd:
-            built.append(cmd[-1])
+            built.append(cmd[cmd.index("build") + 1:])
             started.append("<build>")
         if "up" in cmd:
+            assert "--build" not in cmd  # build once, up front (issue 449)
             started.extend(cmd[cmd.index("--no-deps") + 1:])
         if "ps" in cmd:
             return cp(out="\n".join(started))
@@ -59,7 +81,15 @@ def test_up_starts_in_order_and_waits(tmp_path, monkeypatch):
     monkeypatch.setattr(stack, "provision_token", lambda **kw: kw.get("path", tmp_path / "t"))
     assert stack.up(sim, "min", runner=runner, say=lambda m: None, available=12 * 1024**3, wait=1)
     assert started.index("prometheus") < started.index("slurmctld") < started.index("cn001")
-    assert built == ["cn001"] and started.index("<build>") < started.index("prometheus")  # node-base before its dependants
+    assert built[0] == ["cn001"]  # node-base first: slurmctld and login build FROM it
+    assert len(built) == 2 and "cn001" not in built[1] and "slurmctld" in built[1]  # then every other image once, in one call
+    assert max(i for i, x in enumerate(started) if x == "<build>") < started.index("prometheus")  # all builds before the first start
+
+
+def test_build_targets_one_service_per_image():
+    svcs = {"cn001": {"build": "images/node", "image": "w/node"}, "cn002": {"build": "images/node", "image": "w/node"},
+            "bmc-farm": {"build": "components/bmc", "image": "w/bmc"}, "grafana": {"image": "grafana"}}
+    assert stack.build_targets(svcs, list(svcs)) == ["cn001", "bmc-farm"]
 
 
 def test_down_passes_the_stop_timeout_only_when_set(monkeypatch):
@@ -228,7 +258,7 @@ def test_up_warns_but_still_succeeds_when_the_token_cannot_be_made(tmp_path, mon
     monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
     monkeypatch.setattr(stack, "provision_token", no_token)
     assert stack.up(sim, "min", runner=runner, say=msgs.append, available=12 * 1024**3, wait=1)
-    assert any(m.startswith("WARN no grafana token") for m in msgs) and msgs[-1] == "stack is up"
+    assert any(m.startswith("WARN no grafana token") for m in msgs) and msgs[-1].startswith("stack is up in ")
 
 
 def test_current_profile_reads_the_file_or_falls_back(tmp_path, monkeypatch):
@@ -502,3 +532,33 @@ def test_a_changed_slurm_conf_restarts_a_running_slurmctld(tmp_path, monkeypatch
     said: list[str] = []
     assert stack.up(sim, "min", runner=runner, say=said.append, available=8 * 1024**3, wait=1)
     assert any("pick up the new slurm.conf" in m for m in said) and any("--force-recreate" in c and "slurmctld" in c for c in calls)
+
+
+def test_up_reports_its_stages_in_order_and_the_plan_first(tmp_path, monkeypatch):
+    """Issue 519: the page shows these, so they are data (a plan, then running/done per stage), not log text."""
+    sim = _workdir(tmp_path, monkeypatch)
+    events: list[dict] = []
+    started: list[str] = []
+
+    def runner(cmd):
+        if "up" in cmd:
+            started.extend(cmd[cmd.index("--no-deps") + 1:])
+        return cp(out="\n".join(started)) if "ps" in cmd else cp()
+
+    monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
+    monkeypatch.setattr(stack, "provision_token", lambda **kw: kw.get("path", tmp_path / "t"))
+    assert stack.up(sim, "min", runner=runner, say=lambda m: None, available=12 * 1024**3, wait=1, stage=events.append)
+    plan = events[0]["plan"]
+    assert events[0].keys() == {"plan"} and plan[0] == "Build images" and "Nodes" in plan
+    seq = [(e["stage"], e["state"]) for e in events[1:]]
+    assert seq[0] == ("Build images", "running") and seq[1] == ("Build images", "done")
+    assert [n for n, s in seq if s == "done"] == plan  # every planned stage finishes, in the planned order
+
+
+def test_stage_lines_print_only_when_the_governor_asks(monkeypatch, capsys):
+    monkeypatch.delenv(stack.STAGE_ENV, raising=False)
+    stack.stage_lines({"plan": ["A"]})
+    assert capsys.readouterr().out == ""  # a person at a terminal sees no machine lines
+    monkeypatch.setenv(stack.STAGE_ENV, "1")
+    stack.stage_lines({"plan": ["A"]})
+    assert capsys.readouterr().out == '@stage {"plan": ["A"]}\n'
