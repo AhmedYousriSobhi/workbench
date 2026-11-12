@@ -56,3 +56,11 @@ def test_the_diagrams_get_the_slurm_facts_on_every_visible_tab():
     body = src.split("export async function paintSlurmStats()")[1].split("\n}\n")[0]
     assert "tab-traffic" not in body.split("S.slurmAt = Date.now()")[0]  # the gate is the page being visible, not the Traffic tab
     assert "document.hidden" in body and body.count("paintBlocks()") == 2  # the diagrams repaint when the facts arrive
+
+
+def test_the_zoom_bar_on_home_opens_the_diagram_instead_of_doing_nothing():
+    """Issue 567 follow-up: Home has no diagram, yet the bar showed Cluster pressed and a click changed nothing."""
+    from pathlib import Path
+    src = (Path(__file__).resolve().parent.parent / "webui/static/js/zoom.js").read_text()
+    assert "const on = !none && b.dataset.level === lv" in src  # no level is marked on Home or Test run
+    assert "offInfra() && !onConn()" in src.split("export function zoomTo")[1]  # a click there selects the Infrastructure tab at that level
