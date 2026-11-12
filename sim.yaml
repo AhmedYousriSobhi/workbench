@@ -22,6 +22,11 @@ partitions:
   - {name: cpu, nodes: compute}
   - {name: gpu, nodes: gpu}
 
+# topology:             # optional real Slurm topology (topology.conf, issue 543, docs/guides/topology.md); nodes are spread round-robin over the leaves
+#   plugin: tree        # tree | block
+#   spines: 1
+#   leaves_per_spine: 2
+
 controller:             # a controller node (SPEC C-20, issue 416): slurmctld's host with sshd, the BCM head node (cmsh); off: the login node acts as the head node
   enabled: false        # benchctl up --controller
   allow:                # who may ssh in: these users, and every user in one of these groups

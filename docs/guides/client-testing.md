@@ -102,6 +102,10 @@ Fastest start: import the whole cluster from a file with `benchctl export profil
 
 SSH connection handling (hung, down, changed host key, session limit), step by step with screenshots: [ssh-connection-testing.md](ssh-connection-testing.md).
 
+## Switch topology
+
+With a `topology:` in `sim.yaml` (see [topology.md](topology.md)) `scontrol show topology` lists the switches, and `benchctl scenario run switch-leaf-down` (SC-35) drains one leaf's nodes for 90 s and resumes them: check the client shows the switch tree and the reason `switch leaf1 down`.
+
 ## Expiry and authentication faults
 
 Real errors from the real components, for a client's "login needed", "certificate expired" and "unauthorised" paths (target `auth`, issue 549; they need the host CLI, the page cannot play them):
