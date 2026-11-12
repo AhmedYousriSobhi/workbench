@@ -62,7 +62,7 @@ export function render(st) {
   spark('sp-mem', mem, lo - pad, hi + pad);
   $('mem-lo').textContent = (lo - pad).toFixed(1) + ' GB'; $('mem-hi').textContent = (hi + pad).toFixed(1) + ' GB';
   const phi = Math.max(10, ...psi); spark('sp-psi', psi, 0, phi); $('psi-hi').textContent = phi.toFixed(0) + ' %';
-  S.lastLog = st.audit; renderLog();
+  S.lastLog = st.audit; S.change = st.change || null; renderLog();
 }
 
 let events = null;

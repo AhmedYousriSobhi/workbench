@@ -1,10 +1,11 @@
 import { S } from './state.js';
-import { $, H, esc } from './util.js';
+import { $, H, esc, setHTML, setText } from './util.js';
 import { KIND_NAME, KIND_TEXT } from './geometry.js';
 import { kindOf } from './svg.js';
 import { nodeList } from './inspector.js';
 import { loadCluster } from './cluster.js';
 import { jobsWarning, planDiff, reviewLines } from './planmodel.js';
+import { applyOutcome, stageRows } from './applymodel.js';
 
 export async function loadPlan() {
   const parts = [...document.querySelectorAll('#pl-parts input:checked')].map(i => i.value).join(',');
@@ -141,7 +142,7 @@ export async function openPlan() {
   $('pl-shape-kcpu').textContent = node(sh.k8s_cpu); $('pl-shape-kgpu').textContent = sh.k8s_gpu && sh.k8s_gpu.gpus ? `${sh.k8s_gpu.gpus} × ${(sh.k8s_gpu.gpu_type || '').toUpperCase()}, ${sh.k8s_gpu.cpus} CPUs each` : '';
   $('pl-now-gpus').textContent = c.gpus ? `now ${c.gpus}` : '';
   if (S.bmcSaved) { S.bmcOff = new Set(bmcNames().filter(n => !S.bmcSaved.has(n))); S.bmcSaved = null; }  // a saved node list shows as exceptions
-  $('pl-apply-msg').textContent = ''; S.armed = 0; paintPlanSummary(); $('plandlg').showModal(); loadPlan(); S.planStates = null; readStates();
+  $('pl-apply-msg').textContent = ''; S.armed = 0; if (!S.applying) $('pl-prog').hidden = true; paintPlanSummary(); $('plandlg').showModal(); loadPlan(); S.planStates = null; readStates();
 }
 
 export function init() {
@@ -163,6 +164,14 @@ export function init2() {
 
 }
 
+// the Progress list under the review: the governor's stages for this job, then its one-line summary (U5)
+export function paintProgress(job) {
+  const rows = stageRows(S.change && S.change.job === job ? S.change : null), o = applyOutcome(S.change, job);
+  $('pl-prog').hidden = !rows.length;
+  setHTML($('pl-stages'), rows.map(r => `<li class="${r.state}"><b aria-hidden="true">${r.icon}</b><span>${esc(r.name)}</span><span class="t">${esc(r.t)}</span></li>`).join(''));
+  if (o.kind === 'running') setText($('pl-apply-msg'), '▶ ' + o.text);
+}
+
 export function init3() {
   $('pl-apply').onclick = async () => {
     if (!S.armed) {  // first press asks; the second one (within 8 s) applies
@@ -172,21 +181,25 @@ export function init3() {
       return;
     }
     S.armed = 0; $('pl-apply').textContent = 'Apply to the running workbench';
-    const before = new Set(S.lastLog.filter(l => l.includes('apply-plan')));
     S.applying = true; $('pl-apply').disabled = true; $('pl-apply-msg').textContent = 'Asking the governor…';
     const r = await fetch('/api/plan/apply?' + S.planQuery, { method: 'POST', headers: H });
     const j = await r.json();
     if (!r.ok) { $('pl-apply-msg').textContent = '✗ ' + j.detail; S.applying = false; syncApply(); return; }
     $('pl-apply-msg').textContent = (j.started ? '▶ ' : '▲ ') + j.message;
     if (!j.started) { S.applying = false; syncApply(); return; }
-    const t0 = Date.now(), timer = setInterval(() => {
-      const done = S.lastLog.find(l => l.includes('apply-plan') && /: (done|FAILED)|^FAILED /.test(l) && !before.has(l));
-      if (done || Date.now() - t0 > 600000) {
+    if (j.job == null) { S.applying = false; syncApply(); $('pl-apply-msg').textContent += ' This governor does not report stages: progress is in Governor activity.'; return; }
+    S.change = null; paintProgress(j.job);
+    const t0 = Date.now(); let tick = 0;
+    const timer = setInterval(() => {
+      if (document.hidden) return;  // W-11: nothing polls while the tab is hidden; the next visible tick catches up
+      const o = applyOutcome(S.change, j.job), gone = o.kind === 'unknown' && Date.now() - t0 > 30000;  // the governor restarted, or never reported this job
+      paintProgress(j.job);
+      if (o.kind === 'done' || o.kind === 'failed' || gone || Date.now() - t0 > 660000) {
         clearInterval(timer); S.applying = false; syncApply(); readStates();
-        $('pl-apply-msg').textContent = done ? (done.includes('FAILED') ? '✗ ' : '✓ ') + done : '▲ Still running after 10 minutes: check Governor activity.';
+        $('pl-apply-msg').textContent = o.kind === 'done' ? '✓ ' + o.text : o.kind === 'failed' ? '✗ ' + o.text : '▲ The governor no longer reports this change: check Governor activity.';
         S.connCache = null; S.lastCluster = ''; loadCluster();  // new parts or nodes: Connections and node panels read again (U4)
-      } else { S.lastCluster = ''; loadCluster(); }
-    }, 4000);
+      } else if (++tick % 3 === 0) { S.lastCluster = ''; loadCluster(); }
+    }, 1500);
   };
 
 }

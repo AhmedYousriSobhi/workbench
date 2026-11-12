@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**88% built** (36 done, 71 in review, 9 partial, 5 to do, 121 items).
+**89% built** (36 done, 72 in review, 9 partial, 5 to do, 122 items).
 
 ## Roadmap
 
@@ -16,7 +16,7 @@ flowchart LR
     p4["People and chaos<br/>25%"]:::partial
     p5["Kubernetes<br/>100%"]:::done
     p6["Fidelity VM<br/>0%"]:::todo
-    p7["Web UI and profiles<br/>91%"]:::partial
+    p7["Web UI and profiles<br/>92%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
     p0 --> p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7 --> p8
     classDef done fill:#1a7f37,stroke:#1a7f37,color:#fff
@@ -201,7 +201,7 @@ _One real Ubuntu VM with Redfish power control._
 
 0/1 done
 
-### Web UI and profiles (91%)
+### Web UI and profiles (92%)
 
 _One click from cold start to a busy cluster._
 
@@ -226,6 +226,7 @@ _One click from cold start to a busy cluster._
 | Per-request traffic record and its analysis (redesign step 5a) | 🔍 In review | The three mocks record per caller (User-Agent product token only) and path shape the status class, a latency histogram and the last 400 requests (GET /sim/traffic); the page merges them at /api/traffic; pure tested JavaScript turns them into rates, river bands, probe readings, repeat periods and findings. Not measured says so. The screen is step 5b. Issue 501. | `components/bmc-farm/bmc.py`, `components/bcm-mock/bcm.py`, `components/jira-mock/jira.py`, `webui/traffic.py`, `webui/app.py`, `webui/static/js/trafficanalysis.js`, `webui/tests/js/trafficanalysis.test.mjs`, `tests/test_path_shapes.py`, `tests/test_webui_traffic.py`, `tests/real/test_traffic_record_real.py`, `docs/adr/0041-per-request-traffic-record.md`, `docs/guides/client-testing.md` | - |
 | Traffic analysis screen (redesign step 5b) | 🔍 In review | The Traffic tab opens with the request river, the probe, what was found and the rhythm, read from /api/traffic every 3 s only while the tab is visible; a pool tile or a #cluster-node hash opens a node's focused wire (declared wiring; its messages are not captured). Not measured says so. Message capture needs an owner scope decision. Issue 503. | `webui/static/js/analysis.js`, `webui/static/js/trafficanalysis.js`, `webui/static/canvas.css`, `webui/static/index.html`, `scripts/ui_shots.py`, `docs/manual/05-web-page.md`, `docs/adr/0041-per-request-traffic-record.md` | - |
 | Overview home workspace (redesign step 6a) | 🔍 In review | The page opens on Overview: Needs attention (one source with the top strip), three start cards (Run a test, Break one thing, Connect your client), one card per node (state in words; a load bar only where the GPU exporter measured it) and the services with real or simulated; a node card opens that node in Topology (the old Infrastructure). Fetches nothing of its own. Screens 2 to 4 follow as 6b to 6d. Issue 507. | `webui/static/js/home.js`, `webui/static/js/homemodel.js`, `webui/static/js/shell.js`, `webui/static/js/governor.js`, `webui/static/index.html`, `webui/static/app.css`, `webui/tests/js/homemodel.test.mjs`, `scripts/ui_shots.py`, `docs/adr/0043-overview-home.md`, `docs/manual/05-web-page.md` | - |
+| Apply progress from governor stages and a job id (redesign U5) | 🔍 In review | benchctl up prints @stage lines when the governor asks (WORKBENCH_STAGE_LINES=1); the governor streams them into status.change (job, state, stages with seconds) and apply-plan returns the job id; the Cluster architecture sheet shows a Progress list and waits for its own job, not for audit wording. Older governors without stages get the old message. Live apply and the monitoring client not run. Issue 519. | `benchctl/stack.py`, `governor/core.py`, `governor/__main__.py`, `webui/app.py`, `webui/static/js/applymodel.js`, `webui/static/js/plan.js`, `webui/static/index.html`, `webui/static/app.css`, `tests/test_stack.py`, `tests/test_governor.py`, `tests/test_governor_main.py`, `webui/tests/js/applymodel.test.mjs`, `scripts/ui_shots.py`, `docs/adr/0048-apply-progress-from-governor-stages.md`, `SPEC.md W-13` | - |
 | Content-Security-Policy for the page (redesign follow-up) | 🔍 In review | The page and /static carry a strict policy (script and style from the same origin only, no unsafe-inline); inline style attributes became utility classes and CSSOM writes (paintDyn); a test and the browser check fail on a regression. The help pages are not covered yet. Issue 517. | `webui/app.py`, `webui/static/js/util.js`, `webui/static/js/svg.js`, `webui/static/index.html`, `webui/static/app.css`, `tests/test_webui.py`, `scripts/ui_shots.py`, `docs/adr/0047-content-security-policy.md`, `docs/manual/05-web-page.md` | - |
 | Cluster setup review of changes before Apply (redesign step 6d | 🔍 In review | The Cluster architecture sheet shows Review changes (adds, removes, slurmctld restart) before Apply, and a running-jobs warning with an I understand tick when a node to be removed is allocated or mixed in Slurm; unread states are said, not guessed. The configuration cards are compact. No new route. Stage progress (U5) and job ids need governor work. Issue 515. | `webui/static/js/planmodel.js`, `webui/static/js/plan.js`, `webui/static/index.html`, `webui/static/app.css`, `webui/tests/js/planmodel.test.mjs`, `scripts/ui_shots.py`, `docs/adr/0046-cluster-setup-review.md`, `docs/manual/05-web-page.md` | - |
 | Hidden tab | 🔍 In review | The governor feed closes and cluster polling stops while the tab is hidden and resume on show (W-11); status regions are written only when their text changes; the Connections cache is cleared when an applied plan finishes; node names are encoded in API URLs. Issue 513. | `webui/static/js/governor.js`, `webui/static/js/cluster.js`, `webui/static/js/shell.js`, `webui/static/js/util.js`, `webui/static/js/plan.js`, `webui/static/js/node.js`, `webui/static/js/inspector.js`, `webui/tests/js/livetext.test.mjs`, `scripts/ui_shots.py`, `docs/manual/05-web-page.md` | - |
@@ -243,7 +244,7 @@ _One click from cold start to a busy cluster._
 | README demo gif | 🔍 In review | The README's animation is made from sample data and shows each capability in turn with a caption: dark 2.5D with traffic, error triangles, a fault with its declared blast radius, a lens, the client's eye, focus, the flat view and the global view. Re-run scripts/doc_shots.py after a change to the page. Issue 337. | `scripts/doc_shots.py`, `docs/manual/img/architecture-demo.gif`, `README.md` | - |
 | Budget manager | ⬜ To do | Profile/budget form (W-7). | - | - |
 
-1/35 done
+1/36 done
 
 ### macOS agent and CI (0%)
 

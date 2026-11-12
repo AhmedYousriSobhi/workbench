@@ -3,6 +3,7 @@
 Docker is driven through `docker compose` against the generated file; every call goes through the
 injectable `runner` so the ordering logic is testable without Docker.
 """
+import json
 import os
 import re
 import subprocess
@@ -161,8 +162,23 @@ def network_problem(runner: Runner = _run) -> str | None:
     return None
 
 
+STAGE_ENV = "WORKBENCH_STAGE_LINES"  # the governor sets it: `up` then prints one `@stage {json}` line per stage change (issue 519)
+
+
+def stage_lines(event: dict) -> None:
+    """Default stage reporter: machine-readable lines for the governor, and nothing for a person at a terminal."""
+    if os.environ.get(STAGE_ENV) == "1":
+        print("@stage " + json.dumps(event), flush=True)
+
+
+def stage_plan(names: list[str], todo: dict, has_images: bool, restart: bool) -> list[str]:
+    """The ordered stages `up` will report, as the page shows them."""
+    return (["Build images"] if has_images else []) + [label.capitalize() for label, _ in stage_services(names)] + (["Restart slurmctld"] if restart else [])
+
+
 def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None] = print,
-       available: int | None = None, wait: float = 120, prof: dict | None = None) -> bool:
+       available: int | None = None, wait: float = 120, prof: dict | None = None,
+       stage: Callable[[dict], None] = stage_lines) -> bool:
     """Start the profile. `prof` is a profile built from a workbench selection (benchctl apply): admitted by its own
     estimate instead of the named profile's budget."""
     chosen, began, stage_secs = prof, time.monotonic(), []
@@ -230,9 +246,14 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         if stale:
             say(f"removing nodes no longer wanted: {', '.join(stale)}")
             remove_services(stale, runner)
+    restart = bool((changed or acct_added or (conf_changed and "slurmctld" in before)) and "slurmctld" in todo)
+    first = next((n for n in names if re.fullmatch(r"(cn|gpu|rgpu)\d+", n)), None)
+    stage({"plan": stage_plan(names, todo, first is not None or bool(build_targets(todo, names)), restart)})
+    if first is not None or build_targets(todo, names):
+        stage({"stage": "Build images", "state": "running"})
     # slurmctld, slurmrestd and login build FROM node-base's tag, which only a node service rebuilds. Build it first,
     # or a changed base (new munge key) leaves the controller on the old image and every Slurm call fails to authenticate.
-    if (first := next((n for n in names if re.fullmatch(r"(cn|gpu|rgpu)\d+", n)), None)):
+    if first is not None:
         r = runner(dc("build", first, file=path))
         if r.returncode != 0:
             say(f"FAILED node base image: {r.stderr.strip()[-300:]}")
@@ -246,6 +267,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
             say(f"FAILED image build: {r.stderr.strip()[-300:]}")
             return False
         say(f"images built in {time.monotonic() - t0:.0f} s")
+    if first is not None or targets:
+        stage({"stage": "Build images", "state": "done"})
     ips = addressing.plan(sim, prof.get("compute_nodes"))
     if "teleport" in todo:
         try:
@@ -271,6 +294,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
             return False
     for label, svcs in stage_services(names):
         say(f"starting {label}: {', '.join(svcs)}")
+        stage({"stage": label.capitalize(), "state": "running"})
         stage_began = time.monotonic()
         r = runner(dc("up", "-d", "--no-deps", *svcs, file=path))
         if r.returncode != 0:
@@ -291,12 +315,15 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         if label == "teleport":
             teleport.snapshot()  # the identity survives a rebuild (an emptied data directory restores it)
         stage_secs.append(f"{label} {time.monotonic() - stage_began:.0f}")
-    if (changed or acct_added or (conf_changed and "slurmctld" in before)) and "slurmctld" in todo:  # slurm.conf changed under a running controller
+        stage({"stage": label.capitalize(), "state": "done"})
+    if restart:  # slurm.conf changed under a running controller
+        stage({"stage": "Restart slurmctld", "state": "running"})
         say("restarting slurmctld to pick up the new " + ("accounting setup" if acct_added and not changed else "node list" if changed else "slurm.conf"))
         r = runner(dc("up", "-d", "--no-deps", "--force-recreate", "slurmctld", file=path))
         if r.returncode != 0 or wait_running(["slurmctld"], runner, wait) or _answering(["slurmctld"], runner, path, wait):
             say(f"FAILED slurmctld restart: {r.stderr.strip()[-300:]}")
             return False
+        stage({"stage": "Restart slurmctld", "state": "done"})
     try:
         say(f"grafana token: {provision_token()}")
     except OSError as e:
