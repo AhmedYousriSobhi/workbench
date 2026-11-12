@@ -269,7 +269,9 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         if r.returncode != 0:
             say(f"FAILED node base image: {r.stderr.strip()[-300:]}")
             return False
-    targets = [t for t in build_targets(todo, names) if t != first]  # the node base was built above; build once (issue 449): the per-stage `up` calls below no longer build, and a changed mock is still picked up here
+    # gpu-exporter-farm lives in compose/observability.yml, not in the generated services, so build_targets never saw it and its image stayed
+    # as old as the first build (after #462 it crashed on a missing /sim.yaml); it is built here like every other image.
+    targets = [t for t in build_targets(todo, names) if t != first] + ["gpu-exporter-farm"]  # the node base was built above; build once (issue 449): the per-stage `up` calls below no longer build, and a changed mock is still picked up here
     if targets:
         say(f"building images: {', '.join(targets)}")
         t0 = time.monotonic()
