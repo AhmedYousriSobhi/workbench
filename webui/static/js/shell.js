@@ -2,7 +2,7 @@ import { S } from './state.js';
 import { $ } from './util.js';
 import { buildFlow } from './diagram.js';
 import { syncZoom } from './zoom.js';
-import { startAnalysis, stopAnalysis } from './analysis.js';
+import { startAnalysis, stopAnalysis, leaveTraffic } from './analysis.js';
 import { clusterList, curLevel, enterCluster, paintLevelUi, setLevel } from './overview.js';
 import { dockWide, paintReach } from './inspector.js';
 import { paintConnections } from './connections.js';
@@ -69,7 +69,8 @@ export function selectTab(t, focus) {
   if (t === 'home') paintHome();
   if (t === 'run') paintRunEye();
   if (t === 'traffic') paintTraffic();
-  if (t === 'traffic' && !document.hidden) startAnalysis(); else stopAnalysis();
+  if (!document.hidden) startAnalysis(); else stopAnalysis();  // sampled from page load, so a rate exists when Traffic opens (it needs two readings)
+  if (t !== 'traffic') leaveTraffic();
   syncZoom();
   try { sessionStorage.setItem('workbench-tab', t); } catch (e) { /* not remembered */ }
 }
@@ -118,6 +119,6 @@ export function init3() {
   let savedTab = 'home'; try { savedTab = sessionStorage.getItem('workbench-tab') || 'home'; } catch (e) { /* default */ }
   selectTab(TABS.includes(savedTab) ? savedTab : 'home');
   // the live feed is only worth its CPU while the page is visible
-  document.addEventListener('visibilitychange', () => { if (document.hidden) { closeGov(); pauseCluster(); } else { openGov(); resumeCluster(); } if (document.hidden || ($('tab-nodes').hidden && $('tab-traffic').hidden && $('tab-run').hidden)) closeFlow(); else openFlow(); if (document.hidden || $('tab-traffic').hidden) stopAnalysis(); else startAnalysis(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { closeGov(); pauseCluster(); } else { openGov(); resumeCluster(); } if (document.hidden || ($('tab-nodes').hidden && $('tab-traffic').hidden && $('tab-run').hidden)) closeFlow(); else openFlow(); if (document.hidden) stopAnalysis(); else startAnalysis(); });
 
 }
