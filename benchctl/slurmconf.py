@@ -3,7 +3,7 @@ import os
 import secrets
 from pathlib import Path
 
-from . import hwinventory, topology
+from . import hwinventory, qos, topology
 from .nodes import node_names
 
 CTLD = "slurmctld"
@@ -66,7 +66,7 @@ def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool 
     if plugin := topology.plugin_line(sim):  # issue 543: the switches are in topology.conf beside this file
         lines.append(plugin)
     if accounting:
-        lines += ["AccountingStorageType=accounting_storage/slurmdbd", "AccountingStorageHost=slurmdbd"]
+        lines += ["AccountingStorageType=accounting_storage/slurmdbd", "AccountingStorageHost=slurmdbd", *qos.slurm_lines(sim)]  # issue 544
     if compute:
         lines.append(f"NodeName={_range(compute)} CPUs={c['cpus']} RealMemory={c['memory_mb']} State=UNKNOWN")
     if gpu:
@@ -123,12 +123,18 @@ def slurmdbd_conf(password: str) -> str:
 def accounting_script(sim: dict) -> str:
     """Idempotent sacctmgr bootstrap: cluster, QOS, one account, users from sim.yaml."""
     users = sim.get("users", [])
-    qos = sorted({u["qos"] for u in users if u["qos"] != "normal"})
+    declared = bool(qos.declared(sim))
+    names = sorted({u["qos"] for u in users if u["qos"] != "normal"} - {q["name"] for q in qos.declared(sim)})
     lines = ["#!/bin/sh", "# GENERATED from sim.yaml; safe to re-run",
              "until sacctmgr -i show cluster >/dev/null 2>&1; do sleep 2; done",
              "sacctmgr -i add cluster workbench || true", "sacctmgr -i add account sim || true"]
-    lines += [f"sacctmgr -i add qos {q} || true" for q in qos]
-    lines += [f"sacctmgr -i add user {u['name']} account=sim qos={u['qos']} || true" for u in users]
+    lines += [f"sacctmgr -i add qos {q} || true" for q in names]
+    lines += qos.sacctmgr_lines(sim)  # issue 544: the declared QOS with their limits, before the users that may use them
+    for u in users:
+        allowed = ",".join(qos.user_qos(sim, u)) if declared else u["qos"]
+        lines.append(f"sacctmgr -i add user {u['name']} account=sim qos={allowed}" + (f" defaultqos={u['qos']}" if declared else "") + " || true")
+        if declared:  # an existing user keeps the old list otherwise
+            lines.append(f"sacctmgr -i modify user where name={u['name']} set qos={allowed} defaultqos={u['qos']}")
     return "\n".join(lines) + "\n"
 
 

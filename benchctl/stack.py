@@ -22,6 +22,7 @@ from . import (
     k8s,
     logins,
     memory,
+    qos,
     ready,
     real_gpu,
     slurmconf,
@@ -191,6 +192,9 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         return False
     except topology.TopologyError as e:
         say(f"FAILED topology: {e}")
+        return False
+    except qos.QosError as e:
+        say(f"FAILED qos: {e}")
         return False
     if slurmconf.test_timers_on():
         say(f"NOTE test timers are on ({slurmconf.TEST_TIMERS_ENV}=1): {slurmconf.timers()}; not for client testing")
