@@ -1,5 +1,5 @@
 import { S } from './state.js';
-import { $, esc } from './util.js';
+import { $, esc, paintDyn } from './util.js';
 import { kindOf } from './svg.js';
 import { clusterFacts } from './overview.js';
 import { paintHealth } from './governor.js';
@@ -11,7 +11,7 @@ import { paintTraffic } from './traffic.js';
 
 export const STATE_ICON = { ok: '✓', warn: '▲', fault: '✗', down: '⏻', unknown: '?' };
 export function node(n) {
-  const util = n.gpu_util == null ? '' : `<span class="meter" role="img" aria-label="GPU utilisation ${n.gpu_util} percent"><i style="width:${n.gpu_util}%"></i></span><b>${n.gpu_util}%</b> · ${n.gpus_busy}/${n.gpus} busy · `;
+  const util = n.gpu_util == null ? '' : `<span class="meter" role="img" aria-label="GPU utilisation ${n.gpu_util} percent"><i data-w="${n.gpu_util}"></i></span><b>${n.gpu_util}%</b> · ${n.gpus_busy}/${n.gpus} busy · `;
   const info = util + [n.temp == null ? null : n.temp.toFixed(0) + ' °C', n.bcm ? 'BCM ' + n.bcm : null].filter(Boolean).join(' · ') || esc(n.power ?? '–');
   return `<li><button class="er node ${n.state}" data-node="${esc(n.name)}" aria-label="${esc(n.name)}: ${esc(n.label)}. Open details and fault actions">
     <b class="g" aria-hidden="true">${STATE_ICON[n.state]}</b><span class="nm">${esc(n.name)}</span><span class="st">${esc(n.label)}</span><span class="info">${info}</span></button></li>`;
@@ -38,7 +38,7 @@ export function renderCluster(c) {
   $('services').innerHTML = svcs.map(svcRow).join(''); $('cnt-svc').textContent = `${svcUp} of ${svcs.length} answering`; paintBlocks();
   for (const kind of ['compute', 'gpu', 'k8s']) {
     const rows = c.nodes.filter(n => kindOf(n) === kind);
-    $('nodes-' + kind).innerHTML = rows.map(n => node(n)).join(''); $('br-' + kind).hidden = !rows.length;
+    $('nodes-' + kind).innerHTML = rows.map(n => node(n)).join(''); paintDyn($('nodes-' + kind)); $('br-' + kind).hidden = !rows.length;
     $('cnt-' + kind).textContent = `${rows.filter(n => n.state === 'ok').length} of ${rows.length} healthy`;
   }
   document.querySelectorAll('.node').forEach(b => b.onclick = () => { const n = c.nodes.find(x => x.name === b.dataset.node); if (n && n.kind === 'k8s') openConnection('k8s'); else showNode(b.dataset.node); });  // a Kubernetes node has no BMC or Slurm actions: its row is Connections

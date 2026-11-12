@@ -1,5 +1,5 @@
 import { S } from './state.js';
-import { $, esc } from './util.js';
+import { $, esc, paintDyn } from './util.js';
 import { REAL_SERVICES } from './flowstate.js';
 import { LEVELS } from './governor.js';
 import { attentionItems, homeNodeCard, homeServices, homeSummary } from './homemodel.js';
@@ -20,8 +20,9 @@ export function paintHome() {
   const nodes = cl && cl.nodes ? cl.nodes.map(homeNodeCard) : [];
   $('home-nodes').innerHTML = nodes.length ? nodes.map(c => `<li><button type="button" class="hn ${c.state}" data-open="${esc(c.name)}" aria-label="${esc(c.name)}: ${esc(c.label)}. Open it in Topology">
     <span class="hn-top"><span class="mono">${esc(c.name)}</span><span class="dim small">${esc(c.kind)}</span><span class="pill ${c.state}"><b aria-hidden="true">${c.icon}</b> ${esc(c.label)}</span></span>
-    ${c.load === null ? '' : `<span class="hn-bar" role="img" aria-label="GPU use ${c.load} percent"><i style="width:${c.load}%"></i></span>`}
+    ${c.load === null ? '' : `<span class="hn-bar" role="img" aria-label="GPU use ${c.load} percent"><i data-w="${c.load}"></i></span>`}
     <span class="dim small">${esc(c.detail)}</span></button></li>`).join('') : '<li class="dim small">No nodes yet: the stack is not running or the first snapshot is still on its way.</li>';
+  paintDyn($('home-nodes'));
   const svcs = cl && cl.services ? homeServices(cl.services, REAL_SERVICES) : [];
   $('home-svcs').innerHTML = svcs.map(s => `<li class="hs ${s.up ? 'ok' : 'fault'}"><b class="ic ${s.up ? 'good' : 'bad'}" aria-hidden="true">${s.icon}</b><span>${esc(s.name)}</span><span class="dim small">${s.text}</span><span class="tag">${s.real ? 'real' : 'simulated'}</span></li>`).join('');
 }

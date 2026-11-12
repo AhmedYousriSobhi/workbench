@@ -1,6 +1,6 @@
 import { SVGNS } from './flowstate.js';
 
-export function sv(tag, attrs, text) { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; }
+export function sv(tag, attrs, text) { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) { if (k === 'style') e.style.cssText = attrs[k]; else e.setAttribute(k, attrs[k]); }  /* CSSOM: a style attribute is blocked by the CSP (#517) */ if (text != null) e.textContent = text; return e; }
 export const curve = (a, b) => { const dx = (b.x - a.x) * 0.5; return [a, { x: a.x + dx, y: a.y }, { x: b.x - dx, y: b.y }, b]; };
 export const poly = pts => ({ poly: pts });  // straight segments (the service lines run along a channel); position by distance, like a curve by t
 export const atPoly = (pts, t) => { const L = pts.slice(1).map((q, i) => Math.hypot(q.x - pts[i].x, q.y - pts[i].y)), tot = L.reduce((a, b) => a + b, 0); let d = Math.min(Math.max(t, 0), 1) * tot, i = 0; while (i < L.length - 1 && d > L[i]) d -= L[i++]; const k = L[i] ? d / L[i] : 0; return { x: pts[i].x + (pts[i + 1].x - pts[i].x) * k, y: pts[i].y + (pts[i + 1].y - pts[i].y) * k }; };

@@ -5,6 +5,7 @@
 Starts `python -m webui` on a free port, captures every tab at desktop and phone width in light and dark, and reports
 console errors and horizontal overflow. Prints the PNG paths; exit 1 if any check fails.
 """
+import contextlib
 import json
 import socket
 import subprocess
@@ -12,6 +13,7 @@ import sys
 import time
 from pathlib import Path
 
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -323,15 +325,20 @@ def capture(out: Path) -> dict:
         url = proc.stdout.readline().split("UI: ")[1].strip() + "?token=" + (ROOT / "compose/generated/secrets/ui_token").read_text().strip()  # the log line has no token (#346)
         with sync_playwright() as p:
             browser = p.chromium.launch()
-            first = browser.new_page(viewport={"width": 1280, "height": 900}, color_scheme="light")  # nothing stored: dark first
+            first = browser.new_page(viewport={"width": 1280, "height": 900}, color_scheme="light")  # nothing stored: dark first; the one page that keeps the CSP (#517)
+            first.on("console", lambda m, r=result: r["a11y"].append("CSP violation: " + m.text[:160]) if "Content Security Policy" in m.text else None)
             first.goto(url)
             first.wait_for_timeout(500)
+            for tab in first.locator("nav a, nav button, [role=tab]").all()[:12]:  # visit each screen so its templates run under the policy
+                with contextlib.suppress(PlaywrightError):  # a tab that is hidden or covered is not what this loop checks
+                    tab.click(timeout=1500)
+                    first.wait_for_timeout(400)
             if first.evaluate("document.documentElement.dataset.theme") != "midnight":
                 result["a11y"].append("a first visit does not start in the dark theme")
             first.close()
             for scheme in ("light", "dark"):
                 for vp, (w, h) in VIEWPORTS.items():
-                    page = browser.new_page(viewport={"width": w, "height": h}, color_scheme=scheme)
+                    page = browser.new_page(viewport={"width": w, "height": h}, color_scheme=scheme, bypass_csp=True)
                     page.add_init_script(TEST_HOOK)
                     page.add_init_script("localStorage.setItem('workbench-theme','auto')")  # the shots follow the system scheme; the default is checked above
                     page.on("console", lambda m, r=result: r["console_errors"].append(m.text + " " + m.location.get("url", "")) if m.type == "error" else None)
@@ -532,7 +539,7 @@ def capture(out: Path) -> dict:
                         result["a11y"].extend(check_hidden(page))
                     page.close()
             for w, h, count in ((1280, 900, 6), (1920, 1080, 50)):  # the architecture is the page (#319): it fills the width, the page itself never scrolls, the rails scroll
-                page = browser.new_page(viewport={"width": w, "height": h})
+                page = browser.new_page(viewport={"width": w, "height": h}, bypass_csp=True)
                 page.add_init_script(TEST_HOOK)
                 page.goto(url)
                 page.wait_for_selector("#flow rect.blk")
@@ -607,7 +614,7 @@ def capture(out: Path) -> dict:
                         result["a11y"].append("the breadcrumb did not return to the overview, or the cluster table is missing")
                 page.close()
             for w, h, count in ((1280, 900, 2), (1280, 900, 12), (1920, 1080, 12)):  # several clusters (#327): a grid of cards that fits the panel; entering one shows that cluster
-                page = browser.new_page(viewport={"width": w, "height": h})
+                page = browser.new_page(viewport={"width": w, "height": h}, bypass_csp=True)
                 page.add_init_script(TEST_HOOK)
                 page.goto(url)
                 page.wait_for_selector("#flow rect.blk")

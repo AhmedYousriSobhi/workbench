@@ -229,6 +229,19 @@ def test_static_files_need_the_token_and_have_the_right_type(ui):
             assert resp.headers["Content-Type"].split(";")[0] == kind and resp.headers["Cache-Control"] == "no-cache", path
 
 
+def test_page_and_static_files_carry_a_strict_csp_and_the_page_has_no_inline_style(ui):
+    """#517: the policy blocks inline script and style, so none may remain in the markup or in the modules' templates."""
+    for path in ("/", "/static/app.css", "/static/js/main.js"):
+        r = urllib.request.Request(ui + path, headers={"Authorization": f"Bearer {TOKEN}"})
+        with urllib.request.urlopen(r, timeout=5) as resp:
+            csp = resp.headers["Content-Security-Policy"]
+        assert "script-src 'self'" in csp and "style-src 'self'" in csp and "unsafe-inline" not in csp and "unsafe-eval" not in csp, path
+    src = page_source()
+    assert not re.search(r"\sstyle=\"", src) and not re.search(r"<style\b", (ROOT / "webui/static/index.html").read_text())
+    assert not re.search(r"\son[a-z]+=\"", (ROOT / "webui/static/index.html").read_text())
+    assert not re.search(r"setAttribute\('style'", src)
+
+
 def test_every_module_the_page_imports_is_served_and_nothing_else_is(ui):
     """Walk the import graph from main.js over HTTP: every file answers, so no module is missing from static/js."""
     seen, todo = set(), ["main.js"]
