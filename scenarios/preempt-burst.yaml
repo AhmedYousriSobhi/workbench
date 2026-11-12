@@ -1,0 +1,7 @@
+name: preempt-burst
+ref: SC-37
+description: "A scavenger job fills every GPU of gpu001; at 20 s an urgent job asks for the same GPUs and Slurm requeues the scavenger job (sacct: PREEMPTED, then it runs again after the urgent job ends). Needs the accounting part and the `qos:` of docs/guides/qos-and-preemption.md in sim.yaml"
+steps:
+  - {at: 0s,   target: slurm, do: {submit: {node: gpu001, user: bob, gpus: 8, duration: 600, qos: scavenger}}}
+  - {at: 20s,  target: slurm, do: {submit: {node: gpu001, user: alice, gpus: 8, duration: 90, qos: urgent}}}
+  - {at: 150s, target: slurm, do: {cancel: true}}

@@ -268,7 +268,7 @@ def post(url: str, body: dict, timeout: float = 10) -> None:
 
 HOLD = "/run/workbench/slurmd.hold"  # images/node-base/slurmd-run waits while this file exists
 DAEMON_KEYS = ("slurmd_stop", "slurmd_start", "slurmd_restart", "slurmctld_restart", "submit", "cancel")
-SUBMIT_KEYS = {"node", "user", "gpus", "duration"}
+SUBMIT_KEYS = {"node", "user", "gpus", "duration", "qos"}
 SLURM_STATES = {"drain": "drain", "down": "down", "resume": "resume", "power_off": "off", "power_on": "on"}
 
 
@@ -282,7 +282,7 @@ def submit_command(sub: dict, sim: dict | None = None) -> list[str]:
     from . import workload
 
     sim = sim or yaml.safe_load(Path("sim.yaml").read_text())
-    return workload.command(sim, sub["node"], int(sub.get("gpus", 0)), int(sub.get("duration", 600)), sub.get("user"))
+    return workload.command(sim, sub["node"], int(sub.get("gpus", 0)), int(sub.get("duration", 600)), sub.get("user"), qos=sub.get("qos"))
 
 
 def daemon_commands(do: dict) -> list[list[str]]:

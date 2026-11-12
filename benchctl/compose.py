@@ -15,6 +15,7 @@ from . import (
     k8s,
     logins,
     nhc,
+    qos,
     real_gpu,
     slurmconf,
     teleport,
@@ -176,6 +177,8 @@ def generate(sim: dict, profile: dict) -> dict:
                                       "volumes": ["./flags:/run/workbench-flags:ro"]})  # L1 pauses the background changes (#476)
     if "jira-real" in services:
         _wire_jira_real(services)
+    if bad := qos.problems(sim, "mariadb" in services):  # issue 544: QOS and priority live in slurmdbd
+        raise qos.QosError("; ".join(bad))
     _wire_slurm_services(services)
     ips = addressing.plan(sim, profile.get("compute_nodes"))
     for name, svc in services.items():  # a fixed address for everything (ADR 0018)
