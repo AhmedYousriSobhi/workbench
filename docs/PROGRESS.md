@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**89% built** (37 done, 74 in review, 9 partial, 5 to do, 125 items).
+**88% built** (37 done, 74 in review, 9 partial, 6 to do, 126 items).
 
 ## Roadmap
 
@@ -257,7 +257,7 @@ _External Mac agent and unattended scenario runs._
 
 0/1 done
 
-### Platform and tooling (100%)
+### Platform and tooling (98%)
 
 _What keeps every change safe and debuggable._
 
@@ -302,10 +302,11 @@ _What keeps every change safe and debuggable._
 | Confluence page search on the Jira mock | 🔍 In review | GET /rest/api/search and /wiki/rest/api/search with a CQL subset (type, label, title, text, space, lastmodified; AND OR NOT, ~, in, ORDER BY), start/limit paging with _links.base and next, seven seeded runbook pages, GET|POST /sim/pages to add, clear or reset, the Jira failure modes apply. The query class is shared with JQL. Checked by running the monitoring client's own Confluence client against it (Data Center and Cloud paths). Plugin trimming of the real Jira was measured and does not save memory; a trimmed JVM (Serial GC, C1-only, 512 KB stacks) does: the real Jira cap went from 2560 to 2176 MB, two clean runs (docs/guides/jira-real.md). Issue 289. | `components/jira-mock/jira.py`, `tests/test_jira_pages.py`, `docs/guides/jira-tickets.md`, `docs/adr/0005-bcm-and-jira-mock-surface.md` | - |
 | Parts by category | 🔍 In review | --workload/--accounting/--monitoring/--ticketing/--hardware/--access/--simulation and --addons on start, up, apply, plan; one registry drives flags, Tab completion, errors and the sheet's grouping (ADR 0021). Issue 184. | `benchctl/workbench.py (CATEGORIES)`, `benchctl/cli.py`, `benchctl/completion.py` | - |
 | Hermetic unit tests and a CI workflow (review 6.8 | 🔍 In review | An autouse guard keeps unit tests from running host tools: docker, virsh and ssh-keygen have stand-ins in tests/hostbin (24 tests ran docker or ssh-keygen for real before), systemctl, systemd-run, kubectl, tc, nsenter, tcpdump and sudo raise. The docker compose config check moved to tests/real. A CI workflow runs ruff, the privacy scan, the unit tests, the page logic tests and the tracker check on every PR. Removing the scenario-engine catalog entry and the empty component folders waits for an owner decision. Issue 473. | `tests/conftest.py`, `tests/hostbin/`, `tests/test_hermetic_guard.py`, `tests/real/test_compose_real.py`, `.github/workflows/ci.yml`, `CLAUDE.md` | - |
+| Config lab, scope, overlay model and A/B method (goal G6, epic 557) | ⬜ To do | Decisions recorded, nothing built: the lab is a mode of the running cluster with an overlay model, governor lab-* commands in user mode at L0-L1, rules before Alertmanager, a downscaled and time-dilated A/B replay with a rule-based verdict. Children: issues 543 to 556 and the reused 458 to 462, 465, 473, 221. Issue 542. | `SPEC.md G6 C-24 W-17l NF-9`, `docs/adr/0049-config-lab-scope-and-overlay-model.md`, `docs/adr/0050-config-lab-ab-replay-method.md` | - |
 | Verification helpers | ✅ Done | verify.sh runs validate.sh plus real tests (--full adds the live stack lifecycle); tests/real/helpers.py starts a live governor and talks to its socket. `--unit NAME [--clean]` verifies one component (tests/test_NAME*.py then tests/real/test_NAME*.py, optional reset hook scripts/verify.d/NAME.sh; --list-units, -n). Issue 180. Issue 237: seconds per step and a TIME line; validate.sh writes a pass stamp (scripts/lib-stamp.sh, keyed by HEAD, tracked diff, untracked files and COV_FLOOR) so verify.sh skips a second run on the same tree (`--revalidate` forces it); pytest markers `live` and `browser`, `--skip-browser`. Issue 236: WORKBENCH_TEST_TIMERS=1 (opt-in, read by the slurm.conf generator) shortens SlurmdTimeout and HealthCheckInterval for the slow live modules via the test_timers fixture; the default timings stay checked in test_stack_real. | `scripts/verify.sh` | #48 |
 | Progress tracker | ✅ Done | This page, generated from docs/progress.yaml (issue 19). | `benchctl/progress.py` | #42 |
 
-10/41 done
+10/42 done
 
 ## Next up
 
