@@ -296,9 +296,11 @@ def check_analysis(page) -> list[str]:
         stops = cap["stops"]
         page.click("#tb-nodes")
         before, reads = hits["n"], cap["reads"]
-        page.wait_for_timeout(3500)  # a poll every 3 s, a capture read every 2 s
-        if hits["n"] != before or cap["reads"] != reads:
-            bad.append("the Traffic analysis or its capture kept polling while another tab was open (W-11)")
+        page.wait_for_timeout(3500)  # a poll every 3 s (kept while visible, #538), a capture read every 2 s (stopped off the Traffic tab)
+        if cap["reads"] != reads:
+            bad.append("the wire capture kept reading while another tab was open (W-11)")
+        if hits["n"] == before:
+            bad.append("the traffic sampling stopped on another tab: it runs while the page is visible so a rate exists when Traffic opens (issue 538)")
         if cap["stops"] != stops + 1:
             bad.append("leaving the Traffic tab did not stop the capture")
         page.evaluate("history.replaceState(null, '', location.pathname + location.search)")
