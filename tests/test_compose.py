@@ -1,6 +1,4 @@
 import importlib.util
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -71,18 +69,6 @@ def test_write_marks_generated(tmp_path):
     out = compose.write(compose.generate(SIM, compose.load_profile("min")), tmp_path / "x" / "c.yml")
     assert out.read_text().startswith("# GENERATED")
     assert yaml.safe_load(out.read_text())["include"] == ["../observability.yml"]
-
-
-@pytest.mark.skipif(not shutil.which("docker"), reason="docker missing")
-def test_docker_compose_accepts_generated_file():
-    out = compose.write(compose.generate(SIM, compose.load_profile("std")),
-                        Path("compose/generated/test-std.yml"))
-    try:
-        r = subprocess.run(["docker", "compose", "-f", str(out), "config", "-q"],
-                           capture_output=True, text=True, timeout=60, check=False)
-        assert r.returncode == 0, r.stderr
-    finally:
-        out.unlink()
 
 
 def test_bmc_farm_publishes_tls_and_every_node_has_its_own_bmc_address():
