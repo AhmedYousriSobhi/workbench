@@ -86,5 +86,6 @@ disagreement here with the Slurm version and the log lines that show it.
 | `slurmd_restart: [nodes]` | kill `slurmd`; the supervisor starts it again |
 | `slurmd_stop: [nodes]` / `slurmd_start: [nodes]` | keep it down / let it start |
 | `slurmctld_restart: true` | restart the `slurmctld` container |
+| `power_down: [nodes]` / `power_up: [nodes]` / `reboot: [nodes]` | Slurm's own power save and reboot (`scontrol power down|up`, `scontrol reboot ASAP`), through the BMC farm: [power-and-reboot.md](power-and-reboot.md). Not the same as `power_off`/`power_on` above, which kill and revive a node behind Slurm's back |
 
 `expect` adds `slurm.job_state: {node, state, within}` and `slurm.stepd: {node, alive, within}`. From the page they are done by the governor (see above); with no governor `--workdir` they are skipped.

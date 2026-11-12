@@ -4,12 +4,27 @@
 # `benchctl` scenarios stop it by creating the hold file (and killing slurmd), start it by removing the file.
 # slurmstepd is a separate process: whether a job survives its slurmd is what the resilience scenarios measure.
 HOLD=/run/workbench/slurmd.hold
+BOOTED=/run/workbench/slurmd.booted  # set by a power up or a reboot: the next slurmd says it was just booted (-b)
 mkdir -p /run/workbench
 child=""
+# Slurm power saving (issue 545): a node Slurm has powered down has no slurmd, and one it is powering up gets it back, so it registers
+# like a booted host. The state is Slurm's own (`scontrol show node`), not a file; with slurmctld away nothing changes.
+(
+  while :; do
+    case "$(scontrol -o show node "$(hostname)" 2>/dev/null)" in
+      *State=*POWER*_DOWN*|*State=*POWERING_DOWN*) touch "$HOLD"; pkill -x slurmd ;;
+      *State=*POWERING_UP*) touch "$BOOTED"; rm -f "$HOLD" ;;
+    esac
+    sleep 3
+  done
+) &
 trap '[ -n "$child" ] && kill -TERM "$child" 2>/dev/null; exit 0' TERM INT
 while :; do
   if [ -e "$HOLD" ]; then sleep 1; continue; fi
-  slurmd -D "$@" &
+  boot=""
+  if [ -e "$BOOTED" ]; then boot="-b"; rm -f "$BOOTED"; fi
+  # -b: Slurm decides a node has booted from the host's uptime, which every container shares with the machine; this says so itself
+  slurmd -D $boot "$@" &
   child=$!
   wait "$child"
   child=""
