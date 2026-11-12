@@ -532,3 +532,33 @@ def test_a_changed_slurm_conf_restarts_a_running_slurmctld(tmp_path, monkeypatch
     said: list[str] = []
     assert stack.up(sim, "min", runner=runner, say=said.append, available=8 * 1024**3, wait=1)
     assert any("pick up the new slurm.conf" in m for m in said) and any("--force-recreate" in c and "slurmctld" in c for c in calls)
+
+
+def test_up_reports_its_stages_in_order_and_the_plan_first(tmp_path, monkeypatch):
+    """Issue 519: the page shows these, so they are data (a plan, then running/done per stage), not log text."""
+    sim = _workdir(tmp_path, monkeypatch)
+    events: list[dict] = []
+    started: list[str] = []
+
+    def runner(cmd):
+        if "up" in cmd:
+            started.extend(cmd[cmd.index("--no-deps") + 1:])
+        return cp(out="\n".join(started)) if "ps" in cmd else cp()
+
+    monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
+    monkeypatch.setattr(stack, "provision_token", lambda **kw: kw.get("path", tmp_path / "t"))
+    assert stack.up(sim, "min", runner=runner, say=lambda m: None, available=12 * 1024**3, wait=1, stage=events.append)
+    plan = events[0]["plan"]
+    assert events[0].keys() == {"plan"} and plan[0] == "Build images" and "Nodes" in plan
+    seq = [(e["stage"], e["state"]) for e in events[1:]]
+    assert seq[0] == ("Build images", "running") and seq[1] == ("Build images", "done")
+    assert [n for n, s in seq if s == "done"] == plan  # every planned stage finishes, in the planned order
+
+
+def test_stage_lines_print_only_when_the_governor_asks(monkeypatch, capsys):
+    monkeypatch.delenv(stack.STAGE_ENV, raising=False)
+    stack.stage_lines({"plan": ["A"]})
+    assert capsys.readouterr().out == ""  # a person at a terminal sees no machine lines
+    monkeypatch.setenv(stack.STAGE_ENV, "1")
+    stack.stage_lines({"plan": ["A"]})
+    assert capsys.readouterr().out == '@stage {"plan": ["A"]}\n'

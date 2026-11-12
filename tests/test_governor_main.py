@@ -154,3 +154,35 @@ def test_without_workdir_there_is_no_effector(host, monkeypatch):
     monkeypatch.setattr(gm, "Governor", lambda *a, **k: captured.update(eff=a[-1]) or real_gov(*a, **k))
     gm.main(["--dry-run", "--once", "--no-watchdog", "--signals-file", str(sig)])
     assert captured["eff"] is None  # scale/set-profile are refused unless --workdir is given
+
+
+def test_streamer_hands_each_line_over_and_asks_for_stage_lines(host, monkeypatch, tmp_path):
+    _, sig = host
+    seen = {}
+
+    class Proc:
+        stdout = iter(["@stage {\"plan\": []}\n", "plain\n"])
+
+        def wait(self):
+            return 3
+
+        def poll(self):
+            return 3
+
+        def kill(self):
+            pass
+
+    monkeypatch.setattr(gm.subprocess, "Popen", lambda cmd, **kw: seen.update(cmd=cmd, env=kw["env"]) or Proc())
+    captured = {}
+    real_gov = gm.Governor
+
+    def spy(*a, **k):
+        g = real_gov(*a, **k)
+        captured["streamer"] = k["streamer"]
+        return g
+
+    monkeypatch.setattr(gm, "Governor", spy)
+    gm.main(["--dry-run", "--once", "--no-watchdog", "--signals-file", str(sig), "--workdir", str(tmp_path)])
+    lines = []
+    assert captured["streamer"](["up"], lines.append) == 3
+    assert lines == ['@stage {"plan": []}', "plain"] and seen["env"]["WORKBENCH_STAGE_LINES"] == "1" and seen["cmd"][-2:] == ["benchctl.cli", "up"]

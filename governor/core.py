@@ -1,4 +1,5 @@
 """Governor core: ties sampler, ladder, planner and the control commands together."""
+import json
 import logging
 import threading
 import time
@@ -18,6 +19,8 @@ log = logging.getLogger("governor")
 
 Executor = Callable[[Action], None]
 Effector = Callable[[list[str]], int]  # runs `benchctl <args>`; returns the exit code
+Streamer = Callable[[list[str], Callable[[str], None]], int]  # the same, passing each output line to the callback as it appears (issue 519)
+STAGE_PREFIX = "@stage "  # the line `benchctl up` prints for each stage change when WORKBENCH_STAGE_LINES=1
 
 ADMIT_FLOOR = int(1.0 * 1024**3)  # MemAvailable that must remain after a start (matches benchctl preflight)
 CHANGE_MAX_LEVEL = 1  # scale/set-profile fork docker; GV-8 forbids that under pressure (L2+)
@@ -28,7 +31,8 @@ class Governor:
                  executor: Executor, dry_run: bool = True, watchdog: Watchdog | None = None,
                  watch_interval: float = 15.0, annotator: Annotator | None = None,
                  inventory: Callable[[], tuple[list[Group], dict]] | None = None,
-                 refresh_interval: float = 30.0, effector: Effector | None = None, tracer: Callable | None = None, statser: Callable | None = None, capturer: Callable | None = None):
+                 refresh_interval: float = 30.0, effector: Effector | None = None, tracer: Callable | None = None, statser: Callable | None = None, capturer: Callable | None = None,
+                 streamer: Streamer | None = None):
         self.sampler, self.ladder, self.groups = sampler, ladder, groups
         self.executor, self.dry_run = executor, dry_run
         self.signals: Signals | None = None
@@ -46,6 +50,8 @@ class Governor:
         self._watch_failed = False
         self.annotator = annotator
         self.effector = effector
+        self.streamer = streamer
+        self.change: dict | None = None  # the latest stack change and its stages, replaced whole on every update so `status` never reads a half-written one
         self.tracer = tracer
         self.capture = Capture(capturer, lambda: self.ladder.level, self._record) if capturer else None  # on-demand wire capture, one at a time (issue 505)
         self.statser = statser
@@ -191,17 +197,56 @@ class Governor:
         self._changes += 1
         tag = f"(#{self._changes} {time.strftime('%H:%M:%S')})"  # two identical changes must not look alike: the page waits for a line it has not seen
 
+        job = self._changes
+        self.change = {"job": job, "label": label, "state": "running", "stages": [], "started": time.time(), "finished": None}
+
         def run() -> None:
             try:
                 with self._change_lock:
-                    rc = self.effector(args)
+                    rc = self.streamer(args, lambda line: self._stage_line(job, line)) if self.streamer else self.effector(args)
             except Exception as e:  # noqa: BLE001
+                self._finish(job, False)
                 self._record(f"FAILED {label}: {e} {tag}")
                 return
+            self._finish(job, rc == 0)
             self._record(f"{label}: {'done' if rc == 0 else f'FAILED (exit {rc})'} {tag}")
 
         threading.Thread(target=run, daemon=True, name="change").start()
-        return {"ok": True, "started": True}
+        return {"ok": True, "started": True, "job": job}
+
+    def _change_view(self) -> dict | None:
+        """The latest change for `status`: job id, state and stages (name, state, seconds); no timestamps of its own beyond start and end."""
+        c = self.change
+        return None if c is None else {**c, "stages": [{"name": s["name"], "state": s["state"], "secs": s["secs"]} for s in c["stages"]]}
+
+    def _stage_line(self, job: int, line: str) -> None:
+        """One output line of change `job`: only `@stage {json}` lines count, anything else is ignored (the log text is not an API)."""
+        cur = self.change
+        if not line.startswith(STAGE_PREFIX) or not cur or cur["job"] != job:
+            return
+        try:
+            ev = json.loads(line[len(STAGE_PREFIX):])
+        except ValueError:
+            return
+        now = time.time()
+        stages = [dict(s) for s in cur["stages"]]
+        if isinstance(ev, dict) and isinstance(ev.get("plan"), list) and all(isinstance(n, str) for n in ev["plan"]):
+            stages = [{"name": n[:60], "state": "waiting", "secs": None, "at": None} for n in ev["plan"][:20]]
+        elif isinstance(ev, dict) and ev.get("state") in ("running", "done"):
+            for s in stages:
+                if s["name"] == ev.get("stage"):
+                    if ev["state"] == "running":
+                        s["state"], s["at"] = "running", now
+                    else:
+                        s["state"], s["secs"] = "done", round(now - (s["at"] or now), 1)
+        self.change = {**cur, "stages": stages}
+
+    def _finish(self, job: int, ok: bool) -> None:
+        cur = self.change
+        if not cur or cur["job"] != job:
+            return
+        stages = [{**s, "state": "failed"} if s["state"] == "running" and not ok else s for s in cur["stages"]]
+        self.change = {**cur, "stages": stages, "state": "done" if ok else "failed", "finished": time.time()}
 
     def handle(self, cmd: str, req: dict) -> dict:
         """Control-socket command handler; request already validated by control.dispatch."""
@@ -242,7 +287,8 @@ class Governor:
                         "groups": sorted(self.group_names()),
                         "services": sorted({g.service for g in self.groups if g.service}),  # as of the last inventory refresh
                         "violations": sorted(self.violations),
-                        "audit": self.audit[-60:]}
+                        "audit": self.audit[-60:],
+                        "change": self._change_view()}
             if cmd == "admit":
                 return self._admit(req["budget_mb"])
             if cmd == "scale":

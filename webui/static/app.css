@@ -499,6 +499,8 @@
   .revk { flex:0 0 84px; font-weight:650; } .rev-add .revk { color:var(--ok); } .rev-remove .revk { color:var(--bad); } .rev-restart .revk { color:var(--accent); }
   .revjobs { margin-top:var(--sp3); padding:var(--sp3); border:1px solid var(--line); border-radius:10px; display:flex; flex-direction:column; gap:var(--sp1); } .revjobs.stop { border-color:var(--bad); } .revjobs.unknown { border-color:var(--warn); }
   .revack { margin-top:var(--sp2); font-size:13.5px; }
+  .stages { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; font-size:13.5px; } .stages li { display:flex; gap:var(--sp3); }
+  .stages b { width:1.2em; text-align:center; } .stages .t { margin-left:auto; color:var(--dim); } .stages li.running b { color:var(--accent); } .stages li.done b { color:var(--ok); } .stages li.failed b { color:var(--bad); }
 
   /* compact configuration (6d): steppers side by side, tighter cards, a collapsed Kubernetes card when off */
   .plan-main { gap:var(--sp3); } .pcard { padding:var(--sp3) var(--sp4); gap:var(--sp2); border-radius:12px; } .pch h3 { font-size:15px; }

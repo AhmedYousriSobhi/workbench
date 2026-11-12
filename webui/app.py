@@ -365,7 +365,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             raise HTTPException(409, res.get("error", "the governor refused"))
         if res.get("dry_run"):
             return JSONResponse({"started": False, "message": "The governor is in dry-run mode or has no --workdir, so nothing was applied. Run the command shown instead."})
-        return JSONResponse({"started": True, "message": "Applying. Nodes appear and disappear as they change; progress is in Governor activity."})
+        return JSONResponse({"started": True, "job": res.get("job"), "message": "Applying. Nodes appear and disappear as they change; the stages are listed below."})
 
     async def nhc_state(request: Request):
         """The health checks in run order, the templates the page may add from, and any problem with the files."""

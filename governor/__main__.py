@@ -7,7 +7,9 @@ import pwd
 import signal
 import subprocess
 import sys
+import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from . import control, metrics
@@ -100,6 +102,25 @@ def main(argv: list[str] | None = None) -> None:
             cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]
         return subprocess.run(cmd, cwd=args.workdir, capture_output=True, timeout=600, check=False).returncode
 
+    def streamer(a: list[str], on_line: Callable[[str], None]) -> int:
+        """Like the effector, but hands each output line over as it appears so the governor can report stages (issue 519)."""
+        cmd = [sys.executable, "-m", "benchctl.cli", *a]
+        owner = Path(args.workdir).stat().st_uid
+        if os.geteuid() == 0 and owner != 0:
+            cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]
+        proc = subprocess.Popen(cmd, cwd=args.workdir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                env={**os.environ, "WORKBENCH_STAGE_LINES": "1"})
+        timer = threading.Timer(600, proc.kill)  # the effector's 10-minute limit
+        timer.start()
+        try:
+            for line in proc.stdout:
+                on_line(line.rstrip("\n"))
+            return proc.wait()
+        finally:
+            timer.cancel()
+            if proc.poll() is None:
+                proc.kill()
+
     def tracer(nodes: list[str], since: float) -> dict:
         cmd = [sys.executable, "-m", "benchctl.cli", "get", "trace", "--since", str(max(1.0, time.time() - since)),
                *[a for n in nodes for a in ("--node", n)]]
@@ -132,7 +153,8 @@ def main(argv: list[str] | None = None) -> None:
     gov = Governor(sampler, ladder, groups, executor, args.dry_run, watchdog, args.watch_interval,
                    annotator, discover_docker, args.refresh_interval,
                    effector if args.workdir else None, tracer=tracer if args.workdir else None,
-                   statser=statser if args.workdir else None, capturer=capturer if args.workdir else None)
+                   statser=statser if args.workdir else None, capturer=capturer if args.workdir else None,
+                   streamer=streamer if args.workdir else None)
     srv = control.serve(args.socket, gov.handle, gov.group_names, gid=args.socket_gid) \
         if args.socket else None
     msrv = None

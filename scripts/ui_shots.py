@@ -508,6 +508,10 @@ def capture(out: Path) -> dict:
                     if not (ak["row"] and ak["blocked"] and ak["stop"]) or page.evaluate("document.querySelector('#pl-apply').disabled"):
                         result["a11y"].append(f"plan review: running jobs must block Apply until ticked ({vp} {scheme}): {ak}")
                     page.evaluate("planStates = null; paintReview()")
+                    page.evaluate("(() => { change = {job: 7, label: 'apply-plan', state: 'running', started: 1, finished: null, stages: [{name: 'Build images', state: 'done', secs: 12.4}, {name: 'Nodes', state: 'running', secs: null}, {name: 'Login node', state: 'waiting', secs: null}]}; paintProgress(7); })()")  # U5: the governor's stages, not the log text
+                    pg = page.evaluate("({shown: !document.querySelector('#pl-prog').hidden, rows: [...document.querySelectorAll('#pl-stages li')].map(l => [...l.children].map(c => c.textContent).join(' ')), msg: document.querySelector('#pl-apply-msg').textContent})")
+                    if not pg["shown"] or pg["rows"] != ["✓ Build images 12 s", "▶ Nodes running", "○ Login node waiting"] or "1 of 3 stages done" not in pg["msg"]:
+                        result["a11y"].append(f"apply progress ({vp} {scheme}): {pg}")
                     ppath = out / f"plan-{vp}-{scheme}.png"
                     page.screenshot(path=str(ppath))
                     result["shots"].append(str(ppath))
