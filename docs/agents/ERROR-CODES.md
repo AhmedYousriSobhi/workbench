@@ -20,9 +20,11 @@ With `BENCHCTL_AGENT=1` an error is one line on stderr: `CODE: message | fix: CO
 | `WB-DOCTOR-TOOL-VIRSH` | The virsh tool is missing (some profiles only). | `benchctl doctor` |
 | `WB-DOCTOR-TSH` | The local tsh is newer than the Teleport server. | `benchctl doctor` |
 | `WB-NEEDS-YES` | A destructive command needs --yes in agent mode. | `repeat the command with --yes` |
+| `WB-PART-NOT-RUNNING` | A part this needs is not running (Prometheus, or the web page). | `benchctl start` |
 | `WB-REFUSED-GOVERNOR` | The governor admits no new work at its current memory level. | `benchctl status` |
 | `WB-REFUSED-MEMORY` | Not enough free memory to start this; the governor's pre-flight said no. | `benchctl plan` |
 | `WB-REFUSED-NETWORK` | The cluster network cannot be created or does not match the addressing plan. | `benchctl down` |
+| `WB-STACK-NOT-RUNNING` | No container of the workbench is running. | `benchctl start` |
 | `WB-UNKNOWN-NODE` | No such node. | `benchctl get nodes` |
 | `WB-UNKNOWN-PROFILE` | No such size preset. | `benchctl get profiles` |
 | `WB-UNKNOWN-SCENARIO` | No such scenario. | `benchctl get scenarios` |

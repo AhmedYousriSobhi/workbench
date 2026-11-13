@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "wait",
+  "description": "The result of benchctl wait. Exit 0 met, 1 timeout or failed, 2 precondition (then code, message and fix are set).",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "wait": {
+      "type": "object",
+      "properties": {
+        "for": {
+          "enum": [
+            "ready",
+            "node-state",
+            "alert",
+            "scenario"
+          ]
+        }
+      },
+      "required": [
+        "for"
+      ]
+    },
+    "outcome": {
+      "enum": [
+        "met",
+        "timeout",
+        "failed",
+        "precondition"
+      ]
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "elapsed_s": {
+      "type": "number"
+    },
+    "seen": {
+      "type": "object"
+    },
+    "code": {
+      "type": "string",
+      "pattern": "^WB-"
+    },
+    "message": {
+      "type": "string"
+    },
+    "fix": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "contract_version",
+    "wait",
+    "outcome",
+    "ok",
+    "elapsed_s",
+    "seen"
+  ]
+}

@@ -11,6 +11,9 @@ An agent that has just started needs to know what is running, which endpoints to
 - Size: at most 6,000 characters for the default profile, checked by a test.
 - It reads the same sources the web page's Connections view and the governor's read-only commands read; it adds no new access path and no Docker call from the web UI process (SPEC W-3).
 
+## Addendum (2026-11-13, built in issue 624)
+To keep to the 6,000 character budget with all 37 scenarios, `--json` is printed compact and a scenario summary is cut to 30 characters (`get scenarios --json` has the full text). `clusters` lists the Slurm cluster and, when built, the Kubernetes cluster, each with its pools (compute and gpu node counts; the Kubernetes pool label). An endpoint is `id`, `address`, `auth` (none, ssh-key or file) and a `credential` file path when there is one; the working command is in `get endpoints --json`.
+
 ## Consequences
 - An agent's first call after `start` is one JSON object of about 1,500 tokens.
 - The endpoint list reuses the Connections registry, so there is one list of endpoints, not two.

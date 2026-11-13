@@ -8,7 +8,7 @@ import jsonschema
 import pytest
 from typer.testing import CliRunner
 
-from benchctl import checks, cli, contract, describe, faultstate, inventory, scenario, stack
+from benchctl import alerts, checks, cli, contract, describe, faultstate, inventory, scenario, stack
 from webui import cluster, traffic
 
 runner = CliRunner()
@@ -39,6 +39,7 @@ def in_repo(monkeypatch):
     monkeypatch.setattr(stack, "governor_admits", lambda need, say, ask=None: True)
     ran = scenario.Report("node-down", [scenario.Outcome("bmc-farm power", "ok")], [scenario.Outcome("expect node down", "failed", "did not hold")])
     monkeypatch.setattr(scenario, "run", lambda sc, **k: ran)
+    monkeypatch.setattr(alerts, "fetch", lambda get=None: [{"name": "NodeDown", "state": "firing", "severity": "page", "labels": {"alertname": "NodeDown"}, "active_at": "2026-11-13T10:00:00Z"}])
     monkeypatch.setattr(describe, "gather", lambda *a, **k: {"name": "cn001", "kind": "compute", "notes": [], "container": {"state": "running"}})
 
 
@@ -50,7 +51,7 @@ def schema(name):
 VERBS = [("get-nodes", ["get", "nodes"]), ("get-services", ["get", "services"]), ("get-profiles", ["get", "profiles"]),
          ("get-checks", ["get", "checks"]), ("get-scenarios", ["get", "scenarios"]), ("scenario-list", ["scenario", "list"]),
          ("get-workbench", ["get", "workbench"]), ("describe-node", ["describe", "node", "cn001"]), ("doctor", ["doctor"]),
-         ("status", ["status"]), ("get-endpoints", ["get", "endpoints"]), ("get-faults", ["get", "faults"]),
+         ("status", ["status"]), ("get-alerts", ["get", "alerts"]), ("describe-workbench", ["describe", "workbench"]), ("get-endpoints", ["get", "endpoints"]), ("get-faults", ["get", "faults"]),
          ("get-traffic", ["get", "traffic"]), ("scenario-run", ["scenario", "run", "node-down"]), ("plan", ["plan", "--cpu-nodes", "2", "--gpu-nodes", "1"])]
 
 
@@ -89,6 +90,27 @@ def test_endpoints_give_credentials_as_paths_only():
     assert "command" in items[0] and "command" not in runner.invoke(cli.app, ["get", "endpoints"]).stdout
 
 
+def test_describe_workbench_fits_its_budget_and_holds_no_secret_value():
+    from benchctl import situation
+
+    r = runner.invoke(cli.app, ["describe", "workbench", "--json"])
+    assert len(r.stdout.strip()) <= situation.MAX_CHARS, len(r.stdout)
+    data = json.loads(r.stdout)
+    assert data["scenarios"] and data["endpoints"] and data["next"]
+    for e in data["endpoints"]:
+        assert e.get("credential", "compose/generated/secrets/").startswith("compose/generated/secrets/"), e  # a path, never a value
+    assert [f["target"] for f in data["faults_active"]] == ["cn001", "jira-mock"]
+
+
+def test_wait_result_matches_its_schema(monkeypatch):
+    monkeypatch.setattr(inventory, "_containers", lambda runner=None: {"cn001": "running"})
+    for argv in (["wait", "node-state", "cn001", "running"], ["wait", "alert", "NodeDown"]):
+        r = runner.invoke(cli.app, [*argv, "--timeout", "1"])
+        data = json.loads(r.stdout)
+        jsonschema.validate(data, schema("wait"), cls=jsonschema.Draft202012Validator)
+        assert r.exit_code == 0 and data["outcome"] == "met", argv
+
+
 def test_status_reports_a_reachable_governor(monkeypatch):
     st = {"level": 0, "dry_run": False, "mode": "user", "mem_available": 8 * 1024**3, "psi_some": 0.1, "psi_full": 0.0,
           "groups": ["p6"], "audit": ["L0 start"], "violations": []}
@@ -110,7 +132,7 @@ def test_every_schema_is_valid_draft_2020_12_and_has_a_verb():
         jsonschema.Draft202012Validator.check_schema(schema(name))
         assert schema(name)["$schema"] == "https://json-schema.org/draft/2020-12/schema"
         assert "contract_version" in schema(name)["required"]
-    assert files == {v[0] for v in VERBS}, "a schema without a test, or a verb without a schema"
+    assert files == {v[0] for v in VERBS} | {"wait"}, "a schema without a test, or a verb without a schema"
 
 
 def test_the_changelog_names_the_current_version():
