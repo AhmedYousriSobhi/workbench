@@ -16,6 +16,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 RULES = ROOT / "tests" / "real" / "impact.yaml"
 ALL = "ALL"
+OPTIONAL = {"test_jira_dc_real"}  # an optional part (real Jira, 7 min): ALL does not include it; a change that names it does (--with-jira in verify.sh)
 
 
 def load_rules(path: Path = RULES) -> list[dict]:
@@ -73,6 +74,16 @@ def select(files: list[str], rules: list[dict]) -> tuple[str | list[str], list[s
     return (ALL if everything else sorted(mods)), why
 
 
+def named_optional(files: list[str], rules: list[dict]) -> list[str]:
+    """Optional modules a changed file names itself (its own file or a rule that lists it): they run even when another file selects ALL."""
+    out: set[str] = set()
+    for f in set(files):
+        own = own_module(f)
+        rule = None if own else rule_for(f, rules)
+        out.update(m for m in ([own] if own else (rule["tests"] if rule and rule["tests"] != ALL else [])) if m in OPTIONAL)
+    return sorted(out)
+
+
 def changed(base: str = "origin/dev") -> list[str]:
     """Committed since the merge base, staged, unstaged and untracked: local work counts."""
     def git(*a: str) -> str:
@@ -90,7 +101,8 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     try:
         files = a.files if a.files is not None else changed(a.base)
-        sel, why = select(files, load_rules())
+        rules = load_rules()
+        sel, why = select(files, rules)
     except (subprocess.CalledProcessError, OSError, ValueError, yaml.YAMLError) as e:
         print(f"# impact: {e}; selecting everything", file=sys.stderr)
         print(ALL)
@@ -98,6 +110,9 @@ def main(argv: list[str] | None = None) -> int:
     if a.explain:
         print("\n".join(why) or "(no changed files)")
     print(ALL if sel == ALL else "\n".join(sel))
+    if sel == ALL:  # `+module` lines: optional modules the change itself names, run on top of ALL
+        for m in named_optional(files, rules):
+            print(f"+{m}")
     return 0
 
 

@@ -98,3 +98,12 @@ def test_changed_sees_committed_staged_and_untracked(tmp_path):
         assert impact.changed("main") == ["a", "b", "c"]
     finally:
         impact.ROOT = ROOT
+
+
+def test_real_jira_rides_along_with_all_only_when_the_change_names_it():
+    def out(*files):
+        return subprocess.run(["python3", str(ROOT / "scripts" / "impact.py"), "--files", *files], capture_output=True, text=True, check=True).stdout.split()
+    assert out("benchctl/stack.py") == ["ALL"]  # an infrastructure change does not pull real Jira in
+    assert out("benchctl/stack.py", "benchctl/jira_real.py") == ["ALL", "+test_jira_dc_real"]
+    assert out("benchctl/jira_real.py") == ["test_jira_dc_real"]
+    assert out("benchctl/stack.py", "tests/real/test_jira_dc_real.py") == ["ALL", "+test_jira_dc_real"]

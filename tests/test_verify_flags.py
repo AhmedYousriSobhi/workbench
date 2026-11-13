@@ -36,3 +36,13 @@ def test_unknown_flag_is_refused():
 def test_real_test_script_replaces_the_folder_with_explicit_modules():
     s = (ROOT / "scripts" / "real-test.sh").read_text()
     assert 'tests/real/test_*.py) targets=()' in s and '"${targets[@]}"' in s
+
+
+def test_full_leaves_real_jira_out_unless_asked():
+    assert "--ignore=tests/real/test_jira_dc_real.py" in plan("--full")
+    assert "test_jira_dc_real" not in plan("--full", "--with-jira").split("would run: pytest")[1]
+
+
+def test_the_summary_always_says_jira_was_left_out():
+    s = (ROOT / "scripts" / "verify.sh").read_text()
+    assert "real Jira skipped (optional part" in s and "--with-jira" in s

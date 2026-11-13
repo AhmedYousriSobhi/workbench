@@ -9,6 +9,8 @@
 #        --changed [BASE]         live tests only for the modules the change can affect (tests/real/impact.yaml; BASE default origin/dev),
 #                                 with --failed-first --maxfail=1; an unmatched path selects everything. Before a PR to dev (issue 576).
 #        --explain                with --changed: print file -> rule -> modules and exit
+#        --with-jira              include test_jira_dc_real (real Jira, ~7 min, optional part); left out of --full otherwise, the summary says so.
+#                                 Nightly and the dev -> main release gate run --full --with-jira; --changed adds it when Jira code changed.
 #        --serial                 run validate.sh before the live tests (default: in the background, next to them)
 #        --trust-ci               skip validate.sh when the CI run for HEAD passed and the tree is clean
 #        --revalidate             run validate.sh even when a fresh pass is recorded
@@ -21,13 +23,14 @@
 # Your workbench selection (compose/generated/workbench.yaml, profile, sim.yaml) is saved first and put back on exit.
 set -u
 cd "$(dirname "$0")/.."
-changed=0 base="origin/dev" explain=0 serial=0 trustci=0 full=0 revalidate=0 nobrowser=0 only="" unit="" unit_given=0 clean=0 list=0 dry=0
+withjira=0 changed=0 base="origin/dev" explain=0 serial=0 trustci=0 full=0 revalidate=0 nobrowser=0 only="" unit="" unit_given=0 clean=0 list=0 dry=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --full) full=1 ;;
     --changed) changed=1; case "${2:-}" in ""|-*) ;; *) base="$2"; shift ;; esac ;;
     --explain) explain=1 ;;
     --serial) serial=1 ;;
+    --with-jira) withjira=1 ;;
     --trust-ci) trustci=1 ;;
     --only) only="$2"; shift ;;
     --unit) unit="${2:-}"; unit_given=1; shift ;;
@@ -36,7 +39,7 @@ while [ $# -gt 0 ]; do
     --skip-browser) nobrowser=1 ;;
     --list-units) list=1 ;;
     -n|--dry-run) dry=1 ;;
-    *) echo "usage: $0 [--full] [--changed [BASE]] [--explain] [--serial] [--trust-ci] [--only KEYWORD] [--revalidate] [--skip-browser] [--unit NAME [--clean]] [--list-units] [-n]" >&2; exit 2 ;;
+    *) echo "usage: $0 [--full] [--changed [BASE]] [--explain] [--serial] [--trust-ci] [--with-jira] [--only KEYWORD] [--revalidate] [--skip-browser] [--unit NAME [--clean]] [--list-units] [-n]" >&2; exit 2 ;;
   esac
   shift
 done
@@ -63,9 +66,11 @@ modules=() pick="" pickwhy=""
 if [ "$changed" = 1 ] && [ "$unit_given" = 0 ]; then
   [ "$explain" = 1 ] && { python3 scripts/impact.py --base "$base" --explain; exit 0; }
   pick=$(python3 scripts/impact.py --base "$base" --explain) || pick="ALL"
-  sel_line=$(printf '%s\n' "$pick" | tail -1)
+  plain=$(python3 scripts/impact.py --base "$base") || plain="ALL"
+  sel_line=$(printf '%s\n' "$plain" | head -1)
+  printf '%s\n' "$plain" | grep -q '^+test_jira_dc_real$' && withjira=1  # a Jira change that rides along with an ALL
   if [ "$sel_line" = "ALL" ]; then full=1; pickwhy="every module ($(printf '%s\n' "$pick" | grep -m1 'ALL (' | sed 's/.*-> ALL (//; s/)$//'))"
-  else mapfile -t modules < <(printf '%s\n' "$sel_line" | grep .); pickwhy="${#modules[@]} modules"; fi
+  else mapfile -t modules < <(printf '%s\n' "$plain" | grep .); pickwhy="${#modules[@]} modules"; fi
   basesha=$(git rev-parse --short "$base" 2>/dev/null || echo "?")
   echo "SELECT $pickwhy  (base $base@$basesha)"
 fi
@@ -74,7 +79,7 @@ if [ "$dry" = 1 ] && [ "$unit_given" = 0 ]; then
   echo "would run: validate.sh $validate_mode$([ "$trustci" = 1 ] && echo ', skipped when CI passed for HEAD and the tree is clean')"
   if [ "$changed" = 1 ] && [ "$sel_line" != "ALL" ]; then
     [ ${#modules[@]} = 0 ] && echo "would run: no live tests (nothing live is affected)" || echo "would run: pytest --failed-first --maxfail=1 $(printf 'tests/real/%s.py ' "${modules[@]}")"
-  else echo "would run: pytest tests/real$([ "$full" = 0 ] && echo " -k 'not stack'")"; fi
+  else echo "would run: pytest tests/real$([ "$full" = 0 ] && echo " -k 'not stack'")$([ "$withjira" = 0 ] && [ -z "$only" ] && echo ' --ignore=tests/real/test_jira_dc_real.py (real Jira left out; --with-jira includes it)')"; fi
   exit 0
 fi
 . scripts/lib-selection.sh
@@ -165,10 +170,14 @@ else
   elif [ -n "$only" ]; then sel=(-k "$only")
   elif [ "$full" = 0 ]; then sel=(-k "not stack"); fi
   [ "$nobrowser" = 1 ] && sel+=(-m "not browser")
+  # the whole folder runs without real Jira unless asked; a named module list or --only is the owner's explicit choice
+  jira_left_out=0
+  if [ -z "$only" ] && { [ "$changed" = 0 ] || [ "${sel_line:-ALL}" = "ALL" ]; } && [ "$withjira" = 0 ]; then sel+=(--ignore=tests/real/test_jira_dc_real.py); jira_left_out=1; fi
   if [ "$changed" = 1 ] && [ "${sel_line:-ALL}" != "ALL" ] && [ ${#modules[@]} = 0 ]; then echo "SKIP  live tests  (no live module is affected by this change)"
   else step "real tests ${sel[*]:-}" ./scripts/real-test.sh "${sel[@]}"; fi
   validate_wait
   [ "$full" = 0 ] && [ -z "$only" ] && [ "$changed" = 0 ] && echo "NOTE  live stack lifecycle skipped; run --full when stack/compose/slurm changed"
+  [ "$jira_left_out" = 1 ] && echo "NOTE  real Jira skipped (optional part, ~7 min); --with-jira includes it (nightly and the dev -> main gate run --full --with-jira)"
   [ "$changed" = 1 ] && echo "NOTE  --changed ran the modules the change can reach; run --full before a dev -> main merge"
 fi
 case "$selection_kept" in *workbench.yaml*)
