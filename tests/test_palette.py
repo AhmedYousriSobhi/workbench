@@ -25,7 +25,7 @@ def test_anchors_equal_the_logo_values():
 
 def test_every_theme_defines_every_semantic_token():
     for t in (*THEMES, "canvas"):
-        assert set(RES[t]) == set(PAL["semantic"]), t
+        assert set(RES[t]) == set(PAL["semantic"]) | set(PAL["component"]), t
 
 
 def test_ramps_are_monotonic_in_lightness_and_keep_their_hue():
@@ -73,19 +73,6 @@ def test_tokens_css_has_every_theme_and_the_planes_and_stays_small():
     for p in mp.PLANES:
         assert f"--plane-{p}-dash:" in css and f"[data-plane={p}]" in css
     assert ".pl-stroke" in css and ".pl-dash" in css
-    if "legacy" not in PAL:      # the .canvas scope waits for the new look (issue 646)
-        assert ".canvas" in css
+    assert ".canvas" in css and "legacy" not in PAL
     assert len(css.encode()) < 20_000
     assert not re.search(r"\b(var\(--[a-z0-9-]+\))\s*\)\s*\)", css)
-
-
-def test_the_legacy_block_replaces_generated_tokens_and_is_temporary():
-    """While `legacy` exists the page shows today's values; each of its names appears once per theme block (step 4 deletes it)."""
-    if "legacy" not in PAL:
-        return
-    css = (ROOT / "webui/static/tokens.css").read_text()
-    assert css.count("--cv-ground:") == 1 and css.count("--plane-access:") == 1      # from `all`, not repeated per theme
-    for theme in THEMES:
-        block = re.search(rf":root\[data-theme={theme}\] \{{([^}}]*)\}}", css).group(1)
-        for name in PAL["legacy"][theme]:
-            assert block.count(f"--{name}:") == 1, (theme, name)

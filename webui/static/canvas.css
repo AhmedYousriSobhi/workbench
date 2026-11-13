@@ -55,8 +55,8 @@
 #flow[data-cv] .cv-part.down .cv-box { stroke:var(--cv-error); stroke-dasharray:6 4; } #flow[data-cv] .cv-part.flt .cv-box { stroke:var(--cv-attention); }
 #flow[data-cv] .cv-part.down .cv-state { fill:var(--cv-error); } #flow[data-cv] .cv-part.flt .cv-state { fill:var(--cv-attention); }
 #flow[data-cv] .cv-rack.attn .cv-box { stroke:var(--cv-attention); stroke-width:2; }
-#flow[data-cv] .cv-sq rect { fill:var(--cv-ok-fill); stroke:var(--cv-ok-stroke); stroke-width:1; } #flow[data-cv] .cv-rack[data-ent=k8s-nodes] .cv-sq.ok rect { fill:var(--cv-k8s-fill); stroke:var(--plane-k8s); }
-#flow[data-cv] .cv-sq:not(.ok) rect { fill:var(--cv-attn-fill); stroke:var(--cv-attention); stroke-width:1.6; } #flow[data-cv] .cv-sq.fault rect, #flow[data-cv] .cv-sq.down rect { fill:var(--cv-down-fill); stroke:var(--cv-error); }
+#flow[data-cv] .cv-sq rect { fill:var(--cv-ok-fill); stroke:var(--cv-ok-stroke); stroke-width:1; }
+#flow[data-cv] .cv-sq:not(.ok) rect { fill:var(--cv-attn-fill); stroke:var(--cv-attention); stroke-width:1.6; } #flow[data-cv] .cv-sq.fault rect { fill:var(--cv-fault-fill); stroke:var(--cv-error); } #flow[data-cv] .cv-sq.down rect { fill:var(--cv-down-fill); stroke:var(--node-down); }
 #flow[data-cv] .cv-glyph { font-size:11px; font-weight:800; fill:var(--cv-text); pointer-events:none; } #flow[data-cv] .cv-sq { cursor:pointer; }
 #flow[data-cv] .cv-sum { fill:var(--cv-text-2); }
 #flow[data-cv] .hit { cursor:pointer; } #flow[data-cv] .hit:hover .cv-box, #flow[data-cv] .hit:focus-visible .cv-box { stroke:var(--plane-access); } #flow[data-cv] .hit:focus-visible { outline:2px solid var(--plane-access); outline-offset:3px; }

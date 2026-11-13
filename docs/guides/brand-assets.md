@@ -62,5 +62,4 @@ The logo's teal, ink and amber are the anchors of one colour system (ADR 0069). 
   `accent_text`, `accent_fill` and `warn_text`, because the light-theme teal and amber are about 4:1 on white.
 - Teal means brand, interaction and good (with a check mark); amber means attention only; red means error only.
 - The page, the canvases and the help read `tokens.css` and carry no colour literals (`tests/test_stylesheet_colours.py`).
-  For now a `legacy:` block in the palette keeps today's values so nothing changed; the new look (a later step of issue 642)
-  deletes it. To check a stylesheet change leaves every colour alone: `scripts/style_dump.py` (see its header).
+  To check that a stylesheet change leaves every colour alone: `scripts/style_dump.py` (see its header).

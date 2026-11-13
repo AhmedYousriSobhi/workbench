@@ -1,7 +1,7 @@
   :root { --sp1:4px; --sp2:8px; --sp3:12px; --sp4:16px; --sp5:24px; --side:208px; }
   * { box-sizing: border-box; }
   body { margin:0; background-image:radial-gradient(900px 320px at 12% -8%, var(--sel), transparent 70%); background-repeat:no-repeat; font:0.9375rem/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; background-color:var(--bg); color:var(--fg); }
-  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  :focus-visible { outline:var(--ring-w) solid var(--focus); outline-offset:2px; }
   .skip { position:absolute; left:-999px; top:8px; background:var(--accent); color:var(--on-accent); padding:8px 12px; border-radius:6px; z-index:20; }
   .skip:focus { left:8px; }
   .cols { display:grid; grid-template-columns:272px minmax(0,1fr) 340px; gap:var(--sp4); padding:var(--sp4) var(--sp5) var(--sp5); align-items:start; max-width:1760px; margin:0 auto; width:100%; box-sizing:border-box; }
@@ -162,7 +162,7 @@
   @media (min-width:1700px) { .nodeswrap { display:grid; grid-template-columns:minmax(0,1fr) 400px; align-items:start; } .nodesmain { order:1; } .trafficpanel { order:2; position:sticky; top:72px; } }
   #flow .frame { fill:color-mix(in srgb,var(--panel) 70%,var(--bg)); stroke:var(--line); stroke-width:1.5; } #flow .ftitle { font:700 11px system-ui,sans-serif; fill:var(--dim); letter-spacing:.05em; text-transform:uppercase; }
   #flow .chipbg { fill:var(--panel); stroke:var(--line); stroke-width:1.2; } #flow .lane { fill:none; stroke:var(--line); stroke-width:1.5; } #flow .lane.on { stroke:var(--accent); stroke-width:2.5; opacity:.85; } #flow .lane.inj { stroke-dasharray:2 5; }
-  #flow .hit { cursor:pointer; } #flow .hit:hover rect, #flow .hit:focus-visible rect { stroke:var(--accent); } #flow .hit:focus-visible { outline:2px solid var(--accent); outline-offset:2px; } #flow #dots { pointer-events:none; }
+  #flow .hit { cursor:pointer; } #flow .hit:hover rect, #flow .hit:focus-visible rect { stroke:var(--accent); } #flow .hit:focus-visible { outline:var(--ring-w) solid var(--focus); outline-offset:2px; } #flow #dots { pointer-events:none; }
   table.conn tr.focus td { background:var(--sel); }
   #flow .nd { fill:var(--panel); stroke:var(--line); stroke-width:1.5; } #flow .nd.ok { stroke:var(--ok); } #flow .nd.warn { stroke:var(--warn); stroke-width:2.2; } #flow .nd.fault { stroke:var(--bad); stroke-width:3; } #flow .nd.down { stroke:var(--pending); stroke-dasharray:3 3; } #flow .nd.unknown { stroke:var(--line); stroke-dasharray:1 3; }
   #flow .ndt { font:600 8.5px system-ui,sans-serif; fill:var(--fg); } #flow .ring { fill:none; stroke:var(--warn); stroke-width:2.5; animation:ring 1.1s ease-out forwards; transform-box:fill-box; transform-origin:center; }
@@ -344,7 +344,7 @@
   ul.tl { list-style:none; margin:0; padding:0; max-height:220px; overflow-y:auto; } ul.tl li { display:grid; grid-template-columns:auto minmax(0,1fr); gap:var(--sp3); padding:5px 0; border-bottom:1px solid var(--line); font-size:0.8125rem; } ul.tl .ft { color:var(--dim); font-variant-numeric:tabular-nums; } ul.tl b.f { color:var(--warn); } ul.tl b.r { color:var(--accent); }
   #flow[data-fit] text { font-size:calc(var(--u,1.5) * 14px); font-weight:600; } #flow[data-fit] text.sub { font-size:calc(var(--u,1.5) * 11.5px); font-weight:400; } #flow[data-fit] .ftitle { font-size:calc(var(--u,1.5) * 11px); font-weight:700; }
   #flow[data-fit] .ndt { font-size:calc(var(--u,1.5) * 11px); } #flow[data-fit] .ndt.cl { font-size:calc(var(--u,1.5) * 13px); } #flow[data-fit=n] .ndt.cl { font-size:calc(var(--u,1.5) * 10.5px); } #flow[data-fit] text.elab { font-size:calc(var(--u,1.5) * 11.5px); } #flow[data-fit] .badge { font-size:calc(var(--u,1.5) * 12px); }
-  .node.sel { outline:2px solid var(--accent); outline-offset:-2px; }
+  .node.sel { outline:var(--ring-w) solid var(--select-ring); outline-offset:-2px; }
   /* a closer look at a wiring diagram: plain labels, status in a circle on the tile, tinted status pills, one line per node, a segmented switch (#319) */
   #flow .elbg { stroke:none; opacity:.92; } #flow[data-fit] text.elab { font-weight:500; }
   #flow .ndc { fill:none; stroke-width:1.6; stroke:var(--dim); } #flow .ndc.ok { stroke:var(--ok); } #flow .ndc.fault { stroke:var(--bad); } #flow .ndc.warn { stroke:var(--warn); } #flow .ndg { fill:var(--fg); font-weight:700; }
@@ -438,7 +438,7 @@
   .blastpane { margin-top:var(--sp3); padding:var(--sp3); border:1px dashed var(--bad); border-radius:10px; } .blastpane p { margin:var(--sp2) 0; }
   /* view switcher (#324): the same segmented look as Connections / Timeline */
   .viewrow { margin-top:var(--sp2); } .seg { display:flex; gap:2px; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:3px; width:fit-content; } .seg .btn { border:0; background:transparent; border-radius:8px; }
-  .seg .btn[aria-pressed=true] { background:var(--panel); box-shadow:0 0 0 1.5px var(--accent) inset; font-weight:650; }
+  .seg .btn[aria-pressed=true] { background:var(--panel); box-shadow:0 0 0 var(--ring-w) var(--select-ring) inset; font-weight:650; }
   .lensl { margin:0 var(--sp1) 0 var(--sp4); font-size:0.8125rem; color:var(--dim); } .lensrow { display:contents; } .lenschips { display:inline-flex; flex-wrap:wrap; gap:var(--sp1); } .lenschips .chip { min-height:40px; border-radius:999px; } .lenschips .chip[aria-pressed="true"] { background:color-mix(in srgb,var(--accent) 16%,var(--panel)); font-weight:650; } .lenschips .chip[aria-pressed="true"]::before { content:"✓ "; } .viewrow { align-items:center; flex-wrap:wrap; justify-content:flex-start !important; gap:var(--sp2); } .eyepane { margin-top:var(--sp3); }
   /* a lens lifts its plane in the 2.5D view (#320): deeper side face and a glow on the parts in the plane, the rest dims; nothing moves */
   #trafficpanel[data-view="iso"][data-lens]:not([data-lens="all"]) #flow [data-ent]:not([data-ldim]) :is(.blk, .nd, .chipbg) { filter:drop-shadow(2px 2px 0 var(--ext)) drop-shadow(4px 4px 0 var(--ext)) drop-shadow(6px 6px 0 var(--ext)) drop-shadow(0 0 8px color-mix(in srgb,var(--accent) 65%,transparent)); }
@@ -502,3 +502,6 @@
 .u-fc6{display:flex;align-items:center;gap:6px}.u-fc8{display:flex;align-items:center;gap:8px}
 .u-accent{color:var(--accent)}.u-warn{color:var(--warn)}
 .st{font-weight:500}pre.wrap{white-space:pre-wrap;overflow-x:auto}
+/* selection is a ring and a raised surface, never only a hue (colour system, C-16); keyboard focus is its own offset outline */
+.trchip[aria-pressed=true], #tr-range .btn[aria-pressed=true], .itabs .btn[aria-pressed=true], .trun .scn.sel { box-shadow:0 0 0 var(--ring-w) var(--select-ring) inset; }
+.sidei[aria-selected=true] { box-shadow:inset var(--ring-w) 0 0 var(--select-ring); }

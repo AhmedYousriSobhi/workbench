@@ -52,4 +52,4 @@ def test_every_pair_the_report_lists_passes():
 def test_alpha_tokens_are_wash_only():
     """Transparent tokens (sel, shadow) are never contrast-tested, so they must never carry text."""
     alphas = {n for t in ALL for n, v in RES[t].items() if isinstance(v, tuple)}
-    assert alphas == {"sel", "shadow"}
+    assert alphas == {"sel", "shadow", "shade_22", "shade_25", "shade_28", "shade_35", "shade_40", "backdrop", "attn_glow_1", "attn_glow_2"}

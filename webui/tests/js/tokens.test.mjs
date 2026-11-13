@@ -7,15 +7,15 @@ import { fileURLToPath } from 'node:url';
 
 const css = readFileSync(fileURLToPath(new URL('../../static/canvas.css', import.meta.url)), 'utf8');
 const tokcss = readFileSync(fileURLToPath(new URL('../../static/tokens.css', import.meta.url)), 'utf8');
-const tok = Object.fromEntries([...tokcss.matchAll(/(--[\w-]+):\s*(#[0-9a-fA-F]{6})\b/g)].map(m => [m[1], m[2]]));
+const canvasBlock = tokcss.match(/\.canvas \{([^}]*)\}/)[1];   // a canvas is dark in every page theme: its own set
+const tok = Object.fromEntries([...canvasBlock.matchAll(/(--[\w-]+):\s*(#[0-9a-fA-F]{6})\b/g)].map(m => [m[1], m[2]]));
 const lum = hex => { const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(c => c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
 const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 
 test('the tokens are the brief\'s values with the owner\'s lighter ground (step 4)', () => {
-  assert.deepEqual([tok['--cv-ground'], tok['--cv-surface'], tok['--cv-surface-2']], ['#111A26', '#16202E', '#1A2636']);
+  assert.deepEqual([tok['--cv-ground'], tok['--cv-surface'], tok['--cv-surface-2']], ['#111a26', '#16202e', '#1a2636']);
   assert.deepEqual([tok['--plane-access'], tok['--plane-control'], tok['--plane-k8s'], tok['--plane-data'], tok['--plane-monitoring'], tok['--plane-management']],
-    ['#5CB8FF', '#E2E8F0', '#7C9CFF', '#C49BFF', '#4BE3A0', '#FFB347']);
-  assert.deepEqual([tok['--cv-error'], tok['--cv-no-current']], ['#FF5D5D', '#51627A']);
+    ['#5cb8ff', '#e2e8f0', '#8ea2ff', '#c49bff', '#a6d96a', '#f48fb1']);
 });
 
 test('text tokens reach 4.5:1 on the ground and both surfaces', () => {
