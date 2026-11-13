@@ -34,8 +34,9 @@ class Governor:
                  watch_interval: float = 15.0, annotator: Annotator | None = None,
                  inventory: Callable[[], tuple[list[Group], dict]] | None = None,
                  refresh_interval: float = 30.0, effector: Effector | None = None, tracer: Callable | None = None, statser: Callable | None = None, capturer: Callable | None = None,
-                 streamer: Streamer | None = None):
+                 streamer: Streamer | None = None, admit_floor: int = ADMIT_FLOOR):
         self.sampler, self.ladder, self.groups = sampler, ladder, groups
+        self.admit_floor = admit_floor
         self.executor, self.dry_run = executor, dry_run
         self.signals: Signals | None = None
         self.audit: list[str] = []
@@ -206,8 +207,8 @@ class Governor:
         left = avail - budget_mb * 1024**2
         if level >= 2:
             why = f"refused: governor at L{level}"
-        elif left < ADMIT_FLOOR:
-            why = f"refused: {budget_mb} MB would leave {left / 1024**3:.1f} GB (floor {ADMIT_FLOOR / 1024**3:.1f})"
+        elif left < self.admit_floor:
+            why = f"refused: {budget_mb} MB would leave {left / 1024**3:.1f} GB (floor {self.admit_floor / 1024**3:.1f})"
         else:
             self.counts["admit_ok"] += 1
             self._record(f"admit {budget_mb} MB: ok")
