@@ -14,6 +14,7 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from webui import graph
+from webui.app import login_url
 
 NAMES = ["cn001", "cn002", "cn003", "cn004"]
 NODES = [{"name": n, "kind": "compute", "state": "ok", "label": "Healthy", "temp": 45, "power": "On", "gpus": 0, "bcm": "UP"} for n in NAMES]
@@ -36,7 +37,8 @@ def test_a_drained_node_shows_in_the_traffic_diagram_and_timeline():
         port = s.getsockname()[1]
     proc = subprocess.Popen([sys.executable, "-m", "webui", str(port)], cwd=ROOT, stdout=subprocess.PIPE, text=True)
     try:
-        url = proc.stdout.readline().split("UI: ")[1].strip() + "?token=" + (ROOT / "compose/generated/secrets/ui_token").read_text().strip()
+        base = proc.stdout.readline().split("UI: ")[1].strip().removesuffix("/login")
+        token = (ROOT / "compose/generated/secrets/ui_token").read_text().strip()
         slurm = {"s": {n: "idle" for n in NAMES}}
         with sync_playwright() as p:
             b = p.chromium.launch()
@@ -45,7 +47,7 @@ def test_a_drained_node_shows_in_the_traffic_diagram_and_timeline():
             pg.route("**/api/slurm-stats", lambda r: r.fulfill(json=stats(slurm["s"])))
             pg.route("**/api/flow*", lambda r: r.abort())
             pg.add_init_script("try { localStorage.setItem('workbench-circuit', '0'); sessionStorage.getItem('workbench-tab') || sessionStorage.setItem('workbench-tab', 'nodes'); } catch (e) {}")  # the classic diagram and list: the circuit is the default view
-            pg.goto(url)
+            pg.goto(login_url(base, token))
             pg.click("#tb-traffic")
             pg.wait_for_selector("#tr-map text")
             pg.wait_for_function("document.querySelector('#tr-map').textContent.includes('nodes 4/4')", timeout=15000)
