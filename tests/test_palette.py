@@ -71,9 +71,10 @@ def test_tokens_css_has_every_theme_and_the_planes_and_stays_small():
                 ":root:not([data-theme])", "@media (prefers-contrast: more)", "@media (forced-colors: active)", "@media print"):
         assert sel in css, sel
     for p in mp.PLANES:
-        assert f"--plane-{p}-dash:" in css
-        if "legacy" not in PAL:      # the plane rules and the .canvas scope wait for the new look (issue 644)
-            assert f"[data-plane={p}]" in css and ".canvas" in css
+        assert f"--plane-{p}-dash:" in css and f"[data-plane={p}]" in css
+    assert ".pl-stroke" in css and ".pl-dash" in css
+    if "legacy" not in PAL:      # the .canvas scope waits for the new look (issue 646)
+        assert ".canvas" in css
     assert len(css.encode()) < 20_000
     assert not re.search(r"\b(var\(--[a-z0-9-]+\))\s*\)\s*\)", css)
 

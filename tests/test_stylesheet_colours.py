@@ -17,6 +17,13 @@ def test_stylesheets_have_no_colour_literals():
         assert len(found) <= ALLOW.get(name, 0), (name, found[:5])
 
 
+def test_the_page_scripts_have_no_colour_literals():
+    """Planes and states are named in markup (data-plane, data-state); tokens.css paints them. Comments may name issues (#517)."""
+    for f in sorted((ROOT / "webui/static/js").glob("*.js")):
+        code = re.sub(r"//[^\n]*|/\*.*?\*/", "", f.read_text(), flags=re.DOTALL)
+        assert not COLOUR.findall(code), (f.name, COLOUR.findall(code)[:5])
+
+
 def test_the_login_page_and_the_help_style_have_no_colour_literals():
     assert not COLOUR.findall((ROOT / "webui/static/login.html").read_text())
     from webui.wiki import STYLE

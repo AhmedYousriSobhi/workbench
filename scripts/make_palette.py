@@ -347,13 +347,14 @@ def render_tokens(pal: dict) -> str:
     out.append(f"@media (prefers-color-scheme: dark) {{ :root:not([data-theme]) {{ color-scheme:dark; {theme_decls('dark')} }} }}")
     for t in ("dark", "midnight", "dim"):
         out.append(f":root[data-theme={t}] {{ color-scheme:dark; {theme_decls(t)} }}")
-    if not legacy:      # the plane and state rules and the .canvas scope arrive with the new look (they would restyle today's markup)
-        for p in PLANES:
-            cap = " stroke-linecap:round;" if pal["planes"][p].get("cap") == "round" else ""
-            out.append(f"[data-plane={p}] {{ --plane-c:var(--plane-{p}); --plane-dash:var(--plane-{p}-dash);{cap} }}")
-        out.append("svg [data-plane] { stroke:var(--plane-c); stroke-dasharray:var(--plane-dash); }")
-        for state, tok in (("ok", "ok"), ("attention", "attention"), ("error", "error"), ("down", "node-down"), ("healthy", "node-healthy")):
-            out.append(f"[data-state={state}] {{ --state-c:var(--{tok}); }}")
+    # Planes and states are named in markup (data-plane, data-state); opt-in classes paint them (the CSP blocks inline styles).
+    for p in PLANES:
+        out.append(f"[data-plane={p}] {{ --plane-c:var(--plane-{p}); --plane-dash:var(--plane-{p}-dash); }}")
+    out.append(".pl-stroke { stroke:var(--plane-c); } .pl-fill { fill:var(--plane-c); } .pl-bg { background:var(--plane-c); } "
+               ".pl-dash { stroke-dasharray:var(--plane-dash); } [data-plane=data].pl-dash { stroke-linecap:round; }")
+    for state, tok in (("ok", "ok"), ("attention", "attention"), ("error", "error"), ("down", "node-down"), ("healthy", "node-healthy")):
+        out.append(f"[data-state={state}] {{ --state-c:var(--{tok}); }}")
+    if not legacy:      # the .canvas scope (a full dark set under .canvas) arrives with the new look: it would restyle today's markup
         canvas = res["canvas"]
         aliases = " ".join(f"--{a}:{css_value(canvas[t])};" for a, t in CANVAS_ALIASES.items())
         out.append(f".canvas {{ color-scheme:dark; {decls(canvas)} {aliases} }}")
@@ -365,7 +366,7 @@ def render_tokens(pal: dict) -> str:
         out.append(f"  :root[data-theme={t}] {{ {contrast_more(res[t])} }}")
     out.append("}")
     out.append("@media (forced-colors: active) {")
-    out.append("  svg [data-plane] { stroke:CanvasText; }")
+    out.append("  .pl-stroke { stroke:CanvasText; } .pl-fill { fill:CanvasText; } .pl-bg { background:CanvasText; }")
     out.append("  [data-state] { --state-c:CanvasText; }")
     out.append("}")
     light = res["light"]

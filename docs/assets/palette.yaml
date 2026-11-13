@@ -38,7 +38,7 @@ semantic: [
   ground, panel, raised, line, line_2, line_strong, dot,
   text, text_2, muted,
   accent, accent_text, accent_fill, accent_hover, on_accent, brand, focus, select_bg, select_ring, sel, shadow,
-  ok, warn, warn_text, bad, pending, unknown, attention, error, no_current, wire_base,
+  on_solid, ok, warn, warn_text, bad, pending, unknown, attention, error, no_current, wire_base,
   L0, L1, L2, L3, L4, L5,
   plane_access, plane_control, plane_k8s, plane_data, plane_monitoring, plane_management,
   real_outline, sim_outline, node_healthy, node_attention, node_down,
@@ -62,6 +62,7 @@ charts: ["#2C73D2", "#FF8C42", "#009E73", "#CC79A7", "#9B8CFF", "#B5E48C"]
 
 # Shared by every theme (a theme may override any of them). Written in terms of the theme's own base tokens.
 common:
+  on_solid: "#ffffff"
   dot: "@line"
   brand: anchor.teal
   accent: "@accent_text"
