@@ -28,6 +28,8 @@ files for its tab icons.
 
 ## Documentation art
 
+Besides the README illustrations, the script draws ten small icons (64 by 64): `tile-*.svg` for the Wiki Home grid and `group-*.svg` for the sidebar groups.
+
 The illustrations in the README, manual and guides are SVG files built by one script, `scripts/make_doc_art.py`, the
 same way as the logo: shapes are defined in code, written to `docs/assets/art/`, and nothing is drawn by hand or taken
 from elsewhere.

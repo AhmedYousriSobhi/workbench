@@ -23,6 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from webui.wiki import (  # stdlib-only module: reuses the page titles and the docs layout
+    GROUPS,
     IMAGES,
     Wiki,
 )
@@ -30,7 +31,21 @@ from webui.wiki import (  # stdlib-only module: reuses the page titles and the d
 PREFIX = {"manual": "Manual", "guides": "Guide", "architecture": "Architecture", "adr": "ADR"}
 # the two project callout kinds GitHub does not know: shown as a quote headed by a bold label
 PROJECT_CALLOUTS = {"HOOD": "**🔧 Under the hood**", "DIDYOUKNOW": "**💡 Did you know?**"}
-FOOTER = "Generated from `docs/` in the repository by `scripts/sync_wiki.py`. Edit the files there, not this wiki."
+FOOTER = ("Generated from `docs/` in the repository by `scripts/sync_wiki.py`. Edit the files there, not this wiki: "
+          "every page ends with an **Edit this page** link to its source on `dev`.")
+# the Home tiles (issue 591): icon, title, the chapter it opens, one line
+TILES = [("tile-install", "Install", "02-install-and-start.md", "Check the machine, build, start"),
+         ("tile-use", "Use", "03-using-the-cluster.md", "Slurm jobs, the mock services, Grafana"),
+         ("tile-break", "Break things", "06-scenarios.md", "Play a fault, inject one by hand"),
+         ("tile-watch", "Watch it", "05-web-page.md", "The web page and its architecture view"),
+         ("tile-configure", "Configure", "08-configuration.md", "sim.yaml, profiles, topology"),
+         ("tile-fix", "Fix it", "09-troubleshooting.md", "Symptoms, causes, the diagnostics bundle")]
+START = """## Start here
+
+1. **Check and start:** `./scripts/benchctl start` checks your machine, builds once and prints a link ([Install and start](02-install-and-start.md)).
+2. **Poke it:** `./scripts/benchctl get nodes`, then `./scripts/benchctl exec gpu001 -u alice` ([Using the cluster](03-using-the-cluster.md)).
+3. **Break something:** `./scripts/benchctl scenario run node-down`, watch the page react, then **Clear faults** ([Scenarios and faults](06-scenarios.md)).
+"""
 
 
 def page_name(slug: str) -> str:
@@ -95,22 +110,45 @@ def rewrite(text: str, page: str, docs: Path, blob: str) -> str:
     return "\n".join(out) + "\n"
 
 
+def tile_grid() -> str:
+    """Six illustrated links in a table: an image row, then a link row (not nested: the link rewrite reads one link per bracket pair)."""
+    rows = []
+    for chunk in (TILES[:3], TILES[3:]):
+        rows += ["| " + " | ".join(f"![{t}](../assets/art/{i}.svg)" for i, t, link, _ in chunk) + " |",
+                 "|:---:|:---:|:---:|" if not rows else None,
+                 "| " + " | ".join(f"**[{t}]({link})**<br>{line}" for _, t, link, line in chunk) + " |"]
+    return "\n".join(r for r in rows if r) + "\n"
+
+
+def home_page(text: str) -> str:
+    """The manual's README as a landing page: hero art, Start here, the tile grid, then the chapter table."""
+    cut = text.find("| # | Chapter")
+    cut = len(text) if cut < 0 else cut
+    hero = ('<p align="center"><img src="../assets/art/readme-hero.svg" alt="The workbench cluster: a login node, the Slurm '
+            'controller and compute nodes, fake services around them, and the memory governor guarding the door" width="820"></p>\n\n')
+    return hero + text[:cut] + START + "\n" + tile_grid() + "\n## All chapters\n\n" + text[cut:]
+
+
 def generate(docs: Path, out: Path, blob: str) -> list[str]:
     """Write the wiki into `out`; returns the page names."""
     wiki = Wiki(docs)
     out.mkdir(parents=True, exist_ok=True)
     (out / "images").mkdir(exist_ok=True)
+    edit = re.sub(r"/blob/[^/]+$", "/blob/dev", blob)
+    folder = {label: f for f, label in GROUPS}
     names, side = [], ["**[Home](Home)**", ""]
     for label, items in wiki.nav():
         group_lines = []
         for slug, title in items:
             name = page_name(slug)
-            (out / f"{name}.md").write_text(rewrite((docs / f"{slug}.md").read_text(encoding="utf-8"), f"{slug}.md", docs, blob),
-                                            encoding="utf-8")
+            src = (docs / f"{slug}.md").read_text(encoding="utf-8")
+            body = rewrite(home_page(src) if name == "Home" else src, f"{slug}.md", docs, blob)
+            (out / f"{name}.md").write_text(f"{body}\n---\n[Edit this page]({edit}/docs/{slug}.md)\n", encoding="utf-8")
             names.append(name)
             if name != "Home":
                 group_lines.append(f"- [{title}]({name})")
-        side += [f"**{label}**", "", *group_lines, ""]
+        icon = f'<img src="{image_name(f"assets/art/group-{folder[label]}.svg")}" width="18" alt=""> '  # decorative: the label is text
+        side += [f"{icon}**{label}**", "", *group_lines, ""]
     for group in PREFIX:
         for img in (docs / group / "img").glob("*"):
             if img.suffix in IMAGES:
