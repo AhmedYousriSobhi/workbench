@@ -218,3 +218,17 @@ def test_reference_chapters_have_hero_summary_and_learn_more():
         text = (MANUAL / f"{name}.md").read_text()
         assert text.startswith(f'<p align="center"><img src="../assets/art/{name}-hero.svg" alt="'), name
         assert "**In 30 seconds:**" in text and "## Learn more" in text, name
+
+
+def test_architecture_how_it_works_index_links_every_under_the_hood_section():
+    index = (ROOT / "docs/architecture/README.md").read_text()
+    for folder in ("manual", "guides"):
+        for f in sorted((ROOT / "docs" / folder).glob("*.md")):
+            if "## Under the hood" in f.read_text():
+                assert f"../{folder}/{f.name}#under-the-hood" in index, f"{folder}/{f.name} is missing from the How it works index"
+
+
+def test_architecture_pages_open_with_their_header_art():
+    for f in sorted((ROOT / "docs/architecture").glob("*.md")):
+        assert f.read_text().startswith(f'<p align="center"><img src="../assets/art/arch-{f.stem}-hero.svg" alt="'), f.name
+        assert (ROOT / f"docs/assets/art/arch-{f.stem}-hero.svg").is_file(), f.name

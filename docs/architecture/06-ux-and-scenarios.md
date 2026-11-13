@@ -1,3 +1,5 @@
+<p align="center"><img src="../assets/art/arch-06-ux-and-scenarios-hero.svg" alt="Architecture: Control, web page and scenarios. benchctl, web page, scenarios." width="720"></p>
+
 # Control, Web UI and scenarios
 
 [Architecture index](README.md) · [Project overview](../../README.md)

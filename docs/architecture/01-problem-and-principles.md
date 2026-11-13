@@ -1,3 +1,5 @@
+<p align="center"><img src="../assets/art/arch-01-problem-and-principles-hero.svg" alt="Architecture: Problem and principles. one laptop, nine principles." width="720"></p>
+
 # Problem and design principles
 
 [Architecture index](README.md) · [Project overview](../../README.md)

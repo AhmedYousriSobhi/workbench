@@ -1,3 +1,5 @@
+<p align="center"><img src="../assets/art/arch-04-memory-and-profiles-hero.svg" alt="Architecture: Memory contract. budget, profile, pre-flight." width="720"></p>
+
 # Memory contract and profiles
 
 [Architecture index](README.md) · [Project overview](../../README.md)

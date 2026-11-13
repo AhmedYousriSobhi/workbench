@@ -1,3 +1,5 @@
+<p align="center"><img src="../assets/art/arch-08-repository-and-migration-hero.svg" alt="Architecture: Repository layout. benchctl/, governor/, images/, docs/." width="720"></p>
+
 # Repository layout and migration
 
 [Architecture index](README.md) · [Project overview](../../README.md)

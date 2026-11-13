@@ -1,3 +1,5 @@
+<p align="center"><img src="../assets/art/arch-09-roadmap-decisions-risks-hero.svg" alt="Architecture: Roadmap, decisions, risks. phases, open decisions, risks." width="720"></p>
+
 # Roadmap, open decisions and risks
 
 [Architecture index](README.md) · [Project overview](../../README.md)

@@ -1,3 +1,5 @@
+<p align="center"><img src="../assets/art/arch-05-governor-hero.svg" alt="Architecture: The governor. signals, ladder, actions." width="720"></p>
+
 # The governor
 
 [Architecture index](README.md) · [Project overview](../../README.md)

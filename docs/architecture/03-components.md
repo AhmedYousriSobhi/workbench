@@ -1,3 +1,5 @@
+<p align="center"><img src="../assets/art/arch-03-components-hero.svg" alt="Architecture: Component decisions. Slurm, Kubernetes, BMC, BCM, Jira." width="720"></p>
+
 # Component decisions
 
 [Architecture index](README.md) · [Project overview](../../README.md)

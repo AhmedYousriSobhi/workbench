@@ -1,3 +1,5 @@
+<p align="center"><img src="../assets/art/arch-10-references-hero.svg" alt="Architecture: References. sources." width="720"></p>
+
 # References
 
 [Architecture index](README.md) · [Project overview](../../README.md)
