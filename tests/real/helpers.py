@@ -7,10 +7,13 @@ import sys
 import time
 from pathlib import Path
 
+import stack_reuse
+
 from benchctl import stack
 
 ROOT = Path(__file__).resolve().parents[2]
 GB = 1024**3
+STACK_KEY: str | None = None  # key of the running stack (stack_reuse.stack_key); a different key is a different stack (issue 576)
 STACK_STARTED = False  # set by bring_up; conftest brings the shared stack down once, at the end of the session (issue 234)
 
 
@@ -33,13 +36,18 @@ def exporter_up() -> bool:
         return False
 
 
-def bring_up(sim: dict, profile: str = "min") -> None:
+def bring_up(sim: dict, profile: str = "min", prof: dict | None = None) -> None:
     """Start the stack for a fixture. On failure say why: a refusal by the governor (host memory low, GV-9) is the
     environment, not a defect in the code under test, so the message says so instead of a bare AssertionError."""
-    global STACK_STARTED
+    global STACK_STARTED, STACK_KEY
     said: list[str] = []
-    if stack.up(sim, profile, say=said.append, available=64 * GB):
-        STACK_STARTED = True
+    key = stack_reuse.stack_key(sim, profile, prof)
+    if STACK_STARTED and STACK_KEY != key:  # a different configuration never meets a running stack (issue 535); the same one is reused
+        os.chdir(ROOT)
+        stack.down(say=lambda m: None)
+        STACK_STARTED = False
+    if stack.up(sim, profile, say=said.append, available=64 * GB, **({"prof": prof} if prof else {})):
+        STACK_STARTED, STACK_KEY = True, key
         return
     why = " | ".join(said[-4:]) or "no output"
     if "REFUSED by governor" in why:

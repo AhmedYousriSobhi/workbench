@@ -3,6 +3,7 @@ import subprocess
 
 import helpers
 import pytest
+from stack_reuse import order_key
 from verify_times import Recorder
 
 from benchctl import stack
@@ -86,12 +87,16 @@ def stop_shared_stack() -> None:
         os.chdir(helpers.ROOT)
         stack.down(say=lambda m: None)
         helpers.STACK_STARTED = False
+        helpers.STACK_KEY = None
 
 
 @pytest.fixture(scope="module", autouse=True)
 def _own_stack(request):
-    """An isolated module starts from a stopped stack (a different slurm.conf or selection must not meet a running one)."""
-    if request.module.__name__.rsplit(".", 1)[-1] in ISOLATED_MODULES:
+    """An isolated module starts from a stopped stack (a different slurm.conf or selection must not meet a running one).
+    A module with `STACK_REUSE = True` is isolated only by its configuration (issue 576): bring_up compares stack keys and does the
+    down and up itself when they differ, so two modules with the same key (the test timers) share one cold start. It must leave the
+    cluster as it found it, like a shared module, and ends with release(), not stack.down."""
+    if request.module.__name__.rsplit(".", 1)[-1] in ISOLATED_MODULES and not getattr(request.module, "STACK_REUSE", False):
         stop_shared_stack()
     yield
 
@@ -103,7 +108,9 @@ def _shared_stack_down():
 
 
 def pytest_collection_modifyitems(config, items):
-    items.sort(key=lambda i: "tests/real" in str(i.fspath) and _isolated(i))  # stable: shared modules first
+    # stable: shared modules first, then the STACK_REUSE modules grouped by STACK_GROUP (same key side by side), then the cold starts
+    items.sort(key=lambda i: order_key(i.module.__name__.rsplit(".", 1)[-1], ISOLATED_MODULES if "tests/real" in str(i.fspath) else set(),
+                                       bool(getattr(i.module, "STACK_REUSE", False)), getattr(i.module, "STACK_GROUP", "")))
     _mark(config, items)
 
 

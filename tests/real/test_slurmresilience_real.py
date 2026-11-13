@@ -10,11 +10,13 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import bring_up, exporter_up, wait_for
+from helpers import bring_up, exporter_up, release, wait_for
 
-from benchctl import scenario, stack
+from benchctl import scenario
 
 ROOT = Path(__file__).resolve().parents[2]
+STACK_REUSE = True  # isolated only for the test timers: the same key as the other timers module, so one cold start (issue 576)
+STACK_GROUP = "timers"
 NODE = "cn001"
 
 
@@ -63,7 +65,7 @@ def cluster(test_timers):
     bring_up(yaml.safe_load((ROOT / "sim.yaml").read_text()))
     assert wait_for(lambda: "idle" in node_state(), timeout=90)
     yield
-    stack.down(say=lambda m: None)
+    release()
 
 
 @pytest.fixture(autouse=True)

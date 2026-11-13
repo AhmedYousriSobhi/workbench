@@ -6,7 +6,7 @@ Closes #
 ## Verification
 <!-- State plainly what was and was not verified. -->
 - [ ] `./scripts/validate.sh` passed
-- [ ] `./scripts/verify.sh --full` passed (or: not run, because ...)
+- [ ] `./scripts/verify.sh --changed` passed (paste the `SELECT` and `TIME` lines), or `--full --with-jira` for a `dev` to `main` PR (or: not run, because ...)
 - [ ] Not verified: 
 
 ## Checklist

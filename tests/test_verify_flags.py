@@ -46,3 +46,18 @@ def test_full_leaves_real_jira_out_unless_asked():
 def test_the_summary_always_says_jira_was_left_out():
     s = (ROOT / "scripts" / "verify.sh").read_text()
     assert "real Jira skipped (optional part" in s and "--with-jira" in s
+
+
+def test_install_nightly_prints_the_units_and_writes_nothing(tmp_path):
+    import os
+    env = {**os.environ, "XDG_CONFIG_HOME": str(tmp_path)}
+    r = subprocess.run(["bash", str(ROOT / "scripts" / "verify.sh"), "-n", "--install-nightly", "03:15"], capture_output=True, text=True, cwd=ROOT, env=env, check=False)
+    assert r.returncode == 0, r.stderr
+    assert "OnCalendar=*-*-* 03:15:00" in r.stdout and "verify.sh --full --with-jira" in r.stdout and "nightly-$$(date +%%Y%%m%%d).log" in r.stdout
+    assert "systemctl --user enable --now verify-nightly.timer" in r.stdout
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_install_nightly_defaults_to_half_past_two_and_remove_prints_its_plan(tmp_path):
+    assert "OnCalendar=*-*-* 02:30:00" in plan("--install-nightly")
+    assert "disable --now verify-nightly.timer" in plan("--remove-nightly")
