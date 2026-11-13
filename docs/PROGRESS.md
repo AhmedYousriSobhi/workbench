@@ -100,7 +100,7 @@ _Measure real memory so budgets stop being guesses._
 |---|---|---|---|---|
 | Measurement tooling | ✅ Done | `benchctl measure run/report` samples host, Docker containers, PSS per process and libvirt domains (read-only), saves JSON, suggests budgets = peak x 1.2. `benchctl measure cgroup` reads a container's memory.stat (shmem, file, anon) and OOM-kill count (issue 455). | `benchctl/measure.py` | #28 |
 | Host baseline | 🟡 Partial | Idle host and a small Slurm stack were measured (slurmd 5 MiB, slurmctld 13, MariaDB 171). No loaded run with mocks yet. | - | - |
-| Budgets replaced by measured values | 🟡 Partial | Per-component working sets measured live on 2026-11-05 (benchctl/memory.py MEASURED_MB; the plan expects measured + 15 percent, never above the cap, issue 287); min was measured earlier (0.17 GB, 60 queued jobs) and its profile budget is 1 GB. Docker's own memory (containerd-shims, dockerd) is measured with `benchctl measure overhead --save` and added by the plan (issue 456); per-node parts declare a cost in PER_NODE_MB, tested. | `profiles/min.yaml` | #68 |
+| Budgets replaced by measured values | 🟡 Partial | Per-component working sets measured live on 2026-11-05 (benchctl/memory.py MEASURED_MB; the plan expects measured + 15 percent, never above the cap, issue 287); profile budgets are those component figures summed (min 0.5 GB, std 1.2, full 1.8, jira-real 3.5, tested in tests/test_memory.py); whole-profile peaks are measured for min only. Docker's own memory (containerd-shims, dockerd) is measured with `benchctl measure overhead --save` and added by the plan (issue 456); per-node parts declare a cost in PER_NODE_MB, tested. | `profiles/min.yaml` | #68 |
 
 1/3 done
 
@@ -316,7 +316,7 @@ _What keeps every change safe and debuggable._
 ## Next up
 
 1. Personas and a ticket bot on the login node (they also give the dots Slurm jobs and Jira tickets to draw).
-2. Phase 0 for std/full (16-32 slurmd, k3d) once those profiles are buildable; only min is measured.
+2. Phase 0 for std/full (16-32 slurmd) for the whole profile; per-component figures are measured, only min's whole-profile peak is.
 
 ## Known gaps
 
