@@ -229,7 +229,38 @@ def tour_hero() -> str:
                "".join(b), animated=True)
 
 
-ART = {"readme-hero.svg": readme_hero, "readme-how-it-works.svg": readme_how_it_works, "readme-memory.svg": readme_memory, "tour-hero.svg": tour_hero}
+# ---- small icons: the Wiki Home tiles and the sidebar groups (issue 591) ----------------------------------------------
+
+def icon(title: str, desc: str, body: str, animated: bool = False) -> str:
+    return svg(64, 64, title, desc, body, animated)
+
+
+def _bars(*ys: int) -> str:
+    return "".join(f'<path class="ln" d="M14 {y}h36"/>' for y in ys)
+
+
+ICONS = {
+    "tile-install.svg": lambda: icon("Install", "A node box with an arrow dropping into it.",
+                                     '<path class="ln" d="M32 6v18M24 17l8 8l8-8"/>' + node(19, 32, "ok", 26)),
+    "tile-use.svg": lambda: icon("Use", "A terminal window with a prompt.",
+                                 '<rect class="p2" x="8" y="12" width="48" height="40" rx="8"/>' + label(16, 38, "&gt;_", "tx2", "b", True)),
+    "tile-break.svg": lambda: icon("Break things", "A node with a cross: it is down.", node(19, 19, "down", 26)),
+    "tile-watch.svg": lambda: icon("Watch it", "A wire with a moving pulse.",
+                                   wire("M8 40C20 16 44 16 56 40", "monitoring"), True),
+    "tile-configure.svg": lambda: icon("Configure", "Three sliders.",
+                                       _bars(18, 32, 46) + '<circle class="ok" cx="24" cy="18" r="5"/><circle class="ok" cx="40" cy="32" r="5"/>'
+                                       '<circle class="ok" cx="30" cy="46" r="5"/>'),
+    "tile-fix.svg": lambda: icon("Fix it", "A healthy node inside a circular arrow: it healed.",
+                                  '<path class="ln" d="M10 32a22 22 0 0 1 40-13M54 32a22 22 0 0 1-40 13M44 12l7 8l-10 2"/>' + node(19, 19, "ok", 26)),
+    "group-manual.svg": lambda: icon("Manual", "An open book.",
+                                     '<rect class="p2" x="8" y="14" width="23" height="36" rx="4"/><rect class="p2" x="33" y="14" width="23" height="36" rx="4"/>'),
+    "group-guides.svg": lambda: icon("Guides", "A list of steps.", _bars(18, 32, 46)),
+    "group-architecture.svg": lambda: icon("Architecture", "A rack of nodes.", rack(5, 18, 2, (), 14)),
+    "group-adr.svg": lambda: icon("Decisions", "A note with a tick.",
+                                  '<rect class="p2" x="14" y="8" width="36" height="48" rx="6"/><path class="ln" d="M24 32l6 6l11-12"/>'),
+}
+
+ART = {"readme-hero.svg": readme_hero, "readme-how-it-works.svg": readme_how_it_works, "readme-memory.svg": readme_memory, "tour-hero.svg": tour_hero, **ICONS}
 
 
 def outputs() -> dict[Path, str]:

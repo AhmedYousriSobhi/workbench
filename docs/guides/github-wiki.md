@@ -37,12 +37,12 @@ python scripts/sync_wiki.py --out /tmp/wiki-preview
 
 | In the wiki | From |
 |---|---|
-| `Home` | the manual's start page |
+| `Home` | the manual's README as a landing page: the hero art, "Start here" in three steps, a grid of six illustrated links (Install, Use, Break things, Watch it, Configure, Fix it; `TILES` in `scripts/sync_wiki.py`), then the chapter table |
 | `Manual-NN-...` | `docs/manual/` |
 | `Guide-...` | `docs/guides/` |
 | `Architecture-...` | `docs/architecture/` |
 | `ADR-NNNN-...` | `docs/adr/` |
-| `_Sidebar`, `_Footer` | generated: navigation and a "generated from docs/" note |
+| `_Sidebar`, `_Footer` | generated: navigation, each group with a small icon (`group-*.svg`, decorative, the label is text) and a "generated from docs/" note; every page also ends with an **Edit this page** link to its source on `dev` (a wiki footer is the same on every page, so the link sits at the end of each page) |
 
 Links between pages become wiki links, images are copied to `images/`, and a link to a file outside `docs/` (for
 example `SPEC.md`) opens that file in the repository.

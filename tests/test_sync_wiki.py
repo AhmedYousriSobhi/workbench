@@ -85,3 +85,25 @@ def test_art_is_copied_and_img_and_picture_paths_are_rewritten(tmp_path):
     page = (out / "Home.md").read_text()
     assert page.count('"images/art-hero.svg"') == 3 and "../assets" not in page
     assert 'src="https://x.test/a.png"' in page and f'src="{BLOB}/logo.png?raw=true"' in page
+
+
+def test_home_is_a_landing_page_with_tiles_and_the_chapter_table(tmp_path):
+    sw.generate(ROOT / "docs", tmp_path, BLOB)
+    home = (tmp_path / "Home.md").read_text()
+    assert home.startswith('<p align="center"><img src="images/art-readme-hero.svg" alt="')
+    assert home.index("## Start here") < home.index("art-tile-install.svg") < home.index("## All chapters") < home.index("| # | Chapter")
+    for icon, title, link, _ in sw.TILES:
+        assert f"images/art-{icon}.svg" in home and f"**[{title}]({sw.page_name('manual/' + link[:-3])})**" in home
+        assert (tmp_path / f"images/art-{icon}.svg").is_file()
+    assert "![" in home and "![]" not in home  # every image has alt text
+
+
+def test_sidebar_groups_have_an_icon_and_text_and_every_page_links_to_its_source(tmp_path):
+    sw.generate(ROOT / "docs", tmp_path, BLOB)
+    side = (tmp_path / "_Sidebar.md").read_text()
+    for folder, label in sw.GROUPS:
+        assert f'<img src="images/art-group-{folder}.svg" width="18" alt=""> **{label}**' in side
+        assert (tmp_path / f"images/art-group-{folder}.svg").is_file()
+    guide = (tmp_path / "Guide-getting-started.md").read_text()
+    assert guide.rstrip().endswith("[Edit this page](https://example.test/o/r/blob/dev/docs/guides/getting-started.md)")
+    assert "Edit this page" in (tmp_path / "_Footer.md").read_text()
