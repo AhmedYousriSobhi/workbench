@@ -17,6 +17,6 @@ The page, the canvases, the in-page help, the logo, the documentation art and th
 
 ## Consequences
 - A contributor adds or changes a colour by editing `palette.yaml` only.
-- Step 2 of the programme (a no-visual-change refactor) must carry today's exact values: it does so with `#rrggbb` literals in the palette, and the new look arrives in a later step by replacing them with ramp references.
+- Step 2 (issue 644, built) moves `app.css`, `canvas.css` and the help page onto `tokens.css` with no visible change. A temporary `legacy:` block in the palette carries today's values under today's variable names (they replace the generated tokens of the same name; the plane, state and `.canvas` rules are held back because they would restyle today's markup). `scripts/style_dump.py` proves it: computed colours of every element, four themes, every workspace, identical before and after. Step 4 deletes `legacy:`. The JS literals wait for step 3 (data attributes).
 - A change that alters what a token means needs an ADR; a value tune does not.
 - Later steps (one issue each): the refactor of `app.css`, `canvas.css`, the JS and `wiki.py`; the plane mismatch and data attributes; the new look; the help page, logo script, Grafana, documentation art and the no-flash `theme-init.js` (a `'self'` file, no CSP change); the generated colour guide.

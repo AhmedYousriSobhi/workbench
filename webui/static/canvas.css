@@ -2,11 +2,6 @@
    A canvas is always dark, in every page theme, like a terminal inside a light page (a lifted slate, not black: the first palette read too heavy): the plane colours are chosen for a dark ground.
    Use the tokens, never the hex values. Text tokens meet 4.5:1 on ground and surfaces, plane colours 3:1 (webui/tests/js/tokens.test.mjs). */
 :root {
-  --cv-ground:#111A26; --cv-dot:#223044; --cv-surface:#16202E; --cv-surface-2:#1A2636;
-  --cv-border:#2B3A50; --cv-border-2:#374A64;
-  --cv-text:#F1F5F9; --cv-text-2:#C9D3DD; --cv-text-muted:#A3B5C9;
-  --plane-access:#5CB8FF; --plane-control:#E2E8F0; --plane-k8s:#7C9CFF; --plane-data:#C49BFF; --plane-monitoring:#4BE3A0; --plane-management:#FFB347;
-  --cv-error:#FF5D5D; --cv-attention:#FFB347; --cv-no-current:#51627A; --cv-wire-base:#1E2A3A;
   --cv-font-ui:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --cv-font-mono:"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
@@ -33,7 +28,7 @@
 /* A part that needs attention breathes amber, and always says why in words (js/wire.js markAttention). */
 .breathe { animation:wire-breathe 2.4s ease-in-out infinite; }
 .attn-text { display:block; color:var(--cv-attention); font-size:12px; font-weight:600; }
-@keyframes wire-breathe { 0%,100% { box-shadow:0 0 0 1px rgba(0,0,0,.4), 0 0 10px #FFB34733; } 50% { box-shadow:0 0 0 1px rgba(0,0,0,.4), 0 0 30px #FFB34788; } }
+@keyframes wire-breathe { 0%,100% { box-shadow:0 0 0 1px var(--shade-40), 0 0 10px var(--attn-glow-1); } 50% { box-shadow:0 0 0 1px var(--shade-40), 0 0 30px var(--attn-glow-2); } }
 
 /* Motion off: reduced motion, and any hidden tab (W-11: nothing animates unseen). The dots stay drawn, they just stop. */
 @media (prefers-reduced-motion: reduce) { .wire-pulse, .wire-err, .breathe { animation:none; } }
@@ -54,14 +49,14 @@
 #flow[data-cv] .cv-band.absent { opacity:.5; }
 #flow[data-cv] .cv-clients .cv-box { stroke:var(--plane-access); stroke-opacity:.6; }
 #flow[data-cv] .cv-chip { fill:var(--cv-surface); stroke:var(--cv-border-2); } #flow[data-cv] .cv-chiptext { font-size:17px; }
-#flow[data-cv] .cv-badge-bg { fill:#2E2315; stroke:var(--cv-attention); } #flow[data-cv] .cv-badge { font-size:12px; font-weight:700; fill:var(--cv-attention); letter-spacing:.04em; }
+#flow[data-cv] .cv-badge-bg { fill:var(--cv-badge-bg); stroke:var(--cv-attention); } #flow[data-cv] .cv-badge { font-size:12px; font-weight:700; fill:var(--cv-attention); letter-spacing:.04em; }
 /* a part the cluster lacks keeps its place, greyed at 8 %, and its wires with it; the lane note stays readable */
 #flow[data-cv] [data-part][data-present="false"], #flow[data-cv] .cv-wires [data-present="false"], #flow[data-cv] .cv-labels [data-present="false"] { opacity:.08; pointer-events:none; }
 #flow[data-cv] .cv-part.down .cv-box { stroke:var(--cv-error); stroke-dasharray:6 4; } #flow[data-cv] .cv-part.flt .cv-box { stroke:var(--cv-attention); }
 #flow[data-cv] .cv-part.down .cv-state { fill:var(--cv-error); } #flow[data-cv] .cv-part.flt .cv-state { fill:var(--cv-attention); }
 #flow[data-cv] .cv-rack.attn .cv-box { stroke:var(--cv-attention); stroke-width:2; }
-#flow[data-cv] .cv-sq rect { fill:#1E7F57; stroke:#2FD18A; stroke-width:1; } #flow[data-cv] .cv-rack[data-ent=k8s-nodes] .cv-sq.ok rect { fill:#3A4C80; stroke:var(--plane-k8s); }
-#flow[data-cv] .cv-sq:not(.ok) rect { fill:#5A3A0B; stroke:var(--cv-attention); stroke-width:1.6; } #flow[data-cv] .cv-sq.fault rect, #flow[data-cv] .cv-sq.down rect { fill:#5A1717; stroke:var(--cv-error); }
+#flow[data-cv] .cv-sq rect { fill:var(--cv-ok-fill); stroke:var(--cv-ok-stroke); stroke-width:1; } #flow[data-cv] .cv-rack[data-ent=k8s-nodes] .cv-sq.ok rect { fill:var(--cv-k8s-fill); stroke:var(--plane-k8s); }
+#flow[data-cv] .cv-sq:not(.ok) rect { fill:var(--cv-attn-fill); stroke:var(--cv-attention); stroke-width:1.6; } #flow[data-cv] .cv-sq.fault rect, #flow[data-cv] .cv-sq.down rect { fill:var(--cv-down-fill); stroke:var(--cv-error); }
 #flow[data-cv] .cv-glyph { font-size:11px; font-weight:800; fill:var(--cv-text); pointer-events:none; } #flow[data-cv] .cv-sq { cursor:pointer; }
 #flow[data-cv] .cv-sum { fill:var(--cv-text-2); }
 #flow[data-cv] .hit { cursor:pointer; } #flow[data-cv] .hit:hover .cv-box, #flow[data-cv] .hit:focus-visible .cv-box { stroke:var(--plane-access); } #flow[data-cv] .hit:focus-visible { outline:2px solid var(--plane-access); outline-offset:3px; }
@@ -74,11 +69,11 @@
 #flow[data-cv] g.wire[data-blast] .wire-core, #flow[data-cv] g.wire[data-blast] .wire-halo { stroke:var(--cv-error); stroke-opacity:1; }
 .cvstack { display:flex; flex-wrap:wrap; gap:8px; margin:var(--sp2, 8px) 0; background:var(--cv-ground); border-radius:12px; padding:10px; } .cvstack[hidden] { display:none; }
 .cvlayer { flex:1 1 170px; display:flex; align-items:center; gap:12px; padding:8px 10px; border:1px solid var(--cv-border-2); border-radius:10px; background:var(--cv-surface-2); color:var(--cv-text); font:inherit; text-align:left; cursor:pointer; min-height:48px; }
-.cvlayer[aria-pressed=true] { border-color:var(--cv-text-2); background:#122033; } .cvlayer .lt { display:flex; flex-direction:column; } .cvlayer .n { font-size:0.75rem; color:var(--cv-text-muted); font-family:var(--cv-font-mono); }
+.cvlayer[aria-pressed=true] { border-color:var(--cv-text-2); background:var(--cv-layer-bg); } .cvlayer .lt { display:flex; flex-direction:column; } .cvlayer .n { font-size:0.75rem; color:var(--cv-text-muted); font-family:var(--cv-font-mono); }
 .cvlayer .plate { width:44px; height:24px; border-radius:5px; border:2px solid var(--pc, var(--cv-text-muted)); background:var(--cv-surface); transform:perspective(200px) rotateX(48deg) rotateZ(-8deg); flex:none; }
 .cvlayer .plate[data-plane=access] { --pc:var(--plane-access); } .cvlayer .plate[data-plane=control] { --pc:var(--plane-control); } .cvlayer .plate[data-plane=data] { --pc:var(--plane-data); }
 .cvlayer .plate[data-plane=monitoring] { --pc:var(--plane-monitoring); } .cvlayer .plate[data-plane=management] { --pc:var(--plane-management); } .cvlayer .plate[data-plane=all] { --pc:var(--cv-text); }
-.cvcap { margin:4px 2px; font-size:0.8125rem; color:var(--dim, #A3B5C9); } .cvcap[hidden] { display:none; }
+.cvcap { margin:4px 2px; font-size:0.8125rem; color:var(--dim); } .cvcap[hidden] { display:none; }
 @media (min-width:1100px) { #nodeswrap.circuit { grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto; grid-template-areas:"canvas" "side"; height:auto; min-height:0; }
   #nodeswrap.circuit #trafficpanel { display:block; } #nodeswrap.circuit #trafficpanel > .flowscroll { display:block; overflow-x:auto; } #nodeswrap.circuit #trafficpanel #flow { height:auto; flex:none; margin:var(--sp2) 0; } }
 
@@ -103,7 +98,7 @@
 .fl-kpis { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
 .fl-lane { display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; padding:8px 10px; border:1px dashed var(--cv-border-2); border-radius:10px; } .fl-lane.absent { opacity:.08; } .fl-lt { font-size:0.875rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--cv-text-muted); min-width:92px; } .fl-lc { font-size:0.875rem; color:var(--cv-text-muted); }
 .fl-sqs { display:flex; flex-wrap:wrap; gap:3px; flex:1 1 120px; }
-.fl-sq { width:14px; height:14px; border-radius:3px; background:var(--plane-monitoring); display:inline-flex; align-items:center; justify-content:center; font-size:0.625rem; font-style:normal; font-weight:700; color:#0B1118; }
+.fl-sq { width:14px; height:14px; border-radius:3px; background:var(--plane-monitoring); display:inline-flex; align-items:center; justify-content:center; font-size:0.625rem; font-style:normal; font-weight:700; color:var(--cv-on-light); }
 .fl-sq.warn { background:var(--cv-attention); } .fl-sq.fault { background:var(--cv-error); } .fl-sq.down { background:var(--cv-no-current); color:var(--cv-text); } .fl-sq.unknown { background:transparent; border:1.5px dashed var(--cv-no-current); color:var(--cv-text-muted); }
 .fl-foot { display:flex; align-items:center; gap:10px; font-size:0.875rem; color:var(--cv-text-muted); } .fl-wire { width:140px; height:12px; flex:none; }
 /* Pool */

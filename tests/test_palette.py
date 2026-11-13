@@ -68,9 +68,23 @@ def test_schema_rejects_bad_palettes_with_one_line_each():
 def test_tokens_css_has_every_theme_and_the_planes_and_stays_small():
     css = (ROOT / "webui/static/tokens.css").read_text()
     for sel in (":root[data-theme=light]", ":root[data-theme=dark]", ":root[data-theme=midnight]", ":root[data-theme=dim]",
-                ":root:not([data-theme])", ".canvas", "@media (prefers-contrast: more)", "@media (forced-colors: active)", "@media print"):
+                ":root:not([data-theme])", "@media (prefers-contrast: more)", "@media (forced-colors: active)", "@media print"):
         assert sel in css, sel
     for p in mp.PLANES:
-        assert f"[data-plane={p}]" in css and f"--plane-{p}-dash:" in css
+        assert f"--plane-{p}-dash:" in css
+        if "legacy" not in PAL:      # the plane rules and the .canvas scope wait for the new look (issue 644)
+            assert f"[data-plane={p}]" in css and ".canvas" in css
     assert len(css.encode()) < 20_000
     assert not re.search(r"\b(var\(--[a-z0-9-]+\))\s*\)\s*\)", css)
+
+
+def test_the_legacy_block_replaces_generated_tokens_and_is_temporary():
+    """While `legacy` exists the page shows today's values; each of its names appears once per theme block (step 4 deletes it)."""
+    if "legacy" not in PAL:
+        return
+    css = (ROOT / "webui/static/tokens.css").read_text()
+    assert css.count("--cv-ground:") == 1 and css.count("--plane-access:") == 1      # from `all`, not repeated per theme
+    for theme in THEMES:
+        block = re.search(rf":root\[data-theme={theme}\] \{{([^}}]*)\}}", css).group(1)
+        for name in PAL["legacy"][theme]:
+            assert block.count(f"--{name}:") == 1, (theme, name)
