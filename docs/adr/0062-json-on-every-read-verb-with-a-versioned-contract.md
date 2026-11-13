@@ -1,6 +1,6 @@
 # ADR 0062: `--json` on every read verb, with a versioned schema
 
-Status: proposed, waiting for the owner's approval (issue 603). Nothing here is built. Decision A-3, A-9 of the agent interface.
+Status: accepted by the owner on 2026-11-13 (issue 603, decisions in issue 613). Nothing here is built yet. Decision A-3, A-9 of the agent interface.
 
 ## Context
 Several read verbs already take `-o json` (for example `get nodes` and `describe node`), but there is no promise about the shape, no schema and no version, so a script or an agent can break silently when output changes.
@@ -14,4 +14,5 @@ Several read verbs already take `-o json` (for example `get nodes` and `describe
 - Output shapes are now a public interface and cost a changelog line to change.
 - The schemas are also what the MCP tools (ADR 0064) and the recipes (ADR 0063) rely on.
 - Exists today: `get nodes|scenarios|checks|capture`, `describe node`, `get workbench`, `status`, `plan`, `doctor`, `export profile`. New: `get endpoints|traffic|faults`, `describe workbench`, `export report`.
-- Open question for the owner: which JSON Schema validator may the tests use without adding a runtime dependency (a dev-extra such as `jsonschema`, or a small local checker)?
+- Decided: the tests use `jsonschema`, a pinned, test-only dev-extra (never shipped). Schemas are written in JSON Schema draft 2020-12.
+- No JSON output ever contains a secret value, only a pointer to one (for example a file path or the command that prints it); the privacy test enforces it.

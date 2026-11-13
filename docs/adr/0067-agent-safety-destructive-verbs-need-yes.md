@@ -1,6 +1,6 @@
 # ADR 0067: Agent safety: destructive verbs need `--yes`
 
-Status: proposed, waiting for the owner's approval (issue 603). Nothing here is built. Decision A-8 of the agent interface.
+Status: accepted by the owner on 2026-11-13 (issue 603, decisions in issue 613). Nothing here is built yet. Decision A-8 of the agent interface.
 
 ## Context
 An agent can run a destructive command by mistake and cannot be asked 'are you sure' the way a person is.
@@ -12,4 +12,4 @@ An agent can run a destructive command by mistake and cannot be asked 'are you s
 
 ## Consequences
 - Behaviour only changes when `BENCHCTL_AGENT=1`; people see no difference.
-- Open question for the owner: should output not being a terminal also imply agent mode for safety, or only the variable? The proposal is the variable only, so a script run in cron is not changed.
+- Decided: the `--yes` safety rule comes only from `BENCHCTL_AGENT=1`, so existing scripts and cron jobs see no change. Output formatting is separate (ADR 0065): a non-terminal stdout drops colour and progress bars anyway.

@@ -11,7 +11,7 @@ Normative requirements for workbench. [README.md](README.md) gives the overview 
 - G4. One-command start (`benchctl up`) and a Web UI mirroring the CLI.
 - G5. Be the primary test target for a desktop HPC monitoring client: every endpoint such a client uses (SSH login node, Slurm, Grafana GPU metrics, Jira search, Redfish BMC) MUST behave like the real service, and [docs/guides/client-testing.md](docs/guides/client-testing.md) MUST list where each is and what is not built.
 - G6. Be a pre-production config lab (C-24, ADR 0049): import the exported configuration of a production cluster, change it, and watch the real Slurm, Kubernetes, Prometheus and Teleport run the change against a replay of the workload, with a report. It never weakens G5 and never connects to production.
-- G7. Be usable by other AI agents with little reading (proposed, ADR 0060 to 0068, issue 603): an agent is productive after one short file (`AGENTS.md`, at most 2,000 tokens) and one command call (`benchctl describe workbench --json`, at most 1,500 tokens of output). It never weakens G5 and adds no privilege.
+- G7. Be usable by other AI agents with little reading (approved, ADR 0060 to 0068, issue 603): an agent is productive after one short file (`AGENTS.md`, at most 2,000 tokens) and one command call (`benchctl describe workbench --json`, at most 1,500 tokens of output). It never weakens G5 and adds no privilege.
 
 **Non-goals**
 - Running real training jobs, real BCM, real GPUs or a real shared filesystem. The one exception is the opt-in `real-gpu` part (C-23), which shows the host's own NVIDIA card; no profile, preset or default includes it.
@@ -88,20 +88,20 @@ Profiles: `min`, `std`, `full`, `jira-real`, `mac-agent` ([architecture section 
 
 `doctor`, `up --profile`, `down`, `status`, `top`, `scale <group> <n>`, `jira mode <mock|cloud|dc>`, `scenario list|run`, `workload run`, `get|add|set|remove|validate|reload check(s)` (C-15). All state-changing commands go through the governor.
 
-### 7a. Agent interface (proposed, ADR 0060 to 0068, issue 603; none of it is built)
+### 7a. Agent interface (approved 2026-11-13, ADR 0060 to 0068, issues 603 and 613; none of it is built yet)
 
-Decisions A-1 to A-9, each with an ADR. The word *proposed* stays until the owner approves this block.
+Decisions A-1 to A-9, each with an ADR. The owner approved this block on 2026-11-13.
 
 | ID | Requirement |
 |---|---|
-| AG-1 | `AGENTS.md` at the repository root is for agents that use workbench as a test target and MUST be at most 2,000 tokens (characters divided by 4). `CLAUDE.md` stays for agents that develop it; each opens with one line pointing at the other. The endpoint table and verb list in `AGENTS.md` are generated (`python -m benchctl.agents`) and `validate.sh` MUST fail when they are stale (ADR 0060, 0068). |
-| AG-2 | `benchctl describe workbench --json` MUST return one object (`contract_version`, `state`, `clusters`, `endpoints`, `faults_active`, `scenarios`, `fault_targets`, `next`) of at most 6,000 characters for the default profile, with credentials as pointers and never as values (ADR 0061). |
-| AG-3 | Every read verb MUST accept `--json` (an alias of `-o json`) with a schema in `docs/agents/schemas/`, a `contract_version` field and an entry in `docs/agents/CHANGELOG.md` for every change; removing or renaming a field or changing a type is a major version (ADR 0062). |
-| AG-4 | `benchctl serve mcp` MUST serve the tools of ADR 0064 over stdio, through the same code and the same governor path as the CLI, as the optional extra `.[mcp]`, lazily imported and never loaded by the web UI process (W-1, W-3). |
+| AG-1 | `AGENTS.md` at the repository root is for agents that use workbench as a test target and MUST stay at or under 2,000 tokens (characters divided by 4). `CLAUDE.md` stays for agents that develop it; each opens with one line pointing at the other. The endpoint table and verb list in `AGENTS.md` are generated (`python -m benchctl.agents`) and `validate.sh` MUST fail when they are stale (ADR 0060, 0068). |
+| AG-2 | `benchctl describe workbench --json` MUST return one object (`contract_version`, `state`, `clusters`, `endpoints`, `faults_active`, `scenarios`, `fault_targets`, `next`) of at most 6,000 characters for the default profile, with credentials as pointers and never as values (ADR 0061). No JSON output of any verb ever contains a secret value, only a pointer to one (AG-9). |
+| AG-3 | Every read verb MUST accept `--json` (an alias of `-o json`) with a schema in `docs/agents/schemas/`, a `contract_version` field and an entry in `docs/agents/CHANGELOG.md` for every change; removing or renaming a field or changing a type is a major version. Schemas are JSON Schema draft 2020-12 (ADR 0062). |
+| AG-4 | `benchctl serve mcp` MUST serve the tools of ADR 0064 over stdio, through the same code and the same governor path as the CLI, as the optional extra `.[mcp]`, imported only inside `serve mcp` and never loaded by the web UI, the governor or plain `benchctl` startup (W-1, W-3). |
 | AG-5 | `docs/agents/recipes/` MUST hold the recipes of ADR 0063, each at most 60 lines with the fixed headings; every command in them exists in the CLI. |
-| AG-6 | When stdout is not a terminal or `BENCHCTL_AGENT=1`, output MUST have no colour, progress bar or spinner; an error is one line with a stable code and the fix command; a long log is written to a file and only its path is printed (ADR 0065). |
-| AG-7 | `benchctl wait ready|scenario|alert|node-state ... --timeout S` MUST block and return one JSON result, exit 0 on success and 1 on timeout (ADR 0066). |
-| AG-8 | With `BENCHCTL_AGENT=1`, `down`, `remove ...`, `scale` to fewer nodes and an `apply` that removes nodes MUST need `--yes`; the MCP tools MUST be annotated destructive. Governor admission and levels apply unchanged (GV-8, GV-9, NF-6; ADR 0067). |
+| AG-6 | When stdout is not a terminal or `BENCHCTL_AGENT=1`, output MUST have no colour, progress bar or spinner. With `BENCHCTL_AGENT=1` an error is one line with a stable code (`WB-<KIND>-<DETAIL>`, one registry file the tests check, each with its fix command) and a long log is written to a file and only its path is printed (ADR 0065). |
+| AG-7 | `benchctl wait ready|scenario|alert|node-state ... --timeout S` MUST block and return one JSON result, exit 0 on success, 1 on timeout and 2 when a precondition is not met (`wait alert` without Prometheus; ADR 0066). |
+| AG-8 | With `BENCHCTL_AGENT=1` (and only then), `down`, `remove ...`, `scale` to fewer nodes and an `apply` that removes nodes MUST need `--yes`; the MCP tools MUST be annotated destructive. Governor admission and levels apply unchanged (GV-8, GV-9, NF-6; ADR 0067). |
 | AG-9 | JSON outputs are tested against their schemas (`tests/test_json_contract.py`), including a privacy scan of a sample output (NF-4); agent output mode and the MCP tools have their own tests (ADR 0062, 0064, 0065). |
 
 New CLI verbs: `wait` and `serve mcp`; new resource: `describe workbench`. Read verbs that do not exist today and are part of this block: `get endpoints|traffic|faults`, `export report` and an alerts read (the `get nodes|scenarios|checks|capture`, `describe node` and `get workbench` verbs exist).
@@ -161,6 +161,6 @@ Exit tests are listed in [architecture section 11](docs/architecture/09-roadmap-
 
 See [architecture section 12](docs/architecture/09-roadmap-decisions-risks.md) (Slurm access path, BCM surface, Jira features, real GPUs, Mac access). Each MUST be resolved before the dependent component is implemented.
 
-Not built yet (so no requirement above is satisfied by them): the agent interface G7 and AG-1 to AG-9 (issue 603, proposed); the config lab C-24 and its workspace W-17l (epic 557); W-7 Profile and Budget Manager; the user simulator and ticket bot; Slurm job dots on the Infrastructure architecture; Teleport scenarios (certificate expiry, `teleport-outage`) and Teleport in the Web UI; the Kubernetes real agent node, metrics-server and a k-login node (C-2, ADR 0034); Kubernetes in the Infrastructure architecture diagram; the netem verb of C-12 (issue 478); the fidelity VM is deferred (ADR 0033).
+Not built yet (so no requirement above is satisfied by them): the agent interface G7 and AG-1 to AG-9 (issue 603, approved); the config lab C-24 and its workspace W-17l (epic 557); W-7 Profile and Budget Manager; the user simulator and ticket bot; Slurm job dots on the Infrastructure architecture; Teleport scenarios (certificate expiry, `teleport-outage`) and Teleport in the Web UI; the Kubernetes real agent node, metrics-server and a k-login node (C-2, ADR 0034); Kubernetes in the Infrastructure architecture diagram; the netem verb of C-12 (issue 478); the fidelity VM is deferred (ADR 0033).
 
 The governor's control commands no longer wait for a running plan: actions run outside the state lock (ADR 0031, issue 342; it was issue 53).

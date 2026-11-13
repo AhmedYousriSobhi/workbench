@@ -1,6 +1,6 @@
 # ADR 0060: Two front doors: AGENTS.md for users of the tool, CLAUDE.md for its developers
 
-Status: proposed, waiting for the owner's approval (issue 603). Nothing here is built. Decision A-1 of the agent interface.
+Status: accepted by the owner on 2026-11-13 (issue 603, decisions in issue 613). Nothing here is built yet. Decision A-1 of the agent interface.
 
 ## Context
 Most users of workbench will be other AI agents building and testing an app against it. Today they have to read the manual and the CLI help (thousands of lines) before they can do anything. CLAUDE.md already serves agents that change this repository, and it would be a poor first read for an agent that only wants a test target.

@@ -6,7 +6,7 @@ Status: accepted (design of epic 557, A-8 and A-9). Issue 545.
 
 - Slurm's own mechanisms, no new process: `SuspendProgram`/`ResumeProgram` are one script, `images/slurm-ctl/power.sh`, installed as `power-off` and `power-on` (slurmctld passes only a hostlist, so the name says which way); `RebootProgram` is `images/node-base/reboot.sh`, which runs on the node.
 - The BMC farm is the source of truth for power: the scripts post a Redfish `Reset` (`ForceOff`, `On`) to the farm's plain port. A failure there fails the program, as a real power program's failure would. The BCM mock and the GPU exporter are told the same way a BMC power change does in a scenario, best effort, so every view agrees.
-- Reboot is a power cycle (`ForceOff`, pause, `On`) plus the `slurmd` hold file that `slurmd-run` already waits on; the container stays up. The work runs detached because it kills `slurmd`, its own parent.
+- Reboot is a power cycle (`ForceOff`, pause, `On`) plus the `slurmd` hold file that `slurmd-run` already waits on; the container stays up. The work runs detached because it kills `slurmd`, its own parent (changed, see addendum).
 - `SuspendTime` is not written: the default is off in every Slurm version, so nothing idles into power save, and the value `NONE` in the design could not be checked against 26.05.5 offline (a wrong value stops slurmctld).
 - Scenario keys `power_down`, `power_up`, `reboot` on target `slurm`, separate from `power_off`/`power_on` (a node killed behind Slurm's back). They need Docker, so the page skips them.
 
@@ -17,3 +17,5 @@ A Slurm power down does not stop the node container or its `slurmd` (slurmctld h
 ## Addendum (live run, 2026-11-12)
 
 The first live run changed three details, recorded in docs/guides/power-and-reboot.md: slurmd restarts with `-b` after a power up or reboot (containers share the host uptime, so Slurm never saw a boot), `slurmd-run` follows Slurm's own power state to stop and start slurmd, and `RebootProgram` runs its cycle in the foreground (Slurm ends a detached child).
+
+Addendum (2026-11-13): `RebootProgram` runs its cycle in the foreground, because Slurm ends a detached child. This replaces the sentence "The work runs detached" in the Decision; the live evidence is in the addendum above.
