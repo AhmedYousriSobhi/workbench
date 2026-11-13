@@ -25,13 +25,13 @@ def cluster():
 
 
 def test_get_nodes_reports_real_state(cluster):
-    rows = {r["name"]: r for r in json.loads(benchctl("get", "nodes", "-o", "json").stdout)}
+    rows = {r["name"]: r for r in json.loads(benchctl("get", "nodes", "-o", "json").stdout)["items"]}
     assert rows["cn001"]["state"] == "running" and rows["gpu001"]["kind"] == "gpu"
     assert "cn001" in benchctl("get", "nodes").stdout
 
 
 def test_get_services_lists_the_stack(cluster):
-    names = {r["name"] for r in json.loads(benchctl("get", "services", "-o", "json").stdout)}
+    names = {r["name"] for r in json.loads(benchctl("get", "services", "-o", "json").stdout)["items"]}
     assert {"slurmctld", "login", "cn001"} <= names
 
 
