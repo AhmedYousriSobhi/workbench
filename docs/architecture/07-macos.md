@@ -1,3 +1,5 @@
+<p align="center"><img src="../assets/art/arch-07-macos-hero.svg" alt="Architecture: macOS testing. macOS, external agent." width="720"></p>
+
 # macOS testing
 
 [Architecture index](README.md) · [Project overview](../../README.md)

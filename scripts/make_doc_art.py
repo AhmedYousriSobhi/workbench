@@ -596,6 +596,56 @@ def diagram_canvas() -> str:
                  ("--cv tokens", "wire", "Fleet", "Cluster", "Pool"), ("a wire is a halo, a core and a moving pulse, one colour per plane", "the Focused wire capture runs only through the governor, at L0 and L1, one at a time, for at most 5 minutes"), "monitoring")
 
 
+# ---- architecture page headers (issue 611) -----------------------------------------------------------------------
+
+def arch_01_problem_and_principles() -> str:
+    return _guide_hero('Problem and principles', 'Architecture: Problem and principles', 'Chips: one laptop, nine principles.', ('one laptop', 'nine principles'), 'why 16 GB breaks the old lab', 'access')
+
+
+def arch_02_architecture() -> str:
+    return _guide_hero('Architecture overview', 'Architecture: Architecture overview', 'Chips: login, slurmctld, nodes, mocks.', ('login', 'slurmctld', 'nodes', 'mocks'), 'the full component diagram by priority slice', 'access')
+
+
+def arch_03_components() -> str:
+    return _guide_hero('Component decisions', 'Architecture: Component decisions', 'Chips: Slurm, Kubernetes, BMC, BCM, Jira.', ('Slurm', 'Kubernetes', 'BMC', 'BCM', 'Jira'), 'what each component is and why', 'management')
+
+
+def arch_04_memory_and_profiles() -> str:
+    return _guide_hero('Memory contract', 'Architecture: Memory contract', 'Chips: budget, profile, pre-flight.', ('budget', 'profile', 'pre-flight'), 'every component has a cap and a priority class', 'monitoring')
+
+
+def arch_05_governor() -> str:
+    return _guide_hero('The governor', 'Architecture: The governor', 'Chips: signals, ladder, actions.', ('signals', 'ladder', 'actions'), 'placement, signals and the escalation ladder L0 to L5', 'management')
+
+
+def arch_06_ux_and_scenarios() -> str:
+    return _guide_hero('Control, web page and scenarios', 'Architecture: Control, web page and scenarios', 'Chips: benchctl, web page, scenarios.', ('benchctl', 'web page', 'scenarios'), 'one grammar, one page, named faults', 'access')
+
+
+def arch_07_macos() -> str:
+    return _guide_hero('macOS testing', 'Architecture: macOS testing', 'Chips: macOS, external agent.', ('macOS', 'external agent'), 'never run in a VM on this host', 'control')
+
+
+def arch_08_repository_and_migration() -> str:
+    return _guide_hero('Repository layout', 'Architecture: Repository layout', 'Chips: benchctl/, governor/, images/, docs/.', ('benchctl/', 'governor/', 'images/', 'docs/'), 'where things live', 'control')
+
+
+def arch_09_roadmap_decisions_risks() -> str:
+    return _guide_hero('Roadmap, decisions, risks', 'Architecture: Roadmap, decisions, risks', 'Chips: phases, open decisions, risks.', ('phases', 'open decisions', 'risks'), 'what is done, open and risky', 'management')
+
+
+def arch_10_references() -> str:
+    return _guide_hero('References', 'Architecture: References', 'Chips: sources.', ('sources',), 'what was researched', 'monitoring')
+
+
+def arch_11_governor_as_built() -> str:
+    return _guide_hero('The governor as built', 'Architecture: The governor as built', 'Chips: boot order, control cycle, lock time.', ('boot order', 'control cycle', 'lock time'), 'what the code does today', 'management')
+
+
+def arch_README() -> str:
+    return _guide_hero('How it works', 'Architecture: How it works', 'Chips: manual, guides, architecture, ADRs.', ('manual', 'guides', 'architecture', 'ADRs'), 'every Under the hood section in one index', 'monitoring')
+
+
 ART = {"readme-hero.svg": readme_hero, "readme-how-it-works.svg": readme_how_it_works, "readme-memory.svg": readme_memory, "tour-hero.svg": tour_hero, **ICONS,
        "01-what-it-is-hero.svg": hero_what_it_is, "02-install-and-start-hero.svg": hero_install_and_start,
        "03-using-the-cluster-hero.svg": hero_using_the_cluster,
@@ -614,7 +664,19 @@ ART = {"readme-hero.svg": readme_hero, "readme-how-it-works.svg": readme_how_it_
        "guide-client-setup-by-component-hero.svg": hero_client_setup, "guide-client-setup-by-component-diagram.svg": diagram_client_setup,
        "guide-client-testing-hero.svg": hero_client_testing, "guide-client-testing-diagram.svg": diagram_client_testing,
        "guide-ssh-connection-testing-hero.svg": hero_ssh_testing, "guide-ssh-connection-testing-diagram.svg": diagram_ssh_testing,
-       "guide-web-ui-canvas-hero.svg": hero_canvas, "guide-web-ui-canvas-diagram.svg": diagram_canvas}
+       "guide-web-ui-canvas-hero.svg": hero_canvas, "guide-web-ui-canvas-diagram.svg": diagram_canvas,
+       "arch-01-problem-and-principles-hero.svg": arch_01_problem_and_principles,
+       "arch-02-architecture-hero.svg": arch_02_architecture,
+       "arch-03-components-hero.svg": arch_03_components,
+       "arch-04-memory-and-profiles-hero.svg": arch_04_memory_and_profiles,
+       "arch-05-governor-hero.svg": arch_05_governor,
+       "arch-06-ux-and-scenarios-hero.svg": arch_06_ux_and_scenarios,
+       "arch-07-macos-hero.svg": arch_07_macos,
+       "arch-08-repository-and-migration-hero.svg": arch_08_repository_and_migration,
+       "arch-09-roadmap-decisions-risks-hero.svg": arch_09_roadmap_decisions_risks,
+       "arch-10-references-hero.svg": arch_10_references,
+       "arch-11-governor-as-built-hero.svg": arch_11_governor_as_built,
+       "arch-README-hero.svg": arch_README}
 
 
 def outputs() -> dict[Path, str]:

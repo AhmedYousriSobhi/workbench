@@ -1,3 +1,5 @@
+<p align="center"><img src="../assets/art/arch-02-architecture-hero.svg" alt="Architecture: Architecture overview. login, slurmctld, nodes, mocks." width="720"></p>
+
 # Architecture overview
 
 [Architecture index](README.md) · [Project overview](../../README.md)
