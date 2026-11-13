@@ -17,7 +17,7 @@ def test_tokens_css_is_up_to_date():
 def test_anchors_equal_the_logo_values():
     assert PAL["anchors"] == {"teal": {"light": "#0b8f80", "dark": "#2fc4b2"}, "ink": {"light": "#14211f", "dark": "#e5eeec"},
                               "amber": {"light": "#b86e00", "dark": "#f0a030"}}
-    logo = (ROOT / "scripts/make_logo_assets.py").read_text()
+    logo = (ROOT / "docs/assets/logo.svg").read_text()       # the logo script reads the palette; the generated file carries the values
     for a in ("teal", "ink", "amber"):
         for scheme in ("light", "dark"):
             assert PAL["anchors"][a][scheme] in logo, (a, scheme)

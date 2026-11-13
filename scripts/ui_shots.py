@@ -340,6 +340,15 @@ def capture(out: Path) -> dict:
             if first.evaluate("document.documentElement.dataset.theme") != "midnight":
                 result["a11y"].append("a first visit does not start in the dark theme")
             first.close()
+            for theme in ("light", "dark", "midnight", "dim"):      # no flash: with the app's own scripts blocked, <html> already carries the saved theme
+                fp = browser.new_page(viewport={"width": 1280, "height": 900}, bypass_csp=True)
+                fp.route("**/static/js/main.js", lambda route: route.abort())
+                fp.add_init_script(f"localStorage.setItem('workbench-theme','{theme}')")
+                fp.goto(login_url(base_url, ui_token))
+                fp.wait_for_timeout(400)
+                if fp.evaluate("document.documentElement.dataset.theme") != theme:
+                    result["a11y"].append(f"theme flash: saved {theme}, but the first paint has no theme (theme-init.js did not run)")
+                fp.close()
             for scheme in ("light", "dark"):
                 for vp, (w, h) in VIEWPORTS.items():
                     page = browser.new_page(viewport={"width": w, "height": h}, color_scheme=scheme, bypass_csp=True)
