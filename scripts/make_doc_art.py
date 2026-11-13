@@ -258,6 +258,9 @@ ICONS = {
     "group-architecture.svg": lambda: icon("Architecture", "A rack of nodes.", rack(5, 18, 2, (), 14)),
     "group-adr.svg": lambda: icon("Decisions", "A note with a tick.",
                                   '<rect class="p2" x="14" y="8" width="36" height="48" rx="6"/><path class="ln" d="M24 32l6 6l11-12"/>'),
+    "group-agents.svg": lambda: icon("For AI agents", "A terminal window with a prompt and two small nodes beside it.",
+                                     '<rect class="p2" x="6" y="14" width="34" height="36" rx="6"/>' + label(12, 38, "&gt;_", "tx2", "b", True)
+                                     + node(43, 14, "ok", 14) + node(43, 34, "ok", 14)),
 }
 
 # ---- chapter heroes (issue 596): a small scene per manual chapter, 720 by 150 -----------------------------------------

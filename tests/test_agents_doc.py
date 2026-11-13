@@ -95,3 +95,24 @@ def test_llms_txt_links_exist():
 def test_agent_docs_hold_no_private_path_or_client_name():
     for f in [ROOT / "AGENTS.md", ROOT / "llms.txt", *RECIPES.glob("*.md")]:
         assert not re.search(r"/home/[a-z_]", f.read_text()), f
+
+
+def test_the_skill_is_short_and_points_at_files_and_commands_that_exist():
+    text = (ROOT / "docs" / "agents" / "skill" / "SKILL.md").read_text()
+    front = re.match(r"---\nname: workbench\ndescription: (.+)\n---\n", text)
+    assert front and len(front.group(1)) < 400
+    assert agents.tokens(text) <= 600
+    for path in re.findall(r"`((?:docs/|AGENTS)[^`]*)`", text):
+        assert (ROOT / path.rstrip("/")).exists(), path
+    spans = re.findall(r"`\./scripts/benchctl ([^`]+)`", text)
+    assert len(spans) >= 5
+    for span in spans:
+        check_command(span.replace("NAME", "x").replace("...", "ready"))
+
+
+def test_the_agents_page_links_resolve_and_the_readme_points_at_it():
+    page = ROOT / "docs" / "agents" / "README.md"
+    for link in re.findall(r"\]\(([^)#]+)\)", page.read_text()):
+        if not link.startswith("http"):
+            assert (page.parent / link).exists(), link
+    assert "docs/agents/README.md" in (ROOT / "README.md").read_text()

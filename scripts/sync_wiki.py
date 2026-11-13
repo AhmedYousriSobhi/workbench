@@ -3,7 +3,7 @@
     python scripts/sync_wiki.py --out DIR            write the wiki pages into DIR
     python scripts/sync_wiki.py --push               clone the wiki repository, sync it, commit and push
 
-One wiki page per markdown file in docs/manual, docs/guides, docs/architecture and docs/adr; `Home` is the manual's
+One wiki page per markdown file in docs/manual, docs/guides, docs/architecture, docs/adr and docs/agents; `Home` is the manual's
 start page, `_Sidebar` lists everything. Links between pages become wiki links, images are copied to images/, and a link
 to a file outside docs/ (SPEC.md, sim.yaml, source files) becomes a link to that file in the repository. Never edit the
 wiki by hand: the next sync overwrites it.
@@ -28,7 +28,7 @@ from webui.wiki import (  # stdlib-only module: reuses the page titles and the d
     Wiki,
 )
 
-PREFIX = {"manual": "Manual", "guides": "Guide", "architecture": "Architecture", "adr": "ADR"}
+PREFIX = {"manual": "Manual", "guides": "Guide", "architecture": "Architecture", "adr": "ADR", "agents": "Agents"}
 # the two project callout kinds GitHub does not know: shown as a quote headed by a bold label
 PROJECT_CALLOUTS = {"HOOD": "**🔧 Under the hood**", "DIDYOUKNOW": "**💡 Did you know?**"}
 FOOTER = ("Generated from `docs/` in the repository by `scripts/sync_wiki.py`. Edit the files there, not this wiki: "
@@ -75,7 +75,7 @@ def rewrite(text: str, page: str, docs: Path, blob: str) -> str:
         in_docs = not rel.startswith("..")
         suffix = posixpath.splitext(rel)[1]
         suffix_frag = f"#{frag}" if frag else ""
-        if in_docs and suffix == ".md" and rel.split("/")[0] in PREFIX and (docs / rel).is_file():
+        if in_docs and suffix == ".md" and rel.split("/")[0] in PREFIX and rel.count("/") == 1 and (docs / rel).is_file():  # a page of a group, not a file in a subfolder
             return f"{bang}[{label}]({page_name(rel[:-3])}{suffix_frag})"
         if in_docs and suffix in IMAGES and (docs / rel).is_file():
             return f"{bang}[{label}]({image_name(rel)})"
