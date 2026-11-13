@@ -1,6 +1,6 @@
 # ADR 0068: One source for agent docs: generated blocks, the skill file and the wiki page
 
-Status: proposed, waiting for the owner's approval (issue 603). Nothing here is built. Decision A-1, A-9 of the agent interface.
+Status: accepted by the owner on 2026-11-13 (issue 603, decisions in issue 613). Nothing here is built yet. Decision A-1, A-9 of the agent interface.
 
 ## Context
 Agent docs that are copied by hand drift. The Claude Code skill, the wiki page and the README section must say the same thing as `AGENTS.md`.
