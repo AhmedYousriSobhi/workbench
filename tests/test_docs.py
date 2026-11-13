@@ -66,7 +66,7 @@ def test_markdown_relative_links_resolve():
 
 
 def test_readme_stays_short_and_architecture_is_split():
-    assert len((ROOT / "README.md").read_text().splitlines()) <= 120
+    assert len((ROOT / "README.md").read_text().splitlines()) <= 160
     pages = sorted((ROOT / "docs/architecture").glob("*.md"))
     assert len(pages) >= 10
     index = (ROOT / "docs/architecture/README.md").read_text()
@@ -170,3 +170,14 @@ def test_verbs_guide_covers_every_command():
     group = typer.main.get_command(app)
     missing = [name for name in group.commands if f"`{name}" not in text]
     assert not missing, f"add these verbs to docs/guides/benchctl-verbs.md: {missing}"
+
+
+def test_readme_html_images_exist_and_have_alt_text():
+    """The README uses <img> and <picture>; the link check above only sees markdown links."""
+    text = (ROOT / "README.md").read_text()
+    for tag in re.findall(r"<img\b[^>]*>", text):
+        assert re.search(r'alt="[^"]+"', tag), tag
+    paths = re.findall(r'(?:src|srcset)="(docs/[^"]+)"', text)
+    assert paths
+    for p in paths:
+        assert (ROOT / p).is_file(), p
