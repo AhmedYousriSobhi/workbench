@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "plan",
+  "description": "Would the selection fit in free memory; exit code 1 when fits is false.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "fits": {
+      "type": "boolean"
+    },
+    "verdict": {
+      "type": "string"
+    },
+    "free_mb": {
+      "type": "integer"
+    },
+    "workbench": {
+      "type": "object"
+    },
+    "memory": {
+      "type": "object",
+      "properties": {
+        "need_mb": {
+          "type": "integer"
+        },
+        "expected_mb": {
+          "type": "integer"
+        },
+        "total_mb": {
+          "type": "integer"
+        },
+        "app_mb": {
+          "type": "integer"
+        },
+        "node_count": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "need_mb",
+        "expected_mb",
+        "total_mb",
+        "app_mb",
+        "node_count"
+      ]
+    }
+  },
+  "required": [
+    "contract_version",
+    "fits",
+    "verdict",
+    "free_mb",
+    "workbench",
+    "memory"
+  ]
+}

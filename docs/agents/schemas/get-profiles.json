@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "get profiles",
+  "description": "The size presets.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "compute_nodes": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "groups": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "compute_nodes",
+          "groups"
+        ]
+      }
+    }
+  },
+  "required": [
+    "contract_version",
+    "items"
+  ]
+}

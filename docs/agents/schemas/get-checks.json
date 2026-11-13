@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "get checks",
+  "description": "The node health checks in the order they run.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "position": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "on",
+              "off"
+            ]
+          },
+          "params": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "position",
+          "name",
+          "state",
+          "params",
+          "description"
+        ]
+      }
+    }
+  },
+  "required": [
+    "contract_version",
+    "items"
+  ]
+}
