@@ -1,4 +1,8 @@
+<p align="center"><img src="../assets/art/10-reference-hero.svg" alt="The command grammar as three chips: verb, resource, name" width="720"></p>
+
 # 10. Reference
+
+**In 30 seconds:** every command is `benchctl VERB [RESOURCE] [NAME]`. This page lists each verb, flag and file. Look here when you know what you want and need the exact spelling.
 
 ## The command: `benchctl`
 
@@ -120,3 +124,9 @@ and one per node (`cn001`, `gpu001`, ...).
 | Scenario | a named, timed list of faults |
 | Mock | a program that imitates one service's API |
 | Fidelity VM | deferred (ADR 0033) |
+
+## Learn more
+
+- [Which command do I use?](11-which-command.md)
+- [The verbs guide](../guides/benchctl-verbs.md)
+- [Glossary](12-glossary.md)

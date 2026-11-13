@@ -1,4 +1,15 @@
+<p align="center"><img src="../assets/art/09-troubleshooting-hero.svg" alt="Two commands, status and diag, leading to one masked tar file to attach to a bug report" width="720"></p>
+
 # 9. Troubleshooting
+
+**In 30 seconds:** run `benchctl status` to see the governor, run `benchctl diag` to bundle everything into one masked file, and attach that file to any bug report.
+
+## Do it
+
+```bash
+./scripts/benchctl status
+./scripts/benchctl diag            # writes workbench-diag-<time>.tar.gz
+```
 
 Start with two commands:
 
@@ -48,3 +59,26 @@ Also keep throwaway test containers **unlabelled** (`workbench.class`), or the i
 
 Run `./scripts/benchctl diag`, then open an issue at the project's GitHub repository with the file attached and the exact
 command you ran.
+
+## Under the hood
+
+> [!HOOD]
+> `diag` gathers the doctor checks, `/proc` memory, CPU and IO pressure, `free` and `swapon`, `docker ps` and `docker stats`, the libvirt list, the biggest processes by RSS, the governor's status and journal, the git revision and `sim.yaml`, then writes them into one tar.gz.
+> Before anything is written, each file passes through a masker that replaces GitHub token shapes, anything after `token`, `password` or `secret`, and credentials inside `https://` URLs with `***`.
+
+Source: `benchctl/diag.py` (`collect`, `mask`, `write_bundle`)
+
+## Tips
+
+> [!TIP]
+> Run `diag` while the problem is happening: it records memory pressure at that moment.
+
+## If it goes wrong
+
+See the symptom table above; if nothing fits, the "Still stuck" section at the end says what to send.
+
+## Learn more
+
+- [Verbs guide](../guides/benchctl-verbs.md)
+- [The governor](07-governor.md)
+- [Which command do I use?](11-which-command.md)

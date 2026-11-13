@@ -1,4 +1,8 @@
+<p align="center"><img src="../assets/art/12-glossary-hero.svg" alt="Three word bubbles: profile, mock and scenario" width="720"></p>
+
 # 12. Glossary
+
+**In 30 seconds:** every term the manual and the web page use, in one table.
 
 Words used across the manual and the web page.
 
@@ -26,3 +30,8 @@ Words used across the manual and the web page.
 | **Token** | the login secret for the web page, in `compose/generated/secrets/ui_token` (printed by `benchctl open`) |
 | **Client** | the desktop monitoring application you are testing against workbench |
 | **ADR** | architecture decision record in `docs/adr/`: why a design choice was made |
+
+## Learn more
+
+- [Reference](10-reference.md)
+- [What workbench is](01-what-it-is.md)
