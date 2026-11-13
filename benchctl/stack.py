@@ -226,6 +226,12 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         say(f"skipping (not implemented yet): {', '.join(skip)}")
     if "bmc-farm" in todo:
         ensure_bmc_credentials()
+    if any(re.fullmatch(r"slurm(ctld|restd|dbd)|accounting-init|(cn|gpu|rgpu)\d+", n) or logins.is_login(n) for n in todo):
+        try:
+            ensure_slurm_keys()
+        except OSError as e:
+            say(f"FAILED slurm keys: {e}")
+            return False
     if "jira-real" in todo:
         jira_real.ensure_secrets()
     if any(logins.is_login(n) for n in todo) or any(re.fullmatch(r"(cn|gpu|rgpu)\d+", n) for n in todo):
@@ -262,7 +268,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     if first is not None or build_targets(todo, names):
         stage({"stage": "Build images", "state": "running"})
     # slurmctld, slurmrestd and login build FROM node-base's tag, which only a node service rebuilds. Build it first,
-    # or a changed base (new munge key) leaves the controller on the old image and every Slurm call fails to authenticate.
+    # or a changed base leaves the controller on the old image (the keys are mounted now, issue 465, but the entrypoint is in the base).
     if first is not None:
         r = runner(dc("build", first, file=path))
         if r.returncode != 0:
@@ -443,6 +449,31 @@ def ensure_ssh_keys(path: Path = SSH_DIR, runner: Runner = _run) -> Path:
             if r.returncode != 0:
                 raise OSError(f"ssh-keygen failed: {r.stderr.strip()[-200:]}")
     (path / "authorized_keys").write_text((path / "id_ed25519.pub").read_text() + (path / "id_cluster.pub").read_text())
+    if os.geteuid() == 0:  # run under sudo: hand the secrets back to the checkout's owner
+        owner = path.parent.parent.stat()
+        for p in (path, *path.iterdir()):
+            os.chown(p, owner.st_uid, owner.st_gid)
+    return path
+
+
+SLURM_KEYS = Path("compose/generated/secrets/slurm")
+
+
+def ensure_slurm_keys(path: Path = SLURM_KEYS) -> Path:
+    """The munge key and the Slurm JWT signing key, made once per checkout and mounted read-only into every Slurm container
+    (issue 465): no key material lives in an image layer, and no two clones share keys. The container's entrypoint (root)
+    installs them with the owners munge and slurmctld need, so the host files can stay 0600 and owned by you.
+
+    Kept across `up`s: a new key would break every running node until it restarts.
+    """
+    import secrets
+
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    for name, size in (("munge.key", 1024), ("jwt_hs256.key", 32)):
+        if not (path / name).exists():
+            fd = os.open(path / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as f:
+                f.write(secrets.token_bytes(size))
     if os.geteuid() == 0:  # run under sudo: hand the secrets back to the checkout's owner
         owner = path.parent.parent.stat()
         for p in (path, *path.iterdir()):
