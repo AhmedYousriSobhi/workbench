@@ -13,6 +13,8 @@
 #                                 Nightly and the dev -> main release gate run --full --with-jira; --changed adds it when Jira code changed.
 #        --serial                 run validate.sh before the live tests (default: in the background, next to them)
 #        --trust-ci               skip validate.sh when the CI run for HEAD passed and the tree is clean
+#        --install-nightly [HH:MM]  a user systemd timer (default 02:30) that runs --full --with-jira, log in compose/generated/nightly-DATE.log; no sudo.
+#                                 With -n it prints the unit files and writes nothing. --remove-nightly takes it away. `loginctl enable-linger $USER` lets it run logged out.
 #        --revalidate             run validate.sh even when a fresh pass is recorded
 #        --skip-browser           leave out the Chromium tests (pytest marker `browser`)
 #   ./scripts/verify.sh --unit X  verify one component: tests/test_X*.py (fast), then tests/real/test_X*.py (live)
@@ -23,7 +25,7 @@
 # Your workbench selection (compose/generated/workbench.yaml, profile, sim.yaml) is saved first and put back on exit.
 set -u
 cd "$(dirname "$0")/.."
-withjira=0 changed=0 base="origin/dev" explain=0 serial=0 trustci=0 full=0 revalidate=0 nobrowser=0 only="" unit="" unit_given=0 clean=0 list=0 dry=0
+nightly="" nightly_at="02:30" withjira=0 changed=0 base="origin/dev" explain=0 serial=0 trustci=0 full=0 revalidate=0 nobrowser=0 only="" unit="" unit_given=0 clean=0 list=0 dry=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --full) full=1 ;;
@@ -31,6 +33,8 @@ while [ $# -gt 0 ]; do
     --explain) explain=1 ;;
     --serial) serial=1 ;;
     --with-jira) withjira=1 ;;
+    --install-nightly) nightly=install; case "${2:-}" in [0-2][0-9]:[0-5][0-9]) nightly_at="$2"; shift ;; esac ;;
+    --remove-nightly) nightly=remove ;;
     --trust-ci) trustci=1 ;;
     --only) only="$2"; shift ;;
     --unit) unit="${2:-}"; unit_given=1; shift ;;
@@ -39,10 +43,40 @@ while [ $# -gt 0 ]; do
     --skip-browser) nobrowser=1 ;;
     --list-units) list=1 ;;
     -n|--dry-run) dry=1 ;;
-    *) echo "usage: $0 [--full] [--changed [BASE]] [--explain] [--serial] [--trust-ci] [--with-jira] [--only KEYWORD] [--revalidate] [--skip-browser] [--unit NAME [--clean]] [--list-units] [-n]" >&2; exit 2 ;;
+    *) echo "usage: $0 [--full] [--changed [BASE]] [--explain] [--serial] [--trust-ci] [--with-jira] [--install-nightly [HH:MM] | --remove-nightly] [--only KEYWORD] [--revalidate] [--skip-browser] [--unit NAME [--clean]] [--list-units] [-n]" >&2; exit 2 ;;
   esac
   shift
 done
+if [ -n "$nightly" ]; then  # the nightly full run: a user timer, no sudo (issue 576)
+  udir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"; repo=$(pwd)
+  service="[Unit]
+Description=workbench nightly verification (verify.sh --full --with-jira)
+
+[Service]
+Type=oneshot
+WorkingDirectory=$repo
+ExecStart=/bin/bash -c './scripts/verify.sh --full --with-jira > compose/generated/nightly-\$\$(date +%%Y%%m%%d).log 2>&1'
+TimeoutStartSec=3h"
+  timer="[Unit]
+Description=workbench nightly verification
+
+[Timer]
+OnCalendar=*-*-* $nightly_at:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target"
+  if [ "$nightly" = install ]; then
+    if [ "$dry" = 1 ]; then printf 'would write %s/verify-nightly.service:\n%s\n\nwould write %s/verify-nightly.timer:\n%s\n\nwould run: systemctl --user daemon-reload && systemctl --user enable --now verify-nightly.timer\n' "$udir" "$service" "$udir" "$timer"; exit 0; fi
+    mkdir -p "$udir" "$repo/compose/generated"
+    printf '%s\n' "$service" >"$udir/verify-nightly.service"; printf '%s\n' "$timer" >"$udir/verify-nightly.timer"
+    systemctl --user daemon-reload && systemctl --user enable --now verify-nightly.timer && echo "nightly verification installed: every day at $nightly_at (log: compose/generated/nightly-DATE.log); remove with --remove-nightly" && exit 0
+    echo "could not enable the timer (no systemd user session?); the unit files are in $udir" >&2; exit 1
+  fi
+  if [ "$dry" = 1 ]; then echo "would run: systemctl --user disable --now verify-nightly.timer; remove $udir/verify-nightly.{service,timer}"; exit 0; fi
+  systemctl --user disable --now verify-nightly.timer 2>/dev/null; rm -f "$udir/verify-nightly.service" "$udir/verify-nightly.timer"; systemctl --user daemon-reload 2>/dev/null
+  echo "nightly verification removed"; exit 0
+fi
 shopt -s nullglob
 [ -n "${PYLIBS:-}" ] && export PYTHONPATH="$PYLIBS${PYTHONPATH:+:$PYTHONPATH}"
 units() {  # test_bmc_tls_real.py -> bmc_tls: one name per component that has tests
