@@ -2,7 +2,7 @@
 import pytest
 from palette_lib import RES, SURFACES, THEMES, mp, tok
 
-ALL = (*THEMES, "canvas")
+ALL = tuple(THEMES)
 TEXT_ON_SURFACES = ("text", "text_2", "muted", "accent_text", "warn_text", "bad", "ok", "visited")
 GRAPHIC_ON_SURFACES = ("focus", "line_strong", "select_ring", "attention", "node_healthy", "L0", "L1", "L2", "L3", "L4", "L5",
                        "plane_access", "plane_control", "plane_k8s", "plane_data", "plane_monitoring", "plane_management",

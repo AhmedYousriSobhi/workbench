@@ -11,7 +11,7 @@ The page, the canvases, the in-page help, the logo, the documentation art and th
 - **Logo anchors are fixed** (teal, ink, amber, light and dark) and are for fills, the logo and large graphics. Text and buttons use tuned tokens (`accent_text`, `accent_fill`, `warn_text`): the generator moves the anchor's lightness until the contrast against the theme's surfaces is reached (5.5:1 for these three).
 - **Meanings.** Teal is brand, interaction and good (`ok`, with a check mark). Amber is attention only. Red is error only. Real versus simulated is outline and label, not hue. Governor levels are one ramp, teal to amber to red, each also labelled.
 - **Planes** get six hues and six line types that are the same in every view; plane colours appear only on lines and labelled chips, never on status dots or node squares.
-- **Canvases stay dark in every page theme**; they carry their own resolved set under `.canvas`, and print inverts it to light.
+- **Canvases follow the page theme** (changed from "always dark" by the owner, issue 649): the `--cv-*` names are aliases of each theme's own tokens, written into every theme block, so a light page has a light canvas. Plane colours are tuned to 3:1 on every theme's grounds.
 - **Colour reaches elements through data attributes and stylesheet rules only** (`[data-plane]`, `[data-state]`): the CSP is `style-src 'self'`, and `var()` in SVG presentation attributes is not reliable across renderers. Standalone SVGs (documentation art, the logo) get literal values from the generator.
 - **Checks in `validate.sh`:** contrast for every pair and theme, colour-blind distances (planes fall back to line types, teal against its neighbours and the chart set are hard minimums), line types at a 1.5 px stroke, states, charts, `prefers-contrast: more`, determinism and the schema.
 
@@ -23,3 +23,9 @@ The page, the canvases, the in-page help, the logo, the documentation art and th
 
 ## Step 5 (issue 647, built)
 `scripts/make_logo_assets.py` reads the anchors from the palette (output unchanged) and `scripts/make_doc_art.py` reads its colours from it, writing literal values because a standalone SVG cannot read `tokens.css`. `webui/static/js/theme-init.js` applies the saved theme before first paint: a `'self'` script, so the CSP is unchanged (a hash would have needed a CSP edit and breaks silently when the script is touched). It is loaded in `index.html` only: the sign-in page has no theme and `/static` needs a login. `scripts/ui_shots.py` checks that with the app's scripts blocked, `<html>` already carries each saved theme. The Grafana dashboard has no colour settings today, so nothing is generated for it; the `grafana_ok`, `grafana_warn` and `grafana_bad` tokens are there for when it gets thresholds.
+
+## Step 6 (issue 648, built)
+`make_palette.py` also writes `docs/guides/colour-system.md` (rules, planes, contrast per theme, every token with its four theme values and what it is for and never for, from the palette's `meanings:` block) and one swatch strip per theme in `docs/assets/palette/`; `--check` covers them. The manual's web-page chapter, the canvas guide and `CLAUDE.md` point at it.
+
+## Canvases follow the theme (issue 649, built)
+The separate dark canvas set, the `.canvas` scope and the host list are gone. This also removes the Circuit view regression found in step 6, where its host `#flow[data-cv]` was not inside a `.canvas` element and its variables were undefined. `ADR 0038` ("a canvas is always dark") is superseded on that point.

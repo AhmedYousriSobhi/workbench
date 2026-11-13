@@ -60,6 +60,8 @@ def image_name(rel: str) -> str:
     """`manual/img/web-overview.png` -> `images/manual-web-overview.png`"""
     if rel.startswith("assets/art/"):
         return f"images/art-{rel.rsplit('/', 1)[1]}"
+    if rel.startswith("assets/palette/"):      # the colour guide's swatches (scripts/make_palette.py)
+        return f"images/palette-{rel.rsplit('/', 1)[1]}"
     group, _, name = rel.split("/", 2)
     return f"images/{group}-{name}"
 
@@ -156,6 +158,8 @@ def generate(docs: Path, out: Path, blob: str) -> list[str]:
     for img in (docs / "assets" / "art").glob("*"):  # the generated illustrations (scripts/make_doc_art.py)
         if img.suffix in IMAGES:
             shutil.copyfile(img, out / image_name(f"assets/art/{img.name}"))
+    for img in (docs / "assets" / "palette").glob("*.svg"):
+        shutil.copyfile(img, out / image_name(f"assets/palette/{img.name}"))
     (out / "_Sidebar.md").write_text("\n".join(side), encoding="utf-8")
     (out / "_Footer.md").write_text(FOOTER + "\n", encoding="utf-8")
     return names

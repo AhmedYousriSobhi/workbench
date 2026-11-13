@@ -1,5 +1,5 @@
 /* The redesign's visual language for the diagram canvases (screens 5-7), from docs/design/ui-redesign/DESIGN_HANDOFF.md.
-   A canvas is always dark, in every page theme, like a terminal inside a light page (a lifted slate, not black: the first palette read too heavy): the plane colours are chosen for a dark ground.
+   A canvas follows the page theme (issue 649): the --cv-* names are aliases of the theme's own tokens, written into tokens.css, and the plane colours are tuned to 3:1 on every theme's grounds.
    Use the tokens, never the hex values. Text tokens meet 4.5:1 on ground and surfaces, plane colours 3:1 (webui/tests/js/tokens.test.mjs). */
 :root {
   --cv-font-ui:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;

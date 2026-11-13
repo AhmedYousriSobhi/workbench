@@ -349,6 +349,23 @@ def capture(out: Path) -> dict:
                 if fp.evaluate("document.documentElement.dataset.theme") != theme:
                     result["a11y"].append(f"theme flash: saved {theme}, but the first paint has no theme (theme-init.js did not run)")
                 fp.close()
+            for theme in ("light", "dark"):      # the Circuit view draws with the canvas tokens on hosts that are not .canvas elements (issue 648)
+                cp = browser.new_page(viewport={"width": 1280, "height": 900}, bypass_csp=True)
+                cp.add_init_script(TEST_HOOK.replace("localStorage.setItem('workbench-circuit', '0');", "localStorage.setItem('workbench-circuit', '1');"))
+                cp.add_init_script(f"localStorage.setItem('workbench-theme','{theme}')")
+                cp.goto(login_url(base_url, ui_token))
+                cp.wait_for_timeout(1500)
+                cp.wait_for_function("typeof setTree === 'function'", timeout=15000)
+                cp.evaluate(SYNTH_CLUSTER)
+                cp.wait_for_timeout(800)
+                for problem in cp.evaluate("""() => { const out = [];
+                    for (const el of document.querySelectorAll('#flow[data-cv], .cvlayer, .cvcap, .cvstack, .zoomrail, .canvas'))
+                      if (!getComputedStyle(el).getPropertyValue('--cv-ground').trim()) out.push((el.id || el.className.baseVal || el.className) + ' has no --cv-ground');
+                    if (!document.querySelector('#flow[data-cv]')) out.push('the circuit did not draw');
+                    for (const r of document.querySelectorAll('#flow[data-cv] .cv-box')) if (getComputedStyle(r).fill === 'rgb(0, 0, 0)') { out.push('a box is filled black'); break; }
+                    return out; }"""):
+                    result["a11y"].append(f"circuit {theme}: {problem}")
+                cp.close()
             for scheme in ("light", "dark"):
                 for vp, (w, h) in VIEWPORTS.items():
                     page = browser.new_page(viewport={"width": w, "height": h}, color_scheme=scheme, bypass_csp=True)

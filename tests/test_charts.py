@@ -13,7 +13,7 @@ def test_six_chart_colours_in_a_fixed_order():
 
 
 def test_no_chart_colour_equals_a_status_colour_in_any_theme():
-    for theme in (*THEMES, "canvas"):
+    for theme in THEMES:
         for c in CHARTS:
             for s in STATUS:
                 assert tok(theme, c) != tok(theme, s), (theme, c, s)

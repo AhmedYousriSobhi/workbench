@@ -80,10 +80,9 @@ Read it from left to right:
 
 A login node that is in the selection but not running (never built, or stopped) is drawn **dashed with "✗ not running"**: the page checks whether anything answers on its port 22, so the diagram shows what runs, not only what you picked. With the whole stack down they all look dim instead.
 
-**Colours.** The boxes do not say *mock*; colour does, and the **Key** button above the diagram repeats it (it opens a small panel with every colour, mark and line style). Violet with a dashed stripe is simulated,
-blue with a solid stripe is real. The **border** is the state (green up, red dashed not reachable, grey dotted off). Two overlays sit on top and
-combine with everything else: a pulsing blue dot means traffic now (on a node tile: GPU work running), a red ring with a red triangle means a fault
-was applied in the last 30 seconds. So one box can be up, busy and faulted at the same time. The real Jira has no request counter, so it shows up or down only.
+**Colours.** The boxes do not say *mock*; colour does, and the **Key** button above the diagram repeats it (it opens a small panel with every colour, mark and line style). A **dashed outline** marked *sim* is simulated, a **solid outline** marked *real* is real (a neutral colour, never a hue). The **border** is the state (teal with a ✓ up, red dashed not reachable, grey dotted off). Two overlays sit on top and
+combine with everything else: a pulsing dot means traffic now (on a node tile: GPU work running), a red ring with a red triangle means a fault
+was applied in the last 30 seconds. So one box can be up, busy and faulted at the same time. The lines between parts follow their **plane**: access (solid), control (long dash), Kubernetes (dash-dot), data (dotted), monitoring (short dash) and management (dash-dot-dot) each have one colour and one line type in every view, so they stay apart even without colour. Amber means a part needs attention, never a plane. All colours are listed in the [colour system](../guides/colour-system.md). The real Jira has no request counter, so it shows up or down only.
 
 Every line says **how** it connects:
 

@@ -45,6 +45,7 @@ See [docs/architecture/08-repository-and-migration.md](docs/architecture/08-repo
 
 - Python 3.11+, Typer for the CLI, Starlette for the web UI (ADR 0008), type hints, `ruff` for lint/format, `pytest` for tests.
 - Generated files (compose, `slurm.conf`, Prometheus targets) are derived from `sim.yaml`; never hand-edit them.
+- Colours are edited only in `docs/assets/palette.yaml`; `python scripts/make_palette.py` regenerates `webui/static/tokens.css` and [docs/guides/colour-system.md](docs/guides/colour-system.md) (`validate.sh` fails when they are stale). Never write a hex value in the page, the JS or the help: use a token or a `data-plane` / `data-state` attribute (ADR 0069). `scripts/style_dump.py` proves a stylesheet change left every colour alone.
 - Every component declares a memory budget and priority class (P0-P6).
 
 ## Hard rules

@@ -4,7 +4,7 @@ import itertools
 import pytest
 from palette_lib import PAL, THEMES, mp, tok
 
-ALL = (*THEMES, "canvas")
+ALL = tuple(THEMES)
 PLANES = [f"plane_{p}" for p in mp.PLANES]
 # Pairs that must stay apart by colour alone, not only by dash: the new teal against the colours it sits beside.
 HARD_PAIRS = [("ok", "plane_monitoring"), ("ok", "plane_data"), ("ok", "plane_control")]

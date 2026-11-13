@@ -40,3 +40,12 @@ def test_tokens_css_is_served_under_the_same_policy():
     """The CSP allows 'self' styles only; a linked stylesheet is fine, an inline style is not."""
     app = (ROOT / "webui/app.py").read_text()
     assert "style-src 'self'" in app
+
+
+def test_every_theme_gives_the_canvases_their_cv_names():
+    """A canvas follows the page theme (issue 649): the --cv-* names are aliases written into each theme's block."""
+    css = (ROOT / "webui/static/tokens.css").read_text()
+    for sel in (":root, :root[data-theme=light]", ":root:not([data-theme])", ":root[data-theme=dark]", ":root[data-theme=midnight]", ":root[data-theme=dim]"):
+        block = css[css.index(sel):].split("}", 1)[0]
+        for name in ("cv-ground", "cv-surface", "cv-border", "cv-text", "cv-error", "plane-access"):
+            assert f"--{name}:" in block, (sel, name)

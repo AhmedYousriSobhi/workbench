@@ -24,7 +24,7 @@ def test_anchors_equal_the_logo_values():
 
 
 def test_every_theme_defines_every_semantic_token():
-    for t in (*THEMES, "canvas"):
+    for t in THEMES:
         assert set(RES[t]) == set(PAL["semantic"]) | set(PAL["component"]), t
 
 
@@ -73,6 +73,6 @@ def test_tokens_css_has_every_theme_and_the_planes_and_stays_small():
     for p in mp.PLANES:
         assert f"--plane-{p}-dash:" in css and f"[data-plane={p}]" in css
     assert ".pl-stroke" in css and ".pl-dash" in css
-    assert ".canvas" in css and "legacy" not in PAL
+    assert "--cv-ground:" in css and "legacy" not in PAL
     assert len(css.encode()) < 20_000
     assert not re.search(r"\b(var\(--[a-z0-9-]+\))\s*\)\s*\)", css)
