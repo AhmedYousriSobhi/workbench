@@ -1,4 +1,12 @@
+<p align="center"><img src="../assets/art/03-using-the-cluster-hero.svg" alt="A login node, the Slurm controller and a rack of nodes on one wire, with a cloud of mocks above" width="720"></p>
+
 # 3. Using the cluster
+
+**In 30 seconds:** start, resize and stop the cluster, run Slurm commands, try the mock services, inject a fault by hand and open Grafana. Each is a copy-paste command below.
+
+## Do it
+
+The cluster is already up if you ran `./scripts/benchctl start`. Everything below runs from the repository root.
 
 ## Start, resize, stop
 
@@ -73,3 +81,37 @@ Timed, repeatable faults are [scenarios](06-scenarios.md).
 ## Progress and diagrams
 
 `docs/progress.html` (open the file in a browser) and [PROGRESS.md](../PROGRESS.md) show what is built and how the parts connect.
+
+## What you will see
+
+The terminal block above shows `sinfo` listing six idle nodes. In Grafana the GPU dashboards follow the jobs you submit.
+
+## Under the hood
+
+`benchctl up` turns `sim.yaml` and a profile into one generated compose file and never reads anything you edited in it. Containers get fixed private addresses (compute nodes `10.141.0.N`, GPU nodes `10.141.100.N`, the login node `10.141.255.254`), so a node keeps its address between starts.
+
+A job goes from `sbatch` to `slurmctld`, which schedules it on a node's `slurmd` container. The nodes are real Slurm daemons; the job itself is synthetic.
+
+> [!HOOD]
+> `up` and `scale` ask the governor first, so they are refused from level L2 up. That is the design: free memory and retry.
+
+Source: `benchctl/compose.py`, `benchctl/addressing.py`, `benchctl/stack.py`, ADR 0018, ADR 0025.
+
+## Tips and gotchas
+
+> [!TIP]
+> `./scripts/benchctl scale 8` keeps the profile `up` last started; add `--profile` to change it.
+
+> [!WARNING]
+> Never edit `compose/generated/`: the next `up` overwrites it. Change `sim.yaml` or a profile instead ([chapter 8](08-configuration.md)).
+
+## If it goes wrong
+
+| You see | Why | Do this |
+|---|---|---|
+| `up` or `scale` refused | the governor is at level L2 or higher | free memory and retry |
+| a component is skipped with a note | it is not built yet | see [PROGRESS.md](../PROGRESS.md) |
+
+## Learn more
+
+[Nodes and shells](04-nodes-and-shells.md) · [Scenarios and faults](06-scenarios.md) · [Web page](05-web-page.md) · [ADR 0005](../adr/0005-bcm-and-jira-mock-surface.md)

@@ -181,3 +181,15 @@ def test_readme_html_images_exist_and_have_alt_text():
     assert paths
     for p in paths:
         assert (ROOT / p).is_file(), p
+
+
+TEMPLATED = ("01-what-it-is", "02-install-and-start", "03-using-the-cluster")  # chapters rewritten to the page template (issue 596); the list grows
+
+
+def test_templated_chapters_follow_the_page_template():
+    for name in TEMPLATED:
+        text = (MANUAL / f"{name}.md").read_text()
+        assert text.startswith(f'<p align="center"><img src="../assets/art/{name}-hero.svg" alt="'), name
+        assert "**In 30 seconds:**" in text and "## Do it" in text and "## Learn more" in text, name
+        hood = text.split("## Under the hood", 1)[1].split("\n## ", 1)[0]
+        assert re.search(r"^Source: .+", hood, re.MULTILINE), f"{name}: Under the hood needs a Source line"

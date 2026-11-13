@@ -260,7 +260,43 @@ ICONS = {
                                   '<rect class="p2" x="14" y="8" width="36" height="48" rx="6"/><path class="ln" d="M24 32l6 6l11-12"/>'),
 }
 
-ART = {"readme-hero.svg": readme_hero, "readme-how-it-works.svg": readme_how_it_works, "readme-memory.svg": readme_memory, "tour-hero.svg": tour_hero, **ICONS}
+# ---- chapter heroes (issue 596): a small scene per manual chapter, 720 by 150 -----------------------------------------
+
+def _hero(title: str, name: str, desc: str, body: str, animated: bool = False) -> str:
+    return svg(720, 150, name, desc, label(24, 34, title, "tx", "h b") + body, animated)
+
+
+def hero_what_it_is() -> str:
+    return _hero("What workbench is", "Chapter 1: what workbench is",
+                 "A cloud of stand-in services and a rack of nodes, with the governor badge beside them.",
+                 cloud(40, 62, "stand-ins") + wire("M130 90H250") + rack(250, 66, 4, ("ok", "ok", "held", "ok")) + governor(520, 74)
+                 + label(40, 132, "fake the APIs, real Slurm in small containers, a governor outside", "tm", "s"), True)
+
+
+def hero_install_and_start() -> str:
+    steps = ("check the machine", "tools", "governor", "cluster")
+    b = []
+    for i, nm in enumerate(steps):
+        x = 40 + i * 170
+        b.append(node(x, 56, "ok") + label(x + 13, 106, nm, "tx", "s b", anchor=True))
+        if i < 3:
+            b.append(wire(f"M{x + 34} 69H{x + 162}", "access"))
+    return _hero("Install and start", "Chapter 2: install and start",
+                 "Four steps in a row, each with a tick: check the machine, tools, governor, cluster.", "".join(b)
+                 + label(40, 136, "./scripts/benchctl start does all four, no sudo", "tm", "mono s"), True)
+
+
+def hero_using_the_cluster() -> str:
+    return _hero("Using the cluster", "Chapter 3: using the cluster",
+                 "A login node, the Slurm controller and a rack of nodes on one wire, with a cloud of mocks above.",
+                 '<rect class="rk" x="40" y="66" width="64" height="44" rx="10"/>' + label(72, 93, "login", "tx2", "s", anchor=True)
+                 + wire("M104 88H150") + '<rect class="rk" x="150" y="66" width="84" height="44" rx="10"/>' + label(192, 93, "slurmctld", "tx2", "s", anchor=True)
+                 + wire("M234 88H290") + rack(290, 66, 4) + cloud(540, 56, "mocks"), True)
+
+
+ART = {"readme-hero.svg": readme_hero, "readme-how-it-works.svg": readme_how_it_works, "readme-memory.svg": readme_memory, "tour-hero.svg": tour_hero, **ICONS,
+       "01-what-it-is-hero.svg": hero_what_it_is, "02-install-and-start-hero.svg": hero_install_and_start,
+       "03-using-the-cluster-hero.svg": hero_using_the_cluster}
 
 
 def outputs() -> dict[Path, str]:

@@ -208,6 +208,8 @@ phases:
          how: "A five-minute illustrated walk of eight stops (idea, start, page, zoom, shell, governor, break, heal), one picture each, first in the manual index and the sidebar; the map above it is generated art. Issue 593."}
       - {name: Wiki Home, sidebar and footer, status: review, where: "scripts/sync_wiki.py, scripts/make_doc_art.py, docs/assets/art/, tests/test_sync_wiki.py",
          how: "The Wiki Home is the manual's README with the hero art, a three-step Start here and a grid of six illustrated links; the sidebar groups carry a small icon beside their text; every page ends with an Edit this page link to its source on dev. Ten icons come from make_doc_art.py. Issue 591."}
+      - {name: Manual chapters 1 to 3 in the page template, status: review, where: "docs/manual/01-what-it-is.md, 02-install-and-start.md, 03-using-the-cluster.md, docs/assets/art/, tests/test_docs.py",
+         how: "Each chapter gets a generated hero, an In 30 seconds line, Do it, an Under the hood section with a Source line, tips, a what-goes-wrong table and Learn more; facts and commands are kept, and chapter 1's profile budgets now match profiles/*.yaml. A test checks the template. Issue 596."}
       - {name: README redesign, status: review, where: "README.md, tests/test_docs.py",
          how: "The README opens with the generated hero art, shows the demo and the zoom and layers animation as light and dark picture pairs, and adds why, what is inside, will it fit and an FAQ; every command is unchanged and checked by tests/test_docs.py, numbers link to the memory guide. Issue 589."}
       - {name: README demo gif, status: review, where: "scripts/doc_shots.py, docs/manual/img/architecture-demo.gif, README.md",
