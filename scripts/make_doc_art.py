@@ -294,9 +294,36 @@ def hero_using_the_cluster() -> str:
                  + wire("M234 88H290") + rack(290, 66, 4) + cloud(540, 56, "mocks"), True)
 
 
+def hero_nodes_and_shells() -> str:
+    return _hero("Nodes and shells", "Chapter 4: nodes and shells",
+                 "A terminal on the left, the login node in the middle as the only door, and a rack of nodes behind it.",
+                 '<rect class="p2" x="40" y="62" width="70" height="48" rx="8"/>' + label(75, 92, "&gt;_", "tx2", "b", True, True)
+                 + wire("M110 86H180") + '<rect class="rk" x="180" y="64" width="84" height="44" rx="10"/>' + label(222, 91, "login", "tx2", "s", anchor=True)
+                 + wire("M264 86H330") + rack(330, 64, 4) + label(330, 132, "ssh, only through the login node", "tm", "s"), True)
+
+
+def hero_web_page() -> str:
+    return _hero("The web page", "Chapter 5: the web page",
+                 "A browser window with a small circuit of nodes joined by wires, and the governor socket beneath it.",
+                 '<rect class="p2" x="40" y="52" width="440" height="72" rx="10"/>' + node(64, 70, "ok", 22) + node(104, 70, "ok", 22) + node(144, 70, "down", 22)
+                 + wire("M86 81H104", "monitoring") + wire("M126 81H144", "access") + label(190, 86, "sample data", "tm2", "s")
+                 + label(500, 80, "talks only to", "tm", "s") + label(500, 100, "the governor socket", "tx", "s b"), True)
+
+
+def hero_scenarios() -> str:
+    steps = (("0s", "power off"), ("5s", "drain"), ("40s", "recover"))
+    b = [wire("M60 88H640", "management")]
+    for i, (t, nm) in enumerate(steps):
+        x = 60 + i * 230
+        b.append(f'<circle class="p2" cx="{x}" cy="88" r="7"/>' + label(x, 70, t, "tx", "s b mono", True, True) + bubble(x - 10, 100, 100, nm))
+    return _hero("Scenarios and faults", "Chapter 6: scenarios and faults",
+                 "A timeline with three steps: power off at 0 seconds, drain at 5 seconds, recover at 40 seconds.", "".join(b), True)
+
+
 ART = {"readme-hero.svg": readme_hero, "readme-how-it-works.svg": readme_how_it_works, "readme-memory.svg": readme_memory, "tour-hero.svg": tour_hero, **ICONS,
        "01-what-it-is-hero.svg": hero_what_it_is, "02-install-and-start-hero.svg": hero_install_and_start,
-       "03-using-the-cluster-hero.svg": hero_using_the_cluster}
+       "03-using-the-cluster-hero.svg": hero_using_the_cluster,
+       "04-nodes-and-shells-hero.svg": hero_nodes_and_shells, "05-web-page-hero.svg": hero_web_page, "06-scenarios-hero.svg": hero_scenarios}
 
 
 def outputs() -> dict[Path, str]:

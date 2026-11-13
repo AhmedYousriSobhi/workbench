@@ -183,7 +183,7 @@ def test_readme_html_images_exist_and_have_alt_text():
         assert (ROOT / p).is_file(), p
 
 
-TEMPLATED = ("01-what-it-is", "02-install-and-start", "03-using-the-cluster")  # chapters rewritten to the page template (issue 596); the list grows
+TEMPLATED = ("01-what-it-is", "02-install-and-start", "03-using-the-cluster", "04-nodes-and-shells", "05-web-page", "06-scenarios")  # chapters rewritten to the page template (issue 596); the list grows
 
 
 def test_templated_chapters_follow_the_page_template():

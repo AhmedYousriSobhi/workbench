@@ -1,7 +1,19 @@
+<p align="center"><img src="../assets/art/04-nodes-and-shells-hero.svg" alt="A terminal, the login node as the only door, and a rack of nodes behind it" width="720"></p>
+
 # 4. Nodes and shells
 
-**There is no `ssh` into a simulated node.** The nodes are unprivileged containers without an SSH server. You open a shell
-with `benchctl exec` (a thin wrapper over `docker exec`). The only machine with a real `sshd` is the optional [fidelity VM](#the-fidelity-vm).
+**In 30 seconds:** open a shell on any simulated node with one command, or log in over SSH through the login node the way a real user would. Teleport and several login nodes are optional.
+
+## Do it
+
+```bash
+./scripts/benchctl get nodes                 # who is alive
+./scripts/benchctl exec cn001 -u alice       # a shell on a node as a simulated user
+```
+
+The rest of this chapter has every way in.
+
+Open a shell on a node with `benchctl exec` (a thin wrapper over `docker exec`), or over SSH through the login node: compute and GPU nodes run `sshd`, reachable only from there ([ADR 0014](../adr/0014-sshd-on-compute-nodes.md)). The controller runs none. The optional [fidelity VM](#the-fidelity-vm) is a real machine with its own `sshd`.
 
 ## Find the nodes
 
@@ -249,3 +261,35 @@ tsh login --proxy=10.141.255.30:3080 --insecure --user=alice
 
 The monitoring client's own **Log in** button does the last step. If you see `unknown certificate authority` after a rebuild you did not
 expect, run the three lines above: the client holds a session from an older cluster.
+
+## What you will see
+
+The screenshots in this chapter are real terminal output from the `min` profile; the web page's node panel shows the same nodes ([chapter 5](05-web-page.md)).
+
+## Under the hood
+
+The login node is the only machine you reach from the host. Compute and GPU nodes run `sshd` too, but publish no port, so they are reached only through the login node. Access is by key, with no root and no password, for the simulated users only. `benchctl exec` skips SSH altogether and uses `docker exec`, and the shell it opens is root inside the container, not on your host.
+
+> [!HOOD]
+> One host key and one cluster key are shared by all nodes (a simulation shortcut, like the shared munge key), and the login node trusts that host key, so the hop to a node asks no question. With Teleport on, nodes keep their own `sshd` and trust Teleport's certificate authority; no Teleport process runs on a node.
+
+Source: `benchctl/logins.py`, `benchctl/teleport.py`, ADR 0014, ADR 0020.
+
+## Tips and gotchas
+
+> [!TIP]
+> Tab completion works in a user's shell: commands, paths and Slurm tools, with history on the up arrow and Ctrl-R.
+
+> [!WARNING]
+> A shell that hangs may be a paused container, not a bug: the governor pauses low-priority nodes under memory pressure. Check `./scripts/benchctl status` first.
+
+## If it goes wrong
+
+| You see | Why | Do this |
+|---|---|---|
+| a shell hangs or ends | the node was paused or stopped, or scaled away | `./scripts/benchctl status`, then `benchctl up` |
+| `unknown certificate authority` from `tsh` | Teleport's authority was recreated | see "Keep or reset the Teleport cluster" below |
+
+## Learn more
+
+[Using the cluster](03-using-the-cluster.md) · [The governor](07-governor.md) · [SSH connection testing](../guides/ssh-connection-testing.md) · [ADR 0014](../adr/0014-sshd-on-compute-nodes.md)
