@@ -19,6 +19,7 @@ JQL: AND OR NOT ( ), = != ~ !~ in, not in, is [not] EMPTY, < > <= >= (dates, -7d
 POST /rest/webhooks/1.0/webhook                   {"url": "...", "events": ["jira:issue_created", ...]}
 GET|POST /sim/activity {"on": true, "every": 30, "seed": 1}   (background changes by a team, #158; JIRA_ACTIVITY_EVERY sets it at start)
 POST /sim/failure  {"mode": "401|429|503|slow", "count": 3, "delay": 2}   (applies to the next /rest requests)
+GET  /sim/failure  the failure now set: {"mode", "count" (requests still to fail), "delay"}
 GET|POST /sim/tickets   {"action": "create|transition|comment|fault|reset", ...}: tickets without a client (scenarios, #107)
 GET  /rest/api/{2,3}/issue/KEY/editmeta            (priority, labels, description, summary: what an edit form draws)
 GET  /rest/api/search?cql=type = page AND (label in ("a") OR title ~ "x")&limit=25&start=0   Confluence page search (issue 289), also at
@@ -913,6 +914,9 @@ def make_handler(jira: Jira):
             if url.path == "/sim/failure" and method == "POST":
                 jira.set_failure(self._body())
                 return 200, {"ok": True}
+            if url.path == "/sim/failure" and method == "GET":
+                with jira.lock:
+                    return 200, dict(jira.failure)
             if url.path == "/sim/activity":
                 return 200, jira.set_activity(self._body()) if method == "POST" else dict(jira.activity)
             if url.path == "/sim/tickets":

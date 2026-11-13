@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "get endpoints",
+  "description": "Every address a client can reach. credential is a file path (or -), never a secret value. Rows for optional parts are listed even when the part is not built.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "credential": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "address",
+          "credential",
+          "command"
+        ]
+      }
+    }
+  },
+  "required": [
+    "contract_version",
+    "items"
+  ]
+}

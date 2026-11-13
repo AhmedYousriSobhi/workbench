@@ -8,7 +8,8 @@ import jsonschema
 import pytest
 from typer.testing import CliRunner
 
-from benchctl import checks, cli, contract, describe, inventory
+from benchctl import checks, cli, contract, describe, faultstate, inventory, scenario, stack
+from webui import cluster, traffic
 
 runner = CliRunner()
 ROOT = Path(__file__).resolve().parent.parent
@@ -29,6 +30,15 @@ def in_repo(monkeypatch):
     def gov(req, socket=None):
         raise OSError("no socket")
     monkeypatch.setattr(checks, "governor_request", gov)
+    nodes = [{"name": "cn001", "kind": "compute", "state": "down", "label": "Powered off"}, {"name": "gpu001", "kind": "gpu", "state": "ok", "label": "Healthy"}]
+    monkeypatch.setattr(faultstate, "collect", lambda fetch, runner, running: [faultstate.row("jira-mock", "service", "Failure mode 503 for the next 2 request(s)")])
+    monkeypatch.setattr(cluster.Cluster, "snapshot", lambda self: {"nodes": nodes})
+    sample = {"now": 1.0, "edges": None, "services": {"bmc-farm": True, "bcm-mock": None, "jira-mock": False}, "recent": [],
+              "streams": [{"service": "bmc-farm", "who": "client", "shape": "GET /redfish/v1", "n": 3, "ok": 3, "client_error": 0, "server_error": 0, "ms": 1.5, "hist": [3]}]}
+    monkeypatch.setattr(traffic, "collect", lambda since=0.0: sample)
+    monkeypatch.setattr(stack, "governor_admits", lambda need, say, ask=None: True)
+    ran = scenario.Report("node-down", [scenario.Outcome("bmc-farm power", "ok")], [scenario.Outcome("expect node down", "failed", "did not hold")])
+    monkeypatch.setattr(scenario, "run", lambda sc, **k: ran)
     monkeypatch.setattr(describe, "gather", lambda *a, **k: {"name": "cn001", "kind": "compute", "notes": [], "container": {"state": "running"}})
 
 
@@ -36,11 +46,12 @@ def schema(name):
     return json.loads((SCHEMAS / f"{name}.json").read_text())
 
 
-# (schema, argv): the read verbs that exist today; `get endpoints|traffic|faults` and `scenario run` follow in step 10b
+# (schema, argv): every read verb with a JSON contract so far; `describe workbench` and `get alerts` follow in step 11
 VERBS = [("get-nodes", ["get", "nodes"]), ("get-services", ["get", "services"]), ("get-profiles", ["get", "profiles"]),
          ("get-checks", ["get", "checks"]), ("get-scenarios", ["get", "scenarios"]), ("scenario-list", ["scenario", "list"]),
          ("get-workbench", ["get", "workbench"]), ("describe-node", ["describe", "node", "cn001"]), ("doctor", ["doctor"]),
-         ("status", ["status"]), ("plan", ["plan", "--cpu-nodes", "2", "--gpu-nodes", "1"])]
+         ("status", ["status"]), ("get-endpoints", ["get", "endpoints"]), ("get-faults", ["get", "faults"]),
+         ("get-traffic", ["get", "traffic"]), ("scenario-run", ["scenario", "run", "node-down"]), ("plan", ["plan", "--cpu-nodes", "2", "--gpu-nodes", "1"])]
 
 
 @pytest.mark.parametrize(("name", "argv"), VERBS, ids=[v[0] for v in VERBS])
@@ -53,6 +64,29 @@ def test_json_output_matches_its_schema_and_o_json(name, argv):
     assert runner.invoke(cli.app, [*argv, "-o", "json"]).stdout == r.stdout  # `--json` is only an alias
     for pat in SECRETS:
         assert not pat.search(r.stdout), f"{name}: output matches {pat.pattern}"
+
+
+def test_scenario_run_json_keeps_stdout_to_one_object_and_the_exit_code():
+    r = runner.invoke(cli.app, ["scenario", "run", "node-down", "--json"])
+    data = json.loads(r.stdout)  # progress lines went to stderr
+    assert r.exit_code == 1 and data["passed"] is False and data["expects"][0]["status"] == "failed"
+
+
+def test_scenario_dry_run_json_is_the_timeline():
+    data = json.loads(runner.invoke(cli.app, ["scenario", "run", "node-down", "--dry-run", "--json"]).stdout)
+    jsonschema.validate(data, schema("scenario-run"), cls=jsonschema.Draft202012Validator)
+    assert data["dry_run"] is True and data["timeline"][0]["target"] == "bmc-farm"
+
+
+def test_faults_lists_unhealthy_nodes_and_service_faults():
+    items = json.loads(runner.invoke(cli.app, ["get", "faults", "--json"]).stdout)["items"]
+    assert [(i["target"], i["kind"]) for i in items] == [("cn001", "compute"), ("jira-mock", "service")]
+
+
+def test_endpoints_give_credentials_as_paths_only():
+    items = json.loads(runner.invoke(cli.app, ["get", "endpoints", "--json"]).stdout)["items"]
+    assert any(i["credential"].startswith("compose/generated/secrets/") for i in items)
+    assert "command" in items[0] and "command" not in runner.invoke(cli.app, ["get", "endpoints"]).stdout
 
 
 def test_status_reports_a_reachable_governor(monkeypatch):
