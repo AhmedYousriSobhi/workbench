@@ -183,7 +183,7 @@ def test_readme_html_images_exist_and_have_alt_text():
         assert (ROOT / p).is_file(), p
 
 
-TEMPLATED = ("01-what-it-is", "02-install-and-start", "03-using-the-cluster", "04-nodes-and-shells", "05-web-page", "06-scenarios")  # chapters rewritten to the page template (issue 596); the list grows
+TEMPLATED = ("01-what-it-is", "02-install-and-start", "03-using-the-cluster", "04-nodes-and-shells", "05-web-page", "06-scenarios", "07-governor", "08-configuration", "09-troubleshooting")  # chapters rewritten to the page template (issue 596); the list grows
 
 
 def test_templated_chapters_follow_the_page_template():
@@ -193,3 +193,13 @@ def test_templated_chapters_follow_the_page_template():
         assert "**In 30 seconds:**" in text and "## Do it" in text and "## Learn more" in text, name
         hood = text.split("## Under the hood", 1)[1].split("\n## ", 1)[0]
         assert re.search(r"^Source: .+", hood, re.MULTILINE), f"{name}: Under the hood needs a Source line"
+
+
+REFERENCE = ("10-reference", "11-which-command", "12-glossary")  # reference chapters: hero, 30 seconds and Learn more, no stunts
+
+
+def test_reference_chapters_have_hero_summary_and_learn_more():
+    for name in REFERENCE:
+        text = (MANUAL / f"{name}.md").read_text()
+        assert text.startswith(f'<p align="center"><img src="../assets/art/{name}-hero.svg" alt="'), name
+        assert "**In 30 seconds:**" in text and "## Learn more" in text, name

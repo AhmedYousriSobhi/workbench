@@ -1,4 +1,10 @@
+<p align="center"><img src="../assets/art/11-which-command-hero.svg" alt="A fork in the road: start, look and break, with a command at the end of each branch" width="720"></p>
+
 # 11. Which command do I use?
+
+**In 30 seconds:** start with `benchctl start`, look with `get` and `status`, break things with `scenario run`. The map below groups the commands; the table has the rest.
+
+<p align="center"><img src="../assets/art/map-of-commands.svg" alt="Three panels group the commands: start and stop, look, and poke and break" width="720"></p>
 
 workbench has a launcher, a CLI, a scenario engine, a governor and a few test scripts. This page says which one to reach
 for, and why. Every command runs from the repository root.
@@ -79,3 +85,9 @@ Without `benchctl start` the governor is not started, so nothing protects the ho
 | `fault` or `scenario run` says "No such container" | the stack is not running | `./scripts/benchctl up --profile min` |
 
 More symptoms and fixes: [troubleshooting](09-troubleshooting.md). Every flag and file: [reference](10-reference.md).
+
+## Learn more
+
+- [Reference](10-reference.md)
+- [Troubleshooting](09-troubleshooting.md)
+- [Scenarios](06-scenarios.md)

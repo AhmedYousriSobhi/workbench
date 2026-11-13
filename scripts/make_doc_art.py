@@ -320,10 +320,75 @@ def hero_scenarios() -> str:
                  "A timeline with three steps: power off at 0 seconds, drain at 5 seconds, recover at 40 seconds.", "".join(b), True)
 
 
+def hero_governor() -> str:
+    b = [governor(40, 62)]
+    for i, (lv, st) in enumerate((("L0", "ok"), ("L1", "ok"), ("L3", "held"), ("L4", "down"))):
+        x = 190 + i * 120
+        b.append(node(x, 62, st) + label(x + 13, 112, lv, "tx", "s b mono", anchor=True))
+        if i < 3:
+            b.append(wire(f"M{x + 30} 75H{x + 108}", "management", False))
+    return _hero("The governor", "Chapter 7: the governor",
+                 "The governor badge beside a ladder of four levels: normal, warn, pause and stop, with the marks growing more serious.",
+                 "".join(b) + label(40, 136, "pauses first, stops last, lowest priority first", "tm", "s"), True)
+
+
+def hero_configuration() -> str:
+    return _hero("Configuration", "Chapter 8: configuration",
+                 "One file, sim.yaml, with arrows to the generated compose file, slurm.conf and targets.",
+                 panel(40, 52, 120, 62) + label(100, 88, "sim.yaml", "tx2", "b mono", True, True)
+                 + wire("M160 83H300", "management") + bubble(300, 50, 150, "docker-compose.yml", True) + bubble(300, 90, 150, "slurm.conf", True)
+                 + bubble(470, 70, 190, "targets, inventories", False)
+                 + label(40, 136, "edit one file; the rest is generated", "tm", "s"), True)
+
+
+def hero_troubleshooting() -> str:
+    return _hero("Troubleshooting", "Chapter 9: troubleshooting",
+                 "Two commands, status and diag, leading to one masked tar file to attach to a bug report.",
+                 bubble(40, 60, 150, "benchctl status", True) + bubble(40, 96, 150, "benchctl diag", True) + wire("M190 90H330", "monitoring")
+                 + panel(330, 58, 150, 62) + label(405, 84, "diag.tar.gz", "tx2", "b mono", True, True) + label(405, 104, "secrets masked", "tm2", "s", anchor=True), True)
+
+
+def hero_reference() -> str:
+    return _hero("Reference", "Chapter 10: reference",
+                 "The command grammar as three chips: verb, resource, name.", bubble(40, 62, 110, "benchctl", True) + bubble(170, 62, 80, "VERB", True)
+                 + bubble(270, 62, 110, "RESOURCE", True) + bubble(400, 62, 80, "NAME", True)
+                 + label(40, 126, "one command, one grammar, like kubectl", "tm", "s"))
+
+
+def hero_which_command() -> str:
+    return _hero("Which command?", "Chapter 11: which command do I use?",
+                 "A fork in the road: start, look, break, with a command at the end of each branch.",
+                 wire("M40 84H200", "access", False) + wire("M200 84L330 56H420", "monitoring", False) + wire("M200 84H420", "access", False)
+                 + wire("M200 84L330 112H420", "management", False) + bubble(420, 42, 120, "get nodes", True) + bubble(420, 70, 120, "start", True)
+                 + bubble(420, 98, 120, "scenario run", True))
+
+
+def hero_glossary() -> str:
+    return _hero("Glossary", "Chapter 12: glossary",
+                 "Three word bubbles: profile, mock, scenario.", bubble(40, 62, 130, "profile", False) + bubble(190, 62, 130, "mock", False)
+                 + bubble(340, 62, 130, "scenario", False) + label(40, 126, "words used across the manual and the web page", "tm", "s"))
+
+
+def map_of_commands() -> str:
+    cols = (("Start and stop", "access", ("start", "up", "down", "stop", "open")),
+            ("Look", "monitoring", ("get", "describe", "status", "logs", "diag")),
+            ("Poke and break", "management", ("exec", "ssh", "submit", "scenario", "set node")))
+    b = [label(24, 34, "Map of commands", "tx", "h b")]
+    for i, (t, plane, verbs) in enumerate(cols):
+        x = 24 + i * 226
+        b.append(panel(x, 52, 216, 200) + label(x + 14, 78, t, "tx2", "b"))
+        b.append(wire(f"M{x + 14} 90H{x + 202}", plane, False))
+        for j, v in enumerate(verbs):
+            b.append(bubble(x + 14 + (j % 2) * 96, 104 + (j // 2) * 44, 92, v, True))
+    return svg(720, 270, "Map of benchctl commands", "Three panels group the commands: start and stop, look, and poke and break.", "".join(b))
+
+
 ART = {"readme-hero.svg": readme_hero, "readme-how-it-works.svg": readme_how_it_works, "readme-memory.svg": readme_memory, "tour-hero.svg": tour_hero, **ICONS,
        "01-what-it-is-hero.svg": hero_what_it_is, "02-install-and-start-hero.svg": hero_install_and_start,
        "03-using-the-cluster-hero.svg": hero_using_the_cluster,
-       "04-nodes-and-shells-hero.svg": hero_nodes_and_shells, "05-web-page-hero.svg": hero_web_page, "06-scenarios-hero.svg": hero_scenarios}
+       "04-nodes-and-shells-hero.svg": hero_nodes_and_shells, "05-web-page-hero.svg": hero_web_page, "06-scenarios-hero.svg": hero_scenarios,
+       "07-governor-hero.svg": hero_governor, "08-configuration-hero.svg": hero_configuration, "09-troubleshooting-hero.svg": hero_troubleshooting,
+       "10-reference-hero.svg": hero_reference, "11-which-command-hero.svg": hero_which_command, "12-glossary-hero.svg": hero_glossary, "map-of-commands.svg": map_of_commands}
 
 
 def outputs() -> dict[Path, str]:
