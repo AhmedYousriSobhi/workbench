@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**90% built** (39 done, 91 in review, 9 partial, 6 to do, 145 items).
+**90% built** (39 done, 92 in review, 9 partial, 6 to do, 146 items).
 
 ## Roadmap
 
@@ -16,7 +16,7 @@ flowchart LR
     p4["People and chaos<br/>25%"]:::partial
     p5["Kubernetes<br/>100%"]:::done
     p6["Fidelity VM<br/>0%"]:::todo
-    p7["Web UI and profiles<br/>93%"]:::partial
+    p7["Web UI and profiles<br/>94%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
     p0 --> p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7 --> p8
     classDef done fill:#1a7f37,stroke:#1a7f37,color:#fff
@@ -203,7 +203,7 @@ _One real Ubuntu VM with Redfish power control._
 
 0/1 done
 
-### Web UI and profiles (93%)
+### Web UI and profiles (94%)
 
 _One click from cold start to a busy cluster._
 
@@ -252,11 +252,12 @@ _One click from cold start to a busy cluster._
 | Manual chapters 7 to 12 in the page template | 🔍 In review | Chapters 7 to 9 follow the page template with an Under the hood section sourced from governor/ladder.py, governor/planner.py, benchctl/compose.py and benchctl/diag.py; chapters 10 to 12 keep their reference style and gain a hero, an In 30 seconds line and Learn more; a map of commands illustration sits in chapter 11. Issue 600. | `docs/manual/07-governor.md to 12-glossary.md`, `docs/assets/art/`, `scripts/make_doc_art.py`, `tests/test_docs.py` | - |
 | Guides batch 8a in the page template | 🔍 In review | Memory, NHC checks, topology and QOS guides follow the page template (hero, In 30 seconds, Do it, a mechanism diagram and Under the hood with a Source line from benchctl/memory.py, images/node-base/nhc, benchctl/topology.py, benchctl/qos.py and ADRs 0019, 0053, 0055). Facts and commands kept. Issue 605. | `docs/guides/memory.md`, `nhc-checks.md`, `topology.md`, `qos-and-preemption.md`, `docs/assets/art/`, `tests/test_docs.py` | - |
 | Guides batch 8b in the page template | 🔍 In review | Power and reboot, Slurm resilience and choose-your-workbench guides follow the page template with a mechanism diagram and a sourced Under the hood (images/slurm-ctl/power.sh, images/node-base/reboot.sh, benchctl/slurmtrace.py, benchctl/workbench.py, ADRs 0016, 0017, 0021, 0025, 0054). Facts and commands kept. Issue 607. | `docs/guides/power-and-reboot.md`, `slurm-resilience.md`, `choose-workbench.md`, `docs/assets/art/`, `tests/test_docs.py` | - |
+| Guides batch 8c in the page template | 🔍 In review | The Jira, client setup, client testing, SSH testing and web UI canvas guides follow the page template with a diagram and a sourced Under the hood (ADRs 0005, 0011, 0014, 0018, 0023, 0026, 0038, 0041, 0042, benchctl/jira_driver.py, scripts/record_jira_shapes.py). Facts and commands kept. Issue 609. | `docs/guides/jira-real.md`, `jira-contract.md`, `jira-tickets.md`, `client-setup-by-component.md`, `client-testing.md`, `ssh-connection-testing.md`, `web-ui-canvas.md`, `docs/assets/art/`, `tests/test_docs.py` | - |
 | README redesign | 🔍 In review | The README opens with the generated hero art, shows the demo and the zoom and layers animation as light and dark picture pairs, and adds why, what is inside, will it fit and an FAQ; every command is unchanged and checked by tests/test_docs.py, numbers link to the memory guide. Issue 589. | `README.md`, `tests/test_docs.py` | - |
 | README demo gif | 🔍 In review | The README's animation is made from sample data and shows each capability in turn with a caption: dark 2.5D with traffic, error triangles, a fault with its declared blast radius, a lens, the client's eye, focus, the flat view and the global view. Re-run scripts/doc_shots.py after a change to the page. Issue 337. | `scripts/doc_shots.py`, `docs/manual/img/architecture-demo.gif`, `README.md` | - |
 | Budget manager | ⬜ To do | Profile/budget form (W-7). | - | - |
 
-1/46 done
+1/47 done
 
 ### macOS agent and CI (0%)
 

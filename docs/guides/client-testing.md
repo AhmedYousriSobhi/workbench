@@ -1,4 +1,16 @@
+<p align="center"><img src="../assets/art/guide-client-testing-hero.svg" alt="A loop: up, point, break, watch, down" width="720"></p>
+
 # Testing a monitoring client against workbench
+
+**In 30 seconds:** bring the cluster up, point the client at it, run a scenario, and know what is real and what is not. Never fit workbench to one client; make the simulated service behave like the real one.
+
+## Do it
+
+```bash
+./scripts/benchctl up --profile min
+./scripts/benchctl status
+./scripts/benchctl down       # when done; always stop what you started
+```
 
 workbench simulates a real cluster so that a general-purpose HPC and AI-infrastructure client, one that lets its user
 define any cluster and handles every connection type and HPC feature, can be tested without real hardware. The client
@@ -236,3 +248,30 @@ Results of the run against the real Jira (setup, every number, what was not exer
 - Built, not yet run against the client: a real slow, 503 and 429 through the fault proxy (#305, SC-28, the client must use `127.0.0.1:8084`), tickets and a ticket check on the real Jira in `client-stress-real` (#306), and the token revoke fault (#307, SC-29)
 - [#308](https://github.com/AhmedYousriSobhi/workbench/issues/308) verify the client's Jira panel under the real faults
 - [#309](https://github.com/AhmedYousriSobhi/workbench/issues/309) script the client stress run
+
+## Under the hood
+
+<p align="center"><img src="../assets/art/guide-client-testing-diagram.svg" alt="Bring the cluster up, point the client at it, run a scenario, watch what the client shows, then stop" width="720"></p>
+
+> [!HOOD]
+> The client connects as it would to a production site: SSH to the login node, Slurm commands, Grafana GPU metrics, Jira search and Redfish BMCs. Each endpoint has a fixed address, a credential file under `compose/generated/secrets/` and a status in the table above. The governor can refuse a start at L2 and above (GV-9); the tool says so, and a test or script must not report that as a defect in the client (NF-6).
+
+Source: [ADR 0018](../adr/0018-fixed-addressing-plan.md), SPEC G5, NF-6, NF-8
+
+## Tips
+
+> [!TIP]
+> Run `benchctl scenario run NAME --dry-run` first: it prints the steps and touches nothing.
+
+## If it goes wrong
+
+| Symptom | Try |
+|---|---|
+| Port 2222 refuses | the checkout is probably on a branch without the login node; that is not a client bug |
+| A start is REFUSED | the governor is protecting the host; free memory |
+
+## Learn more
+
+- [Client setup by component](client-setup-by-component.md)
+- [SSH connection testing](ssh-connection-testing.md)
+- [Scenarios](../manual/06-scenarios.md)

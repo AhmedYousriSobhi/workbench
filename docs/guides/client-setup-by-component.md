@@ -1,4 +1,15 @@
+<p align="center"><img src="../assets/art/guide-client-setup-by-component-hero.svg" alt="Components in a row: SSH, Slurm, Grafana, Jira and BMC" width="720"></p>
+
 # Setting up the monitoring client, one component at a time
+
+**In 30 seconds:** point your monitoring client at the cluster one component at a time. Each section gives the values to type, what you should see and what to do if it fails.
+
+## Do it
+
+```bash
+./scripts/benchctl up --profile min
+./scripts/benchctl ssh-key install     # the key where the client can read it
+```
 
 [client-testing.md](client-testing.md) lists every endpoint; the [manual](../manual/README.md) shows the tool from
 scratch. Quickest alternative: [import everything from a file](export-profile.md) and set only the key and token by hand. This page is for the other case: the cluster is running and you want to connect **one** part of your client
@@ -147,3 +158,30 @@ With the client open on the cluster, play one scenario and compare what the clie
 ```
 
 More in [scenarios and faults](../manual/06-scenarios.md).
+
+## Under the hood
+
+<p align="center"><img src="../assets/art/guide-client-setup-by-component-diagram.svg" alt="Each component with its address: SSH and Slurm, Grafana, Jira, BMC and BCM" width="720"></p>
+
+> [!HOOD]
+> Every part has a fixed private address from one plan, reachable from the host because Linux routes the Docker network (compute nodes 10.141.0.N, GPU nodes 10.141.100.N, login 10.141.255.254, services 10.141.255.0/24); `127.0.0.1` with the published ports is the fallback. `up` writes the secrets into `compose/generated/secrets/` and creates new Grafana tokens each time.
+
+Source: `benchctl/addressing.py`, [ADR 0018](../adr/0018-fixed-addressing-plan.md), SPEC NF-8
+
+## Tips
+
+> [!TIP]
+> After every restart, paste the new Grafana token (section 3).
+
+## If it goes wrong
+
+| Symptom | Try |
+|---|---|
+| `up` says REFUSED | the host is short of memory; free some and run it again |
+| `connection refused` on 2222 | the cluster is down or on a branch without the login node |
+
+## Learn more
+
+- [Testing a client](client-testing.md)
+- [SSH connection testing](ssh-connection-testing.md)
+- [Export a profile](export-profile.md)
