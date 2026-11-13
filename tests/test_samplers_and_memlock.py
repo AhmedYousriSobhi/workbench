@@ -18,7 +18,7 @@ def fake_proc(tmp_path, avail_kb=4_000_000, some=1.5, full=0.2, pswpout=100):
 
 
 def test_sampler_reads_proc_and_derives_the_swap_out_rate(tmp_path):
-    s = Sampler(fake_proc(tmp_path, pswpout=100))
+    s = Sampler(fake_proc(tmp_path, pswpout=100), tmp_path / "no-block")  # never the real /sys/block: a CI runner has a zram device
     first = s.sample(10.0)
     assert first.mem_available == 4_000_000 * 1024
     assert (first.psi_some_avg10, first.psi_full_avg10, first.swap_out_rate) == (1.5, 0.2, 0.0)  # no history yet
@@ -30,7 +30,7 @@ def test_sampler_reads_proc_and_derives_the_swap_out_rate(tmp_path):
 def test_psi_without_a_full_line_reports_zero_full(tmp_path):
     proc = fake_proc(tmp_path)
     (proc / "pressure/memory").write_text("some avg10=3.00 avg60=0 avg300=0 total=1\n")
-    assert Sampler(proc).sample(1.0).psi_full_avg10 == 0.0
+    assert Sampler(proc, proc / "no-block").sample(1.0).psi_full_avg10 == 0.0
 
 
 def test_parse_pswpout_missing_is_zero():
