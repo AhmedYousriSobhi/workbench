@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "scenario run",
+  "description": "The final result of a played scenario (progress goes to stderr), or the timeline of a --dry-run. Exit code 1 when passed is false.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "scenario": {
+      "type": "string"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "stopped": {
+      "type": "boolean"
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "failed",
+              "skipped"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "status",
+          "detail"
+        ]
+      }
+    },
+    "expects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "failed",
+              "skipped"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "status",
+          "detail"
+        ]
+      }
+    },
+    "dry_run": {
+      "const": true
+    },
+    "timeline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "target": {
+            "type": "string"
+          },
+          "do": {}
+        },
+        "required": [
+          "at",
+          "target",
+          "do"
+        ]
+      }
+    }
+  },
+  "required": [
+    "contract_version",
+    "scenario"
+  ],
+  "oneOf": [
+    {
+      "required": [
+        "passed",
+        "steps",
+        "expects"
+      ]
+    },
+    {
+      "required": [
+        "dry_run",
+        "timeline"
+      ]
+    }
+  ]
+}

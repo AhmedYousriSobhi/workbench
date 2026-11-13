@@ -619,6 +619,54 @@ def get_capture(node: str = CAPTURE_NODE, seconds: int = CAPTURE_SECONDS) -> Non
         raise typer.Exit(1) from e
 
 
+def _endpoint_rows(full: bool) -> list[dict]:
+    """The Connections registry (the page's Connections view): where to reach each entity and where its credential is (a path, never its value)."""
+    from webui import connections as conn
+
+    keep = ("id", "name", "kind", "address", "credential") + (("command",) if full else ())
+    return [{k: e.get(k) if k != "credential" else (e.get(k) or "-") for k in keep} for e in conn.entities(_sim())]
+
+
+@get_app.command("endpoints")
+def get_endpoints(output: str = OUTPUT, json_: bool = JSON, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
+    """Every address a client can reach (SSH logins, BMC, BCM, Jira, Kubernetes...), the command that works and the file that holds its credential. `--json` adds the command."""
+    as_json = contract.wanted(output, json_)
+    _get(lambda: _endpoint_rows(as_json == "json"), as_json, selector, sort_by, False, 2.0)
+
+
+FAULT_STATES = ("down", "fault", "warn")  # the page's node states other than healthy (ok) and no data (unknown), webui/cluster.py classify
+
+
+def _fault_rows() -> list[dict]:
+    from webui import cluster
+
+    snap = cluster.Cluster(_sim()).snapshot()
+    return [{"node": n["name"], "kind": n["kind"], "state": n["state"], "label": n["label"]} for n in snap["nodes"] if n.get("state") in FAULT_STATES]
+
+
+@get_app.command("faults")
+def get_faults(output: str = OUTPUT, json_: bool = JSON, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
+    """Nodes that are not healthy right now: powered off, a GPU error, overheating, a failed fan, an InfiniBand or NIC problem (what the page's node cards show). None when all is well."""
+    _get(_fault_rows, contract.wanted(output, json_), selector, sort_by, False, 2.0)
+
+
+@get_app.command("traffic")
+def get_traffic(output: str = OUTPUT, json_: bool = JSON,
+                since: float = typer.Option(0.0, "--since", min=0.0, help="only requests newer than this time (seconds since the epoch); streams are always cumulative")) -> None:
+    """Who called which mock, how it ended and how long it took: the mocks' own record of client requests (the page's Traffic analysis). Read-only."""
+    from webui import traffic
+
+    data = traffic.collect(since)
+    if contract.wanted(output, json_) == "json":
+        typer.echo(contract.dumps(data))
+        return
+    down = [s for s, v in data["services"].items() if v is False]
+    rows = [{"service": s["service"], "who": s["who"], "shape": s["shape"], "n": s["n"], "ok": s["ok"],
+             "client_error": s["client_error"], "server_error": s["server_error"], "ms": s["ms"]} for s in data["streams"]]
+    typer.echo(inventory.render(rows) if rows else "no requests recorded")
+    if down:
+        typer.echo(f"not reachable: {', '.join(down)}", err=True)
+
 @get_app.command("scenarios")
 def get_scenarios(output: str = OUTPUT, json_: bool = JSON, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
     """The fault and workload scenarios for `benchctl scenario run`."""
@@ -1128,8 +1176,13 @@ def scenario_list(output: str = OUTPUT, json_: bool = JSON) -> None:
 def scenario_run(name: str = typer.Argument(..., autocompletion=completion.scenarios, help="see `scenario list`"),
                  speed: float = typer.Option(1.0, help="fast-forward: 10 plays it ten times faster"),
                  dry_run: bool = typer.Option(False, "--dry-run", help="validate and show the timeline only"),
-                 trace: bool = typer.Option(False, "--trace", help="after each step print job states and the new Slurm log lines")) -> None:
-    """Play a scenario against the running stack; exit 1 if a step or expectation fails."""
+                 trace: bool = typer.Option(False, "--trace", help="after each step print job states and the new Slurm log lines"),
+                 output: str = OUTPUT, json_: bool = JSON) -> None:
+    """Play a scenario against the running stack; exit 1 if a step or expectation fails. `--json` prints progress on stderr and one result object on stdout."""
+    as_json = contract.wanted(output, json_) == "json"
+
+    def say(msg: str) -> None:
+        typer.echo(msg, err=as_json)
     sim = _sim()
     try:
         sc = scenario.load(name)
@@ -1141,20 +1194,28 @@ def scenario_run(name: str = typer.Argument(..., autocompletion=completion.scena
         typer.echo(f"invalid: {p}", err=True)
     if problems:
         raise typer.Exit(1)
-    typer.echo(scenario.summary(sc))
+    say(scenario.summary(sc))
     if dry_run:
-        for s in scenario.plan(sc):
+        timeline = scenario.plan(sc)
+        if as_json:
+            typer.echo(contract.dumps({"scenario": sc["name"], "dry_run": True, "timeline": [{"at": s.at, "target": s.target, "do": s.do} for s in timeline]}))
+        for s in [] if as_json else timeline:
             typer.echo(f"[{s.at:6.1f}s] {s.target} {s.do}")
         raise typer.Exit(0)
-    if scenario.disruptive(sc) and not stack.governor_admits(0, typer.echo):  # GV-9: nothing starts at L2 and above
+    if scenario.disruptive(sc) and not stack.governor_admits(0, say):  # GV-9: nothing starts at L2 and above
         typer.echo("not run: the governor admits no new work at this memory level (see `benchctl status`)", err=True)
         raise typer.Exit(1)
     hooks = {}
     if trace:
-        tracer = slurmtrace.Tracer(slurmtrace.nodes_of(sc), say=typer.echo)
+        tracer = slurmtrace.Tracer(slurmtrace.nodes_of(sc), say=say)
         hooks["on_step"] = tracer.step
-    report = scenario.run(sc, speed=speed, dilation=float(sim.get("time_dilation", 1.0)), say=typer.echo, **hooks)
-    typer.echo("scenario " + ("passed" if report.ok else "FAILED"))
+    report = scenario.run(sc, speed=speed, dilation=float(sim.get("time_dilation", 1.0)), say=say, **hooks)
+    say("scenario " + ("passed" if report.ok else "FAILED"))
+    if as_json:
+        def row(o) -> dict:
+            return {"label": o.label, "status": o.status, "detail": o.detail}
+        typer.echo(contract.dumps({"scenario": report.name, "passed": report.ok, "stopped": report.stopped,
+                                   "steps": [row(o) for o in report.steps], "expects": [row(o) for o in report.expects]}))
     raise typer.Exit(0 if report.ok else 1)
 
 

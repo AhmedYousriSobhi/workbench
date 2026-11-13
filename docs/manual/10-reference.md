@@ -22,6 +22,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 | `stop` | stop the web page, the cluster and your own governor |
 | `open` | print the login link, open a browser if there is a display |
 | `get nodes\|services\|profiles\|scenarios\|workbench [--json \| -o json\|name] [-l SEL] [--sort-by COL] [-w]` | list what exists, filter (`-l kind=gpu`), sort, redraw; `nodes` shows every node `sim.yaml` defines and its state (`absent` = not started) |
+| `get endpoints\|faults\|traffic [--json]` | where to connect and where each credential lives; unhealthy nodes; who called which mock |
 | `describe node NAME [--json]` | everything known about one node: container, Slurm, jobs, GPUs busy/idle, BMC |
 | `ssh [USER@]NODE [-- CMD]` | `benchctl ssh cn001`: a root shell on the node (docker exec). `benchctl ssh alice@cn001`: a real SSH login as that simulated user, through the first login node that takes a key (not for a Teleport-only cluster: use `tsh`). A command after `--` runs instead of a shell |
 | `exec NODE [-u USER] [-- CMD]` | shell on a node, or one command: `benchctl exec gpu001 -- nvidia-smi` |
@@ -32,7 +33,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 | `scale N [--profile P] [-n] [-y]` | change the compute node count; asks before removing nodes in a terminal, `-n` only says what would change |
 | `up --cpu-nodes N --gpu-nodes N [--gpus-per-node N] [--with PART] [--without PART] [-f FILE]` | the same by selection: estimate first, build only if it fits |
 | `apply -f FILE` | build the workbench a file describes |
-| `scenario list` / `scenario run NAME|SC-nn [--speed N] [--dry-run]` | list scenarios; play one, exit 1 on failure |
+| `scenario list` / `scenario run NAME|SC-nn [--speed N] [--dry-run] [--json]` | list scenarios; play one, exit 1 on failure |
 | `export profile [-o FILE] [--bmc] [--user U] [--name N] [--format ID] [--configured]` | write the running cluster as a client profile file (also the page's **⇩ Export** button) ([guide](../guides/export-profile.md)) |
 | `ssh-key install\|remove` | put the login key under `~/.ssh` for clients that only read there |
 | `status [--socket S]` | governor level, signals, recent actions, then whether the cluster and the web page run |
