@@ -116,11 +116,11 @@ login: [ssh, teleport]
 
 or in the page: **left nav → ⚙ Cluster architecture → Login nodes** (**Add login node**, pick *Direct SSH*, *Teleport only* or *Direct SSH and Teleport* for each, **Apply**).
 
-![The Cluster architecture sheet: three login nodes, each with its own way in](img/web-login-nodes.png)
+![The Cluster architecture sheet: three login nodes, each with its own way in](img/web-login-nodes-light.png)
 
 **2. See how to reach each one.** The page's **Connections** tab has one row per login node with the exact command, and `./scripts/benchctl up` prints them:
 
-![Connections: login (direct SSH), login2 (Teleport only), login3 (both)](img/web-login-connections.png)
+![Connections: login (direct SSH), login2 (Teleport only), login3 (both)](img/web-login-connections-light.png)
 
 **3. Use them.**
 
@@ -178,7 +178,7 @@ tsh ls
 
 The web UI is at `https://10.141.255.30:3080` (same login). The proxy has its own private address and the name `teleport.workbench.test` (resolved inside the cluster; on this machine add it once, your sudo, never run for you: `echo '10.141.255.30 teleport.workbench.test' | sudo tee -a /etc/hosts`). `127.0.0.1:3080` stays as a fallback. The page lists the address and the command in **Connections** (the Teleport row), and shows Teleport's traffic in the Infrastructure architecture.
 
-![The Infrastructure architecture with Teleport: a dot travels from the clients to the Teleport box for each SSH connection](img/web-infrastructure.png)
+![The Infrastructure architecture with Teleport: a dot travels from the clients to the Teleport box for each SSH connection](img/web-infrastructure-light.png)
 
 **The same Teleport cluster survives a rebuild** (see *Keep or reset the Teleport cluster* below). **A login or compute node you drop is forgotten.** `benchctl up` removes the Teleport registration and the host certificate of every node the workbench no longer has, so `tsh ls` lists only what exists (before this, a dropped `login2` stayed registered and a dial failed with *no route to host*). **Your password survives `up`.** `benchctl up` creates a Teleport user only when it does not exist yet, so the password and one-time code you chose from an invite stay. (Before this fix every `up` replaced the users and `tsh login` then said *invalid username or password*; run `benchctl add invite <user>` once to set them again.) **Good to know.** A Teleport container created before the page showed Teleport has no diagnostics port yet, so the card says `not answering` and no dots appear; run `./scripts/benchctl up --with teleport` once to recreate it. Your `tsh` must not be a newer major version than the server (`teleport.version` in `sim.yaml`, default 18.x); use a separate
 `TELEPORT_HOME` if you keep other Teleport profiles. Not simulated: the Teleport agent's extras (dynamic labels, session

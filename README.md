@@ -17,7 +17,7 @@ Real clusters cost a lot and break at 3 a.m. This one costs about 0.5 to 1.5 GB 
 HPC monitoring app talks to: Slurm, GPUs, Grafana, Jira, BMCs. Built to test a desktop monitoring client, handy for
 anyone who wants a cluster to poke without a data centre.
 
-<p align="center"><img src="docs/manual/img/architecture-demo.gif" alt="The Infrastructure architecture in turn: traffic and error dots, a fault with its blast radius, lenses and the client's eye, focus, the flat view and the global view" width="820"></p>
+<p align="center"><img src="docs/manual/img/architecture-demo-dark.gif" alt="The Infrastructure architecture in turn: traffic and error dots, a fault with its blast radius, lenses and the client's eye, focus, the flat view and the global view" width="820"></p>
 
 *The page's Infrastructure architecture (sample data, dark theme). Every way in is a labelled line; dots are requests, triangles are error answers, diamonds are faults. In the animation:*
 
