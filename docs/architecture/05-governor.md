@@ -1,3 +1,5 @@
+<p align="center"><img src="../assets/art/arch-05-governor-hero.svg" alt="Architecture: The governor. signals, ladder, actions." width="720"></p>
+
 # The governor
 
 [Architecture index](README.md) · [Project overview](../../README.md)
@@ -31,6 +33,8 @@ Above roughly 30% PSI the kernel struggles to hand out new memory, so the govern
 | L5 emergency | still degrading after L4 | stop the whole profile except P0/P1 | all but P0/P1 |
 
 Limit of the L4 sustain (ADR 0032, issue 286): the 5 s hold for PSI full is argued from the PSI average and the unit tests (a short stall does not reach L4, a held one does), not measured live. The stall that prompted it (PSI full about 5% while a JVM starts, 5 GB still free) was not reproduced; the live Jira start with the governor running stayed at L0-L1 and was not stopped. A sustained stall now reaches L4 5 s later than before; low MemAvailable is not delayed. Tune `l4_sustain_s` with `--thresholds` if a real start still gets stopped.
+
+Swap storm (ADR 0059, issue 463): `pswpout` above 2000 pages/s for 10 s adds one level to the PSI/headroom level, up to L3 and never past it; `swap_pages_s` and `swap_sustain_s` in `--thresholds` (0 turns it off). Per-container `memory.events` are read every 5 s (below L3): `high` counts show in `status` and `/metrics`, an `oom_kill` is an audit event. Zswap and zram pools are subtracted from `MemAvailable`. Issue 464: the memory thresholds follow `host.reserve_gb` / `safety_floor_gb` in `sim.yaml` (the shipped values give the table above), the loop is woken by a kernel PSI trigger (`some 150000 2000000`; falls back to polling and logs why), and the signal files are opened once (ADR 0059).
 
 Key nuance: **pausing/freezing does not release RAM**, it only stops CPU use. Freeze is a cheap, instantly reversible step; actual relief comes from `memory.reclaim` (to compressed swap) or a real stop/save.
 

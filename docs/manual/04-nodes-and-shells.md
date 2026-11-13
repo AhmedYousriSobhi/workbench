@@ -1,7 +1,19 @@
+<p align="center"><img src="../assets/art/04-nodes-and-shells-hero.svg" alt="A terminal, the login node as the only door, and a rack of nodes behind it" width="720"></p>
+
 # 4. Nodes and shells
 
-**There is no `ssh` into a simulated node.** The nodes are unprivileged containers without an SSH server. You open a shell
-with `benchctl exec` (a thin wrapper over `docker exec`). The only machine with a real `sshd` is the optional [fidelity VM](#the-fidelity-vm).
+**In 30 seconds:** open a shell on any simulated node with one command, or log in over SSH through the login node the way a real user would. Teleport and several login nodes are optional.
+
+## Do it
+
+```bash
+./scripts/benchctl get nodes                 # who is alive
+./scripts/benchctl exec cn001 -u alice       # a shell on a node as a simulated user
+```
+
+The rest of this chapter has every way in.
+
+Open a shell on a node with `benchctl exec` (a thin wrapper over `docker exec`), or over SSH through the login node: compute and GPU nodes run `sshd`, reachable only from there ([ADR 0014](../adr/0014-sshd-on-compute-nodes.md)). The controller runs none. The optional [fidelity VM](#the-fidelity-vm) is a real machine with its own `sshd`.
 
 ## Find the nodes
 
@@ -9,7 +21,7 @@ Node names come from [sim.yaml](../../sim.yaml): compute nodes `cn001`, `cn002`,
 Each container is named `workbench-<name>-1`.
 
 ```bash
-./scripts/benchctl get nodes                                     # the nodes and their state (add -o json for scripts)
+./scripts/benchctl get nodes                                     # the nodes and their state (add --json for scripts)
 ./scripts/benchctl get services                                  # every container of the stack
 docker ps --format '{{.Names}}' --filter label=workbench.class      # the same with docker
 docker ps --format '{{.Names}}' --filter label=workbench.node       # only compute and GPU nodes
@@ -23,7 +35,7 @@ docker exec workbench-slurmctld-1 sinfo -N -l                       # Slurm's vi
 ## Look at one node
 
 ```bash
-./scripts/benchctl describe node gpu001          # add -o json for scripts
+./scripts/benchctl describe node gpu001          # add --json for scripts
 ```
 
 It prints, like `kubectl describe`: the container (state, image, memory limit, priority class), Slurm's view (state,
@@ -116,11 +128,11 @@ login: [ssh, teleport]
 
 or in the page: **left nav → ⚙ Cluster architecture → Login nodes** (**Add login node**, pick *Direct SSH*, *Teleport only* or *Direct SSH and Teleport* for each, **Apply**).
 
-![The Cluster architecture sheet: three login nodes, each with its own way in](img/web-login-nodes.png)
+![The Cluster architecture sheet: three login nodes, each with its own way in](img/web-login-nodes-light.png)
 
 **2. See how to reach each one.** The page's **Connections** tab has one row per login node with the exact command, and `./scripts/benchctl up` prints them:
 
-![Connections: login (direct SSH), login2 (Teleport only), login3 (both)](img/web-login-connections.png)
+![Connections: login (direct SSH), login2 (Teleport only), login3 (both)](img/web-login-connections-light.png)
 
 **3. Use them.**
 
@@ -178,7 +190,7 @@ tsh ls
 
 The web UI is at `https://10.141.255.30:3080` (same login). The proxy has its own private address and the name `teleport.workbench.test` (resolved inside the cluster; on this machine add it once, your sudo, never run for you: `echo '10.141.255.30 teleport.workbench.test' | sudo tee -a /etc/hosts`). `127.0.0.1:3080` stays as a fallback. The page lists the address and the command in **Connections** (the Teleport row), and shows Teleport's traffic in the Infrastructure architecture.
 
-![The Infrastructure architecture with Teleport: a dot travels from the clients to the Teleport box for each SSH connection](img/web-infrastructure.png)
+![The Infrastructure architecture with Teleport: a dot travels from the clients to the Teleport box for each SSH connection](img/web-infrastructure-light.png)
 
 **The same Teleport cluster survives a rebuild** (see *Keep or reset the Teleport cluster* below). **A login or compute node you drop is forgotten.** `benchctl up` removes the Teleport registration and the host certificate of every node the workbench no longer has, so `tsh ls` lists only what exists (before this, a dropped `login2` stayed registered and a dial failed with *no route to host*). **Your password survives `up`.** `benchctl up` creates a Teleport user only when it does not exist yet, so the password and one-time code you chose from an invite stay. (Before this fix every `up` replaced the users and `tsh login` then said *invalid username or password*; run `benchctl add invite <user>` once to set them again.) **Good to know.** A Teleport container created before the page showed Teleport has no diagnostics port yet, so the card says `not answering` and no dots appear; run `./scripts/benchctl up --with teleport` once to recreate it. Your `tsh` must not be a newer major version than the server (`teleport.version` in `sim.yaml`, default 18.x); use a separate
 `TELEPORT_HOME` if you keep other Teleport profiles. Not simulated: the Teleport agent's extras (dynamic labels, session
@@ -249,3 +261,35 @@ tsh login --proxy=10.141.255.30:3080 --insecure --user=alice
 
 The monitoring client's own **Log in** button does the last step. If you see `unknown certificate authority` after a rebuild you did not
 expect, run the three lines above: the client holds a session from an older cluster.
+
+## What you will see
+
+The screenshots in this chapter are real terminal output from the `min` profile; the web page's node panel shows the same nodes ([chapter 5](05-web-page.md)).
+
+## Under the hood
+
+The login node is the only machine you reach from the host. Compute and GPU nodes run `sshd` too, but publish no port, so they are reached only through the login node. Access is by key, with no root and no password, for the simulated users only. `benchctl exec` skips SSH altogether and uses `docker exec`, and the shell it opens is root inside the container, not on your host.
+
+> [!HOOD]
+> One host key and one cluster key are shared by all nodes (a simulation shortcut, like the shared munge key), and the login node trusts that host key, so the hop to a node asks no question. With Teleport on, nodes keep their own `sshd` and trust Teleport's certificate authority; no Teleport process runs on a node.
+
+Source: `benchctl/logins.py`, `benchctl/teleport.py`, ADR 0014, ADR 0020.
+
+## Tips and gotchas
+
+> [!TIP]
+> Tab completion works in a user's shell: commands, paths and Slurm tools, with history on the up arrow and Ctrl-R.
+
+> [!WARNING]
+> A shell that hangs may be a paused container, not a bug: the governor pauses low-priority nodes under memory pressure. Check `./scripts/benchctl status` first.
+
+## If it goes wrong
+
+| You see | Why | Do this |
+|---|---|---|
+| a shell hangs or ends | the node was paused or stopped, or scaled away | `./scripts/benchctl status`, then `benchctl up` |
+| `unknown certificate authority` from `tsh` | Teleport's authority was recreated | see "Keep or reset the Teleport cluster" below |
+
+## Learn more
+
+[Using the cluster](03-using-the-cluster.md) · [The governor](07-governor.md) · [SSH connection testing](../guides/ssh-connection-testing.md) · [ADR 0014](../adr/0014-sshd-on-compute-nodes.md)

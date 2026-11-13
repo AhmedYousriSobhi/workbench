@@ -1,4 +1,56 @@
+import os
+import shlex
+import subprocess
+
 import pytest
+
+# Host tools a unit test must never run: they act on the machine (containers, units, keys, packets) and are absent on a clean runner.
+# A test that needs the behaviour passes a runner or stubs the call; tests/real is the place for the real tool (#473).
+HOST_TOOLS = {"systemd-run", "systemctl", "tc", "nsenter", "tcpdump", "kubectl", "sudo"}
+# Tools with a harmless stand-in in tests/hostbin: docker answers like a stopped daemon, virsh like no libvirt, ssh-keygen writes placeholder keys.
+STUBS = {"docker", "ssh-keygen", "virsh"}
+HOSTBIN = os.path.join(os.path.dirname(__file__), "hostbin")
+
+
+def _tool(args, shell):
+    try:
+        first = shlex.split(args)[0] if isinstance(args, str) else os.fspath(args[0])
+    except (ValueError, IndexError, TypeError):
+        return ""
+    return os.path.basename(first)
+
+
+@pytest.fixture(autouse=True)
+def _no_host_tools(request, monkeypatch):
+    """Fail a unit test that would run a host tool for real. Not applied under tests/real, which exists to run them."""
+    if "real" in request.node.path.parts:
+        return
+    original = subprocess.Popen.__init__
+
+    def guarded(self, args, *a, **kw):
+        name = _tool(args, kw.get("shell"))
+        if name in STUBS:
+            stub = os.path.join(HOSTBIN, name)
+            if isinstance(args, str):  # a command line: swap its first word
+                args = shlex.quote(stub) + args.lstrip()[len(shlex.split(args)[0]):]
+            else:
+                args = [stub, *list(args)[1:]]
+        elif name in HOST_TOOLS:
+            raise RuntimeError(f"hermetic guard: a unit test ran '{name}' for real; pass a runner or stub the call (#473)")
+        return original(self, args, *a, **kw)
+
+    monkeypatch.setattr(subprocess.Popen, "__init__", guarded)
+
+
+@pytest.fixture(autouse=True)
+def _plain_help_text(monkeypatch):
+    """Typer forces terminal styling when GITHUB_ACTIONS, FORCE_COLOR or PY_COLORS is set (read at import), which puts escape codes in
+    the help text the tests match on. The first CI run showed it (#473)."""
+    try:
+        from typer import rich_utils
+    except ImportError:
+        return
+    monkeypatch.setattr(rich_utils, "FORCE_TERMINAL", None)
 
 
 @pytest.fixture(autouse=True)

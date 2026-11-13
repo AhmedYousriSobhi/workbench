@@ -16,7 +16,8 @@ class WorkloadError(ValueError):
     pass
 
 
-def command(sim: dict, node: str, gpus: int = 0, duration: int = 300, user: str | None = None, cpus: int = 1) -> list[str]:
+def command(sim: dict, node: str, gpus: int = 0, duration: int = 300, user: str | None = None, cpus: int = 1,
+            qos: str | None = None) -> list[str]:
     """The `docker exec ... sbatch` for one job on `node`; raises WorkloadError for anything the cluster cannot honour."""
     kinds = dict(nodes.node_names(sim))
     if node not in kinds:
@@ -32,10 +33,14 @@ def command(sim: dict, node: str, gpus: int = 0, duration: int = 300, user: str 
         raise WorkloadError(f"{node} has {per_node} GPU(s); asked for {gpus}")
     if not 1 <= cpus <= 64:
         raise WorkloadError("cpus must be 1 to 64")
+    declared = {q["name"] for q in sim.get("qos") or []} | {"normal"}
+    if qos is not None and qos not in declared:  # issue 544: a QOS the cluster has (sim.yaml `qos:`; normal is built in)
+        raise WorkloadError(f"unknown qos {qos!r}: {', '.join(sorted(declared))}")
     # --output/--error: the working directory here is /, which a user cannot write, so a default slurm-N.out fails the job at launch
     part = "real-gpu" if kinds[node] == "real-gpu" else "gpu" if kinds[node] == "gpu" else "cpu"
     args = ["sbatch", "--parsable", f"--nodelist={node}", f"--partition={part}", f"--cpus-per-task={cpus}",
             f"--job-name=wb-{node}", f"--time={duration // 60 + 1}", "--output=/dev/null", "--error=/dev/null", *([f"--gres=gpu:{gpus}"] if gpus else []),
+            *([f"--qos={qos}"] if qos else []),
             f"--wrap=sleep {duration}"]
     return ["docker", "exec", "-u", user, LOGIN, "bash", "-lc", shlex.join(args)]
 

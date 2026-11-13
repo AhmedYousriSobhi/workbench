@@ -1,0 +1,19 @@
+# workbench
+
+> A pretend HPC cluster for a 16 GB laptop with a memory governor: real Slurm, fake BMCs, GPUs, Jira and BCM, named faults. Built as a test target for a monitoring client.
+
+## For AI agents
+
+- [AGENTS.md](AGENTS.md): start here; commands, endpoints, rules
+- [Recipes](docs/agents/recipes/connect-your-app.md): one goal each with exact commands (see the folder docs/agents/recipes/)
+- [JSON schemas](docs/agents/schemas/get-nodes.json): one per `--json` output (folder docs/agents/schemas/)
+- [JSON contract changelog](docs/agents/CHANGELOG.md): versions and changes
+- [Error codes](docs/agents/ERROR-CODES.md): every WB- code with its fix
+
+## Docs
+
+- [Testing a monitoring client](docs/guides/client-testing.md)
+- [User manual](docs/manual/README.md)
+- [Command guide](docs/guides/benchctl-verbs.md)
+- [Memory guide](docs/guides/memory.md)
+- [Requirements](SPEC.md)

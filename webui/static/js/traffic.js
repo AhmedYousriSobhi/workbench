@@ -1,6 +1,7 @@
 import { S } from './state.js';
 import { clusterNow } from './inspector.js';
 import { $, esc, paintDyn } from './util.js';
+import { paintBlocks } from './diagram.js';
 import { sv } from './svg.js';
 
 export const trRate = {};  // service -> {t, n, rate}: requests per second from the counter, re-sampled every 3 s
@@ -252,14 +253,15 @@ export function paintChips(links) {
 }
 export const PLANE_ICON = { control: 'gear', data: 'db', monitoring: 'chart', management: 'server', access: 'lock' };
 export async function paintSlurmStats() {
-  if ($('tab-traffic').hidden || Date.now() - S.slurmAt < 5000) return;
+  // every visible tab: the circuit, the classic diagram and the Overview zoom read these facts (issue 567), not only the Traffic view
+  if (document.hidden || Date.now() - S.slurmAt < 5000) return;
   S.slurmAt = Date.now();
-  fetch('/api/monitoring').then(r => r.json()).then(j => { S.monLinks = j.links; paintTraffic(); }).catch(() => { S.monLinks = []; });
+  fetch('/api/monitoring').then(r => r.json()).then(j => { S.monLinks = j.links; paintTraffic(); paintBlocks(); }).catch(() => { S.monLinks = []; });
   let s = null;
   try { s = (await (await fetch('/api/slurm-stats')).json()).stats; } catch (e) { /* the governor or the stack is down: show nothing */ }
   S.slurmNodes = s && s.node_states ? s.node_states : null;
   S.dbdLink = s && s.dbd != null ? { id: 'slurmctld>slurmdbd:6819', from: 'slurmctld', to: 'slurmdbd', protocol: 'TCP (Slurm RPC)', port: 6819, plane: 'data', what: 'accounting records; seen by a sacctmgr query (answers or not, no counter)', real: true, measured: false, probe: s.dbd, service: null } : null;
-  paintTraffic();
+  paintTraffic(); paintBlocks();
   const box = $('tr-slurm');
   box.hidden = !s;
   if (s) box.innerHTML = `<b>slurmctld (sdiag)</b>: ${s.rpcs.toLocaleString()} requests served since it started${s.threads == null ? '' : `, ${s.threads} threads now`}. Busiest: `
@@ -310,6 +312,7 @@ export function init() {
   const zoom = z => { S.trZoom = Math.min(3, Math.max(0.6, z)); $('tr-map').style.width = S.trZoom * 100 + '%'; };
   $('tr-zin').onclick = () => zoom(S.trZoom * 1.25); $('tr-zout').onclick = () => zoom(S.trZoom / 1.25); $('tr-zfit').onclick = () => zoom(1);
   if ($('tr-stage').requestFullscreen) $('tr-full').onclick = () => document.fullscreenElement ? document.exitFullscreen() : $('tr-stage').requestFullscreen(); else $('tr-full').hidden = true;
-  setInterval(() => { if (!document.hidden) paintSlurmStats(); }, 5000);  // node states are read every 5 s while the Traffic tab shows (W-11: not while hidden), so a drain appears without traffic or a reload (issue 414)
+  setInterval(() => { if (!document.hidden) paintSlurmStats(); }, 5000);  // node states are read every 5 s while the page is visible (W-11: not while hidden), so a drain appears without traffic or a reload (issue 414) and the diagrams are complete on any tab (issue 567)
+  paintSlurmStats();  // and once now, not after the first 5 s
 
 }

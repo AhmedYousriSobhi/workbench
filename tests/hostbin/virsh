@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+"""Unit-test stand-in for `virsh` (tests/conftest.py, #473): a machine with no reachable libvirt."""
+import sys
+
+sys.stderr.write("error: failed to connect to the hypervisor\n")
+sys.exit(1)

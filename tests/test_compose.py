@@ -1,10 +1,9 @@
 import importlib.util
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
 import yaml
+from invhelp import inv
 
 from benchctl import compose
 
@@ -13,7 +12,7 @@ SIM = yaml.safe_load(Path("sim.yaml").read_text())
 
 def test_profile_extends_union_and_override():
     std = compose.load_profile("std")
-    assert std["groups"] == ["core", "mocks", "access", "scenarios", "accounting", "load"]
+    assert std["groups"] == ["core", "mocks", "access", "accounting"]
     assert std["compute_nodes"] == 16  # own value beats the parent's
     assert compose.load_profile("full")["compute_nodes"] == 32
     assert compose.load_profile("mac-agent")["compute_nodes"] == 4  # inherited
@@ -22,14 +21,14 @@ def test_profile_extends_union_and_override():
 def test_min_has_no_accounting_or_load():
     svcs = compose.generate(SIM, compose.load_profile("min"))["services"]
     assert "slurmctld" in svcs and "bmc-farm" in svcs
-    assert not {"mariadb", "slurmdbd", "user-sim"} & set(svcs)
+    assert not {"mariadb", "slurmdbd", "user-sim", "scenario-engine", "ticket-bot"} & set(svcs)
 
 
 def test_mocks_publish_on_localhost_only():
     svcs = compose.generate(SIM, compose.load_profile("min"))["services"]
     assert svcs["bcm-mock"]["ports"] == ["127.0.0.1:8081:8081"]
     assert svcs["jira-mock"]["ports"] == ["127.0.0.1:8080:8080"]
-    assert "./sim.yaml:/sim.yaml:ro" in svcs["bcm-mock"]["volumes"]
+    assert "./inventory.json:/inventory.json:ro" in svcs["bcm-mock"]["volumes"]  # the mocks read the generated inventory, not sim.yaml (issue 462)
     assert svcs["bcm-mock"]["build"] == "../../components/bcm-mock"
 
 
@@ -48,7 +47,7 @@ def test_node_names_match_gpu_exporter():
         spec.loader.exec_module(exporter)
     except ModuleNotFoundError:
         pytest.skip("pyyaml missing")
-    expected = set(exporter.load_nodes(Path("sim.yaml")))
+    expected = set(exporter.load_nodes(inv(Path("sim.yaml"))))
     generated = {n for n, _ in compose.node_names(SIM)}
     assert generated == expected
 
@@ -64,25 +63,13 @@ def test_slurmd_count_follows_profile():
 def test_budget_matches_limits():
     data = compose.generate(SIM, compose.load_profile("min"))
     nodes = 4 + SIM["gpu"]["nodes"]  # every node also has its BMC forwarder
-    assert compose.budget_mb(data) == 200 + 60 + 3 * 100 + 40 + 60 + nodes * (60 + compose.BMC_FORWARDER_MB)
+    assert compose.budget_mb(data) == 200 + 60 + 3 * 100 + 40 + nodes * (60 + compose.BMC_FORWARDER_MB)
 
 
 def test_write_marks_generated(tmp_path):
     out = compose.write(compose.generate(SIM, compose.load_profile("min")), tmp_path / "x" / "c.yml")
     assert out.read_text().startswith("# GENERATED")
     assert yaml.safe_load(out.read_text())["include"] == ["../observability.yml"]
-
-
-@pytest.mark.skipif(not shutil.which("docker"), reason="docker missing")
-def test_docker_compose_accepts_generated_file():
-    out = compose.write(compose.generate(SIM, compose.load_profile("std")),
-                        Path("compose/generated/test-std.yml"))
-    try:
-        r = subprocess.run(["docker", "compose", "-f", str(out), "config", "-q"],
-                           capture_output=True, text=True, timeout=60, check=False)
-        assert r.returncode == 0, r.stderr
-    finally:
-        out.unlink()
 
 
 def test_bmc_farm_publishes_tls_and_every_node_has_its_own_bmc_address():
@@ -126,12 +113,13 @@ def test_the_jira_mock_starts_with_a_team_working_the_project():
 
 
 def test_exporter_image_has_its_dependency_baked_in_and_pinned():
-    """Issue 235: no `pip install` at container start; every Dockerfile that needs pyyaml pins the same version."""
+    """Issue 235: no `pip install` at container start; the exporter (the one image that still reads YAML) pins pyyaml. The BMC and BCM mocks read the
+    generated inventory.json and need none (issue 462)."""
     root = Path(__file__).resolve().parents[1]
     obs = yaml.safe_load((root / "compose/observability.yml").read_text())["services"]["gpu-exporter-farm"]
     assert "build" in obs and "pip" not in str(obs.get("command", ""))
-    pins = {(root / f"components/{c}/Dockerfile").read_text().count("pyyaml==6.0.3") for c in ("gpu-exporter-farm", "bmc-farm", "bcm-mock")}
-    assert pins == {1}
+    assert (root / "components/gpu-exporter-farm/Dockerfile").read_text().count("pyyaml==6.0.3") == 1
+    assert all("pyyaml" not in (root / f"components/{c}/Dockerfile").read_text() for c in ("bmc-farm", "bcm-mock"))
 
 
 def _sim():

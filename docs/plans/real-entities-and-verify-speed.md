@@ -2,6 +2,8 @@
 
 Status: research done, nothing implemented. Written so each issue can be picked up cold.
 
+> **Update 2026-11-13 (issue 576):** the faster-verify goal was met a different way than this plan's issues 234 to 237 assumed. The first measured `--full` took 22:37 and the real Jira alone was 7 of it; `--full` is now about 14 minutes. What was built and why: [ADR 0057](../adr/0057-two-verification-gates-and-impact-selected-live-tests.md) (two gates, impact map, real Jira optional) and [ADR 0058](../adr/0058-stack-keys-and-build-stamps.md) (stack keys, build stamps).
+
 ## Start here (next session)
 
 - **Tracking epics:** #254 real entities instead of mocks, #255 faster `verify.sh`, #256 multiple independent clusters and per-cluster

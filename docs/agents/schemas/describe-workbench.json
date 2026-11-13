@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "describe workbench",
+  "description": "One call for situational awareness, at most 6,000 characters for the default profile. A credential is a file path under compose/generated/secrets, never a value.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "state": {
+      "type": "object",
+      "properties": {
+        "containers": {
+          "type": "integer"
+        },
+        "profile": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "governor_level": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "mem_available_mb": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "containers",
+        "profile",
+        "governor_level",
+        "mem_available_mb"
+      ]
+    },
+    "clusters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "scheduler": {
+            "enum": [
+              "slurm",
+              "kubernetes"
+            ]
+          },
+          "pools": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "nodes": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "name",
+                "nodes"
+              ]
+            }
+          }
+        },
+        "required": [
+          "name",
+          "scheduler",
+          "pools"
+        ]
+      }
+    },
+    "endpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "auth": {
+            "enum": [
+              "none",
+              "ssh-key",
+              "file"
+            ]
+          },
+          "credential": {
+            "type": "string",
+            "pattern": "^compose/generated/secrets/"
+          }
+        },
+        "required": [
+          "id",
+          "address",
+          "auth"
+        ]
+      }
+    },
+    "faults_active": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "label"
+        ]
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "seconds": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "summary",
+          "seconds"
+        ]
+      }
+    },
+    "fault_targets": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "next": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "contract_version",
+    "state",
+    "clusters",
+    "endpoints",
+    "faults_active",
+    "scenarios",
+    "fault_targets",
+    "next"
+  ]
+}

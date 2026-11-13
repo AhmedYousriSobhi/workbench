@@ -1,7 +1,9 @@
 """The in-page wiki: serves the markdown under docs/ (manual, guides, architecture, ADRs) as linked HTML pages.
 
 A small renderer for the subset those files use (headings, paragraphs, lists, tables, fenced code, quotes, images,
-links, inline code/bold/italic). Pages are read and rendered per request, so nothing is held in memory while idle
+links, inline code/bold/italic) plus the constructs of the illustrated page template: GitHub alerts (`> [!TIP]`, and the
+project kinds `HOOD` and `DIDYOUKNOW`), `<details>`/`<summary>`, `<p align="center">`, `<picture>` (the help shows its `<img>`),
+`<img>`, `<kbd>`, and an italic line after an image as its caption. Only those tags pass; any other tag is escaped. Pages are read and rendered per request, so nothing is held in memory while idle
 (SPEC W-1). A link to another markdown file under docs/ becomes a wiki link; any other repo-relative link (SPEC.md,
 sim.yaml, source files) is shown as plain code, since the page cannot open files outside docs/.
 """
@@ -10,9 +12,16 @@ import posixpath
 import re
 from pathlib import Path
 
-GROUPS = [("manual", "Manual"), ("guides", "Guides"), ("architecture", "Architecture"), ("adr", "Decisions (ADR)")]
+GROUPS = [("manual", "Manual"), ("guides", "Guides"), ("architecture", "Architecture"), ("adr", "Decisions (ADR)"), ("agents", "For AI agents")]
 IMAGES = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
 SKIP = {"measurements", "assets", "legacy-lab-reuse.md"}
+
+
+ALERTS = {  # kind: (icon, label); the label is text, so the kind never depends on colour or icon alone
+    "note": ("ℹ️", "Note"), "tip": ("💡", "Tip"), "important": ("❗", "Important"), "warning": ("⚠️", "Warning"),
+    "caution": ("🛑", "Caution"), "hood": ("🔧", "Under the hood"), "didyouknow": ("💡", "Did you know?"),
+}
+ALERT_RE = re.compile(r"^>\s*\[!(" + "|".join(ALERTS) + r")\]\s*$", re.IGNORECASE)
 
 
 class WikiError(Exception):
@@ -32,7 +41,8 @@ class Wiki:
         path = (self.docs / rel).resolve()
         if not path.is_relative_to(self.docs) or path.suffix != suffix or not path.is_file():
             raise WikiError(rel)
-        if path.relative_to(self.docs).parts[0] in SKIP:
+        parts = path.relative_to(self.docs).parts
+        if parts[0] in SKIP and not (parts[0] == "assets" and len(parts) > 2 and parts[1] == "art"):  # the generated art only
             raise WikiError(rel)
         return path
 
@@ -124,6 +134,17 @@ class Wiki:
             ext = ' rel="noopener noreferrer" target="_blank"' if url.startswith("http") else ""
             return f'<a href="{esc(url)}"{ext}>{m.group(1)}</a>'
 
+        def html_img(m: re.Match) -> str:  # <img src alt width height>: only those attributes, src resolved like a markdown image
+            attrs = dict(re.findall(r"(\w+)=&quot;(.*?)&quot;", m.group(1)))
+            url = self.link(html.unescape(attrs.get("src", "")), page)
+            alt = attrs.get("alt", "")
+            if not url:
+                return f"<em>[image: {alt}]</em>"
+            size = "".join(f' {k}="{attrs[k]}"' for k in ("width", "height") if attrs.get(k, "").isdigit())
+            return f'<img src="{esc(url)}" alt="{alt}"{size} loading="lazy">'
+
+        text = re.sub(r"&lt;img\s+((?:(?!&gt;).)*?)/?&gt;", html_img, text)
+        text = re.sub(r"&lt;kbd&gt;((?:(?!&lt;).)*)&lt;/kbd&gt;", r"<kbd>\1</kbd>", text)
         text = re.sub(r"!\[([^\]]*)\]\(([^)\s]+)\)", image, text)
         text = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", anchor, text)
         text = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", text)
@@ -139,10 +160,24 @@ class Wiki:
         para: list[str] = []
         i = 0
 
+        centered: list[bool] = []  # open <p align="center"> blocks written over several lines
+        details = 0
+
         def flush() -> None:
-            if para:
-                out.append(f"<p>{self.inline(' '.join(para), page)}</p>")
-                para.clear()
+            if not para:
+                return
+            body = self.inline(" ".join(para), page)
+            para.clear()
+            caption = re.fullmatch(r"<em>(.+)</em>", body)
+            if caption and out and out[-1].startswith('<p class="img'):
+                img = out.pop()
+                cls = " center" if "center" in img[:24] else ""
+                inner = re.sub(r"^<p[^>]*>|</p>$", "", img)
+                out.append(f'<figure class="img{cls}">{inner}<figcaption>{caption.group(1)}</figcaption></figure>')
+            elif re.fullmatch(r"<img [^>]*>", body):
+                out.append(f'<p class="img">{body}</p>')
+            else:
+                out.append(f"<p>{body}</p>")
 
         while i < len(lines):
             line = lines[i]
@@ -155,6 +190,31 @@ class Wiki:
                     code.append(lines[i])
                     i += 1
                 out.append(f'<pre class="code"><code data-lang="{esc(lang)}">{esc(chr(10).join(code))}</code></pre>')
+            elif re.fullmatch(r"\s*</?picture>\s*|\s*<source\b[^>]*>\s*", line):
+                flush()  # <picture>: the help shows the <img> fallback (the page's own theme decides, not media queries)
+            elif m := re.fullmatch(r'\s*<p align="center">(.*)</p>\s*', line):
+                flush()
+                inner = self.inline(m.group(1).strip(), page)
+                out.append(f'<p class="img center">{inner}</p>' if re.fullmatch(r"<img [^>]*>", inner) else f'<p class="center">{inner}</p>')
+            elif re.fullmatch(r'\s*<p align="center">\s*', line):
+                flush()
+                out.append('<div class="center">')
+                centered.append(True)
+            elif centered and re.fullmatch(r"\s*</p>\s*", line):
+                flush()
+                out.append("</div>")
+                centered.pop()
+            elif m := re.fullmatch(r"\s*<details>\s*(?:<summary>(.*)</summary>)?\s*", line):
+                flush()
+                details += 1
+                out.append("<details>" + (f"<summary>{self.inline(m.group(1), page)}</summary>" if m.group(1) else ""))
+            elif m := re.fullmatch(r"\s*<summary>(.*)</summary>\s*", line):
+                flush()
+                out.append(f"<summary>{self.inline(m.group(1), page)}</summary>")
+            elif details and re.fullmatch(r"\s*</details>\s*", line):
+                flush()
+                details -= 1
+                out.append("</details>")
             elif m := re.match(r"^(#{1,6})\s+(.*)$", line):
                 flush()
                 n = len(m.group(1))
@@ -188,12 +248,28 @@ class Wiki:
                 out.append(f"<{tag}>" + "".join(f"<li>{self.inline(t, page)}</li>" for t in items) + f"</{tag}>")
             elif line.startswith(">"):
                 flush()
+                alert = ALERT_RE.match(line)
                 quote = []
                 while i < len(lines) and lines[i].startswith(">"):
                     quote.append(lines[i].lstrip(">").strip())
                     i += 1
                 i -= 1
-                out.append(f"<blockquote>{self.inline(' '.join(quote), page)}</blockquote>")
+                if alert:  # paragraphs split at empty quote lines
+                    kind = alert.group(1).lower()
+                    icon, name = ALERTS[kind]
+                    paras: list[str] = []
+                    cur: list[str] = []
+                    for q in quote[1:] + [""]:
+                        if q:
+                            cur.append(q)
+                        elif cur:
+                            paras.append(" ".join(cur))
+                            cur = []
+                    body = "".join(f"<p>{self.inline(t, page)}</p>" for t in paras)
+                    out.append(f'<div class="alert alert-{kind}" role="note"><p class="alert-title"><span aria-hidden="true">{icon}</span> '
+                               f"<strong>{esc(name)}</strong></p>{body}</div>")
+                else:
+                    out.append(f"<blockquote>{self.inline(' '.join(quote), page)}</blockquote>")
             elif re.match(r"^(-{3,}|\*{3,})\s*$", line):
                 flush()
                 out.append("<hr>")
@@ -203,6 +279,7 @@ class Wiki:
                 para.append(line.strip())
             i += 1
         flush()
+        out += ["</div>"] * len(centered) + ["</details>"] * details
         return self.title(path), "\n".join(out)
 
 
@@ -229,6 +306,14 @@ code{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg);
 pre.code{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow:auto}pre.code code{background:none;padding:0}
 .tablewrap{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:12px 0}th,td{text-align:left;vertical-align:top;padding:8px 10px;border:1px solid var(--line)}th{background:var(--bg)}
 blockquote{margin:12px 0;padding:4px 14px;border-left:4px solid var(--accent);background:var(--bg);border-radius:4px}
+.center{text-align:center}.center img{margin:8px auto}img[src$=".svg"]{border:0}
+figure.img{margin:12px 0}figure.img img{margin:0 0 6px}figure.center{text-align:center}figure.center img{margin:0 auto 6px}figcaption{color:var(--dim);font-size:14px;font-style:italic}
+kbd{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 6px}
+details{margin:12px 0;padding:4px 14px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}details[open]{padding-bottom:10px}summary{cursor:pointer;font-weight:600;min-height:32px;display:flex;align-items:center}
+.alert{margin:14px 0;padding:6px 14px;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:8px;background:var(--bg);color:var(--fg)}
+.alert p{margin:6px 0}.alert-title{font-size:15px}
+.alert-tip,.alert-didyouknow{border-left-color:#1a7f37}.alert-important{border-left-color:#8250df}.alert-warning{border-left-color:#9a6700}.alert-caution{border-left-color:#cf222e;border-left-style:double;border-left-width:7px}.alert-hood{border-left-style:dashed}
+@media(prefers-color-scheme:dark){.alert-tip,.alert-didyouknow{border-left-color:#3fb950}.alert-important{border-left-color:#a371f7}.alert-warning{border-left-color:#d29922}.alert-caution{border-left-color:#f85149}}
 .hit{padding:10px 0;border-bottom:1px solid var(--line)}.hit p{margin:2px 0;color:var(--dim);font-size:14px}
 @media(max-width:860px){.wrap{grid-template-columns:minmax(0,1fr);padding:12px 16px 32px}nav.side{position:static;max-height:none;order:2}article{padding:4px 16px 24px}header.top{padding:10px 16px}}
 """

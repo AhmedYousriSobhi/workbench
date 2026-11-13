@@ -1,3 +1,5 @@
+<p align="center"><img src="../assets/art/arch-06-ux-and-scenarios-hero.svg" alt="Architecture: Control, web page and scenarios. benchctl, web page, scenarios." width="720"></p>
+
 # Control, Web UI and scenarios
 
 [Architecture index](README.md) · [Project overview](../../README.md)
@@ -58,7 +60,6 @@ steps:
   - at: 0s    ; target: gpu-exporter  ; do: {nodes: [gpu003,gpu004,gpu007], xid: 79, rate: 2/min}
   - at: 30s   ; target: bmc-farm      ; do: {nodes: [gpu003], sensor: GPU_TEMP, ramp_to: 92C, over: 2m}
   - at: 90s   ; target: slurm         ; do: {drain: [gpu003], reason: "xid 79"}
-  - at: 2m    ; target: ticket-bot    ; do: {sla_profile: p1-fast}
 expect:   # optional assertions for automated demo/CI runs
   - jira.issue_created: {labels: [gpu, xid], within: 3m}
 ```

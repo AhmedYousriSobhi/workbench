@@ -10,6 +10,7 @@ import pytest
 from helpers import wait_for
 from test_cluster_real import api, ui  # noqa: F401  (the module-scoped live stack and UI process)
 
+from webui.app import login_url
 from webui.flow import STATS
 
 JIRA = "http://127.0.0.1:8080"
@@ -64,7 +65,7 @@ def test_dots_move_in_a_real_browser_and_pause(ui, tmp_path):  # noqa: F811
         errors = []
         page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
         page.add_init_script("window.__WB_TEST = true; try { localStorage.setItem('workbench-circuit', '0'); sessionStorage.getItem('workbench-tab') || sessionStorage.setItem('workbench-tab', 'nodes'); } catch (e) {}")  # the module globals (flowEs below) and the classic diagram and list: the circuit is the default view
-        page.goto(f"{base}/login?token={token}")
+        page.goto(login_url(base, token))
         page.wait_for_selector("#fb-jira-mock.up")  # block turns green once the feed reports it reachable
         shot = {"done": False}
 

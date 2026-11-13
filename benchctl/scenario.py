@@ -2,7 +2,7 @@
 
 A scenario is `steps` (`at`, `target`, `do`) and optional `expect` assertions. Each step is one HTTP call to a
 mock's /sim/inject (or a `scontrol` call in slurmctld). `ramp` steps expand into a series of temperature steps.
-Targets whose component is not built yet (k8s, ticket-bot) are reported as skipped, not failed.
+Targets the caller cannot run (the page has no Docker) are reported as skipped, not failed.
 """
 import base64
 import json
@@ -16,7 +16,7 @@ from pathlib import Path
 
 import yaml
 
-from . import checks, dcgm, k8s
+from . import authfaults, checks, dcgm, k8s, topology
 from .nodes import node_names
 
 ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "http://127.0.0.1:8000/sim/inject",
@@ -31,10 +31,9 @@ JIRA_REAL_URL = "http://127.0.0.1:8083"
 JIRA_REAL_MODES = ("outage", "restore", "bad_logins", "clear_logins", "rate_limit", "rate_limit_off", "token_revoke", "token_restore",
                    "proxy_503", "proxy_429", "proxy_slow", "proxy_off")  # real faults on the real Jira (issue 303); proxy_* through benchctl/jira_proxy.py (issue 305)
 JIRA_REAL_TICKET_ACTIONS = ("create", "transition", "comment")  # `tickets:` steps on the real Jira go through the REST driver (issue 306)
-HOST_TARGETS = ("slurm", "ssh", "jira-real", "k8s", "dcgm")  # steps that need Docker on the host
+HOST_TARGETS = ("slurm", "ssh", "jira-real", "k8s", "dcgm", "auth")  # steps that need Docker on the host
 SSH_STATES = ("down", "up", "hung")
 NODE_SSHD_STATES = ("down", "up")
-NOT_BUILT = ("ticket-bot",)
 RAMP_STEP_S = 10.0
 RAMP_START_C = 50.0
 SCENARIOS = Path("scenarios")
@@ -101,9 +100,7 @@ def summary(sc: dict) -> str:
 
 def page_support(step: Step) -> str:
     """"" when the Web UI can run the step (it has no Docker: only the governor's Slurm steps), else why not. The same rules as `_apply` with host=False."""
-    if step.target in NOT_BUILT:
-        return f"{step.target} is not built yet"
-    if step.target == "slurm" and (set(step.do) & set(DAEMON_KEYS) or set(step.do) & set(SLURM_STATES)):
+    if step.target == "switch" or step.target == "slurm" and (set(step.do) & set(DAEMON_KEYS) or set(step.do) & set(SLURM_STATES)):
         return ""
     if step.target in HOST_TARGETS:
         return f"{step.target} steps need the host CLI (no Docker access in the page)"
@@ -157,7 +154,10 @@ def validate(sc: dict, sim: dict) -> list[str]:
         if t in ("jira-tickets", "jira-activity"):  # the endpoint key, not a target: steps say `jira` with `tickets:`
             problems.append(f"step {i}: unknown target {t!r}")
             continue
-        if t not in ENDPOINTS and t not in HOST_TARGETS and t not in NOT_BUILT:
+        if t == "switch":
+            problems += [f"step {i}: {m}" for m in topology.switch_problems(s.get("do") or {}, sim)]
+            continue
+        if t not in ENDPOINTS and t not in HOST_TARGETS:
             problems.append(f"step {i}: unknown target {t!r}")
         do = s.get("do") or {}
         if t == "ssh":
@@ -168,6 +168,9 @@ def validate(sc: dict, sim: dict) -> list[str]:
             problems += [f"step {i}: {m}" for m in daemon_problems(do)]
         if t == "dcgm" and sum(bool(do.get(v)) for v in ("stop", "start", "restart")) != 1:
             problems.append(f"step {i}: dcgm needs one of stop, start, restart: true")
+        if t == "auth":
+            problems += [f"step {i}: {m}" for m in authfaults.problems(do, nodes, {u["name"] for u in sim.get("users", [])})]
+            continue
         if t == "k8s":
             problems += [f"step {i}: {m}" for m in k8s.step_problems(do, {n for n, _ in k8s.node_list(sim)})]
         if t == "jira-real" and "tickets" in do:
@@ -177,7 +180,7 @@ def validate(sc: dict, sim: dict) -> list[str]:
         if t == "k8s":  # its node names are Kubernetes nodes, checked above
             continue
         names = [n for key in ("nodes", "drain", "down", "resume", "power_off", "power_on", "slurmd_stop", "slurmd_start",
-                               "slurmd_restart") for n in do.get(key) or []]
+                               "slurmd_restart", "power_down", "power_up", "reboot") for n in do.get(key) or []]
         if isinstance(do.get("submit"), dict) and do["submit"].get("node"):
             names.append(do["submit"]["node"])
         problems += [f"step {i}: unknown node {n!r}" for n in names if n not in nodes]
@@ -262,7 +265,7 @@ def post(url: str, body: dict, timeout: float = 10) -> None:
 
 HOLD = "/run/workbench/slurmd.hold"  # images/node-base/slurmd-run waits while this file exists
 DAEMON_KEYS = ("slurmd_stop", "slurmd_start", "slurmd_restart", "slurmctld_restart", "submit", "cancel")
-SUBMIT_KEYS = {"node", "user", "gpus", "duration"}
+SUBMIT_KEYS = {"node", "user", "gpus", "duration", "qos"}
 SLURM_STATES = {"drain": "drain", "down": "down", "resume": "resume", "power_off": "off", "power_on": "on"}
 
 
@@ -276,7 +279,7 @@ def submit_command(sub: dict, sim: dict | None = None) -> list[str]:
     from . import workload
 
     sim = sim or yaml.safe_load(Path("sim.yaml").read_text())
-    return workload.command(sim, sub["node"], int(sub.get("gpus", 0)), int(sub.get("duration", 600)), sub.get("user"))
+    return workload.command(sim, sub["node"], int(sub.get("gpus", 0)), int(sub.get("duration", 600)), sub.get("user"), qos=sub.get("qos"))
 
 
 def daemon_commands(do: dict) -> list[list[str]]:
@@ -296,6 +299,21 @@ def daemon_commands(do: dict) -> list[list[str]]:
         cmds.append(submit_command(do["submit"]))
     if do.get("cancel"):
         cmds.append(["docker", "exec", SLURMCTLD, "scancel", "--quiet", "-u", "alice"])
+    return cmds
+
+
+def power_commands(do: dict) -> list[list[str]]:
+    """Slurm's own power save and reboot (issue 545), asked of the real slurmctld: `power_down` and `power_up` are `scontrol power down|up`
+    (POWERED_DOWN, POWERING_UP; the BMC farm is told by SuspendProgram and ResumeProgram), `reboot` is `scontrol reboot ASAP` (the node's
+    RebootProgram cycles it through the BMC and restarts slurmd, and it returns to service: nextstate=resume). `power_off` and `power_on`
+    stay what they were: a node that dies and is revived behind Slurm's back, as a power cut would."""
+    cmds: list[list[str]] = []
+    for key, verb in (("power_down", "down"), ("power_up", "up")):
+        if do.get(key):
+            cmds.append(["docker", "exec", SLURMCTLD, "scontrol", "power", verb, ",".join(do[key])])
+    if do.get("reboot"):
+        cmds.append(["docker", "exec", SLURMCTLD, "scontrol", "reboot", "ASAP", "nextstate=resume",
+                     f"reason={do.get('reason', 'scenario reboot')}", ",".join(do["reboot"])])
     return cmds
 
 
@@ -395,12 +413,16 @@ def execute(step: Step, poster=post, runner=checks.run, host: bool = True, slurm
 
 def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcome:
     label = f"{step.target} {json.dumps(step.do, sort_keys=True)}"
-    if step.target in NOT_BUILT:
-        return Outcome(label, "skipped", f"{step.target} is not built yet")
+    if step.target == "switch":  # a leaf switch is its nodes: down drains exactly those, up resumes exactly those (issue 543)
+        sim = k8s.current_sim()
+        if topology.switch_problems(step.do, sim):
+            return Outcome(label, "failed", "; ".join(topology.switch_problems(step.do, sim)))
+        inner = _apply(Step(step.at, "slurm", topology.switch_step(step.do, sim)), poster, runner, host, slurm, daemon)
+        return Outcome(label, inner.status, inner.detail)
     if step.target == "slurm" and not host and daemon and set(step.do) & set(DAEMON_KEYS):  # no Docker: the governor does it
         ok, detail = daemon(step.do)
         return Outcome(label, "ok" if ok else "skipped", detail)  # a refusal (calm levels only) is not a failure of the scenario
-    if step.target == "slurm" and not host and slurm and not set(step.do) & set(DAEMON_KEYS):  # no Docker: the governor does it
+    if step.target == "slurm" and not host and slurm and not set(step.do) & set(DAEMON_KEYS) and set(step.do) & set(SLURM_STATES):  # no Docker: the governor does it
         for key, state in SLURM_STATES.items():
             for n in step.do.get(key, []):
                 ok, detail = slurm(n, state, step.do.get("reason"))
@@ -441,6 +463,10 @@ def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcom
                 r = runner(cmd)
                 if r.returncode and cmd[3:4] != ["pkill"]:  # pkill exits 1 when slurmd is already down: that is the goal
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+            for cmd in power_commands(step.do):
+                r = runner(cmd)
+                if r.returncode:
+                    return Outcome(label, "failed", (r.stderr or r.stdout).strip())
         elif step.target == "dcgm":
             return _dcgm(step, label, runner)
         elif step.target == "k8s":
@@ -451,6 +477,9 @@ def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcom
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip()[-300:])
         elif step.target == "jira-real":
             return jira_real_fault(step, label, runner)
+        elif step.target == "auth":
+            bad = authfaults.apply(step.do, runner, poster, k8s.current_sim())
+            return Outcome(label, "failed", bad) if bad else Outcome(label, "ok")
         elif step.target == "jira":
             if "tickets" in step.do:  # {tickets: {action: create|transition|comment|reset, ...}}
                 poster(ENDPOINTS["jira-tickets"], step.do["tickets"])

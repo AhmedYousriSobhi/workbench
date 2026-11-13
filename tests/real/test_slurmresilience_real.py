@@ -10,11 +10,13 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import bring_up, exporter_up, wait_for
+from helpers import bring_up, exporter_up, release, wait_for
 
-from benchctl import scenario, stack
+from benchctl import scenario
 
 ROOT = Path(__file__).resolve().parents[2]
+STACK_REUSE = True  # isolated only for the test timers: the same key as the other timers module, so one cold start (issue 576)
+STACK_GROUP = "timers"
 NODE = "cn001"
 
 
@@ -63,15 +65,15 @@ def cluster(test_timers):
     bring_up(yaml.safe_load((ROOT / "sim.yaml").read_text()))
     assert wait_for(lambda: "idle" in node_state(), timeout=90)
     yield
-    stack.down(say=lambda m: None)
+    release()
 
 
 @pytest.fixture(autouse=True)
 def clean(cluster):
     yield
     run_steps({"slurmd_start": [NODE], "cancel": True})
-    wait_for(lambda: "idle" in node_state() or "drain" not in node_state() and "down" not in node_state(), timeout=90)
-    ctl("scontrol", "update", f"nodename={NODE}", "state=resume")
+    ctl("scontrol", "update", f"nodename={NODE}", "state=resume")  # resume first: a drained node never becomes idle by waiting (it cost 90 s per module, #576)
+    wait_for(lambda: "idle" in node_state(), timeout=90)
 
 
 def test_slurmd_is_not_pid_1_so_it_can_restart_without_the_container():

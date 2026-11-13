@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+"""Unit-test stand-in for `docker` (tests/conftest.py, #473): a machine whose daemon is not running. Nothing reaches a real container."""
+import sys
+
+sys.stderr.write("Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n")
+sys.exit(1)

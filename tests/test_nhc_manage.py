@@ -149,7 +149,7 @@ def test_cli_add_set_get_remove_and_the_delivered_copy(repo):
     r = cli.invoke(app, ["add", "check", "gpu-hot", "--template", "metric-above", "--set", "metric=DCGM_FI_DEV_GPU_TEMP", "--set", "max=85", "--position", "1"])
     assert r.exit_code == 0 and "added check gpu-hot" in r.output
     assert (repo / "compose/generated/nhc/gpu-hot.sh").is_file()
-    rows = json.loads(cli.invoke(app, ["get", "checks", "-o", "json"]).output)
+    rows = json.loads(cli.invoke(app, ["get", "checks", "-o", "json"]).output)["items"]
     assert rows[0]["name"] == "gpu-hot" and rows[0]["params"] == "metric=DCGM_FI_DEV_GPU_TEMP max=85" and rows[0]["position"] == 1
     assert cli.invoke(app, ["set", "check", "gpu-xid", "off"]).exit_code == 0
     assert "gpu-xid off" in (repo / "compose/generated/nhc/checks.conf").read_text()

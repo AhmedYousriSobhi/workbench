@@ -50,7 +50,12 @@ refresh_governor() {  # the Grafana token only exists after the first `up`: rest
 
 ui_pid() { [ -f "$pidf" ] && kill -0 "$(cat "$pidf")" 2>/dev/null && cat "$pidf"; }
 page_url() { sed -n 's/.*workbench UI: //p' "$logf" 2>/dev/null | tail -1; }  # the log never holds the token
-link() { local u; u="$(page_url)"; [ -n "$u" ] && [ -s "$state/secrets/ui_token" ] && echo "$u?token=$(cat "$state/secrets/ui_token")"; }
+# A one-time code (60 s) from the running page, never the token itself: the link may land in browser history (SEC2, #466).
+link() {
+  local u c; u="$(page_url)"; [ -n "$u" ] && [ -s "$state/secrets/ui_token" ] || return 0
+  c="$(curl -fsS -m 3 -X POST -H "Authorization: Bearer $(cat "$state/secrets/ui_token")" -H "X-Requested-With: workbench" "${u%/login}/api/login-code" 2>/dev/null | sed -n 's/.*"code": *"\([^"]*\)".*/\1/p')"
+  [ -n "$c" ] && echo "$u?code=$c"
+}
 ensure_venv() {
   [ -x .venv/bin/python ] && return 0
   echo "== creating the virtualenv (once)"
@@ -72,7 +77,7 @@ start_ui() {
 }
 show_link() {
   echo; echo "Web page: $(link)"
-  echo "(the link signs you in once; keep it private, it is only valid on this machine)"
+  echo "(the link signs you in once and expires after a minute; run this command again for a new one)"
 }
 open_link() {
   if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v xdg-open >/dev/null; then xdg-open "$(link)" >/dev/null 2>&1 & fi

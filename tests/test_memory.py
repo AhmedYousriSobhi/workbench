@@ -34,7 +34,7 @@ def test_the_expected_use_covers_the_measurement_plus_the_tolerance_and_never_ex
             assert seen <= cap, f"{name} was seen using {seen} MB, above its cap {cap} MB"
     assert memory.expected_mb("cn001", 60, {"workbench.node": "cn001"}) == math.ceil(memory.MEASURED_MB["slurmd"] * 1.15)
     assert memory.expected_mb("bmc-cn001", 32) == math.ceil(memory.MEASURED_MB["bmc-forwarder"] * 1.15)
-    assert memory.expected_mb("scenario-engine", 60) == 60  # unmeasured: the cap
+    assert memory.expected_mb("accounting-init", 60) == 60  # unmeasured: the cap
 
 
 def test_the_estimate_is_below_the_caps_and_the_app_is_a_separate_line(monkeypatch):

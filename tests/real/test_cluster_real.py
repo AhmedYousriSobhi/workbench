@@ -11,6 +11,8 @@ import pytest
 import yaml
 from helpers import bring_up, release, wait_for
 
+from webui.app import login_url
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -96,7 +98,7 @@ def test_screenshot_of_a_faulted_cluster(ui, tmp_path):
             page = browser.new_page(viewport={"width": size[0], "height": size[1]}, bypass_csp=True)
             page.add_init_script("localStorage.setItem('workbench-tree', 'open')")  # the list is folded by default at 1100-1500 px (#192)
             page.add_init_script("try { localStorage.setItem('workbench-circuit', '0'); sessionStorage.getItem('workbench-tab') || sessionStorage.setItem('workbench-tab', 'nodes'); } catch (e) {}")  # the classic diagram and list: the circuit is the default view
-            page.goto(f"{base}/login?token={token}")
+            page.goto(login_url(base, token))
             page.wait_for_selector(".node.fault")
             assert page.locator(".node.down").count() == 1 and page.locator(".node.warn").count() == 1
             assert page.locator(".node.fault").count() == 2

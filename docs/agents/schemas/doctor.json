@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "doctor",
+  "description": "Host prerequisite checks; exit code 1 when ok is false.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "fix": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^WB-DOCTOR-"
+          }
+        },
+        "required": [
+          "name",
+          "code",
+          "status",
+          "detail",
+          "fix"
+        ]
+      }
+    }
+  },
+  "required": [
+    "contract_version",
+    "ok",
+    "checks"
+  ]
+}

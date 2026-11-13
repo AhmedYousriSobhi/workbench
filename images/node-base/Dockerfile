@@ -30,8 +30,8 @@ RUN --mount=type=cache,target=/ccache,sharing=locked \
  && ccache -s | grep -iE "hit|miss|cache size" \
  && test -f /opt/slurm/lib/slurm/cgroup_v2.so
 
-# Shared base for every Slurm node (slurmd) and the controller image. The munge key is baked in:
-# the sim is a closed lab network, so all containers share one key by design.
+# Shared base for every Slurm node (slurmd) and the controller image. The munge key and the JWT key are NOT in the image:
+# `benchctl up` makes them in compose/generated/secrets/slurm and the entrypoint installs them from a read-only mount (issue 465).
 FROM ubuntu:24.04
 ARG SLURM_VERSION
 ENV DEBIAN_FRONTEND=noninteractive PATH=/opt/slurm/bin:/opt/slurm/sbin:$PATH
@@ -40,6 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       iputils-ping iputils-tracepath iproute2 dnsutils netcat-openbsd traceroute tcpdump net-tools curl wget openssh-client \
       procps psmisc lsof strace file vim-tiny nano \
  && rm -rf /var/lib/apt/lists/* \
+ && rm -f /etc/munge/munge.key \
  && mkdir -p /run/sshd \
  && sed -i 's#^SHELL=.*#SHELL=/bin/bash#' /etc/default/useradd \
  && printf '%s\n' 'export PATH=/opt/slurm/bin:$PATH' > /etc/profile.d/slurm.sh \
@@ -49,11 +50,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && usermod -aG slurmjwt slurm \
  && mkdir -p /etc/slurm /var/spool/slurmd /var/spool/slurmctld /run/munge /var/log/munge \
  && chown slurm:slurm /var/spool/slurmctld \
- && dd if=/dev/urandom bs=32 count=1 of=/var/spool/slurmctld/jwt_hs256.key 2>/dev/null \
- && chown slurm:slurmjwt /var/spool/slurmctld/jwt_hs256.key && chmod 0640 /var/spool/slurmctld/jwt_hs256.key \
- && dd if=/dev/urandom bs=1 count=1024 of=/etc/munge/munge.key 2>/dev/null \
- && chown -R munge:munge /etc/munge /var/lib/munge /var/log/munge /run/munge \
- && chmod 0400 /etc/munge/munge.key
+ && chown -R munge:munge /etc/munge /var/lib/munge /var/log/munge /run/munge
 COPY --from=build /opt/slurm /opt/slurm
 # Tab completion for squeue, sbatch, srun, scontrol ... (shipped in the Slurm source tree)
 COPY --from=build /tmp/slurm-${SLURM_VERSION}/contribs/slurm_completion_help/slurm_completion.sh /etc/bash_completion.d/slurm
@@ -68,6 +65,7 @@ COPY sshd_config /etc/ssh/sshd_config
 COPY --chmod=755 nhc nhc-prolog nhc-epilog /usr/local/sbin/
 COPY --chmod=755 teleport-ssh /usr/local/sbin/teleport-ssh
 COPY --chmod=755 slurmd-run /usr/local/sbin/slurmd-run
+COPY --chmod=755 reboot.sh /usr/local/sbin/reboot.sh
 # The checks the runner uses when the host mounts none (/etc/workbench/nhc, from compose/generated/nhc, wins).
 COPY nhc.d/checks.conf nhc.d/*.sh /usr/local/lib/nhc.d/
 COPY entrypoint.sh /entrypoint.sh

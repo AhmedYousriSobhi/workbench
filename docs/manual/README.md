@@ -6,6 +6,7 @@ The complete guide to using workbench. Read it front to back once, then use it a
 
 | # | Chapter | You will learn |
 |---|---|---|
+| 0 | [The Tour](00-tour.md) | eight stops, five minutes: start it, look, break a node, watch it heal |
 | 1 | [What workbench is](01-what-it-is.md) | the idea, the parts, the profiles, the ports |
 | 2 | [Install and start](02-install-and-start.md) | prerequisites, first start, stop, status |
 | 3 | [Using the cluster](03-using-the-cluster.md) | up, scale, down, Slurm jobs, the mock services, Grafana |

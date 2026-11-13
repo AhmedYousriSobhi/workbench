@@ -1,3 +1,5 @@
+<p align="center"><img src="../assets/art/arch-04-memory-and-profiles-hero.svg" alt="Architecture: Memory contract. budget, profile, pre-flight." width="720"></p>
+
 # Memory contract and profiles
 
 [Architecture index](README.md) · [Project overview](../../README.md)
@@ -16,7 +18,6 @@ Host reserve (OS, desktop, IDE, browser): **about 3 GB**, never governed. Page c
 | bmc-farm + bcm-mock + jira-mock + gpu-exporter-farm | 0.3 GB | P2 |
 | Kubernetes control plane (etcd, apiserver, controller manager, scheduler) + KWOK, five containers (ADR 0034) | 0.9 GB cap, about 0.3 GB measured | P3 |
 | slurmd containers | ~60 MB each (16 nodes about 1 GB) | P4 |
-| user-sim + ticket-bot + scenario-engine | 0.15 GB | P5 |
 | Fidelity VM | 2.0 GB cap | P6 |
 | Jira DC (jira-real only) | 2.1 GB cap + Postgres 0.25 GB (measured, trimmed JVM) | P6 |
 
@@ -24,10 +25,10 @@ Host reserve (OS, desktop, IDE, browser): **about 3 GB**, never governed. Page c
 
 | Profile | What's on | Est. sim total |
 |---|---|---|
-| `min` | core, mocks, 4 slurmd, scenarios | 0.5 GB expected (measured use plus 15 percent) |
-| `std` | `min` + accounting, 16 slurmd, Kubernetes (KWOK), load sims | 1.3 GB expected today (the Kubernetes part is optional and adds about 0.3 GB measured, 0.9 GB cap) |
-| `full` | `std` + 32 slurmd, 200 KWOK nodes, fidelity VM | 1.9 GB expected today (32 slurmd; KWOK and the fidelity VM not built) |
-| `jira-real` | `std` minus Kubernetes, plus Jira DC | 3.6 GB expected |
+| `min` | core, mocks, 4 slurmd | 0.5 GB expected (measured use plus 15 percent) |
+| `std` | `min` + accounting, 16 slurmd | 1.2 GB expected today (the optional Kubernetes part, `--with k8s`, adds about 0.3 GB measured, 0.9 GB cap; its KWOK node count comes from `sim.yaml` `kubernetes.nodes`, 4 today, or `--k8s-nodes`) |
+| `full` | `std` with 32 slurmd | 1.8 GB expected today (the fidelity VM is deferred, ADR 0033, and not counted until it is built and measured) |
+| `jira-real` | `std` plus Jira DC | 3.5 GB expected |
 | `mac-agent` | `min` + remote macOS agent (external) | 0.5 GB local |
 
 `benchctl up --profile X` runs a **pre-flight**: `MemAvailable` minus the profile's budget and the app under test's reserve must stay above the safety floor, otherwise it refuses and suggests a smaller profile.
@@ -58,7 +59,7 @@ per-node cost (`PER_NODE_MB`), and `tests/test_overhead.py` fails when a new per
 | prometheus / grafana / gpu-exporter-farm | 22 / 54 / 19 | 300 / 300 / 100 | 26 / 62 / 22 |
 | jira-db (real Jira's Postgres) | 130 | 256 | 150 |
 | jira-real | 2045 (peak, setup plus ticket run, trimmed JVM) | 2176 | 2176 (at the cap by nature: a JVM keeps what it grew) |
-| scenario-engine, user-sim, ticket-bot, accounting-init | not measured (not built or one-shot) | 60 / 60 / 40 / 30 | the cap |
+| accounting-init | not measured (one-shot) | 30 | the cap |
 | **app under test** | | | **1024 (reserve)** |
 
 The 15 percent tolerance is `memory.TOLERANCE`. Live check on the same selection (plan expected 1068 MB; 190 MB of that is

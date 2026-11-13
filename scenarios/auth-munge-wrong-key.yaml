@@ -1,0 +1,6 @@
+name: auth-munge-wrong-key
+ref: SC-32
+description: "cn001 gets a different munge key, so slurmctld rejects its messages with 'Invalid credential' and the node goes down after SlurmdTimeout; at 120 s its own key is put back"
+steps:
+  - {at: 0s,   target: auth, do: {munge_wrong_key: [cn001]}}
+  - {at: 120s, target: auth, do: {munge_restore: [cn001]}}

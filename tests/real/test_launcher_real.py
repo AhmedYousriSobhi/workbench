@@ -63,7 +63,7 @@ def test_start_serves_the_page_and_stop_cleans_up(tmp_path):
         assert st["ok"] and st["mode"] == "user"
         _freeze_and_thaw_a_real_container(checks, usock)
         link = re.search(r"Web page: (\S+)", r.stdout).group(1)
-        assert f":{port}/login?token=" in link
+        assert f":{port}/login?code=" in link and "token=" not in link  # a one-time code, never the token (#466)
         opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor())
         page = opener.open(link, timeout=10).read().decode()  # the login link signs in and serves the page
         assert "workbench" in page

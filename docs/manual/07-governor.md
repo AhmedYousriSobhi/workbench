@@ -1,4 +1,16 @@
+<p align="center"><img src="../assets/art/07-governor-hero.svg" alt="The governor badge beside a ladder of four levels, from normal to stop, with the marks growing more serious" width="720"></p>
+
 # 7. The governor
+
+**In 30 seconds:** the governor is the bouncer. It watches your RAM from outside the cluster and, when memory gets tight, pauses the least important containers first and stops them only if that is not enough. You rarely need to touch it.
+
+## Do it
+
+```bash
+./scripts/benchctl status          # the level, the mode, memory, recent actions
+```
+
+Level L0 means all is well. Anything higher means the governor is protecting your machine.
 
 The governor keeps the host alive. It runs **on the host, outside everything it may stop**, watches memory, and escalates
 through a ladder, acting on the lowest-priority containers first and on reversible actions before destructive ones.
@@ -27,7 +39,7 @@ When the root service is running it wins. Details and the reasons: [ADR 0010](..
 | L5 emergency | still degrading after L4 | stop everything except P0 and P1 |
 
 It escalates at once and de-escalates one level at a time after 60 s calm (minimum 10 s per level). Pausing frees no RAM;
-it only stops growth. Relief comes from stopping. Thresholds can be overridden with `--thresholds` (JSON).
+it only stops growth. Relief comes from stopping. Thresholds can be overridden with `--thresholds` (JSON). The memory thresholds default from `host.reserve_gb` and `safety_floor_gb` in `sim.yaml`; a sustained swap-out storm (`swap_pages_s`, `swap_sustain_s`) adds one level up to L3; the governor wakes on a kernel PSI stall trigger where the kernel allows it (`--no-psi-trigger` to poll only). See ADR 0059.
 
 ## Look at it
 
@@ -65,3 +77,41 @@ The design is in [the architecture](../architecture/05-governor.md) and what the
 
 While the governor executes a plan, `status` waits for the plan (about 28 ms per pause and 175 ms per stop per container,
 measured). With few containers this is invisible; tracked in issue #53.
+
+## Under the hood
+
+> [!HOOD]
+> The ladder is pure logic with no I/O: the planner turns a level into actions, cumulative, so L4 also does what L3 does.
+>
+> | Level | Acts on | Verb |
+> |---|---|---|
+> | L1 | everything | notify, stop new arrivals |
+> | L2 | P5, P4 | throttle (`memory.high`, root service only) |
+> | L3 | P6, P5, P4 | freeze, then reclaim |
+> | L4 | P6, P5, P4, P3 | stop (VMs are saved) |
+> | L5 | P2 to P6 | stop everything left except P0 and P1 |
+>
+> Reversible actions run before destructive ones. Freeze, throttle and stop-arrivals are undone as the level falls; stops are never undone by the governor.
+> Escalation is immediate; each step down needs 60 s of calm and at least 10 s in the level. L2 and L3 pressure must hold 10 s, the L4 stall 5 s, and an L4 condition that lasts 30 s becomes L5.
+> User mode acts only by `docker pause` and `docker stop`; the root service adds cgroup throttle and reclaim and locks its own memory (ADR 0010, SPEC GV-8).
+
+Source: `governor/ladder.py` (`Thresholds`, `Ladder`), `governor/planner.py` (`plan`, `reversible_first`), [ADR 0010](../adr/0010-rootless-governor-mode.md), [ADR 0059](../adr/0059-governor-signal-model.md), SPEC GV-3, GV-4, GV-8
+
+## Tips
+
+> [!TIP]
+> Pausing frees no RAM; it only stops growth. If you see a node frozen, the cure is more free memory, not a restart.
+
+## If it goes wrong
+
+| Symptom | Try |
+|---|---|
+| `up` is refused | the governor is at L2 or above: close a browser or the IDE, check `benchctl status`, retry |
+| A node is frozen | it thaws by itself after 60 s calm |
+| The web page says the governor is down | `./scripts/benchctl start` (no sudo) |
+
+## Learn more
+
+- [The governor as built](../architecture/11-governor-as-built.md) and [the design](../architecture/05-governor.md)
+- [Troubleshooting](09-troubleshooting.md)
+- [Memory guide](../guides/memory.md)

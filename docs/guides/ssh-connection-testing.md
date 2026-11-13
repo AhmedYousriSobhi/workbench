@@ -1,4 +1,15 @@
+<p align="center"><img src="../assets/art/guide-ssh-connection-testing-hero.svg" alt="A client, the login node and a compute node" width="720"></p>
+
 # Testing SSH connections step by step
+
+**In 30 seconds:** check the SSH path works, then break one thing at a time (a refused key, a changed host key, a session limit) and see how your client reports it.
+
+## Do it
+
+```bash
+./scripts/benchctl up --profile min
+./scripts/benchctl ssh-key install
+```
 
 A walkthrough for checking how a desktop HPC monitoring client handles SSH: reaching the login node, running Slurm on
 a node through it, and what the client shows when the connection misbehaves. Every screenshot is the real output of
@@ -193,3 +204,26 @@ fault "reset: true"          # only if you stopped halfway; this also starts a s
 | `Permission denied` or a host-key warning with no fault applied | an earlier `rotate_host_key` is still active | `fault "reset: true"` |
 | a second session is refused with no fault applied | an earlier `max_sessions` is still active | `fault "reset: true"` |
 | `ssh cn001` is refused with no fault applied | an earlier `node_sshd: down` is still active | `fault "node_sshd: up, nodes: [cn001]"` |
+
+## Under the hood
+
+<p align="center"><img src="../assets/art/guide-ssh-connection-testing-diagram.svg" alt="A client reaches the login node, then a compute node; a key, the host key and session limits can each be broken alone" width="720"></p>
+
+> [!HOOD]
+> The login node is the way in; compute and GPU nodes run `sshd` too, reachable from the login node, with key login only, no root, no password and only the simulated users. The node `sshd` starts only when `WORKBENCH_SSHD=1` and the keys are mounted, so the controller runs none (ADR 0014).
+
+Source: `benchctl/logins.py`, [ADR 0011](../adr/0011-ssh-login-node.md), [ADR 0014](../adr/0014-sshd-on-compute-nodes.md), [ADR 0023](../adr/0023-login-nodes-and-their-auth.md)
+
+## Tips
+
+> [!TIP]
+> Break one thing at a time and undo it before the next; section 7 cleans up.
+
+## If it goes wrong
+
+See "If something does not match" at the end of this guide.
+
+## Learn more
+
+- [Client setup, section 1](client-setup-by-component.md)
+- [Nodes and shells](../manual/04-nodes-and-shells.md)

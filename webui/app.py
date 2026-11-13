@@ -10,8 +10,10 @@ import contextlib
 import hmac
 import json
 import re
+import secrets
 import threading
 import time
+import urllib.parse
 from pathlib import Path
 
 import yaml
@@ -160,6 +162,15 @@ class Runs:
         return {"stopping": bool(self.state.get("running"))}
 
 
+def login_url(base: str, token: str) -> str:
+    """A one-time login link for a running page, minted with the token (tests, shot scripts); the token is never in the URL."""
+    import urllib.request
+    req = urllib.request.Request(f"{base}/api/login-code", method="POST",
+                                 headers={"Authorization": f"Bearer {token}", "X-Requested-With": "workbench"})
+    with urllib.request.urlopen(req, timeout=5) as r:
+        return f"{base}/login?code={json.load(r)['code']}"
+
+
 def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Path("scenarios"),
                sim_yaml: Path = Path("sim.yaml"), interval: float = 1.0, docs: Path = DOCS,
                fetch=None, poster=None, nhc_src: Path = nhc.SRC, nhc_out: Path = nhc.OUT) -> Starlette:
@@ -173,7 +184,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
     def authed(request: Request) -> None:
         got = request.cookies.get(COOKIE) or request.headers.get("authorization", "").removeprefix("Bearer ")
         if not hmac.compare_digest(got.encode(), token.encode()):
-            raise HTTPException(401, "login required: open /login?token=<token>")
+            raise HTTPException(401, "login required: open /login (run ./scripts/benchctl open for a link)")
 
     def csrf(request: Request) -> None:  # a cross-site form cannot set this header
         if request.headers.get("x-requested-with") != "workbench":
@@ -187,12 +198,36 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             return await fn(request)
         return handler
 
-    async def login(request: Request):
-        if not hmac.compare_digest(request.query_params.get("token", "").encode(), token.encode()):
-            raise HTTPException(401, "wrong token")
+    codes: dict[str, float] = {}  # one-time login codes -> expiry; the long-lived token never travels in a URL (SEC2, #466)
+
+    def signed_in() -> Response:
         resp = RedirectResponse("/", status_code=303)
         resp.set_cookie(COOKIE, token, httponly=True, samesite="strict")
         return resp
+
+    async def login(request: Request):
+        """GET /login?code=C signs in with a one-time code (60 s, used up on first use); GET /login alone shows the form
+        and POST /login takes the token from the form body, so a browser history entry never holds a working secret."""
+        if request.method == "POST":
+            form = urllib.parse.parse_qs((await request.body()).decode(errors="replace"))
+            if not hmac.compare_digest(form.get("token", [""])[0].encode(), token.encode()):
+                raise HTTPException(401, "wrong token")
+            return signed_in()
+        code = request.query_params.get("code")
+        if code is None:
+            return FileResponse(STATIC / "login.html")
+        now = time.monotonic()
+        for k in [k for k, exp in codes.items() if exp < now]:
+            del codes[k]
+        if codes.pop(code, 0) < now:
+            raise HTTPException(401, "login code unknown, used or expired: run ./scripts/benchctl open for a new link")
+        return signed_in()
+
+    async def login_code(request: Request):
+        """A fresh one-time code, for `benchctl open` and the terminal link; the caller already holds the token."""
+        code = secrets.token_urlsafe(16)
+        codes[code] = time.monotonic() + 60
+        return JSONResponse({"code": code})
 
     async def index(request: Request):
         return FileResponse(STATIC / "index.html")
@@ -654,7 +689,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         lifespan=lifespan,
         middleware=[Middleware(CSPMiddleware)],
         routes=[
-            Route("/login", login),
+            Route("/login", login, methods=["GET", "POST"]),
+            Route("/api/login-code", protected(login_code, write=True), methods=["POST"]),
             Route("/", protected(index)),
             Route("/static/{rel:path}", protected(static_file)),
             Route("/help", protected(help_home)),

@@ -1,4 +1,10 @@
+<p align="center"><img src="../assets/art/11-which-command-hero.svg" alt="A fork in the road: start, look and break, with a command at the end of each branch" width="720"></p>
+
 # 11. Which command do I use?
+
+**In 30 seconds:** start with `benchctl start`, look with `get` and `status`, break things with `scenario run`. The map below groups the commands; the table has the rest.
+
+<p align="center"><img src="../assets/art/map-of-commands.svg" alt="Three panels group the commands: start and stop, look, and poke and break" width="720"></p>
 
 workbench has a launcher, a CLI, a scenario engine, a governor and a few test scripts. This page says which one to reach
 for, and why. Every command runs from the repository root.
@@ -54,6 +60,7 @@ Without `benchctl start` the governor is not started, so nothing protects the ho
 - The **web page** plays the same scenarios, but has no Docker access, so it **skips** Slurm and SSH steps. To
   play those, use the terminal.
 - A **fault action** in a node's panel on the web page (power off, fan failure, XID) is one step applied right now.
+- To give Slurm a switch topology (`topology.conf`) and take a leaf switch down, follow [Slurm topology](../guides/topology.md).
 - To add, change or remove a node health check (what drains a node), follow [NHC checks](../guides/nhc-checks.md).
 - To test a client's SSH handling, follow [SSH connection testing](../guides/ssh-connection-testing.md).
 
@@ -62,10 +69,12 @@ Without `benchctl start` the governor is not started, so nothing protects the ho
 | I changed... | Run |
 |---|---|
 | any code or docs, before a commit | `./scripts/validate.sh` |
-| something that touches a live container or the governor, before asking for a merge | `./scripts/verify.sh` (add `--full` for the whole stack lifecycle, or `--only KEYWORD`) |
+| anything, before asking for a merge to `dev` | `./scripts/verify.sh --changed` (runs only the live tests the change can reach; `--explain` shows which and why) |
+| before a release (`dev` to `main`) | `./scripts/verify.sh --full --with-jira` (the whole stack lifecycle and the real Jira; plain `--full` leaves the real Jira out and says so); `./scripts/verify.sh --install-nightly` runs it every night |
+| one component | `./scripts/verify.sh --unit NAME [--clean]`, or `--only KEYWORD` |
 | the governor's cgroup or systemd code | `sudo ./scripts/real-test-root.sh` |
 
-`verify.sh --full` starts and stops the stack, so run it when nothing else is using the stack.
+`verify.sh --full` starts and stops the stack, so run it when nothing else is using the stack. Every run prints a `SLOW` line (the slowest modules) and keeps the times in `compose/generated/verify-times.json`.
 
 ## When something refuses to start
 
@@ -76,3 +85,9 @@ Without `benchctl start` the governor is not started, so nothing protects the ho
 | `fault` or `scenario run` says "No such container" | the stack is not running | `./scripts/benchctl up --profile min` |
 
 More symptoms and fixes: [troubleshooting](09-troubleshooting.md). Every flag and file: [reference](10-reference.md).
+
+## Learn more
+
+- [Reference](10-reference.md)
+- [Troubleshooting](09-troubleshooting.md)
+- [Scenarios](06-scenarios.md)

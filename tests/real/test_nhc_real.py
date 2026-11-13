@@ -5,11 +5,13 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import bring_up, exporter_up, wait_for
+from helpers import bring_up, exporter_up, release, wait_for
 
-from benchctl import nhc, stack
+from benchctl import nhc
 
 ROOT = Path(__file__).resolve().parents[2]
+STACK_REUSE = True  # isolated only for the test timers: the same key as the other timers module, so one cold start (issue 576)
+STACK_GROUP = "timers"
 NAME = "live-marker"
 
 
@@ -31,7 +33,7 @@ def cluster(test_timers):
     if NAME in [c.name for c in nhc.load()]:  # a failed test must not leave the check in the checkout
         nhc.remove(NAME)
         nhc.sync()
-    stack.down(say=lambda m: None)
+    release()
 
 
 def test_the_nodes_mount_the_checks_and_a_new_check_drains_a_running_node_then_removing_it_resumes(cluster, tmp_path):

@@ -1,4 +1,16 @@
+<p align="center"><img src="../assets/art/guide-client-testing-hero.svg" alt="A loop: up, point, break, watch, down" width="720"></p>
+
 # Testing a monitoring client against workbench
+
+**In 30 seconds:** bring the cluster up, point the client at it, run a scenario, and know what is real and what is not. Never fit workbench to one client; make the simulated service behave like the real one.
+
+## Do it
+
+```bash
+./scripts/benchctl up --profile min
+./scripts/benchctl status
+./scripts/benchctl down       # when done; always stop what you started
+```
 
 workbench simulates a real cluster so that a general-purpose HPC and AI-infrastructure client, one that lets its user
 define any cluster and handles every connection type and HPC feature, can be tested without real hardware. The client
@@ -101,6 +113,24 @@ data only, stop every process you start, and never commit screenshots that show 
 Fastest start: import the whole cluster from a file with `benchctl export profile` ([export-profile.md](export-profile.md)). Setting up each part of the client one at a time (SSH, Slurm, Grafana, storage, Jira, BCM, BMC): [client-setup-by-component.md](client-setup-by-component.md).
 
 SSH connection handling (hung, down, changed host key, session limit), step by step with screenshots: [ssh-connection-testing.md](ssh-connection-testing.md).
+
+## Switch topology
+
+With a `topology:` in `sim.yaml` (see [topology.md](topology.md)) `scontrol show topology` lists the switches, and `benchctl scenario run switch-leaf-down` (SC-35) drains one leaf's nodes for 90 s and resumes them: check the client shows the switch tree and the reason `switch leaf1 down`.
+
+## Expiry and authentication faults
+
+Real errors from the real components, for a client's "login needed", "certificate expired" and "unauthorised" paths (target `auth`, issue 549; they need the host CLI, the page cannot play them):
+
+| Scenario | What the client meets | Put right by |
+|---|---|---|
+| `auth-slurm-token-expiry` (SC-30) | slurmrestd 401 after the token's 60 s; the token is in `compose/generated/secrets/slurm_token` (`cat` it, it is not printed) | ask for a new one: `docker exec workbench-slurmctld-1 scontrol token username=alice` |
+| `auth-teleport-cert-expiry` (SC-31) | the identity file `compose/generated/secrets/teleport/identity/alice` lives 60 s, then the login node refuses it | the scenario signs it again at 180 s |
+| `auth-munge-wrong-key` (SC-32) | `cn001` is rejected by slurmctld (`Invalid credential`), goes down after SlurmdTimeout | the scenario puts the node's own key back at 120 s (`munge_restore`) |
+| `bmc-tls-expired` (SC-33) | `certificate has expired` on the BMC TLS ports (8443, 443, each node's address); same key and name, so a client that pins by key still connects | back at 60 s |
+| `k8s-cert-expired` (SC-34) | `certificate has expired` from `kubectl` and any client that checks dates; the API server restarts twice (10 to 20 s each) | back at 90 s |
+
+A scenario that stops half-way leaves the fault in place. Undo it with the matching step: `{auth: {munge_restore: [cn001]}}`, `bmc_tls_expired: false`, `k8s_cert_expired: false`, `teleport_cert_restore: [alice]` (write it as a one-step scenario). The Teleport outage half of issue 209 is separate.
 
 ## Write a scenario and watch the client
 
@@ -218,3 +248,30 @@ Results of the run against the real Jira (setup, every number, what was not exer
 - Built, not yet run against the client: a real slow, 503 and 429 through the fault proxy (#305, SC-28, the client must use `127.0.0.1:8084`), tickets and a ticket check on the real Jira in `client-stress-real` (#306), and the token revoke fault (#307, SC-29)
 - [#308](https://github.com/AhmedYousriSobhi/workbench/issues/308) verify the client's Jira panel under the real faults
 - [#309](https://github.com/AhmedYousriSobhi/workbench/issues/309) script the client stress run
+
+## Under the hood
+
+<p align="center"><img src="../assets/art/guide-client-testing-diagram.svg" alt="Bring the cluster up, point the client at it, run a scenario, watch what the client shows, then stop" width="720"></p>
+
+> [!HOOD]
+> The client connects as it would to a production site: SSH to the login node, Slurm commands, Grafana GPU metrics, Jira search and Redfish BMCs. Each endpoint has a fixed address, a credential file under `compose/generated/secrets/` and a status in the table above. The governor can refuse a start at L2 and above (GV-9); the tool says so, and a test or script must not report that as a defect in the client (NF-6).
+
+Source: [ADR 0018](../adr/0018-fixed-addressing-plan.md), SPEC G5, NF-6, NF-8
+
+## Tips
+
+> [!TIP]
+> Run `benchctl scenario run NAME --dry-run` first: it prints the steps and touches nothing.
+
+## If it goes wrong
+
+| Symptom | Try |
+|---|---|
+| Port 2222 refuses | the checkout is probably on a branch without the login node; that is not a client bug |
+| A start is REFUSED | the governor is protecting the host; free memory |
+
+## Learn more
+
+- [Client setup by component](client-setup-by-component.md)
+- [SSH connection testing](ssh-connection-testing.md)
+- [Scenarios](../manual/06-scenarios.md)

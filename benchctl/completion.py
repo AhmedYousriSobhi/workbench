@@ -11,6 +11,8 @@ from pathlib import Path
 
 import typer
 
+from . import errors
+
 SHELLS = ("bash", "zsh", "fish")
 OUTPUTS = ["table", "json", "name"]
 COLUMNS = {"nodes": ["name", "kind", "state"], "services": ["name", "state"],
@@ -166,7 +168,7 @@ def check_value(value: str | None, valid: list[str], what: str) -> str | None:
     """Option callback: pass `value` through, or exit 2 with `explain`. Silent when the list cannot be read."""
     if value is None or not valid or value in valid:
         return value
-    raise typer.BadParameter(explain(value, valid, what))
+    raise errors.CodedBadParameter(explain(value, valid, what), errors.unknown_code(what))
 
 
 # ---- scripts and install ------------------------------------------------------------------------

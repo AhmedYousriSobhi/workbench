@@ -15,10 +15,23 @@ gpu:
   prefix: gpu
   gpus_per_node: 8
   type: h200
+  cpus: 64                # per GPU node, 8 per GPU: the same in Slurm, Redfish and BCM (issue 462)
+  memory_mb: 16384        # fake RealMemory per GPU node, 2048 per GPU
 
 partitions:
   - {name: cpu, nodes: compute}
   - {name: gpu, nodes: gpu}
+
+# topology:             # optional real Slurm topology (topology.conf, issue 543, docs/guides/topology.md); nodes are spread round-robin over the leaves
+#   plugin: tree        # tree | block
+#   spines: 1
+#   leaves_per_spine: 2
+
+# qos:                  # optional real QOS, priority and preemption (issue 544, docs/guides/qos-and-preemption.md); needs the accounting part
+#   - {name: scavenger, priority: 1, max_gpus_per_user: 2}
+#   - {name: urgent, priority: 1000, preempt: [scavenger], grace_time_s: 30}
+# slurm:
+#   priority: {weight_qos: 1000, weight_age: 100, weight_fairshare: 10000, decay_half_life: 7-0}
 
 controller:             # a controller node (SPEC C-20, issue 416): slurmctld's host with sshd, the BCM head node (cmsh); off: the login node acts as the head node
   enabled: false        # benchctl up --controller

@@ -1,9 +1,8 @@
 """What exists, as `benchctl get <resource>` prints it: nodes, services, profiles, scenarios."""
-import json
 from collections.abc import Callable
 from pathlib import Path
 
-from . import compose, nodes, scenario, stack
+from . import compose, contract, nodes, scenario, stack
 
 RESOURCES = ["nodes", "services", "profiles", "scenarios"]
 
@@ -71,7 +70,7 @@ def sort_rows(rows: list[dict], key: str | None) -> list[dict]:
 def render(rows: list[dict], output: str = "table") -> str:
     """A table (default), JSON for scripts (`-o json`), or just the names, one per line (`-o name`)."""
     if output == "json":
-        return json.dumps(rows, indent=2)
+        return contract.dumps(rows)
     if output == "name":
         return "\n".join(str(r["name"]) for r in rows)
     if output != "table":

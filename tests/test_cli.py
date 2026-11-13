@@ -154,7 +154,7 @@ def test_get_resources_and_json(monkeypatch):
     monkeypatch.setattr(inventory, "_containers", lambda runner=None: {"cn001": "running", "gpu001": "paused"})
     r = runner.invoke(cli.app, ["get", "nodes"])
     assert r.exit_code == 0 and "cn001" in r.output and "running" in r.output and "absent" in r.output
-    rows = json.loads(runner.invoke(cli.app, ["get", "nodes", "-o", "json"]).output)
+    rows = json.loads(runner.invoke(cli.app, ["get", "nodes", "-o", "json"]).output)["items"]
     assert {"name": "gpu001", "kind": "gpu", "state": "paused"} in rows
     assert "min" in runner.invoke(cli.app, ["get", "profiles"]).output
     assert "node-down" in runner.invoke(cli.app, ["get", "scenarios"]).output

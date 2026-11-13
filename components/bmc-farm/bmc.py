@@ -8,6 +8,8 @@ Host header: bmc-<node> or <node>, e.g. the compose-network alias bmc-cn001; any
 Everything but the service root needs a session (POST /redfish/v1/SessionService/Sessions, X-Auth-Token) or Basic
 auth with the account in the credentials file; with no file, auth is off.
 
+POST /sim/tls  {"expired": true|false}: present an expired certificate (or the good one again) on the TLS ports
+GET /sim/tls   {"served": bool, "expired": bool}: whether TLS is served and which certificate it presents
 POST /sim/inject  {"node": n, "temp": 95} | {"node": n, "fan_fail": 2} | {"node": n, "power": "Off"}
                   | {"node": n, "event": "text"} | {"node": n, "clear": true}
 """
@@ -24,29 +26,16 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-import yaml
-
 FANS = 6
 FIRMWARE = {"BMC": ("BMC firmware", "2.4.0"), "BIOS": ("BIOS", "1.0.0")}
 RESET_TO = {"On": "On", "ForceOn": "On", "ForceOff": "Off", "GracefulShutdown": "Off",
             "ForceRestart": "On", "GracefulRestart": "On", "PowerCycle": "On"}
 
 
-def load_nodes(sim_yaml: Path) -> dict[str, dict]:
-    """{node: {"gpus": n, "memory_mb": m, "cpus": c}} for compute then GPU nodes."""
-    cfg = yaml.safe_load(sim_yaml.read_text())
-    out: dict[str, dict] = {}
-    c, g = cfg.get("compute", {}), cfg.get("gpu", {})
-    for i in range(1, c.get("count", 0) + 1):
-        out[f"{c['prefix']}{i:03d}"] = {"gpus": 0, "memory_mb": c.get("memory_mb", 4096), "cpus": c.get("cpus", 8)}
-    for i in range(1, g.get("nodes", 0) + 1):
-        out[f"{g['prefix']}{i:03d}"] = {"gpus": g["gpus_per_node"], "memory_mb": 2048 * g["gpus_per_node"],
-                                        "cpus": 8 * g["gpus_per_node"]}
-    k = cfg.get("kubernetes") or {}
-    for grp in (k.get("nodes") or []) if k.get("enabled") else []:  # Kubernetes nodes are machines too: they have a BMC (listed after the Slurm nodes)
-        for i in range(1, int(grp.get("count", 0)) + 1):
-            out[f"{grp['prefix']}{i:03d}"] = {"gpus": int(grp.get("gpus", 0)), "memory_mb": int(grp.get("memory_gb", 32)) * 1024, "cpus": int(grp.get("cpus", 8))}
-    return out
+def load_nodes(inventory: Path) -> dict[str, dict]:
+    """{node: {"gpus": n, "memory_mb": m, "cpus": c, "serial": s}} from the generated inventory.json (benchctl/hwinventory.py), in its order."""
+    return {n["name"]: {"gpus": n["gpus"], "memory_mb": n["memory_mb"], "cpus": n["cpus"], "serial": n["serial"]}
+            for n in json.loads(Path(inventory).read_text())["nodes"]}
 
 
 class Farm:
@@ -57,6 +46,8 @@ class Farm:
         self.fans_failed: dict[str, int] = {}
         self.log: dict[str, list[dict]] = {n: [] for n in nodes}
         self.account = "admin"  # the read-only account the AccountService lists; main() sets it from the credentials
+        self.tls_expired = False  # what POST /sim/tls last asked for (read back by GET /sim/tls)
+        self.set_tls = None  # main() sets it when TLS is served: set_tls(True) presents the expired certificate, set_tls(False) the good one
 
     def event(self, node: str, message: str, severity: str = "OK") -> None:
         entries = self.log[node]
@@ -106,7 +97,7 @@ class Farm:
                  "AccountService": {"@odata.id": base + "/AccountService"},
                  "SessionService": {"@odata.id": base + "/SessionService"}},
             "Systems/1": {"@odata.id": f"{base}/Systems/1", "Id": "1", "Name": node, "HostName": node, "Manufacturer": "workbench", "Model": "SimServer",
-                          "SerialNumber": f"SIM-{node.upper()}", "BiosVersion": "1.0.0",
+                          "SerialNumber": info["serial"], "BiosVersion": "1.0.0",
                           "PowerState": self.power[node], "Status": healthy,
                           "ProcessorSummary": {"Count": info["cpus"], "Status": healthy},
                           "MemorySummary": {"TotalSystemMemoryGiB": info["memory_mb"] // 1024, "Status": healthy},
@@ -352,6 +343,8 @@ def make_handler(farm: Farm, sessions: Sessions | None = None, stats: dict | Non
                 return self._send(200, dict(stats))
             if self.path == "/sim/paths":
                 return self._send(200, SHAPES.snapshot())
+            if self.path == "/sim/tls":
+                return self._send(200, {"served": farm.set_tls is not None, "expired": farm.tls_expired})
             if self.path.split("?")[0] == "/sim/traffic":
                 return self._send(200, SHAPES.traffic(since_of(self.path)))
             hit = self._split()
@@ -375,6 +368,12 @@ def make_handler(farm: Farm, sessions: Sessions | None = None, stats: dict | Non
                 if path == "/sim/inject":
                     farm.inject(req)
                     return self._send(200, {"ok": True})
+                if path == "/sim/tls":  # {"expired": true|false}: the next handshakes see a certificate that ended yesterday (issue 549)
+                    if farm.set_tls is None:
+                        return self._send(400, {"error": "this farm serves no TLS"})
+                    farm.set_tls(bool(req.get("expired")))
+                    farm.tls_expired = bool(req.get("expired"))
+                    return self._send(200, {"ok": True, "expired": bool(req.get("expired"))})
                 if sessions is not None and path.rstrip("/") == SESSIONS:
                     made = sessions.login(str(req.get("UserName", "")), str(req.get("Password", "")))
                     if made is None:
@@ -412,10 +411,10 @@ STANDARD_TLS_PORT = 443  # not published on the host (binding it there needs roo
 
 
 def main() -> None:
-    sim = Path(sys.argv[1] if len(sys.argv) > 1 else "sim.yaml")
+    inventory = Path(sys.argv[1] if len(sys.argv) > 1 else "/inventory.json")
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 8000
     tls_port = int(sys.argv[3]) if len(sys.argv) > 3 else 8443
-    farm, stats, lock = Farm(load_nodes(sim)), {"requests": 0, "errors": 0}, threading.Lock()
+    farm, stats, lock = Farm(load_nodes(inventory)), {"requests": 0, "errors": 0}, threading.Lock()
     creds = read_credentials(Path("/run/workbench/bmc_credentials"))
     if creds:
         farm.account = creds[0]
@@ -423,6 +422,9 @@ def main() -> None:
     if tls_port and cert.is_file():
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.load_cert_chain(cert, key)
+        expired = Path("/app/certs/expired.pem")
+        if expired.is_file():  # same key and name, validity in the past: only the expiry differs (gen_cert.py)
+            farm.set_tls = lambda gone: ctx.load_cert_chain(expired if gone else cert, key)
         sessions = Sessions(creds)
         for p in dict.fromkeys((tls_port, STANDARD_TLS_PORT)):  # 443 is where a client looks when it is given no port
             try:

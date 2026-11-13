@@ -10,13 +10,16 @@ from . import (
     addressing,
     controller,
     dcgm,
+    hwinventory,
     jira_real,
     k8s,
     logins,
     nhc,
+    qos,
     real_gpu,
     slurmconf,
     teleport,
+    topology,
 )
 from .nodes import KIND_GROUP, hardware_nodes, node_names
 
@@ -43,10 +46,11 @@ CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {
     "teleport": {"teleport": (f"{teleport.IMAGE}:{teleport.DEFAULT_VERSION}", 320, 2)},
     # a real control plane with KWOK nodes (ADR 0034); the image tags are replaced from sim.yaml kubernetes.version (benchctl/k8s.py)
     "k8s": {n: (k8s.images({})[n], k8s.LIMITS[n], 3) for n in k8s.SERVICES},
-    "scenarios": {"scenario-engine": ("workbench/scenario-engine:dev", 60, 5)},
-    "load": {"user-sim": ("workbench/user-sim:dev", 60, 5), "ticket-bot": ("workbench/ticket-bot:dev", 40, 5)},
 }
 SSH_PORT = 2222
+# Every image whose entrypoint is node-base's installs the munge and JWT keys from this mount (images/node-base/entrypoint.sh).
+SLURM_KEY_IMAGES = ("workbench/node-base:dev", "workbench/slurm-ctl:dev", "workbench/login:dev")
+SLURM_KEYS_MOUNT = "./secrets/slurm:/run/workbench/slurm:ro"
 SLURMD_MB = 60
 SLURMD_PRIO = 4
 
@@ -73,6 +77,8 @@ def _service(image: str, mem_mb: int, prio: int, build: str | None = None) -> di
 
 
 def generate(sim: dict, profile: dict) -> dict:
+    if bad := topology.problems(sim, profile.get("compute_nodes")):  # one message per condition, before anything is written (issue 543)
+        raise topology.TopologyError("; ".join(bad))
     services: dict = {}
     for group in profile["groups"]:
         for name, (image, mem, prio) in CATALOG.get(group, {}).items():
@@ -161,18 +167,23 @@ def generate(sim: dict, profile: dict) -> dict:
     if "bmc-farm" in services:  # Redfish endpoints for every node in sim.yaml, localhost only
         # :8443 is TLS at the standard /redfish/v1, the node chosen by Host: clients reach it as bmc-<node>
         services["bmc-farm"].update({
-            "volumes": ["./sim.yaml:/sim.yaml:ro", "./secrets/bmc_credentials:/run/workbench/bmc_credentials:ro"],
+            "volumes": ["./inventory.json:/inventory.json:ro", "./secrets/bmc_credentials:/run/workbench/bmc_credentials:ro"],
             "ports": ["127.0.0.1:8000:8000", "127.0.0.1:8443:8443"]})
         _bmc_forwarders(services, sim, profile)
     if "bcm-mock" in services:  # CMDaemon JSON API on the same node inventory, localhost only
-        services["bcm-mock"].update({"volumes": ["./sim.yaml:/sim.yaml:ro"], "ports": ["127.0.0.1:8081:8081"]})
+        services["bcm-mock"].update({"volumes": ["./inventory.json:/inventory.json:ro"], "ports": ["127.0.0.1:8081:8081"]})
     if "jira-mock" in services:
         # a team works the project in the background, one change about every 45 s (benchctl set jira-activity off to stop it, #158)
         services["jira-mock"].update({"ports": ["127.0.0.1:8080:8080"], "environment": {"JIRA_ACTIVITY_EVERY": "45"},
                                       "volumes": ["./flags:/run/workbench-flags:ro"]})  # L1 pauses the background changes (#476)
     if "jira-real" in services:
         _wire_jira_real(services)
+    if bad := qos.problems(sim, "mariadb" in services):  # issue 544: QOS and priority live in slurmdbd
+        raise qos.QosError("; ".join(bad))
     _wire_slurm_services(services)
+    for svc in services.values():  # munge and JWT keys are made by `up` (ensure_slurm_keys), never baked into an image (issue 465)
+        if svc.get("image") in SLURM_KEY_IMAGES:
+            svc.setdefault("volumes", []).append(SLURM_KEYS_MOUNT)
     ips = addressing.plan(sim, profile.get("compute_nodes"))
     for name, svc in services.items():  # a fixed address for everything (ADR 0018)
         if ip := addressing.address_of(ips, name):
@@ -290,6 +301,7 @@ def write(compose: dict, out: Path = Path("compose/generated/docker-compose.yml"
         # workbench or `scale` changed the counts (the repository's sim.yaml is the default, not the running truth).
         shown = {**sim, "compute": {**sim.get("compute", {}), **({"count": compute_nodes} if compute_nodes is not None else {})}}
         (out.parent / "sim.yaml").write_text(yaml.safe_dump(shown, sort_keys=False))
+        hwinventory.write(shown, out.parent / hwinventory.FILE)  # the one node inventory the mocks and the exporter read (issue 462)
         (out.parent / "flags").mkdir(exist_ok=True)  # the governor's L1 pause flag; made here so Docker does not create it as root (#476)
         (out.parent / "nhc").mkdir(exist_ok=True)  # mounted by every node; filled only with checks that validate (ADR 0019)
         if errs := nhc.sync(out=out.parent / "nhc"):

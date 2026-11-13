@@ -25,3 +25,28 @@ pip install -e '.[browser]' && .venv/bin/python -m playwright install chromium  
 
 The web page shows the same small cut next to its title, painted from its own theme colours, and uses the generated
 files for its tab icons.
+
+## Documentation art
+
+Besides the README illustrations, the script draws ten small icons (64 by 64): `tile-*.svg` for the Wiki Home grid and `group-*.svg` for the sidebar groups.
+
+The illustrations in the README, manual and guides are SVG files built by one script, `scripts/make_doc_art.py`, the
+same way as the logo: shapes are defined in code, written to `docs/assets/art/`, and nothing is drawn by hand or taken
+from elsewhere.
+
+```bash
+.venv/bin/python scripts/make_doc_art.py           # rewrites docs/assets/art/*.svg
+.venv/bin/python scripts/make_doc_art.py --check   # exit 1 if a file is missing, stale or not generated here (validate.sh runs it)
+.venv/bin/python scripts/make_doc_art.py --list    # every file with its size
+```
+
+Rules every file follows (`tests/test_doc_art.py` checks them):
+
+- one file works on light and dark GitHub and in the page's help: it carries its own `prefers-color-scheme` styles;
+- at most 60 KB, a `<title>` and a `<desc>` that say what the picture shows;
+- real text in a system font stack; every text colour is paired with its ground in `TEXT_PAIRS` and reaches 4.5:1 in both themes;
+- status is never colour alone (a node has a tick, pause bars or a cross as well);
+- motion is a CSS animation inside the SVG (the wire pulse, as in `wire.js`) and stops under `prefers-reduced-motion`; the still frame makes sense alone.
+
+Shared primitives (`node`, `rack`, `wire`, `cloud`, `governor`, `bubble`, `label`, `arrow`) live in the script; plane
+colours follow [the web page canvas](web-ui-canvas.md). Add a picture as one function and one entry in `ART`.

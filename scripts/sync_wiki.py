@@ -3,7 +3,7 @@
     python scripts/sync_wiki.py --out DIR            write the wiki pages into DIR
     python scripts/sync_wiki.py --push               clone the wiki repository, sync it, commit and push
 
-One wiki page per markdown file in docs/manual, docs/guides, docs/architecture and docs/adr; `Home` is the manual's
+One wiki page per markdown file in docs/manual, docs/guides, docs/architecture, docs/adr and docs/agents; `Home` is the manual's
 start page, `_Sidebar` lists everything. Links between pages become wiki links, images are copied to images/, and a link
 to a file outside docs/ (SPEC.md, sim.yaml, source files) becomes a link to that file in the repository. Never edit the
 wiki by hand: the next sync overwrites it.
@@ -23,12 +23,29 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from webui.wiki import (  # stdlib-only module: reuses the page titles and the docs layout
+    GROUPS,
     IMAGES,
     Wiki,
 )
 
-PREFIX = {"manual": "Manual", "guides": "Guide", "architecture": "Architecture", "adr": "ADR"}
-FOOTER = "Generated from `docs/` in the repository by `scripts/sync_wiki.py`. Edit the files there, not this wiki."
+PREFIX = {"manual": "Manual", "guides": "Guide", "architecture": "Architecture", "adr": "ADR", "agents": "Agents"}
+# the two project callout kinds GitHub does not know: shown as a quote headed by a bold label
+PROJECT_CALLOUTS = {"HOOD": "**🔧 Under the hood**", "DIDYOUKNOW": "**💡 Did you know?**"}
+FOOTER = ("Generated from `docs/` in the repository by `scripts/sync_wiki.py`. Edit the files there, not this wiki: "
+          "every page ends with an **Edit this page** link to its source on `dev`.")
+# the Home tiles (issue 591): icon, title, the chapter it opens, one line
+TILES = [("tile-install", "Install", "02-install-and-start.md", "Check the machine, build, start"),
+         ("tile-use", "Use", "03-using-the-cluster.md", "Slurm jobs, the mock services, Grafana"),
+         ("tile-break", "Break things", "06-scenarios.md", "Play a fault, inject one by hand"),
+         ("tile-watch", "Watch it", "05-web-page.md", "The web page and its architecture view"),
+         ("tile-configure", "Configure", "08-configuration.md", "sim.yaml, profiles, topology"),
+         ("tile-fix", "Fix it", "09-troubleshooting.md", "Symptoms, causes, the diagnostics bundle")]
+START = """## Start here
+
+1. **Check and start:** `./scripts/benchctl start` checks your machine, builds once and prints a link ([Install and start](02-install-and-start.md)).
+2. **Poke it:** `./scripts/benchctl get nodes`, then `./scripts/benchctl exec gpu001 -u alice` ([Using the cluster](03-using-the-cluster.md)).
+3. **Break something:** `./scripts/benchctl scenario run node-down`, watch the page react, then **Clear faults** ([Scenarios and faults](06-scenarios.md)).
+"""
 
 
 def page_name(slug: str) -> str:
@@ -41,6 +58,8 @@ def page_name(slug: str) -> str:
 
 def image_name(rel: str) -> str:
     """`manual/img/web-overview.png` -> `images/manual-web-overview.png`"""
+    if rel.startswith("assets/art/"):
+        return f"images/art-{rel.rsplit('/', 1)[1]}"
     group, _, name = rel.split("/", 2)
     return f"images/{group}-{name}"
 
@@ -56,7 +75,7 @@ def rewrite(text: str, page: str, docs: Path, blob: str) -> str:
         in_docs = not rel.startswith("..")
         suffix = posixpath.splitext(rel)[1]
         suffix_frag = f"#{frag}" if frag else ""
-        if in_docs and suffix == ".md" and rel.split("/")[0] in PREFIX and (docs / rel).is_file():
+        if in_docs and suffix == ".md" and rel.split("/")[0] in PREFIX and rel.count("/") == 1 and (docs / rel).is_file():  # a page of a group, not a file in a subfolder
             return f"{bang}[{label}]({page_name(rel[:-3])}{suffix_frag})"
         if in_docs and suffix in IMAGES and (docs / rel).is_file():
             return f"{bang}[{label}]({image_name(rel)})"
@@ -65,12 +84,49 @@ def rewrite(text: str, page: str, docs: Path, blob: str) -> str:
             return m.group(0)
         return f"{bang}[{label}]({blob}/{repo_rel}{suffix_frag})"
 
+    def fix_attr(m: re.Match) -> str:
+        """`src="..."` and `srcset="..."` of <img>, <source>: an image in docs/ is copied, any other file is read from the repository."""
+        attr, target = m.group(1), m.group(2)
+        if re.match(r"^([a-z]+:|#|//)", target):
+            return m.group(0)
+        rel = posixpath.normpath(posixpath.join(posixpath.dirname(page), target))
+        if not rel.startswith("..") and posixpath.splitext(rel)[1] in IMAGES and (docs / rel).is_file():
+            return f'{attr}="{image_name(rel)}"'
+        repo_rel = posixpath.normpath(posixpath.join("docs", posixpath.dirname(page), target))
+        return m.group(0) if repo_rel.startswith("..") else f'{attr}="{blob}/{repo_rel}?raw=true"'
+
     out, fenced = [], False
     for line in text.splitlines():
         if line.startswith("```"):
             fenced = not fenced
-        out.append(line if fenced else re.sub(r"(!?)\[([^\]]*)\]\(([^)\s]+)\)", fix, line))
+        if fenced:
+            out.append(line)
+            continue
+        line = re.sub(r"(!?)\[([^\]]*)\]\(([^)\s]+)\)", fix, line)
+        line = re.sub(r"(?<=[\s<])(src|srcset)=\"([^\"]+)\"", fix_attr, line)
+        if m := re.match(r"^>\s*\[!(" + "|".join(PROJECT_CALLOUTS) + r")\]\s*$", line, re.IGNORECASE):
+            line = f"> {PROJECT_CALLOUTS[m.group(1).upper()]}\n>"
+        out.append(line)
     return "\n".join(out) + "\n"
+
+
+def tile_grid() -> str:
+    """Six illustrated links in a table: an image row, then a link row (not nested: the link rewrite reads one link per bracket pair)."""
+    rows = []
+    for chunk in (TILES[:3], TILES[3:]):
+        rows += ["| " + " | ".join(f"![{t}](../assets/art/{i}.svg)" for i, t, link, _ in chunk) + " |",
+                 "|:---:|:---:|:---:|" if not rows else None,
+                 "| " + " | ".join(f"**[{t}]({link})**<br>{line}" for _, t, link, line in chunk) + " |"]
+    return "\n".join(r for r in rows if r) + "\n"
+
+
+def home_page(text: str) -> str:
+    """The manual's README as a landing page: hero art, Start here, the tile grid, then the chapter table."""
+    cut = text.find("| # | Chapter")
+    cut = len(text) if cut < 0 else cut
+    hero = ('<p align="center"><img src="../assets/art/readme-hero.svg" alt="The workbench cluster: a login node, the Slurm '
+            'controller and compute nodes, fake services around them, and the memory governor guarding the door" width="820"></p>\n\n')
+    return hero + text[:cut] + START + "\n" + tile_grid() + "\n## All chapters\n\n" + text[cut:]
 
 
 def generate(docs: Path, out: Path, blob: str) -> list[str]:
@@ -78,21 +134,28 @@ def generate(docs: Path, out: Path, blob: str) -> list[str]:
     wiki = Wiki(docs)
     out.mkdir(parents=True, exist_ok=True)
     (out / "images").mkdir(exist_ok=True)
+    edit = re.sub(r"/blob/[^/]+$", "/blob/dev", blob)
+    folder = {label: f for f, label in GROUPS}
     names, side = [], ["**[Home](Home)**", ""]
     for label, items in wiki.nav():
         group_lines = []
         for slug, title in items:
             name = page_name(slug)
-            (out / f"{name}.md").write_text(rewrite((docs / f"{slug}.md").read_text(encoding="utf-8"), f"{slug}.md", docs, blob),
-                                            encoding="utf-8")
+            src = (docs / f"{slug}.md").read_text(encoding="utf-8")
+            body = rewrite(home_page(src) if name == "Home" else src, f"{slug}.md", docs, blob)
+            (out / f"{name}.md").write_text(f"{body}\n---\n[Edit this page]({edit}/docs/{slug}.md)\n", encoding="utf-8")
             names.append(name)
             if name != "Home":
                 group_lines.append(f"- [{title}]({name})")
-        side += [f"**{label}**", "", *group_lines, ""]
+        icon = f'<img src="{image_name(f"assets/art/group-{folder[label]}.svg")}" width="18" alt=""> '  # decorative: the label is text
+        side += [f"{icon}**{label}**", "", *group_lines, ""]
     for group in PREFIX:
         for img in (docs / group / "img").glob("*"):
             if img.suffix in IMAGES:
                 shutil.copyfile(img, out / image_name(f"{group}/img/{img.name}"))
+    for img in (docs / "assets" / "art").glob("*"):  # the generated illustrations (scripts/make_doc_art.py)
+        if img.suffix in IMAGES:
+            shutil.copyfile(img, out / image_name(f"assets/art/{img.name}"))
     (out / "_Sidebar.md").write_text("\n".join(side), encoding="utf-8")
     (out / "_Footer.md").write_text(FOOTER + "\n", encoding="utf-8")
     return names

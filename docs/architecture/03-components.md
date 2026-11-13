@@ -1,3 +1,5 @@
+<p align="center"><img src="../assets/art/arch-03-components-hero.svg" alt="Architecture: Component decisions. Slurm, Kubernetes, BMC, BCM, Jira." width="720"></p>
+
 # Component decisions
 
 [Architecture index](README.md) · [Project overview](../../README.md)
@@ -13,9 +15,9 @@
 - Optional later optimization: build Slurm with multiple-slurmd support to host many logical nodes in one container if per-container overhead matters.
 
 ### 4.2 Kubernetes: one real mini-cluster + KWOK for scale
-- Replace the multi-VM Vagrant K8s with **k3d or kind**: 1 control-plane + 1 real worker (for real pods, real metrics).
+- Replace the multi-VM Vagrant K8s with a real control plane (etcd, kube-apiserver, scheduler, controller manager from the upstream images) and **no real worker**: k3d/kind with a real agent was rejected (ADR 0034).
 - Add **KWOK (Kubernetes WithOut Kubelet)** for scale and faults: it simulates node and pod lifecycles against the real API server, with a very small footprint (the project advertises 1k nodes / 100k pods on a laptop). Fake GPU nodes advertise `nvidia.com/gpu` capacity; flipping a node to `NotReady` is a one-line fault.
-- Constraint: kind/k3d create their node containers themselves, so don't assume you can set a cgroup parent for them. The governor addresses them by container name/label through the Docker API.
+- The control plane runs as ordinary compose services, so they get a cgroup parent and a memory limit like everything else (ADR 0034).
 
 ### 4.3 BMC: Redfish farm
 - Build **`bmc-farm`**: a single process serving N virtual Redfish endpoints (per-port or per-virtual-host), each with inventory, power state, thermals, fans, sensors and an event log. Faults are injected via a control API (`/sim/inject`).
@@ -36,7 +38,7 @@ Note: Jira Cloud cannot be self-hosted, and Atlassian ended Jira Server support 
 | `cloud` | 0 local | Contract testing against a real **Jira Cloud free site** (small-team free tier; check current limits). Real auth, real rate limits. |
 | `dc` | ~2.1 GB cap (measured) | Only the `jira-real` profile, which suspends K8s + fidelity VM to pay for it. Keep heap at the recommended size; don't starve it. |
 
-Put **Toxiproxy** in front of the Jira mode only (an HTTP path, where it is cheap) to inject latency/outages. Do **not** put it in the Slurm RPC path; use `tc netem` there (section 4.9).
+Client-facing HTTP and SSH paths get a userspace fault proxy (the repository's own stdlib proxy, not Toxiproxy), for latency and outages. Do **not** put a proxy in the Slurm RPC path; in-cluster link faults use `tc netem` through the root service only (section 4.9, ADR 0056).
 
 ### 4.6 Observability
 - Prometheus (retention about 2d, 15-30s scrape, capped cardinality) + Grafana + Alertmanager. Dashboards provisioned from files so they're reproducible.
@@ -57,5 +59,5 @@ Put **Toxiproxy** in front of the Jira mode only (an HTTP path, where it is chea
 ### 4.9 Storage, network and time simulation
 - **Fake shared filesystems.** No NFS/Lustre servers. Emit static `node_exporter` textfile metrics (`node_filesystem_size_bytes`, `node_filesystem_free_bytes`) for dummy mounts such as `/mnt/lustre`; scenarios like `disk-full` just change the numbers.
 - **tmpfs for ephemeral state.** MariaDB (Slurm accounting) and the Prometheus TSDB live on a capped tmpfs (MariaDB 100 MB, Prometheus 200 MB, with `retention.size` 150 MB so it never fills it). State need not survive a host reboot, and this avoids IO saturation next to 30+ containers.
-- **Network chaos with `tc netem`.** Latency, loss and partitions are applied on the Docker bridge networks between `core` and `mocks`/`compute`; no proxy process, no extra RAM.
+- **Network chaos.** Client-facing paths use userspace proxies. Inside the cluster, `tc netem` latency, loss and partitions on the Docker bridge networks between `core` and `mocks`/`compute` run only through the optional root governor service: bounded targets and values, a TTL, cleared at start, L0-L1 only (ADR 0056). Not built yet.
 - **Time dilation.** `time_dilation` in `sim.yaml` scales synthetic job durations and arrival rates (inversely) in `user-sim` and `scenario-engine`, so a 24 h queue pattern can run in minutes.

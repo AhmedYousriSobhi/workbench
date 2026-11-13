@@ -16,9 +16,11 @@ from . import control, metrics
 from .annotate import Annotator
 from .core import Governor
 from .executors import ARRIVALS_FLAG, Executor, UserExecutor, discover_docker
+from .hostsize import derive, read_host
 from .ladder import Ladder, Thresholds
 from .memlock import MitigationPath, lock_memory, locked_kb, raise_memlock_limit
 from .planner import Group
+from .psi import PsiTrigger
 from .signals import GB, CgroupSampler, FileSampler, Sampler
 from .watchdog import Watchdog
 
@@ -60,6 +62,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--signals-file", default=None, help="drive the ladder from a JSON file (tests)")
     ap.add_argument("--watch-cgroup", default=None, help="take signals from one cgroup dir (tests)")
     ap.add_argument("--thresholds", default=None, help='JSON overrides, e.g. {"l4_mem": 1000000}')
+    ap.add_argument("--sim", default=None, help="sim.yaml whose host.reserve_gb / safety_floor_gb set the memory thresholds (default: WORKDIR/sim.yaml)")
+    ap.add_argument("--no-psi-trigger", action="store_true", help="poll only: do not ask the kernel to wake the loop on a memory stall")
     ap.add_argument("--arrivals-flag", default=ARRIVALS_FLAG)
     ap.add_argument("--no-watchdog", action="store_true", help="disable container security/limit checks")
     ap.add_argument("--watch-interval", type=float, default=15.0, help="seconds between security scans")
@@ -86,7 +90,11 @@ def main(argv: list[str] | None = None) -> None:
         sampler = CgroupSampler(Path(args.watch_cgroup))
     else:
         sampler = Sampler()
-    ladder = Ladder(Thresholds(**json.loads(args.thresholds or "{}")))
+    sim_path = Path(args.sim) if args.sim else Path(args.workdir) / "sim.yaml" if args.workdir else None
+    reserve, floor = read_host(sim_path) if sim_path else read_host(Path("/nonexistent"))
+    ladder = Ladder(Thresholds(**{**derive(reserve, floor), **json.loads(args.thresholds or "{}")}))
+    log.info("memory thresholds from reserve %.1f GB, floor %.1f GB: L4 < %.2f, L1 < %.2f, calm > %.2f GB",
+             reserve, floor, ladder.t.l4_mem / GB, ladder.t.l1_mem / GB, ladder.t.l0_mem / GB)
     executor = (UserExecutor if args.user_mode else Executor)(groups, cgroups, path, arrivals_flag=arrivals_flag_path(args.arrivals_flag, args.user_mode, args.workdir))
     if clear_stale_flag(executor.arrivals_flag, args.dry_run):
         log.warning("removed a stale arrivals pause flag left by an earlier governor (%s)", executor.arrivals_flag)
@@ -154,7 +162,7 @@ def main(argv: list[str] | None = None) -> None:
                    annotator, discover_docker, args.refresh_interval,
                    effector if args.workdir else None, tracer=tracer if args.workdir else None,
                    statser=statser if args.workdir else None, capturer=capturer if args.workdir else None,
-                   streamer=streamer if args.workdir else None)
+                   streamer=streamer if args.workdir else None, admit_floor=int(floor * GB))
     srv = control.serve(args.socket, gov.handle, gov.group_names, gid=args.socket_gid) \
         if args.socket else None
     msrv = None
@@ -164,6 +172,9 @@ def main(argv: list[str] | None = None) -> None:
             log.info("metrics on http://%s/metrics", args.metrics_addr)
         except OSError as e:  # observability must not stop the governor
             log.error("metrics endpoint unavailable on %s: %s", args.metrics_addr, e)
+    trigger = None if args.once or args.no_psi_trigger or args.signals_file or args.watch_cgroup else PsiTrigger()
+    if trigger:
+        log.info("PSI trigger active: the loop wakes on a memory stall") if trigger.active else log.info("PSI trigger off, polling every %.1f s (%s)", args.interval, trigger.why)
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(SystemExit(0)))
     try:
         raise_memlock_limit()
@@ -181,7 +192,10 @@ def main(argv: list[str] | None = None) -> None:
                      s.mem_available / GB, s.psi_some_avg10, s.psi_full_avg10)
             if args.once:
                 return
-            time.sleep(args.interval)
+            if trigger:
+                trigger.wait(args.interval)
+            else:
+                time.sleep(args.interval)
     finally:
         if msrv:
             msrv.shutdown()
@@ -190,6 +204,10 @@ def main(argv: list[str] | None = None) -> None:
             if args.socket and os.path.exists(args.socket):
                 os.unlink(args.socket)
         path.close()
+        if trigger:
+            trigger.close()
+        if hasattr(sampler, "close"):
+            sampler.close()
 
 
 if __name__ == "__main__":

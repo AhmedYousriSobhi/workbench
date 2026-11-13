@@ -1,3 +1,5 @@
+<p align="center"><img src="../assets/art/arch-09-roadmap-decisions-risks-hero.svg" alt="Architecture: Roadmap, decisions, risks. phases, open decisions, risks." width="720"></p>
+
 # Roadmap, open decisions and risks
 
 [Architecture index](README.md) · [Project overview](../../README.md)
@@ -11,7 +13,7 @@
 | 2 Slurm | `node-base`, ctld + restd, N slurmd from `sim.yaml`, Prometheus + Grafana | `benchctl scale 16` works; app sees the nodes |
 | 3 Mocks | bmc-farm, bcm-mock, gpu-exporter-farm, jira-mock + Toxiproxy | App's BMC/BCM/Jira integrations pass against mocks |
 | 4 People + chaos | user-sim, ticket-bot, scenario engine, 5 starter scenarios | `gpu-xid-storm` produces tickets end to end |
-| 5 Kubernetes | k3d + KWOK, fake GPU nodes, node-fault scenarios | App shows mixed real/fake K8s nodes |
+| 5 Kubernetes | real control plane + KWOK, fake GPU nodes, node-fault scenarios | App shows mixed real/fake K8s nodes |
 | 6 Fidelity VM (deferred, ADR 0033) | vagrant-libvirt VM + sushy-tools power control | Redfish power-off really stops the VM |
 | 7 Web UI + profiles | Web UI (canvas, dashboard, orchestrator, budget manager), profile pre-flight, `jira-real` swap | One click from cold start to a populated, busy cluster |
 | 8 macOS + CI | External Mac agent profile; headless scenario runs with assertions | Scenario suite runs unattended |

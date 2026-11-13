@@ -1,17 +1,28 @@
+<p align="center"><img src="../assets/art/05-web-page-hero.svg" alt="A browser window with a small circuit of nodes joined by wires, and the governor socket beneath it" width="720"></p>
+
 # 5. The web page
+
+**In 30 seconds:** one dashboard over the governor, the cluster and the scenarios, on `127.0.0.1:8088`. It shows what is happening as a circuit you can zoom, lets you break a node and recover it, and never touches Docker itself.
+
+## Do it
+
+```bash
+./scripts/benchctl start     # starts it with the cluster; prints a one-time login link
+./scripts/benchctl open      # print a new link
+```
 
 One dashboard over everything: governor, cluster, scenarios. It fits one screen (1280 × 800 and up) with no page scrolling.
 
 ```bash
 ./scripts/benchctl start                     # starts it with the cluster; or by hand:
-.venv/bin/python -m webui [port]         # default 127.0.0.1:8088; prints http://127.0.0.1:8088/login?token=...
-./scripts/benchctl open                      # print the login link again
+.venv/bin/python -m webui [port]         # default 127.0.0.1:8088; serves the page; sign in with `benchctl open`
+./scripts/benchctl open                      # print a one-time login link (valid 60 s, works once; the token is never in the URL)
 ```
 
 Open the link once: it sets a cookie. The token lives in `compose/generated/secrets/ui_token`; anyone with the link on
 this machine can use the page, so keep it private. The page listens on `127.0.0.1` only.
 
-![The dashboard: the Infrastructure architecture fills the left column, the node list is top right and the connections bottom right](img/web-infrastructure.png)
+![The dashboard: the Infrastructure architecture fills the left column, the node list is top right and the connections bottom right](img/web-infrastructure-light.png)
 
 *A healthy cluster with Teleport on: L0 Normal, 5 of 5 services answering, 6 of 6 nodes healthy, "All clear" under Needs attention (sample data; the numbers on your page are live). Some older screenshots further down predate the redesign; `scripts/ui_shots.py` regenerates fresh ones.*
 
@@ -30,7 +41,7 @@ Two panels open on top of the page from the top strip or its **☰ Menu** and cl
 On a phone, and under 1100 px, the Infrastructure architecture, the list and the Connections area stack in one column and the diagram keeps its natural shape. The page has a skip link and
 landmarks, and honours reduced motion.
 
-![The dashboard on a phone, panels stacked (older layout; today the Infrastructure architecture and the list stack in one column)](img/web-phone.png)
+![The dashboard on a phone, panels stacked (the Infrastructure architecture, the list and the Connections area stack in one column)](img/web-phone-light.png)
 
 ## The entity list
 
@@ -55,7 +66,7 @@ The page opens on **Overview**, the first item of the left nav. It answers four 
 
 The **Infrastructure architecture** is the main view: everything on it is a part you can point at.
 
-![Infrastructure architecture: clients, the access layer with three login nodes, the services and the nodes, every line labelled](img/web-infrastructure.png)
+![Infrastructure architecture: clients, the access layer with three login nodes, the services and the nodes, every line labelled](img/web-infrastructure-light.png)
 
 Read it from left to right:
 
@@ -93,7 +104,7 @@ A round dot travels along a line for each real request (a **triangle** for an an
 tile. *Pause* stops the dots; they also stop at governor L3 and under reduced motion, and the live feed runs only while
 the page is visible and the Infrastructure workspace is open. **Key** (top right of the diagram) opens the legend: kinds, states, the dot, diamond and ring, the node marks, and a sample of each line style. The **view switcher** under the title (*2.5D*, *Flat*, *Overview*) picks how the diagram is drawn and at what level; the focus, selection and node list stay as they are when you switch. *Overview* is the level of detail: The *overview* condenses the cluster to one card (clients, access, the node groups with a health bar, the services and the fault count); above 24 nodes the page opens there. Hover the card (or Tab to it) to see the design underneath, double-click it, press Enter or use **Open full design** to enter, and use the **All clusters** link or Esc to go back. With several clusters the overview is a grid of cards (the cluster's name, nodes healthy, services and faults, and a condensed *access → nodes* picture when the card is big enough); a card with a failing part is marked with ▲. Entering one shows that cluster's diagram and node list. On a phone, tap the card. A table of clusters is in the page for screen readers.
 
-![The overview: one card for the cluster, with a preview of the design underneath](img/web-global-view.png)
+![The overview: one card for the cluster, with a preview of the design underneath](img/web-global-view-light.png)
 
 *2.5D* and *Flat* are the drawing styles (in 2.5D a lens also lifts its plane: parts in it get a deeper side face and a glow; see ADR 0030): 2.5D (the default) draws the same diagram as raised slabs on a tiled floor with glowing lines; flat is the plain baseline and is the default under reduced motion and on a phone. The choice is remembered in the browser.
 
@@ -108,16 +119,16 @@ the page is visible and the Infrastructure workspace is open. **Key** (top right
 **Hover** a part for a one-line tip (its state and how it is reached). **Click** it (or Tab to it and press Enter) for a pop-up window
 next to it with its address, the credential file, a command to copy, and buttons for the details:
 
-![Hovering login2 shows a tip: Teleport only, no direct port](img/web-architecture-hover.png)
+![Hovering login2 shows a tip: Teleport only, no direct port](img/web-architecture-hover-light.png)
 
-![Clicking gpu001 opens a pop-up: address, how it is reached, the ssh command, and the actions](img/web-architecture-popup.png)
+![Clicking gpu001 opens a pop-up: address, how it is reached, the ssh command, and the actions](img/web-architecture-popup-light.png)
 
 Esc closes the pop-up and returns the focus to the part. For a node, **Actions and details** opens its panel (below); **Connections**
 opens the row for that part in the Connections tab.
 
 **Fold the list away.** The list is a second way to the same parts. **Topology** in the view choice (left rail, under the nav) hides the list and gives the whole right column to Connections and the selected part:
 
-![The Infrastructure architecture with the node list folded away](img/web-architecture-wide.png)
+![The Infrastructure architecture with the node list folded away](img/web-architecture-wide-light.png)
 
 On a phone the diagram scrolls sideways inside its panel and the list sits below it.
 
@@ -129,7 +140,7 @@ workbench (`benchctl start --login ssh,teleport,both`, or the Login nodes rows o
 
 ### The Circuit view
 
-![The Circuit view: Slurm lane with its racks, the Kubernetes lane faded because this cluster has none, the services under the HTTP bus and the layer row](img/web-circuit.png)
+![The Circuit view: Slurm lane with its racks, the Kubernetes lane faded because this cluster has none, the services under the HTTP bus and the layer row](img/web-circuit-light.png)
 
 **Circuit** (the default view; **2.5D (classic)** is the other choice in the view switch, and the Flat style and the Clusters button are gone: the circuit and the zoom below replace them) draws the same cluster as a live circuit: a Slurm lane (login, slurmctld or the
 controller, slurmdbd, CPU and GPU racks) and a Kubernetes lane (kubectl, kube-apiserver, etcd, KWOK, racks), and the services under an HTTP bus. One
@@ -150,7 +161,11 @@ Communication page of the cluster you are in, with a **Back to the cluster** but
 the same pages. Other ways to move: **Ctrl + scroll** (or a pinch on a trackpad) zooms in on the card or rack under the pointer and out from anywhere, **+** and
 **-** step a level, **Escape** steps out of a pool or Traffic. Each move takes about 0.7 s (none under reduced motion) and the old level is gone afterwards.
 
-![The Pool level: side panel with KPIs, a state bar and filters, and a grid of node tiles](img/web-pool.png)
+![Animation: zoom out to the Fleet, in to the Cluster, the Access, Management and Monitoring layers one at a time, in to a Pool and back out](img/circuit-zoom-light.gif)
+
+*The zoom and the layers in turn (sample data).*
+
+![The Pool level: side panel with KPIs, a state bar and filters, and a grid of node tiles](img/web-pool-light.png)
 
 - **Pool**: click a rack's **N nodes ›** button. The side panel says what feeds the pool, how many nodes are in service, the average GPU use and a bar of node
   states; filters show All, Busy, Idle or Needs attention. Tiles (16 a page) show the node's state in words, its busy GPUs and temperature, and a heartbeat
@@ -158,12 +173,12 @@ the same pages. Other ways to move: **Ctrl + scroll** (or a pinch on a trackpad)
 - **Fleet**: one card per cluster with health, what it has (Slurm, Kubernetes, controller, accounting), nodes in service, requests a minute, a square per
   node for each lane, and a footer: only the monitoring client connects to a cluster. Click a card to open it. Only the running cluster has a request rate.
 
-![The Fleet level: a card per cluster](img/web-fleet.png)
+![The Fleet level: a card per cluster](img/web-fleet-light.png)
 
 
 ## Traffic analysis: who asks the mocks, and how it ends
 
-![The Traffic tab's analysis: the request river, the probe, what was found and the rhythm](img/web-traffic-analysis.png)
+![The Traffic tab's analysis: the request river, the probe, what was found and the rhythm](img/web-traffic-analysis-light.png)
 
 At the top of the **Traffic** tab (the TRAFFIC stop of the zoom rail) the page reads the mocks' own record of client requests (`/api/traffic`, every 3 seconds, on every screen while the page is visible and never while it is hidden, so a rate exists when you open the tab; only the Traffic tab draws it). It records only **who asked** (the User-Agent's product token, for example `curl`), the method and path shape, how it ended and how long it took; never a value, a header or a secret.
 
@@ -174,7 +189,7 @@ At the top of the **Traffic** tab (the TRAFFIC stop of the zoom rail) the page r
 - **Window**: last minute, last 5 minutes, or since the page opened.
 - **Focused wire**: a pool tile's **Wire in Traffic ↗**, or a link such as `http://127.0.0.1:8088/#workbench-gpu003` (`#<cluster>-<node>`), opens a node's wire: its declared wiring (BMC farm and slurmctld for a Slurm node, KWOK for a Kubernetes node), **Back to the pool** and **Clear focus**, and a **capture of its messages**.
 
-  ![The Focused wire panel: the tube, the message log and the decoded latest message](img/web-wire-capture.png)
+  ![The Focused wire panel: the tube, the message log and the decoded latest message](img/web-wire-capture-light.png)
 
   The capture is **off unless the panel is open**: it starts when the panel opens and stops when you close it, switch tab, or after 5 minutes, and a bar says how long is left. It is a class P5 job of the governor, one wire at a time, and it only starts at L0 to L1: at L2 or above the panel says "paused: memory pressure". The always-on counters stay masked; the capture tells nodes apart by their fixed IP address instead.
   - **A Slurm node**: `tcpdump` inside the node's container, on ports 6817 and 6818, limited by time and packet count. The message type comes from the Slurm message header (decoded for the pinned Slurm release); a header that does not parse shows as **▲ unknown type** with only its direction, size and timing, never a guess.
@@ -192,7 +207,7 @@ Teleport is a part like the others, so you control it from **left nav → ⚙ Cl
 4. When the apply finishes, the `teleport` card appears in the list and the box in the diagram. Open **Connections**: the
    **Teleport (SSH through a proxy)** row has the address, a copy-ready `tsh` command and the identity file to use.
 
-![The Connections tab: the Teleport row has the address, a command to copy and the identity file](img/web-teleport-connection.png)
+![The Connections tab: the Teleport row has the address, a command to copy and the identity file](img/web-teleport-connection-light.png)
 
 To turn it off, untick it and apply again. Two things stay in a terminal because the page has no Docker access by design
 (SPEC W-3): creating the one-time link for a `tsh login` password and code (`./scripts/benchctl add invite alice`), and the
@@ -214,18 +229,18 @@ live state.
   because this page has no Docker access. The container IP needs Docker, so run `./scripts/benchctl describe node cn001`
   (it prints an `IP:` line).
 
-![The fault actions as they looked on a node card: Power off, Power on, Overheat, Fan failure, Clear faults (older layout; they are now in the node panel's Actions card)](img/web-fault-actions.png)
+![The node panel's Actions card: Power off, then under Recover, Clear faults (the buttons shown depend on the node's state)](img/web-fault-actions-light.png)
 
-*The same actions, from before the node panel.*
+*The Actions card of a powered-off node.*
 
-![cn002 shown as Powered off with BCM DOWN (older layout)](img/web-node-powered-off.png)
+![cn002 open in the node panel: Powered off, 18 °C, with its address and the command to reach it](img/web-node-powered-off-light.png)
 
 *After Power off on cn002: the node is marked "Powered off" in words as well as colour, BCM shows DOWN, and the strip counts
 5 of 6 nodes healthy. Press Clear faults to undo.*
 
 ## Plan: change the workbench
 
-![The Cluster architecture sheet: Slurm and Kubernetes node counts, login nodes, optional parts, and the summary](img/web-cluster-architecture.png)
+![The Cluster architecture sheet: Slurm and Kubernetes node counts, login nodes, optional parts, and the summary](img/web-cluster-architecture-light.png)
 
 **▦ Cluster architecture** opens a wide sheet with one card per concern and a summary beside it that stays in view. **Slurm cluster**: steppers for CPU nodes, GPU nodes and GPUs per node, each with what one node is (for example 8 CPUs, 4 GB; H200). **Kubernetes cluster**: an Enabled switch and steppers for its own CPU and GPU nodes (KWOK), separate from the Slurm nodes. **Login nodes**: one card per login node with two choices, *Way in* (SSH, Teleport, Both) and *Serves* (Slurm, Kubernetes, Both: an s-login, a k-login or a shared login), and two presets, *One shared login* and *Separate s-login and k-login*. **Optional parts**: toggles grouped by category as in the `--ticketing`, `--hardware` flags (accounting, Jira, BMC, BCM, Teleport, scenarios, load; each shows the memory limit it adds, and the toggles show what is built now). The summary lists the node counts per scheduler, the logins, the memory it needs against free memory, and the command for a terminal; on a phone it stacks under the cards. The memory bar reads like "1.7 GB needed of 4.5 GB free". The sheet shows the change against what runs now ("GPU nodes 2 → 3 (+1)") and the
 `benchctl up ...` command for a terminal. Editing the numbers only estimates. **Review changes** (top of the summary) says what Apply will do before you press it: **+ Adds** (nodes, parts, login nodes), **− Removes** and **↻ Restarts** (slurmctld, only when the Slurm node list changed or accounting was added). When a node to be removed is `allocated` or `mixed` in Slurm (one `sinfo`, read when the sheet opens), the sheet says jobs will stop and **Apply** stays disabled until you tick **I understand**. If Slurm's states cannot be read it says so; it does not guess. It does not list job ids: the page has no Slurm access beyond node states. The cards are compact: the three Slurm steppers share a row, and the Kubernetes card collapses to one line while it is off. **Apply to the running workbench** (press
@@ -251,7 +266,7 @@ while an older one kept running). Restart it and reload:
 
 While one runs, the top strip also shows it, and pressing that chip opens Test run. A run started from the CLI or another tab is shown too.
 
-![Run panel showing node-down, step 2 of 6, with each step marked ok or pending and a Stop button (older layout)](img/web-scenario-running.png)
+![Run panel showing node-down, step 2 of 6, with each step marked ok or pending and a Stop button](img/web-scenario-running-light.png)
 
 *A scenario playing (node-down, step 2 of 6). Stop aborts.*
 
@@ -294,7 +309,7 @@ The page and its files are served with a strict Content-Security-Policy: scripts
 If the cluster is down the page shows one notice and one *Needs attention* entry, hides data that cannot exist (the entity
 list) and names the recovery command, which never needs `sudo`. If the governor is down it says so the same way.
 
-![The dashboard with the stack stopped (older layout)](img/web-stack-down.png)
+![The dashboard with the stack stopped: one notice, one Needs attention entry, no node data](img/web-stack-down-light.png)
 
 *The cluster is stopped: one notice with the command to start it, services shown offline with dashed outlines, and no node
 list. The memory figures are the host's, taken at the time of the screenshot.*
@@ -305,7 +320,7 @@ list. The memory figures are the host's, taken at the time of the screenshot.*
 `/help/`: a sidebar to jump between pages, a search box, and **← Dashboard** to go back. It needs the same login as the
 page. Start with [Which command do I use?](11-which-command.md) when the commands are new.
 
-![The help pages: the manual's sidebar on the left and the "Which command do I use?" table on the right](img/web-help.png)
+![The help pages: the manual's sidebar on the left and the "Which command do I use?" table on the right](img/web-help-light.png)
 
 ## Limits
 
@@ -349,3 +364,35 @@ and reloaded: `./scripts/benchctl up`, then `./scripts/benchctl exec slurmctld -
 BMC is its own small container with its own address (`10.148.x.y:443`) and costs about 32 MB, shown in the memory bar; switch off
 the nodes you do not need. A node panel shows its BMC address, or "none for this node". Apply rebuilds as usual and removes
 the BMCs you switched off.
+
+## What you will see
+
+The screenshots in this chapter come from sample data, so the numbers differ from your cluster and the shapes match.
+
+## Under the hood
+
+The page is a small Starlette server (`webui/app.py`) and static ES modules, with no build step. It never gets Docker or root: it talks to the governor's Unix socket (`/run/workbench/gov.sock`) and to the mocks' HTTP endpoints. Scenarios it plays run with `host=False`, so steps that need Docker are skipped, not failed.
+
+> [!HOOD]
+> The traffic dots come from the mocks' request counters, not from packet capture, and the live feed (server-sent events) is open only while the tab is visible; animation stops at governor level L3 and under reduced motion.
+
+Source: `webui/app.py`, `webui/flow.py`, `webui/cluster.py`, SPEC W-3 and W-11, ADR 0007, ADR 0009.
+
+## Tips and gotchas
+
+> [!TIP]
+> Press Esc to leave a node's panel; **Clear faults** undoes every fault you injected.
+
+> [!WARNING]
+> Anyone with the login link on this machine can use the page, so keep it private. The page listens on `127.0.0.1` only.
+
+## If it goes wrong
+
+| You see | Why | Do this |
+|---|---|---|
+| one notice that the stack is down | the cluster is stopped | run the command the notice names; it never needs `sudo` |
+| a notice that the governor is down | no governor is running | `./scripts/benchctl start` |
+
+## Learn more
+
+[Scenarios and faults](06-scenarios.md) · [The governor](07-governor.md) · [Web UI canvas](../guides/web-ui-canvas.md) · [ADR 0009](../adr/0009-traffic-dots-from-request-counters.md)

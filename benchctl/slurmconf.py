@@ -3,6 +3,7 @@ import os
 import secrets
 from pathlib import Path
 
+from . import hwinventory, qos, topology
 from .nodes import node_names
 
 CTLD = "slurmctld"
@@ -54,17 +55,24 @@ def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool 
         "HealthCheckProgram=/usr/local/sbin/nhc", f"HealthCheckInterval={t['HealthCheckInterval']}", "HealthCheckNodeState=ANY",
         # The same checks before a job starts (a failure drains the node and requeues the job) and after it ends.
         "Prolog=/usr/local/sbin/nhc-prolog", "Epilog=/usr/local/sbin/nhc-epilog",
+        # Power saving and reboot through the BMC farm (issue 545): `scontrol power down|up` runs these (images/slurm-ctl/power.sh), `scontrol reboot`
+        # runs RebootProgram on the node (images/node-base/reboot.sh). SuspendTime stays at its default (off), so nothing idles off by itself.
+        "SuspendProgram=/usr/local/sbin/power-off", "ResumeProgram=/usr/local/sbin/power-on", "SuspendTimeout=30", "ResumeTimeout=60",
+        "RebootProgram=/usr/local/sbin/reboot.sh",
         # slurmrestd authenticates callers with JWT; the key is baked into the lab image (ADR 0002).
         "AuthAltTypes=auth/jwt",
         "AuthAltParameters=jwt_key=/var/spool/slurmctld/jwt_hs256.key",
     ]
+    if plugin := topology.plugin_line(sim):  # issue 543: the switches are in topology.conf beside this file
+        lines.append(plugin)
     if accounting:
-        lines += ["AccountingStorageType=accounting_storage/slurmdbd", "AccountingStorageHost=slurmdbd"]
+        lines += ["AccountingStorageType=accounting_storage/slurmdbd", "AccountingStorageHost=slurmdbd", *qos.slurm_lines(sim)]  # issue 544
     if compute:
         lines.append(f"NodeName={_range(compute)} CPUs={c['cpus']} RealMemory={c['memory_mb']} State=UNKNOWN")
     if gpu:
         gres = f"gpu:{g['type']}:{g['gpus_per_node']}"
-        lines.append(f"NodeName={_range(gpu)} CPUs={c['cpus']} RealMemory={c['memory_mb']} "
+        shape = hwinventory.gpu_shape(sim)  # one shape for a GPU node in Slurm, Redfish and BCM (issue 462)
+        lines.append(f"NodeName={_range(gpu)} CPUs={shape['cpus']} RealMemory={shape['memory_mb']} "
                      f"Gres={gres} State=UNKNOWN")
     if real:  # the card's own node and partition: one real GPU, a device file the driver provides (issue 428)
         lines.append(f"NodeName={real[0]} CPUs={c['cpus']} RealMemory={c['memory_mb']} Gres=gpu:{sim['real_gpu']['type']}:1 State=UNKNOWN")
@@ -115,12 +123,18 @@ def slurmdbd_conf(password: str) -> str:
 def accounting_script(sim: dict) -> str:
     """Idempotent sacctmgr bootstrap: cluster, QOS, one account, users from sim.yaml."""
     users = sim.get("users", [])
-    qos = sorted({u["qos"] for u in users if u["qos"] != "normal"})
+    declared = bool(qos.declared(sim))
+    names = sorted({u["qos"] for u in users if u["qos"] != "normal"} - {q["name"] for q in qos.declared(sim)})
     lines = ["#!/bin/sh", "# GENERATED from sim.yaml; safe to re-run",
              "until sacctmgr -i show cluster >/dev/null 2>&1; do sleep 2; done",
              "sacctmgr -i add cluster workbench || true", "sacctmgr -i add account sim || true"]
-    lines += [f"sacctmgr -i add qos {q} || true" for q in qos]
-    lines += [f"sacctmgr -i add user {u['name']} account=sim qos={u['qos']} || true" for u in users]
+    lines += [f"sacctmgr -i add qos {q} || true" for q in names]
+    lines += qos.sacctmgr_lines(sim)  # issue 544: the declared QOS with their limits, before the users that may use them
+    for u in users:
+        allowed = ",".join(qos.user_qos(sim, u)) if declared else u["qos"]
+        lines.append(f"sacctmgr -i add user {u['name']} account=sim qos={allowed}" + (f" defaultqos={u['qos']}" if declared else "") + " || true")
+        if declared:  # an existing user keeps the old list otherwise
+            lines.append(f"sacctmgr -i modify user where name={u['name']} set qos={allowed} defaultqos={u['qos']}")
     return "\n".join(lines) + "\n"
 
 
@@ -129,6 +143,11 @@ def write(sim: dict, out_dir: Path, compute_override: int | None = None,
     out_dir.mkdir(parents=True, exist_ok=True)
     files = {"slurm.conf": slurm_conf(sim, compute_override, accounting), "gres.conf": gres_conf(sim),
              "cgroup.conf": "CgroupPlugin=disabled\n"}
+    topo = topology.conf(sim, compute_override)
+    if topo:
+        files["topology.conf"] = topo
+    else:
+        (out_dir / "topology.conf").unlink(missing_ok=True)  # an earlier run's switches must not outlive the `topology:` key
     if accounting:
         files["accounting.sh"] = accounting_script(sim)
     for name, text in files.items():

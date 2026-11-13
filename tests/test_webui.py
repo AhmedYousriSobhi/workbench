@@ -43,9 +43,9 @@ def ui(tmp_path):
     scen.mkdir()
     (scen / "quick.yaml").write_text(
         "name: quick\ndescription: d\nsteps:\n  - {at: 0s, target: slurm, do: {drain: [cn001]}}\n"
-        "  - {at: 0s, target: ticket-bot, do: {x: 1}}\n")
-    (scen / "slow.yaml").write_text("name: slow\ndescription: d\nsteps:\n  - {at: 0s, target: ticket-bot, do: {a: 1}}\n"
-                                    "  - {at: 1h, target: ticket-bot, do: {b: 2}}\n")
+        "  - {at: 0s, target: dcgm, do: {stop: true}}\n")
+    (scen / "slow.yaml").write_text("name: slow\ndescription: d\nsteps:\n  - {at: 0s, target: dcgm, do: {stop: true}}\n"
+                                    "  - {at: 1h, target: dcgm, do: {start: true}}\n")
     port = free_port()
     server = uvicorn.Server(uvicorn.Config(create_app(TOKEN, sock, scen, ROOT / "sim.yaml", interval=0.05, fetch=no_stack, poster=no_stack),
                                            host="127.0.0.1", port=port, log_level="error"))
@@ -77,19 +77,60 @@ def test_everything_needs_the_token(ui):
     assert code == 200 and json.loads(body)["level"] == 2
 
 
-def test_login_sets_a_strict_cookie_and_rejects_a_wrong_token(ui):
-    assert req(ui, "/login?token=wrong", auth=False)[0] == 401
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):
+        return None
 
-    class NoRedirect(urllib.request.HTTPRedirectHandler):
-        def redirect_request(self, *a, **k):
-            return None
 
-    opener = urllib.request.build_opener(NoRedirect)
+def _post(url, data=b"", headers=None):
+    r = urllib.request.Request(url, data=data, method="POST", headers=headers or {})
+    return urllib.request.build_opener(_NoRedirect).open(r)
+
+
+def _code(ui):
+    return json.load(_post(f"{ui}/api/login-code", headers={"Authorization": f"Bearer {TOKEN}", "X-Requested-With": "workbench"}))["code"]
+
+
+def test_login_by_one_time_code_sets_a_strict_cookie_and_the_code_works_once(ui):
+    assert req(ui, "/login?code=wrong", auth=False)[0] == 401
+    code = _code(ui)
     with pytest.raises(HTTPError) as e:
-        opener.open(f"{ui}/login?token={TOKEN}")
+        urllib.request.build_opener(_NoRedirect).open(f"{ui}/login?code={code}")
     assert e.value.code == 303
     cookie = e.value.headers["set-cookie"]
-    assert "HttpOnly" in cookie and "samesite=strict" in cookie.lower()
+    assert "HttpOnly" in cookie and "samesite=strict" in cookie.lower() and TOKEN in cookie
+    assert req(ui, f"/login?code={code}", auth=False)[0] == 401  # used up
+
+
+def test_the_token_in_the_url_no_longer_logs_in(ui):
+    assert req(ui, f"/login?token={TOKEN}", auth=False)[0] == 200  # just the form page
+    assert req(ui, "/api/status?token=" + TOKEN, auth=False)[0] == 401
+
+
+def test_login_form_posts_the_token_in_the_body(ui):
+    with pytest.raises(HTTPError) as e:
+        _post(f"{ui}/login", b"token=wrong")
+    assert e.value.code == 401
+    with pytest.raises(HTTPError) as e:
+        _post(f"{ui}/login", f"token={TOKEN}".encode())
+    assert e.value.code == 303 and "workbench_ui" in e.value.headers["set-cookie"]
+
+
+def test_login_code_needs_the_token_and_csrf_header(ui):
+    with pytest.raises(HTTPError) as e:
+        _post(f"{ui}/api/login-code")
+    assert e.value.code == 401
+    with pytest.raises(HTTPError) as e:
+        _post(f"{ui}/api/login-code", headers={"Authorization": f"Bearer {TOKEN}"})
+    assert e.value.code == 403
+
+
+def test_an_expired_code_is_refused(ui, monkeypatch):
+    import webui.app as appmod
+    code = _code(ui)
+    real = appmod.time.monotonic
+    monkeypatch.setattr(appmod.time, "monotonic", lambda: real() + 120)
+    assert req(ui, f"/login?code={code}", auth=False)[0] == 401
 
 
 def test_page_is_served_and_has_no_external_resources(ui):
@@ -127,9 +168,9 @@ def test_scenario_list_and_run_sends_slurm_steps_through_the_governor(ui):
         if not state["running"]:
             break
         time.sleep(0.05)
-    # the Slurm drain goes through the governor (the page never runs Docker itself); the ticket-bot step is not built
+    # the Slurm drain goes through the governor (the page never runs Docker itself); the dcgm step needs the host CLI
     assert state["ok"] is True and [s["status"] for s in state["steps"]] == ["ok", "skipped"]
-    assert "not built" in state["steps"][1]["detail"]
+    assert "host CLI" in state["steps"][1]["detail"]
 
 
 def test_stop_ends_a_running_scenario_and_unknown_is_404(ui):
@@ -171,7 +212,8 @@ def test_launcher_prints_a_login_link_and_serves_with_the_token(monkeypatch, tmp
     assert token not in out
     monkeypatch.setattr(launcher.sys.stdout, "isatty", lambda: True, raising=False)
     launcher.main()
-    assert capsys.readouterr().out.strip() == f"workbench UI: http://127.0.0.1:9123/login?token={token}"  # a terminal gets the link
+    out = capsys.readouterr().out
+    assert token not in out and "benchctl open" in out  # a terminal is pointed at the one-time link; no secret is printed
     assert ran["kw"] == {"host": "127.0.0.1", "port": 9123, "log_level": "warning"}  # localhost only (W-8)
 
 
@@ -272,7 +314,7 @@ def test_help_wiki_needs_the_token_and_serves_pages_images_and_search(ui):
     assert b"http://" not in body.replace(b"http://127.0.0.1", b"")  # nothing third-party is loaded
     code, body = req(ui, "/help/search?q=governor")
     assert code == 200 and b"/help/manual/07-governor" in body
-    assert req(ui, "/help/files/manual/img/web-infrastructure.png")[0] == 200
+    assert req(ui, "/help/files/manual/img/web-infrastructure-light.png")[0] == 200
     assert req(ui, "/help/manual/nope")[0] == 404 and req(ui, "/help/files/manual/README.md")[0] == 404
     assert req(ui, "/help/..%2F..%2FSPEC")[0] == 404 and req(ui, "/help/files/..%2F..%2Fsim.yaml")[0] == 404
 

@@ -83,6 +83,7 @@ def test_up_starts_in_order_and_waits(tmp_path, monkeypatch):
     assert started.index("prometheus") < started.index("slurmctld") < started.index("cn001")
     assert built[0] == ["cn001"]  # node-base first: slurmctld and login build FROM it
     assert len(built) == 2 and "cn001" not in built[1] and "slurmctld" in built[1]  # then every other image once, in one call
+    assert "gpu-exporter-farm" in built[1]  # it lives in compose/observability.yml: it was never rebuilt, so an old image outlived a change to its code
     assert max(i for i, x in enumerate(started) if x == "<build>") < started.index("prometheus")  # all builds before the first start
 
 

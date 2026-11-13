@@ -12,6 +12,12 @@ The engine is `benchctl/scenario.py`, run by `benchctl scenario`. It talks HTTP 
 ports and uses `docker exec` for `scontrol`, like the rest of `benchctl`. No new container, no new privilege.
 The `scenario-engine` entry in the compose catalog stays unbuilt (skipped by `up`).
 
+## Addendum: the placeholders are gone (issue 473)
+The `scenario-engine`, `user-sim` and `ticket-bot` catalog entries, their empty `components/` folders, the `scenarios` and `load` parts
+and the `--simulation` option are removed; so is the `ticket-bot` scenario target (`gpu-xid-storm` no longer has a ticket-bot step).
+Load is the login node's `user_sim.py` (`benchctl load on|off`). Addresses 13 to 15 stay reserved and unused. A future ticket bot runs
+on the login node and gets its own issue. Profile budgets fell by the 60 MB the engine's cap used to count.
+
 ## Consequences
 - The Web UI (W-3: governor socket only) cannot run the engine itself. Options when the UI is built: the UI
   backend runs scenarios in-process as the unprivileged `workbench` user (only the HTTP targets), or the governor

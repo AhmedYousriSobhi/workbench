@@ -1,4 +1,16 @@
+<p align="center"><img src="../assets/art/06-scenarios-hero.svg" alt="A timeline with three steps: power off at 0 seconds, drain at 5 seconds, recover at 40 seconds" width="720"></p>
+
 # 6. Scenarios and faults
+
+**In 30 seconds:** a scenario is a named, repeatable timeline of faults, a small stunt your monitoring client has to notice. Run one with one command, or play it from the web page.
+
+## Do it
+
+```bash
+./scripts/benchctl scenario list
+./scripts/benchctl scenario run node-down --dry-run     # print the timeline, change nothing
+./scripts/benchctl scenario run node-down
+```
 
 A scenario is a named, repeatable timeline of faults. They live in `scenarios/*.yaml`.
 
@@ -12,7 +24,7 @@ A scenario is a named, repeatable timeline of faults. They live in `scenarios/*.
 ./scripts/benchctl scenario run SC-02 --dry-run          # the reference works instead of the name
 ```
 
-The command exits 1 when a step errors or an `expect` line does not hold. Steps for parts that are not built (ticket-bot) are reported as **skipped**, not failed. From the web page ([chapter 5](05-web-page.md)) the `slurm` steps go through the governor; tick **Slurm trace** there for the same trace (see the [resilience guide](../guides/slurm-resilience.md)).
+The command exits 1 when a step errors or an `expect` line does not hold. Steps the caller cannot run are reported as **skipped**, not failed. From the web page ([chapter 5](05-web-page.md)) the `slurm` steps go through the governor; tick **Slurm trace** there for the same trace (see the [resilience guide](../guides/slurm-resilience.md)).
 
 ## The scenarios shipped
 
@@ -31,6 +43,14 @@ The command exits 1 when a step errors or an `expect` line does not hold. Steps 
 | SC-11 | `jira-real-429` | the real Jira's own rate limiting (3 requests, refill 1 per second) turns on, so bursts get a real 429 with `X-RateLimit-*` headers, then off at 120 s; each change shows up to a minute late |
 | SC-28 | `jira-real-slow-503` | the real Jira answers slowly (8 s), then 503, then 429 with `Retry-After: 30`, through the fault proxy: **point the client at `127.0.0.1:8084`** |
 | SC-29 | `jira-real-token-revoked` | alice's personal access token is revoked (a real 401 for a client using it), then a new one is written to `jira-real.env` at 90 s |
+| SC-37 | `preempt-burst` | a scavenger job fills the GPUs of `gpu001`; at 20 s an `urgent` job asks for them and Slurm requeues the scavenger job; needs the accounting part and `qos:` in `sim.yaml` ([guide](../guides/qos-and-preemption.md)) |
+| SC-36 | `reboot-asap` | Slurm reboots `cn002` (`scontrol reboot ASAP`): BMC `Reset ForceOff` then `Reset On`, slurmd restarts, the node resumes; then `cn003` is powered down through Slurm (`POWERED_DOWN`, BMC Off) and up at 90 s ([guide](../guides/power-and-reboot.md)) |
+| SC-35 | `switch-leaf-down` | one leaf switch goes down: exactly its nodes drain (`switch leaf1 down`), and only those resume at 90 s; needs `topology:` in `sim.yaml` ([guide](../guides/topology.md)) |
+| SC-30 | `auth-slurm-token-expiry` | a Slurm REST token for alice that lives 60 s is saved to `compose/generated/secrets/slurm_token`; after that slurmrestd answers 401 |
+| SC-31 | `auth-teleport-cert-expiry` | alice's Teleport identity file lives 60 s, then the login node refuses it as expired; signed again at 180 s (`--with teleport`) |
+| SC-32 | `auth-munge-wrong-key` | `cn001` gets another munge key (slurmctld: `Invalid credential`, node goes down), its own key is back at 120 s |
+| SC-33 | `bmc-tls-expired` | the BMC farm presents a certificate that ended yesterday for 60 s: `certificate has expired` on 8443, 443 and each node's BMC address |
+| SC-34 | `k8s-cert-expired` | the API server serves a certificate that ended yesterday for 90 s (`--with k8s`): `certificate has expired` from kubectl |
 | SC-12 | `jira-real-captcha` | six wrong-password logins make the real Jira answer 401 then 403 `CAPTCHA_CHALLENGE` (what an integration meets after a bad password), cleared after 60 s |
 | SC-26 | `ticket-lifecycle` | one ticket: Open, In Progress, a note, Resolved, Closed |
 | SC-04 | `drain-ticket` | Slurm drains `cn003`; a ticket naming the cluster and the node is filed, worked, and resolved when the node resumes |
@@ -63,7 +83,7 @@ expect:
 ```
 
 - `at`: when the step runs, as `10s`, `2m`. `--speed` and `time_dilation` in `sim.yaml` compress it.
-- `target`: `bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira`, `slurm`, `ssh`, `k8s` (built); `ticket-bot` (not built, skipped).
+- `target`: `bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira`, `slurm`, `ssh`, `k8s`.
 - `do`: the body for that target. `nodes: [...]` fans out one request per node and must name nodes from `sim.yaml`. `slurm`
   takes `drain` and `resume` (node lists) and the job and daemon steps of the [resilience guide](../guides/slurm-resilience.md) (`submit: {node, gpus, duration}`, `cancel`, `slurmd_restart`, `slurmd_stop`, `slurmd_start`, `slurmctld_restart`); `jira` takes `failure: {mode: "429"|"503"|null, count: N}`; `bmc-farm` takes `power`,
   `temp`, `fan_fail`, `ramp: {to, over}`, `clear`; `ssh` (the login node) takes `state: down|hung|up` (stop, freeze, restore),
@@ -72,7 +92,7 @@ expect:
   `delete_pod: {namespace, name}`, `scale: {namespace, deploy, replicas}` and `apply: [path under k8s/]`. Expectations: `k8s.node_ready: {node, ready, within}`
   and `k8s.pod_status: {namespace, name, reason, within}` (the pod's phase or a container's waiting or terminated reason).
 - `expect`: assertions checked after the steps. Anything that needs the app under test (such as `jira.issue_created`) only
-  holds when the app, or ticket-bot once built, does its part.
+  holds when the app does its part.
 
 Always run `--dry-run` first: it rejects unknown targets and unknown nodes. Design: [ADR 0006](../adr/0006-scenario-engine-runs-in-the-host-cli.md).
 
@@ -84,3 +104,35 @@ itself after about 30-40 s. `power: "On"` and `clear: true` undo all of that. Yo
 Slurm steps are no longer needed (they are harmless if present). Played from the page, the Slurm part (`drain`, `down`,
 `resume`, `power_off`, `power_on`) goes through the governor, at calm levels only (L0-L1); when it is refused the step still
 runs and says why in its detail. `ssh` steps still need `benchctl scenario run`.
+
+## What you will see
+
+`run` prints each step as it fires and then the result of every `expect` line. The command exits 1 when a step errors or an `expect` line does not hold; steps the caller cannot run are reported as skipped.
+
+## Under the hood
+
+A scenario is a YAML file in `scenarios/` with `steps` (each has a time, a target and a body) and optional `expect` assertions. The engine runs in the host command line and turns each step into a request to the target: a mock, the Slurm controller through the governor, or `ssh` on the login node. `--speed` and `time_dilation` in `sim.yaml` compress the clock.
+
+> [!HOOD]
+> Which steps run depends on who plays the scenario. From `benchctl` on your host everything runs. From the web page (no Docker) the Slurm steps go through the governor at calm levels only, `ssh` steps and Kubernetes steps are skipped, and the step still says why.
+
+Source: `benchctl/scenario.py`, `scenarios/*.yaml`, `webui/cluster.py`, ADR 0006.
+
+## Tips and gotchas
+
+> [!TIP]
+> Always run `--dry-run` first: it rejects unknown targets and unknown nodes.
+
+> [!WARNING]
+> `nodes: [...]` must name nodes from `sim.yaml`; an unknown node is rejected.
+
+## If it goes wrong
+
+| You see | Why | Do this |
+|---|---|---|
+| a step is skipped | the caller cannot run that target (for example `k8s` from the page) | run it with `benchctl scenario run` |
+| an `expect` line fails | the app under test must do its part for some assertions, or the step did not take effect | read the step's detail, then re-run with `--trace` |
+
+## Learn more
+
+[Web page](05-web-page.md) · [The governor](07-governor.md) · [Slurm resilience](../guides/slurm-resilience.md) · [ADR 0006](../adr/0006-scenario-engine-runs-in-the-host-cli.md)

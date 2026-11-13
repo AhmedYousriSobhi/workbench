@@ -1,0 +1,44 @@
+name: CI
+
+# Unit tests, lint and the scans that need no Docker, no cgroups and no sudo. Live tests (tests/real) stay local: ./scripts/verify.sh.
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install
+        run: pip install -e ".[dev,mcp]"
+      - name: Lint
+        run: ruff check .
+      - name: Privacy scan
+        run: ./scripts/check-privacy.sh --all
+      - name: Unit tests, tests/real excluded (it needs Docker and a real host)
+        run: python -m pytest tests -q --ignore=tests/real -p no:cacheprovider
+      - name: Web page logic tests
+        run: node --test "webui/tests/js/*.test.mjs"
+      - name: Progress tracker is current
+        run: |
+          python -m benchctl.progress
+          git diff --exit-code docs/PROGRESS.md docs/progress.html

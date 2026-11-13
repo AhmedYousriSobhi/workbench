@@ -1,4 +1,16 @@
+<p align="center"><img src="../assets/art/08-configuration-hero.svg" alt="One file, sim.yaml, with arrows to the generated compose file, slurm.conf and targets" width="720"></p>
+
 # 8. Configuration
+
+**In 30 seconds:** you edit one file, `sim.yaml`, and everything else (compose, Slurm config, Prometheus targets, BMC inventories) is generated from it. Never edit the generated files by hand.
+
+## Do it
+
+```bash
+./scripts/benchctl compose --profile min      # regenerate and look at the result
+```
+
+Then bring the stack down and up again so every container sees the same values.
 
 [sim.yaml](../../sim.yaml) is the single source of truth. Compose files, `slurm.conf`, Prometheus targets and the BMC and BCM
 inventories are generated from it, so node names agree everywhere. **Never hand-edit generated files**
@@ -45,3 +57,30 @@ Budgets for `std` and `full` are estimates until measured. To measure: `benchctl
 
 Generated secrets (database password, the governor's Grafana token, the web page token) live only in
 `compose/generated/secrets/` (not committed). Never copy them into files, messages or reports.
+
+## Under the hood
+
+> [!HOOD]
+> `benchctl compose` reads `sim.yaml` plus `profiles/NAME.yaml`, builds the compose model from a component catalogue (`CATALOG`) and writes `compose/generated/docker-compose.yml` with a "GENERATED, do not edit" header. A copy of the `sim.yaml` it used is written beside it, because `scale` and a saved workbench selection change the counts, so the repository file is the default and not the running truth.
+> Every component gets a memory limit and a priority class label (`workbench.class: P0` to `P6`) from that catalogue, which is how the governor knows what to pause first.
+> `scale` changes only the node count of a running stack; for any other `sim.yaml` change, bring the stack down and up again so every container sees the same values.
+
+Source: `benchctl/compose.py` (`CATALOG`, `write`), `benchctl/stack.py` (`scale`), SPEC section 3
+
+## Tips
+
+> [!WARNING]
+> Files under `compose/generated/` are overwritten on every run. A hand edit there is lost.
+
+## If it goes wrong
+
+| Symptom | Try |
+|---|---|
+| A change did not show up | `benchctl down`, then `benchctl up` |
+| `scenario run` rejects a name | the node or user is not in `sim.yaml`; use `--dry-run` to see which |
+
+## Learn more
+
+- [sim.yaml](../../sim.yaml)
+- [Choose your workbench](../guides/choose-workbench.md)
+- [The memory contract](../architecture/04-memory-and-profiles.md)

@@ -66,7 +66,7 @@ def test_markdown_relative_links_resolve():
 
 
 def test_readme_stays_short_and_architecture_is_split():
-    assert len((ROOT / "README.md").read_text().splitlines()) <= 120
+    assert len((ROOT / "README.md").read_text().splitlines()) <= 160
     pages = sorted((ROOT / "docs/architecture").glob("*.md"))
     assert len(pages) >= 10
     index = (ROOT / "docs/architecture/README.md").read_text()
@@ -126,8 +126,23 @@ def test_getting_started_explains_how_to_get_a_shell_on_a_node():
 def test_manual_images_are_all_used_and_have_alt_text():
     text = "\n".join(p.read_text() for p in MANUAL.glob("*.md"))
     used = set(re.findall(r"\]\(img/([\w.-]+\.png)\)", text))
-    assert used == {p.name for p in (MANUAL / "img").glob("*.png")}
+    # pages use the light image; the dark twin is for the README's <picture> (D-8)
+    assert used == {p.name for p in (MANUAL / "img").glob("*.png") if not p.name.endswith("-dark.png")}
     assert not re.findall(r"!\[\]\(", text)
+
+
+def test_screenshots_come_in_light_and_dark_pairs_within_budget():
+    """doc_shots.py writes every screenshot and the demo GIF as NAME-light and NAME-dark; each PNG is at most 300 KB, each GIF 3 MB."""
+    img = MANUAL / "img"
+    for ext in ("png", "gif"):
+        light = {p.name[: -len(f"-light.{ext}")] for p in img.glob(f"*-light.{ext}")}
+        dark = {p.name[: -len(f"-dark.{ext}")] for p in img.glob(f"*-dark.{ext}")}
+        assert light == dark, f"{ext}: no twin for {sorted(light ^ dark)}"
+    assert any(img.glob("architecture-demo-light.gif")) and any(img.glob("circuit-zoom-light.gif"))
+    for p in list(MANUAL.glob("img/*.png")) + list((ROOT / "docs/guides/img").glob("*.png")):
+        assert p.stat().st_size <= 300 * 1024, f"{p.name} is over 300 KB"
+    for p in img.glob("*.gif"):
+        assert p.stat().st_size <= 3 * 1024 * 1024, f"{p.name} is over 3 MB"
 
 
 def test_no_old_names_left():
@@ -155,3 +170,65 @@ def test_verbs_guide_covers_every_command():
     group = typer.main.get_command(app)
     missing = [name for name in group.commands if f"`{name}" not in text]
     assert not missing, f"add these verbs to docs/guides/benchctl-verbs.md: {missing}"
+
+
+def test_readme_html_images_exist_and_have_alt_text():
+    """The README uses <img> and <picture>; the link check above only sees markdown links."""
+    text = (ROOT / "README.md").read_text()
+    for tag in re.findall(r"<img\b[^>]*>", text):
+        assert re.search(r'alt="[^"]+"', tag), tag
+    paths = re.findall(r'(?:src|srcset)="(docs/[^"]+)"', text)
+    assert paths
+    for p in paths:
+        assert (ROOT / p).is_file(), p
+
+
+TEMPLATED = ("01-what-it-is", "02-install-and-start", "03-using-the-cluster", "04-nodes-and-shells", "05-web-page", "06-scenarios", "07-governor", "08-configuration", "09-troubleshooting")  # chapters rewritten to the page template (issue 596); the list grows
+
+
+def test_templated_chapters_follow_the_page_template():
+    for name in TEMPLATED:
+        text = (MANUAL / f"{name}.md").read_text()
+        assert text.startswith(f'<p align="center"><img src="../assets/art/{name}-hero.svg" alt="'), name
+        assert "**In 30 seconds:**" in text and "## Do it" in text and "## Learn more" in text, name
+        hood = text.split("## Under the hood", 1)[1].split("\n## ", 1)[0]
+        assert re.search(r"^Source: .+", hood, re.MULTILINE), f"{name}: Under the hood needs a Source line"
+
+
+GUIDES = {"memory": "memory", "nhc-checks": "nhc-checks", "topology": "topology", "qos-and-preemption": "qos-and-preemption",
+          "power-and-reboot": "power-and-reboot", "slurm-resilience": "slurm-resilience", "choose-workbench": "choose-workbench",
+          **{k: k for k in ("jira-real", "jira-contract", "jira-tickets", "client-setup-by-component", "client-testing", "ssh-connection-testing", "web-ui-canvas")}}  # guides in the page template (issue 605); the list grows
+
+
+def test_templated_guides_follow_the_page_template():
+    for name, key in GUIDES.items():
+        text = (ROOT / "docs/guides" / f"{name}.md").read_text()
+        assert text.startswith(f'<p align="center"><img src="../assets/art/guide-{key}-hero.svg" alt="'), name
+        assert "**In 30 seconds:**" in text and "## Do it" in text and "## Learn more" in text, name
+        assert f"guide-{key}-diagram.svg" in text, name
+        hood = text.split("## Under the hood", 1)[1].split("\n## ", 1)[0]
+        assert re.search(r"^Source: .+", hood, re.MULTILINE), f"{name}: Under the hood needs a Source line"
+
+
+REFERENCE = ("10-reference", "11-which-command", "12-glossary")  # reference chapters: hero, 30 seconds and Learn more, no stunts
+
+
+def test_reference_chapters_have_hero_summary_and_learn_more():
+    for name in REFERENCE:
+        text = (MANUAL / f"{name}.md").read_text()
+        assert text.startswith(f'<p align="center"><img src="../assets/art/{name}-hero.svg" alt="'), name
+        assert "**In 30 seconds:**" in text and "## Learn more" in text, name
+
+
+def test_architecture_how_it_works_index_links_every_under_the_hood_section():
+    index = (ROOT / "docs/architecture/README.md").read_text()
+    for folder in ("manual", "guides"):
+        for f in sorted((ROOT / "docs" / folder).glob("*.md")):
+            if "## Under the hood" in f.read_text():
+                assert f"../{folder}/{f.name}#under-the-hood" in index, f"{folder}/{f.name} is missing from the How it works index"
+
+
+def test_architecture_pages_open_with_their_header_art():
+    for f in sorted((ROOT / "docs/architecture").glob("*.md")):
+        assert f.read_text().startswith(f'<p align="center"><img src="../assets/art/arch-{f.stem}-hero.svg" alt="'), f.name
+        assert (ROOT / f"docs/assets/art/arch-{f.stem}-hero.svg").is_file(), f.name

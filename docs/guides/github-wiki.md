@@ -37,12 +37,31 @@ python scripts/sync_wiki.py --out /tmp/wiki-preview
 
 | In the wiki | From |
 |---|---|
-| `Home` | the manual's start page |
+| `Home` | the manual's README as a landing page: the hero art, "Start here" in three steps, a grid of six illustrated links (Install, Use, Break things, Watch it, Configure, Fix it; `TILES` in `scripts/sync_wiki.py`), then the chapter table |
 | `Manual-NN-...` | `docs/manual/` |
 | `Guide-...` | `docs/guides/` |
 | `Architecture-...` | `docs/architecture/` |
 | `ADR-NNNN-...` | `docs/adr/` |
-| `_Sidebar`, `_Footer` | generated: navigation and a "generated from docs/" note |
+| `_Sidebar`, `_Footer` | generated: navigation, each group with a small icon (`group-*.svg`, decorative, the label is text) and a "generated from docs/" note; every page also ends with an **Edit this page** link to its source on `dev` (a wiki footer is the same on every page, so the link sits at the end of each page) |
 
 Links between pages become wiki links, images are copied to `images/`, and a link to a file outside `docs/` (for
 example `SPEC.md`) opens that file in the repository.
+
+## Constructs a page may use
+
+The same markdown is shown on GitHub, in the wiki and in the page's **? Help** (`webui/wiki.py`, a small renderer with a
+fixed subset). Use only these; anything else is escaped in the help.
+
+| Write | Help | Wiki |
+|---|---|---|
+| `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]` then `> text` | a box with an icon and a text label | kept as is (GitHub alerts) |
+| `> [!HOOD]` (under the hood), `> [!DIDYOUKNOW]` | the same kind of box | rewritten to a quote headed by `**🔧 Under the hood**` or `**💡 Did you know?**` |
+| `<details><summary>Title</summary>` ... `</details>` | collapsible block | same |
+| `<p align="center"><img src="..." alt="..." width="720"></p>` | centred image | image path rewritten to `images/` |
+| `<picture>` with `<source media srcset>` and an `<img>` | shows the `<img>` | `srcset` and `src` rewritten |
+| an image, then an italic line (`*caption*`) | `<figure>` with a caption | plain image and italic line |
+| `<kbd>Ctrl</kbd>` | key cap | same |
+
+Illustrations come from `docs/assets/art/` ([brand and art](brand-assets.md)); the wiki copies them to `images/art-NAME.svg`.
+A project callout kind that GitHub does not know would show as a plain quote in the repository view, which is acceptable.
+Check in a wiki preview that the five GitHub kinds render as alerts in the Wiki; if they do not, rewrite them as the two project kinds are.

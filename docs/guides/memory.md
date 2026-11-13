@@ -1,4 +1,14 @@
+<p align="center"><img src="../assets/art/guide-memory-hero.svg" alt="A memory bar with a filled part for expected use and a dashed cap beyond it" width="720"></p>
+
 # How much memory the workbench uses
+
+**In 30 seconds:** every part of the workbench has a measured size and a cap. `benchctl plan` adds them up, adds a 1 GB reserve for your app, and tells you before anything starts whether it fits.
+
+## Do it
+
+```bash
+./scripts/benchctl plan --profile std      # the cost, and whether it fits; exit 1 if it does not
+```
 
 Measured on 2026-11-05 with `docker stats` on a live stack (issue 287). The plan (`benchctl plan`, `up`) uses these numbers: **expected use = measured + 15 percent, never above the cap**. Numbers live in `benchctl/memory.py`; the contract and the method are in the [memory contract](../architecture/04-memory-and-profiles.md).
 
@@ -34,7 +44,6 @@ Largest working set seen (MB), the cap the container may reach, and what the pla
 | Prometheus / Grafana / GPU exporter | 22 / 54 / 19 | 300 / 300 / 100 | 26 / 62 / 22 |
 | **Jira (real), Data Center** | **2045** | **2176** | **2176** |
 | Postgres for the real Jira | 130 | 256 | 150 |
-| scenario engine, user-sim, ticket-bot | not measured (not built) | 60 / 60 / 40 | the cap |
 
 The real Jira is more than 90 percent of what the whole stack uses. Its cap of 2176 MB (heap 768 MB, a trimmed JVM: Serial GC, C1-only compilation, 512 KB thread stacks) passed the setup and a ticket run twice with a peak of about 2040 MiB; without the JVM flags the smallest working cap was 2560 MB. A Java application keeps its heap, code cache, plugin system and thread stacks, so it cannot go much lower. All trials: [real Jira](jira-real.md#why-21-gb-measured-issues-287-and-289).
 
@@ -88,3 +97,33 @@ Every part that is multiplied by the node count declares its cost per node in `P
 ```
 
 `shmem` is what the container's tmpfs holds; `oom_kill` counts kills by the kernel (it must stay 0 under load). MariaDB's data moves off tmpfs only if its `shmem` is 50 MB or more (decision on issue 455).
+
+## Under the hood
+
+<p align="center"><img src="../assets/art/guide-memory-diagram.svg" alt="A bar for one part: the measured use, 15 percent on top and a dashed cap the result never passes" width="720"></p>
+
+> [!HOOD]
+> The plan counts each part as its largest measured working set plus 15 percent, never above the part's memory cap. A part with no measurement counts as its cap.
+> The app under test is added as a reserve (1024 MB unless you measured it). Precedence: `--app-mb`, then `WORKBENCH_APP_MB`, then the saved measurement, then 1024.
+> `up` and `scale` ask the governor first (admission), which refuses at L2 and above or when the start would breach the safety floor.
+
+Source: `benchctl/memory.py` (`TOLERANCE`, `expected_mb`, `app_reserve`), [the memory contract](../architecture/04-memory-and-profiles.md), SPEC GV-9
+
+## Tips
+
+> [!TIP]
+> Close the browser and IDE before a big start. Memory they hold is not free for the cluster.
+
+## If it goes wrong
+
+| Symptom | Try |
+|---|---|
+| `plan` says it does not fit | choose a smaller profile or fewer nodes, or leave the real Jira off |
+| A start is refused with `REFUSED` | the governor is protecting the machine: free memory and retry |
+| A start is stopped part-way | a short memory stall (issue 286); close heavy apps first |
+
+## Learn more
+
+- [The governor](../manual/07-governor.md)
+- [Choose your workbench](choose-workbench.md)
+- [Real Jira](jira-real.md)

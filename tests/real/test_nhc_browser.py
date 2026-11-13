@@ -11,7 +11,7 @@ pytest.importorskip("uvicorn")
 import uvicorn
 from playwright.sync_api import sync_playwright
 
-from webui.app import create_app
+from webui.app import create_app, login_url
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -50,7 +50,7 @@ def test_the_sheet_changes_the_files_through_drag_and_buttons(tmp_path):
                 page = browser.new_context(viewport={"width": width, "height": 800}, bypass_csp=True).new_page()
                 page.on("pageerror", lambda e: errors.append(str(e)))
                 page.add_init_script("try { localStorage.setItem('workbench-circuit', '0'); sessionStorage.getItem('workbench-tab') || sessionStorage.setItem('workbench-tab', 'nodes'); } catch (e) {}")  # the classic diagram and list: the circuit is the default view
-                page.goto(f"http://127.0.0.1:{port}/login?token=tok")
+                page.goto(login_url(f"http://127.0.0.1:{port}", "tok"))
                 page.click("#menubtn")
                 page.click("#nhcbtn")
                 page.wait_for_selector(".nhcrow")

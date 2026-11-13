@@ -1,3 +1,5 @@
+<p align="center"><img src="../assets/art/arch-11-governor-as-built-hero.svg" alt="Architecture: The governor as built. boot order, control cycle, lock time." width="720"></p>
+
 # The governor as built
 
 [Architecture index](README.md) · [The governor (design)](05-governor.md)

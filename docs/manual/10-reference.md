@@ -1,4 +1,8 @@
+<p align="center"><img src="../assets/art/10-reference-hero.svg" alt="The command grammar as three chips: verb, resource, name" width="720"></p>
+
 # 10. Reference
+
+**In 30 seconds:** every command is `benchctl VERB [RESOURCE] [NAME]`. This page lists each verb, flag and file. Look here when you know what you want and need the exact spelling.
 
 ## The command: `benchctl`
 
@@ -17,8 +21,12 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 | `start [--profile P | --with PART ... | --ticketing jira --hardware bmc,bcm ... | --addons]` | machine check, venv, governor (as you), cluster, web page; default profile `min`; category flags `--workload --accounting --monitoring --ticketing --hardware --access --simulation` and `--addons` (every optional part) build a selection ([guide](../guides/choose-workbench.md#parts-by-category)); also on `up`, `apply`, `plan`; `--login MODE,MODE...` sets the login nodes ([guide](04-nodes-and-shells.md#login-nodes-how-many-and-how-each-one-lets-you-in)) |
 | `stop` | stop the web page, the cluster and your own governor |
 | `open` | print the login link, open a browser if there is a display |
-| `get nodes\|services\|profiles\|scenarios\|workbench [-o json\|name] [-l SEL] [--sort-by COL] [-w]` | list what exists, filter (`-l kind=gpu`), sort, redraw; `nodes` shows every node `sim.yaml` defines and its state (`absent` = not started) |
-| `describe node NAME [-o json]` | everything known about one node: container, Slurm, jobs, GPUs busy/idle, BMC |
+| `get nodes\|services\|profiles\|scenarios\|workbench [--json \| -o json\|name] [-l SEL] [--sort-by COL] [-w]` | list what exists, filter (`-l kind=gpu`), sort, redraw; `nodes` shows every node `sim.yaml` defines and its state (`absent` = not started) |
+| `get endpoints\|faults\|traffic [--json]` | where to connect and where each credential lives; what is wrong now (nodes, expired certificates or tokens, a Jira failure mode); who called which mock |
+| `describe workbench [--json]` / `get alerts` / `wait ready\|node-state\|alert\|scenario` | one-call overview for an agent; Prometheus alerts; block until something is true (exit 0 met, 1 timeout, 2 precondition) |
+| `serve mcp` | serve the verbs to an AI agent over MCP (stdio); needs `pip install -e '.[mcp]'` |
+| `BENCHCTL_AGENT=1 benchctl ...` | agent mode: one-line coded errors, `--yes` required for destructive verbs, logs in a file; see the verbs guide |
+| `describe node NAME [--json]` | everything known about one node: container, Slurm, jobs, GPUs busy/idle, BMC |
 | `ssh [USER@]NODE [-- CMD]` | `benchctl ssh cn001`: a root shell on the node (docker exec). `benchctl ssh alice@cn001`: a real SSH login as that simulated user, through the first login node that takes a key (not for a Teleport-only cluster: use `tsh`). A command after `--` runs instead of a shell |
 | `exec NODE [-u USER] [-- CMD]` | shell on a node, or one command: `benchctl exec gpu001 -- nvidia-smi` |
 | `logs NODE [-f] [--tail N]` | container log of a node or service |
@@ -28,7 +36,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 | `scale N [--profile P] [-n] [-y]` | change the compute node count; asks before removing nodes in a terminal, `-n` only says what would change |
 | `up --cpu-nodes N --gpu-nodes N [--gpus-per-node N] [--with PART] [--without PART] [-f FILE]` | the same by selection: estimate first, build only if it fits |
 | `apply -f FILE` | build the workbench a file describes |
-| `scenario list` / `scenario run NAME|SC-nn [--speed N] [--dry-run]` | list scenarios; play one, exit 1 on failure |
+| `scenario list` / `scenario run NAME|SC-nn [--speed N] [--dry-run] [--json]` | list scenarios; play one, exit 1 on failure |
 | `export profile [-o FILE] [--bmc] [--user U] [--name N] [--format ID] [--configured]` | write the running cluster as a client profile file (also the page's **⇩ Export** button) ([guide](../guides/export-profile.md)) |
 | `ssh-key install\|remove` | put the login key under `~/.ssh` for clients that only read there |
 | `status [--socket S]` | governor level, signals, recent actions, then whether the cluster and the web page run |
@@ -52,7 +60,8 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 | `scripts/install-governor.sh [--uninstall\|--print]` | optional root governor service (sudo) |
 | `scripts/install-hooks.sh` | git hooks for contributors (no sudo) |
 | `scripts/validate.sh` | lint, tests, privacy scan: run before every commit |
-| `scripts/verify.sh [--full] [--revalidate] [--skip-browser]` | validate (skipped when it passed for this exact tree) plus real-host tests, with seconds per step: run before asking for a merge |
+| `scripts/verify.sh [--changed [BASE] [--explain]] [--full [--with-jira]] [--serial] [--trust-ci] [--revalidate] [--skip-browser] [--unit NAME [--clean]] [--install-nightly [HH:MM] \| --remove-nightly]` | validate (in the background next to the live tests; skipped when it passed for this exact tree) plus real-host tests, with seconds per step and a `SLOW` line. `--changed` before a PR to `dev`, `--full --with-jira` before `dev` to `main` and nightly |
+| `scripts/impact.py [--explain]` | which live-test modules a change reaches (`tests/real/impact.yaml`); an unmatched path selects all |
 | `scripts/real-test.sh` | real-host tests |
 | `scripts/ui_shots.py [OUTDIR]` | screenshots and checks of the web page |
 | `node --test "webui/tests/js/*.test.mjs"` | the web page's JavaScript tests (Node 22 or newer; `validate.sh` runs them) |
@@ -65,7 +74,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 |---|---|
 | `.venv/bin/python -m webui [port]` | the web page (default 8088) |
 | `http://127.0.0.1:8088/help/` | these pages inside the web page, with search (needs the login) |
-| `python -m governor [flags]` | the governor (`--dry-run`, `--once`, `--user-mode`, `--socket`, `--metrics-addr`, `--grafana-url`, `--thresholds`, `--workdir`, `--refresh-interval`, `--no-watchdog`) |
+| `python -m governor [flags]` | the governor (`--dry-run`, `--once`, `--user-mode`, `--socket`, `--metrics-addr`, `--grafana-url`, `--thresholds`, `--sim`, `--no-psi-trigger`, `--workdir`, `--refresh-interval`, `--no-watchdog`) |
 | `fidelity-vm/bin/up.sh`, `down.sh` | the deferred VM scaffold (ADR 0033) |
 
 ## Ports (127.0.0.1, except 9401)
@@ -105,7 +114,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 ## Container names
 
 `workbench-<service>-1`: `slurmctld`, `slurmrestd`, `mariadb`, `slurmdbd`, `bmc-farm`, `bcm-mock`, `jira-mock`,
-`scenario-engine`, and one per node (`cn001`, `gpu001`, ...).
+and one per node (`cn001`, `gpu001`, ...).
 
 ## Glossary (short; the full list is [chapter 12](12-glossary.md))
 
@@ -119,3 +128,9 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 | Scenario | a named, timed list of faults |
 | Mock | a program that imitates one service's API |
 | Fidelity VM | deferred (ADR 0033) |
+
+## Learn more
+
+- [Which command do I use?](11-which-command.md)
+- [The verbs guide](../guides/benchctl-verbs.md)
+- [Glossary](12-glossary.md)

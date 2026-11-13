@@ -19,6 +19,7 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from webui import blast, graph
+from webui.app import login_url
 
 SYNTH_CLUSTER = """lastCluster = JSON.stringify({logins: [{name: 'login', mode: 'both', port: 2222}, {name: 'login2', mode: 'teleport', port: null}], services: {'bmc-farm': true, 'bcm-mock': true, 'jira-mock': true, 'jira-real': true, 'gpu-exporter': true, 'dcgm-exporter': true, 'real-gpu': true, 'teleport': true, 'jump': true, 'controller': true}, actions: [{id: 'power-off', label: 'Power off', gpu_only: false}, {id: 'power-on', label: 'Power on', gpu_only: false}, {id: 'overheat', label: 'Overheat', gpu_only: false}, {id: 'fan-fail', label: 'Fan failure', gpu_only: false}, {id: 'clear', label: 'Clear faults', gpu_only: false}],
                             nodes: ['cn001', 'cn002', 'cn003', 'cn004'].map(n => ({name: n, kind: 'compute', state: 'ok', label: 'Healthy', temp: 45, power: 'On', gpus: 0}))
@@ -324,12 +325,13 @@ def capture(out: Path) -> dict:
     proc = subprocess.Popen([sys.executable, "-m", "webui", str(port)], cwd=ROOT, stdout=subprocess.PIPE, text=True)
     result: dict = {"shots": [], "console_errors": [], "overflow": [], "a11y": []}
     try:
-        url = proc.stdout.readline().split("UI: ")[1].strip() + "?token=" + (ROOT / "compose/generated/secrets/ui_token").read_text().strip()  # the log line has no token (#346)
+        base_url = proc.stdout.readline().split("UI: ")[1].strip().removesuffix("/login")
+        ui_token = (ROOT / "compose/generated/secrets/ui_token").read_text().strip()  # a one-time code, no token in the URL (#466)
         with sync_playwright() as p:
             browser = p.chromium.launch()
             first = browser.new_page(viewport={"width": 1280, "height": 900}, color_scheme="light")  # nothing stored: dark first; the one page that keeps the CSP (#517)
             first.on("console", lambda m, r=result: r["a11y"].append("CSP violation: " + m.text[:160]) if "Content Security Policy" in m.text else None)
-            first.goto(url)
+            first.goto(login_url(base_url, ui_token))
             first.wait_for_timeout(500)
             for tab in first.locator("nav a, nav button, [role=tab]").all()[:12]:  # visit each screen so its templates run under the policy
                 with contextlib.suppress(PlaywrightError):  # a tab that is hidden or covered is not what this loop checks
@@ -348,7 +350,7 @@ def capture(out: Path) -> dict:
                     deadline = time.time() + 15
                     while True:
                         try:
-                            page.goto(url)
+                            page.goto(login_url(base_url, ui_token))
                             break
                         except Exception:
                             if time.time() > deadline:
@@ -548,7 +550,7 @@ def capture(out: Path) -> dict:
             for w, h, count in ((1280, 900, 6), (1920, 1080, 50)):  # the architecture is the page (#319): it fills the width, the page itself never scrolls, the rails scroll
                 page = browser.new_page(viewport={"width": w, "height": h}, bypass_csp=True)
                 page.add_init_script(TEST_HOOK)
-                page.goto(url)
+                page.goto(login_url(base_url, ui_token))
                 page.wait_for_selector("#flow rect.blk")
                 page.wait_for_timeout(1200)  # the first real poll has landed: it must not overwrite the sample
                 page.evaluate(SYNTH_CLUSTER)
@@ -623,7 +625,7 @@ def capture(out: Path) -> dict:
             for w, h, count in ((1280, 900, 2), (1280, 900, 12), (1920, 1080, 12)):  # several clusters (#327): a grid of cards that fits the panel; entering one shows that cluster
                 page = browser.new_page(viewport={"width": w, "height": h}, bypass_csp=True)
                 page.add_init_script(TEST_HOOK)
-                page.goto(url)
+                page.goto(login_url(base_url, ui_token))
                 page.wait_for_selector("#flow rect.blk")
                 page.wait_for_timeout(1200)
                 page.evaluate(SYNTH_CLUSTER)

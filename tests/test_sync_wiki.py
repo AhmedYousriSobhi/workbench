@@ -58,3 +58,52 @@ def test_ci_token_goes_in_a_header_only_when_origin_has_no_credentials(monkeypat
     assert sw.auth_args(plain, "https://github.com/o/r?with=credentials") == []  # a developer's origin carries its own
     monkeypatch.delenv("GITHUB_TOKEN")
     assert sw.auth_args(plain, plain) == []
+
+
+def test_project_callouts_are_rewritten_and_github_kinds_kept(tmp_path):
+    docs = tmp_path / "docs"
+    (docs / "manual").mkdir(parents=True)
+    (docs / "manual" / "README.md").write_text("x")
+    text = "> [!HOOD]\n> the mechanism\n\n> [!didyouknow]\n> a fact\n\n> [!TIP]\n> keep\n\n```\n> [!HOOD]\n```\n"
+    out = sw.rewrite(text, "manual/README.md", docs, BLOB)
+    assert "> **🔧 Under the hood**\n>\n> the mechanism" in out and "> **💡 Did you know?**\n>\n> a fact" in out
+    assert "> [!TIP]\n> keep" in out and "```\n> [!HOOD]\n```" in out
+
+
+def test_art_is_copied_and_img_and_picture_paths_are_rewritten(tmp_path):
+    docs, out = tmp_path / "docs", tmp_path / "wiki"
+    (docs / "manual").mkdir(parents=True)
+    (docs / "assets" / "art").mkdir(parents=True)
+    (docs / "assets" / "art" / "hero.svg").write_text("<svg/>")
+    (docs / "manual" / "README.md").write_text(
+        '<p align="center"><img src="../assets/art/hero.svg" alt="a" width="720"></p>\n'
+        '<picture>\n<source media="(prefers-color-scheme: dark)" srcset="../assets/art/hero.svg">\n'
+        '<img src="../assets/art/hero.svg" alt="b"></picture>\n<img src="https://x.test/a.png" alt="c">\n'
+        '<img src="../../logo.png" alt="d">\n')
+    sw.generate(docs, out, BLOB)
+    assert (out / "images" / "art-hero.svg").is_file()
+    page = (out / "Home.md").read_text()
+    assert page.count('"images/art-hero.svg"') == 3 and "../assets" not in page
+    assert 'src="https://x.test/a.png"' in page and f'src="{BLOB}/logo.png?raw=true"' in page
+
+
+def test_home_is_a_landing_page_with_tiles_and_the_chapter_table(tmp_path):
+    sw.generate(ROOT / "docs", tmp_path, BLOB)
+    home = (tmp_path / "Home.md").read_text()
+    assert home.startswith('<p align="center"><img src="images/art-readme-hero.svg" alt="')
+    assert home.index("## Start here") < home.index("art-tile-install.svg") < home.index("## All chapters") < home.index("| # | Chapter")
+    for icon, title, link, _ in sw.TILES:
+        assert f"images/art-{icon}.svg" in home and f"**[{title}]({sw.page_name('manual/' + link[:-3])})**" in home
+        assert (tmp_path / f"images/art-{icon}.svg").is_file()
+    assert "![" in home and "![]" not in home  # every image has alt text
+
+
+def test_sidebar_groups_have_an_icon_and_text_and_every_page_links_to_its_source(tmp_path):
+    sw.generate(ROOT / "docs", tmp_path, BLOB)
+    side = (tmp_path / "_Sidebar.md").read_text()
+    for folder, label in sw.GROUPS:
+        assert f'<img src="images/art-group-{folder}.svg" width="18" alt=""> **{label}**' in side
+        assert (tmp_path / f"images/art-group-{folder}.svg").is_file()
+    guide = (tmp_path / "Guide-getting-started.md").read_text()
+    assert guide.rstrip().endswith("[Edit this page](https://example.test/o/r/blob/dev/docs/guides/getting-started.md)")
+    assert "Edit this page" in (tmp_path / "_Footer.md").read_text()

@@ -22,7 +22,7 @@ COUNTERS = {"teleport": f"{TELEPORT}/metrics"}
 # The real Jira publishes no request counter: only whether it answers (its /status), so its box shows up/down and says so.
 REACH_ONLY = {"jira-real": f"{JIRA_REAL}/status", "dcgm-exporter": f"{DCGM_REAL}/metrics", "real-gpu": f"{REAL_GPU}/metrics", "k8s-api": "k8s-api"}  # the second is probed by benchctl.k8s.api_up (HTTPS with the cluster CA)
 SCENARIO_TARGETS = {"bmc-farm": "bmc-farm", "bcm-mock": "bcm-mock", "gpu-exporter": "gpu-exporter",
-                    "jira": "jira-mock"}  # scenario target name -> block; slurm, k8s, ticket-bot have no block
+                    "jira": "jira-mock"}  # scenario target name -> block; slurm and k8s have no block
 PROBE_TIMEOUT = 0.2  # s: the mocks are on this machine; a frozen one (governor L3 freezes P2+) must not stall the feed for the others (issue 451)
 BACKOFF_MAX = 10.0  # s: a service seen down is skipped for 1, 2, 4 ... up to this many seconds, and asked again after that
 PAUSE_LEVEL = 3  # SPEC: the animation is a luxury; from L3 up the governor wants every MB and CPU cycle
