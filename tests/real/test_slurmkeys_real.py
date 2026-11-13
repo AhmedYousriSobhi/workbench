@@ -29,14 +29,14 @@ def stack_up():
     release()
 
 
-def test_no_image_layer_holds_a_key():
+def test_no_image_layer_holds_a_key(stack_up):  # stack_up builds the images first: an older build still holds a key
     for image in IMAGES:
         r = sh("docker", "run", "--rm", "--entrypoint", "sh", image, "-c",
                "test ! -e /etc/munge/munge.key && test ! -e /var/spool/slurmctld/jwt_hs256.key")
         assert r.returncode == 0, f"{image} holds a key: {r.stderr}"
 
 
-def test_a_container_without_the_mount_refuses_with_one_message():
+def test_a_container_without_the_mount_refuses_with_one_message(stack_up):
     r = sh("docker", "run", "--rm", IMAGES[0], "true")
     assert r.returncode == 1 and "benchctl up" in r.stderr and r.stderr.count("\n") == 1, r.stderr
 
