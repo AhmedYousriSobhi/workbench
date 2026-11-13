@@ -1,4 +1,15 @@
+<p align="center"><img src="../assets/art/guide-slurm-resilience-hero.svg" alt="A job process on a node outliving a restarted daemon" width="720"></p>
+
 # Slurm resilience: what a running job does when the daemons change under it
+
+**In 30 seconds:** start a real job, break a Slurm daemon under it, and read a trace of what Slurm logged and what the job did at every step.
+
+## Do it
+
+```bash
+./scripts/benchctl up --profile min
+./scripts/benchctl scenario run slurmd-restart-mid-job --trace
+```
 
 Real Slurm is worth its cost for cases a mock cannot reproduce (ADR 0025). These four scenarios start a real job on a
 node and then break something under it, and `--trace` prints what Slurm logged and what the job did at every step.
@@ -89,3 +100,32 @@ disagreement here with the Slurm version and the log lines that show it.
 | `power_down: [nodes]` / `power_up: [nodes]` / `reboot: [nodes]` | Slurm's own power save and reboot (`scontrol power down|up`, `scontrol reboot ASAP`), through the BMC farm: [power-and-reboot.md](power-and-reboot.md). Not the same as `power_off`/`power_on` above, which kill and revive a node behind Slurm's back |
 
 `expect` adds `slurm.job_state: {node, state, within}` and `slurm.stepd: {node, alive, within}`. From the page they are done by the governor (see above); with no governor `--workdir` they are skipped.
+
+## Under the hood
+
+<p align="center"><img src="../assets/art/guide-slurm-resilience-diagram.svg" alt="Before and after a slurmd restart: the daemon pid changes, the step process pid and the job state stay" width="720"></p>
+
+> [!HOOD]
+> Real Slurm is worth its cost for cases a mock cannot reproduce (ADR 0025). The four scenarios use steps on target `slurm` (`submit`, `slurmd_restart`, `slurmd_stop`, `slurmd_start`, `slurmctld_restart`) and the read-only trace (`benchctl get trace`, `benchctl/slurmtrace.py`) prints `before:` and `after:` with job states and process ids plus the new log lines between them.
+> `slurmd` runs under a small supervisor (`slurmd-run`), not as PID 1, so it can restart without its container. The cgroup plugins are off (ADR 0002), so step cleanup and out-of-memory kills differ from a production site.
+
+Source: `benchctl/slurmtrace.py`, `benchctl/scenario.py`, `images/node-base/slurmd-run`, [ADR 0025](../adr/0025-slurm-is-real-the-rest-is-simulated.md), [ADR 0002](../adr/0002-slurm-from-source-no-extra-privileges.md)
+
+## Tips
+
+> [!TIP]
+> Read the `slurmstepd` pid first. If it did not change across a `slurmd` restart, the job outlived the daemon.
+
+## If it goes wrong
+
+| Symptom | Try |
+|---|---|
+| The command refuses to start | the governor admits no new work (L2 and above); free memory and run it again |
+| On the page the steps show skipped | the governor was not started with `--workdir`; use `./scripts/benchctl start` |
+| `squeue: no answer from slurmctld` | expected for a few seconds after `slurmctld_restart` |
+
+## Learn more
+
+- [Power and reboot](power-and-reboot.md)
+- [Scenarios](../manual/06-scenarios.md)
+- [The governor](../manual/07-governor.md)

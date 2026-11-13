@@ -195,7 +195,8 @@ def test_templated_chapters_follow_the_page_template():
         assert re.search(r"^Source: .+", hood, re.MULTILINE), f"{name}: Under the hood needs a Source line"
 
 
-GUIDES = {"memory": "memory", "nhc-checks": "nhc-checks", "topology": "topology", "qos-and-preemption": "qos-and-preemption"}  # guides in the page template (issue 605); the list grows
+GUIDES = {"memory": "memory", "nhc-checks": "nhc-checks", "topology": "topology", "qos-and-preemption": "qos-and-preemption",
+          "power-and-reboot": "power-and-reboot", "slurm-resilience": "slurm-resilience", "choose-workbench": "choose-workbench"}  # guides in the page template (issue 605); the list grows
 
 
 def test_templated_guides_follow_the_page_template():

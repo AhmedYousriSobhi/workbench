@@ -454,6 +454,53 @@ def diagram_qos() -> str:
     return svg(720, 190, "Preemption in four steps", "A timeline: the scavenger job runs, an urgent job arrives, the scavenger job is requeued, then runs again.", "".join(b))
 
 
+def hero_power() -> str:
+    return _hero("Power and reboot", "Guide: power save and reboot through the BMC farm",
+                 "A node going dark and coming back, with a BMC chip beside it.",
+                 node(60, 62, "ok") + wire("M96 75H180", "management") + node(180, 62, "down") + wire("M216 75H300", "management") + node(300, 62, "ok")
+                 + label(60, 124, "power down, then power up, through the BMC", "tm", "s"), True)
+
+
+def diagram_power() -> str:
+    b = [label(24, 34, "One command, every view agrees", "tx", "h b"), bubble(24, 70, 210, "scontrol power down cn002", True), wire("M234 85H300", "management", False),
+         panel(300, 56, 150, 58) + label(375, 82, "power.sh", "tx2", "b mono", True, True) + label(375, 100, "SuspendProgram", "tm2", "s", anchor=True)]
+    for i, t in enumerate(("BMC: ForceOff", "BCM mock: DOWN", "GPU exporter stops")):
+        b.append(wire(f"M450 85L500 {58 + i * 34}", "monitoring", False) + bubble(500, 44 + i * 34, 190, t, True))
+    b.append(label(24, 170, "sinfo shows POWERED_DOWN, Redfish shows PowerState Off", "tm", "s"))
+    return svg(720, 190, "What a power down touches", "A power down command runs one script that tells the BMC, the BCM mock and the GPU exporter.", "".join(b))
+
+
+def hero_slurm_resilience() -> str:
+    return _hero("Slurm resilience", "Guide: Slurm resilience",
+                 "A job process on a node outliving a restarted daemon.",
+                 bubble(40, 58, 120, "slurmd", True) + bubble(40, 94, 120, "slurmstepd + job", True) + label(190, 80, "restarts", "tm", "s") + arrow(180, 90, 260, 90)
+                 + node(270, 76, "ok") + label(40, 140, "break something under a running job and read the trace", "tm", "s"), True)
+
+
+def diagram_slurm_resilience() -> str:
+    b = [label(24, 34, "Reading a trace: what stayed the same", "tx", "h b"), panel(24, 56, 310, 110) + label(40, 84, "before", "tx2", "b"),
+         label(40, 108, "slurmd=7   slurmstepd=112", "tx2", "mono s"), label(40, 132, "job: RUNNING", "tx2", "mono s"),
+         panel(386, 56, 310, 110) + label(402, 84, "after", "tx2", "b"), label(402, 108, "slurmd=190 slurmstepd=112", "tx2", "mono s"), label(402, 132, "job: RUNNING", "tx2", "mono s"),
+         wire("M334 111H386", "management", False), label(360, 100, "restart", "tm", "s", anchor=True),
+         label(24, 196, "new slurmd pid, same slurmstepd pid: the job outlived the daemon", "tm", "s")]
+    return svg(720, 216, "Reading a Slurm trace", "Before and after a slurmd restart: the daemon's pid changes, the step process pid and the job state stay.", "".join(b))
+
+
+def hero_choose() -> str:
+    return _hero("Choose your workbench", "Guide: choose the workbench to build",
+                 "Three steps: plan, fits, build.", bubble(40, 62, 120, "plan", True) + wire("M160 77H230", "access", False) + bubble(230, 62, 120, "fits?", True)
+                 + wire("M350 77H420", "access", False) + bubble(420, 62, 120, "up", True) + label(40, 126, "see the cost first, build only if it fits", "tm", "s"), True)
+
+
+def diagram_choose() -> str:
+    b = [label(24, 34, "From a wish to a running cluster", "tx", "h b"), bubble(24, 64, 150, "flags or bench.yaml", True), wire("M174 79H220", "access", False),
+         bubble(220, 64, 130, "effective sim", True), wire("M350 79H396", "access", False), bubble(396, 64, 110, "plan", True), wire("M506 79H540", "access", False),
+         bubble(540, 64, 156, "governor admits", False),
+         label(24, 128, "the same effective sim feeds slurm.conf, the BMC farm, GPU metrics, get, describe and export", "tm", "s"),
+         label(24, 150, "plan changes nothing and exits 1 when it does not fit", "tm", "s")]
+    return svg(720, 176, "How a workbench selection is built", "A selection becomes an effective sim, then a plan, then governor admission, then a start.", "".join(b))
+
+
 ART = {"readme-hero.svg": readme_hero, "readme-how-it-works.svg": readme_how_it_works, "readme-memory.svg": readme_memory, "tour-hero.svg": tour_hero, **ICONS,
        "01-what-it-is-hero.svg": hero_what_it_is, "02-install-and-start-hero.svg": hero_install_and_start,
        "03-using-the-cluster-hero.svg": hero_using_the_cluster,
@@ -462,7 +509,10 @@ ART = {"readme-hero.svg": readme_hero, "readme-how-it-works.svg": readme_how_it_
        "10-reference-hero.svg": hero_reference, "11-which-command-hero.svg": hero_which_command, "12-glossary-hero.svg": hero_glossary, "map-of-commands.svg": map_of_commands,
        "guide-memory-hero.svg": hero_memory, "guide-memory-diagram.svg": diagram_memory, "guide-nhc-checks-hero.svg": hero_nhc, "guide-nhc-checks-diagram.svg": diagram_nhc,
        "guide-topology-hero.svg": hero_topology, "guide-topology-diagram.svg": diagram_topology,
-       "guide-qos-and-preemption-hero.svg": hero_qos, "guide-qos-and-preemption-diagram.svg": diagram_qos}
+       "guide-qos-and-preemption-hero.svg": hero_qos, "guide-qos-and-preemption-diagram.svg": diagram_qos,
+       "guide-power-and-reboot-hero.svg": hero_power, "guide-power-and-reboot-diagram.svg": diagram_power,
+       "guide-slurm-resilience-hero.svg": hero_slurm_resilience, "guide-slurm-resilience-diagram.svg": diagram_slurm_resilience,
+       "guide-choose-workbench-hero.svg": hero_choose, "guide-choose-workbench-diagram.svg": diagram_choose}
 
 
 def outputs() -> dict[Path, str]:

@@ -1,4 +1,15 @@
+<p align="center"><img src="../assets/art/guide-choose-workbench-hero.svg" alt="Three steps in a row: plan, fits, build" width="720"></p>
+
 # Choose the workbench to build
+
+**In 30 seconds:** say what you want (nodes and parts), see what it costs with `plan`, and build it with `up` only if the machine has room.
+
+## Do it
+
+```bash
+./scripts/benchctl plan --cpu-nodes 2 --gpu-nodes 4 --with jira
+./scripts/benchctl up   --cpu-nodes 2 --gpu-nodes 4 --with jira
+```
 
 You do not have to edit `sim.yaml`. Say what you want, see what it costs, and build it only if the machine has room.
 Example: 2 CPU nodes, 4 GPU nodes with Jira.
@@ -132,3 +143,32 @@ not up); `up` alone only builds the cluster and never starts the page:
 
 Or open **▦ Cluster architecture** on the page, switch *Accounting* on and press Apply twice. Running jobs on the controller are lost
 when it restarts. The node counts stay as they are because a selection takes them from `sim.yaml` unless you pass flags.
+
+## Under the hood
+
+<p align="center"><img src="../assets/art/guide-choose-workbench-diagram.svg" alt="A selection becomes an effective sim, then a plan, then governor admission, then a start" width="720"></p>
+
+> [!HOOD]
+> A selection (flags or a workbench file) becomes an effective `sim` and a profile (`benchctl/workbench.py`); the estimate is the sum of the generated container limits plus the always-on observability stack, which is the figure the governor admits against. `compose.write` writes the effective `sim` to `compose/generated/sim.yaml`, and `slurm.conf`, the BMC farm, the BCM mock and the GPU exporter all come from that one copy, so they cannot disagree.
+> `plan` changes nothing and exits 1 when the estimate does not fit. From the page, **Apply** asks the governor to rebuild to the plan through `apply-plan`, only at L0 and L1 (ADR 0017).
+
+Source: `benchctl/workbench.py` (`effective`, `estimate`, `verdict`), [ADR 0016](../adr/0016-workbench-selection-and-effective-sim.md), [ADR 0017](../adr/0017-apply-a-plan-through-the-governor.md), [ADR 0021](../adr/0021-parts-by-category.md), SPEC W-13 and W-15
+
+## Tips
+
+> [!TIP]
+> Put your choice in a `bench.yaml` and use `plan -f` then `apply -f`: it is the same every time, and a typo is an error, not a surprise.
+
+## If it goes wrong
+
+| Symptom | Try |
+|---|---|
+| `REFUSED ... does not fit` | follow the `Try:` hint, or close browsers and the IDE and plan again |
+| `invalid: ...` | every flag problem is listed at once; fix them all |
+| `unknown field(s) in the workbench file` | check the spelling against the example |
+
+## Learn more
+
+- [How much memory it uses](memory.md)
+- [The web page](../manual/05-web-page.md)
+- [Configuration](../manual/08-configuration.md)
