@@ -30,7 +30,7 @@ Two panels open on top of the page from the top strip or its **☰ Menu** and cl
 On a phone, and under 1100 px, the Infrastructure architecture, the list and the Connections area stack in one column and the diagram keeps its natural shape. The page has a skip link and
 landmarks, and honours reduced motion.
 
-![The dashboard on a phone, panels stacked (older layout; today the Infrastructure architecture and the list stack in one column)](img/web-phone.png)
+![The dashboard on a phone, panels stacked (the Infrastructure architecture, the list and the Connections area stack in one column)](img/web-phone-light.png)
 
 ## The entity list
 
@@ -150,6 +150,10 @@ Communication page of the cluster you are in, with a **Back to the cluster** but
 the same pages. Other ways to move: **Ctrl + scroll** (or a pinch on a trackpad) zooms in on the card or rack under the pointer and out from anywhere, **+** and
 **-** step a level, **Escape** steps out of a pool or Traffic. Each move takes about 0.7 s (none under reduced motion) and the old level is gone afterwards.
 
+![Animation: zoom out to the Fleet, in to the Cluster, the Access, Management and Monitoring layers one at a time, in to a Pool and back out](img/circuit-zoom-light.gif)
+
+*The zoom and the layers in turn (sample data).*
+
 ![The Pool level: side panel with KPIs, a state bar and filters, and a grid of node tiles](img/web-pool-light.png)
 
 - **Pool**: click a rack's **N nodes ›** button. The side panel says what feeds the pool, how many nodes are in service, the average GPU use and a bar of node
@@ -214,11 +218,11 @@ live state.
   because this page has no Docker access. The container IP needs Docker, so run `./scripts/benchctl describe node cn001`
   (it prints an `IP:` line).
 
-![The fault actions as they looked on a node card: Power off, Power on, Overheat, Fan failure, Clear faults (older layout; they are now in the node panel's Actions card)](img/web-fault-actions.png)
+![The node panel's Actions card: Power off, then under Recover, Clear faults (the buttons shown depend on the node's state)](img/web-fault-actions-light.png)
 
-*The same actions, from before the node panel.*
+*The Actions card of a powered-off node.*
 
-![cn002 shown as Powered off with BCM DOWN (older layout)](img/web-node-powered-off.png)
+![cn002 open in the node panel: Powered off, 18 °C, with its address and the command to reach it](img/web-node-powered-off-light.png)
 
 *After Power off on cn002: the node is marked "Powered off" in words as well as colour, BCM shows DOWN, and the strip counts
 5 of 6 nodes healthy. Press Clear faults to undo.*
@@ -251,7 +255,7 @@ while an older one kept running). Restart it and reload:
 
 While one runs, the top strip also shows it, and pressing that chip opens Test run. A run started from the CLI or another tab is shown too.
 
-![Run panel showing node-down, step 2 of 6, with each step marked ok or pending and a Stop button (older layout)](img/web-scenario-running.png)
+![Run panel showing node-down, step 2 of 6, with each step marked ok or pending and a Stop button](img/web-scenario-running-light.png)
 
 *A scenario playing (node-down, step 2 of 6). Stop aborts.*
 
@@ -294,7 +298,7 @@ The page and its files are served with a strict Content-Security-Policy: scripts
 If the cluster is down the page shows one notice and one *Needs attention* entry, hides data that cannot exist (the entity
 list) and names the recovery command, which never needs `sudo`. If the governor is down it says so the same way.
 
-![The dashboard with the stack stopped (older layout)](img/web-stack-down.png)
+![The dashboard with the stack stopped: one notice, one Needs attention entry, no node data](img/web-stack-down-light.png)
 
 *The cluster is stopped: one notice with the command to start it, services shown offline with dashed outlines, and no node
 list. The memory figures are the host's, taken at the time of the screenshot.*
@@ -305,7 +309,7 @@ list. The memory figures are the host's, taken at the time of the screenshot.*
 `/help/`: a sidebar to jump between pages, a search box, and **← Dashboard** to go back. It needs the same login as the
 page. Start with [Which command do I use?](11-which-command.md) when the commands are new.
 
-![The help pages: the manual's sidebar on the left and the "Which command do I use?" table on the right](img/web-help.png)
+![The help pages: the manual's sidebar on the left and the "Which command do I use?" table on the right](img/web-help-light.png)
 
 ## Limits
 

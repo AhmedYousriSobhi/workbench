@@ -149,6 +149,60 @@ try:
         pg.evaluate("setLevel('full', false)")
         w = 820; frames = [f.resize((w, round(f.height * w / f.width)), Image.LANCZOS).quantize(64) for f in frames]
         frames[0].save(OUT / f"architecture-demo-{SCHEME}.gif", save_all=True, append_images=frames[1:], duration=150, loop=0, optimize=True)
+        # the rest of the manual's web screenshots: the phone layout, the node panel, a running scenario, the stopped stack and the help
+        from benchctl import scenario as scn
+        def sample_page(width, height, cl=None, flow=True):
+            q = b.new_page(viewport={"width": width, "height": height}, color_scheme=SCHEME)
+            q.add_init_script("window.__WB_TEST = true; try { localStorage.setItem('workbench-theme', '" + SCHEMES[SCHEME] + "'); sessionStorage.setItem('workbench-tab', 'nodes'); } catch (e) {}")
+            q.route("**/api/cluster", lambda r: r.fulfill(json=cl or cluster)); q.route("**/api/flow*", lambda r: r.abort())
+            q.route("**/api/connections", lambda r: r.fulfill(json={"entities": connections.entities(SIM)})); q.route("**/api/settings", settings)
+            q.route("**/api/nodes/*", lambda r: r.fulfill(json={"ip": "10.141.0.2", "bmc_ip": "10.148.0.2", "text": "cn002: powered off, BMC reports DOWN"}) if r.request.method == "GET" else r.abort())
+            q.goto(login_url(base_url, ui_token)); q.wait_for_selector("#flow[data-cv] .cv-box"); q.wait_for_timeout(1500)  # the circuit is the page's default layout
+            if flow: q.evaluate(FLOW)
+            q.wait_for_timeout(400)
+            return q
+        def save(path):  # a long phone page is a flat-colour image: keep the file small (budget 300 KB, tests/test_docs.py)
+            im = Image.open(path).convert("RGB")
+            if path.stat().st_size > 250 * 1024:
+                im.quantize(colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).save(path, optimize=True)
+        phone = sample_page(390, 800); phone.screenshot(path=str(OUT / f"web-phone-{SCHEME}.png"), full_page=True); save(OUT / f"web-phone-{SCHEME}.png"); phone.close()
+        off = {**cluster, "nodes": [{**n, "state": "down", "label": "Powered off", "power": "Off", "temp": 18, "bcm": "DOWN"} if n["name"] == "cn002" else n for n in cluster["nodes"]]}
+        pg2 = sample_page(1280, 900, off); pg2.evaluate("showNode('cn002')"); pg2.wait_for_selector("#nodepane:not([hidden])"); pg2.wait_for_timeout(600)
+        pg2.screenshot(path=str(OUT / f"web-node-powered-off-{SCHEME}.png"))
+        pg2.locator("#nodeacts-fault").locator("xpath=ancestor::div[contains(@class,'np-card')]").screenshot(path=str(OUT / f"web-fault-actions-{SCHEME}.png")); pg2.close()
+        pv = scn.preview(scn.load("node-down", ROOT / "scenarios"))
+        state = {"running": True, "name": "node-down", "speed": 1.0, "stopped": False, "ok": None, "trace": None, "expects": [],
+                 "steps": [{"at": x["at"], "target": x["target"], "do": x["do"], "status": "ok" if i < 2 else "pending", "detail": ""} for i, x in enumerate(pv["steps"])]}
+        pg3 = sample_page(1280, 900); pg3.route("**/api/scenarios/run", lambda r: r.fulfill(json=state)); pg3.click("#tb-run"); pg3.evaluate("poll()"); pg3.wait_for_selector("#timeline li"); pg3.wait_for_timeout(1500)
+        pg3.screenshot(path=str(OUT / f"web-scenario-running-{SCHEME}.png")); pg3.close()
+        down = {**cluster, "nodes": [], "services": {k: False for k in cluster["services"]}}
+        pg4 = sample_page(1280, 700, down, flow=False); pg4.wait_for_timeout(800); pg4.screenshot(path=str(OUT / f"web-stack-down-{SCHEME}.png")); pg4.close()
+        pg5 = b.new_page(viewport={"width": 1180, "height": 760}, color_scheme=SCHEME); pg5.goto(login_url(base_url, ui_token)); pg5.goto(base_url + "/help/manual/11-which-command"); pg5.wait_for_timeout(500)
+        pg5.screenshot(path=str(OUT / f"web-help-{SCHEME}.png")); pg5.close()
+        # the circuit's zoom and layers, as an animation for the README: Fleet, then in to the Cluster, one layer at a time, then a Pool
+        zp = sample_page(1280, 900); zp.evaluate("zoomTo('fleet')"); zp.wait_for_timeout(900)
+        zp.evaluate("document.querySelector('header.top').style.setProperty('position', 'static', 'important')")
+        zp.evaluate("zoomTo('cluster')"); zp.wait_for_timeout(900)
+        zb = zp.locator("#trafficpanel").bounding_box(); zclip = {**zb, "height": zb["height"] + 46}; zframes = []
+        zp.evaluate("""([top, left, w, light]) => { const [bg, fg, bd] = light ? ['#f4f7ff', '#14213d', '#2f55d4'] : ['#0b1020', '#e8eefc', '#5b7cff']; const c = document.createElement('div'); c.id = 'zoomcap'; c.setAttribute('aria-hidden', 'true');
+            c.style.cssText = `position:absolute;left:${left}px;top:${top}px;width:${w}px;box-sizing:border-box;padding:8px 14px;border-radius:8px;font:600 18px system-ui,sans-serif;background:${bg};color:${fg};border:1px solid ${bd};pointer-events:none;z-index:99`;
+            document.body.appendChild(c); }""", [zb["y"] + zb["height"] + 6, zb["x"], zb["width"], SCHEME == "light"])
+        def zscene(caption, count, act=None, settle=0):
+            zp.evaluate("t => { document.getElementById('zoomcap').textContent = t }", caption)
+            if act: act()
+            zp.wait_for_timeout(settle)  # a scene that should show the arrival, not the move
+            for _ in range(count):
+                zframes.append(Image.open(io.BytesIO(zp.screenshot(clip=zclip, full_page=True))).convert("RGB")); zp.wait_for_timeout(80)
+        zscene("Zoom out: the Fleet, one card per cluster", 9, lambda: zp.evaluate("zoomTo('fleet')"), settle=1000)
+        zscene("Zoom in: the Cluster, every part and wire", 10, lambda: zp.evaluate("zoomTo('cluster')"))
+        for layer, word in (("access", "Access"), ("management", "Management"), ("monitoring", "Monitoring")):
+            zscene(f"Layers: only {word} stays lit, the rest fades", 7, lambda layer=layer: zp.click(f"#cvstack button[data-layer={layer}]"))
+        zscene("Layers: back to all of them", 5, lambda: zp.click("#cvstack button[data-layer=all]"))
+        zscene("Zoom in again: a Pool, one card per node", 11, lambda: zp.evaluate("zoomTo('pool', {pool: 'sg'})"))
+        zscene("Zoom back out to the Cluster", 9, lambda: zp.evaluate("zoomTo('cluster')"))
+        zw = 820; zframes = [f.resize((zw, round(f.height * zw / f.width)), Image.LANCZOS).quantize(64) for f in zframes]
+        zframes[0].save(OUT / f"circuit-zoom-{SCHEME}.gif", save_all=True, append_images=zframes[1:], duration=150, loop=0, optimize=True)
+        zp.close()
         b.close()
 finally:
     proc.terminate()

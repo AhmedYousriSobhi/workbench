@@ -138,7 +138,7 @@ def test_screenshots_come_in_light_and_dark_pairs_within_budget():
         light = {p.name[: -len(f"-light.{ext}")] for p in img.glob(f"*-light.{ext}")}
         dark = {p.name[: -len(f"-dark.{ext}")] for p in img.glob(f"*-dark.{ext}")}
         assert light == dark, f"{ext}: no twin for {sorted(light ^ dark)}"
-    assert any(img.glob("architecture-demo-light.gif"))
+    assert any(img.glob("architecture-demo-light.gif")) and any(img.glob("circuit-zoom-light.gif"))
     for p in list(MANUAL.glob("img/*.png")) + list((ROOT / "docs/guides/img").glob("*.png")):
         assert p.stat().st_size <= 300 * 1024, f"{p.name} is over 300 KB"
     for p in img.glob("*.gif"):
