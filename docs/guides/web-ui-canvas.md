@@ -1,4 +1,14 @@
+<p align="center"><img src="../assets/art/guide-web-ui-canvas-hero.svg" alt="Tokens, a wire and a zoom level" width="720"></p>
+
 # Web UI: drawing on a canvas (tokens and wires)
+
+**In 30 seconds:** for contributors: draw page diagrams with the `--cv-*` and `--plane-*` CSS variables, never hex values, and add a wire with the one recipe in `wire.js`.
+
+## Do it
+
+```bash
+node --test "webui/tests/js/*.test.mjs"      # the page's logic tests
+```
 
 For contributors working on the page's diagrams. The visual language comes from the redesign
 ([brief](../design/ui-redesign/DESIGN_HANDOFF.md)); the decisions are in [ADR 0038](../adr/0038-redesign-canvas-tokens-and-wire.md).
@@ -68,3 +78,29 @@ polls only while the Traffic tab is visible. To add a reading: add the pure func
 as "not measured", never 0. Periods are found per stream. `ui_shots.py` feeds the screen synthetic `/api/traffic` data and checks the river, the findings, the hash
 round trip and that nothing polls while another tab is open.
 
+## Under the hood
+
+<p align="center"><img src="../assets/art/guide-web-ui-canvas-diagram.svg" alt="Colour tokens, a wire drawn as halo, core and pulse, and the three zoom levels Fleet, Cluster and Pool" width="720"></p>
+
+> [!HOOD]
+> Colours come from `webui/static/canvas.css` tokens, pinned by `webui/tests/js/tokens.test.mjs`. A wire is a halo, a core and a moving pulse, one colour per plane (`wire.js`). The page's zoom has three levels, Fleet, Cluster and Pool.
+> The Focused wire capture runs only through the governor (`capture-start`, `capture-read`, `capture-stop`): off by default, one wire at a time, at L0 and L1, class P5, ended after 5 minutes or when the panel closes. It never stores a body and never touches Docker from the page (SPEC W-3, ADR 0042).
+
+Source: `webui/static/canvas.css`, `webui/static/js/wire.js`, [ADR 0038](../adr/0038-redesign-canvas-tokens-and-wire.md), [ADR 0041](../adr/0041-per-request-traffic-record.md), [ADR 0042](../adr/0042-on-demand-wire-capture.md)
+
+## Tips
+
+> [!TIP]
+> A reading the record cannot give is drawn as "not measured", never as 0.
+
+## If it goes wrong
+
+| Symptom | Try |
+|---|---|
+| A token test fails | a hex value or a token changed; use the variable, or update the pinned value on purpose |
+| The page polls while hidden | live feeds run only while the page is visible (SPEC W-11) |
+
+## Learn more
+
+- [The web page](../manual/05-web-page.md)
+- [Client testing](client-testing.md)

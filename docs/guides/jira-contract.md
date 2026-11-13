@@ -1,4 +1,14 @@
+<p align="center"><img src="../assets/art/guide-jira-contract-hero.svg" alt="A recorded shape compared with the mock" width="720"></p>
+
 # Jira contract: compare jira-mock with real Jira Cloud
+
+**In 30 seconds:** record the shape of real Jira Cloud answers once (keys and value types, never values), and a test fails when the Jira mock drifts from them.
+
+## Do it
+
+```bash
+python -m pytest -q tests/test_jira_contract.py
+```
 
 jira-mock must answer the way real Jira does for the calls the client makes (SPEC NF-2). This records the **shape** of real Jira Cloud
 responses once (keys and value types, never values) and a test fails when the mock drifts from them. Issue 229.
@@ -42,3 +52,28 @@ Covered: `serverInfo`, `myself`, `field`, `project/search`, `search/jql` (and a 
 missing one, transitions, comments, editmeta, watchers, worklog; status codes included.
 Not covered: writes (create, transition with a refused required field, comment), because they change your site; Data Center
 (only Cloud is recorded; the `dc` mode is unchecked); behaviour (ordering, JQL semantics), only shapes.
+
+## Under the hood
+
+<p align="center"><img src="../assets/art/guide-jira-contract-diagram.svg" alt="Shapes recorded from real Jira Cloud are compared with the mock's answers by a test" width="720"></p>
+
+> [!HOOD]
+> `scripts/record_jira_shapes.py` stores only keys and value types from your own Jira Cloud site; `tests/test_jira_contract.py` compares the mock's answers with those shapes. A key the real response has and the mock lacks, or a different type, fails with its path. Accepted differences go in `tests/fixtures/jira/known-gaps.yaml` with a reason.
+
+Source: `scripts/record_jira_shapes.py`, `tests/test_jira_contract.py`, SPEC NF-2, [ADR 0005](../adr/0005-bcm-and-jira-mock-surface.md)
+
+## Tips
+
+> [!TIP]
+> Without recorded fixtures the contract tests skip and say how to record; the comparison itself is always tested.
+
+## If it goes wrong
+
+| Symptom | Try |
+|---|---|
+| The test fails with a path | the mock lacks that key or has another type; fix the mock, or list a known gap with a reason |
+
+## Learn more
+
+- [Jira tickets](jira-tickets.md)
+- [Real Jira](jira-real.md)

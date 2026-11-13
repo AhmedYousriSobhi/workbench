@@ -1,4 +1,15 @@
+<p align="center"><img src="../assets/art/guide-jira-real-hero.svg" alt="Two Jira chips: the mock on port 8080 and the real one on port 8083" width="720"></p>
+
 # Real Jira (optional)
+
+**In 30 seconds:** the Jira mock is the default. When you need Atlassian's own code, start the real Jira Data Center next to it: about 2.4 GB, and a test licence that lasts 3 hours per start.
+
+## Do it
+
+```bash
+./scripts/benchctl start --with jira-real
+./scripts/benchctl setup jira-real
+```
 
 `jira-mock` is the default and answers on `http://127.0.0.1:8080`. When you need Atlassian's own code (to see how a
 client behaves against real validation, JQL and workflows), start the **real Jira Data Center** next to it. It is a
@@ -157,3 +168,32 @@ The same automation runs on the mock and on this Jira, from the host (the real J
 ```
 
 Details and the differences between the two workflows: [ticket driver](jira-tickets.md#both-jiras-one-script-issue-284).
+
+## Under the hood
+
+<p align="center"><img src="../assets/art/guide-jira-real-diagram.svg" alt="The mock answers on 8080; the real Jira Data Center and its Postgres answer on 8083" width="720"></p>
+
+> [!HOOD]
+> `jira-real` is an optional part, off by default: the official `atlassian/jira-software` image (pinned) with `postgres:15` on collation C, on 127.0.0.1:8083. `--addons` and `all` do not turn it on; only its name does.
+> Jira gets 2176 MB (a trimmed JVM) and Postgres 256 MB, both class P6, the smallest limits that passed setup and a ticket run twice. The mock keeps 127.0.0.1:8080.
+
+Source: `benchctl/jira_real.py`, [ADR 0026](../adr/0026-real-jira-data-center-as-an-optional-part.md), SPEC C-19
+
+## Tips
+
+> [!WARNING]
+> The test licence is a gitignored file. Never commit it.
+
+## If it goes wrong
+
+| Symptom | Try |
+|---|---|
+| Jira turns read-only | the 3 hours are up: `benchctl refresh jira-real-licence` |
+| `up` is refused | the real Jira needs about 2.4 GB; free memory or leave it off |
+| Start over | `benchctl remove jira-real-state` |
+
+## Learn more
+
+- [Jira tickets](jira-tickets.md)
+- [Jira contract](jira-contract.md)
+- [How much memory it uses](memory.md)

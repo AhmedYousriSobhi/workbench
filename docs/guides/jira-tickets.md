@@ -1,4 +1,15 @@
+<p align="center"><img src="../assets/art/guide-jira-tickets-hero.svg" alt="A fault opening a ticket in the mock" width="720"></p>
+
 # Tickets: create, note, edit, change status, and scenarios for them
+
+**In 30 seconds:** the Jira mock behaves like a small Jira: a client can search, open, comment, edit and move tickets, and a scenario can file and move tickets next to a real fault.
+
+## Do it
+
+```bash
+./scripts/benchctl scenario list
+./scripts/benchctl set jira-activity on --every 10 --seed 4     # a team moving tickets, repeatable
+```
 
 The Jira mock behaves like a small Jira, so a monitoring client can do everything it does with tickets, and a scenario can
 file and move tickets next to a real fault (a drained node, a GPU error). Everything is at `http://127.0.0.1:8080`;
@@ -176,3 +187,30 @@ Supported CQL: `type`, `label`, `title`, `text`, `space`, `lastmodified`, `AND O
 Paging is `limit` and `start`; the answer has `_links.base` and, when there is more, `_links.next`. The failure modes of the Jira mock
 (401, 429, 503, slow) apply to it. The real Jira part has no Confluence: it is a separate product (about 2+ GB more) and the client
 only searches pages.
+
+## Under the hood
+
+<p align="center"><img src="../assets/art/guide-jira-tickets-diagram.svg" alt="A scenario fault drains a node, the ticket bot files a ticket in the mock, and the client searches for it" width="720"></p>
+
+> [!HOOD]
+> The mock implements REST v2 with a v3 path alias, transitions with required-field validation, and JQL. Its private `/sim/tickets` and `/sim/activity` serve the simulator's own ticket traffic; `benchctl/jira_driver.py` does the same through calls any Jira accepts (`search/jql`, issue, comment, transitions, assignee), so the behaviour can later run against Jira Cloud.
+
+Source: `benchctl/jira_driver.py`, `benchctl/ticketbot.py`, [ADR 0005](../adr/0005-bcm-and-jira-mock-surface.md)
+
+## Tips
+
+> [!TIP]
+> The shipped scenarios label every ticket with the cluster name `workbench` and the node. Name your client's cluster `workbench`, or change the label in your own scenario.
+
+## If it goes wrong
+
+| Symptom | Try |
+|---|---|
+| No tickets appear | check `GET /sim/activity` and that the scenario has a ticket step |
+| Too many background changes | `benchctl set jira-activity off` |
+
+## Learn more
+
+- [Client setup, section 5](client-setup-by-component.md)
+- [Real Jira](jira-real.md)
+- [Scenarios](../manual/06-scenarios.md)

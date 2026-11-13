@@ -501,6 +501,101 @@ def diagram_choose() -> str:
     return svg(720, 176, "How a workbench selection is built", "A selection becomes an effective sim, then a plan, then governor admission, then a start.", "".join(b))
 
 
+def _flow(title: str, alt: str, desc: str, steps: tuple[str, ...], notes: tuple[str, ...], plane: str = "access") -> str:
+    """A row of rounded steps joined by wires, with note lines below (guides, issue 609)."""
+    n = len(steps)
+    w = int((672 - (n - 1) * 36) / n)
+    b = [label(24, 34, title, "tx", "h b")]
+    for i, t in enumerate(steps):
+        x = 24 + i * (w + 36)
+        b.append(bubble(x, 62, w, t, True))
+        if i < n - 1:
+            b.append(wire(f"M{x + w} 77H{x + w + 36}", plane, False))
+    for j, t in enumerate(notes):
+        b.append(label(24, 128 + j * 22, t, "tm", "s"))
+    return svg(720, 150 + 22 * len(notes), alt, desc, "".join(b))
+
+
+def _guide_hero(title: str, name: str, desc: str, chips: tuple[str, ...], line: str, plane: str = "access") -> str:
+    b = []
+    x = 40
+    for i, c in enumerate(chips):
+        w = 20 + 8 * len(c)
+        b.append(bubble(x, 62, w, c, True))
+        if i < len(chips) - 1:
+            b.append(wire(f"M{x + w} 77H{x + w + 30}", plane, False))
+        x += w + 30
+    return _hero(title, name, desc, "".join(b) + label(40, 126, line, "tm", "s"), False)
+
+
+def hero_jira_real() -> str:
+    return _guide_hero("Real Jira", "Guide: real Jira", "Two Jira chips: the mock on 8080 and the real one on 8083.", ("mock :8080", "real :8083"), "the real Jira is optional: 2.4 GB, 3 hours per start")
+
+
+def diagram_jira_real() -> str:
+    return _flow("Mock by default, real on request", "Jira mock and real Jira side by side", "The mock answers on 8080; the real Jira Data Center and its Postgres answer on 8083.",
+                 ("jira-mock :8080", "Jira DC :8083", "Postgres"), ("--with jira-real starts the last two; neither is in --addons", "the 3 hour test licence counts from each Jira start"))
+
+
+def hero_jira_contract() -> str:
+    return _guide_hero("Jira contract", "Guide: Jira contract", "A recorded shape compared with the mock.", ("real shapes", "test", "jira-mock"), "keys and types only, never values")
+
+
+def diagram_jira_contract() -> str:
+    return _flow("A test fails when the mock drifts", "Recording real Jira shapes and testing the mock against them", "Shapes recorded from real Jira Cloud are compared with the mock's answers by a test.",
+                 ("Jira Cloud", "recorded shapes", "mock answers"), ("scripts/record_jira_shapes.py records keys and types once", "tests/test_jira_contract.py compares them on every run"), "monitoring")
+
+
+def hero_jira_tickets() -> str:
+    return _guide_hero("Jira tickets", "Guide: tickets", "A fault opening a ticket in the mock.", ("fault", "ticket", "client"), "scenarios file and move tickets next to real faults")
+
+
+def diagram_jira_tickets() -> str:
+    return _flow("A fault becomes a ticket", "How a node fault becomes a Jira ticket", "A scenario fault drains a node, the ticket bot files a ticket in the mock, and the client searches for it.",
+                 ("node drained", "ticket filed", "client search"), ("recovery resolves the ticket; a team moves others along about every 45 s", "the driver can use the standard REST API instead of /sim/tickets"), "management")
+
+
+def hero_client_setup() -> str:
+    return _guide_hero("Client setup", "Guide: client setup by component", "Components in a row: SSH, Slurm, Grafana, Jira, BMC.", ("SSH", "Slurm", "Grafana", "Jira", "BMC"), "one component at a time, each with what you should see")
+
+
+def diagram_client_setup() -> str:
+    b = [label(24, 34, "Where each part is", "tx", "h b")]
+    rows = (("SSH and Slurm", "10.141.255.254:22"), ("Grafana", "10.141.255.21:3000"), ("Jira", "127.0.0.1:8080"), ("BMC", "10.148.0.N:443"), ("BCM", "cmsh over SSH"))
+    for i, (a, c) in enumerate(rows):
+        y = 56 + i * 40
+        b.append(bubble(24, y, 180, a, False) + wire(f"M204 {y + 15}H260", "access", False) + bubble(260, y, 230, c, True))
+    b.append(label(520, 80, "fallback: 127.0.0.1", "tm", "s") + label(520, 100, "with the published ports", "tm", "s"))
+    return svg(720, 270, "Client endpoints", "Each component with its address: SSH and Slurm, Grafana, Jira, BMC and BCM.", "".join(b))
+
+
+def hero_client_testing() -> str:
+    return _guide_hero("Testing a client", "Guide: testing a monitoring client", "A loop: up, point, break, watch, down.", ("up", "point", "break", "watch", "down"), "the checklist for a fresh session")
+
+
+def diagram_client_testing() -> str:
+    return _flow("The loop", "The client testing loop", "Bring the cluster up, point the client at it, run a scenario, watch what the client shows, then stop.",
+                 ("up", "point client", "scenario", "watch", "down"), ("a REFUSED start is the governor protecting the host, not a defect", "never fit workbench to one client; make the service behave like the real one"), "monitoring")
+
+
+def hero_ssh_testing() -> str:
+    return _guide_hero("SSH testing", "Guide: SSH connection testing", "A client, the login node and a compute node.", ("client", "login", "cn001"), "break one thing at a time and see what the client says")
+
+
+def diagram_ssh_testing() -> str:
+    return _flow("One way in, one thing broken at a time", "The SSH path and what can be broken", "A client reaches the login node, then a compute node; keys, host key and session limits can each be broken alone.",
+                 ("client", "login node", "compute node"), ("break: key refused, host key changed, session limit", "undo each one before the next"), "access")
+
+
+def hero_canvas() -> str:
+    return _guide_hero("Web UI canvas", "Guide: web UI canvas", "Tokens, a wire and a zoom level.", ("tokens", "wire", "zoom"), "for contributors drawing on the page", "monitoring")
+
+
+def diagram_canvas() -> str:
+    return _flow("What a diagram is made of", "Parts of the page's canvas", "Colour tokens, a wire drawn as halo, core and pulse, and the three zoom levels Fleet, Cluster and Pool.",
+                 ("--cv tokens", "wire", "Fleet", "Cluster", "Pool"), ("a wire is a halo, a core and a moving pulse, one colour per plane", "the Focused wire capture runs only through the governor, at L0 and L1, one at a time, for at most 5 minutes"), "monitoring")
+
+
 ART = {"readme-hero.svg": readme_hero, "readme-how-it-works.svg": readme_how_it_works, "readme-memory.svg": readme_memory, "tour-hero.svg": tour_hero, **ICONS,
        "01-what-it-is-hero.svg": hero_what_it_is, "02-install-and-start-hero.svg": hero_install_and_start,
        "03-using-the-cluster-hero.svg": hero_using_the_cluster,
@@ -512,7 +607,14 @@ ART = {"readme-hero.svg": readme_hero, "readme-how-it-works.svg": readme_how_it_
        "guide-qos-and-preemption-hero.svg": hero_qos, "guide-qos-and-preemption-diagram.svg": diagram_qos,
        "guide-power-and-reboot-hero.svg": hero_power, "guide-power-and-reboot-diagram.svg": diagram_power,
        "guide-slurm-resilience-hero.svg": hero_slurm_resilience, "guide-slurm-resilience-diagram.svg": diagram_slurm_resilience,
-       "guide-choose-workbench-hero.svg": hero_choose, "guide-choose-workbench-diagram.svg": diagram_choose}
+       "guide-choose-workbench-hero.svg": hero_choose, "guide-choose-workbench-diagram.svg": diagram_choose,
+       "guide-jira-real-hero.svg": hero_jira_real, "guide-jira-real-diagram.svg": diagram_jira_real,
+       "guide-jira-contract-hero.svg": hero_jira_contract, "guide-jira-contract-diagram.svg": diagram_jira_contract,
+       "guide-jira-tickets-hero.svg": hero_jira_tickets, "guide-jira-tickets-diagram.svg": diagram_jira_tickets,
+       "guide-client-setup-by-component-hero.svg": hero_client_setup, "guide-client-setup-by-component-diagram.svg": diagram_client_setup,
+       "guide-client-testing-hero.svg": hero_client_testing, "guide-client-testing-diagram.svg": diagram_client_testing,
+       "guide-ssh-connection-testing-hero.svg": hero_ssh_testing, "guide-ssh-connection-testing-diagram.svg": diagram_ssh_testing,
+       "guide-web-ui-canvas-hero.svg": hero_canvas, "guide-web-ui-canvas-diagram.svg": diagram_canvas}
 
 
 def outputs() -> dict[Path, str]:
