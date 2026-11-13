@@ -11,6 +11,13 @@ Typed tools let an agent act without reading documentation, and its client shows
 - Tools (names stable): `workbench_describe`, `workbench_plan`, `workbench_up`, `workbench_down`, `scenario_list`, `scenario_run`, `scenario_status`, `fault_inject`, `fault_clear`, `traffic_get`, `capture_start`, `capture_read`, `capture_stop`, `alerts_get`, `wait` (and `report_export` once issue 614 lands). Each has a one or two sentence description and typed inputs. `AGENTS.md`, the recipes and the schemas are also MCP **resources**.
 - Each read tool returns the same data as its `--json` twin; a test compares them.
 
+## Addendum (2026-11-13, built in issue 627)
+Built on `mcp` 2.3.0 (`MCPServer`), pinned in the `[mcp]` extra. Every tool runs the matching `benchctl` command in a subprocess with `BENCHCTL_AGENT=1` (no code is duplicated, the governor path and the `--yes` rule apply by construction). Twelve tools: `workbench_describe`, `workbench_plan`, `workbench_up`, `workbench_down`, `scenario_list`, `scenario_run`, `faults_get`, `endpoints_get`, `fault_inject`, `traffic_get`, `alerts_get`, `wait`. Differences from the list above, because a tool needs a CLI verb behind it and these have none:
+- `scenario_status`, `fault_clear` and `capture_start|read|stop` are **not built**. `fault_inject` maps to `set node NODE off|on|down|drain|resume` (the verb that exists); there is no verb that clears every fault, and `get capture` streams NDJSON for a bounded time rather than start, read, stop.
+- `faults_get` and `endpoints_get` are added: the `get faults` and `get endpoints` contract outputs exist for them.
+- `workbench_down` and `fault_inject` carry the destructive annotation; read tools are read-only. `AGENTS.md`, `docs/agents/recipes/*` and `docs/agents/schemas/*` are resources (`workbench://agents`, `workbench://recipes/NAME`, `workbench://schemas/NAME`).
+- `tests/test_mcp_isolation.py` checks that the web page, the governor, plain `benchctl` startup and tab completion load neither `mcp` nor `pydantic`.
+
 ## Consequences
 - A new optional dependency and a new long-running process, only when someone starts it.
 - Decided: the SDK's pydantic dependency is accepted as the optional `[mcp]` extra. The MCP package is imported only inside `serve mcp`, so tab completion and ordinary CLI calls do not slow down. The import test covers three processes: the web page, the governor and plain `benchctl` startup.

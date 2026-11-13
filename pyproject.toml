@@ -7,6 +7,7 @@ dependencies = ["typer", "pyyaml", "starlette", "uvicorn"]
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "coverage", "jsonschema==4.26.0"]  # jsonschema: tests only (ADR 0062)
+mcp = ["mcp==2.3.0"]  # `benchctl serve mcp` only (ADR 0064): pulls in pydantic, never imported by the web page, the governor or plain benchctl
 browser = ["playwright", "pillow"]  # UI screenshots/checks: then `playwright install chromium`
 
 [project.scripts]

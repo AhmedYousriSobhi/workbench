@@ -26,6 +26,7 @@ REGISTRY: dict[str, tuple[str, str]] = {
     "WB-UNKNOWN-SCENARIO": ("No such scenario.", "benchctl get scenarios"),
     "WB-PART-NOT-RUNNING": ("A part this needs is not running (Prometheus, or the web page).", "benchctl start"),
     "WB-STACK-NOT-RUNNING": ("No container of the workbench is running.", "benchctl start"),
+    "WB-EXTRA-MISSING": ("An optional extra is not installed.", "pip install -e '.[mcp]'"),
     "WB-USAGE": ("The command line is wrong.", "benchctl VERB --help"),
     "WB-NEEDS-YES": ("A destructive command needs --yes in agent mode.", "repeat the command with --yes"),
     "WB-DOCTOR-CGROUP-V2": ("cgroup v2 is not the unified hierarchy.", "benchctl doctor"),
