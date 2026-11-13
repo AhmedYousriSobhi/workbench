@@ -45,6 +45,8 @@ Optional parts (Teleport, jump host, Kubernetes, real Jira): `benchctl get endpo
 | `benchctl export profile` | Write a profile file the monitoring client can import |
 <!-- END verbs -->
 
+MCP instead of the shell: `pip install -e '.[mcp]'`, then run `benchctl serve mcp` (stdio). Its tools run these same verbs; AGENTS.md, the recipes and the schemas are its resources.
+
 Add `--json` to any read verb. Scenarios: `benchctl scenario list`. Recipes (one goal each, exact commands): `docs/agents/recipes/`.
 
 ## Rules

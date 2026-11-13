@@ -24,6 +24,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 | `get nodes\|services\|profiles\|scenarios\|workbench [--json \| -o json\|name] [-l SEL] [--sort-by COL] [-w]` | list what exists, filter (`-l kind=gpu`), sort, redraw; `nodes` shows every node `sim.yaml` defines and its state (`absent` = not started) |
 | `get endpoints\|faults\|traffic [--json]` | where to connect and where each credential lives; what is wrong now (nodes, expired certificates or tokens, a Jira failure mode); who called which mock |
 | `describe workbench [--json]` / `get alerts` / `wait ready\|node-state\|alert\|scenario` | one-call overview for an agent; Prometheus alerts; block until something is true (exit 0 met, 1 timeout, 2 precondition) |
+| `serve mcp` | serve the verbs to an AI agent over MCP (stdio); needs `pip install -e '.[mcp]'` |
 | `BENCHCTL_AGENT=1 benchctl ...` | agent mode: one-line coded errors, `--yes` required for destructive verbs, logs in a file; see the verbs guide |
 | `describe node NAME [--json]` | everything known about one node: container, Slurm, jobs, GPUs busy/idle, BMC |
 | `ssh [USER@]NODE [-- CMD]` | `benchctl ssh cn001`: a root shell on the node (docker exec). `benchctl ssh alice@cn001`: a real SSH login as that simulated user, through the first login node that takes a key (not for a Teleport-only cluster: use `tsh`). A command after `--` runs instead of a shell |

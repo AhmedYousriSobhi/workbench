@@ -19,6 +19,7 @@ With `BENCHCTL_AGENT=1` an error is one line on stderr: `CODE: message | fix: CO
 | `WB-DOCTOR-TOOL-VAGRANT` | The vagrant tool is missing (some profiles only). | `benchctl doctor` |
 | `WB-DOCTOR-TOOL-VIRSH` | The virsh tool is missing (some profiles only). | `benchctl doctor` |
 | `WB-DOCTOR-TSH` | The local tsh is newer than the Teleport server. | `benchctl doctor` |
+| `WB-EXTRA-MISSING` | An optional extra is not installed. | `pip install -e '.[mcp]'` |
 | `WB-NEEDS-YES` | A destructive command needs --yes in agent mode. | `repeat the command with --yes` |
 | `WB-PART-NOT-RUNNING` | A part this needs is not running (Prometheus, or the web page). | `benchctl start` |
 | `WB-REFUSED-GOVERNOR` | The governor admits no new work at its current memory level. | `benchctl status` |

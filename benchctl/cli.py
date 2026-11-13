@@ -1124,6 +1124,21 @@ def logs(node: str = TARGET, follow: bool = typer.Option(False, "-f", "--follow"
                          f"{stack.PROJECT}-{node}-1"])
 
 
+serve_app = typer.Typer(cls=SuggestingGroup, help="Serve workbench to other programs")
+app.add_typer(serve_app, name="serve")
+
+
+@serve_app.command("mcp")
+def serve_mcp() -> None:
+    """Serve the workbench as typed MCP tools over stdio (optional extra: pip install -e '.[mcp]'). Each tool runs the same benchctl command, so the governor and `--yes` rules apply."""
+    try:
+        from . import mcp_server
+    except ImportError as e:
+        typer.echo(errors.render("WB-EXTRA-MISSING", "the MCP package is not installed"), err=True)
+        raise typer.Exit(1) from e
+    mcp_server.serve()
+
+
 describe_app = typer.Typer(cls=SuggestingGroup, help="Everything known about one thing")
 app.add_typer(describe_app, name="describe")
 
