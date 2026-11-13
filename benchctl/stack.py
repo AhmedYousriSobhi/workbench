@@ -3,6 +3,7 @@
 Docker is driven through `docker compose` against the generated file; every call goes through the
 injectable `runner` so the ordering logic is testable without Docker.
 """
+import hashlib
 import json
 import os
 import re
@@ -88,6 +89,69 @@ def build_targets(services: dict, names: list[str]) -> list[str]:
             seen.add(key)
             out.append(n)
     return out
+
+
+STAMPS = "build-stamps.json"  # next to the generated compose file (gitignored): {service: {"hash": ..., "image": ...}}
+FORCE_BUILD = "WORKBENCH_FORCE_BUILD"
+GPU_FARM = ("gpu-exporter-farm", "../../components/gpu-exporter-farm", "workbench/gpu-exporter-farm")  # lives in compose/observability.yml
+
+
+def context_hash(ctx: Path, base: str = "") -> str | None:
+    """sha256 over every file of a build context (paths and bytes), plus the hash of the image it builds FROM. None when the context is missing."""
+    if not ctx.is_dir():
+        return None
+    h = hashlib.sha256(base.encode())
+    for f in sorted(p for p in ctx.rglob("*") if p.is_file() and "__pycache__" not in p.parts):
+        h.update(f.relative_to(ctx).as_posix().encode())
+        h.update(f.read_bytes())
+    return h.hexdigest()
+
+
+def _stamps(path: Path) -> dict:
+    try:
+        d = json.loads((path.parent / STAMPS).read_text())
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_stamps(path: Path, stamps: dict) -> None:
+    try:
+        (path.parent / STAMPS).write_text(json.dumps(stamps, indent=1))
+    except OSError:
+        pass  # a missing stamp only means the next up builds again
+
+
+def image_hashes(names: list[str], services: dict, path: Path, base_name: str | None) -> dict[str, tuple[str | None, str | None]]:
+    """{service: (inputs hash, image tag)}. Images built FROM the node base also hash the base, so a base change rebuilds them."""
+    def ctx_of(n: str) -> Path | None:
+        if n == GPU_FARM[0]:
+            return path.parent / GPU_FARM[1]
+        b = (services.get(n) or {}).get("build")
+        return path.parent / b if b else None
+    base_ctx = ctx_of(base_name) if base_name else None
+    base_hash = (context_hash(base_ctx) or "") if base_ctx else ""
+    out = {}
+    for n in names:
+        ctx = ctx_of(n)
+        derived = bool(ctx and (ctx / "Dockerfile").is_file() and "FROM workbench/node-base" in (ctx / "Dockerfile").read_text()) and n != base_name
+        out[n] = (context_hash(ctx, base_hash if derived else "") if ctx else None, GPU_FARM[2] if n == GPU_FARM[0] else (services.get(n) or {}).get("image"))
+    return out
+
+
+def image_id(image: str, runner: "Runner") -> str:
+    """The image's id, or "" when there is none (or the daemon cannot be asked): a stamp is only valid for the exact image it was made from."""
+    r = runner(["docker", "image", "inspect", "--format", "{{.Id}}", image])
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def stale_images(hashes: dict, stamps: dict, runner: "Runner", force: bool) -> list[str]:
+    """Targets whose build inputs changed, that were never stamped, whose image is gone, or all of them when forced."""
+    def fresh(n: str) -> bool:
+        h, img = hashes[n]
+        st = stamps.get(n, {})
+        return bool(h and img and st.get("hash") == h and st.get("id") and image_id(img, runner) == st["id"])
+    return list(hashes) if force else [n for n in hashes if not fresh(n)]
 
 
 def governor_admits(need_mb: int, say: Callable[[str], None], ask=None) -> bool:
@@ -269,23 +333,44 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         stage({"stage": "Build images", "state": "running"})
     # slurmctld, slurmrestd and login build FROM node-base's tag, which only a node service rebuilds. Build it first,
     # or a changed base leaves the controller on the old image (the keys are mounted now, issue 465, but the entrypoint is in the base).
-    if first is not None:
+    # Build stamp (issue 576): an image whose build inputs hash matches the last good build, and that still exists, is not built again;
+    # a changed mock or entrypoint changes the hash, so issue 449's guarantee stays. WORKBENCH_FORCE_BUILD=1 builds everything.
+    wanted = ([first] if first is not None else []) + [t for t in build_targets(todo, names) if t != first] + [GPU_FARM[0]]  # gpu-exporter-farm is in compose/observability.yml, not in the generated services (#462): built like every other image
+    stamps, hashes = _stamps(path), image_hashes(wanted, data["services"], path, first)
+    stale = stale_images(hashes, stamps, runner, bool(os.environ.get(FORCE_BUILD)))
+    built_now: list[str] = []
+    t0 = time.monotonic()
+    # slurmctld, slurmrestd and login build FROM node-base's tag, which only a node service rebuilds. Build it first,
+    # or a changed base leaves the controller on the old image (the keys are mounted now, issue 465, but the entrypoint is in the base).
+    if first in stale:
         r = runner(dc("build", first, file=path))
         if r.returncode != 0:
             say(f"FAILED node base image: {r.stderr.strip()[-300:]}")
+            stamps.pop(first, None)
+            _save_stamps(path, stamps)
             return False
-    # gpu-exporter-farm lives in compose/observability.yml, not in the generated services, so build_targets never saw it and its image stayed
-    # as old as the first build (after #462 it crashed on a missing /sim.yaml); it is built here like every other image.
-    targets = [t for t in build_targets(todo, names) if t != first] + ["gpu-exporter-farm"]  # the node base was built above; build once (issue 449): the per-stage `up` calls below no longer build, and a changed mock is still picked up here
+        built_now.append(first)
+    targets = [t for t in stale if t != first]  # the node base was built above; build once (issue 449): the per-stage `up` calls below no longer build
     if targets:
         say(f"building images: {', '.join(targets)}")
-        t0 = time.monotonic()
         r = runner(dc("build", *targets, file=path))
         if r.returncode != 0:
             say(f"FAILED image build: {r.stderr.strip()[-300:]}")
+            for t in targets:
+                stamps.pop(t, None)
+            _save_stamps(path, stamps)
             return False
-        say(f"images built in {time.monotonic() - t0:.0f} s")
-    if first is not None or targets:
+        built_now += targets
+    for n in built_now:
+        iid = image_id(hashes[n][1], runner) if hashes[n][1] else ""
+        if hashes[n][0] and iid:
+            stamps[n] = {"hash": hashes[n][0], "image": hashes[n][1], "id": iid}
+        else:
+            stamps.pop(n, None)
+    if built_now:
+        _save_stamps(path, stamps)
+    say(f"images: {len(wanted) - len(built_now)} unchanged" + (f", built {', '.join(built_now)} in {time.monotonic() - t0:.0f} s" if built_now else ""))
+    if first is not None or wanted:
         stage({"stage": "Build images", "state": "done"})
     ips = addressing.plan(sim, prof.get("compute_nodes"))
     if "teleport" in todo:
