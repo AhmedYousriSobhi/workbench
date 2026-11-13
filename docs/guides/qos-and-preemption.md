@@ -1,4 +1,15 @@
+<p align="center"><img src="../assets/art/guide-qos-and-preemption-hero.svg" alt="An urgent job arrow pushing a scavenger job back to the queue" width="720"></p>
+
 # QOS, priority and preemption
+
+**In 30 seconds:** declare QOS levels in `sim.yaml`, and real Slurm shows the pending reasons and requeues of a production cluster. It needs job accounting.
+
+## Do it
+
+```bash
+./scripts/benchctl up --profile std      # std has accounting
+./scripts/benchctl scenario run preempt-burst
+```
 
 workbench can run real Slurm QOS objects, multifactor priority and QOS preemption (issue 544, ADR 0055), so a client sees the pending reasons and requeues of a production cluster.
 
@@ -43,3 +54,30 @@ Scenario `preempt-burst` (SC-37) does exactly this, then an `urgent` job for the
 ## Not exercised
 
 The monitoring client against these states; fairshare with several accounts; other preempt modes.
+
+## Under the hood
+
+<p align="center"><img src="../assets/art/guide-qos-and-preemption-diagram.svg" alt="A timeline: the scavenger job runs, an urgent job arrives, the scavenger job is requeued, then runs again" width="720"></p>
+
+> [!HOOD]
+> `benchctl/qos.py` validates `qos:` and `slurm.priority:` and writes both outputs: the `slurm.conf` lines (`PriorityType=priority/multifactor`, the weights, `PreemptType=preempt/qos` with `PreemptMode=REQUEUE` when any QOS lists `preempt`) and the `sacctmgr` commands that `accounting-init` runs in slurmdbd. `max_gpus_per_user` becomes `MaxTRESPerUser=gres/gpu=N`.
+> Found live: `AccountingStorageEnforce` defaults to none, so `limits,qos` is set; slurmdbd refuses a GPU limit until slurmctld has registered the TRES, so `accounting.sh` waits up to a minute.
+
+Source: `benchctl/qos.py`, [ADR 0055](../adr/0055-real-qos-priority-and-preemption-from-sim-yaml.md)
+
+## Tips
+
+> [!TIP]
+> `sacct -X -o JobID,QOS,State` shows PREEMPTED and REQUEUED after the burst.
+
+## If it goes wrong
+
+| Symptom | Try |
+|---|---|
+| `up` says `qos: and slurm.priority: need job accounting` | add the accounting part: `benchctl up --with accounting` |
+| A change is not live | run `benchctl up` again; the QOS are set by the `accounting-init` container |
+
+## Learn more
+
+- [Scenarios](../manual/06-scenarios.md)
+- [Slurm resilience](slurm-resilience.md)

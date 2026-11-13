@@ -383,12 +383,86 @@ def map_of_commands() -> str:
     return svg(720, 270, "Map of benchctl commands", "Three panels group the commands: start and stop, look, and poke and break.", "".join(b))
 
 
+# ---- guides (issue 605) ---------------------------------------------------------------------------------------------
+
+def hero_memory() -> str:
+    return _hero("How much memory", "Guide: how much memory the workbench uses",
+                 "A memory bar with a filled part for what is expected and a dashed cap beyond it.",
+                 '<rect class="p2" x="40" y="62" width="400" height="30" rx="8"/><rect class="ok" x="40" y="62" width="150" height="30" rx="8"/>'
+                 + '<rect class="warn" x="40" y="62" width="400" height="30" rx="8"/>' + label(40, 116, "expected use", "tx", "s b") + label(300, 116, "the cap", "tm", "s")
+                 + label(40, 138, "measured, plus 15 percent, never above the cap", "tm", "s"), False)
+
+
+def diagram_memory() -> str:
+    b = [label(24, 34, "How the plan counts one part", "tx", "h b"), '<rect class="p2" x="24" y="64" width="672" height="34" rx="8"/>',
+         '<rect class="ok" x="24" y="64" width="300" height="34" rx="8"/>', '<rect class="p2" x="324" y="64" width="90" height="34" rx="0" style="stroke:var(--teal)"/>',
+         '<rect class="warn" x="24" y="64" width="672" height="34" rx="8"/>',
+         label(24, 122, "measured (largest working set seen)", "tx", "s b"),
+         label(334, 122, "+ 15 percent", "tx", "s b"), label(600, 122, "cap", "tx", "s b", anchor=True),
+         label(24, 160, "expected = min(cap, measured x 1.15)", "tx", "mono s"),
+         label(24, 190, "The plan adds the 1 GB reserve for the app under test, then compares with free memory.", "tm", "s")]
+    return svg(720, 220, "How the plan counts memory", "A bar for one part: the measured use, 15 percent on top, and a dashed cap that the result never passes.", "".join(b))
+
+
+def hero_nhc() -> str:
+    return _hero("NHC checks", "Guide: NHC checks",
+                 "A row of check files, each with a tick, feeding a node that gets drained when one fails.",
+                 bubble(40, 58, 110, "gpu-xid", True) + bubble(40, 94, 110, "gpu-hot", True) + wire("M150 88H260", "monitoring")
+                 + node(260, 75, "ok") + node(300, 75, "held") + label(40, 140, "every 30 s, one line per problem, drain with NHC: reason", "tm", "s"), True)
+
+
+def diagram_nhc() -> str:
+    b = [label(24, 34, "Three ways in, one set of files", "tx", "h b")]
+    for i, t in enumerate(("benchctl add/set/remove check", "edit the files, then reload", "web page: Health checks")):
+        b.append(bubble(24, 56 + i * 44, 240, t, True))
+        b.append(wire(f"M264 {71 + i * 44}H340", "management", False))
+    b.append(panel(340, 52, 160, 130) + label(420, 80, "validate", "tx2", "b", anchor=True) + label(420, 102, "on a copy first", "tm2", "s", anchor=True)
+             + label(420, 130, "then write the", "tm2", "s", anchor=True) + label(420, 148, "nhc.d files", "tm2", "mono s", anchor=True))
+    b.append(wire("M500 117H560", "monitoring", False))
+    b.append(rack(560, 92, 3, ("ok", "ok", "held")) + label(612, 160, "nodes read within 30 s", "tm", "s", anchor=True))
+    return svg(720, 210, "How a health check change reaches the nodes", "Three ways of changing a check, through one validation step, to the node files read within 30 seconds.", "".join(b))
+
+
+def hero_topology() -> str:
+    return _hero("Topology", "Guide: Slurm topology and a switch going down",
+                 "A spine switch over two leaf switches, each holding a small rack of nodes.",
+                 bubble(220, 44, 90, "spine1", True) + wire("M265 74V84H130V96", "access", False) + wire("M265 74V84H400V96", "access", False)
+                 + rack(80, 96, 2) + rack(350, 96, 2, ("down", "down")) + label(80, 92, "leaf1", "tx", "s b mono", True) + label(440, 125, "leaf2 down", "tx", "s b mono", True), True)
+
+
+def diagram_topology() -> str:
+    b = [label(24, 34, "A leaf goes down: its nodes drain", "tx", "h b"), bubble(300, 50, 120, "spine1", True),
+         wire("M360 80V96H170V116", "access", False), wire("M360 80V96H550V116", "access", False)]
+    b.append(bubble(110, 116, 120, "leaf1", True) + rack(100, 160, 3) + label(170, 230, "cn001 cn003 gpu001", "tm", "mono s", anchor=True))
+    b.append(bubble(490, 116, 120, "leaf2 down", True) + rack(480, 160, 3, ("down", "down", "down")) + label(550, 230, "drain: switch leaf2 down", "tm", "mono s", anchor=True))
+    return svg(720, 250, "A leaf switch failing", "A spine over two leaves; the second leaf is down and its three nodes are drained with a reason.", "".join(b))
+
+
+def hero_qos() -> str:
+    return _hero("QOS and preemption", "Guide: QOS, priority and preemption",
+                 "An urgent job arrow pushing a scavenger job back to the queue.",
+                 bubble(40, 58, 110, "scavenger", True) + bubble(40, 94, 110, "urgent", True) + arrow(150, 109, 250, 88) + rack(260, 66, 2, ("held", "ok"))
+                 + label(40, 140, "the urgent job requeues the scavenger job", "tm", "s"), False)
+
+
+def diagram_qos() -> str:
+    steps = (("0s", "scavenger runs", "ok"), ("20s", "urgent arrives", "held"), ("50s", "scavenger requeued", "down"), ("after", "it runs again", "ok"))
+    b = [label(24, 34, "preempt-burst, step by step", "tx", "h b"), wire("M70 110H650", "management", False)]
+    for i, (t, name, st) in enumerate(steps):
+        x = 110 + i * 166
+        b.append(node(x - 13, 64, st) + label(x, 56, t, "tx", "s b mono", True, True) + bubble(x - 70, 136, 140, name, False))
+    return svg(720, 190, "Preemption in four steps", "A timeline: the scavenger job runs, an urgent job arrives, the scavenger job is requeued, then runs again.", "".join(b))
+
+
 ART = {"readme-hero.svg": readme_hero, "readme-how-it-works.svg": readme_how_it_works, "readme-memory.svg": readme_memory, "tour-hero.svg": tour_hero, **ICONS,
        "01-what-it-is-hero.svg": hero_what_it_is, "02-install-and-start-hero.svg": hero_install_and_start,
        "03-using-the-cluster-hero.svg": hero_using_the_cluster,
        "04-nodes-and-shells-hero.svg": hero_nodes_and_shells, "05-web-page-hero.svg": hero_web_page, "06-scenarios-hero.svg": hero_scenarios,
        "07-governor-hero.svg": hero_governor, "08-configuration-hero.svg": hero_configuration, "09-troubleshooting-hero.svg": hero_troubleshooting,
-       "10-reference-hero.svg": hero_reference, "11-which-command-hero.svg": hero_which_command, "12-glossary-hero.svg": hero_glossary, "map-of-commands.svg": map_of_commands}
+       "10-reference-hero.svg": hero_reference, "11-which-command-hero.svg": hero_which_command, "12-glossary-hero.svg": hero_glossary, "map-of-commands.svg": map_of_commands,
+       "guide-memory-hero.svg": hero_memory, "guide-memory-diagram.svg": diagram_memory, "guide-nhc-checks-hero.svg": hero_nhc, "guide-nhc-checks-diagram.svg": diagram_nhc,
+       "guide-topology-hero.svg": hero_topology, "guide-topology-diagram.svg": diagram_topology,
+       "guide-qos-and-preemption-hero.svg": hero_qos, "guide-qos-and-preemption-diagram.svg": diagram_qos}
 
 
 def outputs() -> dict[Path, str]:

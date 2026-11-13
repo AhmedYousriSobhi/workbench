@@ -1,4 +1,15 @@
+<p align="center"><img src="../assets/art/guide-nhc-checks-hero.svg" alt="A row of check files feeding a node that gets drained when a check fails" width="720"></p>
+
 # NHC checks: add, change and remove what the node health check looks at
+
+**In 30 seconds:** each node runs a health check every 30 s. You can add, change or remove the checks with one command, by editing files or from the web page. Every change is validated first, and nodes pick it up within 30 s.
+
+## Do it
+
+```bash
+./scripts/benchctl get checks            # the checks, in run order
+./scripts/benchctl validate checks       # check everything, change nothing
+```
 
 Every node runs a health check (`nhc`) every 30 s, before each job and after it. It drains the node with the reason
 `NHC: ...` when a check finds a problem ([client testing](client-testing.md#node-health-check-what-drains-a-node) lists the
@@ -70,3 +81,31 @@ from templates only; for a script of your own use the command line or a file. Ch
 
 The files are tracked: `git diff images/node-base/nhc.d` shows what changed and `git checkout images/node-base/nhc.d`
 followed by `./scripts/benchctl reload checks` restores the shipped checks.
+
+## Under the hood
+
+<p align="center"><img src="../assets/art/guide-nhc-checks-diagram.svg" alt="Three ways of changing a check go through one validation step to the node files, read within 30 seconds" width="720"></p>
+
+> [!HOOD]
+> The runner (`images/node-base/nhc`) reads `checks.conf` and runs each enabled check in its own subshell with a 10 s timeout. A check prints one line per problem and nothing when healthy; it cannot drain the node, exit the runner or stop the other checks. A check that cannot run (for example an unreachable exporter) is skipped: the node is never drained on a guess.
+> All three ways in use `benchctl/nhc.py`, which makes the change on a copy, validates the whole set, and writes only when it passes. The files are then synced to `compose/generated/nhc`, which the nodes mount read-only.
+
+Source: `images/node-base/nhc`, `benchctl/nhc.py`, [ADR 0019](../adr/0019-nhc-checks-are-files-managed-three-ways.md), SPEC C-15 and W-16
+
+## Tips
+
+> [!WARNING]
+> Never edit `compose/generated/nhc`. Change `images/node-base/nhc.d/` and run `benchctl reload checks`.
+
+## If it goes wrong
+
+| Symptom | Try |
+|---|---|
+| A change is refused | the message says why; nothing was changed |
+| A new file is ignored | list it in `checks.conf` (`NAME on`); `validate checks` tells you |
+| A healthy node drains | your check reports a problem on healthy metrics; the validator should have refused it, so open an issue |
+
+## Learn more
+
+- [Client testing: what drains a node](client-testing.md#node-health-check-what-drains-a-node)
+- [The web page](../manual/05-web-page.md)

@@ -1,4 +1,16 @@
+<p align="center"><img src="../assets/art/guide-topology-hero.svg" alt="A spine switch over two leaf switches, each holding a small rack of nodes" width="720"></p>
+
 # Slurm topology and a switch going down
+
+**In 30 seconds:** give Slurm a real switch tree from `sim.yaml`, then take a leaf switch down to see its nodes drain with the reason `switch leaf1 down`. It is off until you add a `topology:` key.
+
+## Do it
+
+```bash
+./scripts/benchctl up      # after adding topology: to sim.yaml
+docker exec workbench-slurmctld-1 scontrol show topology
+./scripts/benchctl scenario run switch-leaf-down
+```
 
 The real Slurm topology plugin, with switches generated from `sim.yaml` (issue 543, ADR 0053). Off by default: with no `topology:` key Slurm stays flat and nothing below changes. No extra process and no extra memory: it is one more generated file read by `slurmctld`.
 
@@ -47,3 +59,30 @@ The step also works from the page's Test run (it goes through the governor like 
 ## Checked
 
 `tests/test_topology.py` (file text, node agreement with the generated inventory, the step's exact drain and resume commands) and `tests/real/test_topology_real.py` (`./scripts/verify.sh --unit topology`: `scontrol show topology` equals the plan; a leaf down drains exactly its nodes; up resumes only those). Not exercised: the `block` plugin on a live controller, `--switches` placement, and the monitoring client (see [client-testing.md](client-testing.md)).
+
+## Under the hood
+
+<p align="center"><img src="../assets/art/guide-topology-diagram.svg" alt="A spine over two leaves; one leaf is down and its nodes are drained with a reason" width="720"></p>
+
+> [!HOOD]
+> `benchctl/topology.py` decides which node sits under which leaf: the Slurm nodes of the inventory in order, node number i under leaf `i mod leaves`, so each leaf holds a mix and a switch failure is a rack failure, not a whole partition. It writes `compose/generated/slurm/topology.conf`.
+> A changed file restarts `slurmctld` like a changed `slurm.conf`, because it is read only at start. Slurm has no switch state, so a switch outage is modelled as the drain of that leaf's nodes (scenario target `switch`); up resumes exactly those.
+
+Source: `benchctl/topology.py` (`leaves`, `nodes_under`, `conf`), [ADR 0053](../adr/0053-slurm-topology-from-sim-yaml.md)
+
+## Tips
+
+> [!TIP]
+> Try `sbatch -N2 --switches=1` while a leaf is drained: it has to fit under the other leaf.
+
+## If it goes wrong
+
+| Symptom | Try |
+|---|---|
+| `up` says `FAILED topology: ...` | the plugin is unknown, a number is out of range or there are fewer nodes than leaves; fix `sim.yaml` |
+| Back to flat Slurm | remove the `topology:` key and run `up` again |
+
+## Learn more
+
+- [Scenarios](../manual/06-scenarios.md)
+- [Client testing](client-testing.md)
