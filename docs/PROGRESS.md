@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**90% built** (39 done, 93 in review, 9 partial, 6 to do, 147 items).
+**89% built** (39 done, 93 in review, 9 partial, 7 to do, 148 items).
 
 ## Roadmap
 
@@ -16,7 +16,7 @@ flowchart LR
     p4["People and chaos<br/>25%"]:::partial
     p5["Kubernetes<br/>100%"]:::done
     p6["Fidelity VM<br/>0%"]:::todo
-    p7["Web UI and profiles<br/>94%"]:::partial
+    p7["Web UI and profiles<br/>92%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
     p0 --> p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7 --> p8
     classDef done fill:#1a7f37,stroke:#1a7f37,color:#fff
@@ -203,7 +203,7 @@ _One real Ubuntu VM with Redfish power control._
 
 0/1 done
 
-### Web UI and profiles (94%)
+### Web UI and profiles (92%)
 
 _One click from cold start to a busy cluster._
 
@@ -254,11 +254,12 @@ _One click from cold start to a busy cluster._
 | Guides batch 8b in the page template | 🔍 In review | Power and reboot, Slurm resilience and choose-your-workbench guides follow the page template with a mechanism diagram and a sourced Under the hood (images/slurm-ctl/power.sh, images/node-base/reboot.sh, benchctl/slurmtrace.py, benchctl/workbench.py, ADRs 0016, 0017, 0021, 0025, 0054). Facts and commands kept. Issue 607. | `docs/guides/power-and-reboot.md`, `slurm-resilience.md`, `choose-workbench.md`, `docs/assets/art/`, `tests/test_docs.py` | - |
 | Guides batch 8c in the page template | 🔍 In review | The Jira, client setup, client testing, SSH testing and web UI canvas guides follow the page template with a diagram and a sourced Under the hood (ADRs 0005, 0011, 0014, 0018, 0023, 0026, 0038, 0041, 0042, benchctl/jira_driver.py, scripts/record_jira_shapes.py). Facts and commands kept. Issue 609. | `docs/guides/jira-real.md`, `jira-contract.md`, `jira-tickets.md`, `client-setup-by-component.md`, `client-testing.md`, `ssh-connection-testing.md`, `web-ui-canvas.md`, `docs/assets/art/`, `tests/test_docs.py` | - |
 | Architecture How it works index and page headers | 🔍 In review | A How it works table in docs/architecture/README.md links every manual chapter and guide Under the hood section with the decisions behind it, and a test fails when one is missing; every architecture page opens with a generated header illustration. Facts unchanged. Issue 611. | `docs/architecture/`, `docs/assets/art/`, `scripts/make_doc_art.py`, `tests/test_docs.py` | - |
+| Agent-ready interface (SPEC G7 and AG-1 to AG-9) | ⬜ To do | Proposed, not built: AGENTS.md, describe workbench --json, --json with versioned schemas, wait, agent output mode, an optional MCP server, recipes and a skill. Docs-only draft waiting for the owner to approve the SPEC change. Issue 603. | `SPEC.md`, `docs/adr/0060-two-front-doors-agents-md-and-claude-md.md to docs/adr/0068-one-sourced-agent-docs-and-skill.md` | - |
 | README redesign | 🔍 In review | The README opens with the generated hero art, shows the demo and the zoom and layers animation as light and dark picture pairs, and adds why, what is inside, will it fit and an FAQ; every command is unchanged and checked by tests/test_docs.py, numbers link to the memory guide. Issue 589. | `README.md`, `tests/test_docs.py` | - |
 | README demo gif | 🔍 In review | The README's animation is made from sample data and shows each capability in turn with a caption: dark 2.5D with traffic, error triangles, a fault with its declared blast radius, a lens, the client's eye, focus, the flat view and the global view. Re-run scripts/doc_shots.py after a change to the page. Issue 337. | `scripts/doc_shots.py`, `docs/manual/img/architecture-demo.gif`, `README.md` | - |
 | Budget manager | ⬜ To do | Profile/budget form (W-7). | - | - |
 
-1/48 done
+1/49 done
 
 ### macOS agent and CI (0%)
 
