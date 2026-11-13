@@ -40,6 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       iputils-ping iputils-tracepath iproute2 dnsutils netcat-openbsd traceroute tcpdump net-tools curl wget openssh-client \
       procps psmisc lsof strace file vim-tiny nano \
  && rm -rf /var/lib/apt/lists/* \
+ && rm -f /etc/munge/munge.key \
  && mkdir -p /run/sshd \
  && sed -i 's#^SHELL=.*#SHELL=/bin/bash#' /etc/default/useradd \
  && printf '%s\n' 'export PATH=/opt/slurm/bin:$PATH' > /etc/profile.d/slurm.sh \

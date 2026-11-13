@@ -42,7 +42,8 @@ def test_the_accounting_services_mount_them_too():
 
 def test_the_image_has_no_key_material_and_the_entrypoint_installs_the_mounted_ones():
     code = "\n".join(line for line in (ROOT / "images/node-base/Dockerfile").read_text().splitlines() if not line.lstrip().startswith("#"))
-    assert not re.search(r"urandom|create-munge-key|munge\.key|jwt_hs256\.key", code), "a key is generated in the image"
+    assert "&& rm -f /etc/munge/munge.key" in code, "the munge package makes a key when apt installs it; it must go in the same layer"
+    assert not re.search(r"urandom|create-munge-key|jwt_hs256\.key", code.replace("rm -f /etc/munge/munge.key", "")), "a key is generated in the image"
     entry = (ROOT / "images/node-base/entrypoint.sh").read_text()
     assert "install -o munge -g munge -m 0400 /run/workbench/slurm/munge.key /etc/munge/munge.key" in entry
     assert "install -o slurm -g slurmjwt -m 0640 /run/workbench/slurm/jwt_hs256.key" in entry
