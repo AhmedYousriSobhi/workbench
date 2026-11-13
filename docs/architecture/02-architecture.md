@@ -31,7 +31,7 @@ flowchart TB
   end
 
   subgraph K8S["P3 k8s"]
-    K3D["k3d/kind: 1 server + 1 real agent"]
+    K3D["real control plane: etcd, apiserver, scheduler, controller manager"]
     KWOK["KWOK: fake nodes incl. fake GPUs"]
   end
 

@@ -23,5 +23,5 @@
 5. **Observe and control from outside the failure domain.** The governor runs on the host, in its own protected cgroup, and never depends on anything it might stop.
 6. **Degrade in a defined order.** Priority classes plus an escalation ladder (throttle, freeze, reclaim, stop), with hysteresis so it doesn't flap.
 7. **Everything injectable.** Faults and workloads are named scenarios, triggered by CLI, Web UI button or schedule.
-8. **No real disk or network hardware.** Storage is faked with metrics and tmpfs; network faults use kernel `tc netem`, not extra proxies.
+8. **No real disk or network hardware.** Storage is faked with metrics and tmpfs; client-facing network faults use userspace proxies, and in-cluster ones use kernel `tc netem` only through the root governor service (ADR 0056).
 9. **Time is a parameter.** A `time_dilation` multiplier compresses hours of cluster activity into minutes.

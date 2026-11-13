@@ -19,7 +19,7 @@ workbench/
 │   └── bmc-farm/  bcm-mock/  jira-mock/  gpu-exporter-farm/  dcgm-exporter/
 ├── webui/                    # Starlette + a vanilla-JS page of native ES modules, static/js/ (ADR 0007, 0008)
 ├── compose/                  # static + generated compose files (cgroup_parent per class)
-├── k8s/                      # k3d config, KWOK node/stage templates
+├── k8s/                      # KWOK node/stage templates and fixtures
 ├── fidelity-vm/Vagrantfile   # vagrant-libvirt, 2 GB cap, on-demand
 ├── observability/            # prometheus.yml (generated targets), dashboards, alert rules
 ├── scenarios/                # *.yaml
@@ -32,5 +32,5 @@ workbench/
 |---|---|
 | Vagrant compute node | slurmd containers (`node-base`); keep one real VM only as the fidelity node |
 | Vagrant Grafana node | Grafana + Prometheus containers in `core` |
-| Vagrant K8s nodes | k3d/kind (1+1) + KWOK fake nodes |
+| Vagrant K8s nodes | real control plane + KWOK fake nodes (ADR 0034) |
 | Jira container | `jira-mock` by default; the existing container becomes the `dc` mode of the `jira-real` profile |

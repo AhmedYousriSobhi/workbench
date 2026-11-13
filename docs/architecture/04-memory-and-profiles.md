@@ -24,9 +24,9 @@ Host reserve (OS, desktop, IDE, browser): **about 3 GB**, never governed. Page c
 | Profile | What's on | Est. sim total |
 |---|---|---|
 | `min` | core, mocks, 4 slurmd | 0.5 GB expected (measured use plus 15 percent) |
-| `std` | `min` + accounting, 16 slurmd, Kubernetes (KWOK) | 1.2 GB expected today (the Kubernetes part is optional and adds about 0.3 GB measured, 0.9 GB cap) |
-| `full` | `std` + 32 slurmd, 200 KWOK nodes, fidelity VM | 1.8 GB expected today (32 slurmd; KWOK and the fidelity VM not built) |
-| `jira-real` | `std` minus Kubernetes, plus Jira DC | 3.5 GB expected |
+| `std` | `min` + accounting, 16 slurmd | 1.2 GB expected today (the optional Kubernetes part, `--with k8s`, adds about 0.3 GB measured, 0.9 GB cap; its KWOK node count comes from `sim.yaml` `kubernetes.nodes`, 4 today, or `--k8s-nodes`) |
+| `full` | `std` with 32 slurmd | 1.8 GB expected today (the fidelity VM is deferred, ADR 0033, and not counted until it is built and measured) |
+| `jira-real` | `std` plus Jira DC | 3.5 GB expected |
 | `mac-agent` | `min` + remote macOS agent (external) | 0.5 GB local |
 
 `benchctl up --profile X` runs a **pre-flight**: `MemAvailable` minus the profile's budget and the app under test's reserve must stay above the safety floor, otherwise it refuses and suggests a smaller profile.
