@@ -34,7 +34,7 @@ def plan(level: int, groups: list[Group]) -> list[Action]:
     acts: list[Action] = []
     if level >= 1:
         acts.append(Action("notify", "events", 1))
-        acts.append(Action("stop-arrivals", "*", 1))  # global flag read by user-sim/ticket-bot
+        acts.append(Action("stop-arrivals", "*", 1))  # global flag read by user-sim and jira-mock
     if level >= 2:
         acts += [Action("throttle", g.name, 2) for g in _by_prio(groups, {5, 4})]
     if level >= 3:

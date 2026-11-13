@@ -113,8 +113,7 @@ Or run a named scenario (a timed list of faults) instead of injecting by hand:
 ./scripts/benchctl scenario run node-down --speed 10  # play it ten times faster
 ```
 
-A scenario fails (exit 1) when a step errors or an `expect` line does not hold. Steps for parts that are not
-built yet (ticket-bot) are reported as skipped.
+A scenario fails (exit 1) when a step errors or an `expect` line does not hold. Steps the caller cannot run (the web page has no Docker) are reported as skipped.
 
 ## 4a. Get a shell on a node
 

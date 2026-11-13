@@ -1,6 +1,6 @@
 # Profile: min
 name: min
-budget_gb: 0.5   # expected use of what is built today (510 MB: measured + 15 percent, benchctl/memory.py, issue 287); the app under test is added on top by the pre-flight
+budget_gb: 0.5   # expected use of what is built today (450 MB: measured + 15 percent, benchctl/memory.py, issue 287); the app under test is added on top by the pre-flight
 extends: []
-groups: [core, mocks, access, scenarios]
+groups: [core, mocks, access]
 compute_nodes: 4

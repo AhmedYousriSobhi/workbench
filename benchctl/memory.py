@@ -39,7 +39,7 @@ PER_NODE_MB: dict[str, int] = {
     "bmc-forwarder": 32,   # every per-node BMC address; 18 MB measured
     "dcgm-exporter": 150,  # optional (--with dcgm), real-gpu nodes only; 125 MB measured, the one part that is not a few MB
 }
-NOT_MEASURED = ("scenario-engine", "user-sim", "ticket-bot", "accounting-init")  # not built or one-shot: expected at the cap
+NOT_MEASURED = ("accounting-init",)  # one-shot: expected at the cap
 
 
 def key_of(name: str, labels: dict | None = None) -> str:

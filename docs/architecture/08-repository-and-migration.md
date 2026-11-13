@@ -16,8 +16,7 @@ workbench/
 │   ├── node-base/            # shared base for all slurmd containers
 │   └── slurm-ctl/ ...
 ├── components/
-│   ├── bmc-farm/  bcm-mock/  jira-mock/  gpu-exporter-farm/
-│   └── user-sim/  ticket-bot/  scenario-engine/
+│   └── bmc-farm/  bcm-mock/  jira-mock/  gpu-exporter-farm/  dcgm-exporter/
 ├── webui/                    # Starlette + a vanilla-JS page of native ES modules, static/js/ (ADR 0007, 0008)
 ├── compose/                  # static + generated compose files (cgroup_parent per class)
 ├── k8s/                      # k3d config, KWOK node/stage templates

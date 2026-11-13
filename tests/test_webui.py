@@ -43,9 +43,9 @@ def ui(tmp_path):
     scen.mkdir()
     (scen / "quick.yaml").write_text(
         "name: quick\ndescription: d\nsteps:\n  - {at: 0s, target: slurm, do: {drain: [cn001]}}\n"
-        "  - {at: 0s, target: ticket-bot, do: {x: 1}}\n")
-    (scen / "slow.yaml").write_text("name: slow\ndescription: d\nsteps:\n  - {at: 0s, target: ticket-bot, do: {a: 1}}\n"
-                                    "  - {at: 1h, target: ticket-bot, do: {b: 2}}\n")
+        "  - {at: 0s, target: dcgm, do: {stop: true}}\n")
+    (scen / "slow.yaml").write_text("name: slow\ndescription: d\nsteps:\n  - {at: 0s, target: dcgm, do: {stop: true}}\n"
+                                    "  - {at: 1h, target: dcgm, do: {start: true}}\n")
     port = free_port()
     server = uvicorn.Server(uvicorn.Config(create_app(TOKEN, sock, scen, ROOT / "sim.yaml", interval=0.05, fetch=no_stack, poster=no_stack),
                                            host="127.0.0.1", port=port, log_level="error"))
@@ -127,9 +127,9 @@ def test_scenario_list_and_run_sends_slurm_steps_through_the_governor(ui):
         if not state["running"]:
             break
         time.sleep(0.05)
-    # the Slurm drain goes through the governor (the page never runs Docker itself); the ticket-bot step is not built
+    # the Slurm drain goes through the governor (the page never runs Docker itself); the dcgm step needs the host CLI
     assert state["ok"] is True and [s["status"] for s in state["steps"]] == ["ok", "skipped"]
-    assert "not built" in state["steps"][1]["detail"]
+    assert "host CLI" in state["steps"][1]["detail"]
 
 
 def test_stop_ends_a_running_scenario_and_unknown_is_404(ui):

@@ -68,8 +68,9 @@ def test_execute_slurm_drain_and_resume_use_scontrol():
     assert scenario.execute(scenario.Step(0, "slurm", {"drain": ["cn001"]}), runner=lambda c: CP(code=1, err="boom")).detail == "boom"
 
 
-def test_unbuilt_targets_are_skipped_not_failed():
-    assert scenario.execute(scenario.Step(0, "ticket-bot", {})).status == "skipped"
+def test_ticket_bot_is_not_a_target():
+    problems = scenario.validate({"name": "x", "steps": [{"at": "0s", "target": "ticket-bot", "do": {"x": 1}}]}, yaml.safe_load(Path("sim.yaml").read_text()))
+    assert any("unknown target" in p for p in problems)
 
 
 def test_run_waits_scaled_by_speed_and_dilation_and_stops_clean():

@@ -105,7 +105,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 ## Container names
 
 `workbench-<service>-1`: `slurmctld`, `slurmrestd`, `mariadb`, `slurmdbd`, `bmc-farm`, `bcm-mock`, `jira-mock`,
-`scenario-engine`, and one per node (`cn001`, `gpu001`, ...).
+and one per node (`cn001`, `gpu001`, ...).
 
 ## Glossary (short; the full list is [chapter 12](12-glossary.md))
 

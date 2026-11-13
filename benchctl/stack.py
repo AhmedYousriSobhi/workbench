@@ -46,7 +46,6 @@ STAGES = [  # (label, service-name pattern); later stages depend on earlier ones
     ("bmc addresses", r"bmc-(cn|gpu)\d+"),
     ("nodes", r"(cn|gpu|rgpu)\d+"),
     ("login node", r"login\d*"),
-    ("scenarios", r"scenario-engine"),
 ]
 
 Runner = Callable[[list[str]], subprocess.CompletedProcess]

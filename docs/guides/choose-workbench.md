@@ -12,7 +12,7 @@ Example: 2 CPU nodes, 4 GPU nodes with Jira.
 It prints the nodes and parts, the memory by item (expected use and the cap), the reserve for the app under test (1 GB until you run `benchctl measure app --match NAME --save`, see [memory](memory.md)) and the total it needs, then one verdict line:
 
 - `fits: needs 2092 MB (1068 MB expected + 1024 MB for the app (assumed, not measured)), 8000 MB free, 5908 MB would remain (floor 1024 MB)`: exit code 0.
-- `does not fit: ... short by 273 MB ... Try: drop load (100 MB); drop accounting (360 MB); 5 fewer node(s)`: exit code 1,
+- `does not fit: ... short by 273 MB ... Try: drop jira-real (2 GB); drop accounting (360 MB); 5 fewer node(s)`: exit code 1,
   and it says what to remove. When the workbench alone fits and only the app's reserve does not, it names the largest reserve that does (`--app-mb 700 if the app needs less than 1024 MB`); start the app after the workbench.
 
 **Expected** is what each part was measured to use plus 15 percent (never above its cap); **cap** is the container limit the
@@ -36,7 +36,7 @@ nothing) when the estimate does not fit. Check: `benchctl get nodes`, `benchctl 
 |---|---|
 | `--cpu-nodes N` / `--gpu-nodes N` | how many of each (0 to 64 and 0 to 16; at least one node) |
 | `--gpus-per-node N` | GPUs on each GPU node, 1 to 8 |
-| `--with PART` / `--without PART` | add or remove a part (repeat the flag): `jira`, `bmc`, `bcm`, `accounting`, `teleport`, `scenarios`, `load` |
+| `--with PART` / `--without PART` | add or remove a part (repeat the flag): `jira`, `bmc`, `bcm`, `accounting`, `teleport`, `k8s`, `jump` |
 | `--ticketing jira`, `--hardware bmc,bcm`, `--access teleport`, ... | the same parts by category, see below |
 | `--addons` | every optional part (`--without teleport` still removes one) |
 | `--login ssh,teleport,both` | the login nodes, one auth mode each (`login`, `login2`, ...; 1 to 8); a Teleport mode turns Teleport on. See [login nodes](../manual/04-nodes-and-shells.md#login-nodes-how-many-and-how-each-one-lets-you-in) |
@@ -49,7 +49,7 @@ nothing) when the estimate does not fit. Check: `benchctl get nodes`, `benchctl 
 | `-f FILE` | read the selection from a workbench file; flags override it |
 | `--save FILE` (plan) | write the selection to a file |
 
-Flags you leave out come from `sim.yaml`. Default parts: `jira`, `bmc`, `bcm`, `accounting`, `scenarios` (accounting, about 360 MB, is what makes `sacct` work). Always present: Slurm, the
+Flags you leave out come from `sim.yaml`. Default parts: `jira`, `bmc`, `bcm`, `accounting` (accounting, about 360 MB, is what makes `sacct` work). Always present: Slurm, the
 login node, Prometheus and Grafana.
 
 ## Parts by category
@@ -64,16 +64,15 @@ Name the parts by what they are for. Values are comma separated or repeated, `al
 | `--ticketing` | `jira` | the Jira mock |
 | `--hardware` | `bmc`, `bcm` | the BMC farm, the BCM mock |
 | `--access` | `teleport` | Teleport auth and proxy |
-| `--simulation` | `scenarios`, `load` | the scenario engine, the user and ticket simulators |
 
 ```bash
 ./scripts/benchctl start --ticketing jira --hardware bmc,bcm --access teleport
-./scripts/benchctl plan --simulation all --accounting slurmdbd   # what it would cost
+./scripts/benchctl plan --accounting slurmdbd   # what it would cost
 ./scripts/benchctl start --addons                                 # everything optional
 ./scripts/benchctl start --addons --without teleport              # everything except one
 ```
 
-Category flags add to the default parts (`jira`, `bmc`, `bcm`, `accounting`, `scenarios`); `--without` removes. A typo gets a hint: `unknown ticketing item 'jirra'. Did you mean 'jira'?`. A plain `benchctl start` with no flags is the `min` preset, which has none of the optional parts. `start` never reuses the workbench you last built: its first line names what it starts and, if one was saved, what it replaces (`Starting the min size preset. This replaces the workbench last built (2 compute + 3 GPU nodes, parts ...)`). `benchctl start --profile min` is the plain default, spelled out, and `start` with parts builds the default workbench plus those parts.
+Category flags add to the default parts (`jira`, `bmc`, `bcm`, `accounting`); `--without` removes. A typo gets a hint: `unknown ticketing item 'jirra'. Did you mean 'jira'?`. A plain `benchctl start` with no flags is the `min` preset, which has none of the optional parts. `start` never reuses the workbench you last built: its first line names what it starts and, if one was saved, what it replaces (`Starting the min size preset. This replaces the workbench last built (2 compute + 3 GPU nodes, parts ...)`). `benchctl start --profile min` is the plain default, spelled out, and `start` with parts builds the default workbench plus those parts.
 
 ## A workbench file
 
@@ -83,7 +82,7 @@ name: lab
 cpu_nodes: 2
 gpu_nodes: 4
 gpus_per_node: 8
-parts: [jira, bmc, scenarios]
+parts: [jira, bmc]
 ```
 
 ```bash
