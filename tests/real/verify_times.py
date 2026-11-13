@@ -10,11 +10,12 @@ KEEP_RUNS = 20
 class Recorder:
     def __init__(self, isolated: set[str], clock=time.monotonic):
         self.isolated, self.clock = isolated, clock
+        self.reuse: set[str] = set()  # STACK_REUSE modules: isolated by configuration, they share a stack with the same key (issue 576)
         self.mods: dict[str, dict] = {}
 
     def start(self, module: str) -> None:
         now = self.clock()
-        self.mods.setdefault(module, {"t0": now, "t1": now, "tests": 0, "failed": 0, "cold": module in self.isolated})
+        self.mods.setdefault(module, {"t0": now, "t1": now, "tests": 0, "failed": 0, "cold": module in self.isolated and module not in self.reuse, "reused": module in self.reuse})
 
     def finish(self, module: str) -> None:
         """Called after each test's teardown; the last call of a module also covers its module-fixture teardown."""
@@ -27,12 +28,12 @@ class Recorder:
             self.mods[module]["failed"] += 1
 
     def rows(self) -> list[dict]:
-        out = [{"module": m, "seconds": round(v["t1"] - v["t0"], 1), "cold_start": v["cold"], "tests": v["tests"], "failed": v["failed"]} for m, v in self.mods.items()]
+        out = [{"module": m, "seconds": round(v["t1"] - v["t0"], 1), "cold_start": v["cold"], "reused_stack": v["reused"], "tests": v["tests"], "failed": v["failed"]} for m, v in self.mods.items()]
         return sorted(out, key=lambda r: -r["seconds"])
 
     def slow_line(self, n: int = 10) -> str:
         rows = self.rows()[:n]
-        return "SLOW  " + " · ".join(f"{r['module']} {r['seconds']:.0f}s ({'cold' if r['cold_start'] else 'shared'})" for r in rows) if rows else ""
+        return "SLOW  " + " · ".join(f"{r['module']} {r['seconds']:.0f}s ({'cold' if r['cold_start'] else 'reused' if r['reused_stack'] else 'shared'})" for r in rows) if rows else ""
 
     def write(self, path: Path, stamp: str) -> None:
         """Append this run, keep the last KEEP_RUNS. An unreadable file starts over."""

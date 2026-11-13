@@ -108,6 +108,7 @@ def _shared_stack_down():
 
 
 def pytest_collection_modifyitems(config, items):
+    RECORDER.reuse = {i.module.__name__.rsplit(".", 1)[-1] for i in items if getattr(i.module, "STACK_REUSE", False)}
     # stable: shared modules first, then the STACK_REUSE modules grouped by STACK_GROUP (same key side by side), then the cold starts
     items.sort(key=lambda i: order_key(i.module.__name__.rsplit(".", 1)[-1], ISOLATED_MODULES if "tests/real" in str(i.fspath) else set(),
                                        bool(getattr(i.module, "STACK_REUSE", False)), getattr(i.module, "STACK_GROUP", "")))

@@ -51,3 +51,16 @@ def test_the_file_keeps_the_last_runs_and_survives_garbage(tmp_path):
     r.finish("m")
     r.write(f, "x")
     assert len(json.loads(f.read_text())) == 1
+
+
+def test_a_stack_reuse_module_is_labelled_reused_not_cold():
+    r = vt.Recorder({"test_nhc_real", "test_k8s_real"}, clock(0, 36, 40, 98))
+    r.reuse = {"test_nhc_real"}
+    r.start("test_nhc_real")
+    r.finish("test_nhc_real")
+    r.start("test_k8s_real")
+    r.finish("test_k8s_real")
+    rows = {x["module"]: x for x in r.rows()}
+    assert rows["test_nhc_real"]["cold_start"] is False and rows["test_nhc_real"]["reused_stack"] is True
+    assert rows["test_k8s_real"]["cold_start"] is True
+    assert "test_nhc_real 36s (reused)" in r.slow_line() and "test_k8s_real 58s (cold)" in r.slow_line()
