@@ -77,8 +77,21 @@ its documentation the failing message says what was expected and what was seen; 
 
 ## Observed behaviour
 
-Not recorded yet: the live tests have not been run against this change (issue 220). After the first run, add each
-disagreement here with the Slurm version and the log lines that show it.
+First live run (2026-11-13, `./scripts/verify.sh --unit slurmresilience --clean`, started from a stopped stack): **7 passed, 1 skipped in 130 s**, with the test timers on (`SlurmdTimeout` 10, `HealthCheckInterval` 15; see CLAUDE.md). Nothing disagreed with Slurm's documentation, so there is no deviation to record.
+
+What the seven passing tests checked on the containers:
+
+- `slurmd` is not PID 1, so it restarts without the container.
+- A `slurmd` restart leaves `slurmstepd` and the job running.
+- `slurmd` down for a while marks the node not responding, and it returns with the job.
+- A `slurmctld` restart keeps jobs and nodes.
+- A simulated GPU job keeps its GPUs busy across a `slurmctld` restart.
+- A drain under a running job lets the job finish.
+- The shipped scenarios run and trace.
+
+The two slowest were the drain test and the shipped scenarios, about 44 s each; the rest took 12 s or less.
+
+The skipped test is not named in the run output. The only skip in the module is the governor test (`test_the_governor_runs_the_steps_and_serves_the_trace_for_the_page`), which skips when no governor answers, so that is the one to check; it is not recorded as passed. Run it with a governor started by `benchctl start` to cover it.
 
 ## Limits
 
