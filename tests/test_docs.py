@@ -126,8 +126,23 @@ def test_getting_started_explains_how_to_get_a_shell_on_a_node():
 def test_manual_images_are_all_used_and_have_alt_text():
     text = "\n".join(p.read_text() for p in MANUAL.glob("*.md"))
     used = set(re.findall(r"\]\(img/([\w.-]+\.png)\)", text))
-    assert used == {p.name for p in (MANUAL / "img").glob("*.png")}
+    # pages use the light image; the dark twin is for the README's <picture> (D-8)
+    assert used == {p.name for p in (MANUAL / "img").glob("*.png") if not p.name.endswith("-dark.png")}
     assert not re.findall(r"!\[\]\(", text)
+
+
+def test_screenshots_come_in_light_and_dark_pairs_within_budget():
+    """doc_shots.py writes every screenshot and the demo GIF as NAME-light and NAME-dark; each PNG is at most 300 KB, each GIF 3 MB."""
+    img = MANUAL / "img"
+    for ext in ("png", "gif"):
+        light = {p.name[: -len(f"-light.{ext}")] for p in img.glob(f"*-light.{ext}")}
+        dark = {p.name[: -len(f"-dark.{ext}")] for p in img.glob(f"*-dark.{ext}")}
+        assert light == dark, f"{ext}: no twin for {sorted(light ^ dark)}"
+    assert any(img.glob("architecture-demo-light.gif"))
+    for p in list(MANUAL.glob("img/*.png")) + list((ROOT / "docs/guides/img").glob("*.png")):
+        assert p.stat().st_size <= 300 * 1024, f"{p.name} is over 300 KB"
+    for p in img.glob("*.gif"):
+        assert p.stat().st_size <= 3 * 1024 * 1024, f"{p.name} is over 3 MB"
 
 
 def test_no_old_names_left():

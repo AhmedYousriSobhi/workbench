@@ -4,7 +4,10 @@ animated GIF into docs/manual/img.
 
     .venv/bin/python scripts/doc_shots.py          # needs `pip install -e '.[browser]'` and `playwright install chromium`
 
-Re-run it after a change to the page's look, then commit the images."""
+Every image comes as a pair, `NAME-light.png` and `NAME-dark.png` (the GIF as `architecture-demo-light.gif` and `-dark.gif`): pages
+use the light one (GitHub's default), the README shows both in a `<picture>`. Dark is the page's default theme (Midnight). With no
+argument it runs both schemes in turn; `doc_shots.py light` or `dark` runs one. Re-run it after a change to the page's look, then
+commit the images."""
 import io
 import subprocess
 import sys
@@ -13,6 +16,13 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent; OUT = ROOT / "docs/manual/img"
+SCHEMES = {"light": "light", "dark": "midnight"}  # file suffix: the page theme it shows
+if len(sys.argv) < 2:
+    for _scheme in SCHEMES:
+        subprocess.run([sys.executable, __file__, _scheme], check=True)
+    sys.exit(0)
+SCHEME = sys.argv[1]
+assert SCHEME in SCHEMES, f"usage: doc_shots.py [{'|'.join(SCHEMES)}]"
 nodes = [{"name": n, "kind": "compute", "state": "ok", "label": "Healthy", "temp": 45 + i, "power": "On", "gpus": 0, "bcm": "UP"} for i, n in enumerate(["cn001", "cn002", "cn003", "cn004"])] + \
         [{"name": n, "kind": "gpu", "state": "ok", "label": "Healthy", "temp": 44 + i, "power": "On", "gpus": 8, "gpu_util": 3 + i, "gpus_busy": 0, "bcm": "UP"} for i, n in enumerate(["gpu001", "gpu002"])]
 cluster = {"logins": [{"name": "login", "mode": "ssh", "port": 2222, "ip": "10.141.255.254"}, {"name": "login2", "mode": "teleport", "port": None, "ip": "10.141.255.252"}, {"name": "login3", "mode": "both", "port": 2224, "ip": "10.141.255.251"}], "services": {"bmc-farm": True, "bcm-mock": True, "jira-mock": True, "gpu-exporter": True, "teleport": True, "jump": True, "controller": True}, "nodes": nodes,
@@ -72,8 +82,8 @@ try:
     ui_token = (ROOT / "compose/generated/secrets/ui_token").read_text().strip()  # a one-time code, no token in the URL (#466)
     with sync_playwright() as p:
         b = p.chromium.launch()
-        pg = b.new_page(viewport={"width": 1280, "height": 900}, color_scheme="light")
-        pg.add_init_script("window.__WB_TEST = true; try { localStorage.setItem('workbench-circuit', '0'); sessionStorage.getItem('workbench-tab') || sessionStorage.setItem('workbench-tab', 'nodes'); } catch (e) {}")  # exposes the page modules as globals (webui/static/js/testhook.js)
+        pg = b.new_page(viewport={"width": 1280, "height": 900}, color_scheme=SCHEME)
+        pg.add_init_script("window.__WB_TEST = true; try { localStorage.setItem('workbench-circuit', '0'); localStorage.setItem('workbench-theme', '" + SCHEMES[SCHEME] + "'); sessionStorage.getItem('workbench-tab') || sessionStorage.setItem('workbench-tab', 'nodes'); } catch (e) {}")  # exposes the page modules as globals (webui/static/js/testhook.js)
         pg.route("**/api/cluster", lambda r: r.fulfill(json=cluster))
         pg.route("**/api/flow*", lambda r: r.abort())
         pg.route("**/api/connections", lambda r: r.fulfill(json={"entities": connections.entities(SIM)}))
@@ -83,27 +93,27 @@ try:
         pg.goto(login_url(base_url, ui_token)); pg.wait_for_selector("#flow rect.blk"); pg.wait_for_timeout(1200)
         pg.evaluate("setTree(true, false)"); pg.evaluate(FLOW)
         pg.wait_for_timeout(500)
-        pg.screenshot(path=str(OUT / "web-infrastructure.png"))
-        pg.hover("#lg-login2"); pg.wait_for_timeout(250); pg.screenshot(path=str(OUT / "web-architecture-hover.png")); pg.mouse.move(2, 2)
-        pg.click("#nd-gpu001"); pg.wait_for_selector("#pop dl"); pg.wait_for_timeout(500); pg.screenshot(path=str(OUT / "web-architecture-popup.png")); pg.keyboard.press("Escape")
-        pg.evaluate("setLevel('overview', false)"); pg.wait_for_timeout(500); pg.mouse.move(420, 480); pg.wait_for_timeout(250); pg.screenshot(path=str(OUT / "web-global-view.png")); pg.mouse.move(2, 2); pg.evaluate("setLevel('full', false)"); pg.wait_for_timeout(500)  # the global view (#321)
-        pg.evaluate("setTree(false, false)"); pg.wait_for_timeout(400); pg.screenshot(path=str(OUT / "web-architecture-wide.png")); pg.evaluate("setTree(true, false)"); pg.wait_for_timeout(300)
-        pg.click("#vw-cv"); pg.wait_for_selector("#flow[data-cv] .cv-box"); pg.wait_for_timeout(600); pg.add_style_tag(content="header.top{position:static!important}"); pg.locator("#trafficpanel").screenshot(path=str(OUT / "web-circuit.png")); pg.evaluate("zoomTo('pool', {pool: 'sg'})"); pg.wait_for_timeout(1100); pg.locator("#trafficpanel").screenshot(path=str(OUT / "web-pool.png")); pg.evaluate("zoomTo('fleet')"); pg.wait_for_timeout(1100); pg.locator("#trafficpanel").screenshot(path=str(OUT / "web-fleet.png")); pg.route("**/api/traffic*", traffic_route()); pg.evaluate("zoomTo('cluster'); zoomTo('traffic')"); pg.wait_for_timeout(8500); pg.locator("#tan").screenshot(path=str(OUT / "web-traffic-analysis.png")); pg.route("**/api/capture/*", capture_route()); pg.evaluate("location.hash = 'workbench-gpu001'"); pg.wait_for_timeout(3500); pg.locator("#an-focus").screenshot(path=str(OUT / "web-wire-capture.png")); pg.evaluate("history.replaceState(null, '', location.pathname + location.search)"); pg.wait_for_timeout(300); pg.unroute("**/api/capture/*"); pg.unroute("**/api/traffic*"); pg.evaluate("zoomTo('fleet')"); pg.wait_for_timeout(1100); pg.evaluate("sessionStorage.removeItem('workbench-level'); setCircuit(false); setView(false, false)"); pg.wait_for_timeout(300)
+        pg.screenshot(path=str(OUT / f"web-infrastructure-{SCHEME}.png"))
+        pg.hover("#lg-login2"); pg.wait_for_timeout(250); pg.screenshot(path=str(OUT / f"web-architecture-hover-{SCHEME}.png")); pg.mouse.move(2, 2)
+        pg.click("#nd-gpu001"); pg.wait_for_selector("#pop dl"); pg.wait_for_timeout(500); pg.screenshot(path=str(OUT / f"web-architecture-popup-{SCHEME}.png")); pg.keyboard.press("Escape")
+        pg.evaluate("setLevel('overview', false)"); pg.wait_for_timeout(500); pg.mouse.move(420, 480); pg.wait_for_timeout(250); pg.screenshot(path=str(OUT / f"web-global-view-{SCHEME}.png")); pg.mouse.move(2, 2); pg.evaluate("setLevel('full', false)"); pg.wait_for_timeout(500)  # the global view (#321)
+        pg.evaluate("setTree(false, false)"); pg.wait_for_timeout(400); pg.screenshot(path=str(OUT / f"web-architecture-wide-{SCHEME}.png")); pg.evaluate("setTree(true, false)"); pg.wait_for_timeout(300)
+        pg.click("#vw-cv"); pg.wait_for_selector("#flow[data-cv] .cv-box"); pg.wait_for_timeout(600); pg.evaluate("document.querySelector('header.top').style.setProperty('position', 'static', 'important')"); pg.locator("#trafficpanel").screenshot(path=str(OUT / f"web-circuit-{SCHEME}.png")); pg.evaluate("zoomTo('pool', {pool: 'sg'})"); pg.wait_for_timeout(1100); pg.locator("#trafficpanel").screenshot(path=str(OUT / f"web-pool-{SCHEME}.png")); pg.evaluate("zoomTo('fleet')"); pg.wait_for_timeout(1100); pg.locator("#trafficpanel").screenshot(path=str(OUT / f"web-fleet-{SCHEME}.png")); pg.route("**/api/traffic*", traffic_route()); pg.evaluate("zoomTo('cluster'); zoomTo('traffic')"); pg.wait_for_timeout(8500); pg.locator("#tan").screenshot(path=str(OUT / f"web-traffic-analysis-{SCHEME}.png")); pg.route("**/api/capture/*", capture_route()); pg.evaluate("location.hash = 'workbench-gpu001'"); pg.wait_for_timeout(3500); pg.locator("#an-focus").screenshot(path=str(OUT / f"web-wire-capture-{SCHEME}.png")); pg.evaluate("history.replaceState(null, '', location.pathname + location.search)"); pg.wait_for_timeout(300); pg.unroute("**/api/capture/*"); pg.unroute("**/api/traffic*"); pg.evaluate("zoomTo('fleet')"); pg.wait_for_timeout(1100); pg.evaluate("sessionStorage.removeItem('workbench-level'); setCircuit(false); setView(false, false)"); pg.wait_for_timeout(300)
         pg.click("#tb-conn"); pg.wait_for_selector("#conn-rows tr td code"); pg.wait_for_timeout(300)
         pg.locator("#conn-rows tr[data-id='teleport']").scroll_into_view_if_needed()
         pg.evaluate("document.querySelector('#conn-rows tr[data-id=teleport]').classList.add('focus')")
         pg.evaluate("document.querySelector('#conn-rows tr[data-id=teleport]').classList.remove('focus')")
-        pg.screenshot(path=str(OUT / "web-teleport-connection.png"))
+        pg.screenshot(path=str(OUT / f"web-teleport-connection-{SCHEME}.png"))
         pg.evaluate("document.querySelector('#conn-rows tr[data-id=login2]').classList.add('focus'); window.scrollTo(0, 0)")
-        pg.screenshot(path=str(OUT / "web-login-connections.png"))
+        pg.screenshot(path=str(OUT / f"web-login-connections-{SCHEME}.png"))
         pg.click("#tb-nodes"); pg.click("#menubtn"); pg.click("#planbtn"); pg.wait_for_selector("#pl-parts input"); pg.wait_for_timeout(800)
-        pg.screenshot(path=str(OUT / "web-cluster-architecture.png"))
+        pg.screenshot(path=str(OUT / f"web-cluster-architecture-{SCHEME}.png"))
         pg.locator("#pl-logins").scroll_into_view_if_needed(); pg.wait_for_timeout(300)
-        pg.screenshot(path=str(OUT / "web-login-nodes.png"))
+        pg.screenshot(path=str(OUT / f"web-login-nodes-{SCHEME}.png"))
         # the README's animation: every capability in turn, each with a caption (#337). Sample data, no cluster.
         from PIL import Image
         pg.goto(login_url(base_url, ui_token)); pg.wait_for_selector("#flow rect.blk"); pg.wait_for_timeout(1200)
-        pg.evaluate("setTheme('dark')"); pg.evaluate("setView(true, false)"); pg.evaluate("setTree(false)"); pg.evaluate(FLOW); pg.wait_for_timeout(500)
+        pg.evaluate(f"setTheme('{SCHEMES[SCHEME]}')"); pg.evaluate("setView(true, false)"); pg.evaluate("setTree(false)"); pg.evaluate(FLOW); pg.wait_for_timeout(500)
         # the diagram and the side panel (focus, blast radius, client's eye), side by side as on the real page; the caption has its own strip below
         def union():
             a, c = pg.locator("#trafficpanel").bounding_box(), pg.locator("#inspector").bounding_box()
@@ -111,9 +121,9 @@ try:
         pg.click("#lens [data-lens=client]"); pg.wait_for_timeout(400); box = union(); pg.click("#lens [data-lens=all]"); pg.wait_for_timeout(300)
         strip = 46
         clip = {**box, "height": box["height"] + strip}; frames = []
-        pg.evaluate("""([top, left, w]) => { const c = document.createElement('div'); c.id = 'democap'; c.setAttribute('aria-hidden', 'true');
-            c.style.cssText = `position:absolute;left:${left}px;top:${top}px;width:${w}px;box-sizing:border-box;padding:8px 14px;border-radius:8px;font:600 18px system-ui,sans-serif;background:#0b1020;color:#e8eefc;border:1px solid #5b7cff;pointer-events:none;z-index:99`;
-            document.body.appendChild(c); }""", [box["y"] + box["height"] + 6, box["x"], box["width"]])
+        pg.evaluate("""([top, left, w, light]) => { const [bg, fg, bd] = light ? ['#f4f7ff', '#14213d', '#2f55d4'] : ['#0b1020', '#e8eefc', '#5b7cff']; const c = document.createElement('div'); c.id = 'democap'; c.setAttribute('aria-hidden', 'true');
+            c.style.cssText = `position:absolute;left:${left}px;top:${top}px;width:${w}px;box-sizing:border-box;padding:8px 14px;border-radius:8px;font:600 18px system-ui,sans-serif;background:${bg};color:${fg};border:1px solid ${bd};pointer-events:none;z-index:99`;
+            document.body.appendChild(c); }""", [box["y"] + box["height"] + 6, box["x"], box["width"], SCHEME == "light"])
         def traffic(to, n, err=None):
             e = f", err: {err}" if err is not None else ""
             pg.evaluate(f"onFlow({{level: 0, cursor: {len(frames) + 300}, events: [{{from: 'clients', to: '{to}', n: {n}, label: 'requests', nodes: []{e}}}], totals: flowSnap.totals, errors: flowSnap.errors, reachable: flowSnap.reachable}})")
@@ -138,7 +148,7 @@ try:
         pg.evaluate("setLevel('overview', false)"); scene("Global view: one card per cluster, double-click to dive in", 10)
         pg.evaluate("setLevel('full', false)")
         w = 820; frames = [f.resize((w, round(f.height * w / f.width)), Image.LANCZOS).quantize(64) for f in frames]
-        frames[0].save(OUT / "architecture-demo.gif", save_all=True, append_images=frames[1:], duration=150, loop=0, optimize=True)
+        frames[0].save(OUT / f"architecture-demo-{SCHEME}.gif", save_all=True, append_images=frames[1:], duration=150, loop=0, optimize=True)
         b.close()
 finally:
     proc.terminate()
