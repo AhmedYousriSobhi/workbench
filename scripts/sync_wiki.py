@@ -28,6 +28,8 @@ from webui.wiki import (  # stdlib-only module: reuses the page titles and the d
 )
 
 PREFIX = {"manual": "Manual", "guides": "Guide", "architecture": "Architecture", "adr": "ADR"}
+# the two project callout kinds GitHub does not know: shown as a quote headed by a bold label
+PROJECT_CALLOUTS = {"HOOD": "**🔧 Under the hood**", "DIDYOUKNOW": "**💡 Did you know?**"}
 FOOTER = "Generated from `docs/` in the repository by `scripts/sync_wiki.py`. Edit the files there, not this wiki."
 
 
@@ -41,6 +43,8 @@ def page_name(slug: str) -> str:
 
 def image_name(rel: str) -> str:
     """`manual/img/web-overview.png` -> `images/manual-web-overview.png`"""
+    if rel.startswith("assets/art/"):
+        return f"images/art-{rel.rsplit('/', 1)[1]}"
     group, _, name = rel.split("/", 2)
     return f"images/{group}-{name}"
 
@@ -65,11 +69,29 @@ def rewrite(text: str, page: str, docs: Path, blob: str) -> str:
             return m.group(0)
         return f"{bang}[{label}]({blob}/{repo_rel}{suffix_frag})"
 
+    def fix_attr(m: re.Match) -> str:
+        """`src="..."` and `srcset="..."` of <img>, <source>: an image in docs/ is copied, any other file is read from the repository."""
+        attr, target = m.group(1), m.group(2)
+        if re.match(r"^([a-z]+:|#|//)", target):
+            return m.group(0)
+        rel = posixpath.normpath(posixpath.join(posixpath.dirname(page), target))
+        if not rel.startswith("..") and posixpath.splitext(rel)[1] in IMAGES and (docs / rel).is_file():
+            return f'{attr}="{image_name(rel)}"'
+        repo_rel = posixpath.normpath(posixpath.join("docs", posixpath.dirname(page), target))
+        return m.group(0) if repo_rel.startswith("..") else f'{attr}="{blob}/{repo_rel}?raw=true"'
+
     out, fenced = [], False
     for line in text.splitlines():
         if line.startswith("```"):
             fenced = not fenced
-        out.append(line if fenced else re.sub(r"(!?)\[([^\]]*)\]\(([^)\s]+)\)", fix, line))
+        if fenced:
+            out.append(line)
+            continue
+        line = re.sub(r"(!?)\[([^\]]*)\]\(([^)\s]+)\)", fix, line)
+        line = re.sub(r"(?<=[\s<])(src|srcset)=\"([^\"]+)\"", fix_attr, line)
+        if m := re.match(r"^>\s*\[!(" + "|".join(PROJECT_CALLOUTS) + r")\]\s*$", line, re.IGNORECASE):
+            line = f"> {PROJECT_CALLOUTS[m.group(1).upper()]}\n>"
+        out.append(line)
     return "\n".join(out) + "\n"
 
 
@@ -93,6 +115,9 @@ def generate(docs: Path, out: Path, blob: str) -> list[str]:
         for img in (docs / group / "img").glob("*"):
             if img.suffix in IMAGES:
                 shutil.copyfile(img, out / image_name(f"{group}/img/{img.name}"))
+    for img in (docs / "assets" / "art").glob("*"):  # the generated illustrations (scripts/make_doc_art.py)
+        if img.suffix in IMAGES:
+            shutil.copyfile(img, out / image_name(f"assets/art/{img.name}"))
     (out / "_Sidebar.md").write_text("\n".join(side), encoding="utf-8")
     (out / "_Footer.md").write_text(FOOTER + "\n", encoding="utf-8")
     return names

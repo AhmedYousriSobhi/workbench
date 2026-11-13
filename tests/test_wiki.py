@@ -86,3 +86,109 @@ def test_every_real_page_renders_and_every_internal_link_resolves():
                 else:
                     real.page_path(url[len("/help/"):])
     assert seen >= 25
+
+
+# ---- the illustrated page template (issue 585) ----------------------------------------------------------------------
+
+ART_PAGE = '''# Art page
+
+<p align="center"><img src="../assets/art/hero.svg" alt="the hero's picture" width="720"></p>
+
+*A caption under the hero.*
+
+> [!TIP]
+> Use the **tip**.
+>
+> Second paragraph.
+
+> [!HOOD]
+> The mechanism.
+
+> [!NOTE]
+> n
+
+> [!IMPORTANT]
+> i
+
+> [!WARNING]
+> w
+
+> [!CAUTION]
+> c
+
+> [!DIDYOUKNOW]
+> d
+
+> an ordinary quote
+
+<details><summary>The full story</summary>
+
+Inside with `code` and press <kbd>Ctrl</kbd>+<kbd>C</kbd>.
+
+</details>
+
+<details>
+<summary>Second</summary>
+
+body two
+
+</details>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../assets/art/hero.svg">
+    <img src="../assets/art/hero.svg" alt="in a picture">
+  </picture>
+</p>
+
+<script>alert(1)</script> and <b>raw</b> and <img src="../../SPEC.md" alt="gone">
+'''
+
+
+@pytest.fixture
+def art_wiki(tmp_path):
+    d = tmp_path / "docs"
+    (d / "manual").mkdir(parents=True)
+    (d / "assets" / "art").mkdir(parents=True)
+    (d / "assets" / "art" / "hero.svg").write_text("<svg/>")
+    (d / "assets" / "secret.png").write_bytes(b"x")
+    (d / "manual" / "02-art.md").write_text(ART_PAGE)
+    return Wiki(d)
+
+
+def test_every_alert_kind_renders_with_icon_and_label(art_wiki):
+    _, body = art_wiki.render("manual/02-art")
+    for kind, label in (("tip", "Tip"), ("hood", "Under the hood"), ("note", "Note"), ("important", "Important"),
+                        ("warning", "Warning"), ("caution", "Caution"), ("didyouknow", "Did you know?")):
+        m = re.search(rf'<div class="alert alert-{kind}" role="note"><p class="alert-title"><span aria-hidden="true">(\S+)</span> '
+                      rf"<strong>{re.escape(label)}</strong></p>", body)
+        assert m, kind
+    assert "<p>Use the <strong>tip</strong>.</p><p>Second paragraph.</p>" in body
+    assert "<blockquote>an ordinary quote</blockquote>" in body
+
+
+def test_details_kbd_picture_and_figure_caption(art_wiki):
+    _, body = art_wiki.render("manual/02-art")
+    assert "<details><summary>The full story</summary>" in body and body.count("<details>") == body.count("</details>") == 2
+    assert "<code>code</code>" in body and "<kbd>Ctrl</kbd>+<kbd>C</kbd>" in body
+    assert "<summary>Second</summary>" in body
+    assert ('<figure class="img center"><img src="/help/files/assets/art/hero.svg" alt="the hero&#x27;s picture" width="720" '
+            'loading="lazy"><figcaption>A caption under the hero.</figcaption></figure>') in body
+    assert "<picture" not in body and "<source" not in body  # the <img> inside is what the help shows
+    assert 'alt="in a picture"' in body and '<div class="center">' in body and body.count("<div") == body.count("</div>")
+
+
+def test_other_tags_are_escaped_and_art_is_the_only_asset_served(art_wiki):
+    _, body = art_wiki.render("manual/02-art")
+    assert "<script>" not in body and "&lt;script&gt;alert(1)&lt;/script&gt;" in body and "<b>raw" not in body
+    assert "<em>[image: gone]</em>" in body  # an <img> that points outside docs/ is not loaded
+    assert art_wiki.file_path("assets/art/hero.svg").name == "hero.svg"
+    with pytest.raises(WikiError):
+        art_wiki.file_path("assets/secret.png")
+
+
+def test_alert_styles_exist_for_every_kind_and_both_themes():
+    from webui.wiki import ALERTS, STYLE
+    for kind in ALERTS:
+        assert f".alert-{kind}" in STYLE or kind in ("note",), kind
+    assert "prefers-color-scheme:dark" in STYLE and "details{" in STYLE and "kbd{" in STYLE and "figcaption{" in STYLE
