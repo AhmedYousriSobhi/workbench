@@ -40,3 +40,9 @@ exercised it. The decision above (no framework, no build step, no CDN, nothing t
 A view needs lazy loading to keep the first paint fast, or the number of modules makes a bundler cheaper than many requests (it does not
 on localhost).
 
+
+## Addendum: login without the token in the URL (issue 466, SEC2)
+`/login?token=` put the long-lived token into browser history and any log that saw the URL. It is gone. `benchctl open` (and the
+test and screenshot scripts) ask the running page for a one-time code (`POST /api/login-code`, authorised by the token in a header,
+60 s, used up on first use) and print `/login?code=...`. Without a link, `GET /login` shows a form that posts the token in the body.
+The cookie is unchanged. The page prints no secret, on a terminal or in the log.

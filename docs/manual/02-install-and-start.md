@@ -23,7 +23,7 @@ Check all of this before building anything:
 ```
 
 The first `start` builds images (a few minutes) and creates `.venv`. Use `./scripts/benchctl start --profile std` for a
-bigger profile. The login link signs you in once; keep it private, it only works on this machine.
+bigger profile. The login link signs you in once and expires after a minute (the token is never in the URL, so it stays out of browser history); `benchctl open` prints a new one. Without a link, open `/login` and paste the token from `compose/generated/secrets/ui_token`.
 
 `benchctl start` reads two environment variables: `BENCHCTL_UI_PORT` (web page port, default 8088) and `BENCHCTL_GOVERNOR`
 (`auto|user|system|off`, default `auto`: the system service if it runs, otherwise a governor started as you).
@@ -38,7 +38,7 @@ python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'   # onc
 ./scripts/benchctl doctor                       # host prerequisites; fix any FAIL first
 ./scripts/benchctl preflight --profile min      # would this profile fit in free memory right now?
 ./scripts/benchctl up --profile min             # governor admission, ordered start (about a minute)
-.venv/bin/python -m webui                     # prints the login link
+.venv/bin/python -m webui                     # then ./scripts/benchctl open for the login link
 ```
 
 Without activating the venv, prefix commands with `./scripts/benchctl` instead of `python -m benchctl.cli`.
