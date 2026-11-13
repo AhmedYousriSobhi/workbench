@@ -73,7 +73,7 @@
   tests: [test_completion_real, test_machine_real, test_launcher_real, test_benchctl_real]
 - name: tools that no live test reads
   paths: ["benchctl/progress.py", "scripts/validate.sh", "scripts/check-*.sh", "scripts/install-hooks.sh", "scripts/sync_wiki.py", "scripts/*_shots.py",
-          "scripts/make_logo_assets.py", "scripts/term_shot.py", "scripts/jira_shapes.py", "scripts/record_jira_shapes.py"]
+          "scripts/make_logo_assets.py", "scripts/make_palette.py", "docs/assets/palette.yaml", "scripts/term_shot.py", "scripts/jira_shapes.py", "scripts/record_jira_shapes.py"]
   tests: []
 - name: virsh
   paths: ["fidelity-vm/**"]

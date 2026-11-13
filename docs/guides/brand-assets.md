@@ -50,3 +50,16 @@ Rules every file follows (`tests/test_doc_art.py` checks them):
 
 Shared primitives (`node`, `rack`, `wire`, `cloud`, `governor`, `bubble`, `label`, `arrow`) live in the script; plane
 colours follow [the web page canvas](web-ui-canvas.md). Add a picture as one function and one entry in `ART`.
+
+## Colours
+
+The logo's teal, ink and amber are the anchors of one colour system (ADR 0069). Every colour lives in
+`docs/assets/palette.yaml`; `python scripts/make_palette.py` writes `webui/static/tokens.css` from it and
+`validate.sh` fails when that file is stale. To add or change a colour, edit the palette file only, regenerate, and run
+`./scripts/validate.sh`: the contrast, colour-blind and line-type tests tell you if the change is readable.
+
+- The three anchors are fixed. They are for fills, the logo and large graphics; text and buttons use the tuned
+  `accent_text`, `accent_fill` and `warn_text`, because the light-theme teal and amber are about 4:1 on white.
+- Teal means brand, interaction and good (with a check mark); amber means attention only; red means error only.
+- `tokens.css` is generated but not yet read by the page: moving the page, the canvases and the help onto it is the
+  next steps of issue 642.

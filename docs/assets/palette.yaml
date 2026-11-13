@@ -1,0 +1,179 @@
+# The one colour source (issue 642). Edit this file, then run: python scripts/make_palette.py
+# Everything else (webui/static/tokens.css, later the logo, help page, doc art, Grafana) is generated from it.
+#
+# Value forms (a token's value is one of):
+#   "#rrggbb"                 a literal
+#   "ramp.step"               a primitive ramp step, e.g. teal.700 ("neutral.N" is the theme's neutral ramp)
+#   "anchor.teal"             a logo anchor for the theme's scheme (light or dark)
+#   "@token"                  another token of the same theme
+#   {mix: [a, b, t]}          a blend of two values in OKLab, t = share of b
+#   {alpha: [a, 0.1]}         a value with transparency (not contrast-tested)
+#   {tune: {from, min, against, shift}}  start from a value, move its lightness away from the listed
+#                             backgrounds until the WCAG ratio is at least min (the generator does the tuning)
+version: 1
+
+# The logo's three colours. Fixed; the logo SVGs carry exactly them. For fills, the logo and large graphics.
+# Text and buttons use the tuned tokens below (accent_text, accent_fill, warn_text).
+anchors:
+  teal:  {light: "#0b8f80", dark: "#2fc4b2"}
+  ink:   {light: "#14211f", dark: "#e5eeec"}
+  amber: {light: "#b86e00", dark: "#f0a030"}
+
+# Seeds of the primitive ramps (steps 50..950 at fixed OKLCH lightness, hue kept, chroma follows the seed).
+primitives:
+  teal: "#2fc4b2"
+  amber: "#f0a030"
+  red: "#ff5d5d"
+  blue: "#5cb8ff"
+  periwinkle: "#8ea2ff"
+  violet: "#c49bff"
+  lime: "#a6d96a"
+  rose: "#f48fb1"
+  ink: "#14211f"      # tinted neutral (light and dark themes)
+  navy: "#0e1530"     # midnight ground
+  slate: "#252932"    # dim ground
+
+# Every theme must define every one of these names (the generator fails if one is missing or unknown).
+semantic: [
+  ground, panel, raised, line, line_2, line_strong, dot,
+  text, text_2, muted,
+  accent, accent_text, accent_fill, accent_hover, on_accent, brand, focus, select_bg, select_ring, sel, shadow,
+  ok, warn, warn_text, bad, pending, unknown, attention, error, no_current, wire_base,
+  L0, L1, L2, L3, L4, L5,
+  plane_access, plane_control, plane_k8s, plane_data, plane_monitoring, plane_management,
+  real_outline, sim_outline, node_healthy, node_attention, node_down,
+  hover, active, visited, disabled, row_hover, row_selected,
+  chart_1, chart_2, chart_3, chart_4, chart_5, chart_6,
+  grafana_ok, grafana_warn, grafana_bad]
+
+# The six planes: start value on a dark ground, tuned per theme to >= 3:1 on the theme's grounds. Plane colours
+# appear only on lines and labelled chips, never on status dots or squares. The line type is the second cue.
+planes:
+  access:     {color: "#5CB8FF", dash: ""}
+  control:    {color: "#E2E8F0", dash: "12 6"}
+  k8s:        {color: "#8EA2FF", dash: "12 4 1 4"}
+  data:       {color: "#C49BFF", dash: "1 5", cap: round}
+  monitoring: {color: "#A6D96A", dash: "5 5"}
+  management: {color: "#F48FB1", dash: "12 4 1 4 1 4"}
+dashes: {sim_outline: "4 3", attention_node: "7 6"}   # attention_node matches the logo's dashed amber square
+
+# Categorical series colours, colour-blind checked, fixed order. Never status colours.
+charts: ["#2C73D2", "#FF8C42", "#009E73", "#CC79A7", "#9B8CFF", "#B5E48C"]
+
+# Shared by every theme (a theme may override any of them). Written in terms of the theme's own base tokens.
+common:
+  dot: "@line"
+  brand: anchor.teal
+  accent: "@accent_text"
+  accent_text: {tune: {from: anchor.teal, min: 5.5, against: [ground, panel, raised]}}
+  accent_fill: {tune: {from: anchor.teal, min: 5.5, against: [on_accent]}}
+  focus: {tune: {from: anchor.teal, min: 3, against: [ground, panel, raised]}}
+  select_ring: "@accent_text"
+  select_bg: {mix: [panel, "@accent_fill", 0.14]}
+  sel: {alpha: ["@accent_fill", 0.12]}
+  line_strong: {tune: {from: "@line_2", min: 3, against: [ground, panel]}}
+  ok: "@accent_text"
+  warn: {tune: {from: anchor.amber, min: 3, against: [ground, panel]}}
+  warn_text: {tune: {from: anchor.amber, min: 5.5, against: [ground, panel, raised]}}
+  bad: {tune: {from: red.500, min: 4.5, against: [ground, panel, raised]}}
+  error: "@bad"
+  attention: anchor.amber
+  pending: "@muted"
+  unknown: "@muted"
+  no_current: {tune: {from: neutral.500, min: 3, against: [ground, panel]}}
+  wire_base: "@line"
+  # Governor ladder: teal (calm) to amber (L2, L3) to red (L4, L5). Each level is also labelled.
+  L0: "@ok"
+  L1: {mix: ["@ok", "@warn", 0.5]}
+  L2: "@warn"
+  L3: {mix: ["@warn", "@bad", 0.4]}
+  L4: {mix: ["@warn", "@bad", 0.75]}
+  L5: "@bad"
+  # Real is a solid outline, simulated a dashed one, both neutral (never a hue).
+  real_outline: "@text"
+  sim_outline: "@text_2"
+  node_healthy: anchor.teal
+  node_attention: "@attention"
+  node_down: "@muted"          # grey with a cross mark, never red
+  hover: {mix: [panel, "@text", 0.06]}
+  active: {mix: [panel, "@text", 0.12]}
+  row_hover: "@hover"
+  row_selected: "@select_bg"
+  visited: {tune: {from: violet.500, min: 4.5, against: [ground, panel, raised]}}
+  disabled: {tune: {from: {mix: ["@muted", "@panel", 0.3]}, min: 3, against: [panel]}}
+  grafana_ok: "@ok"
+  grafana_warn: "@warn"
+  grafana_bad: "@bad"
+
+themes:
+  light:
+    scheme: light
+    neutral: ink
+    ground: ink.50
+    panel: "#ffffff"
+    raised: ink.100
+    line: ink.300
+    line_2: ink.400
+    text: ink.900
+    text_2: ink.800
+    muted: ink.700
+    on_accent: "#ffffff"
+    accent_hover: {tune: {from: "@accent_fill", shift: -0.05, min: 4.5, against: [on_accent]}}
+    shadow: {alpha: [anchor.ink, 0.08]}
+  dark:
+    scheme: dark
+    neutral: ink
+    ground: ink.975
+    panel: ink.950
+    raised: ink.900
+    line: ink.800
+    line_2: ink.700
+    text: ink.50
+    text_2: ink.300
+    muted: ink.400
+    on_accent: "@ground"
+    accent_hover: {tune: {from: "@accent_fill", shift: 0.05, min: 4.5, against: [on_accent]}}
+    shadow: {alpha: ["#000000", 0]}      # depth in dark themes comes from lighter surfaces, not shadows
+  midnight:
+    scheme: dark
+    neutral: navy
+    ground: navy.975
+    panel: navy.950
+    raised: navy.900
+    line: navy.800
+    line_2: navy.700
+    text: navy.50
+    text_2: navy.300
+    muted: navy.400
+    on_accent: "@ground"
+    accent_hover: {tune: {from: "@accent_fill", shift: 0.05, min: 4.5, against: [on_accent]}}
+    shadow: {alpha: ["#000000", 0]}
+  dim:
+    scheme: dark
+    neutral: slate
+    ground: slate.950
+    panel: slate.900
+    raised: slate.850
+    line: slate.800
+    line_2: slate.700
+    text: slate.50
+    text_2: slate.300
+    muted: slate.400
+    on_accent: "@ground"
+    accent_hover: {tune: {from: "@accent_fill", shift: 0.05, min: 4.5, against: [on_accent]}}
+    shadow: {alpha: ["#000000", 0]}
+
+# Canvases are dark in every page theme (a lifted slate, today's values), so they carry their own set. It is the dark
+# theme with the canvas grounds; tokens.css writes it under .canvas, and print inverts it to the light theme.
+canvas:
+  extends: dark
+  ground: "#111A26"
+  panel: "#16202E"
+  raised: "#1A2636"
+  line: "#2B3A50"
+  line_2: "#374A64"
+  dot: "#223044"
+  text: "#F1F5F9"
+  text_2: "#C9D3DD"
+  muted: "#A3B5C9"
+  wire_base: "#1E2A3A"
