@@ -27,10 +27,15 @@
           },
           "fix": {
             "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^WB-DOCTOR-"
           }
         },
         "required": [
           "name",
+          "code",
           "status",
           "detail",
           "fix"

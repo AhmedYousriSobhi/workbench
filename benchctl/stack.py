@@ -19,6 +19,7 @@ from . import (
     compose,
     controller,
     dcgm,
+    errors,
     jira_real,
     k8s,
     logins,
@@ -167,7 +168,7 @@ def governor_admits(need_mb: int, say: Callable[[str], None], ask=None) -> bool:
         say("WARN governor not reachable: starting without admission (GV-9)")
         return True
     if not r.get("ok"):
-        say(f"REFUSED by governor: {r.get('error')}")
+        say(errors.render("WB-REFUSED-GOVERNOR", str(r.get("error")), f"REFUSED by governor: {r.get('error')}"))
     return bool(r.get("ok"))
 
 
@@ -271,7 +272,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     skip = unbuildable(data["services"], path.parent)
     todo = {n: v for n, v in data["services"].items() if n not in skip}
     if (problem := network_problem(runner)):
-        say(f"REFUSED: {problem}")
+        say(errors.render("WB-REFUSED-NETWORK", problem, f"REFUSED: {problem}"))
         return False
     missing = missing_mb(todo, runner, path)
     if missing:  # a running stack is already in "used" memory: nothing to admit when nothing starts
@@ -280,7 +281,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         else:
             avail = checks.mem_available() if available is None else available
             ok, msg = workbench.verdict(workbench.estimate(sim, chosen, running=workbench.running_services()), avail // (1024 * 1024))
-        say(("admitted: " if ok else "REFUSED: ") + msg)
+        say(("admitted: " + msg) if ok else errors.render("WB-REFUSED-MEMORY", msg, "REFUSED: " + msg))
         if not ok or not governor_admits(missing, say):
             return False
     else:

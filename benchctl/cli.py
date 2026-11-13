@@ -12,6 +12,7 @@ import typer.completion
 from typer.core import TyperGroup
 
 from . import (
+    agentmode,
     capture,
     checks,
     completion,
@@ -19,6 +20,7 @@ from . import (
     contract,
     describe,
     diag,
+    errors,
     export,
     faultstate,
     inventory,
@@ -39,6 +41,12 @@ from . import (
 )
 
 
+class CodedUsageError(click.UsageError):
+    def __init__(self, message: str, code: str, ctx=None):
+        super().__init__(message, ctx=ctx)
+        self.code = code
+
+
 class SuggestingGroup(TyperGroup):
     """A mistyped verb gets a hint and an error (exit 2). It is never guessed and run: `benchctl dwon` must not
     run `down` (CLI guidelines: suggest, do not silently correct; no prefix abbreviations that block future verbs)."""
@@ -48,9 +56,25 @@ class SuggestingGroup(TyperGroup):
             return super().resolve_command(ctx, args)
         except click.UsageError as e:
             close = difflib.get_close_matches(args[0], self.list_commands(ctx), n=1) if args else []
-            if close:
-                raise click.UsageError(f"{e.message} Did you mean '{close[0]}'?", ctx=ctx) from e
-            raise
+            hint = f" Did you mean '{close[0]}'?" if close else ""
+            raise CodedUsageError(f"{e.message}{hint}", "WB-UNKNOWN-VERB", ctx=ctx) from e
+
+    def main(self, *args, **kwargs):
+        """Agent mode (BENCHCTL_AGENT=1): a usage error is one coded line on stderr, not a usage box (ADR 0065)."""
+        agentmode.apply()
+        if not agentmode.agent():
+            return super().main(*args, **kwargs)
+        kwargs["standalone_mode"] = False
+        try:
+            code = super().main(*args, **kwargs)
+        except Exception as e:  # typer 0.27 carries its own copy of click's exceptions: match them by shape
+            if type(e).__name__ == "Abort":
+                sys.exit(1)
+            if not (hasattr(e, "exit_code") and hasattr(e, "format_message")):
+                raise
+            sys.stderr.write(errors.click_line(e) + "\n")
+            sys.exit(e.exit_code)
+        sys.exit(code if isinstance(code, int) else 0)
 
 
 def _profile_check(value: str | None) -> str | None:
@@ -93,7 +117,14 @@ def doctor(output: str = OUTPUT, json_: bool = JSON) -> None:
     results = checks.run_all()
     failed = any(c.status == checks.FAIL for c in results)
     if contract.wanted(output, json_) == "json":
-        typer.echo(contract.dumps({"ok": not failed, "checks": [{"name": c.name, "status": c.status, "detail": c.detail, "fix": c.fix} for c in results]}))
+        typer.echo(contract.dumps({"ok": not failed, "checks": [{"name": c.name, "code": errors.doctor_code(c.name), "status": c.status, "detail": c.detail, "fix": c.fix} for c in results]}))
+        raise typer.Exit(1 if failed else 0)
+    if agentmode.agent():  # only what needs attention, one coded line each
+        for c in results:
+            if c.status != checks.OK:
+                typer.echo(f"{errors.doctor_code(c.name)} {c.status}: {' '.join(c.detail.split())}" + (f" | fix: {c.fix}" if c.fix else ""))
+        if not any(c.status != checks.OK for c in results):
+            typer.echo("ok: every check passed")
         raise typer.Exit(1 if failed else 0)
     for c in results:
         typer.echo(f"[{ICON[c.status]}] {c.name}: {c.detail}")
@@ -106,7 +137,7 @@ def doctor(output: str = OUTPUT, json_: bool = JSON) -> None:
 def preflight(profile: str = typer.Option("std", "--profile", autocompletion=completion.profiles, callback=_profile_check)) -> None:
     """Would this profile fit in current free memory? (SPEC section 6)"""
     ok, msg = checks.preflight(profile, checks.load_profiles(), checks.mem_available())
-    typer.echo(("OK: " if ok else "REFUSED: ") + msg, err=not ok)
+    typer.echo(("OK: " + msg) if ok else errors.render("WB-REFUSED-MEMORY", msg, "REFUSED: " + msg), err=not ok)
     raise typer.Exit(0 if ok else 1)
 
 
@@ -477,17 +508,24 @@ def open_ui() -> None:
     _launcher("open")
 
 
-def _confirm(what: str, yes: bool) -> None:
+YES = typer.Option(False, "-y", "--yes", help="do not ask (a terminal asks; scripts are never asked; BENCHCTL_AGENT=1 requires it)")
+
+
+def _confirm(what: str, yes: bool, ask: bool = True) -> None:
     """Ask before a step that ends shells or removes nodes, but only for a person at a terminal: scripts and the
-    launcher (no TTY) are never blocked, and `--yes` skips the question."""
-    if not yes and sys.stdin.isatty() and not typer.confirm(f"{what} Continue?", default=False):
+    launcher (no TTY) are never blocked, and `--yes` skips the question. With BENCHCTL_AGENT=1 nobody can be asked, so
+    the step is refused without `--yes` (ADR 0067); `ask=False` adds only that rule, for verbs that never asked a person."""
+    if not yes and agentmode.agent():
+        errors.needs_yes(what)
+        raise typer.Exit(1)
+    if ask and not yes and sys.stdin.isatty() and not typer.confirm(f"{what} Continue?", default=False):
         typer.echo("cancelled", err=True)
         raise typer.Exit(1)
 
 
 @app.command()
 def down(dry_run: bool = typer.Option(False, "-n", "--dry-run", help="list what would stop; change nothing"),
-         yes: bool = typer.Option(False, "-y", "--yes", help="do not ask (a terminal asks; scripts are never asked)")) -> None:
+         yes: bool = YES) -> None:
     """Stop and remove the workbench compose project (nothing else)."""
     running = [r["name"] for r in inventory.service_rows() if r["state"] == "running"]
     if dry_run:
@@ -529,7 +567,7 @@ def _get(rows_fn, output: str, selector: list[str] | None, sort_by: str | None, 
             raise inventory.QueryError("--interval must be at least 1 second (each redraw asks Docker)")
         while True:
             text = once()
-            typer.echo(("\033[2J\033[H" if sys.stdout.isatty() else "") + text)
+            typer.echo(("\033[2J\033[H" if sys.stdout.isatty() and not agentmode.agent() else "") + text)
             time.sleep(interval)
     except inventory.QueryError as e:
         typer.echo(str(e), err=True)
@@ -815,13 +853,14 @@ def set_check(name: str = CHECK, state: str = typer.Argument(None, help="on or o
 
 
 @remove_app.command("jobs")
-def remove_jobs() -> None:
+def remove_jobs(yes: bool = YES) -> None:
     """Cancel every job of the simulated users (scancel); the nodes go back to idle."""
+    _confirm("This cancels every job of the simulated users.", yes, ask=False)
     _daemon({"cancel": True}, "jobs cancelled")
 
 
 @remove_app.command("teleport-state")
-def remove_teleport_state(yes: bool = typer.Option(False, "-y", "--yes", help="do not ask (a terminal asks; scripts are never asked)")) -> None:
+def remove_teleport_state(yes: bool = YES) -> None:
     """Forget the Teleport cluster: the next `benchctl up` makes a new one (new certificate authority, no passwords), and every
     client must `tsh logout`, then `benchctl add invite USER`, then log in again. Stop the stack first (`benchctl down`)."""
     if any(r["name"] == "teleport" and r["state"] == "running" for r in inventory.service_rows()):
@@ -835,7 +874,7 @@ def remove_teleport_state(yes: bool = typer.Option(False, "-y", "--yes", help="d
 
 
 @remove_app.command("jira-real-state")
-def remove_jira_real_state(yes: bool = typer.Option(False, "-y", "--yes", help="do not ask (a terminal asks; scripts are never asked)")) -> None:
+def remove_jira_real_state(yes: bool = YES) -> None:
     """Forget the real Jira: remove its containers and data, so the next start is a fresh one with a fresh 3-hour licence. The
     mock is not touched."""
     _confirm("This deletes the real Jira's data: its users, tickets and tokens.", yes)
@@ -878,8 +917,9 @@ def setup_jira_real(licence: str = typer.Option("", "--licence", help="a file wi
 
 
 @remove_app.command("check")
-def remove_check(name: str = CHECK) -> None:
+def remove_check(name: str = CHECK, yes: bool = YES) -> None:
     """Remove a check and its file from images/node-base/nhc.d (git keeps the old one). To keep it, `set check NAME off` instead."""
+    _confirm(f"This removes the check {name} and its file.", yes, ask=False)
     _nhc_run(nhc.remove, name)
     _nhc_done(f"removed check {name}")
 
@@ -1050,9 +1090,20 @@ def ssh_cmd(ctx: typer.Context, target: str = typer.Argument(..., help="NODE for
 @app.command()
 def logs(node: str = TARGET, follow: bool = typer.Option(False, "-f", "--follow"),
          tail: int = typer.Option(50, "--tail")) -> None:
-    """Container log of a node or service."""
+    """Container log of a node or service. With BENCHCTL_AGENT=1 the log goes to a file and only its path is printed."""
     import os
+    from pathlib import Path
 
+    if agentmode.agent():
+        if follow:
+            raise errors.CodedBadParameter("--follow never ends: read a bounded log with --tail N", "WB-USAGE")
+        r = stack._run(["docker", "logs", "--tail", str(tail), f"{stack.PROJECT}-{node}-1"])
+        out = Path("compose/generated/logs")
+        out.mkdir(parents=True, exist_ok=True)
+        path = out / f"{node}.log"
+        path.write_text(r.stdout + r.stderr)
+        typer.echo(f"{path} ({len((r.stdout + r.stderr).splitlines())} lines, last {tail} of {node}); read it with: tail -n 40 {path}")
+        raise typer.Exit(r.returncode)
     os.execvp("docker", ["docker", "logs", *(["-f"] if follow else []), "--tail", str(tail),
                          f"{stack.PROJECT}-{node}-1"])
 
@@ -1144,7 +1195,7 @@ def ssh_key_remove() -> None:
 def scale(n: int = typer.Argument(..., min=0, help="compute node count"),
           profile: str = typer.Option(None, "--profile", autocompletion=completion.profiles, callback=_profile_check, help="default: the profile `up` last started"),
           dry_run: bool = typer.Option(False, "-n", "--dry-run", help="say which nodes start or stop; change nothing"),
-          yes: bool = typer.Option(False, "-y", "--yes", help="do not ask before removing nodes (a terminal asks)")) -> None:
+          yes: bool = YES) -> None:
     """Change the compute-node count: regenerates slurm.conf, restarts slurmctld, starts/stops slurmd."""
     if workbench.current(_base_sim()):
         typer.echo("a workbench is built: to change its size run `benchctl up --cpu-nodes N ...` "
@@ -1191,7 +1242,7 @@ def scenario_run(name: str = typer.Argument(..., autocompletion=completion.scena
     try:
         sc = scenario.load(name)
     except scenario.ScenarioError as e:
-        typer.echo(completion.explain(name, completion.scenarios(""), "scenario") if completion.scenarios("") else str(e), err=True)
+        typer.echo(errors.render("WB-UNKNOWN-SCENARIO", completion.explain(name, completion.scenarios(""), "scenario")) if completion.scenarios("") else str(e), err=True)
         raise typer.Exit(1) from e
     problems = scenario.validate(sc, sim)
     for p in problems:
