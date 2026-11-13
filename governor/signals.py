@@ -11,6 +11,7 @@ class Signals:
     psi_some_avg10: float  # percent
     psi_full_avg10: float  # percent
     swap_out_rate: float = 0.0  # pages/s, filled by Sampler
+    compressed_swap: int = 0  # bytes of RAM held by zswap and zram pools (already taken off mem_available, #463)
 
 
 def parse_psi(text: str) -> dict[str, float]:
@@ -41,9 +42,30 @@ def parse_pswpout(text: str) -> int:
     return 0
 
 
+def parse_memory_events(text: str) -> dict[str, int]:
+    """Parse a cgroup's memory.events ('high 3', 'oom_kill 1', ...)."""
+    out: dict[str, int] = {}
+    for line in text.splitlines():
+        k, _, v = line.partition(" ")
+        if v.strip().isdigit():
+            out[k] = int(v)
+    return out
+
+
+def zram_bytes(sysblock: Path) -> int:
+    """RAM used by every zram device: the third field of mm_stat is mem_used_total."""
+    total = 0
+    for f in sysblock.glob("zram*/mm_stat"):
+        try:
+            total += int(f.read_text().split()[2])
+        except (OSError, ValueError, IndexError):
+            continue
+    return total
+
+
 class Sampler:
-    def __init__(self, proc: Path = Path("/proc")):
-        self.proc = proc
+    def __init__(self, proc: Path = Path("/proc"), sysblock: Path = Path("/sys/block")):
+        self.proc, self.sysblock = proc, sysblock
         self._last: tuple[float, int] | None = None
 
     def sample(self, now: float) -> Signals:
@@ -54,7 +76,10 @@ class Sampler:
         if self._last and now > self._last[0]:
             rate = (pswp - self._last[1]) / (now - self._last[0])
         self._last = (now, pswp)
-        return Signals(mem["MemAvailable"], psi["some"], psi.get("full", 0.0), rate)
+        # MemAvailable counts pages that compression would only shrink, not free: with a compressed swap in use the
+        # headroom is overstated by what the pools already hold, so take that off (conservative, #463)
+        pools = mem.get("Zswap", 0) + zram_bytes(self.sysblock)
+        return Signals(max(mem["MemAvailable"] - pools, 0), psi["some"], psi.get("full", 0.0), rate, pools)
 
 
 class FileSampler:
@@ -70,7 +95,8 @@ class FileSampler:
         import json
 
         d = json.loads(self.path.read_text())
-        return Signals(int(d["mem_available"]), float(d["psi_some"]), float(d["psi_full"]))
+        return Signals(int(d["mem_available"]), float(d["psi_some"]), float(d["psi_full"]),
+                       float(d.get("swap_out_rate", 0.0)), int(d.get("compressed_swap", 0)))
 
 
 class CgroupSampler:

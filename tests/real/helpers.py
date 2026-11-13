@@ -79,8 +79,8 @@ def release() -> None:
     or before a module in ISOLATED_MODULES that needs a cold start of its own."""
 
 
-def signals(path: Path, avail_gb: float = 8, some: float = 0, full: float = 0) -> None:
-    path.write_text(json.dumps({"mem_available": int(avail_gb * GB), "psi_some": some, "psi_full": full}))
+def signals(path: Path, avail_gb: float = 8, some: float = 0, full: float = 0, swap: float = 0) -> None:
+    path.write_text(json.dumps({"mem_available": int(avail_gb * GB), "psi_some": some, "psi_full": full, "swap_out_rate": swap}))
 
 
 def ask(sock: Path, req: dict) -> dict:

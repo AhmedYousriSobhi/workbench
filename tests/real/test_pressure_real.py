@@ -109,6 +109,22 @@ def test_ladder_climbs_and_recovers_on_the_live_stack(sim, tmp_path):
     assert before and containers() == before  # dry-run touched nothing
 
 
+def test_a_swap_storm_raises_the_ladder_and_the_live_cgroups_report_memory_events(sim, tmp_path):
+    """#463: sustained swap-out adds a level on a calm host (dry run, nothing touched); memory.events of the real containers reach status and /metrics."""
+    port = free_port()
+    gov, sig, sock = start_governor(tmp_path, "--dry-run", "--no-watchdog", "--thresholds", json.dumps({"swap_pages_s": 100, "swap_sustain_s": 0.5, "calm_s": 1, "min_dwell_s": 0.3}),
+                                    "--refresh-interval", "1", "--metrics-addr", f"127.0.0.1:{port}")
+    try:
+        assert wait_for(lambda: "workbench-cn001-1" in ask(sock, {"cmd": "status"})["groups"])
+        climb(sig, sock, port, 2, avail_gb=8, swap=5000)
+        assert ask(sock, {"cmd": "status"})["swap_out_rate"] == 5000
+        climb(sig, sock, port, 0, avail_gb=8)
+        assert wait_for(lambda: set(ask(sock, {"cmd": "status"})["memory_events"]) == {"high", "oom", "oom_kill"}, timeout=15)
+        assert wait_for(lambda: 'workbench_container_memory_events{name="workbench-cn001-1",event="oom_kill"}' in "".join(scrape(port)), timeout=15)
+    finally:
+        stop_governor(gov)
+
+
 @pytest.mark.skipif(os.geteuid() != 0, reason="needs root to write container cgroups")
 def test_real_freeze_and_thaw_of_live_containers(sim, tmp_path):
     def frozen(name: str) -> bool:

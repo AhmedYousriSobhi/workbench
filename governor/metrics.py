@@ -34,7 +34,12 @@ def render(gov) -> bytes:
             f"workbench_host_psi_full_avg10 {s.psi_full_avg10}",
             "# TYPE workbench_host_swap_out_pages_per_second gauge",
             f"workbench_host_swap_out_pages_per_second {s.swap_out_rate}",
+            "# TYPE workbench_host_compressed_swap_bytes gauge",
+            f"workbench_host_compressed_swap_bytes {s.compressed_swap}",
         ]
+    if gov.events:
+        out.append("# TYPE workbench_container_memory_events counter")
+        out += [f'workbench_container_memory_events{{name="{n}",event="{k}"}} {v}' for n, e in sorted(gov.events.items()) for k, v in e.items()]
     c = gov.counts
     out += [
         "# TYPE workbench_governor_actions_total counter",

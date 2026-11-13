@@ -3,14 +3,14 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**89% built** (37 done, 80 in review, 9 partial, 6 to do, 132 items).
+**89% built** (38 done, 80 in review, 9 partial, 6 to do, 133 items).
 
 ## Roadmap
 
 ```mermaid
 flowchart LR
     p0["Baseline<br/>33%"]:::partial
-    p1["Governor<br/>86%"]:::partial
+    p1["Governor<br/>87%"]:::partial
     p2["Slurm<br/>100%"]:::review
     p3["Mocks<br/>83%"]:::partial
     p4["People and chaos<br/>25%"]:::partial
@@ -104,7 +104,7 @@ _Measure real memory so budgets stop being guesses._
 
 1/3 done
 
-### Governor (86%)
+### Governor (87%)
 
 _A root service that keeps the host alive by escalating through a ladder._
 
@@ -121,11 +121,12 @@ _A root service that keeps the host alive by escalating through a ladder._
 | Inventory refresh and Grafana annotations | ✅ Done | Re-discovers containers so late starters are governed; posts audit events to Grafana with a token from the environment (SPEC GV-6). | `governor/annotate.py`, `governor/core.py` | #36 |
 | systemd unit installed permanently | 🟡 Partial | Unit and slice pass systemd-analyze and ran as a transient service in tests; scripts/install-governor.sh installs it as the standing service (printed unit tested; the sudo install itself is run by the user). | `systemd` | - |
 | Admission and real scale / set-profile | ✅ Done | admit command (GV-9): refused at L2+ or if it would breach the floor; scale and set-profile run benchctl in the background at L0-L1 only (GV-8). benchctl up/scale ask first. Verified live through the socket. | `governor/core.py` | #48 |
+| Swap storm, memory.events and compressed swap signals (issue 463) | ✅ Done | Sustained pswpout adds one level (up to L3); per-container memory.events high/oom/oom_kill in status and /metrics, oom_kill an audit event; zswap and zram pools taken off MemAvailable. Unit tests with the signals file; live in test_pressure_real. | `governor/signals.py`, `governor/ladder.py`, `governor/core.py`, `governor/metrics.py`, `docs/adr/0059-governor-signal-model.md` | - |
 | Governor /metrics endpoint | ✅ Done | Prometheus text (level, MemAvailable, PSI, swap, groups per priority, actions, admissions) bound to the docker bridge address, rendered once per step so a scrape does no work (GV-8). The Prometheus 'governor' target is up on the live stack. | `governor/metrics.py` | #60 |
 | Live ladder test on the real stack | ✅ Done | Dry-run governor against the running containers: L0 to L3 and back, /metrics, Grafana annotations and the planned throttle/freeze/thaw actions. The root variant passes on the dev machine: L3 really freezes a live container's cgroup (cgroup.events frozen 1), keeps P1 services running, and thaws on recovery; it also exposed and fixed the nested-slice cgroup path bug (PR 64). | `tests/real/test_pressure_real.py` | #60 |
 | Host tuning script and benchctl top | ⬜ To do | zram, swappiness and THP tuning with confirmation, and a live view of the governor. | - | - |
 
-12/14 done
+13/15 done
 
 ### Slurm (100%)
 
