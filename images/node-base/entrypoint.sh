@@ -13,6 +13,13 @@ printf 'WORKBENCH_GPUS=%s\nWORKBENCH_IB=%s\n' "${WORKBENCH_GPUS:-0}" "${WORKBENC
 for u in $WORKBENCH_USERS; do
   id "${u%%:*}" >/dev/null 2>&1 || useradd -m -u "${u##*:}" "${u%%:*}"
 done
+# The munge and JWT keys are made by `benchctl up` and mounted read-only; none is baked into the image (issue 465).
+if [ ! -f /run/workbench/slurm/munge.key ] || [ ! -f /run/workbench/slurm/jwt_hs256.key ]; then
+  echo "workbench: the Slurm keys are not mounted at /run/workbench/slurm; start the cluster with ./scripts/benchctl up" >&2
+  exit 1
+fi
+install -o munge -g munge -m 0400 /run/workbench/slurm/munge.key /etc/munge/munge.key
+install -o slurm -g slurmjwt -m 0640 /run/workbench/slurm/jwt_hs256.key /var/spool/slurmctld/jwt_hs256.key
 su -s /bin/sh munge -c "munged --force"
 # Compute nodes (WORKBENCH_SSHD=1) also run sshd for `ssh <node>` hops and ProxyJump; keys come from the host's
 # compose/generated/secrets/ssh, mounted read-only (sshd wants a root-owned host key, so install copies).

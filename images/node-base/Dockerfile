@@ -30,8 +30,8 @@ RUN --mount=type=cache,target=/ccache,sharing=locked \
  && ccache -s | grep -iE "hit|miss|cache size" \
  && test -f /opt/slurm/lib/slurm/cgroup_v2.so
 
-# Shared base for every Slurm node (slurmd) and the controller image. The munge key is baked in:
-# the sim is a closed lab network, so all containers share one key by design.
+# Shared base for every Slurm node (slurmd) and the controller image. The munge key and the JWT key are NOT in the image:
+# `benchctl up` makes them in compose/generated/secrets/slurm and the entrypoint installs them from a read-only mount (issue 465).
 FROM ubuntu:24.04
 ARG SLURM_VERSION
 ENV DEBIAN_FRONTEND=noninteractive PATH=/opt/slurm/bin:/opt/slurm/sbin:$PATH
@@ -49,11 +49,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && usermod -aG slurmjwt slurm \
  && mkdir -p /etc/slurm /var/spool/slurmd /var/spool/slurmctld /run/munge /var/log/munge \
  && chown slurm:slurm /var/spool/slurmctld \
- && dd if=/dev/urandom bs=32 count=1 of=/var/spool/slurmctld/jwt_hs256.key 2>/dev/null \
- && chown slurm:slurmjwt /var/spool/slurmctld/jwt_hs256.key && chmod 0640 /var/spool/slurmctld/jwt_hs256.key \
- && dd if=/dev/urandom bs=1 count=1024 of=/etc/munge/munge.key 2>/dev/null \
- && chown -R munge:munge /etc/munge /var/lib/munge /var/log/munge /run/munge \
- && chmod 0400 /etc/munge/munge.key
+ && chown -R munge:munge /etc/munge /var/lib/munge /var/log/munge /run/munge
 COPY --from=build /opt/slurm /opt/slurm
 # Tab completion for squeue, sbatch, srun, scontrol ... (shipped in the Slurm source tree)
 COPY --from=build /tmp/slurm-${SLURM_VERSION}/contribs/slurm_completion_help/slurm_completion.sh /etc/bash_completion.d/slurm

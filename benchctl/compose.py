@@ -48,6 +48,9 @@ CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {
     "k8s": {n: (k8s.images({})[n], k8s.LIMITS[n], 3) for n in k8s.SERVICES},
 }
 SSH_PORT = 2222
+# Every image whose entrypoint is node-base's installs the munge and JWT keys from this mount (images/node-base/entrypoint.sh).
+SLURM_KEY_IMAGES = ("workbench/node-base:dev", "workbench/slurm-ctl:dev", "workbench/login:dev")
+SLURM_KEYS_MOUNT = "./secrets/slurm:/run/workbench/slurm:ro"
 SLURMD_MB = 60
 SLURMD_PRIO = 4
 
@@ -178,6 +181,9 @@ def generate(sim: dict, profile: dict) -> dict:
     if bad := qos.problems(sim, "mariadb" in services):  # issue 544: QOS and priority live in slurmdbd
         raise qos.QosError("; ".join(bad))
     _wire_slurm_services(services)
+    for svc in services.values():  # munge and JWT keys are made by `up` (ensure_slurm_keys), never baked into an image (issue 465)
+        if svc.get("image") in SLURM_KEY_IMAGES:
+            svc.setdefault("volumes", []).append(SLURM_KEYS_MOUNT)
     ips = addressing.plan(sim, profile.get("compute_nodes"))
     for name, svc in services.items():  # a fixed address for everything (ADR 0018)
         if ip := addressing.address_of(ips, name):
