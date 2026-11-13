@@ -217,6 +217,18 @@ def readme_memory() -> str:
                "and the safety floor, above the governor's levels L0 to L4.", "".join(b))
 
 
+def tour_hero() -> str:
+    """The Tour's map: eight stops on one pulsing wire, a node at the end that goes down and comes back."""
+    stops = ("Idea", "Start", "Page", "Zoom", "Shell", "Governor", "Break", "Heal")
+    xs = [50 + i * 88 for i in range(len(stops))]
+    b = [label(24, 34, "Eight stops, five minutes", "tx", "h b"), wire(f"M{xs[0]} 92L{xs[-1]} 92", "access")]
+    for i, (x, nm) in enumerate(zip(xs, stops, strict=True)):
+        b.append(f'<circle class="p2" cx="{x}" cy="92" r="15" style="stroke-width:2"/>' + label(x, 97, str(i + 1), "tx2", "b", anchor=True))
+        b.append(label(x, 130, nm, "tx", "s b", anchor=True))
+    return svg(720, 150, "The Tour: eight stops", "A line of eight numbered stops: idea, start, page, zoom, shell, governor, break, heal.",
+               "".join(b), animated=True)
+
+
 # ---- small icons: the Wiki Home tiles and the sidebar groups (issue 591) ----------------------------------------------
 
 def icon(title: str, desc: str, body: str, animated: bool = False) -> str:
@@ -282,7 +294,7 @@ def hero_using_the_cluster() -> str:
                  + wire("M234 88H290") + rack(290, 66, 4) + cloud(540, 56, "mocks"), True)
 
 
-ART = {"readme-hero.svg": readme_hero, "readme-how-it-works.svg": readme_how_it_works, "readme-memory.svg": readme_memory, **ICONS,
+ART = {"readme-hero.svg": readme_hero, "readme-how-it-works.svg": readme_how_it_works, "readme-memory.svg": readme_memory, "tour-hero.svg": tour_hero, **ICONS,
        "01-what-it-is-hero.svg": hero_what_it_is, "02-install-and-start-hero.svg": hero_install_and_start,
        "03-using-the-cluster-hero.svg": hero_using_the_cluster}
 
