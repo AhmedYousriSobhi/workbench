@@ -3,6 +3,7 @@ import subprocess
 
 import helpers
 import pytest
+from verify_times import Recorder
 
 from benchctl import stack
 
@@ -104,3 +105,32 @@ def _shared_stack_down():
 def pytest_collection_modifyitems(config, items):
     items.sort(key=lambda i: "tests/real" in str(i.fspath) and _isolated(i))  # stable: shared modules first
     _mark(config, items)
+
+
+# Per-module wall time, including the module's stack up and down (issue 576): written to compose/generated/verify-times.json.
+RECORDER = Recorder(ISOLATED_MODULES)
+
+
+def _module_of(nodeid: str) -> str:
+    return nodeid.split("::", 1)[0].rsplit("/", 1)[-1].removesuffix(".py")
+
+
+def pytest_runtest_logstart(nodeid, location):
+    RECORDER.start(_module_of(nodeid))
+
+
+def pytest_runtest_logfinish(nodeid, location):
+    RECORDER.finish(_module_of(nodeid))
+
+
+def pytest_runtest_logreport(report):
+    if report.failed:
+        RECORDER.outcome(_module_of(report.nodeid), True)
+
+
+def pytest_terminal_summary(terminalreporter):
+    if os.environ.get("WORKBENCH_REAL") != "1" or not RECORDER.mods:
+        return
+    from datetime import datetime
+    RECORDER.write(helpers.ROOT / "compose" / "generated" / "verify-times.json", datetime.now().isoformat(timespec="seconds"))
+    terminalreporter.write_line(RECORDER.slow_line())

@@ -1,0 +1,80 @@
+# Which live-test modules a change can break (issue 576, V-2). Read by scripts/impact.py and `verify.sh --changed`.
+# Per changed file the FIRST matching rule wins, so specific rules come before general ones; the matches of all files are unioned.
+# `tests: ALL` = every live module, `tests: []` = no live test can be affected. A path no rule matches selects ALL (fail safe).
+# A changed tests/real/test_X.py always selects test_X. tests/test_impact.py fails when a live module is in no rule.
+# `**` crosses folders, `*` does not cross a slash.
+- name: docs and images of docs
+  paths: ["docs/**", "*.md", "LICENSE*", ".github/**", ".githooks/**", ".gitignore", ".privacy-allow", "graphify-out/**"]
+  tests: []
+- name: unit tests and their stand-ins
+  paths: ["tests/test_*.py", "tests/hostbin/**", "tests/conftest.py", "tests/webui_src.py", "webui/tests/**", "tests/real/impact.yaml", "tests/real/verify_times.py"]
+  tests: []
+- name: infrastructure, the stack itself
+  paths: ["tests/real/conftest.py", "tests/real/helpers.py", "scripts/verify.sh", "scripts/real-test.sh", "scripts/lib-*.sh", "scripts/impact.py",
+          "benchctl/stack.py", "benchctl/compose.py", "benchctl/addressing.py", "benchctl/inventory.py", "benchctl/cli.py", "benchctl/controller.py",
+          "benchctl/ready.py", "benchctl/workbench.py", "benchctl/__init__.py", "sim.yaml", "profiles/**", "compose/*.yml", "pyproject.toml"]
+  tests: ALL
+- name: node health check
+  paths: ["images/node-base/nhc", "images/node-base/nhc.d/**", "benchctl/nhc.py"]
+  tests: [test_nhc_real, test_nhc_browser]
+- name: images of the cluster
+  paths: ["images/node-base/**", "images/slurm-ctl/**"]
+  tests: ALL
+- name: governor
+  paths: ["governor/**", "systemd/**", "scripts/install-governor.sh", "scripts/real-test-root.sh", "benchctl/checks.py", "benchctl/memory.py"]
+  tests: [test_real, test_root, test_pressure_real, test_user_mode_real, test_apply_real, test_stack_real, test_webui_real]
+- name: Slurm configuration
+  paths: ["benchctl/slurmconf.py", "benchctl/topology.py", "benchctl/qos.py", "scripts/verify.d/**"]
+  tests: [test_topology_real, test_qos_real, test_power_real, test_slurmresilience_real, test_cluster_real, test_stack_real, test_slurmkeys_real, test_compose_real]
+- name: Slurm statistics and workload
+  paths: ["benchctl/slurmstats.py", "benchctl/slurmtrace.py", "benchctl/workload.py"]
+  tests: [test_gpu_follows_slurm_real, test_scenario_real, test_cluster_real, test_traffic_record_real]
+- name: Kubernetes
+  paths: ["benchctl/k8s.py", "k8s/**"]
+  tests: [test_k8s_real, test_wire_capture_real, test_compose_real]
+- name: wire capture
+  paths: ["benchctl/capture.py", "benchctl/slurm_msgtypes.py", "scripts/gen_slurm_msgtypes.py"]
+  tests: [test_wire_capture_real]
+- name: bmc-farm
+  paths: ["components/bmc-farm/**"]
+  tests: [test_mocks_real, test_bmc_tls_real, test_power_real, test_cluster_real, test_traffic_record_real]
+- name: bcm-mock
+  paths: ["components/bcm-mock/**", "images/login/cmsh.py"]
+  tests: [test_mocks_real, test_cmsh_real, test_traffic_record_real]
+- name: jira
+  paths: ["components/jira-mock/**", "benchctl/jira_driver.py", "benchctl/jira_proxy.py", "benchctl/ticketbot.py"]
+  tests: [test_mocks_real, test_jira_tickets_real, test_jira_dc_real, test_traffic_record_real]
+- name: jira-real
+  paths: ["benchctl/jira_real.py"]
+  tests: [test_jira_dc_real]
+- name: GPU exporters
+  paths: ["components/gpu-exporter-farm/**", "components/dcgm-exporter/**", "benchctl/dcgm.py", "observability/**"]
+  tests: [test_mocks_real, test_gpu_follows_slurm_real, test_gpu_grafana_real, test_dcgm_real]
+- name: real GPU
+  paths: ["benchctl/real_gpu.py"]
+  tests: [test_real_gpu_real]
+- name: web page
+  paths: ["webui/static/**"]
+  tests: [test_webui_browser, test_traffic_live_browser, test_nhc_browser, test_flow_real]
+- name: web server
+  paths: ["webui/*.py"]
+  tests: [test_webui_real, test_webui_browser, test_flow_real, test_cluster_real, test_launcher_real, test_traffic_record_real]
+- name: access, login and jump nodes
+  paths: ["images/login/**", "images/jump/**", "benchctl/logins.py", "benchctl/teleport.py", "benchctl/nodeshell.py", "benchctl/nodes.py"]
+  tests: [test_login_real, test_access_real, test_teleport_real, test_node_ssh_real, test_ssh_faults_real, test_node_tools_real, test_cmsh_real]
+- name: scenarios and faults
+  paths: ["benchctl/scenario.py", "benchctl/authfaults.py", "scenarios/**"]
+  tests: [test_scenario_real, test_authfaults_real, test_slurmresilience_real, test_ssh_faults_real]
+- name: describe, export, diagnostics
+  paths: ["benchctl/describe.py", "benchctl/export.py", "benchctl/hwinventory.py", "benchctl/diag.py", "benchctl/measure.py"]
+  tests: [test_describe_real, test_export_real, test_inventory_real, test_benchctl_real, test_workbench_real]
+- name: completion and machine check
+  paths: ["benchctl/completion.py", "benchctl/machine.py", "scripts/check-machine.sh", "scripts/benchctl", "scripts/benchctl-launch"]
+  tests: [test_completion_real, test_machine_real, test_launcher_real, test_benchctl_real]
+- name: tools that no live test reads
+  paths: ["benchctl/progress.py", "scripts/validate.sh", "scripts/check-*.sh", "scripts/install-hooks.sh", "scripts/sync_wiki.py", "scripts/*_shots.py",
+          "scripts/make_logo_assets.py", "scripts/term_shot.py", "scripts/jira_shapes.py", "scripts/record_jira_shapes.py"]
+  tests: []
+- name: virsh
+  paths: ["fidelity-vm/**"]
+  tests: [test_vm]

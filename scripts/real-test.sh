@@ -4,4 +4,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 [ -n "${PYLIBS:-}" ] && export PYTHONPATH="$PYLIBS${PYTHONPATH:+:$PYTHONPATH}"
-WORKBENCH_REAL=1 exec python3 -m pytest -v -rfE --durations=25 tests/real "$@"
+# Explicit module files (verify.sh --changed) replace the whole folder; anything else is added to it.
+targets=(tests/real)
+for a in "$@"; do case "$a" in tests/real/test_*.py) targets=() ;; esac; done
+WORKBENCH_REAL=1 exec python3 -m pytest -v -rfE --durations=25 "${targets[@]}" "$@"
