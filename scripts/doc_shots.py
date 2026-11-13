@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT))
 import yaml
 
 from webui import blast, connections, graph
+from webui.app import login_url
 
 cluster = {**graph.attach(cluster), "blast": blast.payload()}  # the declared graph and the blast table the page draws from (#312, #315)
 SIM = {**yaml.safe_load((ROOT / "sim.yaml").read_text()), "login": ["ssh", "teleport", "both"]}
@@ -67,7 +68,8 @@ def capture_route():  # sample /api/capture answers: a few Slurm messages and on
 port = 8199
 proc = subprocess.Popen([sys.executable, "-m", "webui", str(port)], cwd=ROOT, stdout=subprocess.PIPE, text=True)
 try:
-    url = proc.stdout.readline().split("UI: ")[1].strip() + "?token=" + (ROOT / "compose/generated/secrets/ui_token").read_text().strip()  # the log line has no token (#346)
+    base_url = proc.stdout.readline().split("UI: ")[1].strip().removesuffix("/login")
+    ui_token = (ROOT / "compose/generated/secrets/ui_token").read_text().strip()  # a one-time code, no token in the URL (#466)
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page(viewport={"width": 1280, "height": 900}, color_scheme="light")
@@ -78,7 +80,7 @@ try:
         def settings(r):
             j = r.fetch().json(); j["logins"]["now"] = ["ssh", "teleport", "both"]; r.fulfill(json=j)
         pg.route("**/api/settings", settings)
-        pg.goto(url); pg.wait_for_selector("#flow rect.blk"); pg.wait_for_timeout(1200)
+        pg.goto(login_url(base_url, ui_token)); pg.wait_for_selector("#flow rect.blk"); pg.wait_for_timeout(1200)
         pg.evaluate("setTree(true, false)"); pg.evaluate(FLOW)
         pg.wait_for_timeout(500)
         pg.screenshot(path=str(OUT / "web-infrastructure.png"))
@@ -100,7 +102,7 @@ try:
         pg.screenshot(path=str(OUT / "web-login-nodes.png"))
         # the README's animation: every capability in turn, each with a caption (#337). Sample data, no cluster.
         from PIL import Image
-        pg.goto(url); pg.wait_for_selector("#flow rect.blk"); pg.wait_for_timeout(1200)
+        pg.goto(login_url(base_url, ui_token)); pg.wait_for_selector("#flow rect.blk"); pg.wait_for_timeout(1200)
         pg.evaluate("setTheme('dark')"); pg.evaluate("setView(true, false)"); pg.evaluate("setTree(false)"); pg.evaluate(FLOW); pg.wait_for_timeout(500)
         # the diagram and the side panel (focus, blast radius, client's eye), side by side as on the real page; the caption has its own strip below
         def union():

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>workbench: sign in</title>
+</head>
+<body>
+<main>
+<h1>workbench</h1>
+<p>Run <code>./scripts/benchctl open</code> for a link that signs you in, or paste the token from <code>compose/generated/secrets/ui_token</code>.</p>
+<form method="post" action="/login">
+<label for="token">Token</label>
+<input id="token" name="token" type="password" autocomplete="current-password" required>
+<button type="submit">Sign in</button>
+</form>
+</main>
+</body>
+</html>

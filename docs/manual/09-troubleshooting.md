@@ -21,7 +21,7 @@ Start with two commands:
 | A node is gone | the governor stopped it, or you scaled down | `benchctl up --profile X` or `benchctl scale N` |
 | Web page says the stack is down | the cluster is not running | `./scripts/benchctl start` |
 | Web page says the governor is down | no governor socket | `./scripts/benchctl start` (no sudo) |
-| Lost the login link | it is printed once at start | `./scripts/benchctl open` |
+| Login link expired or already used | a link works once, for 60 s | `./scripts/benchctl open` |
 | Port already in use | another service holds 8088, 8080, 8081, 8000, 9400, 3000 or 9090 | stop it; set `BENCHCTL_UI_PORT` for the web page |
 | Slurm steps skipped in a web scenario | the page has no Docker access by design | run `./scripts/benchctl scenario run NAME` |
 | `ssh cn001` fails from the host | nodes are reachable only through the login node | `ssh` to the login node, then `ssh cn001`; or `docker exec -it workbench-cn001-1 bash` ([chapter 4](04-nodes-and-shells.md)) |

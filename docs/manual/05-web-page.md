@@ -4,8 +4,8 @@ One dashboard over everything: governor, cluster, scenarios. It fits one screen 
 
 ```bash
 ./scripts/benchctl start                     # starts it with the cluster; or by hand:
-.venv/bin/python -m webui [port]         # default 127.0.0.1:8088; prints http://127.0.0.1:8088/login?token=...
-./scripts/benchctl open                      # print the login link again
+.venv/bin/python -m webui [port]         # default 127.0.0.1:8088; serves the page; sign in with `benchctl open`
+./scripts/benchctl open                      # print a one-time login link (valid 60 s, works once; the token is never in the URL)
 ```
 
 Open the link once: it sets a cookie. The token lives in `compose/generated/secrets/ui_token`; anyone with the link on

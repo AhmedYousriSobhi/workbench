@@ -233,7 +233,7 @@ def wire(services: dict, sim: dict) -> None:
                      "--listen-client-urls=http://0.0.0.0:2379", "--advertise-client-urls=http://k8s-etcd:2379",
                      "--listen-peer-urls=http://127.0.0.1:2380", "--initial-advertise-peer-urls=http://127.0.0.1:2380",
                      "--initial-cluster=node0=http://127.0.0.1:2380"],
-        "k8s-apiserver": ["--etcd-servers=http://k8s-etcd:2379", "--etcd-prefix=/registry", "--allow-privileged=true",
+        "k8s-apiserver": ["--etcd-servers=http://k8s-etcd:2379", "--etcd-prefix=/registry", "--allow-privileged=true",  # kept on: the team-b privileged-pod fixture (k8s/fixtures/20-signals.yaml) is a security signal and would be rejected (#466)
                           "--authorization-mode=Node,RBAC", "--bind-address=0.0.0.0", f"--secure-port={API_PORT}",
                           f"--tls-cert-file={CONTAINER_PKI}/apiserver.crt", f"--tls-private-key-file={CONTAINER_PKI}/apiserver.key",
                           f"--client-ca-file={CONTAINER_PKI}/ca.crt", f"--token-auth-file={CONTAINER_PKI}/tokens.csv",

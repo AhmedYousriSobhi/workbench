@@ -28,8 +28,10 @@ def main() -> None:
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8088
     token = load_token()
     url = f"http://127.0.0.1:{port}/login"
-    # The token goes to a terminal only: stdout is a file when the launcher runs us, and that log must hold no secret.
-    print(f"workbench UI: {url}?token={token}" if sys.stdout.isatty() else f"workbench UI: {url}", flush=True)
+    # No secret is printed anywhere: a link with the token would land in logs and browser history (SEC2).
+    print(f"workbench UI: {url}", flush=True)
+    if sys.stdout.isatty():
+        print("sign in: ./scripts/benchctl open  (prints a one-time link)", flush=True)
     uvicorn.run(create_app(token, sim_yaml=live_sim_path()), host="127.0.0.1", port=port, log_level="warning")
 
 
