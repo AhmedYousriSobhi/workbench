@@ -12,7 +12,7 @@ from .control import PLAN_PARTS
 from .executors import UserExecutor
 from .ladder import Ladder
 from .planner import Action, Group, plan, reversible_first, undo
-from .signals import Sampler, Signals
+from .signals import Sampler, Signals, parse_memory_events
 from .watchdog import Watchdog
 
 log = logging.getLogger("governor")
@@ -21,6 +21,8 @@ Executor = Callable[[Action], None]
 Effector = Callable[[list[str]], int]  # runs `benchctl <args>`; returns the exit code
 Streamer = Callable[[list[str], Callable[[str], None]], int]  # the same, passing each output line to the callback as it appears (issue 519)
 STAGE_PREFIX = "@stage "  # the line `benchctl up` prints for each stage change when WORKBENCH_STAGE_LINES=1
+
+EVENTS_EVERY = 5.0  # seconds between memory.events reads (one small file per container)
 
 ADMIT_FLOOR = int(1.0 * 1024**3)  # MemAvailable that must remain after a start (matches benchctl preflight)
 CHANGE_MAX_LEVEL = 1  # scale/set-profile fork docker; GV-8 forbids that under pressure (L2+)
@@ -58,6 +60,9 @@ class Governor:
         self.inventory, self.refresh_interval = inventory, refresh_interval
         self._next_refresh = refresh_interval
         self._static = [g for g in groups if g.kind == "vm"]  # VMs are configured, not discovered
+        self.events: dict[str, dict[str, int]] = {}  # container -> memory.events counters (high, oom, oom_kill), #463
+        self._events_seen: dict[str, dict[str, int]] = {}
+        self._next_events = 0.0
         self.stopped: set[str] = set()  # stopped by us: gone from `docker ps`, but an operator can still `start` them
 
     def group_names(self) -> set[str]:
@@ -100,12 +105,37 @@ class Governor:
         for a in acts:  # outside the lock: `status` keeps answering while containers are stopped one by one (#342)
             self._act(a)
         self._watch(now, level)
+        self._read_events(now, level)
         self._refresh(now, level)
         with self._lock:
             self.metrics = metrics.render(self)
         if self.annotator:
             (self.annotator.paused.set if level >= 3 else self.annotator.paused.clear)()
         return level
+
+    def _read_events(self, now: float, level: int) -> None:
+        """Per-container memory.events (GV-2): a rising `high` shows in status and metrics, an `oom_kill` is an audit event.
+        Skipped from L3 up: reading allocates, and GV-8 keeps the mitigation path free of it."""
+        cgroups = getattr(self.executor, "cgroups", None)
+        if not cgroups or level >= 3 or now < self._next_events:
+            return
+        self._next_events = now + EVENTS_EVERY
+        fresh: dict[str, dict[str, int]] = {}
+        for name, cg in list(cgroups.items()):
+            try:
+                fresh[name] = parse_memory_events((cg / "memory.events").read_text())
+            except OSError:  # the container went away between refreshes
+                continue
+        with self._lock:
+            for name, now_c in fresh.items():
+                was = self._events_seen.get(name)
+                if was is not None:
+                    for ev, label in (("oom_kill", "OOM KILL"), ("oom", "OOM")):
+                        d = now_c.get(ev, 0) - was.get(ev, 0)
+                        if d > 0:
+                            self._note(f"{label}: {name} (+{d})", logging.WARNING)
+            self._events_seen = fresh
+            self.events = {n: {k: c.get(k, 0) for k in ("high", "oom", "oom_kill")} for n, c in fresh.items()}
 
     def _refresh(self, now: float, level: int) -> None:
         """Re-discover containers so late starters are governed. Skipped from L3 up (forks docker)."""
@@ -284,6 +314,10 @@ class Governor:
                         "mem_available": s.mem_available if s else None,
                         "psi_some": s.psi_some_avg10 if s else None,
                         "psi_full": s.psi_full_avg10 if s else None,
+                        "swap_out_rate": s.swap_out_rate if s else None,
+                        "compressed_swap": s.compressed_swap if s else None,
+                        "memory_events": {k: sum(e[k] for e in self.events.values()) for k in ("high", "oom", "oom_kill")},
+                        "memory_high_top": sorted(((n, e["high"]) for n, e in self.events.items() if e["high"]), key=lambda x: -x[1])[:5],
                         "groups": sorted(self.group_names()),
                         "services": sorted({g.service for g in self.groups if g.service}),  # as of the last inventory refresh
                         "violations": sorted(self.violations),

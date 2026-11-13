@@ -19,6 +19,8 @@ class Thresholds:
     l4_sustain_s: float = 5.0  # L4 PSI full must hold this long (a JVM start stalls briefly, #286); low MemAvailable stays immediate
     l4_mem: int = int(1.0 * GB)
     l5_after_s: float = 30.0  # L4 condition persisting this long -> L5
+    swap_pages_s: float = 2000.0  # pswpout above this for swap_sustain_s raises the target one level, never above L3 (#463; 0 turns it off)
+    swap_sustain_s: float = 10.0
     calm_s: float = 60.0  # calm needed per step down
     min_dwell_s: float = 10.0
 
@@ -39,6 +41,16 @@ class Ladder:
         return now - self._since.setdefault(name, now)
 
     def target(self, s: Signals, now: float) -> int:
+        """The level the signals ask for: PSI and headroom decide, a sustained swap storm adds one (up to L3)."""
+        base = self._target(s, now)
+        t = self.t
+        storm = t.swap_pages_s > 0 and s.swap_out_rate > t.swap_pages_s
+        held = self._held("swap", storm, now)  # called every time so a calm tick resets the clock
+        if storm and held >= t.swap_sustain_s and base < 4:
+            return min(max(base, 1) + 1, 3)
+        return base
+
+    def _target(self, s: Signals, now: float) -> int:
         t = self.t
         stall = s.psi_full_avg10 > t.l4_full
         l4 = s.mem_available < t.l4_mem or self._held("l4_psi", stall, now) >= t.l4_sustain_s

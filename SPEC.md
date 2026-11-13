@@ -70,7 +70,7 @@ Normative requirements for workbench. [README.md](README.md) gives the overview 
 |---|---|
 | GV-1 | Runs on the host as a systemd service in its own slice: `OOMScoreAdjust=-900`, `MemoryLow=`, `Restart=always`. |
 | GV-2 | Signals: `MemAvailable`, swap rate, memory PSI (system and per-cgroup), `memory.current`/`memory.events`, CPU/IO PSI as secondary. |
-| GV-3 | Escalation ladder L0 to L5 as in [architecture section 6.3](docs/architecture/05-governor.md). Thresholds are configurable; the README values are defaults. L4 from PSI full must hold 5 s (`l4_sustain_s`, ADR 0032); L4 from low MemAvailable is immediate. |
+| GV-3 | Escalation ladder L0 to L5 as in [architecture section 6.3](docs/architecture/05-governor.md). Thresholds are configurable; the README values are defaults. L4 from PSI full must hold 5 s (`l4_sustain_s`, ADR 0032); L4 from low MemAvailable is immediate. A sustained swap-out storm adds one level up to L3 (ADR 0059). |
 | GV-4 | Hysteresis: escalate immediately, de-escalate only after 60 s calm, with a minimum dwell per level. |
 | GV-5 | Priority classes P0 to P6; lowest priority is acted on first; reversible actions precede destructive ones. |
 | GV-6 | Every action is logged and published as a Grafana annotation and to the Web UI audit log. |
