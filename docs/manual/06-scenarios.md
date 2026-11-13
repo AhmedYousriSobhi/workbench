@@ -1,4 +1,16 @@
+<p align="center"><img src="../assets/art/06-scenarios-hero.svg" alt="A timeline with three steps: power off at 0 seconds, drain at 5 seconds, recover at 40 seconds" width="720"></p>
+
 # 6. Scenarios and faults
+
+**In 30 seconds:** a scenario is a named, repeatable timeline of faults, a small stunt your monitoring client has to notice. Run one with one command, or play it from the web page.
+
+## Do it
+
+```bash
+./scripts/benchctl scenario list
+./scripts/benchctl scenario run node-down --dry-run     # print the timeline, change nothing
+./scripts/benchctl scenario run node-down
+```
 
 A scenario is a named, repeatable timeline of faults. They live in `scenarios/*.yaml`.
 
@@ -92,3 +104,35 @@ itself after about 30-40 s. `power: "On"` and `clear: true` undo all of that. Yo
 Slurm steps are no longer needed (they are harmless if present). Played from the page, the Slurm part (`drain`, `down`,
 `resume`, `power_off`, `power_on`) goes through the governor, at calm levels only (L0-L1); when it is refused the step still
 runs and says why in its detail. `ssh` steps still need `benchctl scenario run`.
+
+## What you will see
+
+`run` prints each step as it fires and then the result of every `expect` line. The command exits 1 when a step errors or an `expect` line does not hold; steps the caller cannot run are reported as skipped.
+
+## Under the hood
+
+A scenario is a YAML file in `scenarios/` with `steps` (each has a time, a target and a body) and optional `expect` assertions. The engine runs in the host command line and turns each step into a request to the target: a mock, the Slurm controller through the governor, or `ssh` on the login node. `--speed` and `time_dilation` in `sim.yaml` compress the clock.
+
+> [!HOOD]
+> Which steps run depends on who plays the scenario. From `benchctl` on your host everything runs. From the web page (no Docker) the Slurm steps go through the governor at calm levels only, `ssh` steps and Kubernetes steps are skipped, and the step still says why.
+
+Source: `benchctl/scenario.py`, `scenarios/*.yaml`, `webui/cluster.py`, ADR 0006.
+
+## Tips and gotchas
+
+> [!TIP]
+> Always run `--dry-run` first: it rejects unknown targets and unknown nodes.
+
+> [!WARNING]
+> `nodes: [...]` must name nodes from `sim.yaml`; an unknown node is rejected.
+
+## If it goes wrong
+
+| You see | Why | Do this |
+|---|---|---|
+| a step is skipped | the caller cannot run that target (for example `k8s` from the page) | run it with `benchctl scenario run` |
+| an `expect` line fails | the app under test must do its part for some assertions, or the step did not take effect | read the step's detail, then re-run with `--trace` |
+
+## Learn more
+
+[Web page](05-web-page.md) · [The governor](07-governor.md) · [Slurm resilience](../guides/slurm-resilience.md) · [ADR 0006](../adr/0006-scenario-engine-runs-in-the-host-cli.md)

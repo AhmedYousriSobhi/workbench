@@ -1,4 +1,15 @@
+<p align="center"><img src="../assets/art/05-web-page-hero.svg" alt="A browser window with a small circuit of nodes joined by wires, and the governor socket beneath it" width="720"></p>
+
 # 5. The web page
+
+**In 30 seconds:** one dashboard over the governor, the cluster and the scenarios, on `127.0.0.1:8088`. It shows what is happening as a circuit you can zoom, lets you break a node and recover it, and never touches Docker itself.
+
+## Do it
+
+```bash
+./scripts/benchctl start     # starts it with the cluster; prints a one-time login link
+./scripts/benchctl open      # print a new link
+```
 
 One dashboard over everything: governor, cluster, scenarios. It fits one screen (1280 × 800 and up) with no page scrolling.
 
@@ -353,3 +364,35 @@ and reloaded: `./scripts/benchctl up`, then `./scripts/benchctl exec slurmctld -
 BMC is its own small container with its own address (`10.148.x.y:443`) and costs about 32 MB, shown in the memory bar; switch off
 the nodes you do not need. A node panel shows its BMC address, or "none for this node". Apply rebuilds as usual and removes
 the BMCs you switched off.
+
+## What you will see
+
+The screenshots in this chapter come from sample data, so the numbers differ from your cluster and the shapes match.
+
+## Under the hood
+
+The page is a small Starlette server (`webui/app.py`) and static ES modules, with no build step. It never gets Docker or root: it talks to the governor's Unix socket (`/run/workbench/gov.sock`) and to the mocks' HTTP endpoints. Scenarios it plays run with `host=False`, so steps that need Docker are skipped, not failed.
+
+> [!HOOD]
+> The traffic dots come from the mocks' request counters, not from packet capture, and the live feed (server-sent events) is open only while the tab is visible; animation stops at governor level L3 and under reduced motion.
+
+Source: `webui/app.py`, `webui/flow.py`, `webui/cluster.py`, SPEC W-3 and W-11, ADR 0007, ADR 0009.
+
+## Tips and gotchas
+
+> [!TIP]
+> Press Esc to leave a node's panel; **Clear faults** undoes every fault you injected.
+
+> [!WARNING]
+> Anyone with the login link on this machine can use the page, so keep it private. The page listens on `127.0.0.1` only.
+
+## If it goes wrong
+
+| You see | Why | Do this |
+|---|---|---|
+| one notice that the stack is down | the cluster is stopped | run the command the notice names; it never needs `sudo` |
+| a notice that the governor is down | no governor is running | `./scripts/benchctl start` |
+
+## Learn more
+
+[Scenarios and faults](06-scenarios.md) · [The governor](07-governor.md) · [Web UI canvas](../guides/web-ui-canvas.md) · [ADR 0009](../adr/0009-traffic-dots-from-request-counters.md)
