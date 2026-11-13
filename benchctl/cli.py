@@ -13,6 +13,7 @@ from typer.core import TyperGroup
 
 from . import (
     agentmode,
+    alerts,
     capture,
     checks,
     completion,
@@ -31,12 +32,15 @@ from . import (
     memory,
     nhc,
     nodes,
+    ready,
     scenario,
+    situation,
     slurmstats,
     slurmtrace,
     stack,
     teleport,
     ticketbot,
+    wait,
     workbench,
 )
 
@@ -709,6 +713,18 @@ def get_traffic(output: str = OUTPUT, json_: bool = JSON,
     if down:
         typer.echo(f"not reachable: {', '.join(down)}", err=True)
 
+@get_app.command("alerts")
+def get_alerts(output: str = OUTPUT, json_: bool = JSON, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
+    """The alerts Prometheus is firing or about to fire (read-only). The workbench ships no alert rules, so this is empty until rules are loaded. Exit 1 when Prometheus is not running."""
+    def rows() -> list[dict]:
+        try:
+            return alerts.fetch()
+        except alerts.NotRunning as e:
+            typer.echo(errors.render("WB-PART-NOT-RUNNING", f"{e}; start it with: {alerts.ENABLE}"), err=True)
+            raise typer.Exit(1) from e
+    _get(rows, contract.wanted(output, json_), selector, sort_by, False, 2.0)
+
+
 @get_app.command("scenarios")
 def get_scenarios(output: str = OUTPUT, json_: bool = JSON, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
     """The fault and workload scenarios for `benchctl scenario run`."""
@@ -1122,6 +1138,90 @@ def describe_node(node: str = NODE, output: str = OUTPUT, json_: bool = JSON) ->
         typer.echo(str(e.args[0]), err=True)
         raise typer.Exit(1) from e
     typer.echo(contract.dumps(info) if contract.wanted(output, json_) == "json" else describe.render(info))
+
+
+@describe_app.command("workbench")
+def describe_workbench(output: str = OUTPUT, json_: bool = JSON) -> None:
+    """One call for situational awareness: state, clusters and pools, endpoints (credentials as file paths only), faults, scenarios, fault targets and what to do next. `--json` is at most 6,000 characters."""
+    import yaml
+
+    from webui import cluster
+    from webui import connections as conn
+
+    sim = _sim()
+    spec = workbench.current(_base_sim())
+    gov = None
+    try:
+        gov = checks.governor_request({"cmd": "status"}, checks.GOV_SOCKET)
+    except OSError:
+        pass
+    running = [r["name"] for r in inventory.service_rows() if r["state"] == "running"]
+    state = {"containers": len(running), "profile": stack.current_profile() if running else None,
+             "governor_level": gov["level"] if gov else None, "mem_available_mb": checks.mem_available() // (1024 * 1024)}
+    info = situation.gather(
+        state=state, spec=spec.to_dict() if spec else None, sim=sim, k8s_nodes=sim.get("kubernetes", {}).get("nodes", []) if cluster.k8s_built() else [],
+        entities=conn.entities(sim), faults=_fault_rows(), scenarios=scenario.list_all(), plan=scenario.plan,
+        fault_targets=[*cluster.ACTIONS, *sorted(scenario.HOST_TARGETS), *sorted(k for k in scenario.ENDPOINTS if not k.startswith("jira-"))])
+    if contract.wanted(output, json_) == "json":
+        typer.echo(contract.dumps(info, compact=True))
+        return
+    typer.echo(yaml.safe_dump(info, sort_keys=False, width=120).rstrip())
+
+
+wait_app = typer.Typer(cls=SuggestingGroup, help="Block until something is true, then print one JSON result (exit 0 met, 1 timeout, 2 precondition not met)")
+app.add_typer(wait_app, name="wait")
+TIMEOUT = typer.Option(120.0, "--timeout", min=1.0, help="seconds to wait before giving up (exit 1)")
+
+
+def _wait(check, timeout: float, what: dict) -> None:
+    result = wait.poll(check, timeout)
+    if result["outcome"] == wait.PRECONDITION:
+        typer.echo(errors.render(result["code"], result["message"], fix=result["fix"]), err=True)
+    typer.echo(contract.dumps({"wait": what, **result}))
+    raise typer.Exit(wait.EXIT[result["outcome"]])
+
+
+@wait_app.command("ready")
+def wait_ready(timeout: float = TIMEOUT) -> None:
+    """Until every started service answers (the same check `start` uses). Exit 2 when nothing is running."""
+    _wait(wait.ready_check(lambda: [r["name"] for r in inventory.service_rows() if r["state"] == "running"],
+                           lambda n: ready.probe_ok(n, stack._run, stack.dc)), timeout, {"for": "ready"})
+
+
+@wait_app.command("node-state")
+def wait_node_state(node: str = NODE, state: str = typer.Argument(..., help="a container state as `get nodes` shows it: running, paused, absent..."),
+                    timeout: float = TIMEOUT) -> None:
+    """Until a node's state (as `get nodes` shows it) is STATE."""
+    _wait(wait.node_state_check(lambda: inventory.node_rows(_sim()), node, state), timeout, {"for": "node-state", "node": node, "state": state})
+
+
+@wait_app.command("alert")
+def wait_alert(name: str = typer.Argument(..., help="the alert's name (alertname)"),
+               resolved: bool = typer.Option(False, "--resolved", help="until it is no longer pending or firing (default: until it fires)"),
+               firing: bool = typer.Option(False, "--firing", help="until it fires (the default)"),
+               timeout: float = TIMEOUT) -> None:
+    """Until a Prometheus alert fires (or, with --resolved, is gone). Exit 2 when Prometheus is not running."""
+    if resolved and firing:
+        raise typer.BadParameter("choose --firing or --resolved")
+    want = "resolved" if resolved else "firing"
+    _wait(wait.alert_check(name, want), timeout, {"for": "alert", "name": name, "until": want})
+
+
+def _page_run_state() -> dict:
+    import json as _json
+    import urllib.request
+
+    token = wait.UI_TOKEN.read_text().strip()
+    req = urllib.request.Request(f"http://127.0.0.1:{os.environ.get('BENCHCTL_UI_PORT', '8088')}/api/scenarios/run", headers={"Authorization": f"Bearer {token}"})
+    with urllib.request.urlopen(req, timeout=3) as r:
+        return _json.load(r)
+
+
+@wait_app.command("scenario")
+def wait_scenario(name: str = typer.Argument(..., autocompletion=completion.scenarios, help="a scenario the web page is playing"),
+                  timeout: float = TIMEOUT) -> None:
+    """Until the web page's run of NAME has ended (exit 1 if it ended failed). Scenarios started with `scenario run` block by themselves. Exit 2 when the page is not running."""
+    _wait(wait.scenario_check(name, _page_run_state), timeout, {"for": "scenario", "name": name})
 
 
 export_app = typer.Typer(cls=SuggestingGroup, help="Write the workbench in a form another tool can import")

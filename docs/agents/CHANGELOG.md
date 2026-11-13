@@ -2,6 +2,10 @@
 
 Every JSON output of `benchctl` carries `contract_version` (`MAJOR.MINOR`); the schemas are in [schemas/](schemas/) (JSON Schema draft 2020-12). Adding a field is a minor bump. Removing or renaming a field, or changing a type, is a major bump. Every change gets a line here (SPEC AG-3, ADR 0062).
 
+## 1.3 (2026-11-13)
+
+Minor, nothing removed. New JSON outputs: `describe workbench` (one call: state, clusters with pools, endpoints with credentials as file paths, active faults, scenarios, fault targets, next steps; at most 6,000 characters, printed compact), `get alerts` (Prometheus alerts, pending or firing; the workbench ships no alert rules, so it is empty until rules are loaded) and `wait ready|node-state|alert|scenario` (one result object: `outcome` met, timeout, failed or precondition; exit 0, 1, 1, 2).
+
 ## 1.2 (2026-11-13)
 
 Minor. Each `doctor` check carries a stable `code` (`WB-DOCTOR-...`, the registry is [ERROR-CODES.md](ERROR-CODES.md)). With `BENCHCTL_AGENT=1`, errors are one line `CODE: message | fix: COMMAND` on stderr and `doctor` prints only the checks that need attention (agent output mode, ADR 0065; not part of the JSON contract).

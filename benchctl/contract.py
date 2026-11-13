@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-CONTRACT_VERSION = "1.2"
+CONTRACT_VERSION = "1.3"
 
 
 def wrap(data):
@@ -18,8 +18,9 @@ def wrap(data):
     return {"contract_version": CONTRACT_VERSION, **body}
 
 
-def dumps(data) -> str:
-    return json.dumps(wrap(data), indent=2)
+def dumps(data, compact: bool = False) -> str:
+    """`compact` drops the indentation (describe workbench keeps to a size budget, SPEC AG-2)."""
+    return json.dumps(wrap(data), separators=(",", ":")) if compact else json.dumps(wrap(data), indent=2)
 
 
 def wanted(output: str, json_flag: bool = False) -> str:
