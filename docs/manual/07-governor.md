@@ -27,7 +27,7 @@ When the root service is running it wins. Details and the reasons: [ADR 0010](..
 | L5 emergency | still degrading after L4 | stop everything except P0 and P1 |
 
 It escalates at once and de-escalates one level at a time after 60 s calm (minimum 10 s per level). Pausing frees no RAM;
-it only stops growth. Relief comes from stopping. Thresholds can be overridden with `--thresholds` (JSON).
+it only stops growth. Relief comes from stopping. Thresholds can be overridden with `--thresholds` (JSON). The memory thresholds default from `host.reserve_gb` and `safety_floor_gb` in `sim.yaml`; a sustained swap-out storm (`swap_pages_s`, `swap_sustain_s`) adds one level up to L3; the governor wakes on a kernel PSI stall trigger where the kernel allows it (`--no-psi-trigger` to poll only). See ADR 0059.
 
 ## Look at it
 

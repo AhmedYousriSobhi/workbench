@@ -3,7 +3,7 @@ import json
 
 from governor.core import EVENTS_EVERY, Governor
 from governor.ladder import Ladder, Thresholds
-from governor.signals import GB, FileSampler, Sampler, Signals, parse_memory_events, zram_bytes
+from governor.signals import GB, FileSampler, Sampler, Signals, parse_memory_events
 
 
 def sig(swap=0.0, avail=8 * GB, psi=0.0):
@@ -48,10 +48,15 @@ def test_sampler_reads_the_swap_rate_and_takes_compressed_pools_off_the_headroom
     assert s.sample(6).mem_available == 0  # never negative
 
 
-def test_zram_bytes_ignores_a_broken_device(tmp_path):
-    (tmp_path / "zram0").mkdir()
-    (tmp_path / "zram0/mm_stat").write_text("garbage")
-    assert zram_bytes(tmp_path) == 0 and zram_bytes(tmp_path / "none") == 0
+def test_a_broken_zram_device_counts_nothing(tmp_path):
+    proc = tmp_path / "proc"
+    (proc / "pressure").mkdir(parents=True)
+    (tmp_path / "b/zram0").mkdir(parents=True)
+    (tmp_path / "b/zram0/mm_stat").write_text("garbage")
+    (proc / "pressure/memory").write_text("some avg10=0.00 avg60=0 avg300=0 total=0\n")
+    (proc / "meminfo").write_text("MemAvailable: 10 kB\n")
+    (proc / "vmstat").write_text("pswpout 0\n")
+    assert Sampler(proc, tmp_path / "b").sample(0).compressed_swap == 0
 
 
 def test_the_signals_file_can_drive_swap_and_pools(tmp_path):

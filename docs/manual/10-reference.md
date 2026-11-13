@@ -66,7 +66,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 |---|---|
 | `.venv/bin/python -m webui [port]` | the web page (default 8088) |
 | `http://127.0.0.1:8088/help/` | these pages inside the web page, with search (needs the login) |
-| `python -m governor [flags]` | the governor (`--dry-run`, `--once`, `--user-mode`, `--socket`, `--metrics-addr`, `--grafana-url`, `--thresholds`, `--workdir`, `--refresh-interval`, `--no-watchdog`) |
+| `python -m governor [flags]` | the governor (`--dry-run`, `--once`, `--user-mode`, `--socket`, `--metrics-addr`, `--grafana-url`, `--thresholds`, `--sim`, `--no-psi-trigger`, `--workdir`, `--refresh-interval`, `--no-watchdog`) |
 | `fidelity-vm/bin/up.sh`, `down.sh` | the deferred VM scaffold (ADR 0033) |
 
 ## Ports (127.0.0.1, except 9401)
