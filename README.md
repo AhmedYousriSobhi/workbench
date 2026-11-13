@@ -136,6 +136,15 @@ Every command is explained, with its limits, in [the verbs guide](docs/guides/be
 
 </details>
 
+## Using it from an AI agent
+
+```bash
+./scripts/benchctl describe workbench --json     # one call: state, endpoints, faults, scenarios, next steps
+pip install -e '.[mcp]' && ./scripts/benchctl serve mcp    # the same verbs as typed MCP tools
+```
+
+Read [AGENTS.md](AGENTS.md) first (under 2,000 tokens); recipes are in [docs/agents/](docs/agents/README.md).
+
 ## Read more
 
 | I want | Go to |

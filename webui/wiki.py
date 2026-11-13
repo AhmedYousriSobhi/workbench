@@ -12,7 +12,7 @@ import posixpath
 import re
 from pathlib import Path
 
-GROUPS = [("manual", "Manual"), ("guides", "Guides"), ("architecture", "Architecture"), ("adr", "Decisions (ADR)")]
+GROUPS = [("manual", "Manual"), ("guides", "Guides"), ("architecture", "Architecture"), ("adr", "Decisions (ADR)"), ("agents", "For AI agents")]
 IMAGES = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
 SKIP = {"measurements", "assets", "legacy-lab-reuse.md"}
 
