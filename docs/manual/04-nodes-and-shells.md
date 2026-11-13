@@ -21,7 +21,7 @@ Node names come from [sim.yaml](../../sim.yaml): compute nodes `cn001`, `cn002`,
 Each container is named `workbench-<name>-1`.
 
 ```bash
-./scripts/benchctl get nodes                                     # the nodes and their state (add -o json for scripts)
+./scripts/benchctl get nodes                                     # the nodes and their state (add --json for scripts)
 ./scripts/benchctl get services                                  # every container of the stack
 docker ps --format '{{.Names}}' --filter label=workbench.class      # the same with docker
 docker ps --format '{{.Names}}' --filter label=workbench.node       # only compute and GPU nodes
@@ -35,7 +35,7 @@ docker exec workbench-slurmctld-1 sinfo -N -l                       # Slurm's vi
 ## Look at one node
 
 ```bash
-./scripts/benchctl describe node gpu001          # add -o json for scripts
+./scripts/benchctl describe node gpu001          # add --json for scripts
 ```
 
 It prints, like `kubectl describe`: the container (state, image, memory limit, priority class), Slurm's view (state,

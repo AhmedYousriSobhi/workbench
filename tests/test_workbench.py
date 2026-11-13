@@ -145,7 +145,7 @@ def test_up_by_selection_builds_with_the_workbench_and_remembers_it(cwd, monkeyp
     assert r.exit_code == 0, r.output
     assert seen["sim"]["gpu"]["nodes"] == 4 and "jira-mock" in compose.generate(seen["sim"], seen["prof"])["services"]
     assert workbench.current(SIM).gpu_nodes == 4
-    assert json.loads(runner.invoke(cli.app, ["get", "workbench", "-o", "json"]).output)["cpu_nodes"] == 2
+    assert json.loads(runner.invoke(cli.app, ["get", "workbench", "-o", "json"]).output)["workbench"]["cpu_nodes"] == 2
     assert "gpu004" in runner.invoke(cli.app, ["get", "nodes"]).output  # every command now sees the built workbench
 
 

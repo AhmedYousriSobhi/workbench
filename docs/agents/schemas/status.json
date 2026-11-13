@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "status",
+  "description": "Governor level and signals, then the cluster and the web page.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "governor": {
+      "type": "object",
+      "properties": {
+        "reachable": {
+          "type": "boolean"
+        },
+        "level": {
+          "type": "integer"
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "mem_available_mb": {
+          "type": "integer"
+        },
+        "psi_some": {},
+        "psi_full": {},
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "violations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "audit": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "socket": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "reachable"
+      ]
+    },
+    "cluster": {
+      "type": "object",
+      "properties": {
+        "running": {
+          "type": "integer"
+        },
+        "start": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "running",
+        "start"
+      ]
+    },
+    "web_page": {
+      "type": "object",
+      "properties": {
+        "running": {
+          "type": "boolean"
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "running",
+        "url"
+      ]
+    }
+  },
+  "required": [
+    "contract_version",
+    "governor",
+    "cluster",
+    "web_page"
+  ]
+}

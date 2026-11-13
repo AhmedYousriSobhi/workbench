@@ -21,8 +21,8 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 | `start [--profile P | --with PART ... | --ticketing jira --hardware bmc,bcm ... | --addons]` | machine check, venv, governor (as you), cluster, web page; default profile `min`; category flags `--workload --accounting --monitoring --ticketing --hardware --access --simulation` and `--addons` (every optional part) build a selection ([guide](../guides/choose-workbench.md#parts-by-category)); also on `up`, `apply`, `plan`; `--login MODE,MODE...` sets the login nodes ([guide](04-nodes-and-shells.md#login-nodes-how-many-and-how-each-one-lets-you-in)) |
 | `stop` | stop the web page, the cluster and your own governor |
 | `open` | print the login link, open a browser if there is a display |
-| `get nodes\|services\|profiles\|scenarios\|workbench [-o json\|name] [-l SEL] [--sort-by COL] [-w]` | list what exists, filter (`-l kind=gpu`), sort, redraw; `nodes` shows every node `sim.yaml` defines and its state (`absent` = not started) |
-| `describe node NAME [-o json]` | everything known about one node: container, Slurm, jobs, GPUs busy/idle, BMC |
+| `get nodes\|services\|profiles\|scenarios\|workbench [--json \| -o json\|name] [-l SEL] [--sort-by COL] [-w]` | list what exists, filter (`-l kind=gpu`), sort, redraw; `nodes` shows every node `sim.yaml` defines and its state (`absent` = not started) |
+| `describe node NAME [--json]` | everything known about one node: container, Slurm, jobs, GPUs busy/idle, BMC |
 | `ssh [USER@]NODE [-- CMD]` | `benchctl ssh cn001`: a root shell on the node (docker exec). `benchctl ssh alice@cn001`: a real SSH login as that simulated user, through the first login node that takes a key (not for a Teleport-only cluster: use `tsh`). A command after `--` runs instead of a shell |
 | `exec NODE [-u USER] [-- CMD]` | shell on a node, or one command: `benchctl exec gpu001 -- nvidia-smi` |
 | `logs NODE [-f] [--tail N]` | container log of a node or service |

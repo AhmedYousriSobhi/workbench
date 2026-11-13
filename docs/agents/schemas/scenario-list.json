@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "get scenarios",
+  "description": "Every scenario; ref is - when it has none.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "name",
+          "steps",
+          "description"
+        ]
+      }
+    }
+  },
+  "required": [
+    "contract_version",
+    "items"
+  ]
+}
