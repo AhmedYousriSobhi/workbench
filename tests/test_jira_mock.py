@@ -405,3 +405,11 @@ def test_the_l1_flag_pauses_the_background_changes(tmp_path, monkeypatch):
     assert ticks == []
     flag.unlink(); time.sleep(0.2); stop.set(); t.join(2)
     assert ticks
+
+
+def test_failure_state_can_be_read_back(server):
+    base, _, _ = server
+    call(base, "/sim/failure", {"mode": "503", "count": 2})
+    assert call(base, "/sim/failure")[1] == {"mode": "503", "count": 2, "delay": 2.0}
+    new(base)
+    assert call(base, "/sim/failure")[1]["count"] == 1  # counts down as it is used

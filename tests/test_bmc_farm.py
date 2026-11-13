@@ -216,3 +216,19 @@ def test_the_farm_ports_match_the_addressing_plan():
     nodes = bmc.load_nodes(inv(ROOT / "sim.yaml"))
     plan = addressing.plan(yaml.safe_load((ROOT / "sim.yaml").read_text()))
     assert [plan["bmc_port"][n] for n in nodes] == [bmc.NODE_PORT_BASE + i for i in range(len(nodes))]
+
+
+def test_tls_state_can_be_read_back():
+    farm = bmc.Farm(bmc.load_nodes(inv(ROOT / "sim.yaml")))
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), bmc.make_handler(farm))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_port}"
+    try:
+        assert call(f"{base}/sim/tls") == {"served": False, "expired": False}  # no TLS in this farm
+        farm.set_tls = lambda gone: None
+        call(f"{base}/sim/tls", {"expired": True})
+        assert call(f"{base}/sim/tls") == {"served": True, "expired": True}
+        call(f"{base}/sim/tls", {"expired": False})
+        assert call(f"{base}/sim/tls")["expired"] is False
+    finally:
+        srv.shutdown()

@@ -8,7 +8,7 @@ import jsonschema
 import pytest
 from typer.testing import CliRunner
 
-from benchctl import checks, cli, contract, describe, inventory, scenario, stack
+from benchctl import checks, cli, contract, describe, faultstate, inventory, scenario, stack
 from webui import cluster, traffic
 
 runner = CliRunner()
@@ -31,6 +31,7 @@ def in_repo(monkeypatch):
         raise OSError("no socket")
     monkeypatch.setattr(checks, "governor_request", gov)
     nodes = [{"name": "cn001", "kind": "compute", "state": "down", "label": "Powered off"}, {"name": "gpu001", "kind": "gpu", "state": "ok", "label": "Healthy"}]
+    monkeypatch.setattr(faultstate, "collect", lambda fetch, runner, running: [faultstate.row("jira-mock", "service", "Failure mode 503 for the next 2 request(s)")])
     monkeypatch.setattr(cluster.Cluster, "snapshot", lambda self: {"nodes": nodes})
     sample = {"now": 1.0, "edges": None, "services": {"bmc-farm": True, "bcm-mock": None, "jira-mock": False}, "recent": [],
               "streams": [{"service": "bmc-farm", "who": "client", "shape": "GET /redfish/v1", "n": 3, "ok": 3, "client_error": 0, "server_error": 0, "ms": 1.5, "hist": [3]}]}
@@ -77,9 +78,9 @@ def test_scenario_dry_run_json_is_the_timeline():
     assert data["dry_run"] is True and data["timeline"][0]["target"] == "bmc-farm"
 
 
-def test_faults_lists_only_unhealthy_nodes():
+def test_faults_lists_unhealthy_nodes_and_service_faults():
     items = json.loads(runner.invoke(cli.app, ["get", "faults", "--json"]).stdout)["items"]
-    assert [i["node"] for i in items] == ["cn001"]
+    assert [(i["target"], i["kind"]) for i in items] == [("cn001", "compute"), ("jira-mock", "service")]
 
 
 def test_endpoints_give_credentials_as_paths_only():

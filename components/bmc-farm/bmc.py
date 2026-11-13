@@ -9,6 +9,7 @@ Everything but the service root needs a session (POST /redfish/v1/SessionService
 auth with the account in the credentials file; with no file, auth is off.
 
 POST /sim/tls  {"expired": true|false}: present an expired certificate (or the good one again) on the TLS ports
+GET /sim/tls   {"served": bool, "expired": bool}: whether TLS is served and which certificate it presents
 POST /sim/inject  {"node": n, "temp": 95} | {"node": n, "fan_fail": 2} | {"node": n, "power": "Off"}
                   | {"node": n, "event": "text"} | {"node": n, "clear": true}
 """
@@ -45,6 +46,7 @@ class Farm:
         self.fans_failed: dict[str, int] = {}
         self.log: dict[str, list[dict]] = {n: [] for n in nodes}
         self.account = "admin"  # the read-only account the AccountService lists; main() sets it from the credentials
+        self.tls_expired = False  # what POST /sim/tls last asked for (read back by GET /sim/tls)
         self.set_tls = None  # main() sets it when TLS is served: set_tls(True) presents the expired certificate, set_tls(False) the good one
 
     def event(self, node: str, message: str, severity: str = "OK") -> None:
@@ -341,6 +343,8 @@ def make_handler(farm: Farm, sessions: Sessions | None = None, stats: dict | Non
                 return self._send(200, dict(stats))
             if self.path == "/sim/paths":
                 return self._send(200, SHAPES.snapshot())
+            if self.path == "/sim/tls":
+                return self._send(200, {"served": farm.set_tls is not None, "expired": farm.tls_expired})
             if self.path.split("?")[0] == "/sim/traffic":
                 return self._send(200, SHAPES.traffic(since_of(self.path)))
             hit = self._split()
@@ -368,6 +372,7 @@ def make_handler(farm: Farm, sessions: Sessions | None = None, stats: dict | Non
                     if farm.set_tls is None:
                         return self._send(400, {"error": "this farm serves no TLS"})
                     farm.set_tls(bool(req.get("expired")))
+                    farm.tls_expired = bool(req.get("expired"))
                     return self._send(200, {"ok": True, "expired": bool(req.get("expired"))})
                 if sessions is not None and path.rstrip("/") == SESSIONS:
                     made = sessions.login(str(req.get("UserName", "")), str(req.get("Password", "")))

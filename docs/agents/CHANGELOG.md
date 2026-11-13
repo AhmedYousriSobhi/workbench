@@ -4,7 +4,7 @@ Every JSON output of `benchctl` carries `contract_version` (`MAJOR.MINOR`); the 
 
 ## 1.1 (2026-11-13)
 
-Minor, nothing removed. New JSON outputs: `get endpoints` (the Connections registry; the credential is a file path, never a value; `--json` adds the `command`), `get faults` (nodes in the page's states down, fault or warn), `get traffic` (the mocks' record of client requests, `--since T`) and `scenario run NAME --json` (progress on stderr; stdout is one object with every step and `expect` verdict, or the timeline with `--dry-run`).
+Minor, nothing removed. New JSON outputs: `get endpoints` (the Connections registry; the credential is a file path, never a value; `--json` adds the `command`), `get faults` (nodes in the page's states down, fault or warn, plus faults on a service or credential: a Jira failure mode, an expired BMC or Kubernetes certificate, an expired Slurm token, a wrong munge key; each row has `target`, `kind`, `state`, `label`; the Teleport certificate fault is not read back yet), `get traffic` (the mocks' record of client requests, `--since T`) and `scenario run NAME --json` (progress on stderr; stdout is one object with every step and `expect` verdict, or the timeline with `--dry-run`).
 
 ## 1.0 (2026-11-13)
 

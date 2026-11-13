@@ -20,6 +20,7 @@ from . import (
     describe,
     diag,
     export,
+    faultstate,
     inventory,
     jira_real,
     logins,
@@ -640,13 +641,16 @@ FAULT_STATES = ("down", "fault", "warn")  # the page's node states other than he
 def _fault_rows() -> list[dict]:
     from webui import cluster
 
-    snap = cluster.Cluster(_sim()).snapshot()
-    return [{"node": n["name"], "kind": n["kind"], "state": n["state"], "label": n["label"]} for n in snap["nodes"] if n.get("state") in FAULT_STATES]
+    sim = _sim()
+    snap = cluster.Cluster(sim).snapshot()
+    rows = [{"target": n["name"], "kind": n["kind"], "state": n["state"], "label": n["label"]} for n in snap["nodes"] if n.get("state") in FAULT_STATES]
+    running = [r["name"] for r in inventory.node_rows(sim) if r["state"] == "running" and r["kind"] != "k8s"]
+    return rows + faultstate.collect(cluster.http_json, stack._run, running)
 
 
 @get_app.command("faults")
 def get_faults(output: str = OUTPUT, json_: bool = JSON, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
-    """Nodes that are not healthy right now: powered off, a GPU error, overheating, a failed fan, an InfiniBand or NIC problem (what the page's node cards show). None when all is well."""
+    """What is wrong right now: unhealthy nodes (powered off, a GPU error, overheating, a failed fan, an InfiniBand or NIC problem: the page's node cards) and the faults on a service or a credential (a Jira failure mode, an expired BMC or Kubernetes certificate, an expired Slurm token, a wrong munge key). None when all is well."""
     _get(_fault_rows, contract.wanted(output, json_), selector, sort_by, False, 2.0)
 
 

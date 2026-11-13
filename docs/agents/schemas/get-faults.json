@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "get faults",
-  "description": "Nodes that are not healthy now (the page's node states down, fault and warn). Empty when all is well.",
+  "description": "What is wrong now: nodes in the page's states down, fault or warn, and faults on a service or credential (kind service or auth: a Jira failure mode, an expired BMC or Kubernetes certificate, an expired Slurm token, a wrong munge key). A target can appear twice. Empty when all is well.",
   "type": "object",
   "properties": {
     "contract_version": {
@@ -13,7 +13,7 @@
       "items": {
         "type": "object",
         "properties": {
-          "node": {
+          "target": {
             "type": "string"
           },
           "kind": {
@@ -31,7 +31,7 @@
           }
         },
         "required": [
-          "node",
+          "target",
           "kind",
           "state",
           "label"
