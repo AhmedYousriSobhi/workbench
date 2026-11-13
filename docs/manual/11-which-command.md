@@ -63,10 +63,12 @@ Without `benchctl start` the governor is not started, so nothing protects the ho
 | I changed... | Run |
 |---|---|
 | any code or docs, before a commit | `./scripts/validate.sh` |
-| something that touches a live container or the governor, before asking for a merge | `./scripts/verify.sh` (add `--full` for the whole stack lifecycle, or `--only KEYWORD`) |
+| anything, before asking for a merge to `dev` | `./scripts/verify.sh --changed` (runs only the live tests the change can reach; `--explain` shows which and why) |
+| before a release (`dev` to `main`) | `./scripts/verify.sh --full --with-jira` (the whole stack lifecycle and the real Jira; plain `--full` leaves the real Jira out and says so); `./scripts/verify.sh --install-nightly` runs it every night |
+| one component | `./scripts/verify.sh --unit NAME [--clean]`, or `--only KEYWORD` |
 | the governor's cgroup or systemd code | `sudo ./scripts/real-test-root.sh` |
 
-`verify.sh --full` starts and stops the stack, so run it when nothing else is using the stack.
+`verify.sh --full` starts and stops the stack, so run it when nothing else is using the stack. Every run prints a `SLOW` line (the slowest modules) and keeps the times in `compose/generated/verify-times.json`.
 
 ## When something refuses to start
 

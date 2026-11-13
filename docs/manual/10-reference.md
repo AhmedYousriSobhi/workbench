@@ -52,7 +52,8 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 | `scripts/install-governor.sh [--uninstall\|--print]` | optional root governor service (sudo) |
 | `scripts/install-hooks.sh` | git hooks for contributors (no sudo) |
 | `scripts/validate.sh` | lint, tests, privacy scan: run before every commit |
-| `scripts/verify.sh [--full] [--revalidate] [--skip-browser]` | validate (skipped when it passed for this exact tree) plus real-host tests, with seconds per step: run before asking for a merge |
+| `scripts/verify.sh [--changed [BASE] [--explain]] [--full [--with-jira]] [--serial] [--trust-ci] [--revalidate] [--skip-browser] [--unit NAME [--clean]] [--install-nightly [HH:MM] \| --remove-nightly]` | validate (in the background next to the live tests; skipped when it passed for this exact tree) plus real-host tests, with seconds per step and a `SLOW` line. `--changed` before a PR to `dev`, `--full --with-jira` before `dev` to `main` and nightly |
+| `scripts/impact.py [--explain]` | which live-test modules a change reaches (`tests/real/impact.yaml`); an unmatched path selects all |
 | `scripts/real-test.sh` | real-host tests |
 | `scripts/ui_shots.py [OUTDIR]` | screenshots and checks of the web page |
 | `node --test "webui/tests/js/*.test.mjs"` | the web page's JavaScript tests (Node 22 or newer; `validate.sh` runs them) |

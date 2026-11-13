@@ -23,8 +23,35 @@ workbench/
 ├── fidelity-vm/Vagrantfile   # vagrant-libvirt, 2 GB cap, on-demand
 ├── observability/            # prometheus.yml (generated targets), dashboards, alert rules
 ├── scenarios/                # *.yaml
+├── scripts/                  # validate.sh (static), verify.sh (live gates), impact.py (which live modules a change reaches)
+├── tests/                    # hermetic unit tests (stand-ins for docker, systemctl, ...)
+│   └── real/                 # live tests; impact.yaml (change -> modules), stack_reuse.py (stack keys, order), verify_times.py (timing)
 └── docs/adr/                 # decision records
 ```
+
+### Verification: how a change is checked (issue 576, ADR 0057, 0058)
+
+```
+ git diff origin/dev ──► scripts/impact.py ◄── tests/real/impact.yaml     (an unmatched path selects ALL)
+                              │
+                              ▼
+   verify.sh --changed ──► validate.sh (background) + real-test.sh <selected modules> --failed-first --maxfail=1
+   verify.sh --full  [--with-jira] ──► every live module (real Jira only with --with-jira)
+                              │
+       tests/real/conftest.py │ order: shared stack ► STACK_REUSE (same key, one stack) ► cold starts
+                              ▼
+        helpers.bring_up: stack key differs? down + up : reuse ──► stack.up: unchanged image? skip the build (build stamp)
+                              │
+                              ▼
+                compose/generated/verify-times.json  +  SLOW line
+```
+
+| Gate | Command | Live modules |
+|---|---|---|
+| Before a PR to `dev` | `verify.sh --changed` | only those the change can reach, per `impact.yaml` |
+| Before `dev` to `main`, and nightly | `verify.sh --full --with-jira` (nightly: `--install-nightly`) | all, including the real Jira (about 7 minutes) |
+
+The live modules never run in parallel: the stack uses fixed addresses and ports (ADR 0018) and 16 GB allows one stack. Measured on 2026-11-13: a plain `--full` takes about 14 minutes (22 before: the real Jira alone was 7).
 
 ## 10. Migration from what you have
 
