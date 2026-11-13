@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Guidance for Claude Code when working in this repository.
+Guidance for Claude Code when working in this repository. (Using workbench as a test target, not changing it? Read [AGENTS.md](AGENTS.md) instead.)
 
 ## Project
 
@@ -64,6 +64,7 @@ See [docs/architecture/08-repository-and-migration.md](docs/architecture/08-repo
 - `python -m governor --dry-run --once` (add `--watch-interval S` / `--no-watchdog` for the container security watchdog: new/resolved findings land in the audit log and `status`, skipped from L3 up); `--refresh-interval S` re-discovers containers (late starters get the current level's actions); `--grafana-url URL` publishes audit events as annotations (token only via `$WORKBENCH_GRAFANA_TOKEN`, paused from L3 up); `--signals-file F.json` drives the ladder from a file for tests/tuning.
 
 - `./scripts/benchctl start|stop|open` (they call the internal helper `scripts/benchctl-launch`; `benchctl` is the one controller command, grammar `VERB [RESOURCE] [NAME]`, ADR 0015; add new commands in that grammar, never a new top-level script): one-command launcher (machine check, venv, cluster, web page in the background; pid and log in `compose/generated/ui.pid|ui.log`; `BENCHCTL_UI_PORT` overrides 8088).
+- `python -m benchctl.agents` rewrites the generated blocks (endpoints, verbs, contract version) of `AGENTS.md`, the short file for agents that **use** workbench (at most 2,000 tokens; recipes in `docs/agents/recipes/`, `llms.txt` at the root). `tests/test_agents_doc.py` (run by `validate.sh`) fails when it is stale or a command it shows does not exist. Add a verb that matters to `VERBS` in `benchctl/agents.py`.
 - `./scripts/check-machine.sh` (stdlib only, before any build; `benchctl check` once the venv exists; `benchctl/machine.py`) confirms the machine meets the requirements. `./scripts/benchctl doctor | preflight --profile X | status | diag`: environment check, memory pre-flight, governor state, and a masked diagnostics tarball. **Attach `diag` output when reporting or debugging an environment problem.**
 
 - `./scripts/benchctl compose --profile X`: generates `compose/generated/docker-compose.yml` (gitignored) from `sim.yaml` + `profiles/X.yaml` (`groups`, `compute_nodes`, `extends`). Add components in `CATALOG` in `benchctl/compose.py`; never hand-edit the output.
