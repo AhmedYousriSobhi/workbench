@@ -46,8 +46,6 @@ CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {
     "teleport": {"teleport": (f"{teleport.IMAGE}:{teleport.DEFAULT_VERSION}", 320, 2)},
     # a real control plane with KWOK nodes (ADR 0034); the image tags are replaced from sim.yaml kubernetes.version (benchctl/k8s.py)
     "k8s": {n: (k8s.images({})[n], k8s.LIMITS[n], 3) for n in k8s.SERVICES},
-    "scenarios": {"scenario-engine": ("workbench/scenario-engine:dev", 60, 5)},
-    "load": {"user-sim": ("workbench/user-sim:dev", 60, 5), "ticket-bot": ("workbench/ticket-bot:dev", 40, 5)},
 }
 SSH_PORT = 2222
 SLURMD_MB = 60

@@ -20,7 +20,7 @@ def spec(**kw):
 
 def test_defaults_come_from_sim_yaml_and_flags_override_only_what_they_name():
     d = workbench.defaults(SIM)
-    assert (d.cpu_nodes, d.gpu_nodes, d.gpus_per_node) == (4, 2, 8) and sorted(d.parts) == ["accounting", "bcm", "bmc", "jira", "scenarios"]
+    assert (d.cpu_nodes, d.gpu_nodes, d.gpus_per_node) == (4, 2, 8) and sorted(d.parts) == ["accounting", "bcm", "bmc", "jira"]
     assert spec(cpu_nodes=2, gpu_nodes=4).gpu_nodes == 4 and spec(cpu_nodes=2).gpus_per_node == 8
 
 
@@ -75,12 +75,12 @@ def test_observability_constant_matches_the_static_compose_file():
 
 
 def test_verdict_fits_or_says_what_to_remove():
-    s = spec(cpu_nodes=30, gpu_nodes=16, parts=["accounting", "load", "jira"])
+    s = spec(cpu_nodes=30, gpu_nodes=16, parts=["accounting", "jira-real", "jira"])
     est = workbench.estimate(*workbench.effective(SIM, s))
     ok, msg = workbench.verdict(est, est["need_mb"] + 2048)
     assert ok and "fits" in msg
     ok, msg = workbench.verdict(est, est["need_mb"] + workbench.FLOOR_MB - 200, spec=s)  # 200 MB short
-    assert not ok and "short by" in msg and "fewer node" in msg and "drop load" in msg and "drop accounting" in msg
+    assert not ok and "short by" in msg and "fewer node" in msg and "drop jira-real" in msg and "drop accounting" in msg
 
 
 def test_render_lists_nodes_parts_and_total():
@@ -118,7 +118,7 @@ def test_plan_prints_the_estimate_and_exits_0_when_it_fits(cwd):
 
 def test_plan_exits_1_and_names_the_fix_when_it_does_not_fit(cwd, monkeypatch):
     monkeypatch.setattr("benchctl.checks.mem_available", lambda *a: 1500 * 1024**2)
-    r = runner.invoke(cli.app, ["plan", "--cpu-nodes", "20", "--with", "load"])
+    r = runner.invoke(cli.app, ["plan", "--cpu-nodes", "20", "--with", "jira-real"])
     assert r.exit_code == 1 and "does not fit" in r.output and "Try:" in r.output
 
 

@@ -25,7 +25,6 @@ def test_every_part_is_in_exactly_one_category():
 def test_expand_names_items_with_commas_repeats_and_all():
     assert workbench.expand({"hardware": ["bmc,bcm"], "access": ["teleport"]}) == ["bcm", "bmc", "teleport"]
     assert workbench.expand({"hardware": ["bmc", "bcm"]}) == ["bcm", "bmc"]
-    assert workbench.expand({"simulation": ["all"]}) == ["load", "scenarios"]
     assert workbench.expand({"accounting": ["slurmdbd"]}) == ["accounting"]
     assert workbench.expand({"workload": ["slurm"], "monitoring": ["grafana,prometheus"]}) == []  # always on: nothing to add
     assert workbench.expand({}, addons=True) == sorted(set(workbench.PARTS) - set(workbench.BY_NAME_ONLY))  # the real Jira is not an add-on
@@ -47,7 +46,7 @@ def test_completion_offers_flags_items_and_continues_after_a_comma():
     assert "kubernetes" in completion.category("workload")("k")
     assert completion.category("access")("t") == ["teleport"]
     out = runner.invoke(cli.app, ["start", "--help"], terminal_width=200).output
-    for flag in ("--workload", "--accounting", "--monitoring", "--ticketing", "--hardware", "--access", "--simulation", "--addons"):
+    for flag in ("--workload", "--accounting", "--monitoring", "--ticketing", "--hardware", "--access", "--addons"):
         assert flag in out
 
 
@@ -55,7 +54,7 @@ def test_plan_accepts_category_flags_and_addons():
     r = runner.invoke(cli.app, ["plan", "--ticketing", "jira", "--hardware", "bmc,bcm", "--access", "teleport"])
     assert "teleport" in r.output and "jira" in r.output and "bcm" in r.output
     r = runner.invoke(cli.app, ["plan", "--addons", "--without", "teleport"])
-    assert "load" in r.output and "teleport" not in r.output.split("(always")[0]
+    assert "accounting" in r.output and "teleport" not in r.output.split("(always")[0]
     r = runner.invoke(cli.app, ["plan", "--hardware", "bmcc"])
     assert r.exit_code == 1 and "Did you mean 'bmc'?" in r.output
 
@@ -65,10 +64,10 @@ def test_start_forwards_the_selection_as_parts(monkeypatch):
     monkeypatch.setattr(cli, "_launcher", lambda *a: calls.append(a))
     monkeypatch.setattr(cli, "_offer_completion", lambda: None)
     monkeypatch.setattr(cli.workbench, "current", lambda sim, path=None: None)  # a saved workbench on this machine would be kept (issue 387)
-    runner.invoke(cli.app, ["start", "--access", "teleport", "--simulation", "load"])
+    runner.invoke(cli.app, ["start", "--access", "teleport", "--hardware", "bmc"])
     args = calls[-1]
     assert args[0] == "start" and "--profile" not in args
-    assert [args[i + 1] for i, a in enumerate(args) if a == "--with"] == ["load", "teleport"]
+    assert [args[i + 1] for i, a in enumerate(args) if a == "--with"] == ["bmc", "teleport"]
     runner.invoke(cli.app, ["start", "--workload", "slurm"])  # adds nothing, still a selection (not the min preset)
     assert "--profile" not in calls[-1]
     runner.invoke(cli.app, ["start"])

@@ -12,7 +12,7 @@ A scenario is a named, repeatable timeline of faults. They live in `scenarios/*.
 ./scripts/benchctl scenario run SC-02 --dry-run          # the reference works instead of the name
 ```
 
-The command exits 1 when a step errors or an `expect` line does not hold. Steps for parts that are not built (ticket-bot) are reported as **skipped**, not failed. From the web page ([chapter 5](05-web-page.md)) the `slurm` steps go through the governor; tick **Slurm trace** there for the same trace (see the [resilience guide](../guides/slurm-resilience.md)).
+The command exits 1 when a step errors or an `expect` line does not hold. Steps the caller cannot run are reported as **skipped**, not failed. From the web page ([chapter 5](05-web-page.md)) the `slurm` steps go through the governor; tick **Slurm trace** there for the same trace (see the [resilience guide](../guides/slurm-resilience.md)).
 
 ## The scenarios shipped
 
@@ -71,7 +71,7 @@ expect:
 ```
 
 - `at`: when the step runs, as `10s`, `2m`. `--speed` and `time_dilation` in `sim.yaml` compress it.
-- `target`: `bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira`, `slurm`, `ssh`, `k8s` (built); `ticket-bot` (not built, skipped).
+- `target`: `bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira`, `slurm`, `ssh`, `k8s`.
 - `do`: the body for that target. `nodes: [...]` fans out one request per node and must name nodes from `sim.yaml`. `slurm`
   takes `drain` and `resume` (node lists) and the job and daemon steps of the [resilience guide](../guides/slurm-resilience.md) (`submit: {node, gpus, duration}`, `cancel`, `slurmd_restart`, `slurmd_stop`, `slurmd_start`, `slurmctld_restart`); `jira` takes `failure: {mode: "429"|"503"|null, count: N}`; `bmc-farm` takes `power`,
   `temp`, `fan_fail`, `ramp: {to, over}`, `clear`; `ssh` (the login node) takes `state: down|hung|up` (stop, freeze, restore),
@@ -80,7 +80,7 @@ expect:
   `delete_pod: {namespace, name}`, `scale: {namespace, deploy, replicas}` and `apply: [path under k8s/]`. Expectations: `k8s.node_ready: {node, ready, within}`
   and `k8s.pod_status: {namespace, name, reason, within}` (the pod's phase or a container's waiting or terminated reason).
 - `expect`: assertions checked after the steps. Anything that needs the app under test (such as `jira.issue_created`) only
-  holds when the app, or ticket-bot once built, does its part.
+  holds when the app does its part.
 
 Always run `--dry-run` first: it rejects unknown targets and unknown nodes. Design: [ADR 0006](../adr/0006-scenario-engine-runs-in-the-host-cli.md).
 

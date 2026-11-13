@@ -12,7 +12,7 @@ SIM = yaml.safe_load(Path("sim.yaml").read_text())
 
 def test_profile_extends_union_and_override():
     std = compose.load_profile("std")
-    assert std["groups"] == ["core", "mocks", "access", "scenarios", "accounting", "load"]
+    assert std["groups"] == ["core", "mocks", "access", "accounting"]
     assert std["compute_nodes"] == 16  # own value beats the parent's
     assert compose.load_profile("full")["compute_nodes"] == 32
     assert compose.load_profile("mac-agent")["compute_nodes"] == 4  # inherited
@@ -21,7 +21,7 @@ def test_profile_extends_union_and_override():
 def test_min_has_no_accounting_or_load():
     svcs = compose.generate(SIM, compose.load_profile("min"))["services"]
     assert "slurmctld" in svcs and "bmc-farm" in svcs
-    assert not {"mariadb", "slurmdbd", "user-sim"} & set(svcs)
+    assert not {"mariadb", "slurmdbd", "user-sim", "scenario-engine", "ticket-bot"} & set(svcs)
 
 
 def test_mocks_publish_on_localhost_only():
@@ -63,7 +63,7 @@ def test_slurmd_count_follows_profile():
 def test_budget_matches_limits():
     data = compose.generate(SIM, compose.load_profile("min"))
     nodes = 4 + SIM["gpu"]["nodes"]  # every node also has its BMC forwarder
-    assert compose.budget_mb(data) == 200 + 60 + 3 * 100 + 40 + 60 + nodes * (60 + compose.BMC_FORWARDER_MB)
+    assert compose.budget_mb(data) == 200 + 60 + 3 * 100 + 40 + nodes * (60 + compose.BMC_FORWARDER_MB)
 
 
 def test_write_marks_generated(tmp_path):

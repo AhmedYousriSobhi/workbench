@@ -2,7 +2,7 @@
 
 A scenario is `steps` (`at`, `target`, `do`) and optional `expect` assertions. Each step is one HTTP call to a
 mock's /sim/inject (or a `scontrol` call in slurmctld). `ramp` steps expand into a series of temperature steps.
-Targets whose component is not built yet (k8s, ticket-bot) are reported as skipped, not failed.
+Targets the caller cannot run (the page has no Docker) are reported as skipped, not failed.
 """
 import base64
 import json
@@ -34,7 +34,6 @@ JIRA_REAL_TICKET_ACTIONS = ("create", "transition", "comment")  # `tickets:` ste
 HOST_TARGETS = ("slurm", "ssh", "jira-real", "k8s", "dcgm", "auth")  # steps that need Docker on the host
 SSH_STATES = ("down", "up", "hung")
 NODE_SSHD_STATES = ("down", "up")
-NOT_BUILT = ("ticket-bot",)
 RAMP_STEP_S = 10.0
 RAMP_START_C = 50.0
 SCENARIOS = Path("scenarios")
@@ -101,8 +100,6 @@ def summary(sc: dict) -> str:
 
 def page_support(step: Step) -> str:
     """"" when the Web UI can run the step (it has no Docker: only the governor's Slurm steps), else why not. The same rules as `_apply` with host=False."""
-    if step.target in NOT_BUILT:
-        return f"{step.target} is not built yet"
     if step.target == "switch" or step.target == "slurm" and (set(step.do) & set(DAEMON_KEYS) or set(step.do) & set(SLURM_STATES)):
         return ""
     if step.target in HOST_TARGETS:
@@ -160,7 +157,7 @@ def validate(sc: dict, sim: dict) -> list[str]:
         if t == "switch":
             problems += [f"step {i}: {m}" for m in topology.switch_problems(s.get("do") or {}, sim)]
             continue
-        if t not in ENDPOINTS and t not in HOST_TARGETS and t not in NOT_BUILT:
+        if t not in ENDPOINTS and t not in HOST_TARGETS:
             problems.append(f"step {i}: unknown target {t!r}")
         do = s.get("do") or {}
         if t == "ssh":
@@ -422,8 +419,6 @@ def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcom
             return Outcome(label, "failed", "; ".join(topology.switch_problems(step.do, sim)))
         inner = _apply(Step(step.at, "slurm", topology.switch_step(step.do, sim)), poster, runner, host, slurm, daemon)
         return Outcome(label, inner.status, inner.detail)
-    if step.target in NOT_BUILT:
-        return Outcome(label, "skipped", f"{step.target} is not built yet")
     if step.target == "slurm" and not host and daemon and set(step.do) & set(DAEMON_KEYS):  # no Docker: the governor does it
         ok, detail = daemon(step.do)
         return Outcome(label, "ok" if ok else "skipped", detail)  # a refusal (calm levels only) is not a failure of the scenario

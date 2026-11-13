@@ -34,7 +34,6 @@ Largest working set seen (MB), the cap the container may reach, and what the pla
 | Prometheus / Grafana / GPU exporter | 22 / 54 / 19 | 300 / 300 / 100 | 26 / 62 / 22 |
 | **Jira (real), Data Center** | **2045** | **2176** | **2176** |
 | Postgres for the real Jira | 130 | 256 | 150 |
-| scenario engine, user-sim, ticket-bot | not measured (not built) | 60 / 60 / 40 | the cap |
 
 The real Jira is more than 90 percent of what the whole stack uses. Its cap of 2176 MB (heap 768 MB, a trimmed JVM: Serial GC, C1-only compilation, 512 KB thread stacks) passed the setup and a ticket run twice with a peak of about 2040 MiB; without the JVM flags the smallest working cap was 2560 MB. A Java application keeps its heap, code cache, plugin system and thread stacks, so it cannot go much lower. All trials: [real Jira](jira-real.md#why-21-gb-measured-issues-287-and-289).
 

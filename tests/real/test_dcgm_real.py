@@ -44,7 +44,7 @@ def slurm(*cmd: str) -> subprocess.CompletedProcess:
 @pytest.fixture(scope="module")
 def built():
     os.chdir(ROOT)
-    out = benchctl("up", "--cpu-nodes", "1", "--gpu-nodes", "2", "--gpus-per-node", "2", "--with", "dcgm", "--dcgm-nodes", "2", "--with", "scenarios")
+    out = benchctl("up", "--cpu-nodes", "1", "--gpu-nodes", "2", "--gpus-per-node", "2", "--with", "dcgm", "--dcgm-nodes", "2")
     assert out.returncode == 0, out.stdout + out.stderr
     assert wait_for(lambda: "DCGM_FI_DEV_GPU_UTIL" in scrape(), timeout=120), "the real exporter never answered"
     yield

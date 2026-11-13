@@ -37,7 +37,7 @@ def cluster(tmp_path_factory):
 
 
 def test_apply_plan_shrinks_then_grows_the_running_workbench(cluster):
-    plan = {"cmd": "apply-plan", "cpu_nodes": 2, "gpu_nodes": 1, "gpus_per_node": 8, "parts": ["jira", "bmc", "bcm", "scenarios"]}
+    plan = {"cmd": "apply-plan", "cpu_nodes": 2, "gpu_nodes": 1, "gpus_per_node": 8, "parts": ["jira", "bmc", "bcm"]}
     assert ask(cluster, plan)["started"]
     assert wait_for(lambda: {"cn001", "cn002", "gpu001"} <= services() and not ({"cn003", "cn004", "gpu002"} & services()), timeout=300)
     assert wait_for(lambda: slurm_nodes() == {"cn001", "cn002", "gpu001"}, timeout=120), slurm_nodes()
