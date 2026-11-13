@@ -6,6 +6,11 @@
 #                                 the step line says so. Durations: see the per-step seconds in your own run (issue 237).
 #   ./scripts/verify.sh --full    also the live stack lifecycle (up/scale/down, ~3 GB)
 #   ./scripts/verify.sh --only X  run only real tests matching pytest -k X (skips validate.sh)
+#        --changed [BASE]         live tests only for the modules the change can affect (tests/real/impact.yaml; BASE default origin/dev),
+#                                 with --failed-first --maxfail=1; an unmatched path selects everything. Before a PR to dev (issue 576).
+#        --explain                with --changed: print file -> rule -> modules and exit
+#        --serial                 run validate.sh before the live tests (default: in the background, next to them)
+#        --trust-ci               skip validate.sh when the CI run for HEAD passed and the tree is clean
 #        --revalidate             run validate.sh even when a fresh pass is recorded
 #        --skip-browser           leave out the Chromium tests (pytest marker `browser`)
 #   ./scripts/verify.sh --unit X  verify one component: tests/test_X*.py (fast), then tests/real/test_X*.py (live)
@@ -16,10 +21,14 @@
 # Your workbench selection (compose/generated/workbench.yaml, profile, sim.yaml) is saved first and put back on exit.
 set -u
 cd "$(dirname "$0")/.."
-full=0 revalidate=0 nobrowser=0 only="" unit="" unit_given=0 clean=0 list=0 dry=0
+changed=0 base="origin/dev" explain=0 serial=0 trustci=0 full=0 revalidate=0 nobrowser=0 only="" unit="" unit_given=0 clean=0 list=0 dry=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --full) full=1 ;;
+    --changed) changed=1; case "${2:-}" in ""|-*) ;; *) base="$2"; shift ;; esac ;;
+    --explain) explain=1 ;;
+    --serial) serial=1 ;;
+    --trust-ci) trustci=1 ;;
     --only) only="$2"; shift ;;
     --unit) unit="${2:-}"; unit_given=1; shift ;;
     --clean) clean=1 ;;
@@ -27,7 +36,7 @@ while [ $# -gt 0 ]; do
     --skip-browser) nobrowser=1 ;;
     --list-units) list=1 ;;
     -n|--dry-run) dry=1 ;;
-    *) echo "usage: $0 [--full] [--only KEYWORD] [--revalidate] [--skip-browser] [--unit NAME [--clean]] [--list-units] [-n]" >&2; exit 2 ;;
+    *) echo "usage: $0 [--full] [--changed [BASE]] [--explain] [--serial] [--trust-ci] [--only KEYWORD] [--revalidate] [--skip-browser] [--unit NAME [--clean]] [--list-units] [-n]" >&2; exit 2 ;;
   esac
   shift
 done
@@ -50,10 +59,29 @@ if [ "$unit_given" = 1 ]; then
     exit 0
   fi
 fi
+modules=() pick="" pickwhy=""
+if [ "$changed" = 1 ] && [ "$unit_given" = 0 ]; then
+  [ "$explain" = 1 ] && { python3 scripts/impact.py --base "$base" --explain; exit 0; }
+  pick=$(python3 scripts/impact.py --base "$base" --explain) || pick="ALL"
+  sel_line=$(printf '%s\n' "$pick" | tail -1)
+  if [ "$sel_line" = "ALL" ]; then full=1; pickwhy="every module ($(printf '%s\n' "$pick" | grep -m1 'ALL (' | sed 's/.*-> ALL (//; s/)$//'))"
+  else mapfile -t modules < <(printf '%s\n' "$sel_line" | grep .); pickwhy="${#modules[@]} modules"; fi
+  basesha=$(git rev-parse --short "$base" 2>/dev/null || echo "?")
+  echo "SELECT $pickwhy  (base $base@$basesha)"
+fi
+validate_mode="in the background"; [ "$serial" = 1 ] && validate_mode="first (--serial)"
+if [ "$dry" = 1 ] && [ "$unit_given" = 0 ]; then
+  echo "would run: validate.sh $validate_mode$([ "$trustci" = 1 ] && echo ', skipped when CI passed for HEAD and the tree is clean')"
+  if [ "$changed" = 1 ] && [ "$sel_line" != "ALL" ]; then
+    [ ${#modules[@]} = 0 ] && echo "would run: no live tests (nothing live is affected)" || echo "would run: pytest --failed-first --maxfail=1 $(printf 'tests/real/%s.py ' "${modules[@]}")"
+  else echo "would run: pytest tests/real$([ "$full" = 0 ] && echo " -k 'not stack'")"; fi
+  exit 0
+fi
 . scripts/lib-selection.sh
 log=$(mktemp)
 selection_save  # the real tests build and forget their own selections: keep yours, so the next `up` is your cluster, not std
-trap 'rm -f "$log"; selection_restore' EXIT
+vlog=$(mktemp) vpid=""
+trap 'rm -f "$log" "$vlog"; [ -n "$vpid" ] && kill "$vpid" 2>/dev/null; selection_restore' EXIT
 status=0
 . scripts/lib-stamp.sh
 timings=()
@@ -92,7 +120,23 @@ step() {  # step NAME CMD...: run with a live status line, record, keep the outp
     mkdir -p compose/generated; keep="compose/generated/verify-fail-${name%% *}-$(date +%H%M%S).log"; cp "$log" "$keep"
     echo "      full output of this step: $keep  (attach it; nothing needs re-running with -vv)"; fi
   awk '/slowest .*durations/{f=1} f&&/^=+ .* in [0-9.]+s/{f=0} f' "$log" | sed 's/^/      /'  # where the time went (pytest --durations)
+  grep '^SLOW ' "$log" | sed 's/^/      /'  # per-module seconds from tests/real/verify_times.py (issue 576)
   timings+=("${secs}s $name")
+}
+validate_start() { vt0=$SECONDS; echo "START validate.sh (in the background, own log)"; ./scripts/validate.sh >"$vlog" 2>&1 & vpid=$!; }
+validate_wait() {  # the live tests are done: collect validate.sh; either failing fails the run
+  [ -n "$vpid" ] || return 0
+  local rc; wait "$vpid"; rc=$?; vpid=""
+  local secs=$((SECONDS - vt0))
+  if [ $rc = 0 ]; then echo "PASS  validate.sh  [${secs}s, ran next to the live tests]  ($(tail -1 "$vlog"))"; else
+    echo "FAIL  validate.sh  [${secs}s]"; tail -40 "$vlog"; status=1
+    mkdir -p compose/generated; keep="compose/generated/verify-fail-validate-$(date +%H%M%S).log"; cp "$vlog" "$keep"; echo "      full output of this step: $keep"; fi
+  timings+=("${secs}s validate.sh")
+}
+ci_green() {  # CI passed for exactly this commit and nothing is modified: its result is this tree's result
+  command -v gh >/dev/null 2>&1 || return 1
+  [ -z "$(git status --porcelain)" ] || return 1
+  [ "$(gh run list --commit "$(git rev-parse HEAD)" --workflow ci.yml --json conclusion -q '.[0].conclusion' 2>/dev/null)" = success ]
 }
 if [ "$unit_given" = 1 ]; then
   if [ "$clean" = 1 ]; then
@@ -103,17 +147,29 @@ if [ "$unit_given" = 1 ]; then
   if [ ${#live[@]} -gt 0 ]; then step "$unit live tests" env WORKBENCH_REAL=1 python3 -m pytest -v -rfE --durations=25 "${live[@]}"
   else echo "NOTE  $unit has no live tests (tests/real/test_${unit}*.py)"; fi
 else
+  run_validate=0
   if [ -z "$only" ]; then
     if [ "$revalidate" = 0 ] && age=$(stamp_fresh); then echo "SKIP  validate.sh  (passed ${age}s ago for this exact tree; --revalidate runs it again)"
-    else step "validate.sh" ./scripts/validate.sh; fi
+    elif [ "$trustci" = 1 ] && ci_green; then echo "SKIP  validate.sh  (CI passed for HEAD and the tree is clean, --trust-ci)"
+    else run_validate=1; fi
   fi
+  if [ "$run_validate" = 1 ] && [ "$serial" = 1 ]; then step "validate.sh" ./scripts/validate.sh; run_validate=0; fi
+  [ "$run_validate" = 1 ] && validate_start
   # the tests start their own stacks: a cluster running with your selection would meet them half way (issue 535)
   step "clean start (benchctl down)" ./scripts/benchctl down --yes
   for f in $SELECTION_FILES; do rm -f "$f"; done
-  sel=(); [ -n "$only" ] && sel=(-k "$only") || { [ "$full" = 0 ] && sel=(-k "not stack"); }
+  sel=()
+  if [ "$changed" = 1 ] && [ "${sel_line:-ALL}" != "ALL" ]; then
+    sel=(--failed-first --maxfail=1); for m in "${modules[@]}"; do sel+=("tests/real/$m.py"); done
+  elif [ "$changed" = 1 ]; then sel=(--failed-first --maxfail=1)
+  elif [ -n "$only" ]; then sel=(-k "$only")
+  elif [ "$full" = 0 ]; then sel=(-k "not stack"); fi
   [ "$nobrowser" = 1 ] && sel+=(-m "not browser")
-  step "real tests ${sel[*]:-}" ./scripts/real-test.sh "${sel[@]}"
-  [ "$full" = 0 ] && [ -z "$only" ] && echo "NOTE  live stack lifecycle skipped; run --full when stack/compose/slurm changed"
+  if [ "$changed" = 1 ] && [ "${sel_line:-ALL}" != "ALL" ] && [ ${#modules[@]} = 0 ]; then echo "SKIP  live tests  (no live module is affected by this change)"
+  else step "real tests ${sel[*]:-}" ./scripts/real-test.sh "${sel[@]}"; fi
+  validate_wait
+  [ "$full" = 0 ] && [ -z "$only" ] && [ "$changed" = 0 ] && echo "NOTE  live stack lifecycle skipped; run --full when stack/compose/slurm changed"
+  [ "$changed" = 1 ] && echo "NOTE  --changed ran the modules the change can reach; run --full before a dev -> main merge"
 fi
 case "$selection_kept" in *workbench.yaml*)
   echo "NOTE  your workbench selection was kept; the tests stopped the cluster, so bring it back with ./scripts/benchctl up (or start)" ;;
