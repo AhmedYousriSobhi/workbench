@@ -195,6 +195,19 @@ def test_templated_chapters_follow_the_page_template():
         assert re.search(r"^Source: .+", hood, re.MULTILINE), f"{name}: Under the hood needs a Source line"
 
 
+GUIDES = {"memory": "memory", "nhc-checks": "nhc-checks", "topology": "topology", "qos-and-preemption": "qos-and-preemption"}  # guides in the page template (issue 605); the list grows
+
+
+def test_templated_guides_follow_the_page_template():
+    for name, key in GUIDES.items():
+        text = (ROOT / "docs/guides" / f"{name}.md").read_text()
+        assert text.startswith(f'<p align="center"><img src="../assets/art/guide-{key}-hero.svg" alt="'), name
+        assert "**In 30 seconds:**" in text and "## Do it" in text and "## Learn more" in text, name
+        assert f"guide-{key}-diagram.svg" in text, name
+        hood = text.split("## Under the hood", 1)[1].split("\n## ", 1)[0]
+        assert re.search(r"^Source: .+", hood, re.MULTILINE), f"{name}: Under the hood needs a Source line"
+
+
 REFERENCE = ("10-reference", "11-which-command", "12-glossary")  # reference chapters: hero, 30 seconds and Learn more, no stunts
 
 
