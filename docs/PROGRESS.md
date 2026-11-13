@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**89% built** (39 done, 85 in review, 9 partial, 6 to do, 139 items).
+**89% built** (39 done, 86 in review, 9 partial, 6 to do, 140 items).
 
 ## Roadmap
 
@@ -16,7 +16,7 @@ flowchart LR
     p4["People and chaos<br/>25%"]:::partial
     p5["Kubernetes<br/>100%"]:::done
     p6["Fidelity VM<br/>0%"]:::todo
-    p7["Web UI and profiles<br/>92%"]:::partial
+    p7["Web UI and profiles<br/>93%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
     p0 --> p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7 --> p8
     classDef done fill:#1a7f37,stroke:#1a7f37,color:#fff
@@ -203,7 +203,7 @@ _One real Ubuntu VM with Redfish power control._
 
 0/1 done
 
-### Web UI and profiles (92%)
+### Web UI and profiles (93%)
 
 _One click from cold start to a busy cluster._
 
@@ -245,12 +245,13 @@ _One click from cold start to a busy cluster._
 | Plane lenses and the client's eye | 🔍 In review | A Lens menu restyles the same layout by plane (access, management, telemetry, tickets, faults) from the declared edges' plane: the rest dims by attribute, nothing moves. The Client's eye lens lists every client edge to a service with calls, errors, rate per minute and a verdict from the per-mock counters, and says not measured where nothing counts; with the stack down it shows one message. Issue 316. | `webui/static/index.html`, `scripts/ui_shots.py` | - |
 | 2.5D view | 🔍 In review | The 2.5D view is the same SVG restyled with CSS only (raised slabs, gradient faces, tiled floor, glow on live and failed parts); a lens lifts its plane (deeper side face and glow, the rest dims, nothing moves). Flat is the default under reduced motion and on a phone; the view switcher turns it on. Measured in headless Chromium: 19-36 % of one core main thread while animating and a 3.5 MB heap, no measurable cost over flat (ADR 0030). A tilted layered stack and a camera into a layer are not built. Issue 320. | `webui/static/index.html`, `docs/adr/0030-2-5d-view.md` | - |
 | Light and dark screenshot pairs | 🔍 In review | doc_shots.py writes every screenshot it makes as NAME-light.png and NAME-dark.png (dark is the page's Midnight theme) and the README demo as architecture-demo-light.gif and -dark.gif; manual pages use the light image. A test checks the pairs and the budgets (PNG 300 KB, GIF 3 MB). Also fixes the script under the page's CSP. The phone, node panel, fault actions, running scenario, stopped stack and help shots are redone in the circuit layout, and a new circuit-zoom GIF shows the layers and the Fleet, Cluster and Pool zoom. Issue 587. | `scripts/doc_shots.py`, `docs/manual/img/`, `tests/test_docs.py`, `docs/manual/04-nodes-and-shells.md`, `docs/manual/05-web-page.md` | - |
+| Tour page | 🔍 In review | A five-minute illustrated walk of eight stops (idea, start, page, zoom, shell, governor, break, heal), one picture each, first in the manual index and the sidebar; the map above it is generated art. Issue 593. | `docs/manual/00-tour.md`, `scripts/make_doc_art.py`, `docs/assets/art/tour-hero.svg` | - |
 | Wiki Home | 🔍 In review | The Wiki Home is the manual's README with the hero art, a three-step Start here and a grid of six illustrated links; the sidebar groups carry a small icon beside their text; every page ends with an Edit this page link to its source on dev. Ten icons come from make_doc_art.py. Issue 591. | `scripts/sync_wiki.py`, `scripts/make_doc_art.py`, `docs/assets/art/`, `tests/test_sync_wiki.py` | - |
 | README redesign | 🔍 In review | The README opens with the generated hero art, shows the demo and the zoom and layers animation as light and dark picture pairs, and adds why, what is inside, will it fit and an FAQ; every command is unchanged and checked by tests/test_docs.py, numbers link to the memory guide. Issue 589. | `README.md`, `tests/test_docs.py` | - |
 | README demo gif | 🔍 In review | The README's animation is made from sample data and shows each capability in turn with a caption: dark 2.5D with traffic, error triangles, a fault with its declared blast radius, a lens, the client's eye, focus, the flat view and the global view. Re-run scripts/doc_shots.py after a change to the page. Issue 337. | `scripts/doc_shots.py`, `docs/manual/img/architecture-demo.gif`, `README.md` | - |
 | Budget manager | ⬜ To do | Profile/budget form (W-7). | - | - |
 
-1/40 done
+1/41 done
 
 ### macOS agent and CI (0%)
 
