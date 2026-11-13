@@ -1,4 +1,15 @@
+<p align="center"><img src="../assets/art/guide-power-and-reboot-hero.svg" alt="A node going dark and coming back, joined by wires that show power flowing" width="720"></p>
+
 # Power save and reboot through the BMC farm
+
+**In 30 seconds:** use Slurm's own power save and reboot commands and the fake BMCs follow: `sinfo` shows `POWERED_DOWN`, Redfish shows `PowerState` Off, and the node returns to service when you power it up.
+
+## Do it
+
+```bash
+docker exec workbench-slurmctld-1 scontrol power down cn002
+docker exec workbench-slurmctld-1 scontrol power up cn002
+```
 
 Slurm's own power states and reboot workflow, wired to the fake BMCs (issue 545, ADR 0054). A client sees what it would on a real cluster: `POWERED_DOWN` and `POWERING_UP` in `sinfo`, a Redfish `PowerState` of `Off`, and a node that reboots and returns to service.
 
@@ -46,3 +57,32 @@ Three things differ from what the Slurm manual suggests, and the images handle t
 - **`RebootProgram` runs in the foreground.** slurmd waits for it and Slurm ends anything the program leaves behind, so a detached copy never ran. `reboot.sh` does the whole cycle itself, and slurmd is killed in the middle of it.
 
 Still not exercised: a node with a running job through `scontrol reboot ASAP` (the node should drain first), the monitoring client.
+
+## Under the hood
+
+<p align="center"><img src="../assets/art/guide-power-and-reboot-diagram.svg" alt="One power down command runs one script that tells the BMC, the BCM mock and the GPU exporter" width="720"></p>
+
+> [!HOOD]
+> No new process: `SuspendProgram` and `ResumeProgram` are one script, `images/slurm-ctl/power.sh`, installed under two names (slurmctld passes only a hostlist, so the name says which way). It posts a Redfish `Reset` to the BMC farm, which is the source of truth for power, then tells the BCM mock and the GPU exporter so every view agrees. A BMC farm failure fails the program, as a real one would.
+> A reboot is a power cycle (`ForceOff`, a pause, `On`) plus the hold file that `slurmd-run` waits on; the container stays up. `SuspendTime` is not written, so nothing powers down by itself.
+
+Source: `images/slurm-ctl/power.sh`, `images/node-base/reboot.sh`, `images/node-base/slurmd-run`, [ADR 0054](../adr/0054-slurm-power-save-and-reboot-through-the-bmc-farm.md)
+
+## Tips
+
+> [!TIP]
+> `power_down` is not `power_off`. The first goes through Slurm like an administrator's act; the second kills a node behind Slurm's back, like a power cut.
+
+## If it goes wrong
+
+| Symptom | Try |
+|---|---|
+| The node ends `down~` after a power up | the image is older than `slurmd-run -b`; rebuild with `benchctl up` |
+| The program exits 1 | the BMC farm refused; check `docker logs workbench-bmc-farm-1` |
+| A scenario step is skipped on the page | these steps need the host CLI; run `benchctl scenario run NAME` |
+
+## Learn more
+
+- [Scenarios](../manual/06-scenarios.md)
+- [Slurm resilience](slurm-resilience.md)
+- [Client testing](client-testing.md)
