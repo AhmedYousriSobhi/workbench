@@ -81,7 +81,7 @@ fi
 log=$(mktemp)
 selection_save  # the real tests build and forget their own selections: keep yours, so the next `up` is your cluster, not std
 vlog=$(mktemp) vpid=""
-trap 'rm -f "$log" "$vlog"; [ -n "$vpid" ] && kill "$vpid" 2>/dev/null; selection_restore' EXIT
+trap 'rm -f "$log" "$vlog" "$vlog.secs"; [ -n "$vpid" ] && kill "$vpid" 2>/dev/null; selection_restore' EXIT
 status=0
 . scripts/lib-stamp.sh
 timings=()
@@ -123,11 +123,11 @@ step() {  # step NAME CMD...: run with a live status line, record, keep the outp
   grep '^SLOW ' "$log" | sed 's/^/      /'  # per-module seconds from tests/real/verify_times.py (issue 576)
   timings+=("${secs}s $name")
 }
-validate_start() { vt0=$SECONDS; echo "START validate.sh (in the background, own log)"; ./scripts/validate.sh >"$vlog" 2>&1 & vpid=$!; }
+validate_start() { vt0=$SECONDS; echo "START validate.sh (in the background, own log)"; bash -c 'SECONDS=0; ./scripts/validate.sh; rc=$?; echo $SECONDS >"$1.secs"; exit $rc' _ "$vlog" >"$vlog" 2>&1 & vpid=$!; }
 validate_wait() {  # the live tests are done: collect validate.sh; either failing fails the run
   [ -n "$vpid" ] || return 0
   local rc; wait "$vpid"; rc=$?; vpid=""
-  local secs=$((SECONDS - vt0))
+  local secs; secs=$(cat "$vlog.secs" 2>/dev/null || echo $((SECONDS - vt0)))  # its own run time, not how long we waited for it
   if [ $rc = 0 ]; then echo "PASS  validate.sh  [${secs}s, ran next to the live tests]  ($(tail -1 "$vlog"))"; else
     echo "FAIL  validate.sh  [${secs}s]"; tail -40 "$vlog"; status=1
     mkdir -p compose/generated; keep="compose/generated/verify-fail-validate-$(date +%H%M%S).log"; cp "$vlog" "$keep"; echo "      full output of this step: $keep"; fi

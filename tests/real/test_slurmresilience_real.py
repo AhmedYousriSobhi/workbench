@@ -70,8 +70,8 @@ def cluster(test_timers):
 def clean(cluster):
     yield
     run_steps({"slurmd_start": [NODE], "cancel": True})
-    wait_for(lambda: "idle" in node_state() or "drain" not in node_state() and "down" not in node_state(), timeout=90)
-    ctl("scontrol", "update", f"nodename={NODE}", "state=resume")
+    ctl("scontrol", "update", f"nodename={NODE}", "state=resume")  # resume first: a drained node never becomes idle by waiting (it cost 90 s per module, #576)
+    wait_for(lambda: "idle" in node_state(), timeout=90)
 
 
 def test_slurmd_is_not_pid_1_so_it_can_restart_without_the_container():
