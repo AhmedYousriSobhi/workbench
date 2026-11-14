@@ -19,7 +19,7 @@ CLAUDE.md's hard rule ("Do not add real NFS/Lustre") stays as it is; only its po
 
 ## Owner answers (2026-11-14)
 1. Tier 3 and the C-11 text: **approved**.
-2. MinIO or SeaweedFS: **survey first** (below).
+2. MinIO or SeaweedFS: **survey first** (below); the owner then asked me to do the research myself and to "do the best recommended"; the choice below follows from it (Garage) and is open to correction.
 3. What the client reads: **the disk space and the inodes of a path**, and **the nodes must be able to reach the storage**.
 
 ### What that means for the tiers
@@ -40,17 +40,31 @@ Users keep large LLM training datasets on one path shared by all nodes. That is 
 
 So the realistic pair is a shared volume for the POSIX path and an S3 store for the object path; the others need a privilege the project does not grant. The *look* of NFS, Lustre or DDN comes from the shims in tier 1 (`df` mount source, `lfs df`, `lfs quota`), not from running them.
 
-### Survey of object stores (secondary sources, not yet measured here)
-| | MinIO | SeaweedFS | Garage |
-|---|---|---|---|
-| State | Community repo archived by its owner in 2026 and no official images; the AGPL source remains and community forks exist | Active | Active |
-| Licence | AGPLv3 | Apache 2.0 | AGPLv3 |
-| Image | none official | about 57 MB (a hardened build; official image not measured) | about 10 to 20 MB compressed |
-| Memory | n/a | a user reports 80 to 90 MB idle on 4.17 and 250 to 360 MB on 4.18 and later, a filer OOM-killed at 256 MB (issue 9035); the 19 MB fresh and 372 MB after small-file load from another source | not found; a Rust single binary, expected small |
-| API | S3 | S3, a filer with a path view, WebDAV, a FUSE mount (unusable here) | S3 only |
-| Metrics | yes | not confirmed | Prometheus format reported, not confirmed against its docs |
+### Survey of object stores (2026-11-14, read from the vendors' pages and issue trackers; memory figures are third-party measurements)
+| | MinIO | SeaweedFS | RustFS | Garage |
+|---|---|---|---|---|
+| State | community repository archived in 2026, no official images; community forks (`pgsty/minio`) | active | 1.0 GA announced for 2026-09-16; open issues about memory that grows and is not released (1.0.3, 1.0.4) | active, tags v2.2.0 to v2.5.0 |
+| Licence | AGPLv3 | Apache 2.0 | Apache 2.0 | AGPLv3 |
+| Image | none official | 96 MB compressed (4.23, with a second Rust binary) | about 110 to 158 MB | about 10 to 20 MB compressed |
+| Memory | n/a | about 141 MB for `weed server -s3` on 4.41 (one informal test); 250 to 360 MB reported for the filer on 4.18+ against 80 to 90 MB on 4.17 | about 250 MB idle, 650 MB with 1.5 GB of data on 1.0.3, 1.5 to 2.6 GiB after load on 1.0.4 | tens of MB (22.6 MiB idle on v2.4.1, 30 to 60 MB in another comparison); its own guide asks for 512 MB for production |
+| Single node | n/a | one process: master, volume, filer, S3 | one pod, one volume | `--single-node` (v2.3.0 and later) lays itself out; `--default-bucket` and `GARAGE_DEFAULT_ACCESS_KEY`/`_SECRET_KEY` make the bucket and key at start |
+| Metrics | `-metricsPort` per server | not confirmed | `GET /metrics` on the admin port (3903), guarded by `metrics_token`: `garage_local_disk_avail`/`_total` (data and metadata volumes), `cluster_healthy`, `cluster_available`, `cluster_connected_nodes`, `cluster_storage_nodes_ok`, `block_bytes_read`/`_written` |
+| Extras | | filer path view, WebDAV, FUSE (unusable here) | | S3 only |
 
-**Recommendation:** drop MinIO (nothing official to pull, nothing patched). Between the other two, **Garage** if the store is only an S3 endpoint with metrics (smallest, fits a P6 budget with room), **SeaweedFS** if a path-shaped view (its filer) is wanted from the nodes, at a memory cost that depends on the version and must be pinned. The AGPL on Garage matters only if we redistribute it; we only pull the upstream image at run time, as we do with the Kubernetes images, so I see no conflict, but it is your call for a public repository. Before building, I will pull both images, run them idle and under a small load in a throwaway container without the `workbench.class` label, and report real RSS, image size, non-root behaviour and the metrics endpoint.
+**Decision: Garage**, pinned to `dxflrs/garage:v2.5.0` (a newer tag is an ADR addendum). It is the smallest, has a one-flag single-node start with the bucket and key created at boot (no layout or key commands to script), exposes Prometheus metrics with space and health, and is not showing the memory growth that RustFS and SeaweedFS have open reports about. SeaweedFS is the second choice if a path-shaped view is ever wanted; RustFS is too young for a service that must stay at a few hundred MB; MinIO has nothing official to pull.
+
+Facts about how it runs: config at `/etc/garage.toml` (`metadata_dir`, `data_dir`, `db_engine = "sqlite"`, `replication_factor = 1`, `rpc_bind_addr`, `rpc_secret`, `[s3_api]` on 3900 with `s3_region = "garage"`, `[admin]` on 3903 with `admin_token` and `metrics_token`); ports 3900 S3, 3901 RPC, 3902 web, 3903 admin; no volumes by default, so data and metadata need a volume or a tmpfs. The image's user is not documented on that page and must be checked before the service is declared unprivileged.
+
+**AGPLv3:** the repository does not redistribute Garage; `up` pulls the upstream image at run time, as it does the Kubernetes images. The owner has been told and decides for a public repository.
+
+**What the nodes get:** the endpoint `http://objectstore:3900`, the region `garage` and a generated key pair in a read-only secret mounted on every node and login node, plus a small S3 client (to be chosen when tier 3 is built: a pinned static binary with its SHA256, never a package pulled at start).
+
+### What the research says about the formats the shims print (read, not captured from a site)
+- `lfs df`: a header `UUID ... Use% Mounted on`, one row per target named `FSNAME-OST000c_UUID` (the index is hexadecimal) ending in `/mount[OST:12]` (UTK's page); a `filesystem_summary:` row and MDT rows are not shown by any page found, so they come from knowledge of the tool.
+- `lfs quota -u bob /mnt/testfs`: `Disk quotas for user bob (uid 500):`, columns `Filesystem kbytes quota limit grace files quota limit grace`, an asterisk on a value over its limit and a grace such as `6d23h56m44s` (the Lustre manual; newer releases print `usr` and `used`).
+- A Lustre client's `df` source is `MGSNID@tcp:/fsname` or `10.51.22.11@o2ib:10.51.22.10@o2ib:/lustre/home`; an unreachable mount fails `df` with `Input/output error` or, after an eviction, `Cannot send after transport endpoint shutdown (-108)`; a stale NFS handle shows `Stale file handle`.
+- `node_exporter`: `node_filesystem_avail_bytes` is the space for non-root users and `node_filesystem_files_free` the free inodes. Lustre's own counters: `filesfree`/`filestotal` and `kbytesfree`/`kbytestotal` per MDT and OST; the exporters are `lustre_exporter` (HPE, inactive since 2022), its GSI fork, and `lustrefs-exporter` (Whamcloud, Rust).
+- AI clusters: NVIDIA's DGX guides keep datasets and checkpoints on a shared parallel file system from a partner (DDN's AI400X2 for BasePOD) with node-local NVMe absorbing frequent checkpoints; dataset loaders such as Mosaic Streaming read shards (about 100 MB to 1 GB) from S3-compatible stores and keep a bounded local cache; Pyxis/Enroot mount shared paths with `--container-mounts host:container`. This is the reason for the pair this ADR builds: a shared path and an S3 store.
 
 ## Not verified
 All of it. The shared-volume seeding of user homes and the effect on SSH login are the main risks for tier 2; the image size and idle memory are the main unknowns for tier 3.

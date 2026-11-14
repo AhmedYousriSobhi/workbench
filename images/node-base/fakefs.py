@@ -182,9 +182,9 @@ def lfs_quota(argv: list[str], mounts: list[dict]) -> int:
         used_kb, lim_kb = q["used_gb"] * 1024 * 1024, q["quota_gb"] * 1024 * 1024
         f = (lambda kb: human(kb * 1024)) if human_ else (lambda kb: str(int(kb)))
         over = q["exceeded"]
-        grace = "6d23h59m" if over else "-"
-        print(f"Disk quotas for usr {user} (uid {uid}):")
-        print(table([["Filesystem", "used", "quota", "limit", "grace", "files", "quota", "limit", "grace"],
+        grace = "6d23h59m59s" if over else "-"  # the Lustre manual's form: days, hours, minutes, seconds
+        print(f"Disk quotas for user {user} (uid {uid}):")  # "user" and the kbytes column are the Lustre manual's; newer releases print usr and used
+        print(table([["Filesystem", "bytes" if human_ else "kbytes", "quota", "limit", "grace", "files", "quota", "limit", "grace"],
                      [m["path"], f(used_kb) + ("*" if over else ""), f(lim_kb), f(lim_kb), grace, str(q["files_used"]), str(q["quota_files"]), str(q["quota_files"]), "-"]]), end="")
         if over:
             sys.stderr.write(f"lfs quota: user {user} is over the quota on {m['path']}\n")
