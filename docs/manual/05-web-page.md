@@ -150,7 +150,7 @@ The **view switcher** under the title (*2.5D*, *Flat*, *Overview*) picks how the
 
 ![The overview: one card for the cluster, with a preview of the design underneath](img/web-global-view-light.png)
 
-*2.5D* and *Flat* are the drawing styles (in 2.5D a lens also lifts its plane: parts in it get a deeper side face and a glow; see ADR 0030): 2.5D (the default) draws the same diagram as raised slabs on a tiled floor with glowing lines; flat is the plain baseline and is the default under reduced motion and on a phone. The choice is remembered in the browser.
+*2.5D* and *Flat* are the drawing styles (in 2.5D a lens also lifts its plane: parts in it get a deeper side face and a glow; see ADR 0030): 2.5D draws the same diagram as raised slabs on a tiled floor with glowing lines; flat is the plain baseline and is the default on every device. Choosing 2.5D is remembered in the browser and then wins over the default.
 
 **Focus.** Double-click a part (or Tab to it and press **F**) to focus it: the part and its direct neighbours stay lit, everything else dims, faulted parts stay visible, and nothing moves. Connections then lists what it connects to (plane, kind, and whether the link is *measured* by a counter or only *declared*). Double-click it again, press Esc, or use the breadcrumb under the diagram to leave.
 

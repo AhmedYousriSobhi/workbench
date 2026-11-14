@@ -95,7 +95,7 @@ export function init2() {
   $('vw-iso').onclick = () => { setCircuit(false); setView(true, true); toDiagram(); };
   $('vw-cv').onclick = () => { setCircuit(true); toDiagram(); };
   let viewPref = null; try { viewPref = localStorage.getItem('workbench-view'); } catch (e) { /* default */ }
-  setView(viewPref ? viewPref === 'iso' : !matchMedia('(prefers-reduced-motion: reduce), (max-width: 640px)').matches, false);  // default per device: flat under reduced motion and on a phone
+  setView(viewPref === 'iso', false);  // flat is the default everywhere (#525); only a remembered choice of 2.5D changes it
   try { S.circuit = localStorage.getItem('workbench-circuit') !== '0'; } catch (e) { S.circuit = true; }  // the circuit is the way in; the classic diagram is a choice
   $('nodeswrap').classList.toggle('circuit', S.circuit);
   paintLevelUi();

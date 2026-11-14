@@ -793,3 +793,10 @@ def test_plan_budget_goes_negative_when_over_and_adds_no_write_path(ui, monkeypa
     assert data["fits"] is False and data["headroom_mb"] < 0 and data["budget_mb"] == 0
     assert req(ui, "/api/plan", "POST", headers={"X-Requested-With": "workbench"})[0] == 405
     assert b"pl-over" in served_page(ui) and b"budgetView" in served_page(ui)
+
+
+def test_flat_is_the_default_view_everywhere():
+    """#525: no saved choice means flat on a desktop too; only a remembered 2.5D changes it."""
+    src = page_source()
+    assert "setView(viewPref === 'iso', false)" in src
+    assert "max-width: 640px)').matches, false)" not in src
