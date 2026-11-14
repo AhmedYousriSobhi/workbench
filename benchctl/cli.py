@@ -1050,13 +1050,15 @@ app.add_typer(load_app, name="load")
 def load_on(rate: float = typer.Option(6, "--rate", help="jobs per minute (Poisson arrivals)"),
             duration: float = typer.Option(120, "--duration", help="mean job length in seconds"),
             seed: int = typer.Option(None, "--seed", help="a fixed seed makes the arrivals repeatable"),
+            personas: bool = typer.Option(False, "--personas", help="each user follows the job mix of the persona in sim.yaml, with some failing and cancelled jobs"),
+            day: float = typer.Option(0, "--day", help="daily rhythm: seconds one simulated day lasts (60 to 86400; 0 = off), the arrival rate rises and falls"),
             mocks: bool = typer.Option(False, "--mocks", help="also start a demo client that calls Jira, BCM and the BMC farm, so the Traffic tab has requests"),
             mock_rate: float = typer.Option(30, "--mock-rate", help="demo client requests per minute")) -> None:
     """Start the user simulator: alice and bob submit cpu jobs and GPU jobs at random, so squeue and the node states have a live queue."""
     from . import workload
 
     try:
-        cmds = workload.load_on(_sim(), rate, duration, seed)
+        cmds = workload.load_on(_sim(), rate, duration, seed, personas, day)
         if mocks:
             cmds += workload.mocks_on(_sim(), mock_rate)
     except workload.WorkloadError as e:
@@ -1068,6 +1070,8 @@ def load_on(rate: float = typer.Option(6, "--rate", help="jobs per minute (Poiss
             typer.echo(f"cannot start the load: {(r.stderr or r.stdout).strip()}", err=True)
             raise typer.Exit(1)
     typer.echo(f"load: on, about {rate:g} job(s) a minute, each about {duration:g} s (benchctl load off to stop)"
+               + ("; personas on: job mixes by persona, some jobs fail or are cancelled" if personas else "")
+               + (f"; daily rhythm: a day lasts {day:g} s" if day else "")
                + (f"; demo client for Jira, BCM and the BMC farm: about {mock_rate:g} request(s) a minute" if mocks else ""))
 
 

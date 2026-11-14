@@ -18,6 +18,14 @@ and the `--simulation` option are removed; so is the `ticket-bot` scenario targe
 Load is the login node's `user_sim.py` (`benchctl load on|off`). Addresses 13 to 15 stay reserved and unused. A future ticket bot runs
 on the login node and gets its own issue. Profile budgets fell by the 60 MB the engine's cap used to count.
 
+## Addendum: personas, failures and a daily rhythm (issue 680)
+`user_sim.py` gets three opt-in behaviours, all inside the one process on the login node (no container, no extra memory): `--personas`
+(the `persona:` label of each `sim.yaml` user picks a job mix: GPU share, GPUs, CPUs, length, a peak hour; some jobs end with exit 1 and some
+are `scancel`led by their owner), and `--day SECONDS` (a pure `rhythm(hour, peak)` multiplies the arrival rate, one simulated day lasting
+SECONDS real seconds; `benchctl load on --personas --day 600`). Without them nothing changes. The 20-pending cap stays, the cancel list is
+capped at 40, and the governor's L1 flag still pauses arrivals. The mix, rhythm and plan are pure functions of a seeded RNG and the hour, so
+unit tests need no cluster. A persona unknown to the table gets the default mix. The ticket bot is a separate issue (#681).
+
 ## Consequences
 - The Web UI (W-3: governor socket only) cannot run the engine itself. Options when the UI is built: the UI
   backend runs scenarios in-process as the unprivileged `workbench` user (only the HTTP targets), or the governor

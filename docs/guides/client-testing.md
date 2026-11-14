@@ -228,7 +228,17 @@ down by not answering, which no page button or scenario step reports.
 
 ## A live queue
 
-`benchctl load on` starts simulated users: `alice` and `bob` submit cpu jobs and 1 to 4 GPU jobs at random, so the Slurm panel has running and pending jobs and a node going down hits real work. `benchctl load off` stops it; `benchctl submit NODE` (or the node panel's Workload card) runs one job on a chosen node. A job pinned to a node that is down stays pending (*ReqNodeNotAvail*) until the node is back or you `scancel` it.
+`benchctl load on` starts simulated users: `alice` and `bob` submit cpu jobs and 1 to 4 GPU jobs at random, so the Slurm panel has running and pending jobs and a node going down hits real work. `benchctl load off` stops it; `benchctl submit NODE` (or the node panel's Workload card) runs one job on a chosen node. 
+
+For a more lifelike queue add two opt-in switches (same simulator, same 20-pending cap, no extra container or memory):
+
+```
+benchctl load on --personas --day 600
+```
+
+`--personas` gives each user the job mix of the `persona:` in `sim.yaml`: `alice` (ml-trainer) submits mostly 1 to 4 GPU jobs, long, with 4 or 8 CPUs per task; `bob` (mpi-researcher) submits mostly cpu jobs. About 10% of jobs fail (they end early with exit code 1, so `squeue -t all` and `sacct` show FAILED) and 5 to 10% are cancelled by their owner a few seconds after starting (CANCELLED). `--day 600` squeezes a simulated day into 600 real seconds: the arrival rate follows a curve (busiest at 14:00, quiet at night; the ml-trainer peaks at 22:00), so the queue grows and drains within minutes. Add `--seed N` for repeatable arrivals. `benchctl load off` stops everything.
+
+A job pinned to a node that is down stays pending (*ReqNodeNotAvail*) until the node is back or you `scancel` it.
 
 ## Taking a node down so Slurm notices
 
