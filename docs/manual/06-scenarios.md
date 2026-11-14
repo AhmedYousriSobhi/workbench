@@ -72,6 +72,7 @@ The command exits 1 when a step errors or an `expect` line does not hold. Steps 
 | SC-38 | `k8s-preempt` | filler pods hold GPUs of `kgpu001`; an inference pod needs more than are free and the real scheduler preempts them (needs the `k8s` part; [ADR 0077](../adr/0077-k8s-policy-objects-and-api-throttling.md)) |
 | SC-39 | `k8s-drain-blocked` | `kgpu001` is drained while it holds an `inference` pod whose disruption budget allows no eviction; the drain blocks and the pod stays (needs `k8s`) |
 | SC-40 | `k8s-api-throttled` | the API server throttles the client's user (`viewer`) to about three seats and no queue, so a burst gets 429; removed after 2 minutes (needs `k8s`) |
+| SC-45 | `k8s-queue-inactive` | the `gpu-training` Kueue queue and its local queues go inactive with a growing backlog, then recover (needs `k8s`; no controller, the step writes the status) |
 | SC-18 | `pod-crashloop` | a pod crash-loops and another is OOMKilled (needs the `k8s` part) |
 
 ## Write your own

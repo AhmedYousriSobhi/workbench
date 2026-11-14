@@ -1,0 +1,6 @@
+name: k8s-queue-inactive
+ref: SC-45
+description: The gpu-training ClusterQueue (and its LocalQueues) goes inactive with its backlog growing, then recovers; Kueue has no controller here, so the step writes the status (issue 469)
+steps:
+  - {at: 0s,   target: k8s, do: {queue: {name: gpu-training, active: false, pending: 19}}}
+  - {at: 150s, target: k8s, do: {queue: {name: gpu-training, active: true, pending: 7}}}

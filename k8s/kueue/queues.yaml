@@ -1,0 +1,93 @@
+# Kueue fixtures (issue 469): queues with believable counts. `status` is applied by benchctl/kueue.py through the status subresource.
+# Conditions use the real reasons: Ready, FlavorNotFound (ClusterQueue), ClusterQueueIsInactive (LocalQueue).
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ResourceFlavor
+metadata: {name: a100-80gb}
+spec: {nodeLabels: {nvidia.com/gpu.product: NVIDIA-A100-SXM4-80GB}}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ResourceFlavor
+metadata: {name: cpu-default}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ClusterQueue
+metadata: {name: gpu-training}
+spec:
+  namespaceSelector: {}
+  resourceGroups:
+  - coveredResources: [cpu, memory, nvidia.com/gpu]
+    flavors:
+    - name: a100-80gb
+      resources: [{name: cpu, nominalQuota: "256"}, {name: memory, nominalQuota: 2Ti}, {name: nvidia.com/gpu, nominalQuota: "32"}]
+status: {pendingWorkloads: 7, reservingWorkloads: 12, admittedWorkloads: 12, conditions: [{type: Active, status: "True", reason: Ready, message: Can admit new workloads}]}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ClusterQueue
+metadata: {name: gpu-inference}
+spec:
+  namespaceSelector: {}
+  resourceGroups:
+  - coveredResources: [cpu, memory, nvidia.com/gpu]
+    flavors:
+    - name: a100-80gb
+      resources: [{name: cpu, nominalQuota: "64"}, {name: memory, nominalQuota: 512Gi}, {name: nvidia.com/gpu, nominalQuota: "8"}]
+status: {pendingWorkloads: 0, reservingWorkloads: 4, admittedWorkloads: 4, conditions: [{type: Active, status: "True", reason: Ready, message: Can admit new workloads}]}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ClusterQueue
+metadata: {name: cpu-batch}
+spec:
+  namespaceSelector: {}
+  resourceGroups:
+  - coveredResources: [cpu, memory]
+    flavors:
+    - name: cpu-default
+      resources: [{name: cpu, nominalQuota: "512"}, {name: memory, nominalQuota: 4Ti}]
+status: {pendingWorkloads: 21, reservingWorkloads: 38, admittedWorkloads: 38, conditions: [{type: Active, status: "True", reason: Ready, message: Can admit new workloads}]}
+---
+# inactive: it names a flavor that does not exist (a real ClusterQueue stops admitting for exactly this)
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ClusterQueue
+metadata: {name: legacy-h100}
+spec:
+  namespaceSelector: {}
+  resourceGroups:
+  - coveredResources: [cpu, memory, nvidia.com/gpu]
+    flavors:
+    - name: h100-80gb
+      resources: [{name: cpu, nominalQuota: "128"}, {name: memory, nominalQuota: 1Ti}, {name: nvidia.com/gpu, nominalQuota: "16"}]
+status:
+  pendingWorkloads: 3
+  reservingWorkloads: 0
+  admittedWorkloads: 0
+  conditions: [{type: Active, status: "False", reason: FlavorNotFound, message: "Can't admit new workloads: references missing ResourceFlavor(s): h100-80gb"}]
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata: {name: train, namespace: team-a}
+spec: {clusterQueue: gpu-training}
+status: {pendingWorkloads: 5, reservingWorkloads: 8, admittedWorkloads: 8, conditions: [{type: Active, status: "True", reason: Ready, message: Can submit new workloads to clusterQueue}]}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata: {name: train, namespace: team-b}
+spec: {clusterQueue: gpu-training}
+status: {pendingWorkloads: 2, reservingWorkloads: 4, admittedWorkloads: 4, conditions: [{type: Active, status: "True", reason: Ready, message: Can submit new workloads to clusterQueue}]}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata: {name: serve, namespace: team-b}
+spec: {clusterQueue: gpu-inference}
+status: {pendingWorkloads: 0, reservingWorkloads: 4, admittedWorkloads: 4, conditions: [{type: Active, status: "True", reason: Ready, message: Can submit new workloads to clusterQueue}]}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata: {name: batch, namespace: team-a}
+spec: {clusterQueue: cpu-batch}
+status: {pendingWorkloads: 21, reservingWorkloads: 38, admittedWorkloads: 38, conditions: [{type: Active, status: "True", reason: Ready, message: Can submit new workloads to clusterQueue}]}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata: {name: legacy, namespace: team-b}
+spec: {clusterQueue: legacy-h100}
+status: {pendingWorkloads: 3, reservingWorkloads: 0, admittedWorkloads: 0, conditions: [{type: Active, status: "False", reason: ClusterQueueIsInactive, message: Can't submit new workloads to clusterQueue}]}
