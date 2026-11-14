@@ -1,5 +1,6 @@
 """images/node-base/nhc: drains a GPU node on a missing GPU or an XID, resumes only its own drain (issue 141)."""
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -15,13 +16,25 @@ def metrics(node="gpu001", gpus=2, xid=None):
     return "\n".join(lines) + "\n"
 
 
+def no_smi_path(tmp_path):
+    """PATH with the runner's tools but never a host nvidia-smi: the real-gpu check only runs where the card's CDI device gives a node one."""
+    tools = tmp_path / "tools"
+    tools.mkdir(exist_ok=True)
+    for tool in ("bash", "sh", "env", "grep", "egrep", "awk", "sed", "sort", "uniq", "head", "tail", "cut", "tr", "date", "mkdir", "rm", "cat",
+                 "wc", "stat", "sleep", "timeout", "hostname", "dirname", "basename", "touch", "mv", "cp", "printf", "id", "ls", "tee", "find", "xargs", "test", "mktemp", "readlink", "paste", "tac", "expr", "true", "false", "seq", "uname", "nproc"):
+        found = shutil.which(tool)
+        if found and not (tools / tool).exists():
+            (tools / tool).symlink_to(found)
+    return str(tools)
+
+
 def run(tmp_path, text, expected=2, show="", mode=None, ib=0):
     mf, log, stub = tmp_path / "m.txt", tmp_path / "calls.txt", tmp_path / "scontrol"
     mf.write_text(text)
     log.unlink(missing_ok=True)  # a test may run it several times in one directory
     stub.write_text(f'#!/bin/sh\nif [ "$1" = show ]; then printf %s "{show}"; else echo "$@" >> {log}; fi\n')
     stub.chmod(0o755)
-    env = {**os.environ, "NHC_METRICS_FILE": str(mf), "NHC_SCONTROL": str(stub), "NHC_NODE": "gpu001",
+    env = {**os.environ, "PATH": no_smi_path(tmp_path), "NHC_METRICS_FILE": str(mf), "NHC_SCONTROL": str(stub), "NHC_NODE": "gpu001",
            "NHC_EXPECTED_GPUS": str(expected), "NHC_EXPECTED_IB": str(ib),
            "NHC_STATE_DIR": str(tmp_path)}
     r = subprocess.run(["bash", str(NHC), *([mode] if mode else [])], check=False, env=env, capture_output=True, text=True, timeout=10)
@@ -127,7 +140,7 @@ def test_the_expectations_come_from_the_node_file_when_slurmd_gives_a_bare_envir
     stub.chmod(0o755)
     envfile = tmp_path / "node.env"
     envfile.write_text("WORKBENCH_GPUS=2\nWORKBENCH_IB=2\n")
-    bare = {"PATH": os.environ["PATH"], "NHC_METRICS_FILE": str(tmp_path / "m.txt"), "NHC_SCONTROL": str(stub), "NHC_NODE": "gpu001",
+    bare = {"PATH": no_smi_path(tmp_path), "NHC_METRICS_FILE": str(tmp_path / "m.txt"), "NHC_SCONTROL": str(stub), "NHC_NODE": "gpu001",
             "NHC_STATE_DIR": str(tmp_path), "NHC_ENV_FILE": str(envfile)}
     r = subprocess.run(["bash", str(NHC)], check=False, env=bare, capture_output=True, text=True, timeout=10)
     reason = (tmp_path / "calls.txt").read_text()
