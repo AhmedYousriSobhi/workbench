@@ -89,3 +89,12 @@ def test_alertmanager_row_has_its_address_command_and_a_localhost_link():
     row = {e["id"]: e for e in rows()}["alertmanager"]
     assert row["address"].endswith(":9093") and "/api/v2/alerts" in row["command"] and row["credential"] is None
     assert [a["value"] for a in row["actions"]] == ["http://127.0.0.1:9093"]
+
+
+def test_dcgm_and_real_gpu_rows_show_the_cluster_address_and_keep_localhost_as_the_fallback():
+    """Issue 434: the cluster address first (standard in-container port 9400), the published localhost port in the text."""
+    by = {e["id"]: e for e in rows({**SIM, "dcgm": {"nodes": 2}})}
+    assert by["dcgm"]["address"] == "http://10.141.255.50:9400/metrics" and "127.0.0.1:9402" in by["dcgm"]["how"]
+    assert "10.141.255.51" in by["dcgm"]["how"] and "Prometheus" in by["dcgm"]["how"]
+    assert by["real-gpu"]["address"] == "http://10.141.255.24:9400/metrics" and "127.0.0.1:9403" in by["real-gpu"]["how"]
+    assert "10.141.255.24" in by["real-gpu"]["command"]

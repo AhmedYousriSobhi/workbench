@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from benchctl import compose, dcgm, workbench
+from benchctl import addressing, compose, dcgm, workbench
 
 ROOT = Path(__file__).resolve().parent.parent
 SIM = yaml.safe_load((ROOT / "sim.yaml").read_text())
@@ -227,3 +227,11 @@ def test_a_node_with_an_exporter_points_its_dcgmi_at_the_exporters_host_engine()
     assert sv["gpu002"]["environment"]["WORKBENCH_DCGM_HOST"] == "dcgm-exporter-gpu002:5555"
     assert all(sv[s]["environment"]["DCGM_ENGINE_BIND"] == "ALL" for s in ("dcgm-exporter", "dcgm-exporter-gpu002"))
     assert "WORKBENCH_DCGM_HOST" not in services(False).get("gpu001", {}).get("environment", {})
+
+
+def test_every_dcgm_exporter_service_gets_its_fixed_cluster_address():
+    """Issue 434: the compose output carries the planned address (what Prometheus' DNS names resolve to)."""
+    sv = many_services()
+    p = addressing.plan(MANY)["services"]
+    for i, n in enumerate(dcgm.nodes(MANY)):
+        assert sv[dcgm.service(MANY, n)]["networks"]["default"]["ipv4_address"] == p[dcgm.service(MANY, n)] == f"10.141.255.{50 + i}"
