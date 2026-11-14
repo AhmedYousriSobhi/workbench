@@ -19,6 +19,16 @@ def test_one_block_per_setting_with_command_effect_and_undo():
     assert h.current == "always" and h.undo.startswith("echo always |")
 
 
+def test_each_block_has_a_persistent_form_and_its_undo():
+    z, s, h = tuning.plan(MEM, zram=False, swappiness="60", thp="[always] madvise never")
+    assert "/etc/sysctl.d/99-workbench.conf" in s.persist and "sudo sysctl --system" in s.persist
+    assert s.persist_undo == "sudo rm /etc/sysctl.d/99-workbench.conf && sudo sysctl vm.swappiness=60"
+    assert "zram-size = ram / 4" in z.persist and "systemd-zram-setup@zram0.service" in z.persist and "swapoff" in z.persist_undo
+    assert "transparent_hugepage=madvise" in h.persist and "update-grub" in h.persist_undo
+    out = tuning.render([z, s, h])
+    assert out.count("persist:") == 3 and out.count("persist undo:") == 3
+
+
 def test_settings_already_right_are_applied_and_not_rendered():
     items = tuning.plan(MEM, zram=True, swappiness="10", thp="always [madvise] never")
     assert all(t.applied for t in items) and tuning.render(items) == ""
@@ -26,7 +36,7 @@ def test_settings_already_right_are_applied_and_not_rendered():
 
 def test_render_says_print_only_and_lists_each_undo():
     out = tuning.render(tuning.plan(MEM, zram=False, swappiness="60", thp="[always] madvise never"))
-    assert "never runs sudo" in out and out.count("undo:") == 3 and out.count("effect:") == 3
+    assert "never runs sudo" in out and out.count("  undo:") == 3 and out.count("effect:") == 3
 
 
 def test_plan_never_executes_anything(monkeypatch):

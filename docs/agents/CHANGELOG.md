@@ -2,6 +2,10 @@
 
 Every JSON output of `benchctl` carries `contract_version` (`MAJOR.MINOR`); the schemas are in [schemas/](schemas/) (JSON Schema draft 2020-12). Adding a field is a minor bump. Removing or renaming a field, or changing a type, is a major bump. Every change gets a line here (SPEC AG-3, ADR 0062).
 
+## 2.2 (2026-11-14)
+
+Minor, nothing removed. Each `doctor` `tuning` entry gains `persist` and `persist_undo`: the print-only text that keeps the setting across reboots, and its undo (issue 679).
+
 ## 2.1 (2026-11-14)
 
 Minor, nothing removed. `doctor` gains `tuning`: one entry per host setting (`zram`, `swappiness`, `thp`) with `current`, `wanted`, `applied`, and the print-only `command`, `effect` and `undo`. doctor never runs them (SPEC P-3, NF-5). In agent mode (`BENCHCTL_AGENT=1`) the text shows one `tuning:` line, only when a setting is not as recommended (issue 679).

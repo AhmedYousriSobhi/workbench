@@ -19,6 +19,8 @@ class Tuning:
     command: str
     effect: str
     undo: str
+    persist: str = ""  # the same change kept across reboots; print-only like the rest
+    persist_undo: str = ""
 
 
 def _read(path: str) -> str | None:
@@ -56,15 +58,22 @@ def plan(meminfo: str | None = None, zram: bool | None = None, swappiness: str |
         Tuning("zram", "present" if have_zram else "absent", f"zstd zram swap, {mb} MiB ({ZRAM_PERCENT}% of RAM)", have_zram,
                f"sudo modprobe zram && dev=$(sudo zramctl --find --algorithm zstd --size {mb}M) && sudo mkswap \"$dev\" && sudo swapon --priority 100 \"$dev\"",
                "adds compressed swap in RAM, so memory.reclaim and the governor's L3 have somewhere to push pages; lost at reboot",
-               "sudo swapoff /dev/zram0 && sudo zramctl --reset /dev/zram0"),
+               "sudo swapoff /dev/zram0 && sudo zramctl --reset /dev/zram0",
+               "printf '[zram0]\\nzram-size = ram / 4\\ncompression-algorithm = zstd\\nswap-priority = 100\\n' | sudo tee /etc/systemd/zram-generator.conf"
+               " && sudo systemctl daemon-reload && sudo systemctl start systemd-zram-setup@zram0.service (needs zram-generator installed)",
+               "sudo rm /etc/systemd/zram-generator.conf && sudo systemctl daemon-reload && sudo swapoff /dev/zram0"),
         Tuning("swappiness", swp or "unknown", str(SWAPPINESS), swp == str(SWAPPINESS),
                f"sudo sysctl vm.swappiness={SWAPPINESS}",
                "makes the kernel prefer dropping page cache over swapping anonymous pages; lost at reboot",
-               f"sudo sysctl vm.swappiness={swp or 60}"),
+               f"sudo sysctl vm.swappiness={swp or 60}",
+               f"echo vm.swappiness={SWAPPINESS} | sudo tee /etc/sysctl.d/99-workbench.conf && sudo sysctl --system",
+               f"sudo rm /etc/sysctl.d/99-workbench.conf && sudo sysctl vm.swappiness={swp or 60}"),
         Tuning("thp", cur_thp, THP, cur_thp == THP,
                f"echo {THP} | sudo tee /sys/kernel/mm/transparent_hugepage/enabled",
                "huge pages only where a program asks for them, so databases and JVMs in the containers do not bloat resident memory; lost at reboot",
-               f"echo {cur_thp if cur_thp not in ('unknown', THP) else 'always'} | sudo tee /sys/kernel/mm/transparent_hugepage/enabled"),
+               f"echo {cur_thp if cur_thp not in ('unknown', THP) else 'always'} | sudo tee /sys/kernel/mm/transparent_hugepage/enabled",
+               f"in /etc/default/grub add transparent_hugepage={THP} to GRUB_CMDLINE_LINUX_DEFAULT, then sudo update-grub and reboot",
+               f"remove transparent_hugepage={THP} from GRUB_CMDLINE_LINUX_DEFAULT, then sudo update-grub and reboot"),
     ]
 
 
@@ -76,10 +85,11 @@ def render(items: list[Tuning]) -> str:
     out = ["", "Host tuning (SPEC P-3). Printed only: doctor never runs sudo or changes the host. Run a block yourself if you want it."]
     for t in todo:
         out += ["", f"{t.setting}: now {t.current}, recommended {t.wanted}",
-                f"  change: {t.command}", f"  effect: {t.effect}", f"  undo:   {t.undo}"]
+                f"  change: {t.command}", f"  effect: {t.effect}", f"  undo:   {t.undo}",
+                f"  persist: {t.persist}", f"  persist undo: {t.persist_undo}"]
     return "\n".join(out)
 
 
 def as_dict(t: Tuning) -> dict:
     return {"setting": t.setting, "current": t.current, "wanted": t.wanted, "applied": t.applied,
-            "command": t.command, "effect": t.effect, "undo": t.undo}
+            "command": t.command, "effect": t.effect, "undo": t.undo, "persist": t.persist, "persist_undo": t.persist_undo}

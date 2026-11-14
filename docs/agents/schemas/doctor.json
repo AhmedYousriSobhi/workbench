@@ -68,6 +68,12 @@
           },
           "applied": {
             "type": "boolean"
+          },
+          "persist": {
+            "type": "string"
+          },
+          "persist_undo": {
+            "type": "string"
           }
         },
         "required": [
@@ -77,7 +83,9 @@
           "applied",
           "command",
           "effect",
-          "undo"
+          "undo",
+          "persist",
+          "persist_undo"
         ]
       }
     }
