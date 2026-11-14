@@ -26,6 +26,12 @@ export function closeNode() {
   leaveNode();
   if (S.openerEl && document.contains(S.openerEl)) S.openerEl.focus(); else { const b = document.querySelector('.node'); if (b) b.focus(); }
 }
+export function paintNodeSum(name, body) {  // body is kept from the last read, so a Slurm refresh repaints without a new request
+  if (body !== undefined) S.nodeBody = body;
+  const row = JSON.parse(S.lastCluster || '{"nodes":[]}').nodes.find(x => x.name === name);
+  const slurm = S.slurmNodes ? { reason: S.slurmReasons && S.slurmReasons[name], jobs: (S.slurmJobs && S.slurmJobs[name]) || [] } : null;
+  $('nodesum').innerHTML = nodeSummary(row, S.nodeBody, slurm).map(r => `<dt>${esc(r.k)}</dt><dd>${r.code ? `<code>${esc(r.v)}</code>` : esc(r.v)}</dd>`).join('');
+}
 export async function showNode(name) {
   setTree(true);  // the panel lives in the node column: open it if it was folded away
   S.openNode = name; S.openerEl = document.activeElement; paintNodeActions(name); $('nodeactmsg').textContent = '';
@@ -43,7 +49,7 @@ export async function showNode(name) {
     ['IP address', body && body.ip ? `<code>${esc(body.ip)}</code> (fixed; reach it from the login node)` : `run <code>./scripts/benchctl describe node ${esc(name)}</code>`]);
   if (body) kv[kv.findIndex(r => r[0] === 'BMC')] = ['BMC', body.bmc_ip ? `<code>${esc(body.bmc_ip)}:443</code> (HTTPS), user admin, password in <code>compose/generated/secrets/bmc_credentials</code>` : 'none for this node (switched off in Cluster architecture)'];
   const row = JSON.parse(S.lastCluster || '{"nodes":[]}').nodes.find(x => x.name === name);
-  $('nodesum').innerHTML = nodeSummary(row, body).map(r => `<dt>${esc(r.k)}</dt><dd>${r.code ? `<code>${esc(r.v)}</code>` : esc(r.v)}</dd>`).join('');
+  paintNodeSum(name, body);
   const reach = cx && row && row.kind !== 'k8s' ? cx.command.replace('<node>', name) : '';
   $('nodereach').hidden = !reach; $('nodereach-cmd').textContent = reach;
   $('nodereach-copy').onclick = async () => { try { await navigator.clipboard.writeText(reach); $('nodereach-copy').textContent = 'Copied'; } catch (e) { $('nodereach-copy').textContent = 'Select and copy'; } };
@@ -69,6 +75,7 @@ export async function nodeAction(name, action, label) {
 
 export function init() {
   $('node-back').onclick = closeNode;
+  window.addEventListener('wb-slurm', () => { if (S.openNode && !$('nodepane').hidden) paintNodeSum(S.openNode); });  // fresh Slurm facts while the panel is open
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.openNode && !document.querySelector('dialog[open]:not(.drawer)')) closeNode(); });
 
 }

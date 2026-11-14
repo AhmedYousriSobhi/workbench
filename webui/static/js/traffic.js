@@ -262,6 +262,8 @@ export async function paintSlurmStats() {
   let s = null;
   try { s = (await (await fetch('/api/slurm-stats')).json()).stats; } catch (e) { /* the governor or the stack is down: show nothing */ }
   S.slurmNodes = s && s.node_states ? s.node_states : null;
+  S.slurmReasons = S.slurmNodes ? s.node_reasons || {} : null; S.slurmJobs = S.slurmNodes ? s.node_jobs || {} : null;  // the node panel's Reason and Jobs rows
+  window.dispatchEvent(new Event('wb-slurm'));
   S.dbdLink = s && s.dbd != null ? { id: 'slurmctld>slurmdbd:6819', from: 'slurmctld', to: 'slurmdbd', protocol: 'TCP (Slurm RPC)', port: 6819, plane: 'data', what: 'accounting records; seen by a sacctmgr query (answers or not, no counter)', real: true, measured: false, probe: s.dbd, service: null } : null;
   paintTraffic(); paintBlocks();
   const box = $('tr-slurm');
