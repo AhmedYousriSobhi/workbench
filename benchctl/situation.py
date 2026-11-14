@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-MAX_CHARS = 6700  # for the default profile; tests/test_json_contract.py checks it
+MAX_CHARS = 6500  # for the default profile; tests/test_json_contract.py checks it. A new part or scenario fits by moving detail into a drill-down (`get scenarios --json`, `describe node`), never by raising this (ADR 0061 addendum, issue 678)
 SUMMARY = 30
 
 
@@ -44,14 +44,14 @@ def scenario_rows(scs: list[dict], plan: Callable[[dict], list]) -> list[dict]:
     rows = []
     for sc in scs:
         steps = plan(sc)
-        rows.append({"name": sc["name"], "summary": short(sc.get("description", "")), "seconds": round(max((s.at for s in steps), default=0))})
+        rows.append({"name": sc["name"], "seconds": round(max((s.at for s in steps), default=0))})  # what a scenario does: `get scenarios --json`
     return rows
 
 
 def gather(*, state: dict, spec: dict | None, sim: dict, k8s_nodes: list[dict], entities: list[dict], faults: list[dict],
            scenarios: list[dict], fault_targets: list[str], plan: Callable[[dict], list]) -> dict:
     running = state["containers"] > 0
-    nxt = (["benchctl get faults --json", "benchctl scenario run NAME --json  (NAME from scenarios)", "benchctl wait ready --timeout 120"]
+    nxt = (["benchctl get faults --json", "benchctl get scenarios --json  (what each does)", "benchctl scenario run NAME --json", "benchctl wait ready --timeout 120"]
            if running else ["benchctl plan --json", "benchctl start"])
     return {"state": state, "clusters": clusters(spec, sim, k8s_nodes), "endpoints": endpoints(entities),
             "faults_active": [{"target": f["target"], "label": short(f["label"], 48)} for f in faults],

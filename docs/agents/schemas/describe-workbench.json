@@ -133,16 +133,12 @@
           "name": {
             "type": "string"
           },
-          "summary": {
-            "type": "string"
-          },
           "seconds": {
             "type": "integer"
           }
         },
         "required": [
           "name",
-          "summary",
           "seconds"
         ]
       }
