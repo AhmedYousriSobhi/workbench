@@ -12,7 +12,7 @@
 - One container per fake compute node, all from **one shared base image** (shared file-backed pages). Community projects such as `giovtorres/slurm-docker-cluster` already use this pattern (controller, DB, and `c1`/`c2` `slurmd` containers under Docker Compose); use it as a starting point rather than writing from scratch.
 - Container-friendly `slurm.conf` starting points (validate on your Slurm version): `ProctrackType=proctrack/linuxproc`, `TaskPlugin=task/none`, fake `RealMemory`, and GPUs declared as GRES by count (`Name=gpu Type=h200 Count=8`, no device files) so GPU partitions behave like a DGX/HGX fleet.
 - Jobs are synthetic (`sleep`, `stress-ng` with capped memory), never real training.
-- Optional later optimization: build Slurm with multiple-slurmd support to host many logical nodes in one container if per-container overhead matters.
+- Multiple-slurmd (many logical nodes in one container) is not the scaling path: it shares one IP and breaks per-node addresses, sshd, NHC and "freeze a node" faults (ADR 0080). Revisit only if a client test needs more than about 64 Slurm nodes.
 
 ### 4.2 Kubernetes: one real mini-cluster + KWOK for scale
 - Replace the multi-VM Vagrant K8s with a real control plane (etcd, kube-apiserver, scheduler, controller manager from the upstream images) and **no real worker**: k3d/kind with a real agent was rejected (ADR 0034).

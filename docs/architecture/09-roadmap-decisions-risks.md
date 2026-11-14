@@ -11,7 +11,7 @@
 | 0 Baseline | Measure idle + loaded RAM of each current piece (`docker stats`, `smem`, `virsh dommemstat`); fill real numbers into [section 5](04-memory-and-profiles.md) | Budget table replaced with measured values |
 | 1 Governor | Host tuning script, slices, governor with dry-run and the ladder, `benchctl top` | A synthetic memory hog gets throttled, frozen, then stopped in order, and recovers |
 | 2 Slurm | `node-base`, ctld + restd, N slurmd from `sim.yaml`, Prometheus + Grafana | `benchctl scale 16` works; app sees the nodes |
-| 3 Mocks | bmc-farm, bcm-mock, gpu-exporter-farm, jira-mock + Toxiproxy | App's BMC/BCM/Jira integrations pass against mocks |
+| 3 Mocks | bmc-farm, bcm-mock, gpu-exporter-farm, jira-mock (Jira faults through `benchctl/jira_proxy.py`, ADR 0056) | App's BMC/BCM/Jira integrations pass against mocks |
 | 4 People + chaos | user-sim, ticket-bot, scenario engine, 5 starter scenarios | `gpu-xid-storm` produces tickets end to end |
 | 5 Kubernetes | real control plane + KWOK, fake GPU nodes, node-fault scenarios | App shows mixed real/fake K8s nodes |
 | 6 Fidelity VM (deferred, ADR 0033) | vagrant-libvirt VM + sushy-tools power control | Redfish power-off really stops the VM |
@@ -34,6 +34,6 @@
 | Mocks drift from real APIs | Contract tests; record real responses (Jira Cloud free site, a real BCM/BMC if you have one) as fixtures |
 | Governor flaps or overreacts | Hysteresis, min dwell, dry-run tuning, reversible actions first |
 | Freeze doesn't free RAM | Ladder pairs freeze with `memory.reclaim` and falls through to stop/save |
-| Per-container overhead adds up at 32+ nodes | Shared base image, tiny limits, later multiple-slurmd-per-container |
+| Per-container overhead adds up at 32+ nodes | Shared base image, tiny limits; multiple-slurmd rejected for fidelity (ADR 0080), `benchctl measure` keeps the budgets honest |
 | Estimates wrong | Phase 0 measurement gate before committing to profiles |
 | Real Jira DC starves the host | Exclusive `jira-real` profile; governor treats it as P6 |
