@@ -105,3 +105,16 @@ def test_no_node_service_or_bmc_address_is_a_network_gateway():
     nets = compose.generate(SIM, compose.load_profile("min"))["networks"]
     assert nets["default"]["ipam"]["config"] == [{"subnet": "10.141.0.0/16", "gateway": addressing.GATEWAY}]
     assert nets["ipmi"]["ipam"]["config"] == [{"subnet": "10.148.0.0/16", "gateway": addressing.IPMI_GATEWAY}]
+
+
+def test_dcgm_and_real_gpu_exporters_have_fixed_addresses_and_the_generated_compose_uses_them():
+    """Issue 434: Prometheus and clients reach the two opt-in exporters at fixed cluster addresses (:9400 inside each container)."""
+    sim = {**SIM, "dcgm": {"nodes": 2}}
+    p = addressing.plan(sim)
+    assert p["services"]["real-gpu"] == "10.141.255.24"
+    assert p["services"]["dcgm-exporter"] == "10.141.255.50"
+    assert p["services"]["dcgm-exporter-gpu002"] == "10.141.255.51"
+    assert "dcgm-exporter-gpu003" not in p["services"]
+    ips = list(p["services"].values())
+    assert len(ips) == len(set(ips))  # no clash with any other service
+    assert not any(k.startswith("dcgm-exporter") for k in addressing.plan({**SIM, "gpu": {"nodes": 0}})["services"])
