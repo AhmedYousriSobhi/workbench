@@ -42,9 +42,16 @@ def post(url: str, body: dict):
         return json.loads(r.read() or b"null")
 
 
-def tickets() -> list[dict]:
+BEFORE: set[str] = set()  # tickets an earlier module left (agent_recipes files one for gpu002): not this module's to count
+
+
+def all_tickets() -> list[dict]:
     q = urllib.parse.quote(f"labels = {LABEL}")
     return (get(f"{JIRA}/rest/api/2/search?jql={q}&fields=summary,status,labels,comment") or {}).get("issues", [])
+
+
+def tickets() -> list[dict]:
+    return [t for t in all_tickets() if t["key"] not in BEFORE]
 
 
 def comments(key: str) -> list[str]:
@@ -71,6 +78,7 @@ def test_promtool_passes_every_rule_case_and_the_config_files_are_valid():
 def live():
     sim = yaml.safe_load((ROOT / "sim.yaml").read_text())
     bring_up(sim)
+    BEFORE.update(t["key"] for t in all_tickets())
     assert wait_for(exporter_up, timeout=60)
     assert wait_for(lambda: ready(f"{AM}/-/ready"), timeout=60)
     yield sim

@@ -96,13 +96,13 @@ def test_what_did_my_app_call_records_the_caller_and_the_status_class(live):
     """The recipe: the app calls a mock; `get traffic --json` names it and how each call ended; `--since` trims `recent`, not `streams`."""
     for path in ("/rest/api/2/search?jql=project%3DOPS", "/rest/api/2/no-such-thing"):
         try:
-            urllib.request.urlopen(urllib.request.Request(JIRA + path, headers={"User-Agent": "RecipeApp/9.9"}), timeout=5).read()
+            urllib.request.urlopen(urllib.request.Request(JIRA + path, headers={"User-Agent": "RecipeApp/7.31.4159"}), timeout=5).read()
         except OSError:
             pass  # the 404 is the point
     data = json.loads(benchctl("get", "traffic", "--json").stdout)
     mine = [s for s in data["streams"] if s["who"] == "recipeapp"]
     assert sum(s["n"] for s in mine) >= 2 and sum(s["client_error"] for s in mine) >= 1
-    assert "9.9" not in json.dumps(data)  # the product token only
+    assert "7.31.4159" not in json.dumps(data)  # the product token only
     later = json.loads(benchctl("get", "traffic", "--since", str(data["now"] + 3600), "--json").stdout)
     assert later["recent"] == [] and {s["shape"] for s in later["streams"]} >= {s["shape"] for s in mine}  # streams stay cumulative
 

@@ -58,7 +58,7 @@ def test_a_job_asks_for_slices_by_type_and_is_placed_on_the_mig_node(cluster):
     assert job.isdigit(), out
     assert wait_for(lambda: "RUNNING" in run(CTL, "squeue", "-h", "-j", job, "-o", "%T"), timeout=60), run(CTL, "squeue", "-j", job)
     assert "gpu002" in run(CTL, "squeue", "-h", "-j", job, "-o", "%N")  # only gpu002 has that type
-    assert "gpu:h200_1g:9" in node("gpu002")  # the allocation is in GresUsed, by type
+    assert "gpu:h200_1g:9" in run(CTL, "scontrol", "-d", "show", "node", "gpu002")  # GresUsed, by type, shows with -d only
     # 9 slices (indexes 0-8) live on physical GPUs 0 and 1 (7 slices each): the exporter shows exactly those busy
     assert wait_for(lambda: busy_gpus("gpu002") == [0, 1], timeout=60), busy_gpus("gpu002")
     assert busy_gpus("gpu001") == []

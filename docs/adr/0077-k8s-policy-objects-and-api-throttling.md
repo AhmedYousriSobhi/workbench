@@ -15,6 +15,6 @@ A real GPU cluster has priority classes, quotas and disruption budgets, and its 
 `./scripts/verify.sh --unit k8s`: that the scheduler preempts and records `Preempted`, that the drain is refused with the budget named, that the quota rejects the second claim (the quota resource name follows the DRA documentation), and that a burst of 300 concurrent requests as `viewer` gets a 429. The APF seat count is a calculation (600 seats shared by about 245 shares), so a 429 under a light burst is likely but not guaranteed; the live test uses a heavy one.
 
 ## Consequences
-- Two more pods in `team-a` (the pod quota there is 8; `web` 2, `gpu-train`, `dra-train`, `inference` 2 are 6). Scenario pods go to `team-b`.
+- Three more pods in `team-a`. The pod quota there (`20-signals.yaml`) was 8 and the fixtures already asked for 9; with `dra-train` and `inference` they ask for 12, so the quota is now 16 (the first live run failed every Kubernetes module with `exceeded quota: pods`). Scenario pods go to `team-b`.
 - `gpu-train` keeps the default priority (0): a PriorityClass cannot be used by a pod applied in the same pass.
 - APF stays off until a scenario turns it on.
