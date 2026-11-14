@@ -15,6 +15,7 @@ pytest.importorskip("uvicorn")
 import uvicorn
 from webui_src import page_source
 
+from benchctl import compose
 from governor import control
 from webui import __main__ as launcher
 from webui.app import create_app, governor_status
@@ -503,7 +504,7 @@ def test_settings_lists_the_nodes_for_the_bmc_picker_and_the_sheet_sends_the_cho
 def test_plan_with_a_bmc_selection_costs_less_and_names_the_flag(ui):
     full = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8&parts=bmc")[1])
     one = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8&parts=bmc&bmc_nodes=cn001")[1])
-    assert full["total_mb"] - one["total_mb"] == 2 * 32 and "--bmc-nodes cn001" in one["command"]
+    assert full["total_mb"] - one["total_mb"] == 2 * compose.BMC_FORWARDER_MB and "--bmc-nodes cn001" in one["command"]
     assert req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8&parts=bmc&bmc_nodes=..%2Fx")[0] == 422
 
 

@@ -78,8 +78,11 @@ def test_bmc_farm_publishes_tls_and_every_node_has_its_own_bmc_address():
     assert "127.0.0.1:8443:8443" in farm["ports"] and "127.0.0.1:8000:8000" in farm["ports"]
     assert any(v.endswith(":/run/workbench/bmc_credentials:ro") for v in farm["volumes"])
     one = services["bmc-gpu001"]  # a forwarder on the ipmi network, standard port 443, to this node's farm port
-    assert one["networks"] == {"ipmi": {"ipv4_address": "10.148.100.1"}} and one["mem_limit"] == "32m"
-    assert one["command"][-2:] == ["443:bmc-farm:9004", "8443:bmc-farm:9004"] and one["depends_on"] == ["bmc-farm"]
+    assert one["networks"] == {"ipmi": {"ipv4_address": "10.148.100.1"}} and one["mem_limit"] == "16m" and one["image"] == "workbench/bmc-forwarder"
+    assert one["command"] == ["443:bmc-farm:9004", "8443:bmc-farm:9004"] and one["depends_on"] == ["bmc-farm"]
+    assert "volumes" not in one and "cap_add" not in one  # a static binary: nothing mounted, nothing added
+    fwd = [v for n, v in services.items() if n.startswith("bmc-") and n != "bmc-farm"]
+    assert [bool(v.get("build")) for v in fwd].count(True) == 1 and fwd[0]["build"].endswith("components/bmc-forwarder")  # one build for the shared image
     assert set(farm["networks"]) == {"default", "ipmi"} and set(services["login"]["networks"]) == {"default", "ipmi"}
 
 

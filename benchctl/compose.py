@@ -238,7 +238,8 @@ def generate(sim: dict, profile: dict) -> dict:
     return out
 
 
-BMC_FORWARDER_MB = 32
+BMC_FORWARDER_MB = 16  # a static Go binary on scratch, about 2 MB resident (issue 454); the Python forwarder needed 32
+BMC_FORWARDER_IMAGE = "workbench/bmc-forwarder"
 
 
 def _wire_jira_real(services: dict) -> None:
@@ -270,13 +271,15 @@ def bmc_nodes(sim: dict, profile: dict | None = None) -> list[str]:
 
 def _bmc_forwarders(services: dict, sim: dict, profile: dict) -> None:
     """One small container per BMC, its own IP on the ipmi network at the standard port (ADR 0018). It forwards to the
-    farm, which keeps the state, so a node without a forwarder simply has no BMC address."""
+    farm, which keeps the state, so a node without a forwarder simply has no BMC address. They share one image
+    (components/bmc-forwarder, built by the first one), a static binary on scratch (issue 454)."""
     p = addressing.plan(sim, profile.get("compute_nodes"))
+    build = "../../components/bmc-forwarder"
     for n in bmc_nodes(sim, profile):
         port = p["bmc_port"][n]
-        svc = _service("python:3.12-slim", BMC_FORWARDER_MB, 2)
-        svc.update({"command": ["python", "/app/forward.py", f"443:bmc-farm:{port}", f"8443:bmc-farm:{port}"],
-                    "volumes": ["../../components/bmc-farm/forward.py:/app/forward.py:ro"], "depends_on": ["bmc-farm"],
+        svc = _service(BMC_FORWARDER_IMAGE, BMC_FORWARDER_MB, 2, build)
+        build = None
+        svc.update({"command": [f"443:bmc-farm:{port}", f"8443:bmc-farm:{port}"], "depends_on": ["bmc-farm"],
                     "networks": {"ipmi": {"ipv4_address": p["bmc"][n]}}})
         services[f"bmc-{n}"] = svc
     services["bmc-farm"]["networks"] = {"default": {}, "ipmi": {"ipv4_address": addressing.IPMI_FARM_IP}}

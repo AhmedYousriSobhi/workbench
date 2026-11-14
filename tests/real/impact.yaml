@@ -39,7 +39,7 @@
   paths: ["benchctl/capture.py", "benchctl/slurm_msgtypes.py", "scripts/gen_slurm_msgtypes.py"]
   tests: [test_wire_capture_real]
 - name: bmc-farm
-  paths: ["components/bmc-farm/**"]
+  paths: ["components/bmc-farm/**", "components/bmc-forwarder/**"]
   tests: [test_mocks_real, test_bmc_tls_real, test_power_real, test_cluster_real, test_traffic_record_real]
 - name: bcm-mock
   paths: ["components/bcm-mock/**", "images/login/cmsh.py"]

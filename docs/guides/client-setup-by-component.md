@@ -142,7 +142,7 @@ Each BMC is a small container on the BMC network (`10.148.0.0/16`) with its own 
 ([ADR 0018](../adr/0018-fixed-addressing-plan.md)). The address works from this machine and from the login node (the jump
 host is also on that network). `benchctl export profile --bmc` writes one target per node with its own address.
 Every machine has a BMC by default, the Kubernetes nodes too (when that part is on). Choose which in **▦ Cluster architecture** (the BMC part has a switch per node group, Slurm CPU, Slurm GPU, Kubernetes CPU and Kubernetes GPU, with the memory each costs, and a collapsed list to leave out single nodes) or with `--bmc-groups slurm-gpu,k8s-gpu` and `--bmc-nodes cn001,gpu001`;
-each BMC costs about 32 MB. A client that cannot route to the cluster network uses the old single listener,
+each BMC costs 16 MB at most (about 3 MB used). A client that cannot route to the cluster network uses the old single listener,
 `127.0.0.1:8443` with the Host header `bmc-<node>` (`--loopback`).
 
 Check by hand: `curl -sk -u "admin:<password>" https://10.148.100.1/redfish/v1/` (or, with the old listener, `curl -sk -H "Host: bmc-gpu001" -u "admin:<password>" https://127.0.0.1:8443/redfish/v1/`) (it answers "gpu001 service root"). Break something with

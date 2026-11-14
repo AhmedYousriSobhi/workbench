@@ -24,13 +24,21 @@ between starts, and `cmsh` listed made-up addresses. A real cluster has distinct
 - The subnets are fixed, not configurable (observability.yml is a static file). `benchctl up` refuses with one message when
   the existing network has another subnet (run `benchctl down` once) or a host route (VPN, office network) overlaps.
 - Phase 2 (issue 149): every node's BMC has its own address on `ipminet`: 10.148.0.N (compute), 10.148.100.N (GPU) at the
-  standard port 443. Each is a tiny forwarder container (`components/bmc-farm/forward.py`, 32 MB) that pipes TCP to its own port
+  standard port 443. Each is a tiny forwarder container (`components/bmc-forwarder`, 16 MB cap, a static Go binary on scratch since issue 454; it was `forward.py`, 32 MB) that pipes TCP to its own port
   on the farm (9000 + the node's index), which keeps all BMC state; the farm picks the node by that port, so the Host header
   is not needed. A separate state container per BMC was rejected: it would have touched every tool path (scenario injection,
   the page, the traffic counters). The farm and the login node (the jump host) are on both networks. A node's BMC is switched
   on or off per node (`bmc_nodes` in the workbench selection, `--bmc-nodes`, the Cluster architecture sheet): no forwarder, no address,
-  no export target, 32 MB saved. 127.0.0.1:8000/8443 on the farm stays for the tool and as the fallback.
+  no export target, 16 MB saved. 127.0.0.1:8000/8443 on the farm stays for the tool and as the fallback.
 
 ## Consequences
 Addresses are stable and realistic; the jump-host case works with `bmc-<node>`. A host that already uses 10.141/16 or
 10.148/16 must free it. Changing the subnet of an existing cluster needs one `benchctl down`.
+
+## Addendum: the per-node forwarder is a static binary (issue 454)
+The Python forwarder (about 18 MB resident per node, 32 MB cap) is replaced by `components/bmc-forwarder`: one small Go program built into a `scratch` image.
+- **Image:** 2.3 MB, no OS or shell, UID 65534 with every capability dropped; it still binds 443 because Docker lets containers bind from port 0. All forwarders share the one image (the first service carries the build).
+- **Behaviour unchanged:** the same `443:bmc-farm:PORT 8443:bmc-farm:PORT` arguments, one IP per node on `ipminet`, bytes piped untouched so TLS ends at the farm, a dead farm just closes the connection, and the per-node off switch still means no service.
+- **Measured** (one forwarder, 50 connections, on the host): 21.4 MB resident for `forward.py`, 3.2 MB for the binary; idle in a 16 MB-capped container Docker reports 1 MiB.
+- **Budget:** the cap is now 16 MB (`BMC_FORWARDER_MB`), `PER_NODE_MB["bmc-forwarder"]` 16, `MEASURED_MB` 3: about 0.5 GB less expected use at 32 nodes. Profile budgets follow: `std` 1.2 to 0.9 GB, `full` 1.8 to 1.2, `jira-real` 3.5 to 3.2.
+- **Why not `socat`:** it needs a third-party image or an OS layer; the Go source is 70 lines and the toolchain image is already used by `dcgm-exporter`.
