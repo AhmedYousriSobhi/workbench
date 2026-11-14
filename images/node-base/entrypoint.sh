@@ -9,6 +9,8 @@ done
 # slurmd runs the health check, prolog and epilog with a bare environment, so what nhc must expect of this node
 # (GPU count, InfiniBand ports) is written to a file it reads.
 printf 'WORKBENCH_GPUS=%s\nWORKBENCH_IB=%s\n' "${WORKBENCH_GPUS:-0}" "${WORKBENCH_IB:-0}" > /etc/workbench-node.env
+# a node whose card is real (rgpu001) is not in the farm: nhc reads its own exporter instead (issue 437)
+[ -n "${WORKBENCH_NHC_URL:-}" ] && printf 'NHC_METRICS_URL=%s\n' "$WORKBENCH_NHC_URL" >> /etc/workbench-node.env
 # Simulated users (name:uid ...) must resolve identically on every Slurm container.
 for u in $WORKBENCH_USERS; do
   id "${u%%:*}" >/dev/null 2>&1 || useradd -m -u "${u##*:}" "${u%%:*}" || [ -d "/home/${u%%:*}" ]  # a shared /home already holds the directory

@@ -21,7 +21,7 @@ four checks that ship). You can change that list three ways. All three use the s
 |---|---|
 | `checks.conf` | the checks in the order they run, one per line: `NAME on|off [key=value ...]` |
 | `NAME.sh` | one check: a shell snippet that prints **one line per problem**, nothing when the node is healthy |
-| `templates/*.sh` | checks with parameters you fill in (`metric-above`, `metric-below`) |
+| `templates/*.sh` | checks to add from a template (`metric-above`, `metric-below` take parameters; `real-gpu-health` takes none) |
 
 A change is refused, with the reason and nothing changed, when a name or parameter is malformed, a file has a syntax error,
 a parameter is missing, the check calls `scontrol` or `sudo` (the runner drains, not the check), or it reports a problem on
@@ -76,6 +76,21 @@ check. To add one, drag a template from the bottom of the sheet into the list (o
 parameters. A refused change shows one line saying why and the list goes back to what was saved. The page adds checks
 from templates only; for a script of your own use the command line or a file. Changes made at the same moment (two tabs, or the page and
 `benchctl set check`) are applied one after the other, so none is lost.
+
+## The real card (`rgpu001`)
+
+`gpu-count` and `gpu-xid` skip the real-gpu node (it has no simulated GPUs). The `real-gpu-health` template checks the real card
+instead: it drains the node (`NHC: real GPU missing`, `real GPU XID <n>`, `real GPU <t>C over its slowdown <s>C`) when
+`nvidia-smi -L` lists no card, the exporter reports a non-zero XID, or the temperature is over the card's own slowdown threshold
+(read from `nvidia-smi -q`). It is not on by default; turn it on once the part is up:
+
+```bash
+./scripts/benchctl add check real-gpu --template real-gpu-health
+```
+
+Only a node with `nvidia-smi` (the real card's device) runs it; every simulated node skips it. That node's health check reads the real exporter
+(`real-gpu:9400`), not the farm. If the card disappears so completely that the exporter publishes nothing, the runner sees no
+series for the node and skips every check (the node is never drained on a guess); the `nvidia-smi` test fires while the exporter still answers.
 
 ## Undo
 
