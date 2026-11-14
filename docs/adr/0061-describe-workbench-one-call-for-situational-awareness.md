@@ -1,6 +1,6 @@
 # ADR 0061: `benchctl describe workbench --json`: one call for situational awareness
 
-Status: accepted by the owner on 2026-11-13 (issue 603, decisions in issue 613). Nothing here is built yet. Decision A-2 of the agent interface.
+Status: accepted by the owner on 2026-11-13 (issue 603, decisions in issue 613). Built (issues 616 to 628, 633 to 639). Decision A-2 of the agent interface.
 
 ## Context
 An agent that has just started needs to know what is running, which endpoints to call, which faults and scenarios exist and what to do next. Today that takes several commands (`status`, `get nodes`, `get workbench`, `get scenarios`, the connections table) and parsing of each.

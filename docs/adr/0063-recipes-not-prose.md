@@ -1,6 +1,6 @@
 # ADR 0063: Recipes, not prose: short task pages for agents
 
-Status: accepted by the owner on 2026-11-13 (issue 603, decisions in issue 613). Nothing here is built yet. Decision A-5 of the agent interface.
+Status: accepted by the owner on 2026-11-13 (issue 603, decisions in issue 613). Built (issues 616 to 628, 633 to 639). Decision A-5 of the agent interface.
 
 ## Context
 An agent given the manual will read far more than it needs. What it wants is a short, copyable path to one test goal.

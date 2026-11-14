@@ -1,6 +1,6 @@
 # ADR 0065: Agent output mode: no wasted tokens
 
-Status: accepted by the owner on 2026-11-13 (issue 603, decisions in issue 613). Nothing here is built yet. Decision A-6 of the agent interface.
+Status: accepted by the owner on 2026-11-13 (issue 603, decisions in issue 613). Built (issues 616 to 628, 633 to 639). Decision A-6 of the agent interface.
 
 ## Context
 Colour codes, progress bars, spinners and long logs cost an agent tokens and carry no information.
