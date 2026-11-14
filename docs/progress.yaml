@@ -116,6 +116,8 @@ phases:
     title: Kubernetes
     goal: Mixed real and fake K8s nodes
     items:
+      - {name: Kubernetes policy objects and API throttling, status: review, where: "k8s/fixtures/60-policy.yaml, k8s/scenario/70-apf.yaml, benchctl/k8s.py, benchctl/scenario.py, scenarios/k8s-preempt.yaml, scenarios/k8s-drain-blocked.yaml, scenarios/k8s-api-throttled.yaml, tests/test_k8s.py, tests/real/test_k8s_real.py, docs/adr/0077-k8s-policy-objects-and-api-throttling.md",
+         how: "PriorityClasses inference, training and best-effort, a quota of two DRA devices in team-a, an inference deployment with a PodDisruptionBudget that blocks a drain. Scenario steps pod (priority_class, node), drain and remove, expectation k8s.pods_on_node; scenarios k8s-preempt (SC-38), k8s-drain-blocked (SC-39) and k8s-api-throttled (SC-40, an APF level for the viewer user that is applied and removed by the scenario). Unit-tested; the live run (verify.sh --unit k8s) is not done. Issue 548, ADR 0077."}
       - {name: DRA ResourceSlices on the KWOK GPU nodes, status: review, where: "benchctl/dra.py, benchctl/k8s.py, k8s/fixtures/55-dra-claims.yaml, tests/test_k8s.py, tests/real/test_k8s_real.py, docs/adr/0076-dra-resource-slices-on-kwok-gpu-nodes.md",
          how: "A DeviceClass and a resource.k8s.io/v1 ResourceSlice per GPU node (driver gpu.sim.test, attributes uuid, model, index, NVLink domain; memory capacity), generated at up into compose/generated/k8s/50-dra.yaml; the fixture pod dra-train claims one GPU and the real scheduler allocates it. Device UUIDs are the UUID labels of the node's DCGM series. Written and unit-tested; the live run (verify.sh --unit k8s) is not done. Issue 547, ADR 0076."}
       - {name: Cluster fixtures, status: done, where: k8s/fixtures,

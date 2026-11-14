@@ -423,7 +423,7 @@ def bootstrap(sim: dict, ips: dict, say: Callable[[str], None] = print, runner: 
 # ---- scenario steps and expectations (target `k8s`, run by benchctl/scenario.py on the host) ----
 
 FAULTS = ("crashloop", "oom", "imagepull", "jobfail")  # the pod stages in k8s/kwok/stage-faults.yaml (a node has fault-node-down)
-STEP_KEYS = ("down", "up", "cordon", "uncordon", "pod", "delete_pod", "scale", "apply")
+STEP_KEYS = ("down", "up", "cordon", "uncordon", "pod", "delete_pod", "scale", "apply", "remove", "drain")
 _NAME = r"[a-z0-9]([-a-z0-9]*[a-z0-9])?"
 SCENARIO_POD = "scenario-pod.yaml"
 
@@ -451,7 +451,19 @@ def step_problems(do: dict, nodes: set[str]) -> list[str]:
             out.append(f"k8s {key} needs a namespace and a {'name' if key == 'delete_pod' else 'deploy'}")
     if "scale" in do and not (isinstance(do["scale"], dict) and isinstance(do["scale"].get("replicas"), int)):
         out.append("k8s scale needs replicas: a whole number")
-    for path in do.get("apply") or []:
+    if "drain" in do:
+        d = do["drain"] if isinstance(do["drain"], dict) else {}
+        if d.get("node") not in nodes:
+            out.append(f"k8s drain needs a known Kubernetes node, not {d.get('node')!r}")
+        if not isinstance(d.get("timeout", 30), int) or isinstance(d.get("timeout", 30), bool) or not 1 <= d.get("timeout", 30) <= 600:
+            out.append("k8s drain timeout is whole seconds, 1 to 600")
+    if "pod" in do and isinstance(do["pod"], dict):
+        p = do["pod"]
+        if p.get("priority_class") is not None and not _ok_name(p["priority_class"]):
+            out.append("k8s pod priority_class must be a PriorityClass name")
+        if p.get("node") is not None and p["node"] not in nodes:
+            out.append(f"unknown Kubernetes node {p['node']!r}")
+    for path in [*(do.get("apply") or []), *(do.get("remove") or [])]:
         if not (isinstance(path, str) and not path.startswith("/") and ".." not in path.split("/")):
             out.append(f"k8s apply path {path!r} must be relative to the k8s/ directory")
     return out or ([] if do else ["k8s step does nothing"])
@@ -463,6 +475,8 @@ def pod_manifest(p: dict) -> str:
     res = {"limits": {"nvidia.com/gpu": str(p["gpus"])}} if p.get("gpus") else {}
     return yaml.safe_dump({"apiVersion": "v1", "kind": "Pod", "metadata": {"name": p["name"], "namespace": p["namespace"], "labels": labels},
                            "spec": {"restartPolicy": "Never" if p.get("fault") == "jobfail" else "Always",
+                                    **({"priorityClassName": p["priority_class"]} if p.get("priority_class") else {}),
+                                    **({"nodeSelector": {"kubernetes.io/hostname": p["node"]}} if p.get("node") else {}),
                                     "containers": [{"name": "c", "image": "registry.k8s.io/pause:3.10", **({"resources": res} if res else {})}]}})
 
 
@@ -481,6 +495,9 @@ def step_args(do: dict) -> list[list[str]]:
         s = do["scale"]
         out.append(["-n", s["namespace"], "scale", f"deployment/{s['deploy']}", f"--replicas={int(s['replicas'])}"])
     out += [["apply", "--server-side", "--force-conflicts", "-f", f"/k8s/{path}"] for path in do.get("apply") or []]
+    out += [["delete", "--ignore-not-found", "-f", f"/k8s/{path}"] for path in do.get("remove") or []]
+    if "drain" in do:  # cordons, then evicts through the eviction API, so a PodDisruptionBudget can refuse; the timeout ends a blocked drain
+        out.append(["drain", do["drain"]["node"], "--ignore-daemonsets", "--delete-emptydir-data", "--force", f"--timeout={int(do['drain'].get('timeout', 30))}s"])
     return out
 
 
@@ -520,3 +537,10 @@ def pod_reasons(namespace: str, name: str, runner: Callable) -> str:
           "{.status.containerStatuses[*].state.terminated.reason} {.status.containerStatuses[*].lastState.terminated.reason}")
     r = runner(kubectl_cmd(current_sim(), "-n", namespace, "get", "pod", name, "-o", jp))
     return "" if r.returncode else r.stdout.strip()
+
+
+def pods_on_node(node: str, namespace: str, selector: str, runner: Callable) -> int | None:
+    """How many Running pods matching `selector` sit on `node` (None when unreadable)."""
+    r = runner(kubectl_cmd(current_sim(), "-n", namespace, "get", "pods", "-l", selector, "--field-selector",
+                           f"spec.nodeName={node},status.phase=Running", "-o", "jsonpath={.items[*].metadata.name}"))
+    return None if r.returncode else len(r.stdout.split())

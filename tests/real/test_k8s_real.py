@@ -239,3 +239,81 @@ def test_the_real_scheduler_allocates_a_dra_claim_to_a_device_whose_uuid_is_a_dc
     import urllib.request
     text = urllib.request.urlopen(f"http://127.0.0.1:9400/metrics?node={alloc['pool']}", timeout=5).read().decode()
     assert f'UUID="{uuid}"' in text, f"no DCGM series carries {uuid}"
+
+
+def _play(name: str, *, stop_at: float | None = None) -> None:
+    """Run a scenario's k8s steps in order against the live cluster, without waiting for their `at` times."""
+    sc = scenario.load(name)
+    for st in scenario.plan(sc):
+        if stop_at is None or st.at <= stop_at:
+            out = scenario.execute(st)
+            assert out.status == "ok", (name, st, out)
+
+
+def test_the_real_scheduler_preempts_best_effort_pods_for_an_inference_pod(cluster):
+    """Issue 548, scenario k8s-preempt: three priority classes exist; the urgent pod needs more GPUs than are free on kgpu001."""
+    got = json.loads(k8s.kubectl(cluster, "get", "priorityclass", "-o", "json").stdout)["items"]
+    assert {"training", "inference", "best-effort"} <= {c["metadata"]["name"] for c in got}
+    try:
+        _play("k8s-preempt", stop_at=20)
+        assert wait_for(lambda: k8s.pod_reasons("team-b", "urgent", k8s._run).split()[:1] == ["Running"], timeout=90), \
+            k8s.kubectl(cluster, "-n", "team-b", "describe", "pod", "urgent").stdout[-1200:]
+        ev = k8s.kubectl(cluster, "get", "events", "-A", "--field-selector", "reason=Preempted", "-o", "json")
+        assert json.loads(ev.stdout)["items"], "no Preempted event: the node had room, so nothing was preempted"
+    finally:
+        for p in ("urgent", "fill-a", "fill-b"):
+            k8s.kubectl(cluster, "-n", "team-b", "delete", "pod", p, "--ignore-not-found", "--wait=false")
+
+
+def test_a_drain_is_blocked_by_the_disruption_budget_and_the_pod_stays(cluster):
+    """Issue 548, scenario k8s-drain-blocked: the inference budget allows no eviction."""
+    assert wait_for(lambda: k8s.pods_on_node("kgpu001", "team-a", "app=inference", k8s._run) is not None, timeout=60)
+    assert wait_for(lambda: (k8s.pods_on_node("kgpu001", "team-a", "app=inference", k8s._run) or 0) >= 1, timeout=90), \
+        "the spread constraint should put one inference replica on each GPU node"
+    try:
+        r = k8s.kubectl(cluster, "drain", "kgpu001", "--ignore-daemonsets", "--delete-emptydir-data", "--force", "--timeout=25s")
+        assert r.returncode != 0 and "disruption budget" in (r.stderr + r.stdout).lower(), r.stderr[-600:]
+        assert (k8s.pods_on_node("kgpu001", "team-a", "app=inference", k8s._run) or 0) >= 1
+    finally:
+        k8s.kubectl(cluster, "uncordon", "kgpu001")
+
+
+def test_the_gpu_claim_quota_rejects_a_claim_over_the_limit(cluster):
+    """Issue 548: team-a may hold two DRA devices and dra-train holds one."""
+    claim = "apiVersion: resource.k8s.io/v1\nkind: ResourceClaim\nmetadata: {name: %s, namespace: team-a}\nspec:\n  devices:\n    requests: [{name: gpu, exactly: {deviceClassName: gpu.sim.test, count: 1}}]\n"
+    try:
+        assert k8s.kubectl(cluster, "create", "-f", "-", stdin=claim % "quota-a").returncode == 0
+        r = k8s.kubectl(cluster, "create", "-f", "-", stdin=claim % "quota-b")
+        assert r.returncode != 0 and "exceeded quota" in r.stderr, r.stderr[-500:]
+    finally:
+        k8s.kubectl(cluster, "-n", "team-a", "delete", "resourceclaim", "quota-a", "quota-b", "--ignore-not-found")
+
+
+def test_the_throttling_scenario_gives_the_viewer_real_429s_and_touches_nobody_else(cluster):
+    """Issue 548, scenario k8s-api-throttled: a burst as `viewer` meets a level with about three seats and no queue."""
+    import ssl
+    import urllib.error
+    import urllib.request
+    from concurrent.futures import ThreadPoolExecutor
+    ctx = ssl.create_default_context(cafile=str(k8s.SECRETS_DIR / "ca.crt"))
+    ctx.check_hostname = False
+
+    def status(tok: str) -> int:
+        req = urllib.request.Request(f"https://127.0.0.1:{k8s.API_PORT}/api/v1/pods", headers={"Authorization": f"Bearer {tok}"})
+        try:
+            with urllib.request.urlopen(req, context=ctx, timeout=20) as r:
+                return r.status
+        except urllib.error.HTTPError as e:
+            return e.code
+
+    viewer, metrics = k8s.viewer_token(), k8s.metrics_token()
+    try:
+        assert status(viewer) == 200  # before the scenario
+        _play("k8s-api-throttled", stop_at=0)
+        with ThreadPoolExecutor(64) as ex:
+            codes = list(ex.map(lambda _: status(viewer), range(300)))
+        assert 429 in codes, f"no 429 in 300 concurrent requests: {sorted(set(codes))}"
+        assert status(metrics) == 403  # the metrics-only user is unchanged: still no access to pods, and not throttled
+    finally:
+        k8s.kubectl(cluster, "delete", "--ignore-not-found", "-f", "/k8s/scenario/70-apf.yaml", mounts=[(k8s.SRC, "/k8s")])
+    assert wait_for(lambda: status(viewer) == 200, timeout=30)
