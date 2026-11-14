@@ -19,6 +19,7 @@ REGISTRY: dict[str, tuple[str, str]] = {
     "WB-REFUSED-MEMORY": ("Not enough free memory to start this; the governor's pre-flight said no.", "benchctl plan"),
     "WB-REFUSED-GOVERNOR": ("The governor admits no new work at its current memory level.", "benchctl status"),
     "WB-REFUSED-NETWORK": ("The cluster network cannot be created or does not match the addressing plan.", "benchctl down"),
+    "WB-REFUSED-CHECKSUM": ("A Slurm tarball's hash and GitHub's digest for it disagree.", "benchctl get slurm-checksum VERSION"),
     "WB-UNKNOWN-VERB": ("No such command.", "benchctl --help"),
     "WB-UNKNOWN-NODE": ("No such node.", "benchctl get nodes"),
     "WB-UNKNOWN-TARGET": ("No such node or service.", "benchctl get services"),

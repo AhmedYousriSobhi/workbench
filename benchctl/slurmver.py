@@ -2,11 +2,12 @@
 
 `benchctl up --slurm-version X` (or `slurm.version: X` in sim.yaml) builds the node, controller and login images from that release
 and tags them `:dev-X`; the pinned version keeps the plain `:dev` tags, so a default cluster is exactly what it was. Only versions in
-`VERSIONS` are accepted, each with the SHA256 of its tarball (computed from `download.schedmd.com`, which publishes none, ADR 0002).
+`VERSIONS` are accepted, each with the SHA256 of its tarball (computed from `download.schedmd.com`, which publishes none; GitHub's release asset digest is the second source, ADR 0079 addendum).
 """
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import time
 import urllib.request
@@ -14,6 +15,8 @@ import urllib.request
 URL = "https://download.schedmd.com/slurm/slurm-{v}.tar.bz2"
 MAX_BYTES = 100 * 1024 * 1024  # the real tarballs are about 7 MB; anything larger is refused
 MAX_SECONDS = 300
+RELEASES = "https://api.github.com/repos/SchedMD/slurm/releases?per_page=100&page={page}"  # assets carry a `digest` since June 2025
+RELEASE_PAGES = 3
 
 DEFAULT = "26.05.5"  # the pin in images/node-base/Dockerfile (ARG SLURM_VERSION); tests/test_slurmver.py keeps them equal
 VERSIONS: dict[str, str] = {
@@ -27,6 +30,10 @@ BASES = ("workbench/node-base", "workbench/slurm-ctl", "workbench/login")  # the
 
 class SlurmVersionError(ValueError):
     pass
+
+
+class DigestDisagreement(SlurmVersionError):
+    """The hash computed from the tarball and GitHub's digest for the same asset differ: the build must not go on."""
 
 
 def version(sim: dict) -> str:
@@ -100,3 +107,39 @@ def check(v: str, sha: str) -> str:
     if rec != sha:
         raise SlurmVersionError(f"{v}: the tarball hashes to {sha} but {rec} is recorded: do not build it; check the recorded value and the download")
     return f"{v}: SHA256 matches the recorded value"
+
+
+def _api_opener(url: str):
+    req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "workbench-benchctl"})
+    return urllib.request.urlopen(req, timeout=30)
+
+
+def github_digest(v: str, opener=_api_opener) -> tuple[str | None, str]:
+    """GitHub's SHA256 digest of `slurm-v.tar.bz2` among SchedMD's release assets: `(hash, "")`, or `(None, why)` when there is no
+    release, no digest or GitHub cannot be reached. Never raises: a missing second source is reported, not a failure of the first."""
+    name = f"slurm-{v}.tar.bz2"
+    try:
+        for page in range(1, RELEASE_PAGES + 1):
+            with opener(RELEASES.format(page=page)) as r:
+                releases = json.loads(r.read())
+            if not releases:
+                break
+            for rel in releases:
+                for a in rel.get("assets") or []:
+                    if a.get("name") == name:
+                        d = str(a.get("digest") or "")
+                        if re.fullmatch(r"sha256:[0-9a-f]{64}", d):
+                            return d[7:], ""
+                        return None, f"the GitHub release for {v} has no SHA256 digest for {name}"
+    except (OSError, ValueError, TypeError, AttributeError) as e:  # offline, rate limited, malformed answer
+        return None, f"GitHub could not be asked: {e}"
+    return None, f"GitHub has no release with {name} in SchedMD's latest {RELEASE_PAGES * 100} releases"
+
+
+def compare(v: str, computed: str, digest: str | None, why: str) -> str:
+    """The two sources side by side. Raises `DigestDisagreement` when they differ; without a digest it says so and the computed hash is advice only."""
+    if digest is None:
+        return f"computed from the tarball: {computed}\nGitHub digest: none ({why})\nNo second source: the computed hash is advice only, not a pass. Check it against another source before you record it."
+    if digest != computed:
+        raise DigestDisagreement(f"{v}: the tarball hashes to {computed} but GitHub's digest is {digest}: do not record or build it; download again, and report it if it persists")
+    return f"computed from the tarball: {computed}\nGitHub digest:            {digest}\nBoth sources agree."

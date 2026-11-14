@@ -23,6 +23,7 @@ With `BENCHCTL_AGENT=1` an error is one line on stderr: `CODE: message | fix: CO
 | `WB-EXTRA-MISSING` | An optional extra is not installed. | `pip install -e '.[mcp]'` |
 | `WB-NEEDS-YES` | A destructive command needs --yes in agent mode. | `repeat the command with --yes` |
 | `WB-PART-NOT-RUNNING` | A part this needs is not running (Prometheus, or the web page). | `benchctl start` |
+| `WB-REFUSED-CHECKSUM` | A Slurm tarball's hash and GitHub's digest for it disagree. | `benchctl get slurm-checksum VERSION` |
 | `WB-REFUSED-GOVERNOR` | The governor admits no new work at its current memory level. | `benchctl status` |
 | `WB-REFUSED-MEMORY` | Not enough free memory to start this; the governor's pre-flight said no. | `benchctl plan` |
 | `WB-REFUSED-NETWORK` | The cluster network cannot be created or does not match the addressing plan. | `benchctl down` |
