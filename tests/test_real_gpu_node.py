@@ -100,3 +100,10 @@ def test_the_page_reads_the_real_nodes_state_from_the_cards_exporter(on, monkeyp
     row = next(n for n in cluster.Cluster(sim, fetch=fetch).snapshot()["nodes"] if n["name"] == "rgpu001")
     assert row["kind"] == "real-gpu" and row["gpus"] == 1 and row["gpus_busy"] == 1 and row["temp"] == 55.0
     assert (row["state"], row["label"]) == ("ok", "Healthy")
+
+
+def test_the_node_health_check_reads_the_real_exporter_not_the_farm(on):
+    sim, prof = on
+    services = compose.generate(sim, {**prof, "compute_nodes": 1})["services"]
+    assert services["rgpu001"]["environment"]["WORKBENCH_NHC_URL"] == f"http://{real_gpu.SERVICE}:9400/metrics"
+    assert "WORKBENCH_NHC_URL" not in services["gpu001"]["environment"]  # a simulated node stays on the farm (issue 437)

@@ -71,3 +71,17 @@ def test_a_job_in_the_real_partition_runs_on_the_card_and_a_simulated_job_cannot
     assert other.returncode != 0  # the node is in no other partition
     model = real_gpu.cards()[0].split(": ", 1)[1]
     assert f"{real_gpu.NODE} gpu:{real_gpu.gres_type(model)}:1" in slurm("sinfo", "-h", "-N", "-o", "%N %G").stdout  # one GPU, typed by the card's model
+
+
+def test_the_nodes_health_check_reads_the_real_exporter_and_a_healthy_card_is_not_drained(built):
+    """Issue 437. An XID on a real card cannot be injected safely and an unplugged card cannot be staged, so those two cases
+    are covered by tests/test_nhc_real_gpu.py with a stub; here the wiring and the healthy case run on the real card."""
+    env = run("docker", "exec", f"workbench-{real_gpu.NODE}-1", "cat", "/etc/workbench-node.env").stdout
+    assert f"NHC_METRICS_URL=http://{real_gpu.SERVICE}:9400/metrics" in env, env
+    added = run(str(ROOT / "scripts/benchctl"), "add", "check", "real-gpu", "--template", "real-gpu-health")
+    try:
+        assert added.returncode == 0, added.stdout + added.stderr
+        nhc = run("docker", "exec", f"workbench-{real_gpu.NODE}-1", "bash", "-c", ". /etc/workbench-node.env; NHC_CHECKS_DIR=/etc/workbench/nhc bash /usr/local/sbin/nhc")
+        assert "unhealthy" not in nhc.stdout, nhc.stdout + nhc.stderr
+    finally:
+        run(str(ROOT / "scripts/benchctl"), "remove", "check", "real-gpu")
