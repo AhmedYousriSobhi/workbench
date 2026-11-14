@@ -106,3 +106,13 @@ def test_non_interactive_output_is_clean(login):
     """Shell niceties must not leak into the commands a client runs."""
     assert ssh("echo", "hi").stdout == "hi\n"
     assert ssh("sinfo", "-h", "-o", "%P").stdout.split() == ["cpu*", "gpu"]
+
+
+def test_sftp_lists_the_home_directory(login):
+    """A client's Files view opens the sftp subsystem (issue 716): `sftp` as alice lists her home directory."""
+    ssh("touch", "sftp-probe.txt")
+    r = subprocess.run(["sftp", "-i", str(KEY), "-P", str(compose.SSH_PORT), "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=no",
+                        "-o", "UserKnownHostsFile=/dev/null", "-o", "BatchMode=yes", "-b", "-", "alice@127.0.0.1"],
+                       input="ls\n", capture_output=True, text=True, timeout=30, check=False)
+    ssh("rm", "-f", "sftp-probe.txt")
+    assert r.returncode == 0 and "sftp-probe.txt" in r.stdout, r.stderr

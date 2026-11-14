@@ -10,3 +10,5 @@ UsePAM no
 AllowTcpForwarding yes
 X11Forwarding no
 PrintMotd no
+# SFTP for a client's Files view (issue 716): the stock server from node-base's apt layer, run as the user, no chroot
+Subsystem sftp /usr/lib/openssh/sftp-server
