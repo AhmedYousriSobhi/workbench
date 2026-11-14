@@ -4,7 +4,8 @@
 
 - `prometheus/targets/sim-nodes.json`: one file_sd target per simulated node, `instance` is the node (the farm answers
   `/metrics?node=NAME`), so `up{job="sim-nodes"}` says which node's exporter does not answer.
-- `prometheus/scrape-parts.yml` (read through `scrape_config_files`): one job per selected part that has metrics: the real DCGM
+- `prometheus/scrape-parts.yml` (read through `scrape_config_files`): one job per selected part that has metrics: Slurm's own
+  endpoint on the controller (four jobs, `slurm-jobs` ... `slurm-scheduler`), the real DCGM
   exporters, the real GPU card, the Kubernetes API server, etcd, scheduler, controller manager and KWOK, Teleport. A part that is
   not selected has no job, so Prometheus never lists a target that cannot exist.
 - `secrets/prometheus/`: the Kubernetes CA certificate and the token of the `metrics` user, who may read `/metrics` and nothing
@@ -26,6 +27,10 @@ DIR_IN_CONTAINER = "/etc/prometheus/generated"
 SECRETS_IN_CONTAINER = "/etc/prometheus/secrets"
 EXPORTER = "gpu-exporter-farm:9400"
 K8S_TOKEN, K8S_CA = "k8s-metrics.token", "k8s-ca.crt"
+# Slurm's own endpoint (MetricsType=metrics/openmetrics, benchctl/slurmconf.py) answers on the controller's port, one path per family.
+# `jobs-users-accts` is left out: a series per user and account is the cardinality this workbench caps.
+SLURM_PATHS = ("jobs", "nodes", "partitions", "scheduler")
+SLURM_PORT = 6817
 # kube components with a plain /metrics path (authorization-always-allow-paths in benchctl/k8s.py); etcd serves it on its own http port
 K8S_JOBS = {"k8s-controller-manager": ("https", "k8s-controller-manager:10257"), "k8s-scheduler": ("https", "k8s-scheduler:10259"),
             "k8s-etcd": ("http", "k8s-etcd:2381"), "kwok-controller": ("https", "kwok-controller:10247")}
@@ -56,6 +61,9 @@ def part_jobs(sim: dict, services: set[str], k8s_ready: bool = True) -> list[dic
             if scheme == "https":  # the component's own serving certificate is not signed by the workbench CA
                 job.update({"scheme": "https", "tls_config": {"insecure_skip_verify": True}})
             jobs.append(job)
+    if "slurmctld" in services:
+        jobs += [{"job_name": f"slurm-{p}", "metrics_path": f"/metrics/{p}", "static_configs": [{"targets": [f"slurmctld:{SLURM_PORT}"]}]}
+                 for p in SLURM_PATHS]
     if "teleport" in services:
         jobs.append({"job_name": "teleport", "static_configs": [{"targets": [f"teleport:{teleport.DIAG_PORT}"]}]})
     return jobs

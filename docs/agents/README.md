@@ -39,7 +39,7 @@ Skills live in your home directory, not in this repository (`.claude/` is not co
 > The governor can say no. `REFUSED` means starting would risk the machine's memory: close something or pick a smaller profile, and do not retry in a loop.
 
 > [!NOTE]
-> The workbench ships six small Prometheus alert rules (`GpuXidCritical`, `GpuTempHigh`, `InfinibandPortDown`, `NodeDown`, `ExporterDown`, `JiraErrors`, in `observability/rules.yml`), so `get alerts` and `wait alert` have something to read. They watch the simulated cluster only; the app under test brings its own alerting. Alertmanager (127.0.0.1:9093) sends every alert to the Jira mock, which opens one ticket per alert, so `get alerts` and the ticket list agree.
+> The workbench ships seven small Prometheus alert rules (`GpuXidCritical`, `GpuTempHigh`, `InfinibandPortDown`, `NodeDrained`, `NodeDown`, `ExporterDown`, `JiraErrors`, in `observability/rules.yml`), so `get alerts` and `wait alert` have something to read. They watch the simulated cluster only; the app under test brings its own alerting. Alertmanager (127.0.0.1:9093) sends every alert to the Jira mock, which opens one ticket per alert, so `get alerts` and the ticket list agree.
 
 ## MCP server: what was checked
 

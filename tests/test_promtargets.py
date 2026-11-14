@@ -8,7 +8,7 @@ from benchctl import promtargets
 
 ROOT = Path(__file__).resolve().parent.parent
 SIM = yaml.safe_load((ROOT / "sim.yaml").read_text())
-BASE = {"gpu-exporter-farm", "prometheus", "grafana", "alertmanager", "slurmctld"}
+BASE = {"gpu-exporter-farm", "prometheus", "grafana", "alertmanager"}
 
 
 def jobs(services, ready=True):
@@ -83,3 +83,12 @@ def test_prometheus_reads_what_up_writes():
     assert any(m.startswith("./generated/prometheus:") and m.endswith(f"{promtargets.DIR_IN_CONTAINER}:ro") or
                f"{promtargets.DIR_IN_CONTAINER}:ro" in m for m in mounts)
     assert any(f"{promtargets.SECRETS_IN_CONTAINER}:ro" in m for m in mounts)
+
+
+def test_slurm_is_scraped_on_its_own_endpoint_one_job_per_family():
+    """Issue 459, ADR 0074: slurmctld answers /metrics/<family> on its port; users-accts is left out (cardinality)."""
+    got = jobs(BASE | {"slurmctld"})
+    assert set(got) == {"slurm-jobs", "slurm-nodes", "slurm-partitions", "slurm-scheduler"}
+    assert got["slurm-nodes"]["metrics_path"] == "/metrics/nodes"
+    assert all(j["static_configs"] == [{"targets": ["slurmctld:6817"]}] for j in got.values())
+    assert "slurm-jobs-users-accts" not in got

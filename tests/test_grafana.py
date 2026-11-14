@@ -41,3 +41,13 @@ def test_ok_warn_and_bad_are_three_different_colours_taken_from_the_palette():
     for got, tok in ((ok, "grafana_ok"), (warn, "grafana_warn"), (bad, "grafana_bad")):
         assert got == mp.grafana_colour(solid(dark[tok]))
         assert abs(mp.hex_oklch(got)[2] - mp.hex_oklch(solid(dark[tok]))[2]) < 0.05      # the hue of the token is kept
+
+
+def test_the_slurm_dashboard_reads_slurms_own_series_and_sets_no_colours():
+    """Issue 459: provisioned beside the GPU overview, only slurm_* series, no hex colour (ADR 0069)."""
+    text = (ROOT / "observability/dashboards/slurm-overview.json").read_text()
+    d = json.loads(text)
+    assert d["uid"] == "slurm-overview" and len(d["panels"]) == 6
+    exprs = [t["expr"] for p in d["panels"] for t in p["targets"]]
+    assert exprs and all("slurm_" in e for e in exprs)
+    assert "#" not in text

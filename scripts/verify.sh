@@ -80,7 +80,7 @@ fi
 shopt -s nullglob
 [ -n "${PYLIBS:-}" ] && export PYTHONPATH="$PYLIBS${PYTHONPATH:+:$PYTHONPATH}"
 units() {  # test_bmc_tls_real.py -> bmc_tls: one name per component that has tests
-  local f; for f in tests/test_*.py tests/real/test_*.py; do f=$(basename "$f" .py); f=${f#test_}; f=${f%_real}; echo "${f%_browser}"; done | sort -u
+  local f; for f in tests/test_*.py tests/real/test_*.py; do f=$(basename "$f" .py); f=${f#test_}; f=${f%_real}; echo "${f%_browser}"; done | LC_ALL=C sort -u  # byte order, whatever the locale: a name with an underscore sorts the same everywhere
 }
 if [ "$list" = 1 ]; then units; exit 0; fi
 fast=() live=() hook=""

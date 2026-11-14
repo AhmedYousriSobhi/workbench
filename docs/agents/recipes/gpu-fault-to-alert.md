@@ -4,7 +4,7 @@
 GPU errors on both GPU nodes, a thermal rise and a drain; check the app raises its alert and ticket.
 
 ## Needs
-Profile `min` plus `--with jira` if the app files tickets. The workbench's Prometheus loads six default rules (`GpuXidCritical`, `GpuTempHigh`, `InfinibandPortDown`, `NodeDown`, `ExporterDown`, `JiraErrors`; `observability/rules.yml`), so `wait alert` and `get alerts` work out of the box. They only prove the faults are visible in metrics: the app's own alerting is what is under test.
+Profile `min` plus `--with jira` if the app files tickets. The workbench's Prometheus loads seven default rules (`GpuXidCritical`, `GpuTempHigh`, `InfinibandPortDown`, `NodeDrained`, `NodeDown`, `ExporterDown`, `JiraErrors`; `observability/rules.yml`), so `wait alert` and `get alerts` work out of the box. They only prove the faults are visible in metrics: the app's own alerting is what is under test.
 
 ## Steps
 ```bash

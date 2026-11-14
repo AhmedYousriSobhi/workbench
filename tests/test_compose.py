@@ -184,7 +184,7 @@ def test_prometheus_loads_the_default_alert_rules():
     mounts = yaml.safe_load((root / "compose/observability.yml").read_text())["services"]["prometheus"]["volumes"]
     assert "../observability/rules.yml:/etc/prometheus/rules.yml:ro" in mounts
     rules = [r for g in yaml.safe_load((root / "observability/rules.yml").read_text())["groups"] for r in g["rules"]]
-    assert {r["alert"] for r in rules} == {"GpuXidCritical", "GpuTempHigh", "InfinibandPortDown", "NodeDown", "ExporterDown", "JiraErrors"}
+    assert {r["alert"] for r in rules} == {"GpuXidCritical", "GpuTempHigh", "InfinibandPortDown", "NodeDrained", "NodeDown", "ExporterDown", "JiraErrors"}
     assert all(r["expr"] and r["labels"]["severity"] for r in rules)
 
 
