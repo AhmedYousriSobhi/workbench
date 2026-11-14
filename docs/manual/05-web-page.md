@@ -41,7 +41,7 @@ Two panels open on top of the page from the top strip or its **☰ Menu** and cl
 On a phone, and under 1100 px, the Infrastructure architecture, the list and the Connections area stack in one column and the diagram keeps its natural shape. The page has a skip link and
 landmarks, and honours reduced motion.
 
-![The dashboard on a phone, panels stacked (the Infrastructure architecture, the list and the Connections area stack in one column)](img/web-phone-light.png)
+![The dashboard on a phone, panels stacked (one phone screen: the panels stack in one column)](img/web-phone-light.png)
 
 ## The entity list
 
