@@ -30,8 +30,8 @@ ALLOC_STALE_S = 30  # keep the last answer this long when the feed is unreachabl
 
 def load_nodes(inventory: Path) -> dict[str, int]:
     """Return {node_name: gpu_count} from the generated inventory.json (benchctl/hwinventory.py); compute nodes have 0 GPUs and the
-    Kubernetes nodes are there when that part is on."""
-    return {n["name"]: n["gpus"] for n in json.loads(Path(inventory).read_text())["nodes"]}
+    Kubernetes nodes are there when that part is on. The real card's node is not: its own exporter serves it (issue 431)."""
+    return {n["name"]: n["gpus"] for n in json.loads(Path(inventory).read_text())["nodes"] if n["kind"] != "real-gpu"}
 
 
 def load_gpu_type(inventory: Path) -> str:
