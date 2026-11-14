@@ -24,6 +24,7 @@ from . import (
     k8s,
     logins,
     memory,
+    promtargets,
     qos,
     ready,
     real_gpu,
@@ -396,6 +397,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         except (OSError, k8s.K8sError) as e:
             say(f"FAILED kubernetes setup: {e}")
             return False
+    if promtargets.prepare(sim, set(todo), prof.get("compute_nodes"), COMPOSE_FILE.parent):  # the jobs of the selected parts (ADR 0073)
+        runner(["docker", "kill", "-s", "HUP", f"{PROJECT}-prometheus-1"])  # a running Prometheus re-reads them; one that is not running reads them at its start
     for label, svcs in stage_services(names):
         say(f"starting {label}: {', '.join(svcs)}")
         stage({"stage": label.capitalize(), "state": "running"})

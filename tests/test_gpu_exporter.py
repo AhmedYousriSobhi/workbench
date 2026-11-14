@@ -90,7 +90,8 @@ def test_inject_unknown_node():
 
 def test_gen_targets_names_agree():
     t = gen.targets(gen.load_inventory(ROOT / "sim.yaml"))
-    assert t[0]["labels"]["nodes"] == "cn001,cn002,cn003,cn004,gpu001,gpu002"
+    assert [x["labels"]["instance"] for x in t] == ["cn001", "cn002", "cn003", "cn004", "gpu001", "gpu002"]
+    assert all(x["labels"]["__param_node"] == x["labels"]["instance"] and x["labels"]["job"] == "sim-nodes" for x in t)
 
 
 def test_dashboard_json_valid():
@@ -166,3 +167,46 @@ def test_infiniband_ports_and_the_nic_carrier_follow_injected_faults():
     s.inject({"node": "gpu001", "clear": True})
     cleared = s.render()
     assert 'sim_nic_flapping{node="cn001"} 0' in cleared and 'device="mlx5_0",port="1"} 4' in cleared
+
+
+def test_render_of_one_node_holds_only_that_node_and_other_nodes_flaps_are_not_counted():
+    s = exporter.State({"gpu001": 2, "gpu002": 2}, random.Random(1), "h200")
+    only = s.render(only="gpu001")
+    assert 'node="gpu001"' in only and 'node="gpu002"' not in only and 'Hostname="gpu002"' not in only
+    s.inject({"node": "gpu002", "nic_flap": True})
+    s.render(only="gpu001")
+    assert s.carrier.get("gpu002", 0) == 0  # scraping gpu001 never advances the counter of gpu002
+    s.render(only="gpu002")
+    assert s.carrier["gpu002"] == 2
+    s.render()
+    assert s.carrier["gpu002"] == 4  # the whole-farm scrape still advances every flapping node once
+
+
+def test_metrics_node_query_serves_one_node_404s_an_unknown_one_and_503s_a_dead_one():
+    import threading
+    from http.server import ThreadingHTTPServer
+    from urllib.error import HTTPError
+    from urllib.request import urlopen
+
+    state = exporter.State({"gpu001": 2, "gpu002": 2}, random.Random(1), "h200")
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), exporter.make_handler(state))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_port}"
+
+    def get(path):
+        try:
+            with urlopen(base + path, timeout=5) as r:
+                return r.status, r.read().decode()
+        except HTTPError as e:
+            return e.code, e.read().decode()
+
+    try:
+        code, text = get("/metrics?node=gpu002")
+        assert code == 200 and 'node="gpu002"' in text and 'node="gpu001"' not in text
+        assert get("/metrics?node=nope")[0] == 404
+        state.inject({"node": "gpu001", "down": True})
+        assert get("/metrics?node=gpu001")[0] == 503  # Prometheus sees up == 0 for this node alone
+        code, text = get("/metrics")
+        assert code == 200 and 'node="gpu002"' in text and 'node="gpu001"' not in text  # the whole-farm path is unchanged
+    finally:
+        srv.shutdown()

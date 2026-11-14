@@ -1,6 +1,6 @@
 """Fake DCGM-style exporter: one process serving metrics for every simulated node.
 
-GET  /metrics      Prometheus text format
+GET  /metrics      Prometheus text format; /metrics?node=NAME is one node (a dead one answers 503), as Prometheus scrapes it (issue 458)
 POST /sim/inject   {"node": "gpu001", "xid": 79} | {"node": ..., "temp": 92} | {"node": ..., "clear": true}
 """
 import json
@@ -12,6 +12,7 @@ import time
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 import yaml
 
@@ -110,10 +111,11 @@ class State:
             devices[g] = dev
         return {"devices": devices}
 
-    def render(self) -> str:
+    def render(self, only: str | None = None) -> str:
+        """The metrics of every node that is up, or of `only` (what Prometheus scrapes per node, issue 458)."""
         r = self.rng
         out: list[str] = []
-        nodes = {n: g for n, g in self.nodes.items() if n not in self.down}
+        nodes = {n: g for n, g in self.nodes.items() if n not in self.down and only in (None, n)}
 
         def head(name: str, help_: str, typ: str = "gauge") -> None:
             out.append(f"# HELP {name} {help_}")
@@ -165,7 +167,8 @@ class State:
                 state = 1 if i < self.ib_down.get(n, 0) else 4
                 out.append(f'node_infiniband_state_id{{node="{n}",Hostname="{n}",device="mlx5_{i}",port="1"}} {state}')
         for n in self.flapping:
-            self.carrier[n] = self.carrier.get(n, 0) + 2
+            if only in (None, n):  # one scrape of one node must not count the flaps of the others
+                self.carrier[n] = self.carrier.get(n, 0) + 2
         per_node("node_network_carrier_changes_total", "Link state changes", lambda n: self.carrier.get(n, 0), ',device="eth0"', "counter")
         per_node("sim_nic_flapping", "1 while a NIC flap is injected", lambda n: int(n in self.flapping))
         mp = f',mountpoint="{MOUNT}"'
@@ -210,8 +213,16 @@ def make_handler(state: State):
         def do_GET(self):
             if self.path == "/sim/stats":
                 self._send(200, json.dumps(stats), "application/json")
-            elif self.path == "/metrics":
-                self._send(200, state.render())
+            elif urlparse(self.path).path == "/metrics":
+                node = (parse_qs(urlparse(self.path).query).get("node") or [None])[0]
+                if node is None:
+                    self._send(200, state.render())
+                elif node not in state.nodes:
+                    self._send(404, f"no node {node}\n")
+                elif node in state.down:  # a dead host does not answer: Prometheus sees up == 0 for that node alone
+                    self._send(503, f"{node} is down\n")
+                else:
+                    self._send(200, state.render(only=node))
             else:
                 self._send(404, "not found\n")
 

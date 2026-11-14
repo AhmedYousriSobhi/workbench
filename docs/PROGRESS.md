@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**90% built** (39 done, 97 in review, 9 partial, 6 to do, 151 items).
+**90% built** (39 done, 98 in review, 9 partial, 6 to do, 152 items).
 
 ## Roadmap
 
@@ -303,6 +303,7 @@ _What keeps every change safe and debuggable._
 | Initial machine check | 🔍 In review | `./scripts/check-machine.sh` (system python3 only, runs before any build) checks OS, cores, RAM, disk, cgroup v2, Docker daemon and compose, free ports, optional tools, and which profiles fit; READY or NOT READY with a fix per problem. Also `benchctl check`. | `benchctl/machine.py`, `scripts/check-machine.sh` | #87 |
 | benchctl doctor / status / diag | ✅ Done | Environment checks with fixes, governor state, a masked diagnostics tarball, and the container security check. | `benchctl/checks.py`, `benchctl/diag.py` | #26 |
 | Observability stack | ✅ Done | Prometheus (2 d, tmpfs), Grafana with provisioned dashboard, fake GPU exporter (its own image with pyyaml==6.0.3 baked in, no pip at start, runs as nobody; issue 235). | `compose/observability.yml` | - |
+| Prometheus targets generated from the selection (issue 458 | 🔍 In review | One target per simulated node (the farm serves /metrics?node=NAME; a powered-off node answers 503) so up and instance are per node, and one scrape job per selected part (real DCGM, real GPU, Kubernetes API server, etcd, scheduler, controller manager, KWOK, Teleport), written by benchctl up into compose/generated/prometheus and reloaded with SIGHUP. The API server job reads only the metrics user's token. Not done: the live runs (verify.sh --unit prom_targets, test_k8s_real, test_teleport_real), Slurm metrics (issue 459). | `benchctl/promtargets.py`, `observability/prometheus.yml`, `components/gpu-exporter-farm/exporter.py`, `tests/test_promtargets.py`, `tests/real/test_prom_targets_real.py` | - |
 | Alertmanager and default alert rules (issue 460 | 🔍 In review | Alertmanager is a core service beside Prometheus (class P1, 127.0.0.1:9093, 64 MB limit). Six rules (GpuXidCritical, GpuTempHigh, InfinibandPortDown, NodeDown, ExporterDown, JiraErrors), each with a promtool test case; every alert goes to the Jira mock POST /sim/alerts, which opens one ticket per alert and comments on repeat and resolve. The mock also serves GET /metrics (never counted as client traffic) for JiraErrors. In the page: Connections row, a Prometheus to Alertmanager link, a box in the circuit services row. Not done: NodeDrained (needs Slurm metrics, issue 459), a measured memory figure (20 MB is an estimate), the live run (./scripts/verify.sh --unit alerting). | `observability/alertmanager.yml`, `observability/rules.yml`, `tests/rules/rules_test.yml`, `components/jira-mock/jira.py`, `tests/real/test_alerting_real.py` | - |
 | Decisions as ADRs | ✅ Done | 0001 record decisions, 0002 Slurm from source with no extra privileges, 0003 slurmrestd/JWT and accounting, 0004 slurmrestd keeps its unshare steps disabled, 0011 SSH login node. | `docs/adr` | - |
 | Getting-started guide | ✅ Done | Step-by-step use of the app; tests/test_docs.py fails if a documented command disappears. | `docs/guides/getting-started.md` | #52 |
@@ -334,7 +335,7 @@ _What keeps every change safe and debuggable._
 | Verification helpers | ✅ Done | verify.sh runs validate.sh plus real tests (--full adds the live stack lifecycle); tests/real/helpers.py starts a live governor and talks to its socket. `--unit NAME [--clean]` verifies one component (tests/test_NAME*.py then tests/real/test_NAME*.py, optional reset hook scripts/verify.d/NAME.sh; --list-units, -n). Issue 180. Issue 237: seconds per step and a TIME line; validate.sh writes a pass stamp (scripts/lib-stamp.sh, keyed by HEAD, tracked diff, untracked files and COV_FLOOR) so verify.sh skips a second run on the same tree (`--revalidate` forces it); pytest markers `live` and `browser`, `--skip-browser`. Issue 236: WORKBENCH_TEST_TIMERS=1 (opt-in, read by the slurm.conf generator) shortens SlurmdTimeout and HealthCheckInterval for the slow live modules via the test_timers fixture; the default timings stay checked in test_stack_real. Issue 576 (ADR 0057, 0058): `--changed` picks live modules from tests/real/impact.yaml (scripts/impact.py, unmatched path = everything), validate.sh runs beside the live tests (`--serial`, `--trust-ci`), fail-fast for --changed, per-module timing (compose/generated/verify-times.json, SLOW line), real Jira only with `--with-jira`, stack keys with STACK_REUSE, image build stamps (WORKBENCH_FORCE_BUILD), `--install-nightly` user timer. | `scripts/verify.sh`, `scripts/impact.py`, `tests/real/impact.yaml`, `tests/real/stack_reuse.py`, `docs/adr/0057-two-verification-gates-and-impact-selected-live-tests.md` | #48 |
 | Progress tracker | ✅ Done | This page, generated from docs/progress.yaml (issue 19). | `benchctl/progress.py` | #42 |
 
-10/53 done
+10/54 done
 
 ## Next up
 
