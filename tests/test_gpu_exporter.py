@@ -210,3 +210,19 @@ def test_metrics_node_query_serves_one_node_404s_an_unknown_one_and_503s_a_dead_
         assert code == 200 and 'node="gpu002"' in text and 'node="gpu001"' not in text  # the whole-farm path is unchanged
     finally:
         srv.shutdown()
+
+
+def test_summary_gives_the_page_what_a_scrape_would_in_one_small_answer():
+    s = exporter.State({"cn001": 0, "gpu001": 2, "gpu002": 2}, random.Random(3), "h200")
+    s.set_alloc({"gpu001": [0]})
+    s.inject({"node": "gpu001", "xid": 79})
+    s.inject({"node": "gpu002", "ib_down": 1})
+    s.inject({"node": "cn001", "nic_flap": True})
+    s.down.add("gpu002")
+    out = s.summary()
+    assert set(out) == {"cn001", "gpu001"}  # a dead node publishes nothing
+    assert out["gpu001"]["xid"] == 79 and out["gpu001"]["gpu_util"][0] >= 70 and out["gpu001"]["gpu_util"][1] <= 3
+    assert out["cn001"] == {"gpu_util": [], "xid": 0, "ib_down": 0, "nic_flap": True}
+    s.down.clear()
+    assert s.summary()["gpu002"]["ib_down"] == 1
+    json.dumps(out)

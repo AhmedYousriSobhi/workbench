@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**92% built** (40 done, 114 in review, 10 partial, 4 to do, 168 items).
+**92% built** (40 done, 115 in review, 10 partial, 4 to do, 169 items).
 
 ## Roadmap
 
@@ -278,7 +278,7 @@ _External Mac agent and unattended scenario runs._
 
 0/1 done
 
-### Platform and tooling (98%)
+### Platform and tooling (99%)
 
 _What keeps every change safe and debuggable._
 
@@ -348,10 +348,11 @@ _What keeps every change safe and debuggable._
 | Config lab import, scrub and version capture (G6, C-24, issue 550) | 🔍 In review | `benchctl import lab NAME --from DIR` parses slurm.conf, topology.conf, gres.conf, sacctmgr dump, QOS, a sacct trace, allow-listed Kubernetes policy kinds, Prometheus rules (and promtool tests) and Teleport roles; scrubs known secrets, scans for leftovers with the check-privacy rules and refuses with nothing stored; records versions and the match to this workbench in manifest.json under compose/generated/lab/NAME/. Offline and unit-tested on synthetic fixtures; no live test needed (no cluster involved). | `benchctl/lab.py`, `benchctl/lab_import.py`, `benchctl/cli.py (import lab)`, `tests/test_lab_import.py`, `tests/fixtures/lab/`, `docs/guides/config-lab.md`, `docs/adr/0049-config-lab-scope-and-overlay-model.md` | - |
 | Config lab downscale, name mapping and time scaling (G6, C-24, issue 551) | 🔍 In review | `benchctl get lab NAME` plans a run without changing anything: KEY_CLASS (policy, time-scaled, restart, lab-owned, unknown) for every slurm.conf key; a shape-preserving downscale (at least one node per partition x shape x leaf, the rest in proportion, production names kept, services lab-node-NNN, ratio above 100x indicative); the trace sampled at the same ratio per account, QOS and partition; users mapped to lab-u001...; one dilation factor for every time-based parameter, partition limit and job; the peak-concurrency estimate that proposes fewer nodes under lab.max_running_jobs; the admission estimate (nodes x 13 MB + 250 MB). Offline and unit-tested; the governor admit call is wired by issue 553. | `benchctl/lab_slurm.py`, `benchctl/lab_replay.py`, `benchctl/lab.py (plan)`, `benchctl/cli.py (get lab)`, `sim.yaml (lab:)`, `tests/test_lab_downscale.py`, `docs/guides/config-lab.md`, `docs/adr/0050-config-lab-ab-replay-method.md` | - |
 | Config lab, scope, overlay model and A/B method (goal G6, epic 557) | ⬜ To do | Decisions recorded, nothing built: the lab is a mode of the running cluster with an overlay model, governor lab-* commands in user mode at L0-L1, rules before Alertmanager, a downscaled and time-dilated A/B replay with a rule-based verdict. Children: issues 543 to 556 and the reused 458 to 462, 465, 473, 221. Issue 542. | `SPEC.md G6 C-24 W-17l NF-9`, `docs/adr/0049-config-lab-scope-and-overlay-model.md`, `docs/adr/0050-config-lab-ab-replay-method.md` | - |
+| Bulk node summaries for the page (issue 450) | 🔍 In review | GET /sim/summary on the BMC farm (power, CPU temperature, failed fans of every node) and on the GPU exporter (GPU utilisation, XID, InfiniBand ports down, NIC flap) replace two Redfish calls per node and a regex-parsed full scrape: a snapshot makes 7 HTTP calls at 6 nodes and at 32 (was 18 and 70, unit-level count). The Redfish surface is unchanged; the polls carry X-Workbench-Probe and /sim/ is never client traffic. | `components/bmc-farm/bmc.py`, `components/gpu-exporter-farm/exporter.py`, `webui/cluster.py`, `tests/test_cluster.py`, `tests/test_bmc_farm.py`, `tests/test_gpu_exporter.py`, `docs/adr/0012-bmc-farm-standard-redfish-over-tls.md` | - |
 | Verification helpers | ✅ Done | verify.sh runs validate.sh plus real tests (--full adds the live stack lifecycle); tests/real/helpers.py starts a live governor and talks to its socket. `--unit NAME [--clean]` verifies one component (tests/test_NAME*.py then tests/real/test_NAME*.py, optional reset hook scripts/verify.d/NAME.sh; --list-units, -n). Issue 180. Issue 237: seconds per step and a TIME line; validate.sh writes a pass stamp (scripts/lib-stamp.sh, keyed by HEAD, tracked diff, untracked files and COV_FLOOR) so verify.sh skips a second run on the same tree (`--revalidate` forces it); pytest markers `live` and `browser`, `--skip-browser`. Issue 236: WORKBENCH_TEST_TIMERS=1 (opt-in, read by the slurm.conf generator) shortens SlurmdTimeout and HealthCheckInterval for the slow live modules via the test_timers fixture; the default timings stay checked in test_stack_real. Issue 576 (ADR 0057, 0058): `--changed` picks live modules from tests/real/impact.yaml (scripts/impact.py, unmatched path = everything), validate.sh runs beside the live tests (`--serial`, `--trust-ci`), fail-fast for --changed, per-module timing (compose/generated/verify-times.json, SLOW line), real Jira only with `--with-jira`, stack keys with STACK_REUSE, image build stamps (WORKBENCH_FORCE_BUILD), `--install-nightly` user timer. | `scripts/verify.sh`, `scripts/impact.py`, `tests/real/impact.yaml`, `tests/real/stack_reuse.py`, `docs/adr/0057-two-verification-gates-and-impact-selected-live-tests.md` | #48 |
 | Progress tracker | ✅ Done | This page, generated from docs/progress.yaml (issue 19). | `benchctl/progress.py` | #42 |
 
-10/66 done
+10/67 done
 
 ## Next up
 
