@@ -224,3 +224,12 @@ def test_a_wrong_job_memory_is_refused_with_one_message():
         sim = {**SIM, "compute": {**SIM["compute"], "job_memory_mb": bad}}
         with pytest.raises(compose.JobMemoryError, match="compute.job_memory_mb"):
             compose.generate(sim, compose.load_profile("min"))
+
+
+def test_only_the_slurm_nodes_get_the_one_capability_job_accounting_needs():
+    """Issue 674: slurmd reads /proc/PID/io of users' jobs, which root cannot do in a container without SYS_PTRACE; nothing else gets a capability."""
+    from benchctl import compose
+    out = compose.generate(_sim(), {"groups": ["core", "access", "accounting", "mocks"], "compute_nodes": 2})["services"]
+    nodes = {n: s for n, s in out.items() if s["labels"].get("workbench.node")}
+    assert nodes and all(s["cap_add"] == ["SYS_PTRACE"] and not s.get("privileged") for s in nodes.values())
+    assert not [n for n, s in out.items() if n not in nodes and "cap_add" in s]

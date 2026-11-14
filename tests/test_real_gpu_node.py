@@ -64,7 +64,8 @@ def test_the_node_container_gets_the_card_as_a_device_and_no_fake_gpus(on):
     svc = compose.generate(sim, {**prof, "compute_nodes": 1})["services"]["rgpu001"]
     assert svc["devices"] == [real_gpu.DEVICE] and svc["hostname"] == "rgpu001"
     assert "WORKBENCH_GPUS" not in svc["environment"] and svc["environment"]["WORKBENCH_IB"] == "0"
-    assert not {"privileged", "cap_add", "security_opt"} & set(svc) and svc["labels"]["workbench.node"] == "real-gpu"
+    assert not {"privileged", "security_opt"} & set(svc) and svc["labels"]["workbench.node"] == "real-gpu"
+    assert svc["cap_add"] == ["SYS_PTRACE"]  # the one capability every Slurm node has (issue 674)
     assert "devices" not in compose.generate(sim, {**prof, "compute_nodes": 1})["services"]["gpu001"]
 
 

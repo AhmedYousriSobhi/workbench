@@ -193,3 +193,17 @@ def test_check_containers_lists_accepted_exception():
 
     c = checks.check_containers(fake)
     assert c.status == checks.OK and "accepted exception" in c.detail and "ADR 0004" in c.detail
+
+
+def test_a_slurm_node_may_hold_sys_ptrace_and_nothing_else_may():
+    """Issue 674: the accepted exception is narrow: one capability, only on a container labelled as a Slurm node."""
+    def ctr(name, caps, node):
+        return {"Name": name, "HostConfig": {"Memory": 1, "CapAdd": caps}, "Mounts": [],
+                "Config": {"Labels": {"workbench.node": "compute"} if node else {}}}
+
+    assert checks.container_violations([ctr("/cn001", ["SYS_PTRACE"], True)]) == []
+    for bad in (ctr("/login", ["SYS_PTRACE"], False), ctr("/cn002", ["SYS_PTRACE", "NET_ADMIN"], True), ctr("/cn003", ["SYS_ADMIN"], True)):
+        assert "extra capabilities" in " ".join(checks.container_violations([bad]))
+    listed = checks.accepted_exceptions([ctr("/cn001", ["SYS_PTRACE"], True)])
+    assert listed and "SYS_PTRACE" in listed[0] and "ADR 0074" in listed[0]
+    assert checks.accepted_exceptions([ctr("/login", ["SYS_PTRACE"], False)]) == []
