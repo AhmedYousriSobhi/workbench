@@ -1,0 +1,11 @@
+rule_files: [alerts.yml]
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - {series: 'up{instance="a"}', values: '0 0 0 0'}
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: NodeDown
+        exp_alerts:
+          - exp_labels: {severity: page, instance: a}

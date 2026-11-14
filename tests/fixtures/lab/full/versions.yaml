@@ -1,0 +1,4 @@
+slurm: 25.11.9
+kubernetes: v1.36.1
+prometheus: 2.53.0
+teleport: 18.11.8

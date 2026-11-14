@@ -27,6 +27,7 @@ from . import (
     faultstate,
     inventory,
     jira_real,
+    lab,
     logins,
     machine,
     measure,
@@ -1337,6 +1338,23 @@ def wait_scenario(name: str = typer.Argument(..., autocompletion=completion.scen
                   timeout: float = TIMEOUT) -> None:
     """Until the web page's run of NAME has ended (exit 1 if it ended failed). Scenarios started with `scenario run` block by themselves. Exit 2 when the page is not running."""
     _wait(wait.scenario_check(name, _page_run_state), timeout, {"for": "scenario", "name": name})
+
+
+import_app = typer.Typer(cls=SuggestingGroup, help="Bring exported files in: a production cluster's configuration (config lab)")
+app.add_typer(import_app, name="import")
+
+
+@import_app.command("lab")
+def import_lab(name: str = typer.Argument(..., help="lab name: lowercase letters, digits and -"),
+               src: str = typer.Option(..., "--from", help="folder of exported files (slurm.conf, topology.conf, gres.conf, sacctmgr.dump, qos.txt, trace.sacct, k8s/, rules/, teleport/, versions.yaml)"),
+               replace: bool = typer.Option(False, "--replace", help="overwrite a lab of the same name")) -> None:
+    """Import exported production configuration into a config lab: parse, scrub secrets, record versions. Reads files only; never connects to production."""
+    try:
+        m = lab.import_lab(name, _Path(src), replace=replace, sim=_base_sim())
+    except lab.LabError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    typer.echo(lab.summary(m))
 
 
 export_app = typer.Typer(cls=SuggestingGroup, help="Write the workbench in a form another tool can import")
