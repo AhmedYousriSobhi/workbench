@@ -116,10 +116,10 @@ def test_bootstrap_applies_definitions_then_stages_then_nodes_then_fixtures_and_
     assert k8s.bootstrap(SIM, addressing.plan(SIM), lambda m: None, runner=run, ready=lambda ips: True, sleep=lambda s: None)
     files = [c[-1] for c in calls if c[0] == "apply"]
     assert files == ["/k8s/kwok/crds.yaml", "/k8s/kwok/stage-fast.yaml", "/k8s/kwok/stage-faults.yaml", "/state/nodes.yaml",
-                     "/k8s/fixtures/00-namespaces.yaml", "/k8s/fixtures"]
+                     "/k8s/fixtures/00-namespaces.yaml", "/k8s/fixtures", "/state/50-dra.yaml"]
     assert any(c[0] == "wait" and "crd/stages.kwok.x-k8s.io" in c for c in calls)  # stages cannot be applied before their definition exists
     first_sa = next(i for i, c in enumerate(calls) if "serviceaccount" in c)
-    assert first_sa < len(calls) - 1 and calls[-1][-1] == "/k8s/fixtures"  # pods are refused until the default service account exists
+    assert first_sa < len(calls) - 2 and calls[-2][-1] == "/k8s/fixtures"  # pods are refused until the default service account exists
 
 
 def test_bootstrap_stops_with_one_message_where_it_failed():
@@ -321,3 +321,44 @@ def test_the_api_audit_log_is_narrow_metadata_only_on_stdout_and_bounded(tmp_pat
     (tmp_path / "s" / "audit-policy.yaml").write_text("old")
     k8s.prepare(SIM, addressing.plan(SIM), tmp_path / "s", tmp_path / "st")
     assert (tmp_path / "s" / "audit-policy.yaml").read_text() == k8s.AUDIT_POLICY  # a cluster made before this gets it on its next start
+
+
+def test_dra_slices_list_each_gpu_with_the_uuid_of_its_dcgm_series(tmp_path):
+    from benchctl import dra, hwinventory
+
+    docs = list(yaml.safe_load_all(dra.slices_yaml(k8s.node_list(SIM))))
+    assert docs[0]["kind"] == "DeviceClass" and 'device.driver == "gpu.sim.test"' in docs[0]["spec"]["selectors"][0]["cel"]["expression"]
+    slices = docs[1:]
+    gpu_nodes = [(n, g) for n, g in k8s.node_list(SIM) if g.get("gpus")]
+    assert [s["spec"]["nodeName"] for s in slices] == [n for n, _ in gpu_nodes]  # a CPU node gets none
+    for s, (n, g) in zip(slices, gpu_nodes):
+        devs = s["spec"]["devices"]
+        assert len(devs) == g["gpus"] and s["spec"]["driver"] == dra.DRIVER
+        assert [d["attributes"]["uuid"]["string"] for d in devs] == [hwinventory.gpu_uuid(n, i) for i in range(g["gpus"])]
+        assert {d["attributes"]["model"]["string"] for d in devs} == {dra.MODEL[g["gpu_type"]]}
+    k8s.prepare(SIM, addressing.plan(SIM), tmp_path / "s", tmp_path / "st")
+    assert (tmp_path / "st" / "50-dra.yaml").read_text().count("kind: ResourceSlice") == len(gpu_nodes)
+
+
+def test_dra_without_a_gpu_node_writes_nothing():
+    from benchctl import dra
+
+    assert dra.slices_yaml([("kcn001", {"cpus": 8})]) == ""
+
+
+def test_dra_tables_match_the_gpu_exporters():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("exporter", ROOT / "components/gpu-exporter-farm/exporter.py")
+    ex = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ex)
+    from benchctl import dra
+
+    for t, mib in ex.FB_TOTAL_MIB.items():
+        assert dra.MEMORY[t] == f"{mib}Mi", t
+
+
+def test_the_dra_fixture_asks_the_simulated_class_for_one_gpu():
+    docs = list(yaml.safe_load_all((ROOT / "k8s/fixtures/55-dra-claims.yaml").read_text()))
+    t = next(d for d in docs if d["kind"] == "ResourceClaimTemplate")
+    assert t["spec"]["spec"]["devices"]["requests"][0]["exactly"]["deviceClassName"] == "gpu.sim.test"

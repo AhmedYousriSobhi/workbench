@@ -30,7 +30,7 @@
   paths: ["benchctl/slurmstats.py", "benchctl/slurmtrace.py", "benchctl/workload.py"]
   tests: [test_gpu_follows_slurm_real, test_scenario_real, test_cluster_real, test_traffic_record_real]
 - name: Kubernetes
-  paths: ["benchctl/k8s.py", "k8s/**"]
+  paths: ["benchctl/k8s.py", "benchctl/dra.py", "k8s/**"]
   tests: [test_k8s_real, test_wire_capture_real, test_compose_real]
 - name: wire capture
   paths: ["benchctl/capture.py", "benchctl/slurm_msgtypes.py", "scripts/gen_slurm_msgtypes.py"]

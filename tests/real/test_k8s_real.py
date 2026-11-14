@@ -221,3 +221,21 @@ def test_prometheus_scrapes_the_control_plane_with_the_metrics_only_token(cluste
     assert wait_for(lambda: all(set(prom_up(j).values()) == {"1"} for j in jobs), timeout=120), {j: prom_up(j) for j in jobs}
     got = (ROOT / "compose/generated/secrets/prometheus").iterdir()
     assert sorted(p.name for p in got) == ["k8s-ca.crt", "k8s-metrics.token"]  # no admin or viewer token reaches Prometheus
+
+
+def test_the_real_scheduler_allocates_a_dra_claim_to_a_device_whose_uuid_is_a_dcgm_series(cluster):
+    """Issue 547: `up` wrote a DeviceClass and a ResourceSlice per GPU node; the fixture pod's claim is allocated by kube-scheduler."""
+    def claim():
+        r = k8s.kubectl(cluster, "-n", "team-a", "get", "resourceclaim", "-o", "json")
+        items = json.loads(r.stdout)["items"] if r.returncode == 0 else []
+        return next((c for c in items if (c.get("status") or {}).get("allocation")), None)
+
+    assert wait_for(lambda: claim() is not None, timeout=120), k8s.kubectl(cluster, "-n", "team-a", "describe", "pod", "dra-train").stdout[-800:]
+    alloc = claim()["status"]["allocation"]["devices"]["results"][0]
+    assert alloc["driver"] == "gpu.sim.test" and alloc["pool"].startswith("kgpu")
+    sl = json.loads(k8s.kubectl(cluster, "get", "resourceslice", f"{alloc['pool']}-gpu.sim.test", "-o", "json").stdout)
+    dev = next(d for d in sl["spec"]["devices"] if d["name"] == alloc["device"])
+    uuid = dev["attributes"]["uuid"]["string"]
+    import urllib.request
+    text = urllib.request.urlopen(f"http://127.0.0.1:9400/metrics?node={alloc['pool']}", timeout=5).read().decode()
+    assert f'UUID="{uuid}"' in text, f"no DCGM series carries {uuid}"
