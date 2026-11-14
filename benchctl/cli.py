@@ -660,17 +660,25 @@ def get_slurm_stats() -> None:
 
 @get_app.command("slurm-checksum")
 def get_slurm_checksum(version: str = typer.Argument(..., help="a Slurm release, e.g. 25.11.9")) -> None:
-    """Download SchedMD's tarball for a release (at most 100 MB and 5 minutes, nothing kept), print its SHA256 and the line to paste into
-    benchctl/slurmver.py; it never edits the file. For a recorded release it says whether the hash matches. Needs internet."""
+    """Download SchedMD's tarball for a release (at most 100 MB and 5 minutes, nothing kept), hash it and compare with the SHA256 digest
+    GitHub publishes for the same release asset (a second, independent source). Both are printed; a disagreement is refused (exit 1,
+    WB-REFUSED-CHECKSUM). Without a GitHub digest the computed hash is advice only. Prints the line to paste into benchctl/slurmver.py;
+    it never edits the file. For a recorded release it also says whether the hash matches. Needs internet."""
     try:
         sha = slurmver.fetch_sha256(version)
+        digest, why = slurmver.github_digest(version)
+        both = slurmver.compare(version, sha, digest, why)
         if version in slurmver.VERSIONS:
+            typer.echo(both)
             typer.echo(slurmver.check(version, sha))
             return
+    except slurmver.DigestDisagreement as e:
+        typer.echo(errors.render("WB-REFUSED-CHECKSUM", str(e)), err=True)
+        raise typer.Exit(1) from e
     except slurmver.SlurmVersionError as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(1) from e
-    typer.echo(f"slurm-{version}.tar.bz2 SHA256 {sha}\nCompare it with a second source if you can, then add this line to VERSIONS in benchctl/slurmver.py:\n{slurmver.table_line(version, sha)}")
+    typer.echo(f"slurm-{version}.tar.bz2\n{both}\nTo accept it, add this line to VERSIONS in benchctl/slurmver.py:\n{slurmver.table_line(version, sha)}")
 
 
 CAPTURE_NODE = typer.Argument(..., help="a Slurm node or a Kubernetes node, e.g. cn001, gpu001 or kw001")

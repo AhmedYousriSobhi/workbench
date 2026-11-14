@@ -21,4 +21,4 @@ scope, which needs a writable cgroup tree. Docker mounts that tree read-only; th
 - Rebuilding Slurm costs a few minutes; watch the SchedMD security announcements and bump the pin.
 - Any future need for extra container privileges requires an ADR exception and shows up as a doctor failure
   until the check is adjusted on purpose.
-- The checksum comes from the same origin as the tarball, so it guards against corruption, not a compromised mirror.
+- The checksum was first computed from the same origin as the tarball, so on its own it guards against corruption, not a compromised mirror. GitHub's release asset digest is a second, independent source (ADR 0079 addendum, issue 682).

@@ -17,7 +17,7 @@ Or in `sim.yaml` (the flag wins): `slurm: {version: 25.11.9}`. The choice is sav
 | 25.05.9 | the newest of the one before |
 
 - **The first start of a release compiles it** (a few minutes: 25.11.9 took 3 min 38 s in all, 141 s of it compiling, at 4 build jobs on a busy 16-core machine; its node image is 700 MB beside the pinned one's 737 MB). The images are tagged per release (`workbench/node-base:dev-25.11.9`, `slurm-ctl`, `login`) and kept, so going back and forth only rebuilds once. The pinned release keeps the plain `:dev` tags.
-- **A release not in the list is refused** with one message. Each listed release has its SHA256 in `benchctl/slurmver.py`, computed from SchedMD's tarball (the download server publishes none, ADR 0002, ADR 0079). To add one, see "Add another release" below.
+- **A release not in the list is refused** with one message. Each listed release has its SHA256 in `benchctl/slurmver.py`, computed from SchedMD's tarball and equal to the SHA256 digest GitHub shows for the same release asset (ADR 0079). To add one, see "Add another release" below.
 - **Memory** does not change: the same daemons, one release at a time.
 - **Changing the release of a running cluster** means `benchctl up --slurm-version X` again, which recreates the Slurm containers (running jobs end). Upgrading in place while a job runs is the scenario `slurm-upgrade-mid-job` (below).
 
@@ -25,7 +25,7 @@ Or in `sim.yaml` (the flag wins): `slurm: {version: 25.11.9}`. The choice is sav
 
 ## Add another release
 
-SchedMD publishes no checksums, so a release is accepted only when its SHA256 is recorded in the table. The helper downloads the tarball (at most 100 MB and 5 minutes, nothing kept on disk), prints the hash and the exact line to paste. It never edits the file. Needs internet.
+A release is accepted only when its SHA256 is recorded in the table. SchedMD's download server publishes no checksum, but GitHub shows a SHA256 digest for each release asset. The helper downloads the tarball (at most 100 MB and 5 minutes, nothing kept on disk), hashes it, asks GitHub for its digest, prints both and the exact line to paste. It never edits the file. Needs internet.
 
 ```bash
 benchctl get slurm-checksum 25.11.10
@@ -34,8 +34,11 @@ benchctl get slurm-checksum 25.11.10
 It prints:
 
 ```text
-slurm-25.11.10.tar.bz2 SHA256 <64 hex digits>
-Compare it with a second source if you can, then add this line to VERSIONS in benchctl/slurmver.py:
+slurm-25.11.10.tar.bz2
+computed from the tarball: <64 hex digits>
+GitHub digest:            <64 hex digits>
+Both sources agree.
+To accept it, add this line to VERSIONS in benchctl/slurmver.py:
     "25.11.10": "<64 hex digits>",
 ```
 
@@ -44,7 +47,10 @@ Compare it with a second source if you can, then add this line to VERSIONS in be
 3. Check it: `benchctl get slurm-checksum 25.11.10` now says `SHA256 matches the recorded value`; for a recorded release with a different hash it fails with `do not build it`.
 4. Build and look: `benchctl up --cpu-nodes 1 --slurm-version 25.11.10`, then `benchctl exec slurmctld -- slurmctld -V`.
 
-Until step 2 is done, `--slurm-version 25.11.10` is refused with one message that names this command. The hash only proves the download matches what you saw: it is trust on first use, so compare it with a second source (for example a build log or another mirror) before you record it.
+Until step 2 is done, `--slurm-version 25.11.10` is refused with one message that names this command.
+
+- **The two hashes differ:** the command exits 1 with `WB-REFUSED-CHECKSUM` and no line to paste. Do not record or build it; download again and report it if it persists.
+- **GitHub has no release or digest for it** (or cannot be reached, for example offline or rate limited): it says why and prints the computed hash as advice only. That is not a pass: it is trust on first use, so compare it with another source before you record it.
 
 ## Upgrade in place under a running job
 

@@ -122,14 +122,69 @@ def test_check_refuses_an_unrecorded_version_and_a_mismatch():
         slurmver.check(v, "0" * 64)
 
 
-def test_cli_prints_the_line_and_never_edits_the_table(monkeypatch):
+def _gh(*releases):
+    """A GitHub releases opener that serves the given release list on page 1 and an empty list after."""
+    import json
+    return lambda url: _Resp(json.dumps(list(releases) if "page=1" in url else []).encode())
+
+
+def _rel(v, digest):
+    return {"assets": [{"name": f"slurm-{v}.tar.bz2", **({"digest": digest} if digest else {})}]}
+
+
+def test_github_digest_is_read_from_the_matching_asset():
+    d = "sha256:" + "ab" * 32
+    assert slurmver.github_digest("25.11.9", opener=_gh(_rel("26.05.5", "sha256:" + "cd" * 32), _rel("25.11.9", d))) == ("ab" * 32, "")
+
+
+def test_github_digest_reports_why_there_is_none_and_never_raises():
+    assert slurmver.github_digest("25.11.9", opener=_gh(_rel("26.05.5", "sha256:" + "cd" * 32)))[0] is None
+    d, why = slurmver.github_digest("25.11.9", opener=_gh(_rel("25.11.9", None)))
+    assert d is None and "no SHA256 digest" in why
+    d, why = slurmver.github_digest("25.11.9", opener=_gh(_rel("25.11.9", "md5:zz")))
+    assert d is None and "no SHA256 digest" in why
+
+    def boom(u):
+        raise OSError("rate limited")
+    d, why = slurmver.github_digest("25.11.9", opener=boom)
+    assert d is None and "rate limited" in why
+
+
+def test_compare_prints_both_refuses_a_disagreement_and_never_passes_without_a_digest():
+    assert "Both sources agree" in slurmver.compare("25.11.9", "a" * 64, "a" * 64, "")
+    with pytest.raises(slurmver.DigestDisagreement, match="do not record or build"):
+        slurmver.compare("25.11.9", "a" * 64, "b" * 64, "")
+    out = slurmver.compare("25.11.9", "a" * 64, None, "no release")
+    assert "advice only" in out and "agree" not in out and "a" * 64 in out
+
+
+def _cli(monkeypatch, version, computed, digest, why=""):
     from typer.testing import CliRunner
 
     from benchctl import cli
-    monkeypatch.setattr(slurmver, "_opener", lambda u: _Resp(b"abc"))
-    monkeypatch.setattr(slurmver, "fetch_sha256", lambda v, **k: "a" * 64)
+    monkeypatch.setattr(slurmver, "fetch_sha256", lambda v, **k: computed)
+    monkeypatch.setattr(slurmver, "github_digest", lambda v, **k: (digest, why))
+    return CliRunner().invoke(cli.app, ["get", "slurm-checksum", version])
+
+
+def test_cli_prints_the_line_and_never_edits_the_table(monkeypatch):
     before = dict(slurmver.VERSIONS)
-    r = CliRunner().invoke(cli.app, ["get", "slurm-checksum", "25.11.10"])
-    assert r.exit_code == 0 and f'"25.11.10": "{"a" * 64}",' in r.output and slurmver.VERSIONS == before
-    r = CliRunner().invoke(cli.app, ["get", "slurm-checksum", "25.11.9"])
+    r = _cli(monkeypatch, "25.11.10", "a" * 64, "a" * 64)
+    assert r.exit_code == 0 and f'"25.11.10": "{"a" * 64}",' in r.output and "Both sources agree" in r.output and slurmver.VERSIONS == before
+    r = _cli(monkeypatch, "25.11.9", "a" * 64, "a" * 64)
     assert r.exit_code == 1 and "do not build" in r.output
+
+
+def test_cli_refuses_when_github_disagrees_with_the_download(monkeypatch):
+    r = _cli(monkeypatch, "25.11.10", "a" * 64, "b" * 64)
+    assert r.exit_code == 1 and "do not record or build" in r.output and "VERSIONS in" not in r.output
+    monkeypatch.setenv("BENCHCTL_AGENT", "1")
+    r = _cli(monkeypatch, "25.11.9", slurmver.VERSIONS["25.11.9"], "b" * 64)
+    assert r.exit_code == 1 and "WB-REFUSED-CHECKSUM:" in r.output
+
+
+def test_cli_without_a_github_digest_says_so_and_is_not_a_pass(monkeypatch):
+    r = _cli(monkeypatch, "25.11.10", "a" * 64, None, "GitHub has no release")
+    assert r.exit_code == 0 and "advice only" in r.output and "GitHub has no release" in r.output and "agree" not in r.output
+
+
