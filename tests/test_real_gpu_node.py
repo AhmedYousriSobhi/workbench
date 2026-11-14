@@ -1,10 +1,19 @@
-"""The Slurm node on the real card (issue 428, slice 2): a mode of the real-gpu part, its own partition, no BMC or BCM entry yet (issue 431)."""
+"""The Slurm node on the real card (issue 428, slice 2): a mode of the real-gpu part, its own partition, listed by the BMC farm and the BCM mock with the card's model (issue 431)."""
 from pathlib import Path
 
 import pytest
 import yaml
 
-from benchctl import addressing, compose, nodes, real_gpu, slurmconf, workbench, workload
+from benchctl import (
+    addressing,
+    compose,
+    hwinventory,
+    nodes,
+    real_gpu,
+    slurmconf,
+    workbench,
+    workload,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 BASE = yaml.safe_load((ROOT / "sim.yaml").read_text())
@@ -30,10 +39,87 @@ def test_without_the_part_there_is_no_node():
     assert "real_gpu" not in sim and not [n for n, k in nodes.node_names(sim) if k == "real-gpu"]
 
 
-def test_the_mocks_do_not_list_it_yet(on):
+def test_the_hardware_lists_have_it_last_and_the_simulated_nodes_are_unchanged(on):
     sim, _ = on
-    assert "rgpu001" not in [n for n, _ in nodes.hardware_nodes(sim)]  # BMC, BCM and the exporter farm: issue 431
-    assert "rgpu001" not in addressing.plan(sim)["bmc"]
+    with_it = nodes.hardware_nodes(sim)
+    assert with_it[-1] == ("rgpu001", "real-gpu")
+    off = {k: v for k, v in sim.items() if k != "real_gpu"}
+    assert with_it[:-1] == nodes.hardware_nodes(off)
+    assert addressing.plan(sim)["bmc"]["rgpu001"] == "10.148.254.1"
+    assert {k: v for k, v in addressing.plan(sim)["bmc"].items() if k != "rgpu001"} == addressing.plan(off)["bmc"]
+    assert {k: v for k, v in addressing.plan(sim)["bmc_port"].items() if k != "rgpu001"} == addressing.plan(off)["bmc_port"]
+    assert "rgpu001" in compose.bmc_nodes(sim) and "rgpu001" not in compose.bmc_nodes(sim | {"bmc": {"groups": ["slurm-cpu"]}})
+
+
+def test_the_inventory_has_one_real_gpu_with_its_own_shape_and_the_simulated_nodes_are_unchanged(on):
+    sim, _ = on
+    inv = hwinventory.build(sim)
+    by = {n["name"]: n for n in inv["nodes"]}
+    off = hwinventory.build({k: v for k, v in sim.items() if k != "real_gpu"})
+    assert [n for n in inv["nodes"] if n["name"] != "rgpu001"] == off["nodes"]
+    real = by["rgpu001"]
+    assert (real["kind"], real["gpus"], real["category"], real["ip"]) == ("real-gpu", 1, "gpu", addressing.REAL_GPU_IP)
+    assert real["gpu_model"] == "NVIDIA GeForce RTX 3050 Laptop GPU" and real["gpu_type"] == "geforce-rtx-3050-laptop-gpu"
+    assert (real["cpus"], real["memory_mb"]) == (sim["compute"]["cpus"], sim["compute"]["memory_mb"])  # not 8 CPUs and 2048 MB per GPU
+    assert real["gpu_uuids"] == ["GPU-rgpu001-00"]
+    bigger = hwinventory.build(sim | {"real_gpu": {**sim["real_gpu"], "cpus": 12, "memory_mb": 24000}})
+    assert [(n["cpus"], n["memory_mb"]) for n in bigger["nodes"] if n["name"] == "rgpu001"] == [(12, 24000)]
+    assert "CPUs=12 RealMemory=24000 Gres=gpu:geforce" in slurmconf.slurm_conf(sim | {"real_gpu": {**sim["real_gpu"], "cpus": 12, "memory_mb": 24000}})
+
+
+def test_slurm_and_the_inventory_agree_on_the_real_nodes_shape(on):
+    sim, _ = on
+    shape = hwinventory.real_gpu_shape(sim)
+    assert f"NodeName=rgpu001 CPUs={shape['cpus']} RealMemory={shape['memory_mb']} " in slurmconf.slurm_conf(sim)
+
+
+def _load(name, path):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(name, ROOT / path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_the_bmc_farm_lists_it_with_the_cards_model_and_the_others_have_none(on, tmp_path):
+    sim, _ = on
+    path = hwinventory.write(sim, tmp_path / "inventory.json")
+    bmc = _load("bmc_farm", "components/bmc-farm/bmc.py")
+    nodes_ = bmc.load_nodes(path)
+    assert nodes_["rgpu001"]["gpus"] == 1 and nodes_["rgpu001"]["gpu_model"] == "NVIDIA GeForce RTX 3050 Laptop GPU"
+    assert nodes_["gpu001"]["gpu_model"] == "" and nodes_["rgpu001"]["serial"] == "SIM-RGPU001"
+    farm = bmc.Farm(nodes_)
+    real, other = farm.resource("rgpu001", "Systems/1"), farm.resource("gpu001", "Systems/1")
+    assert real["Oem"] == {"GpuCount": 1, "GpuModel": "NVIDIA GeForce RTX 3050 Laptop GPU"}
+    assert other["Oem"] == {"GpuCount": 2}  # a simulated node's Redfish system is unchanged
+
+
+def test_the_bcm_mock_lists_it_in_category_gpu_at_its_own_address(on, tmp_path):
+    sim, _ = on
+    path = hwinventory.write(sim, tmp_path / "inventory.json")
+    bcm = _load("bcm_mock", "components/bcm-mock/bcm.py")
+    cluster = bcm.Cluster(bcm.load_nodes(path))
+    real, sim_gpu = cluster.device("rgpu001"), cluster.device("gpu001")
+    assert (real["category"], real["gpus"], real["ip"]) == ("gpu", 1, addressing.REAL_GPU_IP)
+    assert (sim_gpu["category"], sim_gpu["gpus"], sim_gpu["ip"]) == ("gpu", 2, "10.141.100.1")
+
+
+def test_the_exporter_farm_and_the_farm_targets_skip_it(on, tmp_path):
+    from benchctl import promtargets
+
+    sim, _ = on
+    inv = hwinventory.build(sim)
+    path = hwinventory.write(sim, tmp_path / "inventory.json")
+    farm = _load("gpu_exporter_farm", "components/gpu-exporter-farm/exporter.py")
+    assert "rgpu001" not in farm.load_nodes(path) and "gpu001" in farm.load_nodes(path)
+    assert "rgpu001" not in [t["labels"]["instance"] for t in promtargets.node_targets(inv)]
+
+
+def test_the_nodes_stay_hermetic_without_the_host_tool(monkeypatch):
+    monkeypatch.setattr(real_gpu, "cards", lambda *a, **k: [])  # no nvidia-smi: the model falls back, nothing runs
+    sim, _ = workbench.effective(BASE, workbench.Spec(cpu_nodes=1, gpu_nodes=1, gpus_per_node=2, parts=["real-gpu"]))
+    assert hwinventory.build(sim)["nodes"][-1]["gpu_model"] == "real"
 
 
 def test_it_has_a_fixed_address(on):
