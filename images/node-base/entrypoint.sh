@@ -45,5 +45,7 @@ if [ "$WORKBENCH_SSHD" = 1 ] && [ -f /run/workbench/ssh/ssh_host_node_ed25519_ke
   install -m 644 /run/workbench/ssh/authorized_keys /etc/ssh/authorized_keys
   /usr/local/sbin/teleport-ssh
   /usr/sbin/sshd -e
+  # the controller is the BCM head node (issue 416): it keeps the fake CMDaemon events log too (issue 714, mounted by compose)
+  [ "$WORKBENCH_CONTROLLER" = 1 ] && [ -r /usr/local/bin/events-log ] && python3 /usr/local/bin/events-log &
 fi
 exec "$@"

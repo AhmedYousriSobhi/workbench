@@ -6,6 +6,7 @@ POST /json  {"service": "cmdevice", "call": "getDevices"}
             {"service": "cmstatus", "call": "getStatus", "args": ["cn001"]}
             {"service": "cmpart", "call": "getCategories"}
 GET  /healthz
+            {"service": "cmevents", "call": "getEvents", "args": [since_seq]}   (events log feed, issue 714)
 POST /sim/inject  {"node": n, "state": "UP|DOWN|CLOSED|INSTALLING"} | {"node": n, "closed": true}
 
 The call names follow CMDaemon's service/call convention but are an assumed subset (ADR 0005); extend CALLS.
@@ -20,6 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 STATES = ("UP", "DOWN", "CLOSED", "INSTALLING")
+EVENTS_CAP = 1000
 POWER_TO_STATE = {"powerOn": "UP", "powerOff": "DOWN", "powerReset": "UP"}
 
 
@@ -35,6 +37,18 @@ class Cluster:
     def __init__(self, nodes: dict[str, dict]):
         self.nodes = nodes
         self.state = {n: "UP" for n in nodes}
+        self.events: list[dict] = []  # state changes, oldest first; the login node's events-log writer reads them (issue 714)
+        self.seq = 0
+
+    def set_state(self, name: str, new: str) -> None:
+        old = self.state[name]
+        self.state[name] = new
+        if new != old:
+            self.seq += 1
+            sev = "notice" if new == "UP" else "alert" if new == "DOWN" else "warning"
+            self.events.append({"seq": self.seq, "time": time.time(), "severity": sev, "host": name,
+                                "text": f"Device status changed from {old} to {new}"})
+            del self.events[:-EVENTS_CAP]
 
     def device(self, name: str) -> dict:
         n = self.nodes[name]
@@ -55,7 +69,7 @@ class Cluster:
         state = "CLOSED" if req.get("closed") else req.get("state")
         if state not in STATES:
             raise ValueError(f"state must be one of {STATES}")
-        self.state[node] = state
+        self.set_state(node, state)
 
     def call(self, req: dict):
         """(result, error); error is a CMDaemon-like message or None."""
@@ -64,6 +78,9 @@ class Cluster:
             return [self.device(n) for n in self.nodes], None
         if (service, call) == ("cmpart", "getCategories"):
             return [{"name": c} for c in sorted({n["category"] for n in self.nodes.values()})], None
+        if (service, call) == ("cmevents", "getEvents"):
+            since = int(args[0]) if args and str(args[0]).lstrip("-").isdigit() else 0
+            return {"seq": self.seq, "events": [e for e in self.events if e["seq"] > since]}, None
         if service in ("cmdevice", "cmstatus") and args:
             name = args[0]
             if name not in self.nodes:
@@ -73,7 +90,7 @@ class Cluster:
             if (service, call) == ("cmstatus", "getStatus"):
                 return {"hostname": name, "state": self.state[name]}, None
             if service == "cmdevice" and call in POWER_TO_STATE:
-                self.state[name] = POWER_TO_STATE[call]
+                self.set_state(name, POWER_TO_STATE[call])
                 return {"hostname": name, "state": self.state[name]}, None
         return None, f"Unknown call: {service}.{call}"
 

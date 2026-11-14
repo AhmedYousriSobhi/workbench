@@ -165,7 +165,8 @@ def generate(sim: dict, profile: dict) -> dict:
         ctl.setdefault("environment", {}).update({"WORKBENCH_SSHD": "1", "WORKBENCH_CONTROLLER": "1", "WORKBENCH_SSH_ALLOW": " ".join(controller.allowed_users(sim)),
                                                   "WORKBENCH_HEAD_IP": addressing.service_ip("slurmctld"),
                                                   "WORKBENCH_TELEPORT_NAME": controller.ALIAS})
-        ctl["volumes"] += ["./secrets/ssh:/run/workbench/ssh:ro", "../../images/login/cmsh.py:/usr/local/bin/cmsh:ro"]
+        ctl["volumes"] += ["./secrets/ssh:/run/workbench/ssh:ro", "../../images/login/cmsh.py:/usr/local/bin/cmsh:ro",
+                         "../../images/login/events_log.py:/usr/local/bin/events-log:ro"]
         ctl["ports"] = [f"127.0.0.1:{controller.SSH_PORT}:22"]
         ctl.setdefault("networks", {}).setdefault("default", {})["aliases"] = [controller.ALIAS]
         for lname in lkinds:  # the login nodes are no longer the head node: no cmsh there
