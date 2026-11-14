@@ -31,3 +31,7 @@ Everything: no non-default version has been built or started, and the upgrade ha
 
 ## Measured (2026-11-14, issue 221)
 `workbench/node-base:dev-25.11.9` built from the Dockerfile with `--build-arg SLURM_VERSION=25.11.9 --build-arg SLURM_SHA256=...` (4 build jobs, low priority, cold ccache; 3 min 38 s in all, 141 s of it compiling): it succeeded with the existing dependencies and contains `slurmd` and `slurmctld` that report `slurm 25.11.9`. The image is 700 MB beside 737 MB for the pinned release. The other releases in the table were not built; they share the same configure line, and the live unit builds 25.11.9 only.
+
+## Addendum: how the upgrade scenario swaps a release (issue 221)
+
+Decided with the owner: the scenario target `slurm-upgrade` (`benchctl/slurmupgrade.py`) copies `/opt/slurm` from the target release's image (`docker create` + `docker cp`) into the running container beside the old tree, renames it into place (running processes keep their old files open), runs `ldconfig` and restarts only the daemon. Containers are never recreated, so the job's `slurmstepd` keeps running as in a package upgrade. A missing target image is built by the step itself, from the same checked table. Order: slurmdbd, slurmctld and slurmrestd, nodes, login (SchedMD). The scenario is `slurm-upgrade-mid-job` (SC-44). Rejected: recreating containers from the new image (kills job steps, tests nothing about an in-place upgrade). Not verified live yet.
