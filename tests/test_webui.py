@@ -801,3 +801,26 @@ def test_flat_is_the_default_view_everywhere():
     src = page_source()
     assert "setView(viewPref === 'iso', false)" in src
     assert "max-width: 640px)').matches, false)" not in src
+
+
+def test_node_tickets_search_the_mock_by_node_label():
+    import yaml
+
+    from webui.cluster import Cluster
+    seen = []
+
+    def fetch(url, *a):
+        seen.append(url)
+        return {"issues": [{"key": "OPS-3", "fields": {"summary": "cn001: node down", "status": {"name": "Open"}, "priority": {"name": "High"}}}]}
+    c = Cluster(yaml.safe_load((ROOT / "sim.yaml").read_text()), fetch=fetch)
+    assert c.tickets("cn001") == [{"key": "OPS-3", "summary": "cn001: node down", "status": "Open", "priority": "High"}]
+    assert "labels%20%3D%20%22node-cn001%22" in seen[0]
+    with pytest.raises(KeyError):
+        c.tickets('x" OR 1=1')  # only known node names reach the query
+    assert Cluster(c.sim, fetch=no_stack).tickets("cn001") is None
+
+
+def test_node_tickets_endpoint_answers_null_without_the_mock(ui):
+    code, body = req(ui, "/api/nodes/cn001/tickets")
+    assert code == 200 and json.loads(body) == {"source": "jira-mock", "tickets": None}
+    assert req(ui, "/api/nodes/zzz/tickets")[0] == 404 and req(ui, "/api/nodes/cn001/tickets", auth=False)[0] == 401

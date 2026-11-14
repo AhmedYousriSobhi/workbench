@@ -459,6 +459,13 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         return JSONResponse({"info": info, "text": describe.render(info), "ip": plan["nodes"].get(node),
                              "bmc_ip": plan["bmc"].get(node) if f"bmc-{node}" in services else None})
 
+    async def node_tickets(request: Request):
+        try:
+            found = await asyncio.to_thread(cluster.tickets, request.path_params["node"])
+        except KeyError as e:
+            raise HTTPException(404, f"unknown node {e.args[0]}") from e
+        return JSONResponse({"source": "jira-mock", "tickets": found})
+
     licence = {"text": "", "asked": 0.0}  # the real Jira's licence as the watcher last saw it, and when it last asked for a renewal
 
     @contextlib.asynccontextmanager
@@ -719,6 +726,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/connections", protected(connections)),
             Route("/api/export/profile", protected(export_profile)),
             Route("/api/nodes/{node}", protected(node_detail)),
+            Route("/api/nodes/{node}/tickets", protected(node_tickets)),
             Route("/api/nodes/{node}/workload", protected(node_workload, write=True), methods=["POST"]),
             Route("/api/nodes/{node}/{action}", protected(node_action, write=True), methods=["POST"]),
             Route("/api/scenarios", protected(list_scenarios)),
