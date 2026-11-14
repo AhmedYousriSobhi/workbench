@@ -16,7 +16,7 @@ from pathlib import Path
 
 import yaml
 
-from . import authfaults, checks, dcgm, k8s, topology
+from . import authfaults, checks, dcgm, k8s, slurmupgrade, topology
 from .nodes import node_names
 
 ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "http://127.0.0.1:8000/sim/inject",
@@ -31,7 +31,7 @@ JIRA_REAL_URL = "http://127.0.0.1:8083"
 JIRA_REAL_MODES = ("outage", "restore", "bad_logins", "clear_logins", "rate_limit", "rate_limit_off", "token_revoke", "token_restore",
                    "proxy_503", "proxy_429", "proxy_slow", "proxy_off")  # real faults on the real Jira (issue 303); proxy_* through benchctl/jira_proxy.py (issue 305)
 JIRA_REAL_TICKET_ACTIONS = ("create", "transition", "comment")  # `tickets:` steps on the real Jira go through the REST driver (issue 306)
-HOST_TARGETS = ("slurm", "ssh", "jira-real", "k8s", "dcgm", "auth")  # steps that need Docker on the host
+HOST_TARGETS = ("slurm", "slurm-upgrade", "ssh", "jira-real", "k8s", "dcgm", "auth")  # steps that need Docker on the host
 SSH_STATES = ("down", "up", "hung")
 NODE_SSHD_STATES = ("down", "up")
 RAMP_STEP_S = 10.0
@@ -166,6 +166,9 @@ def validate(sc: dict, sim: dict) -> list[str]:
             problems += [f"step {i}: {m}" for m in jira_ticket_problems(do["tickets"])]
         if t == "slurm":
             problems += [f"step {i}: {m}" for m in daemon_problems(do)]
+        if t == "slurm-upgrade":
+            problems += [f"step {i}: {m}" for m in slurmupgrade.problems(do, nodes)]
+            continue
         if t == "dcgm" and sum(bool(do.get(v)) for v in ("stop", "start", "restart")) != 1:
             problems.append(f"step {i}: dcgm needs one of stop, start, restart: true")
         if t == "auth":
@@ -271,7 +274,7 @@ SLURM_STATES = {"drain": "drain", "down": "down", "resume": "resume", "power_off
 
 def disruptive(sc: dict) -> bool:
     """True when a step restarts or stops a Slurm daemon or starts a job: the governor must admit that first (GV-9)."""
-    return any(set(s.get("do") or {}) & set(DAEMON_KEYS) for s in sc.get("steps", []))
+    return any(set(s.get("do") or {}) & set(DAEMON_KEYS) or s.get("target") == "slurm-upgrade" for s in sc.get("steps", []))
 
 
 def submit_command(sub: dict, sim: dict | None = None) -> list[str]:
@@ -467,6 +470,9 @@ def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcom
                 r = runner(cmd)
                 if r.returncode:
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+        elif step.target == "slurm-upgrade":
+            bad = slurmupgrade.apply(step.do, runner)
+            return Outcome(label, "failed", bad) if bad else Outcome(label, "ok")
         elif step.target == "dcgm":
             return _dcgm(step, label, runner)
         elif step.target == "k8s":

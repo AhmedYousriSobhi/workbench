@@ -68,6 +68,9 @@
 - name: slurm version
   paths: ["benchctl/slurmver.py", "images/slurm-ctl/Dockerfile", "images/login/Dockerfile"]
   tests: [test_slurmver_real, test_stack_real]
+- name: in-place Slurm upgrade (issue 221)
+  paths: ["benchctl/slurmupgrade.py", "scenarios/slurm-upgrade-mid-job.yaml"]
+  tests: [test_slurmupgrade_real]
 - name: object store
   paths: ["benchctl/objectstore.py", "images/node-base/objectstore.sh"]
   tests: [test_objectstore_real, test_prom_targets_real]
