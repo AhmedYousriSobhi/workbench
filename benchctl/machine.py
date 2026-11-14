@@ -24,7 +24,7 @@ MIN_DISK_GB, REC_DISK_GB = 10, 20  # free space for images and Prometheus data
 MIN_CPUS, REC_CPUS = 2, 4
 MIN_PYTHON = (3, 11)
 PORTS = {8088: "web UI", 8080: "jira-mock", 8083: "jira-real", 8081: "bcm-mock", 8000: "bmc-farm", 9400: "gpu-exporter",
-         3000: "Grafana", 9090: "Prometheus", 9093: "Alertmanager"}
+         3000: "Grafana", 9090: "Prometheus", 9093: "Alertmanager", 3900: "Object store (S3)"}
 SAFETY_FLOOR = 1.0  # GB of MemAvailable that must remain after a profile starts (same as benchctl preflight)
 
 

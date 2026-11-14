@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-MAX_CHARS = 6500  # for the default profile; tests/test_json_contract.py checks it
+MAX_CHARS = 6700  # for the default profile; tests/test_json_contract.py checks it
 SUMMARY = 30
 
 

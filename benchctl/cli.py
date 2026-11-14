@@ -1225,7 +1225,7 @@ def describe_node(node: str = NODE, output: str = OUTPUT, json_: bool = JSON) ->
 
 @describe_app.command("workbench")
 def describe_workbench(output: str = OUTPUT, json_: bool = JSON) -> None:
-    """One call for situational awareness: state, clusters and pools, endpoints (credentials as file paths only), faults, scenarios, fault targets and what to do next. `--json` is at most 6,500 characters."""
+    """One call for situational awareness: state, clusters and pools, endpoints (credentials as file paths only), faults, scenarios, fault targets and what to do next. `--json` is at most 6,700 characters."""
     import yaml
 
     from webui import cluster

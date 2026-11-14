@@ -30,6 +30,16 @@ RUN --mount=type=cache,target=/ccache,sharing=locked \
  && ccache -s | grep -iE "hit|miss|cache size" \
  && test -f /opt/slurm/lib/slurm/cgroup_v2.so
 
+# S3 client for the optional object store (issue 672): one static binary, pinned, checked against the vendor's published checksum
+# (s5cmd_checksums.txt of the v2.3.0 release). The nodes read S3_ENDPOINT_URL and the AWS_* names from /run/workbench/objectstore/s3.env.
+FROM ubuntu:24.04 AS s5cmd
+ARG S5CMD_VERSION=2.3.0
+ARG S5CMD_SHA256=de0fdbfa3aceae55e069ba81a0fc17b2026567637603734a387b2fca06c299b4
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/* \
+ && curl -fsSLo /s5cmd.tgz "https://github.com/peak/s5cmd/releases/download/v${S5CMD_VERSION}/s5cmd_${S5CMD_VERSION}_Linux-64bit.tar.gz" \
+ && echo "${S5CMD_SHA256}  /s5cmd.tgz" | sha256sum -c - \
+ && tar -xzf /s5cmd.tgz -C /usr/local/bin s5cmd
+
 # Shared base for every Slurm node (slurmd) and the controller image. The munge key and the JWT key are NOT in the image:
 # `benchctl up` makes them in compose/generated/secrets/slurm and the entrypoint installs them from a read-only mount (issue 465).
 FROM ubuntu:24.04
@@ -52,6 +62,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && chown slurm:slurm /var/spool/slurmctld \
  && chown -R munge:munge /etc/munge /var/lib/munge /var/log/munge /run/munge
 COPY --from=build /opt/slurm /opt/slurm
+COPY --from=s5cmd /usr/local/bin/s5cmd /usr/local/bin/s5cmd
+COPY objectstore.sh /etc/profile.d/objectstore.sh
 # Tab completion for squeue, sbatch, srun, scontrol ... (shipped in the Slurm source tree)
 COPY --from=build /tmp/slurm-${SLURM_VERSION}/contribs/slurm_completion_help/slurm_completion.sh /etc/bash_completion.d/slurm
 # sshd gives non-interactive sessions a minimal PATH, so the Slurm tools are linked into /usr/local/bin.

@@ -47,6 +47,18 @@ storage:
 `benchctl scenario run disk-full` (SC-41: `/scratch` at 99 % of bytes, 90 % of inodes), `quota-exceeded` (SC-42: alice over her quota, `lfs quota` shows `*` and a grace time such as `6d23h59m59s`) and `stale-mount` (SC-43: `cn002` loses `/scratch`: `df` fails with the file system's own message, its series disappear and `node_filesystem_device_error` is 1). Each resets itself after five minutes. A step is
 `{target: gpu-exporter, do: {nodes: [cn001], storage: {mount: /scratch, used_pct: 99}}}`; keys: `used_pct`, `inodes_used_pct`, `stale: true|false`, `user` with `used_gb`, and `reset: true`. The expectation is `storage.mount: {node, mount, min_used_pct, min_inodes_used_pct, quota_exceeded: USER, stale}`.
 
+## The object store (optional)
+
+`benchctl up --with objectstore` adds one Garage container (S3 API, localhost port 3900, 384 MB limit, never in `--addons` or `all`). Every Slurm and login node can use it with no setup:
+
+```bash
+benchctl ssh alice@login
+s5cmd cp results.tar s3://$WORKBENCH_S3_BUCKET/results.tar     # on one node
+s5cmd ls s3://$WORKBENCH_S3_BUCKET/                            # on another
+```
+
+The endpoint, region (`garage`) and key pair come from `/run/workbench/objectstore/s3.env`, which a login shell loads. The key pair is generated once in `compose/generated/secrets/objectstore` and kept across restarts, so stored data stays readable. Prometheus scrapes the store (`up{job="objectstore"}`, `garage_local_disk_avail`). `benchctl down` keeps the data in `compose/generated/objectstore/data`.
+
 ## What is and is not simulated
 
 - Simulated by declaration: sizes, fill levels, inodes, quotas, the Lustre `df`/`quota` layouts (one MDT and four OSTs), a stale handle. The output follows GNU `df` and `lfs` in layout; it is not byte-identical, and only `lfs df` and `lfs quota -u` exist.

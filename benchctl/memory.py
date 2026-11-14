@@ -30,6 +30,7 @@ MEASURED_MB: dict[str, int] = {
     "k8s-etcd": 130, "k8s-apiserver": 201, "k8s-controller-manager": 47, "k8s-scheduler": 18, "kwok-controller": 11,
     "real-gpu": 481,  # the real driver: host engine 404 MB + exporter 77 MB, one run on a laptop RTX card (issue 428)
     "dcgm-exporter": 125,  # exporter 97 MB + host engine 25 MB with 8 GPUs, one run (issue 426); the embedded engine was 430 MB
+    "objectstore": 205,  # Garage after a 200 MB upload incl. page cache, one run (issue 672): RSS alone is lower; replace with `benchctl measure`
     "jira-db": 130, "jira-real": 2045,   # real Jira Data Center: heap 768 MB, JVM_ARGS (Serial GC, C1 only); 2176 MB cap, two clean runs
 }
 # What each part that is multiplied by the node count may cost per node, in MB (the declared cost; issue 456). A new per-node part
