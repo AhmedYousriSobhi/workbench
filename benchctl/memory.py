@@ -22,7 +22,7 @@ MEASURED_ON = "2026-11-05"
 MEASURED_SETUP = "2 cpu + 2 gpu nodes (4 GPUs each), accounting, bmc, bcm, jira, teleport, scenarios, load on; real Jira on its own"
 # key -> largest working set in MiB. "slurmd" is every compute node, "bmc-forwarder" every per-node BMC address.
 MEASURED_MB: dict[str, int] = {
-    "slurmd": 13, "bmc-forwarder": 18, "bmc-farm": 14, "bcm-mock": 12, "jira-mock": 20, "login": 10, "jump": 2,  # jump host: 1.9 MB peak after five forwarded sessions (issue 415)
+    "slurmd": 13, "bmc-forwarder": 3, "bmc-farm": 14, "bcm-mock": 12, "jira-mock": 20, "login": 10, "jump": 2,  # jump host: 1.9 MB peak after five forwarded sessions (issue 415)
     "mariadb": 204, "slurmdbd": 7, "slurmctld": 41, "slurmrestd": 7, "teleport": 222,
     "prometheus": 22, "grafana": 54, "gpu-exporter-farm": 19,
     "alertmanager": 20,  # estimate from the upstream footprint, not yet measured here (issue 460): run `benchctl measure` and replace
@@ -38,7 +38,7 @@ MEASURED_MB: dict[str, int] = {
 # part that cannot be a few MB per node is shared (one container for every node) or optional.
 PER_NODE_MB: dict[str, int] = {
     "slurmd": 188,         # every compute node: 60 MB for slurmd plus the default 128 MB a job may allocate (job_memory_mb); 13 MB measured
-    "bmc-forwarder": 32,   # every per-node BMC address; 18 MB measured
+    "bmc-forwarder": 16,   # every per-node BMC address; a static Go binary, about 3 MB (issue 454; the Python forwarder was 18 MB measured, capped at 32)
     "dcgm-exporter": 150,  # optional (--with dcgm), real-gpu nodes only; 125 MB measured, the one part that is not a few MB
 }
 NOT_MEASURED = ("accounting-init",)  # one-shot: expected at the cap

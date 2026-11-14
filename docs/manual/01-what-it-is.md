@@ -47,9 +47,9 @@ A profile chooses which parts run and carries a memory budget that `benchctl up`
 | Profile | What is on | Budget |
 |---|---|---|
 | `min` | core, mocks, 4 compute nodes, scenarios | 0.5 GB expected |
-| `std` | `min` plus accounting, 16 compute nodes, load simulators | 1.2 GB expected |
-| `full` | `std` plus 32 compute nodes, more fake nodes | 1.8 GB expected |
-| `jira-real` | `std` with a real Jira Data Center instead of the mock | 3.5 GB expected |
+| `std` | `min` plus accounting, 16 compute nodes, load simulators | 0.9 GB expected |
+| `full` | `std` plus 32 compute nodes, more fake nodes | 1.2 GB expected |
+| `jira-real` | `std` with a real Jira Data Center instead of the mock | 3.2 GB expected |
 | `mac-agent` | `min` plus an external macOS agent | 0.5 GB local |
 
 The quick start uses `min`. `up` refuses a profile that does not fit in the memory free right now and names one that does.

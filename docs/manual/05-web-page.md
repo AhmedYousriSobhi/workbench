@@ -435,7 +435,7 @@ and reloaded: `./scripts/benchctl up`, then `./scripts/benchctl exec slurmctld -
 **Connections** button opens that part's row in the Connections tab. Tab to a shape and press Enter or Space for the same.
 
 **BMCs per node.** In **▦ Cluster architecture**, switching *BMC* on shows the nodes that get a BMC address (all by default). Each
-BMC is its own small container with its own address (`10.148.x.y:443`) and costs about 32 MB, shown in the memory bar; switch off
+BMC is its own small container with its own address (`10.148.x.y:443`) and costs 16 MB at most (about 3 MB used), shown in the memory bar; switch off
 the nodes you do not need. A node panel shows its BMC address, or "none for this node". Apply rebuilds as usual and removes
 the BMCs you switched off.
 

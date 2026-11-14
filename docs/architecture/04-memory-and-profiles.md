@@ -26,9 +26,9 @@ Host reserve (OS, desktop, IDE, browser): **about 3 GB**, never governed. Page c
 | Profile | What's on | Est. sim total |
 |---|---|---|
 | `min` | core, mocks, 4 slurmd | 0.5 GB expected (measured use plus 15 percent) |
-| `std` | `min` + accounting, 16 slurmd | 1.2 GB expected today (the optional Kubernetes part, `--with k8s`, adds about 0.3 GB measured, 0.9 GB cap; its KWOK node count comes from `sim.yaml` `kubernetes.nodes`, 4 today, or `--k8s-nodes`) |
-| `full` | `std` with 32 slurmd | 1.8 GB expected today (the fidelity VM is deferred, ADR 0033, and not counted until it is built and measured) |
-| `jira-real` | `std` plus Jira DC | 3.5 GB expected |
+| `std` | `min` + accounting, 16 slurmd | 0.9 GB expected today (the optional Kubernetes part, `--with k8s`, adds about 0.3 GB measured, 0.9 GB cap; its KWOK node count comes from `sim.yaml` `kubernetes.nodes`, 4 today, or `--k8s-nodes`) |
+| `full` | `std` with 32 slurmd | 1.2 GB expected today (the fidelity VM is deferred, ADR 0033, and not counted until it is built and measured) |
+| `jira-real` | `std` plus Jira DC | 3.2 GB expected |
 | `mac-agent` | `min` + remote macOS agent (external) | 0.5 GB local |
 
 `benchctl up --profile X` runs a **pre-flight**: `MemAvailable` minus the profile's budget and the app under test's reserve must stay above the safety floor, otherwise it refuses and suggests a smaller profile.
@@ -50,7 +50,7 @@ per-node cost (`PER_NODE_MB`), and `tests/test_overhead.py` fails when a new per
 | Component | Measured MB | Cap MB | Expected MB |
 |---|---|---|---|
 | slurmd (each compute node) | 13 | 60 | 15 |
-| BMC forwarder (each) | 18 | 32 | 21 |
+| BMC forwarder (each; a static Go binary on scratch, issue 454) | 3 | 16 | 4 |
 | bmc-farm / bcm-mock / jira-mock / login | 14 / 12 / 20 / 10 | 100 / 100 / 100 / 40 | 17 / 14 / 23 / 12 |
 | jump host (bare sshd bastion, `--access jump`) | 2 | 24 | 3 |
 | slurmctld / slurmrestd / slurmdbd | 41 / 7 / 7 | 200 / 60 / 80 | 48 / 9 / 9 |
