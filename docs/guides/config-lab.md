@@ -2,7 +2,7 @@
 
 **In 30 seconds:** copy files you exported from a production cluster into a folder, then `benchctl import lab NAME --from DIR`. The files are parsed, secrets are removed, versions are recorded, and the result is stored under `compose/generated/lab/NAME/` (gitignored). Nothing connects to production.
 
-This is step one of the config lab (goal G6, [ADR 0049](../adr/0049-config-lab-scope-and-overlay-model.md), [ADR 0050](../adr/0050-config-lab-ab-replay-method.md), epic 557). Validate, diff, apply and replay come with later issues; this page says what exists now.
+This is step one of the config lab (goal G6, [ADR 0049](../adr/0049-config-lab-scope-and-overlay-model.md), [ADR 0050](../adr/0050-config-lab-ab-replay-method.md), epic 557). Validation, diff, apply and replay come with later issues; this page says what exists now: import and the downscale plan.
 
 ## Do it
 
@@ -26,6 +26,21 @@ Copy the folder to this machine and import it:
 ```
 
 It prints what was stored, what was scrubbed, dropped or ignored, the versions and the list of what is not tested. Run it again with `--replace` to overwrite a lab of the same name. Lab names are lowercase letters, digits and `-`.
+
+## See how it will be downscaled
+
+```bash
+./scripts/benchctl get lab prod-a                     # nodes per group, sampled jobs, user mapping, time dilation, key classes, memory
+./scripts/benchctl get lab prod-a --max-nodes 32 --keep-users --target-hours 3 -o json
+```
+
+Changes nothing. It shows:
+
+- **Nodes.** `lab.max_nodes` (default 24, at most 64; set it in `sim.yaml`, the commented `lab:` block, or per call with `--max-nodes`). Every (partition x node shape x topology leaf) group keeps at least one node and the rest is split in proportion to the production counts. If there are more groups than the budget the command says so and how many nodes it needs; above 64 groups, drop a partition, shape or switch from the export. Production node names are kept as the Slurm `NodeName` and hostname; the compose services are `lab-node-001`, `lab-node-002`, ... A ratio above 100 production nodes per lab node marks the results indicative.
+- **Jobs.** The trace is sampled at the same ratio (a lab node's share of the production nodes), per (account, QOS, partition) stratum, at least one job per stratum, the same jobs every time. Users become `lab-u001`, `lab-u002`, ... unless `--keep-users`. If the sampled trace would run more than `lab.max_running_jobs` (default 50) at once, a smaller node count is proposed instead of throttling submissions, so both runs see the same load.
+- **Time.** The dilation factor is the trace length divided by `--target-hours` (default `lab.target_hours`, 2; 0.5 to 6), never below 1. Every time-based scheduling parameter (listed, with before and after) is divided by it, and so are partition time limits and job runtimes, the same in both runs.
+- **Key classes.** `slurm.conf` keys are `policy` (applied live), `time-scaled`, `restart` (applied, slurmctld restarts), `lab-owned` (hosts, paths, auth, privileged plugins: the base value stays, reported "not tested") or `unknown` (applied and flagged, restarts slurmctld). A key ending in `Type` also restarts.
+- **Memory.** `lab nodes x 13 MB + 250 MB` for the replay is the amount a lab run asks the governor to admit.
 
 ## What is read
 
@@ -58,4 +73,4 @@ Imported files stay local: `compose/generated/` is gitignored and `scripts/check
 
 ## Under the hood
 
-Source: `benchctl/lab.py` (store, manifest, version match), `benchctl/lab_import.py` (parsers, scrubber). The store is `compose/generated/lab/NAME/baseline/` (scrubbed copies) and `manifest.json` (files with counts and hashes, scrubbed counts, dropped kinds, versions, the workbench's own versions and `version_match`: same, differs or unknown; `differs` marks that component's results indicative). The import writes a temporary folder and renames it, so a refused import leaves nothing. Slurm keys are all stored (secrets scrubbed); which are applied, kept or reported "not tested" is decided by the key classes of a later issue (551).
+Source: `benchctl/lab.py` (store, manifest, version match, plan), `benchctl/lab_import.py` (parsers, scrubber), `benchctl/lab_slurm.py` (key classes, time scaling, downscale), `benchctl/lab_replay.py` (sampling, users, dilation, concurrency). The store is `compose/generated/lab/NAME/baseline/` (scrubbed copies) and `manifest.json` (files with counts and hashes, scrubbed counts, dropped kinds, versions, the workbench's own versions and `version_match`: same, differs or unknown; `differs` marks that component's results indicative). The import writes a temporary folder and renames it, so a refused import leaves nothing. Slurm keys are all stored (secrets scrubbed); `KEY_CLASS` in `lab_slurm.py` decides which are applied, kept or reported "not tested".
