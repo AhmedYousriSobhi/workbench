@@ -93,3 +93,6 @@
 - name: virsh
   paths: ["fidelity-vm/**"]
   tests: [test_vm]
+- name: storage
+  paths: ["benchctl/storage.py", "images/node-base/fakefs.py", "images/node-base/entrypoint.sh", "components/gpu-exporter-farm/**"]
+  tests: [test_storage_real, test_gpu_follows_slurm_real, test_mocks_real]

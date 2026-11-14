@@ -1,0 +1,8 @@
+name: disk-full
+ref: SC-41
+description: "The shared scratch mount fills up (99 percent of bytes, 90 of inodes); df, lfs df and the node_filesystem series show it, then it is emptied"
+steps:
+  - {at: 0s,   target: gpu-exporter, do: {nodes: [cn001], storage: {mount: /scratch, used_pct: 99, inodes_used_pct: 90}}}
+  - {at: 5m,   target: gpu-exporter, do: {nodes: [cn001], storage: {mount: /scratch, reset: true}}}
+expect:
+  - storage.mount: {node: cn001, mount: /scratch, min_used_pct: 99, min_inodes_used_pct: 90, within: 20s}

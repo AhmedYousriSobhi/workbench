@@ -164,7 +164,7 @@
     },
     {
       "id": 6,
-      "title": "/mnt/lustre free",
+      "title": "/scratch free",
       "type": "timeseries",
       "gridPos": {
         "h": 6,
@@ -178,7 +178,7 @@
       },
       "targets": [
         {
-          "expr": "node_filesystem_free_bytes{mountpoint=\"/mnt/lustre\"} / node_filesystem_size_bytes{mountpoint=\"/mnt/lustre\"}",
+          "expr": "node_filesystem_free_bytes{mountpoint=\"/scratch\"} / node_filesystem_size_bytes{mountpoint=\"/scratch\"}",
           "legendFormat": "{{node}}"
         }
       ]

@@ -4,6 +4,7 @@ process; an agent runtime (a client that asks the person before a destructive to
 Skips without the optional [mcp] extra."""
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -17,7 +18,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 async def session_calls():
-    params = StdioServerParameters(command=sys.executable, args=["-m", "benchctl.cli", "serve", "mcp"], cwd=str(ROOT))
+    params = StdioServerParameters(command=sys.executable, args=["-m", "benchctl.cli", "serve", "mcp"], cwd=str(ROOT),
+                                  env={**os.environ, "WORKBENCH_PROMETHEUS": "http://127.0.0.1:9"})  # a unit run never meets the Prometheus of a cluster that happens to run
     async with stdio_client(params) as (read, write), ClientSession(read, write) as s:
         await s.initialize()
         tools = (await s.list_tools()).tools

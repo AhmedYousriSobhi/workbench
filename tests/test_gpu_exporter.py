@@ -67,7 +67,7 @@ def test_render_has_gpu_and_fs_metrics():
     s = exporter.State(exporter.load_nodes(inv(ROOT / "sim.yaml")), random.Random(1))
     text = s.render()
     assert text.count("DCGM_FI_DEV_GPU_UTIL{") == 16
-    assert 'node_filesystem_free_bytes{node="cn001",mountpoint="/mnt/lustre"}' in text
+    assert 'node_filesystem_free_bytes{node="cn001",mountpoint="/mnt/lustre",device="mgs01@tcp:/lustre",fstype="lustre"}' in text
 
 
 def test_inject_xid_and_clear():

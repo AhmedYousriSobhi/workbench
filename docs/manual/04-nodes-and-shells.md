@@ -82,7 +82,7 @@ ls /dev/workbench-gpu*                # the fake GPUs (GPU nodes only)
   governor's `start` command or `benchctl up`.
 - Nodes are small: each is capped at 60 MB and runs `slurmd` and `munge`, not a full set of system services.
 - Scaling down (`benchctl scale 2`) removes nodes, and a shell open on one ends.
-- Nodes run `sshd`, reachable only through the login node (`ssh cn001` there, ADR 0014). There is no real NFS or Lustre; storage is faked with metrics only.
+- Nodes run `sshd`, reachable only through the login node (`ssh cn001` there, ADR 0014). There is no real NFS or Lustre: the mounts are declared (`df`, `df -i`, `lfs df`, `lfs quota` and the `node_filesystem_*` series show them), and `/scratch` is one real shared directory on every node and the login node for datasets and job output ([storage guide](../guides/storage.md)).
 - Do not add `--privileged`, extra capabilities or the Docker socket to a container; `benchctl doctor` fails the stack if
   you do, and the governor's watchdog flags it.
 

@@ -620,6 +620,30 @@ def jira_search(jql: str) -> list[dict]:
         return []
 
 
+def storage_mount(node: str, mount: str) -> dict | None:
+    """One mount as the exporter farm shows it to `node` (GET /sim/storage), or None when it cannot be read."""
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:9400/sim/storage?node={urllib.parse.quote(node)}", timeout=5) as r:
+            return next((m for m in json.loads(r.read())["mounts"] if m["path"] == mount), None)
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def storage_holds(args: dict) -> bool:
+    """`storage.mount`: the mount is at least `min_used_pct` full, `min_inodes_used_pct` of its inodes used, `stale` (default false) for the
+    node, or the user's usage is over the quota (`quota_exceeded: USER`)."""
+    m = storage_mount(args.get("node", "cn001"), args["mount"])
+    if m is None:
+        return False
+    if "min_used_pct" in args and m["used"] * 100 < float(args["min_used_pct"]) * m["size"]:
+        return False
+    if "min_inodes_used_pct" in args and m["files_used"] * 100 < float(args["min_inodes_used_pct"]) * m["files"]:
+        return False
+    if "quota_exceeded" in args and not (m["quotas"].get(args["quota_exceeded"]) or {}).get("exceeded"):
+        return False
+    return bool(m["stale"]) == bool(args.get("stale", False))
+
+
 def jira_labels(labels: list[str]) -> bool:
     jql = "labels = " + " AND labels = ".join(labels)
     url = "http://127.0.0.1:8080/rest/api/2/search?jql=" + urllib.parse.quote(jql)
@@ -670,6 +694,8 @@ def expectation(exp: dict, runner=checks.run, host: bool = True):
         return label, lambda: args["reason"] in k8s.pod_reasons(args["namespace"], args["name"], runner).split(), within
     if kind == "k8s.pods_on_node" and host:  # at least `min` (default 1) Running pods matching `selector` on the node
         return label, lambda: (k8s.pods_on_node(args["node"], args["namespace"], args["selector"], runner) or 0) >= int(args.get("min", 1)), within
+    if kind == "storage.mount" and host:  # the declared mount is as full, stale or over quota as the scenario made it
+        return label, lambda: storage_holds(args), within
     if kind == "jira.issue_created":
         return label, lambda: jira_labels(args["labels"]), within
     search = (lambda q: real_search(q)) if args.get("target") == "real" else (lambda q: jira_search(q))  # `target: real` asks the real Jira

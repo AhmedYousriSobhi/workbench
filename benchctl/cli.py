@@ -39,6 +39,7 @@ from . import (
     slurmstats,
     slurmtrace,
     stack,
+    storage,
     teleport,
     ticketbot,
     wait,
@@ -946,6 +947,18 @@ def remove_jira_real_state(yes: bool = YES) -> None:
     jira_real.reset()
     typer.echo("removed the real Jira's containers and data")
     typer.echo("next: benchctl start --with jira-real; benchctl setup jira-real")
+
+
+@remove_app.command("storage-state")
+def remove_storage_state(yes: bool = YES) -> None:
+    """Empty the shared scratch (and any other shared mount): removes its Docker volume, so the datasets and job output in it are lost.
+    A mount that names a `host_path` is a directory of yours and is never touched. Stop the stack first (`benchctl down`)."""
+    if any(r["state"] == "running" for r in inventory.service_rows()):
+        typer.echo("The cluster is running: run `benchctl down` first, then repeat this.", err=True)
+        raise typer.Exit(1)
+    _confirm("This deletes everything in the shared volumes (datasets, job output).", yes)
+    gone = storage.reset(_sim())
+    typer.echo("removed: " + ", ".join(gone) if gone else "nothing to remove: no shared volume")
 
 
 refresh_app = typer.Typer(cls=SuggestingGroup, help="Renew something that runs out: the real Jira's test licence")

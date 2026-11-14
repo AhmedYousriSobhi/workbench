@@ -19,6 +19,7 @@ from . import (
     qos,
     real_gpu,
     slurmconf,
+    storage,
     teleport,
     topology,
 )
@@ -189,6 +190,11 @@ def generate(sim: dict, profile: dict) -> dict:
     for svc in services.values():  # munge and JWT keys are made by `up` (ensure_slurm_keys), never baked into an image (issue 465)
         if svc.get("image") in SLURM_KEY_IMAGES:
             svc.setdefault("volumes", []).append(SLURM_KEYS_MOUNT)
+    named_volumes, shared_mounts = storage.volumes(sim)
+    for name, svc in services.items():  # a shared mount is one directory on every Slurm node and login node (issue 461, ADR 0078)
+        if shared_mounts and (logins.is_login(name) or svc["labels"].get("workbench.node")):
+            svc.setdefault("volumes", []).extend(shared_mounts)
+            svc.setdefault("environment", {})["WORKBENCH_SHARED_MOUNTS"] = " ".join(m.split(":", 1)[1] for m in shared_mounts)
     ips = addressing.plan(sim, profile.get("compute_nodes"))
     for name, svc in services.items():  # a fixed address for everything (ADR 0018)
         if ip := addressing.address_of(ips, name):
@@ -197,8 +203,11 @@ def generate(sim: dict, profile: dict) -> dict:
     if "bmc-farm" in services:
         nets["ipmi"] = {"ipam": {"config": [{"subnet": addressing.IPMI, "gateway": addressing.IPMI_GATEWAY}]}}
     out = {"name": "workbench", "include": [OBSERVABILITY], "networks": nets, "services": services}
+    vols: dict = dict(named_volumes)  # the data survives `down`; `benchctl remove storage-state` removes it
     if "jira-real" in services:  # named volumes: the data survives `down`; `benchctl remove jira-real-state` removes them
-        out["volumes"] = {v: {} for v in jira_real.VOLUMES}
+        vols.update({v: {} for v in jira_real.VOLUMES})
+    if vols:
+        out["volumes"] = vols
     return out
 
 
