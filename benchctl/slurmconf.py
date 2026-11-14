@@ -80,7 +80,8 @@ def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool 
             if members:
                 lines.append(f"NodeName={_range(members)} CPUs={shape['cpus']} RealMemory={shape['memory_mb']} Gres={gres} State=UNKNOWN")
     if real:  # the card's own node and partition: one real GPU, a device file the driver provides (issue 428)
-        lines.append(f"NodeName={real[0]} CPUs={c['cpus']} RealMemory={c['memory_mb']} Gres=gpu:{sim['real_gpu']['type']}:1 State=UNKNOWN")
+        shape = hwinventory.real_gpu_shape(sim)  # the same shape in Slurm, Redfish and BCM (issue 431)
+        lines.append(f"NodeName={real[0]} CPUs={shape['cpus']} RealMemory={shape['memory_mb']} Gres=gpu:{sim['real_gpu']['type']}:1 State=UNKNOWN")
     for p in sim.get("partitions", []):
         members = compute if p["nodes"] == "compute" else gpu
         if members:

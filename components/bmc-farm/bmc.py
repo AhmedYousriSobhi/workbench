@@ -34,7 +34,7 @@ RESET_TO = {"On": "On", "ForceOn": "On", "ForceOff": "Off", "GracefulShutdown": 
 
 def load_nodes(inventory: Path) -> dict[str, dict]:
     """{node: {"gpus": n, "memory_mb": m, "cpus": c, "serial": s}} from the generated inventory.json (benchctl/hwinventory.py), in its order."""
-    return {n["name"]: {"gpus": n["gpus"], "memory_mb": n["memory_mb"], "cpus": n["cpus"], "serial": n["serial"]}
+    return {n["name"]: {"gpus": n["gpus"], "memory_mb": n["memory_mb"], "cpus": n["cpus"], "serial": n["serial"], "gpu_model": n.get("gpu_model", "")}
             for n in json.loads(Path(inventory).read_text())["nodes"]}
 
 
@@ -101,7 +101,7 @@ class Farm:
                           "PowerState": self.power[node], "Status": healthy,
                           "ProcessorSummary": {"Count": info["cpus"], "Status": healthy},
                           "MemorySummary": {"TotalSystemMemoryGiB": info["memory_mb"] // 1024, "Status": healthy},
-                          "Oem": {"GpuCount": info["gpus"]},
+                          "Oem": {"GpuCount": info["gpus"], **({"GpuModel": info["gpu_model"]} if info.get("gpu_model") else {})},
                           "Actions": {"#ComputerSystem.Reset": {
                               "target": f"{base}/Systems/1/Actions/ComputerSystem.Reset",
                               "ResetType@Redfish.AllowableValues": sorted(RESET_TO)}},

@@ -7,7 +7,7 @@ CPUs in Slurm and 64 in Redfish). The shape of every machine is decided here, on
 import json
 from pathlib import Path
 
-from . import mig, nodes, storage
+from . import addressing, mig, nodes, storage
 
 FILE = "inventory.json"
 VERSION = 1
@@ -28,6 +28,13 @@ def gpu_shape(sim: dict) -> dict:
     return {"cpus": int(g.get("cpus", 8 * n)), "memory_mb": int(g.get("memory_mb", 2048 * n))}
 
 
+def real_gpu_shape(sim: dict) -> dict:
+    """CPUs and memory of the real card's node: `real_gpu.cpus` and `real_gpu.memory_mb` when set, else the compute shape (the node is a
+    plain `node-base` container, as the compute nodes are), never the per-GPU derivation of the simulated GPU nodes (issue 431)."""
+    r, base = sim.get("real_gpu") or {}, compute_shape(sim)
+    return {"cpus": int(r.get("cpus", base["cpus"])), "memory_mb": int(r.get("memory_mb", base["memory_mb"]))}
+
+
 def compute_shape(sim: dict) -> dict:
     c = sim.get("compute", {})
     return {"cpus": int(c.get("cpus", 8)), "memory_mb": int(c.get("memory_mb", 4096))}
@@ -38,12 +45,16 @@ def _machine(name: str, kind: str, sim: dict, groups: dict[str, dict]) -> dict:
         shape, gpus, gpu_type = compute_shape(sim), 0, ""
     elif kind == "gpu":
         shape, gpus, gpu_type = gpu_shape(sim), int(sim["gpu"]["gpus_per_node"]), str(sim["gpu"].get("type", "")).lower()
+    elif kind == "real-gpu":  # one real card: its own shape and the type slug; the model name and the address follow below
+        shape, gpus, gpu_type = real_gpu_shape(sim), 1, str(sim["real_gpu"].get("type", ""))
     else:  # a Kubernetes node: its group in sim.yaml kubernetes.nodes
         g = groups[name]
         shape = {"cpus": int(g.get("cpus", 8)), "memory_mb": int(g.get("memory_gb", 32)) * 1024}
         gpus, gpu_type = int(g.get("gpus", 0)), str(g.get("gpu_type", "")).lower() if g.get("gpus") else ""
     out = {"name": name, "kind": kind, **shape, "gpus": gpus, "gpu_type": gpu_type, "serial": serial(name),
            "gpu_uuids": [gpu_uuid(name, i) for i in range(gpus)]}
+    if kind == "real-gpu":  # BCM category gpu at the node's own address; the BMC shows the model (issue 431)
+        out |= {"category": "gpu", "gpu_model": str(sim["real_gpu"].get("model", "")), "ip": addressing.REAL_GPU_IP}
     if kind == "gpu" and (typed := mig.shape(sim, name)):  # MIG-style typed GRES: the inventory carries the shape Slurm advertises (issue 546)
         out["gpu_mig"] = typed
     return out
@@ -51,7 +62,7 @@ def _machine(name: str, kind: str, sim: dict, groups: dict[str, dict]) -> dict:
 
 def build(sim: dict, compute_override: int | None = None) -> dict:
     """Every machine with hardware, in the order the BMC farm numbers them: Slurm compute, Slurm GPU, then Kubernetes nodes when that part is on.
-    The real card's node (real_gpu) is not listed: the BMC, BCM and exporter do not have it yet (issue 431)."""
+    The real card's node (real_gpu) comes last, as kind real-gpu with its model, category gpu and address (issue 431)."""
     groups: dict[str, dict] = {}
     if nodes.k8s_enabled(sim):
         from . import k8s

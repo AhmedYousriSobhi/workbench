@@ -27,7 +27,7 @@ def load_nodes(inventory: Path) -> dict[str, dict]:
     """{node: {"category": c, "gpus": n, "memory_mb": m, "cpus": c}} from the generated inventory.json (benchctl/hwinventory.py), in its order.
     Kubernetes nodes are listed only when BCM manages them (`bcm_manages_kubernetes`, issue 413)."""
     inv = json.loads(Path(inventory).read_text())
-    return {n["name"]: {"category": n["kind"], "gpus": n["gpus"], "memory_mb": n["memory_mb"], "cpus": n["cpus"]}
+    return {n["name"]: {"category": n.get("category", n["kind"]), "ip": n.get("ip"), "gpus": n["gpus"], "memory_mb": n["memory_mb"], "cpus": n["cpus"]}
             for n in inv["nodes"] if inv.get("bcm_manages_kubernetes", True) or not n["kind"].startswith("k8s")}
 
 
@@ -42,8 +42,10 @@ class Cluster:
                 "gpus": n["gpus"], "memory_mb": n["memory_mb"], "cpus": n["cpus"], "status": self.state[name]}
 
     def ip(self, name: str) -> str:
+        if self.nodes[name].get("ip"):  # a node with its own fixed address (the real card's node, issue 431)
+            return self.nodes[name]["ip"]
         kind = self.nodes[name]["category"]  # the same formula as benchctl/addressing.py host_ip (this file cannot import it)
-        i = [n for n, v in self.nodes.items() if v["category"] == kind].index(name)
+        i = [n for n, v in self.nodes.items() if v["category"] == kind and not v.get("ip")].index(name)
         return f"10.141.{i // 254 + {'gpu': 100, 'k8s-cpu': 200, 'k8s-gpu': 230}.get(kind, 0)}.{i % 254 + 1}"  # benchctl/addressing.py BLOCK
 
     def inject(self, req: dict) -> None:
