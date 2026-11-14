@@ -1,6 +1,6 @@
 # ADR 0064: An MCP server: `benchctl serve mcp`
 
-Status: accepted by the owner on 2026-11-13 (issue 603, decisions in issue 613). Nothing here is built yet. Decision A-4 of the agent interface.
+Status: accepted by the owner on 2026-11-13 (issue 603, decisions in issue 613). Built (issues 616 to 628, 633 to 639). Decision A-4 of the agent interface.
 
 ## Context
 Typed tools let an agent act without reading documentation, and its client shows the tool list for free.
