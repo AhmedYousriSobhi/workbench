@@ -3,7 +3,7 @@ import os
 import secrets
 from pathlib import Path
 
-from . import hwinventory, qos, topology
+from . import hwinventory, mig, qos, topology
 from .nodes import node_names
 
 CTLD = "slurmctld"
@@ -74,10 +74,11 @@ def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool 
     if compute:
         lines.append(f"NodeName={_range(compute)} CPUs={c['cpus']} RealMemory={c['memory_mb']} State=UNKNOWN")
     if gpu:
-        gres = f"gpu:{g['type']}:{g['gpus_per_node']}"
         shape = hwinventory.gpu_shape(sim)  # one shape for a GPU node in Slurm, Redfish and BCM (issue 462)
-        lines.append(f"NodeName={_range(gpu)} CPUs={shape['cpus']} RealMemory={shape['memory_mb']} "
-                     f"Gres={gres} State=UNKNOWN")
+        sliced = [n for n in gpu if mig.is_mig(sim, n)]  # MIG-style typed GRES (issue 546): its own NodeName line, the rest unchanged
+        for members, gres in ((sliced, f"gpu:{mig.gres_type(sim)}:{mig.units(sim)}"), ([n for n in gpu if n not in sliced], f"gpu:{g['type']}:{g['gpus_per_node']}")):
+            if members:
+                lines.append(f"NodeName={_range(members)} CPUs={shape['cpus']} RealMemory={shape['memory_mb']} Gres={gres} State=UNKNOWN")
     if real:  # the card's own node and partition: one real GPU, a device file the driver provides (issue 428)
         lines.append(f"NodeName={real[0]} CPUs={c['cpus']} RealMemory={c['memory_mb']} Gres=gpu:{sim['real_gpu']['type']}:1 State=UNKNOWN")
     for p in sim.get("partitions", []):
@@ -97,9 +98,12 @@ def gres_conf(sim: dict) -> str:
     out = head
     gpu = [n for n, k in node_names(sim) if k == "gpu"]
     if g.get("nodes") and gpu:
-        last = g["gpus_per_node"] - 1
-        files = f"/dev/workbench-gpu[0-{last}]" if last else "/dev/workbench-gpu0"
-        out += f"NodeName={_range(gpu)} Name=gpu Type={g['type']} File={files}\n"
+        sliced = [n for n in gpu if mig.is_mig(sim, n)]
+        for members, kind, count in ((sliced, mig.gres_type(sim), mig.units(sim)), ([n for n in gpu if n not in sliced], g["type"], g["gpus_per_node"])):
+            if members:
+                last = count - 1
+                files = f"/dev/workbench-gpu[0-{last}]" if last else "/dev/workbench-gpu0"
+                out += f"NodeName={_range(members)} Name=gpu Type={kind} File={files}\n"
     real = [n for n, k in node_names(sim) if k == "real-gpu"]
     if real:  # the real card: the driver's own device file, passed into the node as a CDI device
         out += f"NodeName={real[0]} Name=gpu Type={sim['real_gpu']['type']} File=/dev/nvidia0\n"

@@ -2,7 +2,7 @@
 # Fake GPUs: Slurm ignores file-less GRES, so give each GPU a stand-in device file (a symlink
 # to /dev/null; no capability needed). Create the simulated users, start munge, exec the daemon.
 i=0
-while [ "$i" -lt "${WORKBENCH_GPUS:-0}" ]; do
+while [ "$i" -lt "${WORKBENCH_GRES_DEVICES:-${WORKBENCH_GPUS:-0}}" ]; do  # MIG-style nodes have one file per slice (issue 546)
   ln -sf /dev/null "/dev/workbench-gpu$i"
   i=$((i + 1))
 done

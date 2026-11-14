@@ -14,6 +14,7 @@ from . import (
     jira_real,
     k8s,
     logins,
+    mig,
     nhc,
     qos,
     real_gpu,
@@ -94,13 +95,17 @@ def generate(sim: dict, profile: dict) -> dict:
                 services[lname] = {k: v for k, v in copy.deepcopy(services["login"]).items() if k != "build"}
     if problems := logins.problems(sim, {p for p, n in (("teleport", "teleport"), ("k8s", k8s.API)) if n in services}):
         raise logins.LoginError("; ".join(problems))
+    if "slurmctld" in services and (m := mig.config(sim)):  # the GPU allocation feed maps a slice index to its physical GPU (issue 546)
+        services["slurmctld"].setdefault("environment", {}).update({"WORKBENCH_MIG_TYPE": mig.gres_type(sim), "WORKBENCH_MIG_SLICES": str(m["slices"])})
     for name, kind in node_names(sim, profile.get("compute_nodes")):
         svc = _service("workbench/node-base:dev", SLURMD_MB, SLURMD_PRIO, "../../images/node-base")
         svc["hostname"] = name
         svc["labels"]["workbench.node"] = kind
         svc["environment"] = {"WORKBENCH_IB": str(sim["gpu"]["gpus_per_node"] if kind == "gpu" else 0 if kind == "real-gpu" else 1)}  # InfiniBand ports nhc expects
         if kind == "gpu":
-            svc["environment"]["WORKBENCH_GPUS"] = str(sim["gpu"]["gpus_per_node"])
+            svc["environment"]["WORKBENCH_GPUS"] = str(sim["gpu"]["gpus_per_node"])  # physical GPUs: what nhc expects of the exporter's series
+            if mig.is_mig(sim, name):  # typed GRES units need one stand-in device file each (issue 546)
+                svc["environment"]["WORKBENCH_GRES_DEVICES"] = str(mig.units(sim))
         if kind == "real-gpu":  # the real card as a CDI device: unprivileged, no stand-in files (WORKBENCH_GPUS stays 0 so nhc's simulated-GPU checks skip it)
             svc["devices"] = [real_gpu.DEVICE]
         if "slurmctld" in services:
