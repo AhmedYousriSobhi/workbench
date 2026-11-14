@@ -20,3 +20,12 @@ Status: accepted (owner decisions of 2026-11-12). Issue 542; epic 557. Companion
 ## Consequences
 
 Policy behaviour (priority, fairshare, QOS, preemption, topology placement, Kubernetes admission and quotas, alert rule timing, Slurm state compatibility) is decided by the real software. Job runtimes, GPU and network contention, hardware timing, pod runtime and slurmctld load at production scale are approximate and labelled so in every report. A ratio above 100x marks results indicative.
+
+## Addendum (issue 551, downscale, mapping, time scaling)
+
+- Group key is the tuple of a node's partitions, its shape and its topology leaf (a node in two partitions is one group, so it covers both). A shape is the node's `NodeName` line without names and state, plus its `gres.conf` types.
+- Remaining nodes are split by largest remainder in proportion to production counts, capped at each group's size. More groups than `max_nodes` is refused with the needed number.
+- Sampling keeps at least one job per (account, QOS, partition) stratum so every account and QOS is present for fairshare and QOS limits; the seed is fixed.
+- The dilation factor is `max(1, trace span / target)`: a short trace is not stretched. The span runs from the first submit to the last end.
+- Scaled: `PriorityDecayHalfLife`, `PriorityMaxAge`, `PreemptExemptTime`, `PriorityCalcPeriod`, `OverTimeLimit`, `MinJobAge`, `KillWait`, `SchedulerTimeSlice`, `InactiveLimit`, `WaitTime`, the duration options of `SchedulerParameters` (`bf_interval`, `bf_resolution`, `bf_window`, `bf_max_time`, `sched_interval`, `batch_sched_delay`), partition `MaxTime` and `DefaultTime`, QOS `GraceTime` and `MaxWall`, job runtimes and limits. Daemon and node timeouts (`SlurmctldTimeout`, `SlurmdTimeout`, `MessageTimeout`, health check and power timers) are lab-owned: they keep the workbench's own stable values. A scaled value is never below one second (one minute for the minute-unit keys).
+- The memory the governor must admit for a run is `nodes x 13 MB + 250 MB` (`lab_slurm.admission_mb`); the apply command (issue 553) passes it to `admit`.

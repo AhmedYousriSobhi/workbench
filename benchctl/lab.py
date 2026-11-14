@@ -20,6 +20,7 @@ from pathlib import Path
 import yaml
 
 from . import lab_import as li
+from . import lab_replay, lab_slurm
 from .lab_import import ImportError_ as LabError
 
 ROOT = Path("compose/generated/lab")
@@ -203,4 +204,68 @@ def summary(m: dict) -> str:
     if diff:
         lines.append(f"version differs from this workbench ({', '.join(diff)}): results for it are indicative")
     lines.append("not tested: " + ", ".join(m["not_tested"]))
+    return "\n".join(lines)
+
+
+def load_baseline(name: str, root: Path | None = None) -> dict:
+    """The stored baseline parsed again: {slurm, topology, gres, trace, ...} (missing files give empty values)."""
+    base = path(name, root) / "baseline"
+    if not (base / "slurm.conf").is_file() and not exists(name, root):
+        raise LabError(f"no lab {name}: import it first (benchctl import lab {name} --from DIR)")
+
+    def text(rel: str) -> str:
+        return (base / rel).read_text() if (base / rel).is_file() else ""
+
+    return {"slurm": li.parse_slurm_conf(text("slurm.conf")) if text("slurm.conf") else None,
+            "topology": li.parse_topology(text("topology.conf")) if text("topology.conf") else [],
+            "gres": li.parse_gres(text("gres.conf")) if text("gres.conf") else [],
+            "trace": li.parse_trace(text("trace.sacct"))["jobs"] if text("trace.sacct") else [],
+            "qos": li.parse_qos(text("qos.txt")) if text("qos.txt") else []}
+
+
+def plan(name: str, sim: dict, root: Path | None = None, max_nodes: int | None = None, keep_users: bool = False,
+         target_hours: float | None = None) -> dict:
+    """The downscale, name mapping and time scaling the lab would use for NAME; changes nothing."""
+    cfg = lab_slurm.settings(sim)
+    max_nodes = max_nodes or cfg["max_nodes"]
+    target = target_hours or cfg["target_hours"]
+    b = load_baseline(name, root)
+    if b["slurm"] is None:
+        raise LabError(f"lab {name} has no slurm.conf: the node shapes come from it")
+    nodes = lab_slurm.production_nodes(b["slurm"], b["topology"], b["gres"])
+    out: dict = {"name": name, "settings": {"max_nodes": max_nodes, "max_running_jobs": cfg["max_running_jobs"], "target_hours": target}}
+    if b["trace"]:
+        load = lab_replay.plan_load(nodes, b["trace"], max_nodes, cfg["max_running_jobs"])
+        scale, sampled = load["scale"], load["sampled"]
+        factor = lab_replay.time_factor(sampled, target)
+        mapping = lab_replay.map_users(sampled, keep_users)
+        out["jobs"] = {"production": len(b["trace"]), "sampled": len(sampled), "users": len(mapping), "user_map": mapping,
+                       "peak_running": load["peak"], "max_running_jobs": load["cap"], "fits": load["fits"],
+                       "requested_nodes": load["requested_nodes"], "proposed_nodes": load["proposed_nodes"]}
+    else:
+        scale, factor = lab_slurm.downscale(nodes, max_nodes), 1.0
+        out["jobs"] = None
+    _keys, changed = lab_slurm.dilate_keys(b["slurm"]["keys"], factor)
+    out.update(scale=scale, time={"factor": round(factor, 2), "target_hours": target, "changed": changed},
+               key_classes={c: v for c, v in lab_slurm.classify_keys(b["slurm"]["keys"]).items()},
+               admission_mb=lab_slurm.admission_mb(scale["lab_nodes"]), indicative=scale["indicative"])
+    return out
+
+
+def plan_text(p: dict) -> str:
+    s, t = p["scale"], p["time"]
+    lines = [f"lab {p['name']}: {s['production_nodes']} production nodes -> {s['lab_nodes']} lab nodes (ratio {s['ratio']:.1f}x)"
+             + ("; ratio above 100x: results are indicative" if p["indicative"] else "")]
+    for g in s["groups"]:
+        lines.append(f"  {'+'.join(g['partitions']) or '(no partition)'} shape {g['shape']} leaf {g['leaf'] or '-'}: {g['production']} -> {g['lab']}")
+    j = p["jobs"]
+    if j:
+        lines.append(f"trace: {j['production']} jobs -> {j['sampled']} sampled, {j['users']} users mapped; peak {j['peak_running']} running at once (cap {j['max_running_jobs']})")
+        if j["proposed_nodes"] < j["requested_nodes"]:
+            lines.append(f"  the sampled trace peaks above the cap: {j['proposed_nodes']} lab nodes instead of {j['requested_nodes']}" + ("" if j["fits"] else "; still above the cap at the smallest shape-preserving size"))
+    else:
+        lines.append("trace: none imported (no replay possible)")
+    lines.append(f"time: dilation x{t['factor']} for a {t['target_hours']} h run per side" + (f"; {len(t['changed'])} parameter(s) scaled: " + ", ".join(c["key"] for c in t["changed"]) if t["changed"] else ""))
+    lines.append("keys: " + ", ".join(f"{c} {len(v)}" for c, v in p["key_classes"].items() if v))
+    lines.append(f"memory the governor must find free for a run: {p['admission_mb']} MB ({s['lab_nodes']} nodes x {lab_slurm.LAB_NODE_MB} MB + {lab_slurm.REPLAY_MB} MB replay)")
     return "\n".join(lines)

@@ -714,6 +714,21 @@ def _endpoint_rows(full: bool) -> list[dict]:
     return [{k: e.get(k) if k != "credential" else (e.get(k) or "-") for k in keep} for e in conn.entities(_sim())]
 
 
+@get_app.command("lab")
+def get_lab(name: str = typer.Argument(..., help="a lab made with `benchctl import lab`"),
+            max_nodes: int = typer.Option(None, "--max-nodes", min=1, max=64, help="lab node budget (default lab.max_nodes, 24)"),
+            keep_users: bool = typer.Option(False, "--keep-users", help="keep production user names instead of lab-u001..."),
+            target_hours: float = typer.Option(None, "--target-hours", help="run length per side, 0.5 to 6 (default lab.target_hours, 2)"),
+            output: str = OUTPUT) -> None:
+    """Show how a lab would be downscaled: nodes per group, sampled jobs, user mapping, time dilation, key classes and memory. Changes nothing."""
+    try:
+        p = lab.plan(name, _base_sim(), max_nodes=max_nodes, keep_users=keep_users, target_hours=target_hours)
+    except lab.LabError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    typer.echo(json.dumps(p, indent=2) if output == "json" else lab.plan_text(p))
+
+
 @get_app.command("endpoints")
 def get_endpoints(output: str = OUTPUT, json_: bool = JSON, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
     """Every address a client can reach (SSH logins, BMC, BCM, Jira, Kubernetes...), the command that works and the file that holds its credential. `--json` adds the command."""
