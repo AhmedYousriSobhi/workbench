@@ -466,3 +466,75 @@ def test_metrics_are_prometheus_text_and_not_client_traffic(server):
     assert call(base, "/sim/stats")[1]["requests"] == 2  # scraping never counts as a client request
     call(base, "/sim/alerts", {"alerts": [alert()]})
     assert call(base, "/sim/stats")[1]["requests"] == 2
+
+
+def raw(base, path):
+    """GET without following a redirect: (status, headers, bytes)."""
+    import http.client
+    c = http.client.HTTPConnection(base.removeprefix("http://"), timeout=5)
+    c.request("GET", path)
+    r = c.getresponse()
+    return r.status, dict(r.getheaders()), r.read()
+
+
+def test_attachment_metadata_cloud_and_dc():
+    j = jira.Jira()
+    j.create({"fields": {"project": {"key": "OPS"}, "summary": "x"}})
+    assert j.attach("OPS-1", "a.log", b"abc")["size"] == 3
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), jira.make_handler(j))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_port}"
+    try:
+        c3, m3, _ = call(base, "/rest/api/3/attachment/10100")
+        assert c3 == 200 and m3["filename"] == "a.log" and m3["mimeType"] == "text/plain" and m3["author"]["accountId"] == "alice-id"
+        assert m3["self"] == f"{base}/rest/api/3/attachment/10100"
+        assert m3["content"] == f"{base}/rest/api/3/attachment/content/10100"  # Cloud
+        _, m2, _ = call(base, "/rest/api/2/attachment/10100")
+        assert m2["content"] == f"{base}/secure/attachment/10100/a.log"  # Data Center
+        issue = call(base, "/rest/api/2/issue/OPS-1")[1]
+        assert issue["fields"]["attachment"][0]["content"] == m2["content"]
+        assert call(base, "/rest/api/2/attachment/99")[0] == 404
+        assert call(base, "/rest/api/2/attachment/abc")[0] == 404
+        # content: 303 by default, bytes with redirect=false, the DC path serves the bytes
+        code, hdr, _ = raw(base, "/rest/api/3/attachment/content/10100")
+        assert code == 303 and hdr["Location"] == f"{base}/secure/attachment/10100/a.log"
+        assert raw(base, "/rest/api/3/attachment/content/10100?redirect=false")[::2] == (200, b"abc")
+        code, hdr, body = raw(base, "/secure/attachment/10100/a.log")
+        assert (code, body, hdr["Content-Type"]) == (200, b"abc", "text/plain")
+        assert call(base, "/rest/api/2/attachment/10100", method="DELETE")[0] == 204
+        assert call(base, "/rest/api/2/attachment/10100")[0] == 404
+        assert call(base, "/rest/api/2/issue/OPS-1")[1]["fields"]["attachment"] == []
+        paths = call(base, "/sim/paths")[1]
+        assert "GET /rest/api/3/attachment/{id}" in paths["paths"] and "GET /rest/api/3/attachment/{id}" not in paths["unknown"]
+    finally:
+        srv.shutdown()
+
+
+def test_approximate_count(server):
+    base, *_ = server
+    new(base), new(base), new(base, project="INFRA")
+    assert call(base, "/rest/api/3/search/approximate-count", {"jql": "project = OPS"})[1] == {"count": 2}
+    assert call(base, "/rest/api/3/search/approximate-count", {"jql": ""})[1] == {"count": 3}
+    assert call(base, "/rest/api/3/search/approximate-count", {"jql": "nosuchfield = 1"})[0] == 400
+
+
+def test_user_bulk(server):
+    base, *_ = server
+    new(base, reporter={"name": "carol"})
+    code, body, _ = call(base, "/rest/api/3/user/bulk?accountId=carol-id&accountId=nobody-id&accountId=bob-id")
+    assert code == 200 and body["isLast"] and body["total"] == 2 and body["startAt"] == 0 and body["maxResults"] == 10
+    assert [u["accountId"] for u in body["values"]] == ["bob-id", "carol-id"]
+    assert body["values"][0]["accountType"] == "atlassian" and body["values"][0]["displayName"] == "Bob Example"
+    paged = call(base, "/rest/api/2/user/bulk?accountId=carol-id&accountId=bob-id&maxResults=1&startAt=1")[1]
+    assert [u["accountId"] for u in paged["values"]] == ["carol-id"] and paged["isLast"]
+    assert call(base, "/rest/api/2/user/bulk?username=bob")[1]["total"] == 1  # Data Center style
+    assert call(base, "/rest/api/3/user/bulk")[0] == 400
+
+
+def test_seed_has_attachments_and_mentions():
+    j = jira.Jira()
+    j.seed_backlog()
+    assert j.attachments
+    texts = [c["body"] for i in j.issues.values() for c in i["fields"]["comment"]["comments"]]
+    assert any("[~accountid:" in t for t in texts)
+    assert any(a["mimeType"] == "image/png" and "thumbnail" in a for i in j.issues.values() for a in i["fields"]["attachment"])

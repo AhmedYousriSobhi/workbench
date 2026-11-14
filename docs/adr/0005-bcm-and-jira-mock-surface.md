@@ -63,3 +63,21 @@ fixtures (architecture section 13, contract tests).
 The owner proposes removing `dc` as a mock mode (the real Jira part, ADR 0026, covers Data Center) and building `cloud`
 only if the monitoring client's own traffic shows v3 calls. Nothing changes until `/sim/paths` and `/sim/traffic` have
 been read from a client run; SPEC C-5 keeps its wording and notes the proposal.
+
+## Addendum: attachments, approximate-count and user/bulk (issue 715)
+A client run met a 404 on `GET /rest/api/2/attachment/{id}`; `POST /rest/api/3/search/approximate-count` and
+`GET /rest/api/2/user/bulk` were not called but the client uses them. `jira-mock` now serves them, with shapes taken from
+Atlassian's published references (Jira Cloud platform v3 OpenAPI file for the three Cloud endpoints, the Jira Data Center v2
+REST reference for the attachment example); real Jira was not exercised.
+- Attachment metadata (`self, id, filename, author, created, size, mimeType, content, thumbnail`) at `/rest/api/{2,3}/attachment/{id}`
+  (DELETE removes it) and in each issue's `fields.attachment`. Cloud: `content` is `/rest/api/3/attachment/content/{id}`, which
+  answers 303 with a `Location` (or 200 with the bytes for `redirect=false`). Data Center: `content` is
+  `/secure/attachment/{id}/{filename}`, served as bytes (that path is not REST). The seeded backlog carries a log or a PNG on
+  some tickets.
+- `POST /rest/api/3/search/approximate-count` `{"jql"}` returns `{"count": N}`; a JQL error is 400.
+- `GET /rest/api/{2,3}/user/bulk?accountId=...` returns a page (`startAt`, `maxResults` default 10, `total`, `isLast`, `values`) of
+  the known accounts; an unknown id is left out; no `accountId` is a 400. `username`/`key` are also read (Data Center style); whether
+  real Data Center has this route was not confirmed.
+- Some seeded comments mention a teammate as `[~accountid:NAME-id]`. Bodies stay plain strings in v3 (no ADF).
+- The Assets workspace stays a 404: there is no Assets.
+`/sim/paths` and `/sim/traffic` are unchanged; the new paths show as served.
