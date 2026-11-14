@@ -26,11 +26,17 @@ export function closeNode() {
   leaveNode();
   if (S.openerEl && document.contains(S.openerEl)) S.openerEl.focus(); else { const b = document.querySelector('.node'); if (b) b.focus(); }
 }
+export async function loadNodeTickets(name) {  // the Jira mock's tickets labelled node-<name>; null when it does not answer
+  let tickets = null;
+  try { const r = await fetch(`/api/nodes/${enc(name)}/tickets`); if (r.ok) tickets = (await r.json()).tickets; } catch (e) { /* shown as one notice */ }
+  if (S.openNode !== name) return;
+  S.nodeTickets = { node: name, tickets }; paintNodeSum(name);
+}
 export function paintNodeSum(name, body) {  // body is kept from the last read, so a Slurm refresh repaints without a new request
   if (body !== undefined) S.nodeBody = body;
   const row = JSON.parse(S.lastCluster || '{"nodes":[]}').nodes.find(x => x.name === name);
   const slurm = S.slurmNodes ? { reason: S.slurmReasons && S.slurmReasons[name], jobs: (S.slurmJobs && S.slurmJobs[name]) || [] } : null;
-  $('nodesum').innerHTML = nodeSummary(row, S.nodeBody, slurm).map(r => `<dt>${esc(r.k)}</dt><dd>${r.code ? `<code>${esc(r.v)}</code>` : esc(r.v)}</dd>`).join('');
+  $('nodesum').innerHTML = nodeSummary(row, S.nodeBody, slurm, S.nodeTickets && S.nodeTickets.node === name ? S.nodeTickets.tickets : undefined).map(r => `<dt>${esc(r.k)}</dt><dd>${r.code ? `<code>${esc(r.v)}</code>` : esc(r.v)}</dd>`).join('');
 }
 export async function showNode(name) {
   setTree(true);  // the panel lives in the node column: open it if it was folded away
@@ -49,7 +55,7 @@ export async function showNode(name) {
     ['IP address', body && body.ip ? `<code>${esc(body.ip)}</code> (fixed; reach it from the login node)` : `run <code>./scripts/benchctl describe node ${esc(name)}</code>`]);
   if (body) kv[kv.findIndex(r => r[0] === 'BMC')] = ['BMC', body.bmc_ip ? `<code>${esc(body.bmc_ip)}:443</code> (HTTPS), user admin, password in <code>compose/generated/secrets/bmc_credentials</code>` : 'none for this node (switched off in Cluster architecture)'];
   const row = JSON.parse(S.lastCluster || '{"nodes":[]}').nodes.find(x => x.name === name);
-  paintNodeSum(name, body);
+  paintNodeSum(name, body); loadNodeTickets(name);
   const reach = cx && row && row.kind !== 'k8s' ? cx.command.replace('<node>', name) : '';
   $('nodereach').hidden = !reach; $('nodereach-cmd').textContent = reach;
   $('nodereach-copy').onclick = async () => { try { await navigator.clipboard.writeText(reach); $('nodereach-copy').textContent = 'Copied'; } catch (e) { $('nodereach-copy').textContent = 'Select and copy'; } };
@@ -75,7 +81,7 @@ export async function nodeAction(name, action, label) {
 
 export function init() {
   $('node-back').onclick = closeNode;
-  window.addEventListener('wb-slurm', () => { if (S.openNode && !$('nodepane').hidden) paintNodeSum(S.openNode); });  // fresh Slurm facts while the panel is open
+  window.addEventListener('wb-slurm', () => { if (S.openNode && !$('nodepane').hidden) { paintNodeSum(S.openNode); loadNodeTickets(S.openNode); } });  // fresh Slurm facts while the panel is open
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.openNode && !document.querySelector('dialog[open]:not(.drawer)')) closeNode(); });
 
 }

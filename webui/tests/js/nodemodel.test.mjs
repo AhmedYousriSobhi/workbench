@@ -45,3 +45,11 @@ test('without Slurm stats there is one notice and no Jobs row', () => {
   assert.equal(get(rows, 'Jobs'), undefined);
   assert.match(get(rows, 'Reason').v, /Slurm stats are unavailable.*describe node gpu001/);
 });
+test('the Tickets row: none, some, unreadable, and no row before it was asked', () => {
+  assert.equal(get(nodeSummary(gpu(), null, null), 'Tickets'), undefined);
+  assert.equal(get(nodeSummary(gpu(), null, null, []), 'Tickets').v, 'none in the Jira mock (label node-gpu001)');
+  const t = [{ key: 'OPS-3', summary: 'gpu001: GPU fault', status: 'Open', priority: 'High' }];
+  assert.equal(get(nodeSummary(gpu(), null, null, t), 'Tickets').v, 'OPS-3 Open, High: gpu001: GPU fault');
+  assert.match(get(nodeSummary(gpu(), null, null, null), 'Tickets').v, /^not read/);
+  assert.ok(get(nodeSummary({ name: 'k8s-gpu001', kind: 'k8s', state: 'ok' }, null, null, []), 'Tickets'));
+});

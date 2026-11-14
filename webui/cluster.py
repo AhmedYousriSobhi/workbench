@@ -7,6 +7,7 @@ import json
 import re
 import socket
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from benchctl import scenario
@@ -174,6 +175,18 @@ class Cluster:
         bmc = bmc or {}
         return {"name": name, "kind": kind, "gpus": self.gpus if kind == "gpu" else 1 if kind == "real-gpu" else 0,
                 "power": bmc.get("power"), "temp": bmc.get("temp"), "fans_failed": bmc.get("fans_failed", 0)}
+
+    def tickets(self, node: str) -> list[dict] | None:
+        """The jira-mock's tickets for one node: the search `labels = "node-<name>"` (the mock labels the tickets its ops integration files that
+        way). Whether a real Jira labels them is not known, so this reads the mock only. None when the mock does not answer; raises KeyError for an unknown node."""
+        if node not in {n for n, _ in self.nodes}:
+            raise KeyError(node)
+        jql = urllib.parse.quote(f'labels = "node-{node}" ORDER BY created DESC')
+        got = self._try(f"{JIRA}/rest/api/2/search?jql={jql}&maxResults=10&fields=summary,status,priority")
+        if not isinstance(got, dict) or not isinstance(got.get("issues"), list):
+            return None
+        return [{"key": i["key"], "summary": i["fields"].get("summary", ""), "status": (i["fields"].get("status") or {}).get("name", ""),
+                 "priority": (i["fields"].get("priority") or {}).get("name", "")} for i in got["issues"]]
 
     def snapshot(self) -> dict:
         """{"services": {name: bool}, "nodes": [...]}: one pass over the mocks.
