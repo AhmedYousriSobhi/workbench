@@ -61,5 +61,5 @@ Add `--json` to any read verb. Scenarios: `benchctl scenario list`. Recipes (one
 - Do not name or imitate the monitoring client in files you commit.
 
 <!-- BEGIN contract -->
-JSON contract version 2.0. Schemas: `docs/agents/schemas/`. Changes: `docs/agents/CHANGELOG.md`. Error codes: `docs/agents/ERROR-CODES.md`.
+JSON contract version 2.1. Schemas: `docs/agents/schemas/`. Changes: `docs/agents/CHANGELOG.md`. Error codes: `docs/agents/ERROR-CODES.md`.
 <!-- END contract -->

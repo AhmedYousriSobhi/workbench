@@ -41,11 +41,51 @@
           "fix"
         ]
       }
+    },
+    "tuning": {
+      "type": "array",
+      "description": "Host tuning commands (SPEC P-3), print-only: doctor never runs them.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "setting": {
+            "type": "string"
+          },
+          "current": {
+            "type": "string"
+          },
+          "wanted": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "effect": {
+            "type": "string"
+          },
+          "undo": {
+            "type": "string"
+          },
+          "applied": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "setting",
+          "current",
+          "wanted",
+          "applied",
+          "command",
+          "effect",
+          "undo"
+        ]
+      }
     }
   },
   "required": [
     "contract_version",
     "ok",
-    "checks"
+    "checks",
+    "tuning"
   ]
 }

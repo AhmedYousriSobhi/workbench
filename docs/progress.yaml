@@ -290,7 +290,7 @@ phases:
       - {name: Initial machine check, status: review, pr: 87, where: "benchctl/machine.py, scripts/check-machine.sh",
          how: "`./scripts/check-machine.sh` (system python3 only, runs before any build) checks OS, cores, RAM, disk, cgroup v2, Docker daemon and compose, free ports, optional tools, and which profiles fit; READY or NOT READY with a fix per problem. Also `benchctl check`."}
       - {name: benchctl doctor / status / diag, status: done, pr: 26, where: "benchctl/checks.py, benchctl/diag.py",
-         how: "Environment checks with fixes, governor state, a masked diagnostics tarball, and the container security check."}
+         how: "Environment checks with fixes, governor state, a masked diagnostics tarball, and the container security check. Issue 679: doctor also prints the host-tuning commands for zram, swappiness and THP (benchctl/tuning.py), each with its effect and undo; print-only, never sudo (SPEC P-3, NF-5); doctor --json gains tuning (contract 2.1)."}
       - {name: Observability stack, status: done, where: compose/observability.yml,
          how: "Prometheus (2 d, tmpfs), Grafana with provisioned dashboard, fake GPU exporter (its own image with pyyaml==6.0.3 baked in, no pip at start, runs as nobody; issue 235)."}
       - {name: Declared storage and a shared scratch (issue 461, ADR 0078), status: review, where: "benchctl/storage.py, benchctl/hwinventory.py, benchctl/compose.py, benchctl/scenario.py, components/gpu-exporter-farm/exporter.py, images/node-base/fakefs.py, images/node-base/entrypoint.sh, scenarios/disk-full.yaml, scenarios/quota-exceeded.yaml, scenarios/stale-mount.yaml, tests/test_storage.py, tests/real/test_storage_real.py, docs/guides/storage.md",

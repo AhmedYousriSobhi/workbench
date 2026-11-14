@@ -2,6 +2,10 @@
 
 Every JSON output of `benchctl` carries `contract_version` (`MAJOR.MINOR`); the schemas are in [schemas/](schemas/) (JSON Schema draft 2020-12). Adding a field is a minor bump. Removing or renaming a field, or changing a type, is a major bump. Every change gets a line here (SPEC AG-3, ADR 0062).
 
+## 2.1 (2026-11-14)
+
+Minor, nothing removed. `doctor` gains `tuning`: one entry per host setting (`zram`, `swappiness`, `thp`) with `current`, `wanted`, `applied`, and the print-only `command`, `effect` and `undo`. doctor never runs them (SPEC P-3, NF-5). In agent mode (`BENCHCTL_AGENT=1`) the text shows one `tuning:` line, only when a setting is not as recommended (issue 679).
+
 ## 2.0 (2026-11-14)
 
 Major, one field removed. `describe workbench`: a scenario row is `name` and `seconds`; `summary` is gone so the call stays within its 6,500-character budget as scenarios are added. What a scenario does is in `get scenarios --json` (the drill-down). Nothing else changed (issue 678).
