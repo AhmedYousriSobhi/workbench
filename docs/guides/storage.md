@@ -44,7 +44,7 @@ storage:
 
 ## Scenarios
 
-`benchctl scenario run disk-full` (SC-41: `/scratch` at 99 % of bytes, 90 % of inodes), `quota-exceeded` (SC-42: alice over her quota, `lfs quota` shows `*` and a grace time) and `stale-mount` (SC-43: `cn002` loses `/scratch`: `df` fails with the file system's own message, its series disappear and `node_filesystem_device_error` is 1). Each resets itself after five minutes. A step is
+`benchctl scenario run disk-full` (SC-41: `/scratch` at 99 % of bytes, 90 % of inodes), `quota-exceeded` (SC-42: alice over her quota, `lfs quota` shows `*` and a grace time such as `6d23h59m59s`) and `stale-mount` (SC-43: `cn002` loses `/scratch`: `df` fails with the file system's own message, its series disappear and `node_filesystem_device_error` is 1). Each resets itself after five minutes. A step is
 `{target: gpu-exporter, do: {nodes: [cn001], storage: {mount: /scratch, used_pct: 99}}}`; keys: `used_pct`, `inodes_used_pct`, `stale: true|false`, `user` with `used_gb`, and `reset: true`. The expectation is `storage.mount: {node, mount, min_used_pct, min_inodes_used_pct, quota_exceeded: USER, stale}`.
 
 ## What is and is not simulated
