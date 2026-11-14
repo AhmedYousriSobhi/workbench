@@ -121,6 +121,7 @@ def generate(sim: dict, profile: dict) -> dict:
         svc = _service("workbench/node-base:dev", SLURMD_MB + job_memory_mb(sim, kind), SLURMD_PRIO, "../../images/node-base")
         svc["hostname"] = name
         svc["labels"]["workbench.node"] = kind
+        svc["cap_add"] = ["SYS_PTRACE"]  # the one exception to "unprivileged" (issue 674, ADR 0074): slurmd reads /proc/PID/io of the users' job processes
         svc["environment"] = {"WORKBENCH_IB": str(sim["gpu"]["gpus_per_node"] if kind == "gpu" else 0 if kind == "real-gpu" else 1)}  # InfiniBand ports nhc expects
         if kind == "gpu":
             svc["environment"]["WORKBENCH_GPUS"] = str(sim["gpu"]["gpus_per_node"])  # physical GPUs: what nhc expects of the exporter's series

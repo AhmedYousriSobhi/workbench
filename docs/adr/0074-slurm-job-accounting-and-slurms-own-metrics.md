@@ -17,3 +17,12 @@ Status: accepted by the owner on 2026-11-14 (issue 459, epic 557). Built; the li
 ## Consequences
 - Memory: no new process. The scrape adds four small requests every 15 s to `slurmctld`; the gather plugin adds one `/proc` walk per task every 10 s. The measured cost goes into `docs/guides/memory.md` after the live run.
 - `slurm.conf` changes, so a running cluster needs `benchctl up` (a restart of the Slurm daemons) to pick it up.
+
+## Addendum (issue 674): the nodes hold `SYS_PTRACE`
+The live run showed that the first Decision bullet is wrong for jobs of the simulated users: `jobacct_gather/linux` reads `/proc/PID/io` of each job process, and slurmd (root inside an unprivileged node container, no `CAP_SYS_PTRACE`) gets "Permission denied" for a process another user owns. `sstat` and `sacct` then show no memory for alice's job and a normal figure for a root job. A throwaway container confirmed it both ways: the read is denied without the capability and succeeds with `--cap-add SYS_PTRACE`.
+
+**Decision (owner, 2026-11-14):** the simulation must show user jobs' memory the way a real cluster does, so the Slurm node containers (`workbench.node`) get `cap_add: [SYS_PTRACE]`. This is the only capability and the only exception to "containers stay unprivileged": the watchdog (`governor/watchdog.py`) and `benchctl doctor` accept `SYS_PTRACE` on a container labelled `workbench.node`, list it as an accepted exception, and report any other capability, or this one on any other container, as a violation. Options not taken: keeping the gap and testing with a root job (the simulation would differ from a real cluster for exactly the users a client watches), and switching the plugin off (root jobs would lose usage too).
+
+What it allows: processes with the capability in that container may inspect other processes in the same container (the job processes are the only ones that matter); it grants no access to the host or to other containers. Non-root users in the node (ssh sessions, jobs) do not hold it.
+
+Not verified yet: `./scripts/verify.sh --unit slurm_metrics --clean` with alice's job (the existing test already submits as alice).
