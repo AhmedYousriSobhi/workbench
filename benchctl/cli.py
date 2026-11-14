@@ -38,6 +38,7 @@ from . import (
     situation,
     slurmstats,
     slurmtrace,
+    slurmver,
     stack,
     storage,
     teleport,
@@ -654,6 +655,21 @@ def get_trace(node: list[str] = TRACE_NODES, since: float = TRACE_SINCE) -> None
 def get_slurm_stats() -> None:
     """slurmctld's request counts and times from `sdiag`, as JSON: the data behind the page's Traffic view. Read-only."""
     typer.echo(json.dumps(slurmstats.collect(lambda c: stack._run(c))))
+
+
+@get_app.command("slurm-checksum")
+def get_slurm_checksum(version: str = typer.Argument(..., help="a Slurm release, e.g. 25.11.9")) -> None:
+    """Download SchedMD's tarball for a release (at most 100 MB and 5 minutes, nothing kept), print its SHA256 and the line to paste into
+    benchctl/slurmver.py; it never edits the file. For a recorded release it says whether the hash matches. Needs internet."""
+    try:
+        sha = slurmver.fetch_sha256(version)
+        if version in slurmver.VERSIONS:
+            typer.echo(slurmver.check(version, sha))
+            return
+    except slurmver.SlurmVersionError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1) from e
+    typer.echo(f"slurm-{version}.tar.bz2 SHA256 {sha}\nCompare it with a second source if you can, then add this line to VERSIONS in benchctl/slurmver.py:\n{slurmver.table_line(version, sha)}")
 
 
 CAPTURE_NODE = typer.Argument(..., help="a Slurm node or a Kubernetes node, e.g. cn001, gpu001 or kw001")
