@@ -49,7 +49,10 @@
   tests: [test_jira_dc_real]
 - name: GPU exporters
   paths: ["components/gpu-exporter-farm/**", "components/dcgm-exporter/**", "benchctl/dcgm.py", "observability/**"]
-  tests: [test_mocks_real, test_gpu_follows_slurm_real, test_gpu_grafana_real, test_dcgm_real]
+  tests: [test_mocks_real, test_gpu_follows_slurm_real, test_gpu_grafana_real, test_dcgm_real, test_agent_recipes_real]
+- name: agent interface
+  paths: ["benchctl/agentverbs.py", "benchctl/faultstate.py", "benchctl/wait.py", "benchctl/alerts.py", "benchctl/mcp_server.py", "benchctl/agents.py", "benchctl/contract.py"]
+  tests: [test_agent_recipes_real]
 - name: real GPU
   paths: ["benchctl/real_gpu.py"]
   tests: [test_real_gpu_real]

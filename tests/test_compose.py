@@ -174,3 +174,15 @@ def test_the_l1_pause_flag_directory_is_mounted_read_only_on_the_login_and_the_j
     svcs = compose.generate(SIM, compose.load_profile("std"))["services"]
     assert "./flags:/run/workbench-flags:ro" in svcs["login"]["volumes"]
     assert "./flags:/run/workbench-flags:ro" in svcs["jira-mock"]["volumes"]
+
+
+def test_prometheus_loads_the_default_alert_rules():
+    """Issue 633: the rule file is mounted, listed in rule_files, and every rule has a name, an expression and a severity."""
+    root = Path(__file__).resolve().parent.parent
+    prom = yaml.safe_load((root / "observability/prometheus.yml").read_text())
+    assert prom["rule_files"] == ["/etc/prometheus/rules.yml"]
+    mounts = yaml.safe_load((root / "compose/observability.yml").read_text())["services"]["prometheus"]["volumes"]
+    assert "../observability/rules.yml:/etc/prometheus/rules.yml:ro" in mounts
+    rules = [r for g in yaml.safe_load((root / "observability/rules.yml").read_text())["groups"] for r in g["rules"]]
+    assert {r["alert"] for r in rules} == {"GpuXid", "GpuOverheat", "NodeDown"}
+    assert all(r["expr"] and r["labels"]["severity"] for r in rules)

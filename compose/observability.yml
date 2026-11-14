@@ -12,6 +12,7 @@ services:
       - --storage.tsdb.path=/prometheus
     volumes:
       - ../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../observability/rules.yml:/etc/prometheus/rules.yml:ro
       - ../observability/targets:/etc/prometheus/targets:ro
     tmpfs: ["/prometheus:size=200m,uid=65534,gid=65534"]
     mem_limit: 300m

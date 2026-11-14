@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "get capture --once",
+  "description": "The messages on one node's wire for a bounded time (message shape of the stream: t, dir, peer, peer_name, port, size, type, type_id, kind, latency_ms). Never a body. truncated: the message limit ended it.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "node": {
+      "type": "string"
+    },
+    "seconds": {
+      "type": "integer"
+    },
+    "count": {
+      "type": "integer"
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "messages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "number"
+          },
+          "dir": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "t"
+        ]
+      }
+    }
+  },
+  "required": [
+    "contract_version",
+    "node",
+    "seconds",
+    "count",
+    "truncated",
+    "messages"
+  ]
+}

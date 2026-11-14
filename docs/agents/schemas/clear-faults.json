@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "clear faults",
+  "description": "The result of clearing every injected node fault: one entry per target (bmc-farm, gpu-exporter). ok is false when a step failed (exit 1).",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "cleared": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "skipped",
+              "failed"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "nodes",
+          "status"
+        ]
+      }
+    }
+  },
+  "required": [
+    "contract_version",
+    "ok",
+    "cleared"
+  ]
+}
