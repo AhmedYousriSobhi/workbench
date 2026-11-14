@@ -49,6 +49,14 @@ def test_capture_once_stops_at_the_message_limit():
     assert short["count"] == 10 and short["truncated"] is False
 
 
+def test_capture_once_count_never_exceeds_the_limit_when_a_batch_arrives():
+    def run(sim, node, emit, seconds, stop=None):
+        for i in range(8):  # one read of tcpdump output: the stop check cannot run between these
+            emit({"t": i})
+    got = agentverbs.capture_once({}, "cn001", 10, 5, run=run)
+    assert got["count"] == 5 == len(got["messages"]) and got["truncated"] is True
+
+
 def test_cli_scenario_status_without_the_page_exits_1(monkeypatch):
     def down():
         raise OSError("refused")

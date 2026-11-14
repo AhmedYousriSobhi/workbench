@@ -43,4 +43,5 @@ def capture_once(sim: dict, node: str, seconds: int, max_messages: int, run: Cal
     the stream; nothing from a message body, nothing written to disk). `truncated` says the message limit ended it."""
     messages: list[dict] = []
     (run or capture.run)(sim, node, messages.append, seconds, stop=lambda: len(messages) >= max_messages)
-    return {"node": node, "seconds": seconds, "count": len(messages), "truncated": len(messages) >= max_messages, "messages": messages[:max_messages]}
+    kept = messages[:max_messages]  # a read can hand over a batch past the limit; the answer holds at most `max_messages`
+    return {"node": node, "seconds": seconds, "count": len(kept), "truncated": len(messages) >= max_messages, "messages": kept}
