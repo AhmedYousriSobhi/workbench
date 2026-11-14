@@ -1,6 +1,6 @@
 # ADR 0078: storage simulation in three tiers, the third a real object store
 
-Status: accepted by the owner on 2026-11-14 (issue 461, epic 557), C-11 text approved. **Tiers 1 and 2 are built (the live run is pending); tier 3 (the object store) is not built yet.**
+Status: accepted by the owner on 2026-11-14 (issue 461, epic 557), C-11 text approved. **All three tiers are built; the live runs passed for tier 3 (issue 672) and the tier 1 and 2 run is the storage unit.**
 
 ## Context
 SPEC C-11 says "No NFS/Lustre servers. Static `node_exporter` textfile metrics for fake mounts." Today the only storage signal is two random-per-scrape series for one mount inside the GPU exporter (`node_filesystem_size_bytes`, `node_filesystem_free_bytes`), so a client cannot see a full disk, a quota hit or a stale mount, and a job's output file is not visible from the login node (each container has its own `/home`).

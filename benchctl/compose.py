@@ -20,6 +20,7 @@ from . import (
     qos,
     real_gpu,
     slurmconf,
+    slurmver,
     storage,
     teleport,
     topology,
@@ -98,6 +99,8 @@ def _service(image: str, mem_mb: int, prio: int, build: str | None = None) -> di
 
 
 def generate(sim: dict, profile: dict) -> dict:
+    if bad := slurmver.problems(sim):  # one message, before anything is written (issue 221)
+        raise slurmver.SlurmVersionError("; ".join(bad))
     if bad := topology.problems(sim, profile.get("compute_nodes")):  # one message per condition, before anything is written (issue 543)
         raise topology.TopologyError("; ".join(bad))
     services: dict = {}
@@ -209,7 +212,7 @@ def generate(sim: dict, profile: dict) -> dict:
         raise qos.QosError("; ".join(bad))
     _wire_slurm_services(services)
     for svc in services.values():  # munge and JWT keys are made by `up` (ensure_slurm_keys), never baked into an image (issue 465)
-        if svc.get("image") in SLURM_KEY_IMAGES:
+        if slurmver.retag(svc.get("image") or "", {}) in SLURM_KEY_IMAGES:
             svc.setdefault("volumes", []).append(SLURM_KEYS_MOUNT)
     named_volumes, shared_mounts = storage.volumes(sim)
     for name, svc in services.items():  # a shared mount is one directory on every Slurm node and login node (issue 461, ADR 0078)
@@ -223,6 +226,9 @@ def generate(sim: dict, profile: dict) -> dict:
     nets = {"default": {"ipam": {"config": [{"subnet": addressing.INTERNAL, "gateway": addressing.GATEWAY}]}}}
     if "bmc-farm" in services:
         nets["ipmi"] = {"ipam": {"config": [{"subnet": addressing.IPMI, "gateway": addressing.IPMI_GATEWAY}]}}
+    for svc in services.values():  # a Slurm other than the pinned one has its own image tags (ADR 0079)
+        if "image" in svc:
+            svc["image"] = slurmver.retag(svc["image"], sim)
     out = {"name": "workbench", "include": [OBSERVABILITY], "networks": nets, "services": services}
     vols: dict = dict(named_volumes)  # the data survives `down`; `benchctl remove storage-state` removes it
     if "jira-real" in services:  # named volumes: the data survives `down`; `benchctl remove jira-real-state` removes them
