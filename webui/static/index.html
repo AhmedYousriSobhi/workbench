@@ -258,7 +258,12 @@
           <dl class="psum" id="pl-sum"></dl></section>
         <section class="fit" aria-label="Does it fit"><div class="fitnum"><b id="pl-need">–</b><span class="dim small" id="pl-free"></span></div>
           <progress id="pl-bar" max="100" value="0" aria-label="Memory needed as a share of free memory"></progress>
-          <p id="pl-msg" role="status" class="small"></p><p id="pl-diff" class="small"></p></section>
+          <p id="pl-msg" role="status" class="small"></p><p id="pl-diff" class="small"></p>
+          <div class="revjobs" id="pl-over" role="alert" hidden></div>
+          <details class="budget" id="pl-budget"><summary class="small">Projected memory (read-only)</summary>
+            <p class="small" id="pl-budget-sum"></p>
+            <table class="small budgettab"><caption class="srtable">Projected memory by part, in MB</caption><thead><tr><th scope="col">Part</th><th scope="col">Expected</th><th scope="col">Cap</th></tr></thead><tbody id="pl-budget-rows"></tbody></table>
+            <p class="small dim">A projection only. The governor decides at Apply (GV-9); this page changes nothing.</p></details></section>
         <details class="cmdbox"><summary class="small">Command for a terminal</summary><pre id="pl-cmd" class="small"></pre><button class="btn small" id="pl-copy" hidden>Copy command</button></details>
       </div>
     </div>
