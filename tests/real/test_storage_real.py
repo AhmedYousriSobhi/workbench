@@ -81,7 +81,7 @@ def test_lfs_df_and_quota_answer_for_the_lustre_mount_only(live):
     assert "scratch-MDT0000_UUID" in out and "filesystem_summary:" in out and "scratch-OST0003_UUID" in out
     assert run(CN1, "lfs", "df", "/home").returncode == 1
     q = run(CN1, "lfs", "quota", "-u", "alice", "-h", "/scratch", user="alice")
-    assert q.returncode == 0 and "Disk quotas for usr alice" in q.stdout and "*" not in q.stdout, q.stderr
+    assert q.returncode == 0 and "Disk quotas for user alice" in q.stdout and "*" not in q.stdout, q.stderr
 
 
 def test_scenario_disk_full_changes_df_lfs_and_the_series_everywhere_then_resets(live):
@@ -96,7 +96,7 @@ def test_scenario_disk_full_changes_df_lfs_and_the_series_everywhere_then_resets
 def test_scenario_quota_exceeded_marks_the_user_and_stale_mount_breaks_df_on_one_node(live):
     inject("cn001", {"mount": "/scratch", "user": "alice", "used_gb": 20500})
     q = run(CN1, "lfs", "quota", "-u", "alice", "/scratch", user="alice")
-    assert "*" in q.stdout and "6d23h59m" in q.stdout, q.stdout
+    assert "*" in q.stdout and "6d23h59m59s" in q.stdout, q.stdout
     inject("cn001", {"mount": "/scratch", "reset": True})
     inject("cn002", {"mount": "/scratch", "stale": True})
     bad = run(CN2, "df", "/scratch")

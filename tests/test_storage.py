@@ -202,12 +202,12 @@ def test_lfs_quota_shows_the_user_and_the_star_and_grace_when_over(monkeypatch):
     monkeypatch.setattr(fakefs.getpass, "getuser", lambda: "alice")
     monkeypatch.setattr(fakefs.pwd, "getpwnam", lambda n: type("P", (), {"pw_uid": 1001})())
     _, out, _ = run_shim(fakefs.lfs, ["quota", "-u", "alice", "-h", "/scratch"], view_of(), monkeypatch)
-    assert out.splitlines()[0] == "Disk quotas for usr alice (uid 1001):" and "*" not in out
+    assert out.splitlines()[0] == "Disk quotas for user alice (uid 1001):" and "*" not in out
     st = state()
     st.inject({"node": "cn001", "storage": {"mount": "/scratch", "user": "alice", "used_gb": 20500}})
     code, out, err = run_shim(fakefs.lfs, ["quota", "-u", "alice", "/scratch"], view_of(st), monkeypatch)
     row = out.splitlines()[-1].split()
-    assert code == 0 and row[1].endswith("*") and row[4] == "6d23h59m" and "over the quota" in err
+    assert code == 0 and row[1].endswith("*") and row[4] == "6d23h59m59s" and "over the quota" in err
     assert run_shim(fakefs.lfs, ["quota", "-g", "x", "/scratch"], view_of(), monkeypatch)[0] == 1
     assert run_shim(fakefs.lfs, ["setstripe"], view_of(), monkeypatch)[0] == 1
 
