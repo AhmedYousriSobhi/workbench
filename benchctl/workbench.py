@@ -22,7 +22,8 @@ FLOOR_MB = 1024                                   # MemAvailable that must remai
 # part -> (compose group, services it adds; None = the whole group)
 PARTS: dict[str, tuple[str, list[str] | None]] = {
     "jira": ("mocks", ["jira-mock"]), "jira-real": ("jira-real", None), "bmc": ("mocks", ["bmc-farm"]), "bcm": ("mocks", ["bcm-mock"]),
-    "accounting": ("accounting", None), "teleport": ("teleport", None), "k8s": ("k8s", None), "jump": ("jump", None), "dcgm": ("dcgm", None), "real-gpu": ("real-gpu", None)}
+    "accounting": ("accounting", None), "teleport": ("teleport", None), "k8s": ("k8s", None), "jump": ("jump", None), "dcgm": ("dcgm", None), "real-gpu": ("real-gpu", None),
+    "objectstore": ("objectstore", None)}
 # The one registry of options that change what runs and so what memory it needs. The Cluster architecture sheet is drawn from it
 # (`catalog`): a new option is an entry here and in PARTS, not new page code.
 PART_INFO: dict[str, tuple[str, str]] = {
@@ -34,6 +35,7 @@ PART_INFO: dict[str, tuple[str, str]] = {
     "teleport": ("Teleport", "Teleport auth and proxy: tsh login and ssh to the login node and every node through it (not on by default)."),
     "k8s": ("Kubernetes", "A real Kubernetes control plane (etcd, API server, scheduler, controller manager) with KWOK fake CPU and GPU nodes, a read-only kubeconfig and fixtures (ADR 0034)."),
     "jump": ("Jump host", "A bare sshd bastion (nothing else installed) in front of the key-login nodes and the controller: ssh -J jump user@login (SPEC C-21). Teleport nodes keep Teleport."),
+    "objectstore": ("Object store", "One Garage S3 store (ADR 0078): a bucket every Slurm and login node reaches with s5cmd. Not on by default."),
     "dcgm": ("DCGM (real)", "The official dcgm-exporter on NVIDIA's mock NVML for the first GPU node, about 125 MB (ADR 0025). Next to the hand-written exporter, not instead of it."),
     "real-gpu": ("Real GPU", "This machine's own NVIDIA card with the real dcgm-exporter (real temperature, power, utilisation), as one more GPU next to the simulated ones. Needs the NVIDIA driver and container toolkit (SPEC C-23)."),
 }
@@ -46,13 +48,14 @@ CATEGORIES: dict[str, tuple[str, dict[str, str | None]]] = {
     "monitoring": ("metrics and dashboards", {"prometheus": None, "grafana": None, "dcgm": "dcgm", "real-gpu": "real-gpu"}),
     "ticketing": ("ticket systems", {"jira": "jira", "jira-real": "jira-real"}),
     "hardware": ("out-of-band management", {"bmc": "bmc", "bcm": "bcm"}),
+    "storage": ("object storage", {"objectstore": "objectstore"}),
     "access": ("how users reach the nodes", {"teleport": "teleport", "jump": "jump"}),
 }
 NOT_BUILT: dict[str, str] = {}
 PART_CATEGORY = {part: cat for cat, (_, items) in CATEGORIES.items() for part in items.values() if part}
-BY_NAME_ONLY = ("jira-real", "dcgm", "real-gpu")  # heavy (about 2.4 GB): never turned on by `all` or `--addons`, only by its name (ADR 0026)
+BY_NAME_ONLY = ("jira-real", "dcgm", "real-gpu", "objectstore")  # heavy (about 2.4 GB): never turned on by `all` or `--addons`, only by its name (ADR 0026)
 DEFAULT_PARTS = ("jira", "bmc", "bcm", "accounting")  # accounting: without slurmdbd, sacct says storage is disabled
-DROP_ORDER = ("real-gpu", "dcgm", "jira-real", "accounting", "bcm", "jira", "bmc")  # what to suggest removing first
+DROP_ORDER = ("objectstore", "real-gpu", "dcgm", "jira-real", "accounting", "bcm", "jira", "bmc")  # what to suggest removing first
 LIMITS = {"cpu_nodes": (0, 64), "gpu_nodes": (0, 16), "gpus_per_node": (1, 8)}
 
 

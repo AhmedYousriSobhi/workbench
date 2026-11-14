@@ -65,6 +65,9 @@
 - name: agent interface
   paths: ["benchctl/agentverbs.py", "benchctl/faultstate.py", "benchctl/wait.py", "benchctl/alerts.py", "benchctl/mcp_server.py", "benchctl/agents.py", "benchctl/contract.py"]
   tests: [test_agent_recipes_real]
+- name: object store
+  paths: ["benchctl/objectstore.py", "images/node-base/objectstore.sh"]
+  tests: [test_objectstore_real, test_prom_targets_real]
 - name: real GPU
   paths: ["benchctl/real_gpu.py"]
   tests: [test_real_gpu_real]

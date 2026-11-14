@@ -24,6 +24,7 @@ from . import (
     k8s,
     logins,
     memory,
+    objectstore,
     promtargets,
     qos,
     ready,
@@ -44,6 +45,7 @@ STAGES = [  # (label, service-name pattern); later stages depend on earlier ones
     ("mocks", r"bmc-farm|bcm-mock|jira-mock"),
     ("jira real", r"jira-db|jira-real"),
     ("teleport", r"teleport"),
+    ("object store", r"objectstore"),
     ("kubernetes", r"k8s-etcd|k8s-apiserver|k8s-controller-manager|k8s-scheduler"),
     ("kubernetes nodes", r"kwok-controller"),  # starts only once the stages exist: with none it exits
     ("bmc addresses", r"bmc-(cn|gpu)\d+"),
@@ -383,6 +385,12 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
             teleport.prepare(sim, ips)
         except (OSError, teleport.TeleportError) as e:
             say(f"FAILED teleport setup: {e}")
+            return False
+    if objectstore.SERVICE in todo:
+        try:
+            objectstore.prepare(COMPOSE_FILE.parent)
+        except OSError as e:
+            say(f"FAILED object store setup: {e}")
             return False
     if dcgm.SERVICE in todo and (bad := dcgm.problems(sim)):
         say(f"FAILED dcgm: {bad[0]}")

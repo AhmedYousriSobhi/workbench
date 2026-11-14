@@ -16,6 +16,7 @@ from . import (
     logins,
     mig,
     nhc,
+    objectstore,
     qos,
     real_gpu,
     slurmconf,
@@ -44,6 +45,8 @@ CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {
     "dcgm": {dcgm.SERVICE: ("workbench/dcgm-exporter:dev", dcgm.LIMIT_MB, 6)},  # the real DCGM exporter on a mock NVML (issue 426); off by default
     "real-gpu": {real_gpu.SERVICE: ("workbench/dcgm-exporter:dev", real_gpu.LIMIT_MB, 6)},  # the host's own NVIDIA card with the real exporter (issue 428); off by default
     "jump": {"jump": ("workbench/jump:dev", 24, 2)},  # a bare sshd bastion (SPEC C-21)
+    # tier 3 of the storage tiers (ADR 0078): one Garage node speaking S3, off by default (issue 672)
+    "objectstore": {objectstore.SERVICE: (objectstore.image(), objectstore.LIMIT_MB, 6)},
     # the tag is replaced from sim.yaml teleport.version (benchctl/teleport.py); the limit is a planning estimate until measured
     "teleport": {"teleport": (f"{teleport.IMAGE}:{teleport.DEFAULT_VERSION}", 320, 2)},
     # a real control plane with KWOK nodes (ADR 0034); the image tags are replaced from sim.yaml kubernetes.version (benchctl/k8s.py)
@@ -179,6 +182,7 @@ def generate(sim: dict, profile: dict) -> dict:
             if svc["labels"].get("workbench.node") or any(svc is services.get(n) for n in logins.via_teleport(sim)) or (
                     svc is services.get(controller.CONTROLLER) and controller.enabled(sim)):
                 svc["volumes"].append(f"./secrets/teleport:{teleport.CONTAINER_SECRETS}:ro")
+    objectstore.wire(services, os.getuid(), os.getgid(), [n for n, s in services.items() if logins.is_login(n) or s["labels"].get("workbench.node")])  # no-op unless the part is on
     dcgm.wire(services, sim)  # no-op unless the dcgm part is on
     real_gpu.wire(services)  # no-op unless the real-gpu part is on
     k8s.wire(services, sim)  # no-op unless the k8s part is on
