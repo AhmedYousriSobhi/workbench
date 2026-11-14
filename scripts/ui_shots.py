@@ -365,6 +365,18 @@ def capture(out: Path) -> dict:
                     for (const r of document.querySelectorAll('#flow[data-cv] .cv-box')) if (getComputedStyle(r).fill === 'rgb(0, 0, 0)') { out.push('a box is filled black'); break; }
                     return out; }"""):
                     result["a11y"].append(f"circuit {theme}: {problem}")
+                cp.click("#zoomrail [data-level=traffic]")      # Traffic shows the links, one level deeper Requests shows the river, never both (issue 650)
+                cp.wait_for_timeout(1200)
+                seen = [cp.evaluate("document.getElementById('tab-traffic').dataset.tl")]
+                cp.click("#zr-in")
+                cp.wait_for_timeout(900)
+                seen.append(cp.evaluate("document.getElementById('tab-traffic').dataset.tl"))
+                shown = cp.evaluate("getComputedStyle(document.querySelector('#tab-traffic .tan')).display !== 'none'")
+                cp.click("#tr-back")
+                cp.wait_for_timeout(700)
+                seen.append(cp.evaluate("document.getElementById('tab-traffic').dataset.tl"))
+                if seen != ["links", "requests", "links"] or not shown:
+                    result["a11y"].append(f"circuit {theme}: zoom levels Traffic -> Requests -> Back gave {seen}, river shown {shown}")
                 cp.close()
             for scheme in ("light", "dark"):
                 for vp, (w, h) in VIEWPORTS.items():

@@ -113,3 +113,21 @@ def test_the_user_sim_submits_nothing_while_the_l1_flag_exists(tmp_path, monkeyp
     with pytest.raises(KeyboardInterrupt):
         us.main()
     assert len(submitted) == 5 and not any(submitted)  # five arrivals after the flag went; none while it stood
+
+
+def test_mocks_on_copies_the_demo_client_and_starts_it_with_node_names():
+    cmds = workload.mocks_on(SIM, rate=20)
+    assert cmds[0][:2] == ["docker", "cp"] and cmds[1] == workload.mocks_off() and cmds[2][:3] == ["docker", "exec", "-d"]
+    assert cmds[2][-4:-2] == ["--rate", "20"] and cmds[2][-2] == "--nodes" and cmds[2][-1]
+    for rate in (0, 601):
+        with pytest.raises(workload.WorkloadError):
+            workload.mocks_on(SIM, rate=rate)
+
+
+def test_load_on_with_mocks_starts_both_and_load_off_stops_both(monkeypatch):
+    ran = []
+    monkeypatch.setattr(cli.stack, "_run", lambda cmd: ran.append(cmd) or type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})())
+    r = runner.invoke(cli.app, ["load", "on", "--mocks", "--mock-rate", "12"])
+    assert r.exit_code == 0 and len(ran) == 6 and "demo client" in r.output
+    ran.clear()
+    assert runner.invoke(cli.app, ["load", "off"]).exit_code == 0 and ran == [workload.mocks_off(), workload.load_off()]

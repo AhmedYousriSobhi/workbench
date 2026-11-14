@@ -505,3 +505,6 @@
 /* selection is a ring and a raised surface, never only a hue (colour system, C-16); keyboard focus is its own offset outline */
 .trchip[aria-pressed=true], #tr-range .btn[aria-pressed=true], .itabs .btn[aria-pressed=true], .trun .scn.sel { box-shadow:0 0 0 var(--ring-w) var(--select-ring) inset; }
 .sidei[aria-selected=true] { box-shadow:inset var(--ring-w) 0 0 var(--select-ring); }
+/* the Traffic tab shows one block at a time in the Circuit view: the links, or one zoom level deeper the request river (issue 650) */
+#tab-traffic[data-tl=links] > .panel > .tan { display:none; }
+#tab-traffic[data-tl=requests] > .panel > :not(.tan):not(.zback) { display:none; }
