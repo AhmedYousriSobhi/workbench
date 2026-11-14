@@ -3,8 +3,9 @@
 
 const NOT_READ = 'not measured';
 
-// one cluster-snapshot row `n`, the /api/nodes/{name} body (or null) -> [{k, v, code?}] rows; `code` marks a value shown in monospace
-export function nodeSummary(n, body) {
+// one cluster-snapshot row `n`, the /api/nodes/{name} body (or null), and `slurm` ({reason, jobs: [{id, user}]} from the governor's slurm-stats, or
+// null when those stats are unavailable) -> [{k, v, code?}] rows; `code` marks a value shown in monospace
+export function nodeSummary(n, body, slurm = null) {
   if (!n) return [];
   const rows = [];
   if (n.kind === 'k8s') {
@@ -13,7 +14,10 @@ export function nodeSummary(n, body) {
     return rows;
   }
   const gpu = n.kind === 'gpu' || n.kind === 'real-gpu';
-  rows.push({ k: 'Reason', v: n.state === 'ok' ? 'none (healthy)' : `not read here (the page has no Docker); run ./scripts/benchctl describe node ${n.name}` });
+  if (slurm) {  // one notice when Slurm cannot be read (the Reason row below); here its own words
+    rows.push({ k: 'Reason', v: slurm.reason ? `${slurm.reason} (Slurm's reason)` : n.state === 'ok' ? 'none (healthy)' : 'Slurm gives none for this state' });
+    rows.push({ k: 'Jobs', v: slurm.jobs.length ? slurm.jobs.map(j => `${j.id} (${j.user})`).join(', ') : 'none running' });
+  } else rows.push({ k: 'Reason', v: n.state === 'ok' ? 'none (healthy)' : `not read here (Slurm stats are unavailable: the stack or governor is down or paused under memory pressure); run ./scripts/benchctl describe node ${n.name}` });
   const hw = [];
   if (n.gpus) hw.push(`${n.gpus} GPU${n.gpus === 1 ? '' : 's'}`);
   if (typeof n.temp === 'number') hw.push(`${Math.round(n.temp)} °C`);

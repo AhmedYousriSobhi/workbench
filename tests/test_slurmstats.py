@@ -59,3 +59,31 @@ def test_node_states_come_from_sinfo_and_the_worse_state_wins():
     assert slurmstats.node_states(run("", 1)) is None
     both = lambda c: subprocess.CompletedProcess(c, 0, "cn001 drained\n" if "sinfo" in c else SDIAG, "")
     assert slurmstats.collect(both)["node_states"] == {"cn001": "drained"}
+
+
+def test_reasons_and_jobs_per_node():
+    out = "cn001 idle none\ncn002 drained Not responding [slurm@2026-11-14T10:00:00]\ngpu001 allocated* none\nbad line\n"
+    st, why = slurmstats.node_info(run(out))
+    assert st == {"cn001": "idle", "cn002": "drained", "gpu001": "allocated"}
+    assert why == {"cn002": "Not responding [slurm@2026-11-14T10:00:00]"}
+    assert slurmstats.node_info(run("", 1)) is None
+
+
+def test_expand_node_lists():
+    assert slurmstats.expand("cn001") == ["cn001"]
+    assert slurmstats.expand("cn[001-003,005],gpu001") == ["cn001", "cn002", "cn003", "cn005", "gpu001"]
+    assert slurmstats.expand("gpu[001-002]") == ["gpu001", "gpu002"]
+
+
+def test_jobs_per_node_and_collect_carries_all_three():
+    q = "12 alice cn[001-002]\n13_4 bob gpu001\nwhat\n"
+    assert slurmstats.node_jobs(run(q)) == {
+        "cn001": [{"id": "12", "user": "alice"}], "cn002": [{"id": "12", "user": "alice"}], "gpu001": [{"id": "13_4", "user": "bob"}]}
+    assert slurmstats.node_jobs(run("", 1)) is None
+
+    def fake(c):
+        tool = c[3]
+        text = {"sinfo": "cn001 drained Kill task failed\n", "squeue": q, "sdiag": SDIAG, "timeout": "workbench\n"}[tool]
+        return subprocess.CompletedProcess(c, 0, text, "")
+    got = slurmstats.collect(fake)
+    assert got["node_reasons"] == {"cn001": "Kill task failed"} and got["node_jobs"]["gpu001"][0]["user"] == "bob"
