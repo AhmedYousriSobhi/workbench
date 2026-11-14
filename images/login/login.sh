@@ -28,6 +28,11 @@ else
   install -m 644 /run/workbench/ssh/authorized_keys /etc/ssh/authorized_keys
 fi
 # the controller, when there is one, is the BCM head node (issue 416): the login nodes lose cmsh
-[ "${WORKBENCH_HEAD:-1}" = 1 ] || rm -f /usr/local/bin/cmsh
+if [ "${WORKBENCH_HEAD:-1}" = 1 ]; then
+  # the head node's CMDaemon events log (issue 714): bcm-mock's state changes as log lines, for a client's history view
+  /usr/local/bin/events-log &
+else
+  rm -f /usr/local/bin/cmsh /usr/local/bin/events-log
+fi
 /usr/local/sbin/teleport-ssh
 exec /usr/sbin/sshd -D -e
