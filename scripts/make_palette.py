@@ -8,6 +8,7 @@ Source: docs/assets/palette.yaml (the format is described at the top of that fil
 standard library and PyYAML (already a project dependency); it is deterministic (same input, same bytes, no clock).
 Colour maths is in OKLab/OKLCH so ramp steps look even; contrast is WCAG 2 relative luminance."""
 import difflib
+import json
 import math
 import re
 import sys
@@ -20,6 +21,7 @@ PALETTE = ROOT / "docs/assets/palette.yaml"
 TOKENS = ROOT / "webui/static/tokens.css"
 GUIDE = ROOT / "docs/guides/colour-system.md"
 SWATCH_DIR = ROOT / "docs/assets/palette"
+DASHBOARD = ROOT / "observability/dashboards/hpc-overview.json"
 
 STEPS = (50, 100, 200, 300, 400, 500, 600, 700, 800, 850, 900, 950, 975)
 STEP_L = dict(zip(STEPS, (0.975, 0.955, 0.915, 0.85, 0.76, 0.66, 0.56, 0.46, 0.37, 0.32, 0.27, 0.21, 0.17)))
@@ -416,6 +418,7 @@ def render_guide(pal: dict) -> str:
          "- **Planes** have six hues and six line types, the same in every view; plane colours appear only on lines and labelled chips, never on status dots or node squares.",
          "- **Real and simulated** differ by outline (solid and dashed) and a label, not by hue. Selection is a ring, never only a hue change.",
          "- The three logo colours are fixed. They are for fills, the logo and large graphics; text and buttons use `accent_text`, `accent_fill` and `warn_text`, tuned to 5.5:1.",
+         "- The Grafana dashboard's threshold colours (`observability/dashboards/hpc-overview.json`) are written by the generator from `grafana_ok`, `grafana_warn` and `grafana_bad`, moved in lightness to 3:1 on both Grafana themes.",
          "- Canvases (Circuit, fleet, pool, analysis) follow the page theme: their `--cv-*` names are aliases of the theme's own tokens, so a light page has a light canvas.", "",
          "## Themes", ""]
     for t in th:
@@ -434,8 +437,48 @@ def render_guide(pal: dict) -> str:
     return "\n".join(L) + "\n"
 
 
+# Grafana has its own light and dark themes and a panel has one threshold colour, so each threshold colour keeps the hue of its palette
+# token (grafana_ok, grafana_warn, grafana_bad) and moves in lightness until it reaches 3:1 on both Grafana grounds (issue 651).
+GRAFANA_GROUNDS = ("#111217", "#ffffff")
+# panel id -> (threshold steps as (token, from value), line style). A threshold step with no value is the base.
+GRAFANA_THRESHOLDS = {2: ([("grafana_ok", None), ("grafana_warn", 80), ("grafana_bad", 90)], True),     # GPU temperature, degrees C
+                      5: ([("grafana_ok", None), ("grafana_bad", 1)], False)}                           # GPU XID errors: any is bad
+
+
+def grafana_colour(seed: str) -> str:
+    L0, C, h = hex_oklch(seed)
+    for i in range(70):
+        for L in (L0 - i * 0.01, L0 + i * 0.01):
+            c = oklch_hex(L, C, h)
+            if all(contrast(c, g) >= 3 for g in GRAFANA_GROUNDS):
+                return c
+    raise PaletteError(f"no colour near {seed} reaches 3:1 on both Grafana themes")
+
+
+def render_dashboard(pal: dict) -> str:
+    """The dashboard file with its threshold colours written from the palette (everything else in it is left as it is)."""
+    res = resolve_all(pal)["dark"]
+    d = json.loads(DASHBOARD.read_text())
+    for panel in d["panels"]:
+        if panel["id"] not in GRAFANA_THRESHOLDS:
+            continue
+        steps, line = GRAFANA_THRESHOLDS[panel["id"]]
+        fc = panel.setdefault("fieldConfig", {"defaults": {}, "overrides": []})
+        fc.setdefault("overrides", [])
+        dflt = fc.setdefault("defaults", {})
+        dflt["thresholds"] = {"mode": "absolute", "steps": [{"color": grafana_colour(css_solid(res[tok])), "value": v} for tok, v in steps]}
+        if line:
+            dflt.setdefault("custom", {})["thresholdsStyle"] = {"mode": "line"}
+            if dflt.get("color") == {"mode": "thresholds"}:
+                del dflt["color"]
+        else:       # a single-value panel is coloured by its value; a multi-series chart keeps one colour per series and shows the limits as lines
+            dflt["color"] = {"mode": "thresholds"}
+            panel.setdefault("options", {})["colorMode"] = "value"
+    return json.dumps(d, indent=2, ensure_ascii=False) + "\n"
+
+
 def outputs(pal: dict) -> dict:
-    return {TOKENS: render_tokens(pal), GUIDE: render_guide(pal), **{SWATCH_DIR / f"{t}.svg": render_swatch(pal, t) for t in THEME_ORDER}}
+    return {TOKENS: render_tokens(pal), GUIDE: render_guide(pal), **{SWATCH_DIR / f"{t}.svg": render_swatch(pal, t) for t in THEME_ORDER}, DASHBOARD: render_dashboard(pal)}
 
 
 def main(argv: list[str]) -> int:

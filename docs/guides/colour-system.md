@@ -20,6 +20,7 @@ Code uses tokens only: a CSS variable such as `var(--accent)`, or a `data-plane`
 - **Planes** have six hues and six line types, the same in every view; plane colours appear only on lines and labelled chips, never on status dots or node squares.
 - **Real and simulated** differ by outline (solid and dashed) and a label, not by hue. Selection is a ring, never only a hue change.
 - The three logo colours are fixed. They are for fills, the logo and large graphics; text and buttons use `accent_text`, `accent_fill` and `warn_text`, tuned to 5.5:1.
+- The Grafana dashboard's threshold colours (`observability/dashboards/hpc-overview.json`) are written by the generator from `grafana_ok`, `grafana_warn` and `grafana_bad`, moved in lightness to 3:1 on both Grafana themes.
 - Canvases (Circuit, fleet, pool, analysis) follow the page theme: their `--cv-*` names are aliases of the theme's own tokens, so a light page has a light canvas.
 
 ## Themes
@@ -136,6 +137,6 @@ WCAG 2 ratios of the pairs the tests check (text 4.5:1, graphics 3:1).
 | `chart_4` | `#c774a2` | `#cc79a7` | `#cc79a7` | `#cc79a7` | Chart series 4. |
 | `chart_5` | `#8f7ff1` | `#9b8cff` | `#9b8cff` | `#9b8cff` | Chart series 5. |
 | `chart_6` | `#6f9a44` | `#b5e48c` | `#b5e48c` | `#b5e48c` | Chart series 6. More than six series need direct labels or small multiples. |
-| `grafana_ok` | `#006b5f` | `#2fc4b2` | `#2fc4b2` | `#2fc4b2` | Dashboard threshold: good. |
-| `grafana_warn` | `#b86e00` | `#f0a030` | `#f0a030` | `#f0a030` | Dashboard threshold: warning. |
-| `grafana_bad` | `#cf2d37` | `#f55455` | `#f55455` | `#ff6a68` | Dashboard threshold: bad. |
+| `grafana_ok` | `#006b5f` | `#2fc4b2` | `#2fc4b2` | `#2fc4b2` | Seed of the dashboard threshold colour for good; observability/dashboards/hpc-overview.json carries it moved in lightness to 3:1 on both Grafana themes. |
+| `grafana_warn` | `#b86e00` | `#f0a030` | `#f0a030` | `#f0a030` | Seed of the dashboard threshold colour for warning; observability/dashboards/hpc-overview.json carries it moved in lightness to 3:1 on both Grafana themes. |
+| `grafana_bad` | `#cf2d37` | `#f55455` | `#f55455` | `#ff6a68` | Seed of the dashboard threshold colour for bad; observability/dashboards/hpc-overview.json carries it moved in lightness to 3:1 on both Grafana themes. |
