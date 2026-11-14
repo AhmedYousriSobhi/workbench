@@ -18,3 +18,6 @@ SPEC C-12 asked for `tc netem` on the Docker bridge networks and named Toxiproxy
 - Every root verb widens the attack surface of a memory-safety tool; this one is allow-listed and validated.
 - A user without the root service loses only in-cluster link faults.
 - SPEC C-12 follows this text; the netem verb is tracked in issue 478.
+
+## Addendum: order and scope (issue 683)
+Decided 2026-11-14: netem is built last, only through the optional root service, for the CLI and scenarios, never the page.

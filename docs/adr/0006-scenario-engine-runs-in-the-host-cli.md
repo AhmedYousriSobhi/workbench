@@ -26,3 +26,7 @@ on the login node and gets its own issue. Profile budgets fell by the 60 MB the 
 
 ## Revisit when
 Steps need something only a long-running service can do (schedules, concurrent scenarios).
+
+## Addendum: user simulation scope (issue 683)
+Decided 2026-11-14: personas, failure behaviour and a daily rhythm run in the existing simulator process (no new
+container, same concurrency cap), tracked in issue 680. The ticket bot is a separate issue, 681. Neither is built yet.
