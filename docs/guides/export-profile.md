@@ -29,12 +29,21 @@ Open **☰ Menu → ⇩ Export** in the top strip, tick *One BMC target per node
 
 ## What is in the file
 
-Only parts the chosen profile builds: one **cluster entry per login node**, each with its own way in (`login` direct SSH: `10.141.255.254:22`, user `alice`, private-key auth; a Teleport route: the node's name (`login2`) as the host plus a `teleport` block with the proxy `10.141.255.30:3080`, the user and `insecure` (self-signed proxy); a `both` login gets two entries, direct and `-teleport`; the first entry is a key login and carries Slurm, Grafana and Jira), Slurm (partitions from
-`sim.yaml`), Grafana (`http://10.141.255.21:3000`, dashboard `hpc-overview`, GPU datasource `prometheus`, label
-`Hostname`), Jira (`http://10.141.255.11:8080`, project `OPS`), storage (`~`) and, with `--bmc`, a target per node
-(its own `10.148.x.y:443`, user `admin`). `--loopback` writes `127.0.0.1` and the published ports instead (all BMCs then share `127.0.0.1:8443`) (a client that cannot route to the cluster network, or that insists on HTTPS for non-local Jira). It has no password, token or key path; the client signs in to Teleport itself (its **Log in** button, password and one-time code from `benchctl add invite alice`); it does not use the identity files. The shape was checked against the client's own importer. Kubernetes and BCM are not
-exported: Kubernetes is not built, and BCM is configured in the client over the SSH connection
-([by component](client-setup-by-component.md)).
+Only parts the chosen profile builds:
+
+| Entry | Content |
+|---|---|
+| one **cluster entry per login node** | its own way in. `login` direct SSH: `10.141.255.254:22`, user `alice`, private-key auth. A Teleport route: the node's name (`login2`) as the host plus a `teleport` block with the proxy `10.141.255.30:3080`, the user and `insecure` (self-signed proxy). A `both` login gets two entries, direct and `-teleport`. The first entry is a key login and carries Slurm, Grafana and Jira |
+| Slurm | partitions from `sim.yaml` |
+| Grafana | `http://10.141.255.21:3000`, dashboard `hpc-overview`, GPU datasource `prometheus`, label `Hostname` |
+| Jira | `http://10.141.255.11:8080`, project `OPS` |
+| storage | `~` |
+| with `--bmc` | a target per node (its own `10.148.x.y:443`, user `admin`) |
+
+- `--loopback` writes `127.0.0.1` and the published ports instead (all BMCs then share `127.0.0.1:8443`): for a client that cannot route to the cluster network, or that insists on HTTPS for non-local Jira.
+- It has no password, token or key path. The client signs in to Teleport itself (its **Log in** button, password and one-time code from `benchctl add invite alice`); it does not use the identity files.
+- The shape was checked against the client's own importer.
+- Kubernetes and BCM are not exported: Kubernetes is not built, and BCM is configured in the client over the SSH connection ([by component](client-setup-by-component.md)).
 
 ## One-time setting: the client's file format ID
 

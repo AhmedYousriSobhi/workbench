@@ -69,7 +69,21 @@ If port 2222 refuses connections, the checkout is probably on a branch without t
 
 ## Stress test: everything at once while the client runs
 
-`benchctl scenario run client-stress` (5 minutes, [scenarios/client-stress.yaml](../../scenarios/client-stress.yaml)) floods five nodes with jobs, raises GPU XID errors and fan failures, heats a GPU node, powers off and drains `cn004`, files 12 tickets, then makes the Jira mock answer 429, slow and 503 before clearing everything. With the client connected to the real Jira (`jira-real`), run `client-stress-real` instead: same nodes, GPUs, heat and jobs, but Jira's own rate limit (429, about 75 to 180 s), a CAPTCHA lock for one user (use a personal access token for the client's own account, or it is locked out too) and a 30 s hang. It files its 12 tickets on the real Jira (only tickets made in the last 10 minutes are counted, so a repeat run does not add up). Run it with the client open and measure the client at the same time (use a `--match` that names only the client's own processes, such as its install path; a loose word such as `name` matches unrelated programs. The tool prints `matched: <program> xN (MB)` before it samples and warns when more than 4 different programs match; read that line before `--save`):
+`benchctl scenario run client-stress` (5 minutes, [scenarios/client-stress.yaml](../../scenarios/client-stress.yaml)) does this to the client:
+
+- floods five nodes with jobs, raises GPU XID errors and fan failures, heats a GPU node;
+- powers off and drains `cn004`, files 12 tickets;
+- makes the Jira mock answer 429, slow and 503, then clears everything.
+
+With the client connected to the real Jira (`jira-real`), run `client-stress-real` instead: same nodes, GPUs, heat and jobs, but with:
+
+- Jira's own rate limit (429, about 75 to 180 s);
+- a CAPTCHA lock for one user (use a personal access token for the client's own account, or it is locked out too);
+- a 30 s hang.
+
+It files its 12 tickets on the real Jira (only tickets made in the last 10 minutes are counted, so a repeat run does not add up).
+
+Run it with the client open and measure the client at the same time. Use a `--match` that names only the client's own processes, such as its install path; a loose word such as `name` matches unrelated programs. The tool prints `matched: <program> xN (MB)` before it samples and warns when more than 4 different programs match; read that line before `--save`:
 
 ```bash
 ./scripts/benchctl scenario run client-stress &
@@ -215,11 +229,13 @@ the exporter farm and **drains the node** with a reason starting `NHC:` when:
 | InfiniBand port down (one HCA per GPU, one port on a CPU node) | **InfiniBand port down** | `NHC: IB port down: mlx5_0` |
 | NIC link flapping (`node_network_carrier_changes_total` keeps rising) | **NIC flapping** | `NHC: NIC eth0 flapping (4 link changes)` |
 
-The list of checks is not fixed: add your own, switch one off or reorder them from the command line, by editing files or in the page's **Health checks** sheet, with every change validated and live within 30 s ([NHC checks](nhc-checks.md)). The periodic run drains within about 30 s and resumes a drain it made itself once the fault is cleared (never one an operator
-set). The **prolog** fails an unhealthy node, so Slurm requeues the job instead of running it there; the **epilog** drains a node
-that a job left unhealthy, so the next job is not scheduled on it. A node that publishes nothing (powered off) and an unreachable
-exporter are not drained. A cluster built before this needs `benchctl up` once: it rebuilds the node image (the prolog and epilog
-scripts are in it) and restarts `slurmctld`. Without the rebuilt image a job start fails on a missing prolog and drains the node.
+The list of checks is not fixed: add your own, switch one off or reorder them from the command line, by editing files or in the page's **Health checks** sheet, with every change validated and live within 30 s ([NHC checks](nhc-checks.md)).
+
+- The periodic run drains within about 30 s and resumes a drain it made itself once the fault is cleared (never one an operator set).
+- The **prolog** fails an unhealthy node, so Slurm requeues the job instead of running it there.
+- The **epilog** drains a node that a job left unhealthy, so the next job is not scheduled on it.
+- A node that publishes nothing (powered off) and an unreachable exporter are not drained.
+- A cluster built before this needs `benchctl up` once: it rebuilds the node image (the prolog and epilog scripts are in it) and restarts `slurmctld`. Without the rebuilt image a job start fails on a missing prolog and drains the node.
 
 **Tickets for what Slurm does.** `slurmctld` also runs a watcher (`images/slurm-ctl/node_watch.py`) that polls `sinfo` every 10 s: a
 node that turns DOWN or drained files a ticket (kind `slurm`, or a comment on the node's open ticket, so a Power off stays one

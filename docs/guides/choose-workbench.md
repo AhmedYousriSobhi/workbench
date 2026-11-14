@@ -111,11 +111,20 @@ you chose, not the numbers in `sim.yaml`.
 
 ## From the web page
 
-**left nav → ⚙ Cluster architecture** in the top bar of the dashboard opens a panel with the same form (steppers for the counts, toggles for the parts) and a memory bar. Editing the numbers only estimates. **Apply to the
-running workbench** asks the governor to rebuild it to the plan: new nodes start, nodes you no longer want are removed,
-and Slurm's node list is reloaded. Progress shows in the entity list, the Infrastructure architecture and *Governor activity* (in the Governor panel). It needs the governor
-started by `./scripts/benchctl start` (it has the repository path) and calm memory (L0-L1); otherwise the page says why
-in one line. **GB needed** on the page is the number admission compares with free memory (expected use, minus what already runs, no app reserve), not the sum of the caps; hover it for the parts. `benchctl plan` shows the same number plus the 1024 MB app reserve, so the CLI figure is higher unless you pass `--app-mb 0`. The page counts the app under test as already running (no 1 GB reserve, `--app-mb 0` in the command it shows and in the rebuild). You can always copy the command shown and run it in a terminal instead.
+**left nav → ⚙ Cluster architecture** in the top bar of the dashboard opens a panel with the same form (steppers for the counts, toggles for the parts) and a memory bar. Editing the numbers only estimates.
+
+1. Change the counts and parts.
+2. Press **Apply to the running workbench**. It asks the governor to rebuild the workbench to the plan: new nodes start, nodes you no longer want are removed, and Slurm's node list is reloaded.
+3. Watch the progress in the entity list, the Infrastructure architecture and *Governor activity* (in the Governor panel).
+
+Apply needs the governor started by `./scripts/benchctl start` (it has the repository path) and calm memory (L0-L1); otherwise the page says why in one line. You can always copy the command shown and run it in a terminal instead.
+
+**GB needed** on the page is the number admission compares with free memory (expected use, minus what already runs, no app reserve), not the sum of the caps; hover it for the parts.
+
+| | App reserve | Figure |
+|---|---|---|
+| the page | none: it counts the app under test as already running (`--app-mb 0` in the command it shows and in the rebuild) | lower |
+| `benchctl plan` | 1024 MB | higher, unless you pass `--app-mb 0` |
 
 ## Going back
 

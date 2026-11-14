@@ -65,3 +65,17 @@ fixed subset). Use only these; anything else is escaped in the help.
 Illustrations come from `docs/assets/art/` ([brand and art](brand-assets.md)); the wiki copies them to `images/art-NAME.svg`.
 A project callout kind that GitHub does not know would show as a plain quote in the repository view, which is acceptable.
 Check in a wiki preview that the five GitHub kinds render as alerts in the Wiki; if they do not, rewrite them as the two project kinds are.
+
+## Keep pages short to read
+
+A page is for someone doing a task, not for reading top to bottom. Lead with what to do and the copy-paste command, then why.
+
+- Steps go in a numbered list, one action each.
+- Comparisons and option lists go in a small table.
+- A paragraph is about 4 lines; split it, or make it a list.
+- Rarely needed background goes in a short **Details** section at the end, or links to the ADR instead of repeating it.
+
+`python scripts/check_wiki_shape.py` (run by `validate.sh` and `tests/test_wiki_shape.py`) fails on a published page with a
+paragraph over 150 words, or more than 120 lines under one heading without a subheading. `--table` prints the ranked audit
+of every page (lines, words, longest paragraph, longest run, headings, tables, code blocks, images, longest list). A page left
+as it is on purpose goes in `ALLOW` in the script, with the reason (today: ADRs, which record a decision as taken).
