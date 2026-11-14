@@ -13,7 +13,7 @@
 
 Every node runs a health check (`nhc`) every 30 s, before each job and after it. It drains the node with the reason
 `NHC: ...` when a check finds a problem ([client testing](client-testing.md#node-health-check-what-drains-a-node) lists the
-four checks that ship). You can change that list three ways. All three use the same files and the same validation.
+five checks that ship, the real-GPU one only acts on a node with a real card). You can change that list three ways. All three use the same files and the same validation.
 
 **The files** are in `images/node-base/nhc.d/`:
 
@@ -82,10 +82,10 @@ from templates only; for a script of your own use the command line or a file. Ch
 `gpu-count` and `gpu-xid` skip the real-gpu node (it has no simulated GPUs). The `real-gpu-health` template checks the real card
 instead: it drains the node (`NHC: real GPU missing`, `real GPU XID <n>`, `real GPU <t>C over its slowdown <s>C`) when
 `nvidia-smi -L` lists no card, the exporter reports a non-zero XID, or the temperature is over the card's own slowdown threshold
-(read from `nvidia-smi -q`). It is not on by default; turn it on once the part is up:
+(read from `nvidia-smi -q`). It is on by default (`real-gpu-health on` in `checks.conf`) and inert on every node without `nvidia-smi`. If you removed it, add it back from its template:
 
 ```bash
-./scripts/benchctl add check real-gpu --template real-gpu-health
+./scripts/benchctl add check real-gpu-health --template real-gpu-health
 ```
 
 Only a node with `nvidia-smi` (the real card's device) runs it; every simulated node skips it. That node's health check reads the real exporter

@@ -78,10 +78,7 @@ def test_the_nodes_health_check_reads_the_real_exporter_and_a_healthy_card_is_no
     are covered by tests/test_nhc_real_gpu.py with a stub; here the wiring and the healthy case run on the real card."""
     env = run("docker", "exec", f"workbench-{real_gpu.NODE}-1", "cat", "/etc/workbench-node.env").stdout
     assert f"NHC_METRICS_URL=http://{real_gpu.SERVICE}:9400/metrics" in env, env
-    added = run(str(ROOT / "scripts/benchctl"), "add", "check", "real-gpu", "--template", "real-gpu-health")
-    try:
-        assert added.returncode == 0, added.stdout + added.stderr
-        nhc = run("docker", "exec", f"workbench-{real_gpu.NODE}-1", "bash", "-c", ". /etc/workbench-node.env; NHC_CHECKS_DIR=/etc/workbench/nhc bash /usr/local/sbin/nhc")
-        assert "unhealthy" not in nhc.stdout, nhc.stdout + nhc.stderr
-    finally:
-        run(str(ROOT / "scripts/benchctl"), "remove", "check", "real-gpu")
+    listed = run(str(ROOT / "scripts/benchctl"), "get", "checks").stdout
+    assert "real-gpu-health" in listed, listed  # shipped enabled (owner decision 2026-11-14)
+    nhc = run("docker", "exec", f"workbench-{real_gpu.NODE}-1", "bash", "-c", ". /etc/workbench-node.env; NHC_CHECKS_DIR=/etc/workbench/nhc bash /usr/local/sbin/nhc")
+    assert "unhealthy" not in nhc.stdout, nhc.stdout + nhc.stderr

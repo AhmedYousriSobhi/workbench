@@ -40,7 +40,7 @@ def names(src):
 
 def test_the_shipped_checks_are_valid_and_in_the_original_order(src):
     assert nhc.problems(src) == []
-    assert names(src) == ["gpu-count", "gpu-xid", "ib-ports", "nic-flap"]
+    assert names(src) == ["gpu-count", "gpu-xid", "ib-ports", "nic-flap", "real-gpu-health"]
     assert [t["name"] for t in nhc.templates(src)] == ["metric-above", "metric-below", "real-gpu-health"]
 
 
@@ -110,7 +110,7 @@ def test_set_params_move_remove_and_reorder(src):
     nhc.add("gpu-hot", template="metric-above", params={"metric": "m", "max": "1"}, src=src)
     nhc.set_check("gpu-hot", params={"max": "2"}, position=1, src=src)
     assert nhc.load(src)[0].params == {"metric": "m", "max": "2"}
-    nhc.reorder(["gpu-xid", "gpu-hot", "gpu-count", "ib-ports", "nic-flap"], src)
+    nhc.reorder(["gpu-xid", "gpu-hot", "gpu-count", "ib-ports", "nic-flap", "real-gpu-health"], src)
     assert names(src)[:2] == ["gpu-xid", "gpu-hot"]
     with pytest.raises(nhc.NhcError, match="every check exactly once"):
         nhc.reorder(["gpu-xid"], src)
@@ -136,7 +136,7 @@ def test_a_hand_edit_is_checked_line_by_line(src):
 def test_sync_copies_only_valid_sets_and_drops_stale_files(src, tmp_path):
     out = tmp_path / "out"
     assert nhc.sync(src, out) == []
-    assert {p.name for p in out.iterdir()} == {"checks.conf", "gpu-count.sh", "gpu-xid.sh", "ib-ports.sh", "nic-flap.sh"}
+    assert {p.name for p in out.iterdir()} == {"checks.conf", "gpu-count.sh", "gpu-xid.sh", "ib-ports.sh", "nic-flap.sh", "real-gpu-health.sh"}
     (out / "old.sh").write_text("x")
     (src / "checks.conf").write_text("gpu-xid on\nbroken line here\n")
     assert nhc.sync(src, out)  # refused: the delivered copy stays as it was
@@ -156,7 +156,7 @@ def test_cli_add_set_get_remove_and_the_delivered_copy(repo):
     assert cli.invoke(app, ["set", "check", "gpu-hot", "--set", "max=90"]).exit_code == 0
     assert cli.invoke(app, ["remove", "check", "gpu-hot"]).exit_code == 0
     assert not (repo / "compose/generated/nhc/gpu-hot.sh").exists()
-    assert cli.invoke(app, ["validate", "checks"]).output.startswith("ok: 4 checks")
+    assert cli.invoke(app, ["validate", "checks"]).output.startswith("ok: 5 checks")
 
 
 def test_cli_refusals_exit_1_say_nothing_changed_and_usage_errors_exit_2(repo):
@@ -242,7 +242,7 @@ def test_the_page_lists_reorders_toggles_adds_and_removes(page):
     code, state = call(base)
     assert code == 200 and state["checks"][0]["name"] == "gpu-count" and state["problems"] == []
     assert [t["name"] for t in state["templates"]] == ["metric-above", "metric-below", "real-gpu-health"]
-    order = ["nic-flap", "gpu-count", "gpu-xid", "ib-ports"]
+    order = ["nic-flap", "gpu-count", "gpu-xid", "ib-ports", "real-gpu-health"]
     assert [c["name"] for c in call(base, {"op": "reorder", "order": order})[1]["checks"]] == order
     assert (out / "checks.conf").read_text().splitlines()[3].startswith("nic-flap")  # delivered to the nodes' mount at once
     assert call(base, {"op": "toggle", "name": "gpu-xid", "enabled": False})[1]["checks"][2]["enabled"] is False
