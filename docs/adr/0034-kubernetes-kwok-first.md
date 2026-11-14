@@ -124,3 +124,24 @@ Decided with the owner while building; each can be changed later.
 - **Node names** are separate from the Slurm nodes (`kcn001`, `kgpu001`); `--k8s-nodes N` sets the GPU node count.
 - **Phase 2 candidates:** one real k3s or kind worker for real CPU pods and pod logs (privileged container, own ADR),
   metrics-server, Kubernetes through Teleport, a k-login node, the Infrastructure architecture diagram.
+
+## Addendum: Kueue as definitions and status fixtures, no controller (issue 469, owner decision 2026-11-14)
+
+The client reads queue status with `kubectl get`, only when `kubectl api-resources` lists the definition: `clusterqueues.kueue.x-k8s.io`
+(`.status.pendingWorkloads`, `.status.admittedWorkloads`, the `Active` condition) and `localqueues` (pending and admitted counts).
+
+- **Built:** the ClusterQueue, LocalQueue and ResourceFlavor definitions of Kueue v0.20.6 (released 2026-11) and a set of objects
+  (`k8s/kueue/`): three active ClusterQueues (`gpu-training`, `gpu-inference`, `cpu-batch`), one inactive (`legacy-h100`, it names a
+  missing flavor, reason `FlavorNotFound`), LocalQueues in `team-a` and `team-b`. The `viewer` user may read them
+  (`k8s/fixtures/46-rbac-kueue.yaml`). **No controller and no new container**: the counts are fixtures, nothing admits a workload.
+- **One version, no webhook.** Upstream serves v1beta2 from v0.15, stores it from v0.16 and stops serving v1beta1 at v0.20
+  (checked in the v0.20.6 `manifests.yaml`: v1beta1 `served: false`). The file keeps only v1beta2 and drops the `conversion`
+  block, so the API server needs no conversion webhook (v0.20.6 itself fixes the stale webhook reference of an unserved version).
+- **Status** of a CRD with a status subresource is ignored by `kubectl apply`, so `benchctl/kueue.py` writes it with
+  `kubectl patch --subresource=status` after the objects exist (`bootstrap_kueue` in `benchctl/k8s.py`, after the DRA step).
+  The scenario step `queue: {name, active, pending}` rewrites a ClusterQueue and its LocalQueues the same way
+  (`k8s-queue-inactive`).
+- **Not built (owner decision):** kube-state-metrics and DCGM series for KWOK nodes; the Kueue controller and its Workload objects.
+  Volcano and Kubeflow (pytorchjobs, mpijobs) definitions are not added: their CRDs are large and several versions, and the client
+  only looks for them; say if the evidence needs them.
+- **Upgrade:** `k8s/kueue/README.md`.

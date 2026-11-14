@@ -23,7 +23,7 @@ from pathlib import Path
 
 import yaml
 
-from . import dra
+from . import dra, kueue
 from .nodes import node_names
 
 VERSION = "v1.36.1"            # Kubernetes (the control-plane images and kubectl); sim.yaml kubernetes.version overrides
@@ -417,13 +417,33 @@ def bootstrap(sim: dict, ips: dict, say: Callable[[str], None] = print, runner: 
     if r.returncode != 0:
         say(f"FAILED kubernetes fixtures: {(r.stderr or r.stdout).strip()[-300:]}")
         return False
-    return apply("/state/50-dra.yaml", "DRA devices")
+    if not apply("/state/50-dra.yaml", "DRA devices"):
+        return False
+    return bootstrap_kueue(sim, say, runner, src, apply)
+
+
+def bootstrap_kueue(sim: dict, say: Callable[[str], None], runner: Callable, src: list, apply: Callable) -> bool:
+    """Kueue without a controller (issue 469): the definitions, the objects, then each status through the status subresource."""
+    if not apply("/k8s/kueue/crds.yaml", "Kueue definitions"):
+        return False
+    r = kubectl(sim, "wait", "--for=condition=established", "--timeout=60s", *[f"crd/{c}" for c in kueue.CRDS], runner=runner)
+    if r.returncode != 0:
+        say(f"FAILED kubernetes: the Kueue definitions did not become ready: {r.stderr.strip()[-200:]}")
+        return False
+    if not apply("/k8s/kueue/queues.yaml", "Kueue queues"):
+        return False
+    for args in kueue.status_calls():
+        r = kubectl(sim, *args, runner=runner, mounts=src)
+        if r.returncode != 0:
+            say(f"FAILED kubernetes Kueue status: {(r.stderr or r.stdout).strip()[-300:]}")
+            return False
+    return True
 
 
 # ---- scenario steps and expectations (target `k8s`, run by benchctl/scenario.py on the host) ----
 
 FAULTS = ("crashloop", "oom", "imagepull", "jobfail")  # the pod stages in k8s/kwok/stage-faults.yaml (a node has fault-node-down)
-STEP_KEYS = ("down", "up", "cordon", "uncordon", "pod", "delete_pod", "scale", "apply", "remove", "drain")
+STEP_KEYS = ("down", "up", "cordon", "uncordon", "pod", "delete_pod", "scale", "apply", "remove", "drain", "queue")
 _NAME = r"[a-z0-9]([-a-z0-9]*[a-z0-9])?"
 SCENARIO_POD = "scenario-pod.yaml"
 
@@ -463,6 +483,8 @@ def step_problems(do: dict, nodes: set[str]) -> list[str]:
             out.append("k8s pod priority_class must be a PriorityClass name")
         if p.get("node") is not None and p["node"] not in nodes:
             out.append(f"unknown Kubernetes node {p['node']!r}")
+    if "queue" in do:
+        out += kueue.queue_problems(do["queue"])
     for path in [*(do.get("apply") or []), *(do.get("remove") or [])]:
         if not (isinstance(path, str) and not path.startswith("/") and ".." not in path.split("/")):
             out.append(f"k8s apply path {path!r} must be relative to the k8s/ directory")
@@ -496,6 +518,8 @@ def step_args(do: dict) -> list[list[str]]:
         out.append(["-n", s["namespace"], "scale", f"deployment/{s['deploy']}", f"--replicas={int(s['replicas'])}"])
     out += [["apply", "--server-side", "--force-conflicts", "-f", f"/k8s/{path}"] for path in do.get("apply") or []]
     out += [["delete", "--ignore-not-found", "-f", f"/k8s/{path}"] for path in do.get("remove") or []]
+    if "queue" in do:  # a ClusterQueue and its LocalQueues go inactive (or back); no controller, so the status is written
+        out += kueue.queue_calls(do["queue"])
     if "drain" in do:  # cordons, then evicts through the eviction API, so a PodDisruptionBudget can refuse; the timeout ends a blocked drain
         out.append(["drain", do["drain"]["node"], "--ignore-daemonsets", "--delete-emptydir-data", "--force", f"--timeout={int(do['drain'].get('timeout', 30))}s"])
     return out
