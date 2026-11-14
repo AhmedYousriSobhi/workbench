@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**91% built** (39 done, 106 in review, 10 partial, 5 to do, 160 items).
+**91% built** (39 done, 107 in review, 10 partial, 4 to do, 160 items).
 
 ## Roadmap
 
@@ -16,7 +16,7 @@ flowchart LR
     p4["People and chaos<br/>25%"]:::partial
     p5["Kubernetes<br/>100%"]:::review
     p6["Fidelity VM<br/>0%"]:::todo
-    p7["Web UI and profiles<br/>94%"]:::partial
+    p7["Web UI and profiles<br/>96%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
     p0 --> p1 --> p2 --> p3 --> p4 --> p5 --> p6 --> p7 --> p8
     classDef done fill:#1a7f37,stroke:#1a7f37,color:#fff
@@ -208,7 +208,7 @@ _One real Ubuntu VM with Redfish power control._
 
 0/1 done
 
-### Web UI and profiles (94%)
+### Web UI and profiles (96%)
 
 _One click from cold start to a busy cluster._
 
@@ -262,7 +262,7 @@ _One click from cold start to a busy cluster._
 | Agent-ready interface (SPEC G7 and AG-1 to AG-9) | 🔍 In review | Approved by the owner on 2026-11-13 (decisions in issue 613), step 14 built (issue 628: docs/agents/README.md and the wiki group For AI agents, the Claude Code skill, the README section). Issues 633 to 639 (2026-11-14): default Prometheus alert rules (observability/rules.yml: GpuXidCritical, GpuTempHigh, InfinibandPortDown, NodeDrained, NodeDown, ExporterDown, JiraErrors; owner decision, ADR 0066 addendum), the verbs get scenario-status, clear faults and get capture --once with the MCP tools scenario_status, fault_clear and capture_once (fifteen tools, contract 1.4, ADR 0064 addendum, benchctl/agentverbs.py), get faults reads an expired Teleport certificate from the identity file, tests/real/test_agent_recipes_real.py (written; not yet run live: run ./scripts/verify.sh --unit agent_recipes), a stdio MCP client test (tests/test_mcp_stdio.py), verify.sh prints skipped tests. Not done: report_export (issue 614), an agent runtime check of the MCP server (issue 638), the live run of the skipped governor test (issue 639). Step 13 built (issue 627: benchctl serve mcp, optional [mcp] extra, twelve tools and resources, fifteen since issue 635, import-isolation test), step 12 built (issue 626: AGENTS.md with generated blocks, llms.txt, ten recipes, benchctl/agents.py), step 11 built (issues 624, 625: describe workbench --json, get alerts, benchctl wait), step 10a built (issue 616), 10c (issue 618: agent mode BENCHCTL_AGENT=1, the WB- error-code registry in benchctl/errors.py, --yes for destructive verbs, logs to a file) and 10b (issue 617: get endpoints|faults|traffic and scenario run --json, contract 1.1; faults also read back the Jira failure mode, BMC and Kubernetes certificate expiry, the Slurm token and a wrong munge key through new GET /sim/failure and GET /sim/tls on the mocks); 10a: `--json` and `contract_version` on get nodes|services|profiles|scenarios|checks|workbench, describe node, doctor, status, plan and scenario list, schemas in docs/agents/schemas/, tests/test_json_contract.py (benchctl/contract.py). Issue 603. ADR 0071 (default alert rules), SPEC AG-10 and the ADR status lines brought in line with the code (issue 654). Issue 678: the call stays at 6,500 characters; a scenario row is name and seconds (contract 2.0), the summary is in get scenarios --json. | `SPEC.md`, `benchctl/contract.py`, `docs/agents/CHANGELOG.md`, `docs/adr/0060-two-front-doors-agents-md-and-claude-md.md`, `tests/test_json_contract.py`, `tests/test_agent_mode.py`, `tests/test_error_codes.py`, `tests/test_wait.py`, `tests/test_agents_doc.py`, `tests/test_mcp.py`, `tests/test_mcp_stdio.py`, `tests/test_agentverbs.py`, `tests/real/test_agent_recipes_real.py`, `tests/test_mcp_isolation.py`, `observability/rules.yml` | - |
 | README redesign | 🔍 In review | The README opens with the generated hero art, shows the demo and the zoom and layers animation as light and dark picture pairs, and adds why, what is inside, will it fit and an FAQ; every command is unchanged and checked by tests/test_docs.py, numbers link to the memory guide. Issue 589. | `README.md`, `tests/test_docs.py` | - |
 | README demo gif | 🔍 In review | The README's animation is made from sample data and shows each capability in turn with a caption: dark 2.5D with traffic, error triangles, a fault with its declared blast radius, a lens, the client's eye, focus, the flat view and the global view. Re-run scripts/doc_shots.py after a change to the page. Issue 337. | `scripts/doc_shots.py`, `docs/manual/img/architecture-demo.gif`, `README.md` | - |
-| Budget manager | ⬜ To do | Read-only memory calculator and over-budget warning (W-7, issue 684); changes go through the plan/apply sheet; the sim.yaml form editor is dropped. | - | - |
+| Budget manager (read-only calculator) | 🔍 In review | The Cluster architecture sheet shows a read-only projected-memory calculator (budget = free memory minus the safety floor, projected need, headroom, a table of expected use and cap per part) and an Over budget warning with an icon and the shortfall. GET /api/plan gains floor_mb, budget_mb, headroom_mb and breakdown (workbench.breakdown); no new route and no write path; blocking stays the governor's admission (GV-9) and changes still go through Apply. No sim.yaml form editor, by owner decision. Docs images not regenerated (no Chromium here); browser check and the monitoring client not run. Issue 684. | `benchctl/workbench.py`, `webui/app.py`, `webui/static/js/budgetmodel.js`, `webui/static/js/plan.js`, `webui/static/index.html`, `webui/tests/js/budgetmodel.test.mjs`, `tests/test_webui.py` | - |
 
 1/49 done
 

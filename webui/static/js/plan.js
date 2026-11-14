@@ -6,6 +6,7 @@ import { nodeList } from './inspector.js';
 import { loadCluster } from './cluster.js';
 import { jobsWarning, planDiff, reviewLines } from './planmodel.js';
 import { applyOutcome, stageRows } from './applymodel.js';
+import { budgetView } from './budgetmodel.js';
 
 export async function loadPlan() {
   const parts = [...document.querySelectorAll('#pl-parts input:checked')].map(i => i.value).join(',');
@@ -17,15 +18,23 @@ export async function loadPlan() {
   if (!$('pl-bcmk8sbox').hidden) q.set('bcm_k8s', $('pl-bcmk8s').checked ? '1' : '0');
   if (!$('pl-bmcbox').hidden) { q.set('bmc_groups', [...S.bmcOn].join(',')); const inc = bmcNames().filter(n => !S.bmcOff.has(n)); if (S.bmcOff.size) q.set('bmc_nodes', inc.join(',')); }
   const r = await fetch('/api/plan?' + q);
-  if (!r.ok) { $('pl-msg').textContent = '✗ ' + (await r.json()).detail; $('pl-cmd').textContent = ''; $('pl-bar').value = 0; $('pl-need').textContent = '–'; $('pl-free').textContent = ''; $('pl-apply').hidden = true; return; }
+  if (!r.ok) { $('pl-msg').textContent = '✗ ' + (await r.json()).detail; $('pl-cmd').textContent = ''; $('pl-bar').value = 0; $('pl-need').textContent = '–'; $('pl-free').textContent = ''; $('pl-apply').hidden = true; $('pl-over').hidden = true; $('pl-budget').hidden = true; return; }
   const p = await r.json();
   $('pl-bar').value = Math.min(100, Math.round(100 * p.need_mb / Math.max(p.available_mb, 1)));  // the number admission compares with free memory, not the caps
   $('pl-msg').textContent = (p.fits ? '✓ ' : '✗ ') + p.message;
   $('pl-need').textContent = (p.need_mb / 1024).toFixed(1) + ' GB needed'; $('pl-need').title = `expected use ${p.expected_mb} MB` + (p.running_mb ? `, minus ${p.running_mb} MB already running` : '') + `; the containers may reach ${p.total_mb} MB in total (their caps). Your app is counted as already running (0 MB); benchctl reserves 4096 MB for it unless you pass --app-mb 0.`; $('pl-free').textContent = ` of ${(p.available_mb / 1024).toFixed(1)} GB free`;
-  paintReview();
+  paintBudget(p); paintReview();
   $('pl-cmd').textContent = p.fits ? p.command : 'Does not fit. Change the selection, or free memory.';
   $('pl-copy').hidden = !p.fits; $('pl-apply').hidden = !p.fits; S.planQuery = q.toString(); syncApply();
   $('pl-copy').onclick = async () => { try { await navigator.clipboard.writeText(p.command); $('pl-copy').textContent = 'Copied'; } catch (e) { $('pl-copy').textContent = 'Select and copy'; } setTimeout(() => { $('pl-copy').textContent = 'Copy command'; }, 1500); };
+}
+// Projected memory (W-7): read-only; the numbers come from /api/plan, the warning is text plus an icon (budgetmodel.js)
+function paintBudget(p) {
+  if (p.budget_mb === undefined) { $('pl-over').hidden = true; $('pl-budget').hidden = true; return; }  // an older backend: the message above still says it
+  const v = budgetView(p), box = $('pl-over');
+  box.hidden = !v.over; if (v.over) { box.className = 'revjobs stop'; box.innerHTML = `<b><span aria-hidden="true">${v.over.icon}</span> ${esc(v.over.title)}</b><span class="small">${esc(v.over.text)}</span>`; }
+  $('pl-budget').hidden = false; $('pl-budget-sum').textContent = v.summary;
+  $('pl-budget-rows').innerHTML = v.rows.map(r => `<tr><th scope="row">${esc(r.name)}</th><td>${esc(r.expected)}</td><td>${esc(r.cap)}</td></tr>`).join('');
 }
 // Review changes (U6): what Apply will add, remove and restart, and whether removing a node stops jobs. Computed in the browser from the
 // cluster the page already holds and the Slurm node states read when the sheet opened (planmodel.js).

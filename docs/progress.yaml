@@ -232,7 +232,8 @@ phases:
          how: "The README opens with the generated hero art, shows the demo and the zoom and layers animation as light and dark picture pairs, and adds why, what is inside, will it fit and an FAQ; every command is unchanged and checked by tests/test_docs.py, numbers link to the memory guide. Issue 589."}
       - {name: README demo gif, status: review, where: "scripts/doc_shots.py, docs/manual/img/architecture-demo.gif, README.md",
          how: "The README's animation is made from sample data and shows each capability in turn with a caption: dark 2.5D with traffic, error triangles, a fault with its declared blast radius, a lens, the client's eye, focus, the flat view and the global view. Re-run scripts/doc_shots.py after a change to the page. Issue 337."}
-      - {name: Budget manager, status: todo, how: "Read-only memory calculator and over-budget warning (W-7, issue 684); changes go through the plan/apply sheet; the sim.yaml form editor is dropped."}
+      - {name: Budget manager (read-only calculator), status: review, where: "benchctl/workbench.py, webui/app.py, webui/static/js/budgetmodel.js, webui/static/js/plan.js, webui/static/index.html, webui/tests/js/budgetmodel.test.mjs, tests/test_webui.py",
+         how: "The Cluster architecture sheet shows a read-only projected-memory calculator (budget = free memory minus the safety floor, projected need, headroom, a table of expected use and cap per part) and an Over budget warning with an icon and the shortfall. GET /api/plan gains floor_mb, budget_mb, headroom_mb and breakdown (workbench.breakdown); no new route and no write path; blocking stays the governor's admission (GV-9) and changes still go through Apply. No sim.yaml form editor, by owner decision. Docs images not regenerated (no Chromium here); browser check and the monitoring client not run. Issue 684."}
 
   - id: p8
     title: macOS agent and CI

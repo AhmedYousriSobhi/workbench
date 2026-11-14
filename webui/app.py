@@ -360,7 +360,9 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             flags += " --bcm-k8s" if spec.bcm_k8s else " --no-bcm-k8s"
         flags += f" --login {','.join(spec.login_nodes)} --app-mb 0"
         return JSONResponse({"fits": ok, "message": msg, "total_mb": est["total_mb"], "need_mb": est["need_mb"], "expected_mb": est["expected_mb"],
-                             "running_mb": est["running_mb"], "available_mb": avail,
+                             "running_mb": est["running_mb"], "available_mb": avail, "floor_mb": workbench.FLOOR_MB,
+                             "budget_mb": avail - workbench.FLOOR_MB, "headroom_mb": avail - workbench.FLOOR_MB - est["need_mb"],
+                             "breakdown": workbench.breakdown(est),
                              "text": workbench.render(spec, est), "command": f"benchctl up {flags}"})
 
     async def jira_refresh(request: Request):
