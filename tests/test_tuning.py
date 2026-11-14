@@ -15,7 +15,7 @@ def test_one_block_per_setting_with_command_effect_and_undo():
         assert t.command.startswith(("sudo", "echo")) and t.effect and t.undo and not t.applied
     z, s, h = items
     assert "--size 4096M" in z.command and "--algorithm zstd" in z.command
-    assert s.command == "sudo sysctl vm.swappiness=10" and s.undo == "sudo sysctl vm.swappiness=60"
+    assert s.command == "sudo sysctl vm.swappiness=100" and s.undo == "sudo sysctl vm.swappiness=60"
     assert h.current == "always" and h.undo.startswith("echo always |")
 
 
@@ -30,7 +30,7 @@ def test_each_block_has_a_persistent_form_and_its_undo():
 
 
 def test_settings_already_right_are_applied_and_not_rendered():
-    items = tuning.plan(MEM, zram=True, swappiness="10", thp="always [madvise] never")
+    items = tuning.plan(MEM, zram=True, swappiness="100", thp="always [madvise] never")
     assert all(t.applied for t in items) and tuning.render(items) == ""
 
 
@@ -60,7 +60,7 @@ def test_doctor_text_and_json_and_agent_mode(monkeypatch):
     tune = tuning.plan(MEM, zram=False, swappiness="60", thp="[always] madvise never")
     _patch(monkeypatch, tune)
     text = runner.invoke(cli.app, ["doctor"]).stdout
-    assert "sudo sysctl vm.swappiness=10" in text and "undo:" in text
+    assert "sudo sysctl vm.swappiness=100" in text and "undo:" in text
     data = json.loads(runner.invoke(cli.app, ["doctor", "--json"]).stdout)
     assert [t["setting"] for t in data["tuning"]] == ["zram", "swappiness", "thp"]
     monkeypatch.setenv("BENCHCTL_AGENT", "1")
@@ -69,6 +69,6 @@ def test_doctor_text_and_json_and_agent_mode(monkeypatch):
 
 
 def test_doctor_agent_mode_is_silent_when_tuned(monkeypatch):
-    _patch(monkeypatch, tuning.plan(MEM, zram=True, swappiness="10", thp="madvise"))
+    _patch(monkeypatch, tuning.plan(MEM, zram=True, swappiness="100", thp="madvise"))
     monkeypatch.setenv("BENCHCTL_AGENT", "1")
     assert runner.invoke(cli.app, ["doctor"]).stdout.strip() == "ok: every check passed"

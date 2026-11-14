@@ -5,7 +5,7 @@ Print-only (SPEC NF-5): this module reads /proc and /sys and returns text. It ne
 from dataclasses import dataclass
 from pathlib import Path
 
-SWAPPINESS = 10  # "low-ish" (docs/architecture/05-governor.md): keep page cache and anon pages in RAM, swap only under pressure
+SWAPPINESS = 100  # with zram swap: the kernel doc (admin-guide/sysctl/vm) puts equal reclaim cost for cache and swap at 100; 10 is the disk-swap advice
 ZRAM_PERCENT = 25  # low end of "about 25-50% of RAM"
 THP = "madvise"
 
@@ -64,7 +64,7 @@ def plan(meminfo: str | None = None, zram: bool | None = None, swappiness: str |
                "sudo rm /etc/systemd/zram-generator.conf && sudo systemctl daemon-reload && sudo swapoff /dev/zram0"),
         Tuning("swappiness", swp or "unknown", str(SWAPPINESS), swp == str(SWAPPINESS),
                f"sudo sysctl vm.swappiness={SWAPPINESS}",
-               "makes the kernel prefer dropping page cache over swapping anonymous pages; lost at reboot",
+               "with swap in RAM (zram) the kernel reclaims anonymous pages and page cache at equal cost instead of avoiding swap; lost at reboot",
                f"sudo sysctl vm.swappiness={swp or 60}",
                f"echo vm.swappiness={SWAPPINESS} | sudo tee /etc/sysctl.d/99-workbench.conf && sudo sysctl --system",
                f"sudo rm /etc/sysctl.d/99-workbench.conf && sudo sysctl vm.swappiness={swp or 60}"),
