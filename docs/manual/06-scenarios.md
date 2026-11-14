@@ -66,6 +66,12 @@ The command exits 1 when a step errors or an `expect` line does not hold. Steps 
 | SC-19 | `slurmctld-restart-mid-job` | `slurmctld` restarts with a real and a simulated GPU job running |
 | SC-03 | `drain-mid-job` | a node is drained under a running job; the job finishes, the node ends drained |
 | SC-14 | `k8s-node-notready` | a Kubernetes GPU node reports NotReady, then recovers (needs the `k8s` part) |
+| SC-41 | `disk-full` | `/scratch` fills to 99 % of bytes and 90 % of inodes; `df`, `lfs df` and the `node_filesystem` series show it ([guide](../guides/storage.md)) |
+| SC-42 | `quota-exceeded` | alice is over her quota on `/scratch`; `lfs quota -u alice` shows `*` and a grace time |
+| SC-43 | `stale-mount` | `cn002` loses `/scratch`: `df` fails there, its series go, `node_filesystem_device_error` is 1 |
+| SC-38 | `k8s-preempt` | filler pods hold GPUs of `kgpu001`; an inference pod needs more than are free and the real scheduler preempts them (needs the `k8s` part; [ADR 0077](../adr/0077-k8s-policy-objects-and-api-throttling.md)) |
+| SC-39 | `k8s-drain-blocked` | `kgpu001` is drained while it holds an `inference` pod whose disruption budget allows no eviction; the drain blocks and the pod stays (needs `k8s`) |
+| SC-40 | `k8s-api-throttled` | the API server throttles the client's user (`viewer`) to about three seats and no queue, so a burst gets 429; removed after 2 minutes (needs `k8s`) |
 | SC-18 | `pod-crashloop` | a pod crash-loops and another is OOMKilled (needs the `k8s` part) |
 
 ## Write your own
@@ -88,9 +94,9 @@ expect:
   takes `drain` and `resume` (node lists) and the job and daemon steps of the [resilience guide](../guides/slurm-resilience.md) (`submit: {node, gpus, duration}`, `cancel`, `slurmd_restart`, `slurmd_stop`, `slurmd_start`, `slurmctld_restart`); `jira` takes `failure: {mode: "429"|"503"|null, count: N}`; `bmc-farm` takes `power`,
   `temp`, `fan_fail`, `ramp: {to, over}`, `clear`; `ssh` (the login node) takes `state: down|hung|up` (stop, freeze, restore),
   `rotate_host_key: true`, `max_sessions: N` (OpenSSH MaxSessions) and `reset: true` (original key, default limit, node up).
-- `k8s` (needs the part and Docker; the page skips it) takes `down: [node]` (the node reports NotReady, `KubeletNotReady`) and `up: [node]` (Ready again), `cordon` and `uncordon` (node lists), `pod: {namespace, name, fault: crashloop|oom|imagepull|jobfail, gpus: N}`,
-  `delete_pod: {namespace, name}`, `scale: {namespace, deploy, replicas}` and `apply: [path under k8s/]`. Expectations: `k8s.node_ready: {node, ready, within}`
-  and `k8s.pod_status: {namespace, name, reason, within}` (the pod's phase or a container's waiting or terminated reason).
+- `k8s` (needs the part and Docker; the page skips it) takes `down: [node]` (the node reports NotReady, `KubeletNotReady`) and `up: [node]` (Ready again), `cordon` and `uncordon` (node lists), `pod: {namespace, name, fault: crashloop|oom|imagepull|jobfail, gpus: N, priority_class, node}`,
+  `delete_pod: {namespace, name}`, `scale: {namespace, deploy, replicas}`, `apply` and `remove: [path under k8s/]`, and `drain: {node, timeout}` (eviction through the API, so a disruption budget can block it). Expectations: `k8s.node_ready: {node, ready, within}`,
+  `k8s.pod_status: {namespace, name, reason, within}` (the pod's phase or a container's waiting or terminated reason) and `k8s.pods_on_node: {node, namespace, selector, min, within}`. `gpu-exporter` steps also take `storage: {mount, used_pct, inodes_used_pct, stale, user, used_gb, reset}`; expectation `storage.mount: {node, mount, min_used_pct, min_inodes_used_pct, quota_exceeded, stale, within}`.
 - `expect`: assertions checked after the steps. Anything that needs the app under test (such as `jira.issue_created`) only
   holds when the app does its part.
 

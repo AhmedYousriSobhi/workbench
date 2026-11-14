@@ -1,7 +1,9 @@
 # Login node for SSH-based clients (SPEC C-14): sshd plus the Slurm client tools, on the shared node-base.
 # kubectl comes from the official image (no apt step, no download); keep the tag equal to benchctl/k8s.py VERSION (tests/test_k8s.py)
+# BASE_TAG is dev for the pinned Slurm and dev-<version> for another one (benchctl/slurmver.py, ADR 0079)
+ARG BASE_TAG=dev
 FROM registry.k8s.io/kubectl:v1.36.1 AS kubectl
-FROM workbench/node-base:dev
+FROM workbench/node-base:${BASE_TAG}
 COPY --from=kubectl /bin/kubectl /usr/local/bin/kubectl
 # openssh-server and python3 come from node-base: an apt step here would re-run on every node-base change.
 RUN mkdir -p /run/sshd \

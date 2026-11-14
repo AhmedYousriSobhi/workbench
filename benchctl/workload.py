@@ -47,21 +47,40 @@ def command(sim: dict, node: str, gpus: int = 0, duration: int = 300, user: str 
 
 SIM_SCRIPT = "images/login/user_sim.py"
 SIM_PATH = "/usr/local/bin/user-sim"
+MOCK_SCRIPT = "images/login/mock_sim.py"
+MOCK_PATH = "/usr/local/bin/mock-sim"
 
 
-def load_on(sim: dict, rate: float = 6, duration: float = 120, seed: int | None = None) -> list[list[str]]:
+def load_on(sim: dict, rate: float = 6, duration: float = 120, seed: int | None = None, personas: bool = False,
+            day: float = 0) -> list[list[str]]:
     """Commands that (re)start the user simulator on the login node. The script is copied in first, so a cluster built before
     it existed needs no rebuild."""
     if not 0.1 <= rate <= 120:
         raise WorkloadError("rate must be 0.1 to 120 jobs per minute")
     if not 5 <= duration <= 3600:
         raise WorkloadError("duration must be 5 to 3600 seconds")
-    users = ",".join(u["name"] for u in sim.get("users", [])) or "alice,bob"
+    if day and not 60 <= day <= 86400:
+        raise WorkloadError("day must be 60 to 86400 seconds (0: no daily rhythm)")
+    users = ",".join(u["name"] + (f":{u['persona']}" if personas and u.get("persona") else "") for u in sim.get("users", [])) or "alice,bob"
     gpus = sim.get("gpu", {}).get("gpus_per_node", 0) if sim.get("gpu", {}).get("nodes") else 0
     return [["docker", "cp", SIM_SCRIPT, f"{LOGIN}:{SIM_PATH}"], load_off(),
             ["docker", "exec", "-d", LOGIN, "python3", SIM_PATH, "--rate", f"{rate:g}", "--duration", f"{duration:g}", "--users", users,
-             "--gpus", str(gpus), *(["--seed", str(seed)] if seed is not None else [])]]
+             "--gpus", str(gpus), *(["--personas"] if personas else []), *(["--day", f"{day:g}"] if day else []), *(["--seed", str(seed)] if seed is not None else [])]]
 
 
 def load_off() -> list[str]:
     return ["docker", "exec", LOGIN, "pkill", "-f", SIM_PATH]
+
+
+def mocks_on(sim: dict, rate: float = 30) -> list[list[str]]:
+    """Commands that (re)start the demo client for the mocks on the login node (issue 650): the calls a monitoring client makes to
+    jira-mock, bcm-mock and bmc-farm, so the Traffic tab has counted requests. Copied in first, so no rebuild is needed."""
+    if not 1 <= rate <= 600:
+        raise WorkloadError("mock rate must be 1 to 600 requests per minute")
+    names = [n for n, kind in nodes.node_names(sim) if kind == "compute"][:3] or [n for n, _ in nodes.node_names(sim)][:1] or ["cn001"]
+    return [["docker", "cp", MOCK_SCRIPT, f"{LOGIN}:{MOCK_PATH}"], mocks_off(),
+            ["docker", "exec", "-d", LOGIN, "python3", MOCK_PATH, "--rate", f"{rate:g}", "--nodes", ",".join(names)]]
+
+
+def mocks_off() -> list[str]:
+    return ["docker", "exec", LOGIN, "pkill", "-f", MOCK_PATH]

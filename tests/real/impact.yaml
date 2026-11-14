@@ -28,9 +28,9 @@
   tests: [test_topology_real, test_qos_real, test_power_real, test_slurmresilience_real, test_cluster_real, test_stack_real, test_slurmkeys_real, test_compose_real]
 - name: Slurm statistics and workload
   paths: ["benchctl/slurmstats.py", "benchctl/slurmtrace.py", "benchctl/workload.py"]
-  tests: [test_gpu_follows_slurm_real, test_scenario_real, test_cluster_real, test_traffic_record_real]
+  tests: [test_gpu_follows_slurm_real, test_scenario_real, test_cluster_real, test_traffic_record_real, test_usersim_real]
 - name: Kubernetes
-  paths: ["benchctl/k8s.py", "k8s/**"]
+  paths: ["benchctl/k8s.py", "benchctl/dra.py", "k8s/**"]
   tests: [test_k8s_real, test_wire_capture_real, test_compose_real]
 - name: wire capture
   paths: ["benchctl/capture.py", "benchctl/slurm_msgtypes.py", "scripts/gen_slurm_msgtypes.py"]
@@ -49,7 +49,31 @@
   tests: [test_jira_dc_real]
 - name: GPU exporters
   paths: ["components/gpu-exporter-farm/**", "components/dcgm-exporter/**", "benchctl/dcgm.py", "observability/**"]
-  tests: [test_mocks_real, test_gpu_follows_slurm_real, test_gpu_grafana_real, test_dcgm_real]
+  tests: [test_mocks_real, test_gpu_follows_slurm_real, test_gpu_grafana_real, test_dcgm_real, test_agent_recipes_real, test_alerting_real, test_prom_targets_real]
+- name: prometheus targets
+  paths: ["benchctl/promtargets.py", "benchctl/k8s.py", "benchctl/teleport.py", "benchctl/dcgm.py", "benchctl/real_gpu.py"]
+  tests: [test_prom_targets_real, test_k8s_real, test_teleport_real, test_slurm_metrics_real]
+- name: typed GPU shapes
+  paths: ["benchctl/mig.py", "images/slurm-ctl/alloc_feed.py", "images/node-base/entrypoint.sh"]
+  tests: [test_mig_real, test_gpu_follows_slurm_real]
+- name: slurm metrics
+  paths: ["benchctl/slurmconf.py", "observability/dashboards/slurm-overview.json"]
+  tests: [test_slurm_metrics_real]
+- name: alerting
+  paths: ["compose/observability.yml", "components/jira-mock/**", "benchctl/alerts.py"]
+  tests: [test_alerting_real]
+- name: agent interface
+  paths: ["benchctl/agentverbs.py", "benchctl/faultstate.py", "benchctl/wait.py", "benchctl/alerts.py", "benchctl/mcp_server.py", "benchctl/agents.py", "benchctl/contract.py"]
+  tests: [test_agent_recipes_real]
+- name: slurm version
+  paths: ["benchctl/slurmver.py", "images/slurm-ctl/Dockerfile", "images/login/Dockerfile"]
+  tests: [test_slurmver_real, test_stack_real]
+- name: in-place Slurm upgrade (issue 221)
+  paths: ["benchctl/slurmupgrade.py", "scenarios/slurm-upgrade-mid-job.yaml"]
+  tests: [test_slurmupgrade_real]
+- name: object store
+  paths: ["benchctl/objectstore.py", "images/node-base/objectstore.sh"]
+  tests: [test_objectstore_real, test_prom_targets_real]
 - name: real GPU
   paths: ["benchctl/real_gpu.py"]
   tests: [test_real_gpu_real]
@@ -61,7 +85,7 @@
   tests: [test_webui_real, test_webui_browser, test_flow_real, test_cluster_real, test_launcher_real, test_traffic_record_real]
 - name: access, login and jump nodes
   paths: ["images/login/**", "images/jump/**", "benchctl/logins.py", "benchctl/teleport.py", "benchctl/nodeshell.py", "benchctl/nodes.py"]
-  tests: [test_login_real, test_access_real, test_teleport_real, test_node_ssh_real, test_ssh_faults_real, test_node_tools_real, test_cmsh_real]
+  tests: [test_login_real, test_access_real, test_teleport_real, test_node_ssh_real, test_ssh_faults_real, test_node_tools_real, test_cmsh_real, test_usersim_real]
 - name: scenarios and faults
   paths: ["benchctl/scenario.py", "benchctl/authfaults.py", "scenarios/**"]
   tests: [test_scenario_real, test_authfaults_real, test_slurmresilience_real, test_ssh_faults_real]
@@ -73,8 +97,11 @@
   tests: [test_completion_real, test_machine_real, test_launcher_real, test_benchctl_real]
 - name: tools that no live test reads
   paths: ["benchctl/progress.py", "scripts/validate.sh", "scripts/check-*.sh", "scripts/install-hooks.sh", "scripts/sync_wiki.py", "scripts/*_shots.py",
-          "scripts/make_logo_assets.py", "scripts/term_shot.py", "scripts/jira_shapes.py", "scripts/record_jira_shapes.py"]
+          "scripts/make_logo_assets.py", "scripts/make_palette.py", "observability/dashboards/hpc-overview.json", "scripts/style_dump.py", "docs/assets/palette.yaml", "scripts/term_shot.py", "scripts/jira_shapes.py", "scripts/record_jira_shapes.py"]
   tests: []
 - name: virsh
   paths: ["fidelity-vm/**"]
   tests: [test_vm]
+- name: storage
+  paths: ["benchctl/storage.py", "images/node-base/fakefs.py", "images/node-base/entrypoint.sh", "components/gpu-exporter-farm/**"]
+  tests: [test_storage_real, test_gpu_follows_slurm_real, test_mocks_real]

@@ -91,7 +91,7 @@ What the seven passing tests checked on the containers:
 
 The two slowest were the drain test and the shipped scenarios, about 44 s each; the rest took 12 s or less.
 
-The skipped test is not named in the run output. The only skip in the module is the governor test (`test_the_governor_runs_the_steps_and_serves_the_trace_for_the_page`), which skips when no governor answers, so that is the one to check; it is not recorded as passed. Run it with a governor started by `benchctl start` to cover it.
+The first run's output did not name the skipped test (since issue 639 `verify.sh` and `real-test.sh` run pytest with `-rs`, and `verify.sh` prints each `SKIPPED file:line: reason` line under the step, so a skip is named). The only skip in the module is the governor test (`test_the_governor_runs_the_steps_and_serves_the_trace_for_the_page`), which skips when no governor answers, so that is the one to check; it is not recorded as passed. Run it with a governor started by `benchctl start` to cover it.
 
 ## Limits
 

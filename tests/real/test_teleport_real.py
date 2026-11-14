@@ -102,3 +102,9 @@ def test_direct_key_login_works_where_the_mode_allows_it_and_is_refused_otherwis
     refused = key_login(sim_ips["login2"], 22)                         # teleport only: reachable on the network, but no key is accepted
     assert refused.returncode != 0 and "Permission denied" in refused.stderr, refused.stderr
     assert key_login("127.0.0.1", 2223).returncode != 0                # and no port is published for it
+
+
+def test_prometheus_scrapes_teleport_diagnostics(tele):
+    """Issue 458: the `teleport` job exists only because the part is selected, and its target answers."""
+    from helpers import prom_up, wait_for
+    assert wait_for(lambda: set(prom_up("teleport").values()) == {"1"}, timeout=90), prom_up("teleport")

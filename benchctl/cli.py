@@ -13,6 +13,7 @@ from typer.core import TyperGroup
 
 from . import (
     agentmode,
+    agentverbs,
     alerts,
     capture,
     checks,
@@ -38,8 +39,10 @@ from . import (
     slurmstats,
     slurmtrace,
     stack,
+    storage,
     teleport,
     ticketbot,
+    tuning,
     wait,
     workbench,
 )
@@ -119,9 +122,11 @@ def check() -> None:
 def doctor(output: str = OUTPUT, json_: bool = JSON) -> None:
     """Check host prerequisites (SPEC P-1..P-3); exits 1 on any failure."""
     results = checks.run_all()
+    tune = tuning.plan()
     failed = any(c.status == checks.FAIL for c in results)
     if contract.wanted(output, json_) == "json":
-        typer.echo(contract.dumps({"ok": not failed, "checks": [{"name": c.name, "code": errors.doctor_code(c.name), "status": c.status, "detail": c.detail, "fix": c.fix} for c in results]}))
+        typer.echo(contract.dumps({"ok": not failed, "checks": [{"name": c.name, "code": errors.doctor_code(c.name), "status": c.status, "detail": c.detail, "fix": c.fix} for c in results],
+                                   "tuning": [tuning.as_dict(t) for t in tune]}))
         raise typer.Exit(1 if failed else 0)
     if agentmode.agent():  # only what needs attention, one coded line each
         for c in results:
@@ -129,11 +134,17 @@ def doctor(output: str = OUTPUT, json_: bool = JSON) -> None:
                 typer.echo(f"{errors.doctor_code(c.name)} {c.status}: {' '.join(c.detail.split())}" + (f" | fix: {c.fix}" if c.fix else ""))
         if not any(c.status != checks.OK for c in results):
             typer.echo("ok: every check passed")
+        todo = [t.setting for t in tune if not t.applied]
+        if todo:  # one line; the commands are in `benchctl doctor` (text) and `doctor --json` (tuning)
+            typer.echo(f"tuning: {', '.join(todo)} not as recommended (print-only; commands in `benchctl doctor --json`)")
         raise typer.Exit(1 if failed else 0)
     for c in results:
         typer.echo(f"[{ICON[c.status]}] {c.name}: {c.detail}")
         if c.fix and c.status != checks.OK:
             typer.echo(f"       fix: {c.fix}")
+    block = tuning.render(tune)
+    if block:
+        typer.echo(block)
     raise typer.Exit(1 if failed else 0)
 
 
@@ -232,7 +243,7 @@ def _sim() -> dict:
     return workbench.effective(base, spec)[0] if spec else base
 
 
-def _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes=None, login=None, bmc_groups=None, bcm_k8s=None, controller=None, dcgm_nodes=None):
+def _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes=None, login=None, bmc_groups=None, bcm_k8s=None, controller=None, dcgm_nodes=None, slurm_version=None):
     """(spec, sim, profile) from a workbench file and/or flags; flags win. Exits 1 with every problem listed."""
     base = _base_sim()
     try:
@@ -255,6 +266,8 @@ def _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, 
         spec.controller = controller
     if dcgm_nodes is not None:
         spec.dcgm_nodes = dcgm_nodes
+    if slurm_version is not None:
+        spec.slurm_version = slurm_version
     if login is not None:
         spec.login_nodes = _login_modes(login)
     if problems := spec.problems():
@@ -276,6 +289,7 @@ K8S_CPU = typer.Option(None, "--k8s-cpu-nodes", help="Kubernetes CPU nodes (need
 BMC_GROUPS = typer.Option(None, "--bmc-groups", help=f"node groups that get BMCs, comma separated ({', '.join(nodes.GROUPS)}); default all; each BMC costs about 32 MB")
 BCM_K8S = typer.Option(None, "--bcm-k8s/--no-bcm-k8s", help="whether BCM manages the Kubernetes nodes (default: sim.yaml bcm.manage_kubernetes)")
 CONTROLLER = typer.Option(None, "--controller/--no-controller", help="a controller node: slurmctld's host with ssh for whitelisted users, the BCM head node (default: sim.yaml controller.enabled)")
+SLURM_VERSION = typer.Option(None, "--slurm-version", help="build and run this Slurm release (25.05.9, 25.11.9, 26.05.5 default, 26.05.6); the first start of another version compiles it (ADR 0079)")
 DCGM_NODES = typer.Option(None, "--dcgm-nodes", help="GPU nodes that get a real DCGM exporter, 1 to 8 (needs --with dcgm; default 1); each costs about 125 MB")
 BMC_NODES = typer.Option(None, "--bmc-nodes", help="nodes that get a BMC address, comma separated (default all); each costs about 32 MB")
 
@@ -342,7 +356,7 @@ SAVE = typer.Option(None, "--save", help="write the selection to this workbench 
 @app.command()
 def plan(file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS,
          with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, k8s_cpu_nodes: int = K8S_CPU, save: str = SAVE,
-         bmc_nodes: str = BMC_NODES, bmc_groups: str = BMC_GROUPS, bcm_k8s: bool = BCM_K8S, controller: bool = CONTROLLER, dcgm_nodes: int = DCGM_NODES, workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING,
+         bmc_nodes: str = BMC_NODES, bmc_groups: str = BMC_GROUPS, bcm_k8s: bool = BCM_K8S, controller: bool = CONTROLLER, dcgm_nodes: int = DCGM_NODES, slurm_version: str = SLURM_VERSION, workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING,
          monitoring: list[str] = MONITORING, ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE,
          access: list[str] = ACCESS, addons: bool = ADDONS, login: list[str] = LOGIN, app_mb: int = APP_MB_OPT,
          output: str = OUTPUT, json_: bool = JSON) -> None:
@@ -352,7 +366,7 @@ def plan(file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: in
     import yaml
 
     with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, addons, login)
-    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes, login, bmc_groups, bcm_k8s, controller, dcgm_nodes)
+    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes, login, bmc_groups, bcm_k8s, controller, dcgm_nodes, slurm_version)
     est = workbench.estimate(sim, prof, running=workbench.running_services())
     free_mb = checks.mem_available() // (1024 * 1024)
     ok, msg = workbench.verdict(est, free_mb, spec=spec)
@@ -367,8 +381,8 @@ def plan(file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: in
     raise typer.Exit(0 if ok else 1)
 
 
-def _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes=None, login=None, bmc_groups=None, bcm_k8s=None, controller=None, dcgm_nodes=None) -> None:
-    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes, login, bmc_groups, bcm_k8s, controller, dcgm_nodes)
+def _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes=None, login=None, bmc_groups=None, bcm_k8s=None, controller=None, dcgm_nodes=None, slurm_version=None) -> None:
+    spec, sim, prof = _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes, login, bmc_groups, bcm_k8s, controller, dcgm_nodes, slurm_version)
     typer.echo(workbench.render(spec, workbench.estimate(sim, prof)) + "\n")
     if not stack.up(sim, "workbench", say=typer.echo, prof=prof):
         raise typer.Exit(1)
@@ -378,19 +392,19 @@ def _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_
 @app.command()
 def up(profile: str = typer.Option(None, "--profile", autocompletion=completion.profiles, callback=_profile_check, help="a size preset (default std); or choose by counts below"),
        file: str = FILE, name: str = NAME, cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS,
-       with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, k8s_cpu_nodes: int = K8S_CPU, bmc_nodes: str = BMC_NODES, bmc_groups: str = BMC_GROUPS, bcm_k8s: bool = BCM_K8S, controller: bool = CONTROLLER, dcgm_nodes: int = DCGM_NODES,
+       with_: list[str] = WITH, without: list[str] = WITHOUT, k8s_nodes: int = K8S, k8s_cpu_nodes: int = K8S_CPU, bmc_nodes: str = BMC_NODES, bmc_groups: str = BMC_GROUPS, bcm_k8s: bool = BCM_K8S, controller: bool = CONTROLLER, dcgm_nodes: int = DCGM_NODES, slurm_version: str = SLURM_VERSION,
        workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING,
        ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE, access: list[str] = ACCESS,
        addons: bool = ADDONS, login: list[str] = LOGIN, app_mb: int = APP_MB_OPT) -> None:
     """Estimate, then start. By preset (--profile) or by selection (--cpu-nodes 2 --gpu-nodes 4 --with jira,
     --ticketing jira --hardware bmc,bcm, --addons ...)."""
     with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, addons, login)
-    chosen = any(v is not None for v in (file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes, login, bmc_groups, bcm_k8s, controller, dcgm_nodes))
+    chosen = any(v is not None for v in (file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes, login, bmc_groups, bcm_k8s, controller, dcgm_nodes, slurm_version))
     if chosen and profile:
         typer.echo("choose one: --profile PRESET, or a selection (--cpu-nodes, --gpu-nodes, --with, -f FILE)", err=True)
         raise typer.Exit(1)
     if chosen:
-        _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes, login, bmc_groups, bcm_k8s, controller, dcgm_nodes)
+        _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes, login, bmc_groups, bcm_k8s, controller, dcgm_nodes, slurm_version)
         return
     workbench.forget()
     raise typer.Exit(0 if stack.up(_base_sim(), profile or "std", say=typer.echo) else 1)
@@ -399,13 +413,13 @@ def up(profile: str = typer.Option(None, "--profile", autocompletion=completion.
 @app.command()
 def apply(file: str = typer.Option(..., "-f", "--file", help="workbench file to build"), name: str = NAME,
           cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS, with_: list[str] = WITH,
-          without: list[str] = WITHOUT, k8s_nodes: int = K8S, k8s_cpu_nodes: int = K8S_CPU, bmc_nodes: str = BMC_NODES, bmc_groups: str = BMC_GROUPS, bcm_k8s: bool = BCM_K8S, controller: bool = CONTROLLER, dcgm_nodes: int = DCGM_NODES,
+          without: list[str] = WITHOUT, k8s_nodes: int = K8S, k8s_cpu_nodes: int = K8S_CPU, bmc_nodes: str = BMC_NODES, bmc_groups: str = BMC_GROUPS, bcm_k8s: bool = BCM_K8S, controller: bool = CONTROLLER, dcgm_nodes: int = DCGM_NODES, slurm_version: str = SLURM_VERSION,
           workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING,
           ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE, access: list[str] = ACCESS,
           addons: bool = ADDONS, login: list[str] = LOGIN, app_mb: int = APP_MB_OPT) -> None:
     """Build the workbench a file describes (the same as `up -f FILE`)."""
     with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, addons, login)
-    _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes, login, bmc_groups, bcm_k8s, controller, dcgm_nodes)
+    _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes, login, bmc_groups, bcm_k8s, controller, dcgm_nodes, slurm_version)
 
 
 def _launcher(*args: str) -> None:
@@ -643,20 +657,33 @@ def get_slurm_stats() -> None:
 
 
 CAPTURE_NODE = typer.Argument(..., help="a Slurm node or a Kubernetes node, e.g. cn001, gpu001 or kw001")
-CAPTURE_SECONDS = typer.Option(300, "--seconds", min=1, max=300, help="stop after this many seconds (at most 300)")
+CAPTURE_SECONDS = typer.Option(None, "--seconds", min=1, max=300, help="stop after this many seconds (default 300 streaming, 10 with --once; at most 300, 60 with --once)")
+CAPTURE_ONCE = typer.Option(False, "--once", help="one bounded answer: a single JSON object with the messages seen (for scripts and agents); asks the governor first")
+CAPTURE_MESSAGES = typer.Option(agentverbs.CAPTURE_ONCE_MESSAGES, "--max-messages", min=1, max=agentverbs.CAPTURE_ONCE_MAX_MESSAGES, help="with --once: stop after this many messages")
 
 
 @get_app.command("capture")
-def get_capture(node: str = CAPTURE_NODE, seconds: int = CAPTURE_SECONDS) -> None:
+def get_capture(node: str = CAPTURE_NODE, seconds: int = CAPTURE_SECONDS, once: bool = CAPTURE_ONCE, max_messages: int = CAPTURE_MESSAGES,
+                output: str = OUTPUT, json_: bool = JSON) -> None:
     """The messages on one node's wire as they happen, one JSON object per line (issue 505): Slurm messages by tcpdump inside the node,
     or the Kubernetes API audit events about the node. Nothing from a message body; nothing written to disk. The page asks the governor
-    for it; it ends by itself after --seconds."""
+    for it; it ends by itself after --seconds. `--once` waits for the limit (10 s, 200 messages by default) and prints one JSON object
+    with every message instead (issue 635; `--json` means the same as `--once`); like the page it is refused when the governor admits no new work (memory level L2 and above)."""
     import signal
     import sys
 
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))  # the governor stops it with SIGTERM: let tcpdump be stopped on the way out
+    once = once or contract.wanted(output, json_) == "json"
     try:
-        capture.run(_sim(), node, lambda m: typer.echo(json.dumps(m), nl=True) or sys.stdout.flush(), seconds)
+        if once:
+            if seconds is not None and seconds > agentverbs.CAPTURE_ONCE_MAX_SECONDS:
+                raise typer.BadParameter(f"with --once the longest wait is {agentverbs.CAPTURE_ONCE_MAX_SECONDS} seconds", param_hint="--seconds")
+            if not stack.governor_admits(0, lambda m: typer.echo(m, err=True)):
+                typer.echo(errors.render("WB-REFUSED-GOVERNOR", "no capture: the governor admits no new work at this memory level"), err=True)
+                raise typer.Exit(1)
+            typer.echo(contract.dumps(agentverbs.capture_once(_sim(), node, seconds or agentverbs.CAPTURE_ONCE_SECONDS, max_messages)))
+            return
+        capture.run(_sim(), node, lambda m: typer.echo(json.dumps(m), nl=True) or sys.stdout.flush(), seconds or capture.DEFAULT_SECONDS)
     except (ValueError, RuntimeError) as e:
         typer.echo(f"capture failed: {e}", err=True)
         raise typer.Exit(1) from e
@@ -715,7 +742,7 @@ def get_traffic(output: str = OUTPUT, json_: bool = JSON,
 
 @get_app.command("alerts")
 def get_alerts(output: str = OUTPUT, json_: bool = JSON, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
-    """The alerts Prometheus is firing or about to fire (read-only). The workbench ships no alert rules, so this is empty until rules are loaded. Exit 1 when Prometheus is not running."""
+    """The alerts Prometheus is firing or about to fire (read-only). The workbench ships seven default rules (GpuXidCritical, GpuTempHigh, InfinibandPortDown, NodeDrained, NodeDown, ExporterDown, JiraErrors), so empty means none is firing. Exit 1 when Prometheus is not running."""
     def rows() -> list[dict]:
         try:
             return alerts.fetch()
@@ -723,6 +750,22 @@ def get_alerts(output: str = OUTPUT, json_: bool = JSON, selector: list[str] = S
             typer.echo(errors.render("WB-PART-NOT-RUNNING", f"{e}; start it with: {alerts.ENABLE}"), err=True)
             raise typer.Exit(1) from e
     _get(rows, contract.wanted(output, json_), selector, sort_by, False, 2.0)
+
+
+@get_app.command("scenario-status")
+def get_scenario_status(output: str = OUTPUT, json_: bool = JSON) -> None:
+    """The web page's scenario run: running or not, which one, each step's status and the `expect` verdicts so far (read-only, issue 635).
+    A scenario started with `scenario run` is not shown: that command blocks and prints its own report. Exit 1 when the page is not running."""
+    try:
+        data = agentverbs.scenario_status(_page_run_state())
+    except (OSError, ValueError) as e:
+        typer.echo(errors.render("WB-PART-NOT-RUNNING", f"the web page does not answer ({e}); start it with: benchctl start"), err=True)
+        raise typer.Exit(1) from e
+    if contract.wanted(output, json_) == "json":
+        typer.echo(contract.dumps(data))
+        return
+    typer.echo(f"{data['name'] or 'no scenario run yet'}: {'running' if data['running'] else 'not running'}"
+               + (f", {data['steps_done']}/{data['steps_total']} steps" if data["steps_total"] else "") + (f", ok={data['ok']}" if data["ok"] is not None else ""))
 
 
 @get_app.command("scenarios")
@@ -754,6 +797,25 @@ def set_node(node: str = TARGET, state: str = typer.Argument(..., help="off or o
         o = scenario.execute(slurm_only, poster=post, host=True, runner=run)
     typer.echo(f"{node}: {state}" if o.status == "ok" else f"cannot set {node}: {o.detail}", err=o.status != "ok")
     raise typer.Exit(0 if o.status == "ok" else 1)
+
+
+clear_app = typer.Typer(cls=SuggestingGroup, help="Put things back: the injected node faults")
+app.add_typer(clear_app, name="clear")
+
+
+@clear_app.command("faults")
+def clear_faults_cmd(output: str = OUTPUT, json_: bool = JSON) -> None:
+    """Clear every injected node fault at once, as the page's Clear faults does for each node (a hot or failed-fan BMC, a GPU XID, an
+    InfiniBand or NIC problem; a powered-off node is powered on). Faults on a service or a credential are not touched (scenarios restore
+    those). Safe to repeat. `benchctl get faults` shows what is left."""
+    run, post = (lambda c: stack._run(c)), (lambda url, body: scenario.post(url, body))
+    data = agentverbs.clear_faults(_sim(), post, run)
+    if contract.wanted(output, json_) == "json":
+        typer.echo(contract.dumps(data))
+    else:
+        for r in data["cleared"]:
+            typer.echo(f"{r['target']}: {r['status']}" + (f" ({r['detail']})" if r["detail"] else ""))
+    raise typer.Exit(0 if data["ok"] else 1)
 
 
 CHECK = typer.Argument(..., autocompletion=completion.checks, help="check name, see `benchctl get checks`")
@@ -899,6 +961,18 @@ def remove_jira_real_state(yes: bool = YES) -> None:
     typer.echo("next: benchctl start --with jira-real; benchctl setup jira-real")
 
 
+@remove_app.command("storage-state")
+def remove_storage_state(yes: bool = YES) -> None:
+    """Empty the shared scratch (and any other shared mount): removes its Docker volume, so the datasets and job output in it are lost.
+    A mount that names a `host_path` is a directory of yours and is never touched. Stop the stack first (`benchctl down`)."""
+    if any(r["state"] == "running" for r in inventory.service_rows()):
+        typer.echo("The cluster is running: run `benchctl down` first, then repeat this.", err=True)
+        raise typer.Exit(1)
+    _confirm("This deletes everything in the shared volumes (datasets, job output).", yes)
+    gone = storage.reset(_sim())
+    typer.echo("removed: " + ", ".join(gone) if gone else "nothing to remove: no shared volume")
+
+
 refresh_app = typer.Typer(cls=SuggestingGroup, help="Renew something that runs out: the real Jira's test licence")
 app.add_typer(refresh_app, name="refresh")
 
@@ -984,21 +1058,30 @@ app.add_typer(load_app, name="load")
 @load_app.command("on")
 def load_on(rate: float = typer.Option(6, "--rate", help="jobs per minute (Poisson arrivals)"),
             duration: float = typer.Option(120, "--duration", help="mean job length in seconds"),
-            seed: int = typer.Option(None, "--seed", help="a fixed seed makes the arrivals repeatable")) -> None:
+            seed: int = typer.Option(None, "--seed", help="a fixed seed makes the arrivals repeatable"),
+            personas: bool = typer.Option(False, "--personas", help="each user follows the job mix of the persona in sim.yaml, with some failing and cancelled jobs"),
+            day: float = typer.Option(0, "--day", help="daily rhythm: seconds one simulated day lasts (60 to 86400; 0 = off), the arrival rate rises and falls"),
+            mocks: bool = typer.Option(False, "--mocks", help="also start a demo client that calls Jira, BCM and the BMC farm, so the Traffic tab has requests"),
+            mock_rate: float = typer.Option(30, "--mock-rate", help="demo client requests per minute")) -> None:
     """Start the user simulator: alice and bob submit cpu jobs and GPU jobs at random, so squeue and the node states have a live queue."""
     from . import workload
 
     try:
-        cmds = workload.load_on(_sim(), rate, duration, seed)
+        cmds = workload.load_on(_sim(), rate, duration, seed, personas, day)
+        if mocks:
+            cmds += workload.mocks_on(_sim(), mock_rate)
     except workload.WorkloadError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(1) from e
     for cmd in cmds:
         r = stack._run(cmd)
-        if r.returncode and cmd != workload.load_off():  # pkill finding nothing to stop is fine
+        if r.returncode and cmd not in (workload.load_off(), workload.mocks_off()):  # pkill finding nothing to stop is fine
             typer.echo(f"cannot start the load: {(r.stderr or r.stdout).strip()}", err=True)
             raise typer.Exit(1)
-    typer.echo(f"load: on, about {rate:g} job(s) a minute, each about {duration:g} s (benchctl load off to stop)")
+    typer.echo(f"load: on, about {rate:g} job(s) a minute, each about {duration:g} s (benchctl load off to stop)"
+               + ("; personas on: job mixes by persona, some jobs fail or are cancelled" if personas else "")
+               + (f"; daily rhythm: a day lasts {day:g} s" if day else "")
+               + (f"; demo client for Jira, BCM and the BMC farm: about {mock_rate:g} request(s) a minute" if mocks else ""))
 
 
 @load_app.command("off")
@@ -1006,6 +1089,7 @@ def load_off() -> None:
     """Stop the user simulator (jobs already queued keep running)."""
     from . import workload
 
+    stack._run(workload.mocks_off())
     r = stack._run(workload.load_off())
     typer.echo("load: off" if r.returncode in (0, 1) else f"cannot stop the load: {(r.stderr or r.stdout).strip()}",
                err=r.returncode not in (0, 1))
@@ -1157,7 +1241,7 @@ def describe_node(node: str = NODE, output: str = OUTPUT, json_: bool = JSON) ->
 
 @describe_app.command("workbench")
 def describe_workbench(output: str = OUTPUT, json_: bool = JSON) -> None:
-    """One call for situational awareness: state, clusters and pools, endpoints (credentials as file paths only), faults, scenarios, fault targets and what to do next. `--json` is at most 6,000 characters."""
+    """One call for situational awareness: state, clusters and pools, endpoints (credentials as file paths only), faults, scenarios, fault targets and what to do next. `--json` is at most 6,500 characters."""
     import yaml
 
     from webui import cluster

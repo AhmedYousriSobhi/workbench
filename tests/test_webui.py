@@ -338,6 +338,8 @@ def test_plan_endpoint_estimates_without_side_effects(ui):
     assert code == 200 and "2 cpu, 4 gpu" in data["text"] and data["total_mb"] > 700
     assert data["command"].startswith("benchctl up --cpu-nodes 2 --gpu-nodes 4") and "--without bmc" in data["command"]
     assert data["command"].endswith("--app-mb 0") and "app under test" not in data["text"]  # the app already runs: no reserve, so Apply can show
+    assert data["budget_mb"] == data["available_mb"] - data["floor_mb"] and data["headroom_mb"] == data["budget_mb"] - data["need_mb"]
+    assert data["breakdown"][0]["name"] == "6 nodes" and sum(r["cap_mb"] or 0 for r in data["breakdown"]) == data["total_mb"]  # the read-only calculator rows (W-7)
     assert req(ui, "/api/plan?cpu_nodes=999")[0] == 422 and req(ui, "/api/plan?cpu_nodes=x")[0] == 422
     assert req(ui, "/api/plan", auth=False)[0] == 401
     assert b'id="plandlg"' in served_page(ui) and b"loadPlan" in served_page(ui)
@@ -372,7 +374,7 @@ def test_a_slow_plan_does_not_stall_the_other_requests(ui, monkeypatch):
 def test_connections_endpoint_lists_every_entity_with_credential_paths_only(ui):
     code, body = req(ui, "/api/connections")
     rows = {e["id"]: e for e in json.loads(body)["entities"]}
-    assert code == 200 and {"login", "nodes", "bmc", "bcm", "jira", "slurm", "gpu", "prometheus", "grafana", "ui"} <= set(rows)
+    assert code == 200 and {"login", "nodes", "bmc", "bcm", "jira", "slurm", "gpu", "prometheus", "alertmanager", "grafana", "ui"} <= set(rows)
     assert rows["login"]["address"] == "10.141.255.254:22" and "127.0.0.1:2222" in rows["login"]["how"] and rows["login"]["credential"].endswith("ssh/id_ed25519")
     assert rows["bmc"]["credential"].endswith("bmc_credentials") and "admin:<password>" in rows["bmc"]["command"]
     assert req(ui, "/api/connections", auth=False)[0] == 401
@@ -770,3 +772,12 @@ def test_html_text_sizes_are_rem_and_only_the_svg_diagrams_keep_px():
                 bad.append(f"{css.name}: {sel.strip()[:60]}")
     assert not bad, bad
     assert re.search(r"\.small\s*\{\s*font-size:\s*0\.875rem", (ROOT / "webui/static/app.css").read_text())  # 14 px floor for running text
+
+
+def test_plan_budget_goes_negative_when_over_and_adds_no_write_path(ui, monkeypatch):
+    """W-7: the sheet's calculator is read-only; over budget shows as a negative headroom, blocking stays with the governor."""
+    monkeypatch.setattr("webui.app.checks.mem_available", lambda: 1 * 2**30)
+    data = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8")[1])
+    assert data["fits"] is False and data["headroom_mb"] < 0 and data["budget_mb"] == 0
+    assert req(ui, "/api/plan", "POST", headers={"X-Requested-With": "workbench"})[0] == 405
+    assert b"pl-over" in served_page(ui) and b"budgetView" in served_page(ui)

@@ -57,4 +57,4 @@ apiVersion: v1
 kind: ResourceQuota
 metadata: {name: pods, namespace: team-a}
 spec:
-  hard: {pods: "8"}
+  hard: {pods: "16"}  # the fixtures ask for 12 (gpu-train, web 2, stuck, agent 4, sized, inference 2, dra-train); 8 was already over before issue 547

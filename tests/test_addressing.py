@@ -67,7 +67,7 @@ def test_every_generated_service_has_its_fixed_address_and_the_network_has_the_s
 
 def test_observability_file_repeats_the_planned_addresses():
     text = (ROOT / "compose" / "observability.yml").read_text()
-    for svc in ("prometheus", "grafana", "gpu-exporter-farm"):
+    for svc in ("prometheus", "grafana", "gpu-exporter-farm", "alertmanager"):
         assert f"ipv4_address: {addressing.plan(SIM)['services'][svc]}" in text
 
 

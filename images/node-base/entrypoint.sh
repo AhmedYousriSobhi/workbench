@@ -2,7 +2,7 @@
 # Fake GPUs: Slurm ignores file-less GRES, so give each GPU a stand-in device file (a symlink
 # to /dev/null; no capability needed). Create the simulated users, start munge, exec the daemon.
 i=0
-while [ "$i" -lt "${WORKBENCH_GPUS:-0}" ]; do
+while [ "$i" -lt "${WORKBENCH_GRES_DEVICES:-${WORKBENCH_GPUS:-0}}" ]; do  # MIG-style nodes have one file per slice (issue 546)
   ln -sf /dev/null "/dev/workbench-gpu$i"
   i=$((i + 1))
 done
@@ -11,7 +11,14 @@ done
 printf 'WORKBENCH_GPUS=%s\nWORKBENCH_IB=%s\n' "${WORKBENCH_GPUS:-0}" "${WORKBENCH_IB:-0}" > /etc/workbench-node.env
 # Simulated users (name:uid ...) must resolve identically on every Slurm container.
 for u in $WORKBENCH_USERS; do
-  id "${u%%:*}" >/dev/null 2>&1 || useradd -m -u "${u##*:}" "${u%%:*}"
+  id "${u%%:*}" >/dev/null 2>&1 || useradd -m -u "${u##*:}" "${u%%:*}" || [ -d "/home/${u%%:*}" ]  # a shared /home already holds the directory
+done
+# A shared mount (issue 461) holds one directory per user, made once and owned by the user, for datasets and job output.
+for d in $WORKBENCH_SHARED_MOUNTS; do
+  [ "$d" = /home ] && continue
+  for u in $WORKBENCH_USERS; do
+    install -d -m 750 -o "${u%%:*}" -g "${u%%:*}" "$d/${u%%:*}"
+  done
 done
 # The munge and JWT keys are made by `benchctl up` and mounted read-only; none is baked into the image (issue 465).
 if [ ! -f /run/workbench/slurm/munge.key ] || [ ! -f /run/workbench/slurm/jwt_hs256.key ]; then

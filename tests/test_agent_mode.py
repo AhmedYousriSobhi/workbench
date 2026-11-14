@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from benchctl import agentmode, checks, cli, inventory, stack
+from benchctl import agentmode, checks, cli, inventory, stack, tuning
 
 runner = CliRunner()
 ROOT = Path(__file__).resolve().parent.parent
@@ -71,6 +71,8 @@ def test_preflight_refusal_code_in_agent_mode_only(monkeypatch):
 
 
 def test_doctor_in_agent_mode_prints_only_what_needs_attention(monkeypatch):
+    tuned = tuning.plan("MemTotal: 1 kB", zram=True, swappiness="100", thp="madvise")
+    monkeypatch.setattr(tuning, "plan", lambda: tuned)
     monkeypatch.setattr(checks, "run_all", lambda: [checks.Check("cgroup v2", checks.OK, "fine"), checks.Check("memlock", checks.FAIL, "low\nlimit", fix="raise it")])
     agent(monkeypatch)
     r = runner.invoke(cli.app, ["doctor"])

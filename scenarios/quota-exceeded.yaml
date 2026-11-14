@@ -1,0 +1,8 @@
+name: quota-exceeded
+ref: SC-42
+description: "alice is over her quota on /scratch; lfs quota -u alice /scratch shows the star and the grace time, then the usage is reset"
+steps:
+  - {at: 0s,   target: gpu-exporter, do: {nodes: [cn001], storage: {mount: /scratch, user: alice, used_gb: 20500}}}
+  - {at: 5m,   target: gpu-exporter, do: {nodes: [cn001], storage: {mount: /scratch, reset: true}}}
+expect:
+  - storage.mount: {node: cn001, mount: /scratch, quota_exceeded: alice, within: 20s}

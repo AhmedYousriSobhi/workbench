@@ -7,7 +7,7 @@ CPUs in Slurm and 64 in Redfish). The shape of every machine is decided here, on
 import json
 from pathlib import Path
 
-from . import nodes
+from . import mig, nodes, storage
 
 FILE = "inventory.json"
 VERSION = 1
@@ -42,8 +42,11 @@ def _machine(name: str, kind: str, sim: dict, groups: dict[str, dict]) -> dict:
         g = groups[name]
         shape = {"cpus": int(g.get("cpus", 8)), "memory_mb": int(g.get("memory_gb", 32)) * 1024}
         gpus, gpu_type = int(g.get("gpus", 0)), str(g.get("gpu_type", "")).lower() if g.get("gpus") else ""
-    return {"name": name, "kind": kind, **shape, "gpus": gpus, "gpu_type": gpu_type, "serial": serial(name),
-            "gpu_uuids": [gpu_uuid(name, i) for i in range(gpus)]}
+    out = {"name": name, "kind": kind, **shape, "gpus": gpus, "gpu_type": gpu_type, "serial": serial(name),
+           "gpu_uuids": [gpu_uuid(name, i) for i in range(gpus)]}
+    if kind == "gpu" and (typed := mig.shape(sim, name)):  # MIG-style typed GRES: the inventory carries the shape Slurm advertises (issue 546)
+        out["gpu_mig"] = typed
+    return out
 
 
 def build(sim: dict, compute_override: int | None = None) -> dict:
@@ -56,6 +59,8 @@ def build(sim: dict, compute_override: int | None = None) -> dict:
         groups = dict(k8s.node_list(sim))
     return {"version": VERSION,
             "gpu_type": str(sim.get("gpu", {}).get("type", "")).lower(),
+            "users": [str(u["name"]) for u in sim.get("users") or []],  # the simulated users: each has a quota on every mount (issue 461)
+            "storage": storage.inventory_block(sim),  # the declared mounts (issue 461): the exporter and the df/lfs shims read them here
             "bcm_manages_kubernetes": bool((sim.get("bcm") or {}).get("manage_kubernetes", True)),  # false: Kubernetes nodes are not BCM devices (issue 413)
             "nodes": [_machine(n, k, sim, groups) for n, k in nodes.hardware_nodes(sim, compute_override)]}
 

@@ -413,3 +413,56 @@ def test_failure_state_can_be_read_back(server):
     assert call(base, "/sim/failure")[1] == {"mode": "503", "count": 2, "delay": 2.0}
     new(base)
     assert call(base, "/sim/failure")[1]["count"] == 1  # counts down as it is used
+
+
+def alert(name="GpuXidCritical", status="firing", node="gpu001", severity="page", fp="abc123"):
+    return {"status": status, "fingerprint": fp, "labels": {"alertname": name, "node": node, "severity": severity},
+            "annotations": {"summary": f"{name} on {node}", "description": "an XID error is set"}}
+
+
+def test_a_firing_alert_opens_one_ticket_and_a_repeat_comments_on_it(server):
+    base, *_ = server
+    code, out, _ = call(base, "/sim/alerts", {"alerts": [alert()]})
+    assert code == 200 and out == {"created": ["OPS-1"], "commented": []}
+    issue = call(base, "/rest/api/2/issue/OPS-1")[1]["fields"]
+    assert issue["summary"] == "[ALERT] GpuXidCritical on gpu001" and issue["priority"]["name"] == "High"
+    assert {"alert", "alertname-GpuXidCritical", "alert-abc123"} <= set(issue["labels"])
+    again = call(base, "/sim/alerts", {"alerts": [alert()]})[1]
+    assert again == {"created": [], "commented": ["OPS-1"]}  # same fingerprint, ticket still open: no second ticket
+    assert len(call(base, "/rest/api/2/issue/OPS-1/comment")[1]["comments"]) == 1
+
+
+def test_a_resolved_alert_comments_but_does_not_close_the_ticket(server):
+    base, *_ = server
+    call(base, "/sim/alerts", {"alerts": [alert()]})
+    out = call(base, "/sim/alerts", {"alerts": [alert(status="resolved")]})[1]
+    assert out["commented"] == ["OPS-1"]
+    assert call(base, "/rest/api/2/issue/OPS-1")[1]["fields"]["status"]["name"] == "Open"
+    assert call(base, "/sim/alerts", {"alerts": [alert(name="NodeDown", status="resolved", fp="zzz")]})[1] == {"created": [], "commented": []}
+
+
+def test_an_alert_after_the_ticket_was_resolved_opens_a_new_one(server):
+    base, *_ = server
+    call(base, "/sim/alerts", {"alerts": [alert()]})
+    call(base, "/sim/tickets", {"action": "transition", "jql": "project = OPS", "to": "Resolved"})
+    assert call(base, "/sim/alerts", {"alerts": [alert()]})[1]["created"] == ["OPS-2"]
+
+
+def test_alerts_body_must_hold_a_list(server):
+    base, *_ = server
+    assert call(base, "/sim/alerts", {"alerts": "x"})[0] == 400
+    assert call(base, "/sim/alerts", {})[0] == 400
+
+
+def test_metrics_are_prometheus_text_and_not_client_traffic(server):
+    base, *_ = server
+    new(base)
+    call(base, "/rest/api/2/issue/NOPE-1")  # a 404: one error
+    with urlopen(base + "/metrics", timeout=5) as r:
+        text, kind = r.read().decode(), r.headers["Content-Type"]
+    assert kind.startswith("text/plain")
+    assert "jira_mock_requests_total 2\n" in text and "jira_mock_errors_total 1\n" in text
+    urlopen(base + "/metrics", timeout=5).read()
+    assert call(base, "/sim/stats")[1]["requests"] == 2  # scraping never counts as a client request
+    call(base, "/sim/alerts", {"alerts": [alert()]})
+    assert call(base, "/sim/stats")[1]["requests"] == 2

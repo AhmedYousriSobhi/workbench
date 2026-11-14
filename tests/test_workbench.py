@@ -64,9 +64,9 @@ def test_estimate_is_the_sum_of_the_generated_limits_plus_observability():
     est = workbench.estimate(sim, prof)
     data = compose.generate(sim, prof)
     assert est["total_mb"] == compose.budget_mb(data) + workbench.OBSERVABILITY_MB
-    assert est["node_count"] == 6 and est["nodes_mb"] == 6 * compose.SLURMD_MB
+    assert est["node_count"] == 6 and est["nodes_mb"] == 6 * (compose.SLURMD_MB + compose.JOB_MB)
     more = workbench.estimate(*workbench.effective(SIM, spec(cpu_nodes=10, gpu_nodes=4)))
-    assert more["total_mb"] - est["total_mb"] == 8 * (compose.SLURMD_MB + compose.BMC_FORWARDER_MB)  # a node and its BMC
+    assert more["total_mb"] - est["total_mb"] == 8 * (compose.SLURMD_MB + compose.JOB_MB + compose.BMC_FORWARDER_MB)  # a node and its BMC
 
 
 def test_observability_constant_matches_the_static_compose_file():

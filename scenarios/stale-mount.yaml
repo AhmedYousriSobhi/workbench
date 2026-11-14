@@ -1,0 +1,8 @@
+name: stale-mount
+ref: SC-43
+description: "cn002 loses /scratch (a stale handle): df fails there, its node_filesystem series go and node_filesystem_device_error is 1; then it comes back"
+steps:
+  - {at: 0s,   target: gpu-exporter, do: {nodes: [cn002], storage: {mount: /scratch, stale: true}}}
+  - {at: 5m,   target: gpu-exporter, do: {nodes: [cn002], storage: {mount: /scratch, reset: true}}}
+expect:
+  - storage.mount: {node: cn002, mount: /scratch, stale: true, within: 20s}

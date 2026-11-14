@@ -25,17 +25,19 @@ MEASURED_MB: dict[str, int] = {
     "slurmd": 13, "bmc-forwarder": 18, "bmc-farm": 14, "bcm-mock": 12, "jira-mock": 20, "login": 10, "jump": 2,  # jump host: 1.9 MB peak after five forwarded sessions (issue 415)
     "mariadb": 204, "slurmdbd": 7, "slurmctld": 41, "slurmrestd": 7, "teleport": 222,
     "prometheus": 22, "grafana": 54, "gpu-exporter-farm": 19,
+    "alertmanager": 20,  # estimate from the upstream footprint, not yet measured here (issue 460): run `benchctl measure` and replace
     # Kubernetes (ADR 0034): 4 KWOK nodes and the fixtures, one run (issue 232); etcd sat at its first 128 MB cap, so 130 is a floor
     "k8s-etcd": 130, "k8s-apiserver": 201, "k8s-controller-manager": 47, "k8s-scheduler": 18, "kwok-controller": 11,
     "real-gpu": 481,  # the real driver: host engine 404 MB + exporter 77 MB, one run on a laptop RTX card (issue 428)
     "dcgm-exporter": 125,  # exporter 97 MB + host engine 25 MB with 8 GPUs, one run (issue 426); the embedded engine was 430 MB
+    "objectstore": 205,  # Garage after a 200 MB upload incl. page cache, one run (issue 672): RSS alone is lower; replace with `benchctl measure`
     "jira-db": 130, "jira-real": 2045,   # real Jira Data Center: heap 768 MB, JVM_ARGS (Serial GC, C1 only); 2176 MB cap, two clean runs
 }
 # What each part that is multiplied by the node count may cost per node, in MB (the declared cost; issue 456). A new per-node part
 # must be listed here (tests/test_memory.py finds it by generating two sizes), and its cap and measurement must fit under it. A
 # part that cannot be a few MB per node is shared (one container for every node) or optional.
 PER_NODE_MB: dict[str, int] = {
-    "slurmd": 60,          # every compute node; 13 MB measured
+    "slurmd": 188,         # every compute node: 60 MB for slurmd plus the default 128 MB a job may allocate (job_memory_mb); 13 MB measured
     "bmc-forwarder": 32,   # every per-node BMC address; 18 MB measured
     "dcgm-exporter": 150,  # optional (--with dcgm), real-gpu nodes only; 125 MB measured, the one part that is not a few MB
 }

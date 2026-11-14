@@ -116,10 +116,10 @@ def test_bootstrap_applies_definitions_then_stages_then_nodes_then_fixtures_and_
     assert k8s.bootstrap(SIM, addressing.plan(SIM), lambda m: None, runner=run, ready=lambda ips: True, sleep=lambda s: None)
     files = [c[-1] for c in calls if c[0] == "apply"]
     assert files == ["/k8s/kwok/crds.yaml", "/k8s/kwok/stage-fast.yaml", "/k8s/kwok/stage-faults.yaml", "/state/nodes.yaml",
-                     "/k8s/fixtures/00-namespaces.yaml", "/k8s/fixtures"]
+                     "/k8s/fixtures/00-namespaces.yaml", "/k8s/fixtures", "/state/50-dra.yaml"]
     assert any(c[0] == "wait" and "crd/stages.kwok.x-k8s.io" in c for c in calls)  # stages cannot be applied before their definition exists
     first_sa = next(i for i, c in enumerate(calls) if "serviceaccount" in c)
-    assert first_sa < len(calls) - 1 and calls[-1][-1] == "/k8s/fixtures"  # pods are refused until the default service account exists
+    assert first_sa < len(calls) - 2 and calls[-2][-1] == "/k8s/fixtures"  # pods are refused until the default service account exists
 
 
 def test_bootstrap_stops_with_one_message_where_it_failed():
@@ -321,3 +321,98 @@ def test_the_api_audit_log_is_narrow_metadata_only_on_stdout_and_bounded(tmp_pat
     (tmp_path / "s" / "audit-policy.yaml").write_text("old")
     k8s.prepare(SIM, addressing.plan(SIM), tmp_path / "s", tmp_path / "st")
     assert (tmp_path / "s" / "audit-policy.yaml").read_text() == k8s.AUDIT_POLICY  # a cluster made before this gets it on its next start
+
+
+def test_dra_slices_list_each_gpu_with_the_uuid_of_its_dcgm_series(tmp_path):
+    from benchctl import dra, hwinventory
+
+    docs = list(yaml.safe_load_all(dra.slices_yaml(k8s.node_list(SIM))))
+    assert docs[0]["kind"] == "DeviceClass" and 'device.driver == "gpu.sim.test"' in docs[0]["spec"]["selectors"][0]["cel"]["expression"]
+    slices = docs[1:]
+    gpu_nodes = [(n, g) for n, g in k8s.node_list(SIM) if g.get("gpus")]
+    assert [s["spec"]["nodeName"] for s in slices] == [n for n, _ in gpu_nodes]  # a CPU node gets none
+    for s, (n, g) in zip(slices, gpu_nodes):
+        devs = s["spec"]["devices"]
+        assert len(devs) == g["gpus"] and s["spec"]["driver"] == dra.DRIVER
+        assert [d["attributes"]["uuid"]["string"] for d in devs] == [hwinventory.gpu_uuid(n, i) for i in range(g["gpus"])]
+        assert {d["attributes"]["model"]["string"] for d in devs} == {dra.MODEL[g["gpu_type"]]}
+    k8s.prepare(SIM, addressing.plan(SIM), tmp_path / "s", tmp_path / "st")
+    assert (tmp_path / "st" / "50-dra.yaml").read_text().count("kind: ResourceSlice") == len(gpu_nodes)
+
+
+def test_dra_without_a_gpu_node_writes_nothing():
+    from benchctl import dra
+
+    assert dra.slices_yaml([("kcn001", {"cpus": 8})]) == ""
+
+
+def test_dra_tables_match_the_gpu_exporters():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("exporter", ROOT / "components/gpu-exporter-farm/exporter.py")
+    ex = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ex)
+    from benchctl import dra
+
+    for t, mib in ex.FB_TOTAL_MIB.items():
+        assert dra.MEMORY[t] == f"{mib}Mi", t
+
+
+def test_the_dra_fixture_asks_the_simulated_class_for_one_gpu():
+    docs = list(yaml.safe_load_all((ROOT / "k8s/fixtures/55-dra-claims.yaml").read_text()))
+    t = next(d for d in docs if d["kind"] == "ResourceClaimTemplate")
+    assert t["spec"]["spec"]["devices"]["requests"][0]["exactly"]["deviceClassName"] == "gpu.sim.test"
+
+
+def test_policy_fixtures_define_three_priority_classes_a_gpu_claim_quota_and_a_budget_that_allows_no_eviction():
+    docs = list(yaml.safe_load_all((ROOT / "k8s/fixtures/60-policy.yaml").read_text()))
+    by = {}
+    for d in docs:
+        by.setdefault(d["kind"], []).append(d)
+    classes = {c["metadata"]["name"]: c for c in by["PriorityClass"]}
+    assert set(classes) == {"training", "inference", "best-effort"}
+    assert classes["inference"]["value"] > classes["training"]["value"] > 0 > classes["best-effort"]["value"]
+    assert classes["best-effort"]["preemptionPolicy"] == "Never"
+    assert by["ResourceQuota"][0]["spec"]["hard"] == {"gpu.sim.test.deviceclass.resource.k8s.io/devices": "2"}
+    dep, pdb = by["Deployment"][0], by["PodDisruptionBudget"][0]
+    assert pdb["spec"]["minAvailable"] == dep["spec"]["replicas"]  # no voluntary eviction
+    assert pdb["spec"]["selector"] == {"matchLabels": dep["spec"]["selector"]["matchLabels"]}
+
+
+def test_the_throttling_files_are_not_a_fixture_and_only_match_the_viewer():
+    assert not (ROOT / "k8s/fixtures/70-apf.yaml").exists()  # `up` applies every file there
+    docs = list(yaml.safe_load_all((ROOT / "k8s/scenario/70-apf.yaml").read_text()))
+    schema = next(d for d in docs if d["kind"] == "FlowSchema")
+    assert [s["user"]["name"] for r in schema["spec"]["rules"] for s in r["subjects"]] == ["viewer"]
+    level = next(d for d in docs if d["kind"] == "PriorityLevelConfiguration")["spec"]["limited"]
+    assert level["limitResponse"] == {"type": "Reject"}
+
+
+def test_the_new_k8s_steps_validate_and_become_kubectl_calls():
+    nodes = {"kgpu001"}
+    assert k8s.step_problems({"drain": {"node": "kgpu001", "timeout": 30}}, nodes) == []
+    assert "known Kubernetes node" in k8s.step_problems({"drain": {"node": "x"}}, nodes)[0]
+    assert "timeout" in k8s.step_problems({"drain": {"node": "kgpu001", "timeout": 0}}, nodes)[0]
+    assert k8s.step_problems({"pod": {"namespace": "a", "name": "b", "priority_class": "Bad_", "node": "nope"}}, nodes) == [
+        "k8s pod priority_class must be a PriorityClass name", "unknown Kubernetes node 'nope'"]
+    assert k8s.step_problems({"remove": ["scenario/70-apf.yaml"]}, nodes) == [] and k8s.step_problems({"remove": ["../x"]}, nodes)
+    assert k8s.step_args({"remove": ["scenario/70-apf.yaml"]}) == [["delete", "--ignore-not-found", "-f", "/k8s/scenario/70-apf.yaml"]]
+    args = k8s.step_args({"drain": {"node": "kgpu001", "timeout": 20}})[0]
+    assert args[:2] == ["drain", "kgpu001"] and args[-1] == "--timeout=20s" and "--disable-eviction" not in args  # eviction, so a budget can refuse
+    pod = yaml.safe_load(k8s.pod_manifest({"namespace": "a", "name": "p", "priority_class": "inference", "node": "kgpu001", "gpus": 4}))["spec"]
+    assert pod["priorityClassName"] == "inference" and pod["nodeSelector"] == {"kubernetes.io/hostname": "kgpu001"}
+
+
+def test_a_blocked_drain_is_not_a_failed_step_and_pods_on_node_counts_running_pods():
+    do = {"drain": {"node": "kgpu001"}}
+    assert scenario.execute(scenario.Step(0, "k8s", do), runner=lambda c: bad("cannot evict")).status == "ok"
+    assert scenario.execute(scenario.Step(0, "k8s", {"cordon": ["kcn001"]}), runner=lambda c: bad("x")).status == "failed"
+    exp = {"k8s.pods_on_node": {"node": "kgpu001", "namespace": "team-a", "selector": "app=inference", "min": 1}}
+    assert scenario.expectation(exp, lambda c: ok("inference-abc"))[1]() is True
+    assert scenario.expectation(exp, lambda c: ok(""))[1]() is False and scenario.expectation(exp, lambda c: bad())[1]() is False
+
+
+def test_the_policy_scenarios_validate_against_the_default_sim():
+    names = {"k8s-preempt", "k8s-drain-blocked", "k8s-api-throttled"}
+    found = [s for s in scenario.list_all(ROOT / "scenarios") if s["name"] in names]
+    assert {s["name"] for s in found} == names and all(not scenario.validate(s, SIM) for s in found)

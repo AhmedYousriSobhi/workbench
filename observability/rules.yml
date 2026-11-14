@@ -1,0 +1,49 @@
+# Default alert rules (issues 633 and 460, ADR 0071 and 0072). Prometheus evaluates them; Alertmanager sends each one to the
+# Jira mock, which opens a ticket. They give `benchctl get alerts` and `benchctl wait alert` something to read, and the
+# gpu-fault-to-alert recipe an end-to-end assert. The app under test keeps its own alerting; these watch the simulated cluster.
+# `promtool test rules` cases for every rule are in tests/rules/.
+groups:
+  - name: workbench-default
+    interval: 15s
+    rules:
+      - alert: GpuXidCritical
+        expr: max by (node) (DCGM_FI_DEV_XID_ERRORS) > 0
+        for: 15s
+        labels: {severity: page}
+        annotations: {summary: "XID error {{ $value }} on {{ $labels.node }}", description: "A GPU on {{ $labels.node }} reports a non-zero XID error code."}
+      # Reads the GPU exporter's temperature. A scenario's BMC `temp` step does not change it; a gpu-exporter `temp` step does.
+      - alert: GpuTempHigh
+        expr: max by (node) (DCGM_FI_DEV_GPU_TEMP) > 85
+        for: 15s
+        labels: {severity: warning}
+        annotations: {summary: "GPU on {{ $labels.node }} at {{ $value }} C", description: "A GPU on {{ $labels.node }} is above 85 C."}
+      # State 4 is active and 1 is down (node_infiniband_state_id); one ticket per node, however many ports are down.
+      - alert: InfinibandPortDown
+        expr: count by (node) (node_infiniband_state_id == 1) > 0
+        for: 15s
+        labels: {severity: page}
+        annotations: {summary: "{{ $value }} InfiniBand port(s) down on {{ $labels.node }}", description: "The fabric link of {{ $labels.node }} is down."}
+      # A powered-off node publishes nothing, so its series vanish: a node seen 3 minutes ago and not now.
+      # It resolves by itself once the 3 minutes have passed; read it while the node is down.
+      - alert: NodeDown
+        expr: count by (node) (DCGM_FI_DEV_GPU_TEMP offset 3m) unless count by (node) (DCGM_FI_DEV_GPU_TEMP)
+        labels: {severity: page}
+        annotations: {summary: "{{ $labels.node }} stopped publishing metrics", description: "{{ $labels.node }} has published no GPU series for the last scrape."}
+      # Slurm's own node counts (job slurm-nodes, ADR 0074): nodes carrying the DRAIN flag, however many; the ticket says how many.
+      - alert: NodeDrained
+        expr: slurm_nodes_drain > 0
+        for: 30s
+        labels: {severity: warning}
+        annotations: {summary: "{{ $value | printf \"%.0f\" }} Slurm node(s) drained", description: "sinfo -R lists which nodes and why."}
+      # One target per node (benchctl/promtargets.py): a powered-off node answers 503, and a stopped farm fails every node's scrape.
+      - alert: ExporterDown
+        expr: up{job="sim-nodes"} == 0
+        for: 30s
+        labels: {severity: page}
+        annotations: {summary: "The metrics of {{ $labels.instance }} cannot be scraped", description: "{{ $labels.instance }} is down or the exporter farm does not answer."}
+      # Client requests the Jira mock answered with 4xx or 5xx (its own /metrics, which never counts itself): three in a minute.
+      - alert: JiraErrors
+        expr: increase(jira_mock_errors_total[1m]) >= 3
+        for: 15s
+        labels: {severity: warning}
+        annotations: {summary: "The Jira mock answered {{ $value | printf \"%.0f\" }} requests with an error in the last minute", description: "Look at GET /sim/traffic on the Jira mock for which paths."}

@@ -71,6 +71,8 @@ sudo ./scripts/install-governor.sh              # starts at boot, adds cgroup th
 sudo ./scripts/install-governor.sh --uninstall
 ```
 
+Optional on top of it, off by default: a `systemd-oomd` backstop that only watches the workbench containers (`workbench.slice`) and never changes the host's `oomd.conf`. `sudo ./scripts/install-governor.sh --with-oomd` adds it (`--oomd-only` without touching the service, `--without-oomd` removes it, `--uninstall` removes everything). It acts only while `systemd-oomd` runs; `./scripts/benchctl doctor` shows the `oomd backstop` line (off, active, or installed but oomd not running, with the command to fix it).
+
 You can skip it. See [the governor](07-governor.md) for what it adds.
 
 ## What you will see

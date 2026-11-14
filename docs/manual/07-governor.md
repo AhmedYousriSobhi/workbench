@@ -24,6 +24,7 @@ through a ladder, acting on the lowest-priority containers first and on reversib
 | Acts by | `docker pause`, `docker kill`/`stop` | cgroup files |
 | Throttle (`memory.high`) and reclaim | no (skipped, logged once) | yes |
 | Own memory locked and OOM-shielded | best effort | yes (SPEC GV-8) |
+| `systemd-oomd` backstop on `workbench.slice` (GV-10) | no | only with `--with-oomd` (off by default) |
 
 When the root service is running it wins. Details and the reasons: [ADR 0010](../adr/0010-rootless-governor-mode.md).
 

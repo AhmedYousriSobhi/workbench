@@ -21,6 +21,8 @@ GET|POST /sim/activity {"on": true, "every": 30, "seed": 1}   (background change
 POST /sim/failure  {"mode": "401|429|503|slow", "count": 3, "delay": 2}   (applies to the next /rest requests)
 GET  /sim/failure  the failure now set: {"mode", "count" (requests still to fail), "delay"}
 GET|POST /sim/tickets   {"action": "create|transition|comment|fault|reset", ...}: tickets without a client (scenarios, #107)
+POST /sim/alerts   an Alertmanager webhook body (version 4): a firing alert opens a ticket (or comments on its open one), a resolved alert comments (#460)
+GET  /metrics   Prometheus text: jira_mock_requests_total, jira_mock_errors_total (client requests only; not counted itself)
 GET  /rest/api/{2,3}/issue/KEY/editmeta            (priority, labels, description, summary: what an edit form draws)
 GET  /rest/api/search?cql=type = page AND (label in ("a") OR title ~ "x")&limit=25&start=0   Confluence page search (issue 289), also at
      /wiki/rest/api/search (Cloud): results[].title|url|lastModified|resultGlobalContainer.title|content.space.name, _links.base|next
@@ -381,6 +383,39 @@ class Jira:
         if action == "fault":
             return self.fault(body)
         raise JiraError(400, ["action must be create, transition, comment, fault or reset"])
+
+    def alerts(self, body: dict) -> dict:
+        """An Alertmanager webhook (version 4) as a team's ticket flow: a firing alert opens one ticket (project OPS, labelled
+        `alert` and `alert-<fingerprint>`) or, while that ticket is still open, comments on it; a resolved alert comments on it.
+        Nobody closes the ticket for the engineer. Only labels and annotations the alert carries are written; nothing else is kept."""
+        alerts = body.get("alerts")
+        if not isinstance(alerts, list):
+            raise JiraError(400, ["alerts must be a list (an Alertmanager webhook body)"])
+        created, commented = [], []
+        for a in alerts:
+            labels, notes = a.get("labels") or {}, a.get("annotations") or {}
+            name = str(labels.get("alertname") or "alert")
+            fp = str(a.get("fingerprint") or "-".join(f"{k}-{v}" for k, v in sorted(labels.items())))
+            tag = "alert-" + "".join(c for c in fp if c.isalnum() or c in "-_")[:60]
+            text = f"{notes.get('summary') or name}" + (f"\n\n{notes['description']}" if notes.get("description") else "")
+            with self.lock:
+                open_key = next((k for k, i in self.issues.items() if tag in (i["fields"]["labels"] or [])
+                                 and i["fields"]["status"]["name"] not in ("Resolved", "Closed")), None)
+            if a.get("status") == "resolved":
+                if open_key:
+                    self.comment(open_key, {"body": f"Alert {name} resolved (ended {a.get('endsAt') or 'now'})."})
+                    commented.append(open_key)
+            elif open_key:
+                self.comment(open_key, {"body": f"Alert {name} is still firing.\n\n{text}"})
+                commented.append(open_key)
+            else:
+                created.append(self.create({"fields": {
+                    "project": {"key": body.get("project", "OPS")},
+                    "summary": f"[ALERT] {name}" + (f" on {labels['node']}" if labels.get("node") else ""),
+                    "description": text, "labels": ["alert", f"alertname-{name}", tag],
+                    "issuetype": {"name": "Task"},
+                    "priority": {"name": "High" if labels.get("severity") == "page" else "Medium"}}})["key"])
+        return {"created": created, "commented": commented}
 
     def set_activity(self, req: dict) -> dict:
         """Background activity (#158): every `every` seconds (a little jittered) one change a team would make: a ticket moves
@@ -788,7 +823,7 @@ PROBE = "x-workbench-probe"  # the web UI sets this on its own polls so they are
 
 def counted(path: str, headers) -> bool:
     """A real client request: not a health check, not /sim control, not a UI probe."""
-    return not (path.startswith(("/healthz", "/sim/")) or headers.get(PROBE))
+    return not (path.startswith(("/healthz", "/metrics", "/sim/")) or headers.get(PROBE))
 
 
 # --- request shapes (issue 475): which paths a client calls and which 404. Method and path shape only: a segment with a digit
@@ -921,6 +956,8 @@ def make_handler(jira: Jira):
                 return 200, jira.set_activity(self._body()) if method == "POST" else dict(jira.activity)
             if url.path == "/sim/tickets":
                 return 200, jira.sim_tickets(self._body()) if method == "POST" else jira.overview()
+            if url.path == "/sim/alerts" and method == "POST":
+                return 200, jira.alerts(self._body())
             if url.path == "/sim/pages":
                 return 200, jira.sim_pages(self._body()) if method == "POST" else {"pages": len(jira.pages)}
             if url.path in ("/rest/api/search", "/wiki/rest/api/search") and method == "GET":
@@ -1046,7 +1083,20 @@ def make_handler(jira: Jira):
                     return {**me, "emailAddress": email}
             return person(ME)
 
+        def _metrics(self) -> None:
+            with lock:
+                n, err = stats["requests"], stats["errors"]
+            data = ("# TYPE jira_mock_requests_total counter\n" f"jira_mock_requests_total {n}\n"
+                    "# TYPE jira_mock_errors_total counter\n" f"jira_mock_errors_total {err}\n").encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; version=0.0.4")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
         def _handle(self, method: str) -> None:
+            if method == "GET" and urlparse(self.path).path == "/metrics":
+                return self._metrics()
             try:
                 self._send(*self._route(method))
             except JiraError as e:

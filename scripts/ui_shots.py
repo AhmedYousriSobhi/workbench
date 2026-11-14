@@ -157,7 +157,11 @@ def check_run(page, shot: str) -> list[str]:
     names = page.locator("#list .scnsel").evaluate_all("els => els.map(e => e.dataset.name)")
     for name in names:  # the preview says what is CLI-only before anything runs, and says it in words
         page.click(f'#list .scnsel[data-name="{name}"]')
-        page.wait_for_function("n => document.querySelector('#runtitle').textContent.startsWith(n) && document.querySelectorAll('#timeline li').length > 0", arg=name)
+        try:
+            page.wait_for_function("n => document.querySelector('#runtitle').textContent.startsWith(n) && document.querySelectorAll('#timeline li').length > 0", arg=name, timeout=15000)
+        except PlaywrightError:  # name the scenario: a bare timeout does not say which preview never drew
+            bad.append(f"{name}: the preview drew no title or timeline within 15 s (title now: {page.locator('#runtitle').text_content()!r})")
+            continue
         tags, notice = page.locator("#timeline .clitag").count(), page.locator("#runcli").is_visible()
         cli_exp = "(CLI only)" in page.locator("#expects").inner_text()
         if bool(tags or cli_exp) != notice:
@@ -340,6 +344,44 @@ def capture(out: Path) -> dict:
             if first.evaluate("document.documentElement.dataset.theme") != "midnight":
                 result["a11y"].append("a first visit does not start in the dark theme")
             first.close()
+            for theme in ("light", "dark", "midnight", "dim"):      # no flash: with the app's own scripts blocked, <html> already carries the saved theme
+                fp = browser.new_page(viewport={"width": 1280, "height": 900}, bypass_csp=True)
+                fp.route("**/static/js/main.js", lambda route: route.abort())
+                fp.add_init_script(f"localStorage.setItem('workbench-theme','{theme}')")
+                fp.goto(login_url(base_url, ui_token))
+                fp.wait_for_timeout(400)
+                if fp.evaluate("document.documentElement.dataset.theme") != theme:
+                    result["a11y"].append(f"theme flash: saved {theme}, but the first paint has no theme (theme-init.js did not run)")
+                fp.close()
+            for theme in ("light", "dark"):      # the Circuit view draws with the canvas tokens on hosts that are not .canvas elements (issue 648)
+                cp = browser.new_page(viewport={"width": 1280, "height": 900}, bypass_csp=True)
+                cp.add_init_script(TEST_HOOK.replace("localStorage.setItem('workbench-circuit', '0');", "localStorage.setItem('workbench-circuit', '1');"))
+                cp.add_init_script(f"localStorage.setItem('workbench-theme','{theme}')")
+                cp.goto(login_url(base_url, ui_token))
+                cp.wait_for_timeout(1500)
+                cp.wait_for_function("typeof setTree === 'function'", timeout=15000)
+                cp.evaluate(SYNTH_CLUSTER)
+                cp.wait_for_timeout(800)
+                for problem in cp.evaluate("""() => { const out = [];
+                    for (const el of document.querySelectorAll('#flow[data-cv], .cvlayer, .cvcap, .cvstack, .zoomrail, .canvas'))
+                      if (!getComputedStyle(el).getPropertyValue('--cv-ground').trim()) out.push((el.id || el.className.baseVal || el.className) + ' has no --cv-ground');
+                    if (!document.querySelector('#flow[data-cv]')) out.push('the circuit did not draw');
+                    for (const r of document.querySelectorAll('#flow[data-cv] .cv-box')) if (getComputedStyle(r).fill === 'rgb(0, 0, 0)') { out.push('a box is filled black'); break; }
+                    return out; }"""):
+                    result["a11y"].append(f"circuit {theme}: {problem}")
+                cp.click("#zoomrail [data-level=traffic]")      # Traffic shows the links, one level deeper Requests shows the river, never both (issue 650)
+                cp.wait_for_timeout(1200)
+                seen = [cp.evaluate("document.getElementById('tab-traffic').dataset.tl")]
+                cp.click("#zr-in")
+                cp.wait_for_timeout(900)
+                seen.append(cp.evaluate("document.getElementById('tab-traffic').dataset.tl"))
+                shown = cp.evaluate("getComputedStyle(document.querySelector('#tab-traffic .tan')).display !== 'none'")
+                cp.click("#tr-back")
+                cp.wait_for_timeout(700)
+                seen.append(cp.evaluate("document.getElementById('tab-traffic').dataset.tl"))
+                if seen != ["links", "requests", "links"] or not shown:
+                    result["a11y"].append(f"circuit {theme}: zoom levels Traffic -> Requests -> Back gave {seen}, river shown {shown}")
+                cp.close()
             for scheme in ("light", "dark"):
                 for vp, (w, h) in VIEWPORTS.items():
                     page = browser.new_page(viewport={"width": w, "height": h}, color_scheme=scheme, bypass_csp=True)

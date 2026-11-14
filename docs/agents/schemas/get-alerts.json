@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "get alerts",
-  "description": "Prometheus alerts that are pending or firing. The workbench ships no alert rules, so this is empty until rules are loaded. Exit 1 when Prometheus is not running.",
+  "description": "Prometheus alerts that are pending or firing. The workbench ships seven default rules (GpuXidCritical, GpuTempHigh, InfinibandPortDown, NodeDrained, NodeDown, ExporterDown, JiraErrors), so empty means none is firing. Exit 1 when Prometheus is not running.",
   "type": "object",
   "properties": {
     "contract_version": {

@@ -106,3 +106,16 @@ def stop_governor(proc) -> bytes:
     proc.terminate()
     _, err = proc.communicate(timeout=10)
     return err
+
+
+def prom_up(job: str, prom: str = "http://127.0.0.1:9090") -> dict[str, str]:
+    """`{instance: "1" | "0"}` for one scrape job, as Prometheus itself reports it ({} while it has no such target yet)."""
+    import json
+    import urllib.parse
+    import urllib.request
+    try:
+        q = urllib.parse.quote(f'up{{job="{job}"}}')
+        with urllib.request.urlopen(f"{prom}/api/v1/query?query={q}", timeout=5) as r:
+            return {x["metric"].get("instance", "?"): x["value"][1] for x in json.loads(r.read())["data"]["result"]}
+    except (OSError, ValueError, KeyError):
+        return {}

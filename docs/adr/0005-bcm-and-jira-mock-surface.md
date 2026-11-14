@@ -58,3 +58,8 @@ hundred lines in the same process). A real Confluence is not run: it would cost 
 ## Revisit when
 The app's real BCM or Jira calls are known: replace the call list or surface, and record real responses as
 fixtures (architecture section 13, contract tests).
+
+## Addendum: Jira modes are a proposal, not a decision (issue 683)
+The owner proposes removing `dc` as a mock mode (the real Jira part, ADR 0026, covers Data Center) and building `cloud`
+only if the monitoring client's own traffic shows v3 calls. Nothing changes until `/sim/paths` and `/sim/traffic` have
+been read from a client run; SPEC C-5 keeps its wording and notes the proposal.

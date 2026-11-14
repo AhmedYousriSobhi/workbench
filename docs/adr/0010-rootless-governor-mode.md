@@ -46,3 +46,11 @@ and a stopped one comes back with the `start` command. Running them found four d
   modes. They are now remembered until they run again. A stop is still never undone automatically (by design).
 A shared host also matters: if a system governor runs on the same machine it governs the same containers from host
 signals, so rootless tests need that one calm (L0).
+
+## Addendum: systemd-oomd backstop on the project's own slice (issue 686, SPEC GV-10)
+Owner decision, 2026-11-14 (#471). The backstop SPEC GV-10 names, `systemd-oomd`, is shipped as an option of the root installer and nothing else:
+- **What:** `systemd/workbench.slice.d/50-oomd.conf` sets `ManagedOOMMemoryPressure=kill` and `ManagedOOMMemoryPressureLimit=60%`. Compose puts every container in `workbench-pN.slice` (`cgroup_parent`) and systemd nests a dashed slice under `workbench.slice`, so one drop-in covers P0 to P6 and nothing else on the host. The governor's own slice (`workbench-governor.slice`) is not under it.
+- **Opt-in:** `sudo ./scripts/install-governor.sh --with-oomd` (with the service) or `--oomd-only`; a plain install never adds it. `--without-oomd` removes only it, `--uninstall` removes it with the service. `./scripts/install-governor.sh --print-oomd` shows it without root. The start path (`benchctl start`, rootless) is unchanged (NF-5).
+- **Never the host's config:** `/etc/systemd/oomd.conf` is not read or written. The installer does not enable `systemd-oomd` either; if it is not running the drop-in does nothing, and the installer and `benchctl doctor` (`oomd backstop`) say so with the command. Doctor reports off (the default), active, installed but oomd not running, or not applied.
+- **Limits:** the 60% limit is read by oomd against the 20 s default duration of the host's oomd configuration (not changed here). oomd picks the victim by its own ranking inside `workbench.slice`; per-class preference (`ManagedOOMPreference`) is not set, so the governor's ladder (stop P6 first) remains the intended path and oomd only acts if pressure is still high when it fails.
+- **Tested:** unit text, installer dry run and doctor line are hermetic tests (`tests/test_oomd.py`); `tests/real/test_root.py::test_oomd_backstop_installs_covers_the_class_slices_and_uninstalls` runs with `sudo ./scripts/real-test-root.sh` and is run by the owner.

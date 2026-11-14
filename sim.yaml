@@ -8,6 +8,7 @@ compute:
   count: 4
   prefix: cn
   memory_mb: 4096         # fake RealMemory per node
+  # job_memory_mb: 128    # real room a job gets on each node above slurmd's 60 MB (a cap; 0 to 4096). Raise it to the largest job you submit (#670)
   cpus: 8
 
 gpu:
@@ -17,6 +18,11 @@ gpu:
   type: h200
   cpus: 64                # per GPU node, 8 per GPU: the same in Slurm, Redfish and BCM (issue 462)
   memory_mb: 16384        # fake RealMemory per GPU node, 2048 per GPU
+  # job_memory_mb: 128    # same, for the GPU nodes
+  # mig:                  # optional, off by default (issue 546, ADR 0075): split every GPU of the listed nodes into slices;
+  #   nodes: [gpu002]     #   Slurm then advertises gpu:h200_1g:56 there (8 GPUs x 7) and jobs ask --gres=gpu:h200_1g:N
+  #   profile: 1g
+  #   slices: 7           #   per GPU, 1 to 7
 
 partitions:
   - {name: cpu, nodes: compute}
@@ -31,6 +37,7 @@ partitions:
 #   - {name: scavenger, priority: 1, max_gpus_per_user: 2}
 #   - {name: urgent, priority: 1000, preempt: [scavenger], grace_time_s: 30}
 # slurm:
+#   version: 25.11.9   # build and run this Slurm release instead of the pin (25.05.9, 25.11.9, 26.05.5, 26.05.6; --slurm-version; ADR 0079)
 #   priority: {weight_qos: 1000, weight_age: 100, weight_fairshare: 10000, decay_half_life: 7-0}
 
 controller:             # a controller node (SPEC C-20, issue 416): slurmctld's host with sshd, the BCM head node (cmsh); off: the login node acts as the head node
@@ -61,6 +68,11 @@ bcm:
 
 bmc:
   per_node: true   # one BMC address per node (ADR 0018); a workbench selection can limit which nodes (--bmc-nodes)
+
+# storage:               # declared mounts and a shared scratch (issue 461, ADR 0078, docs/guides/storage.md); without it /home (NFS) and /scratch (Lustre, shared) apply
+#   mounts:
+#     - {path: /scratch, kind: lustre, size_tb: 500, used_pct: 40, shared: true}
+#     - {path: /datasets, kind: ddn, size_tb: 2000, shared: true, host_path: /mnt/bigdisk/datasets}   # users' training data on a disk you name
 
 host:
   reserve_gb: 3

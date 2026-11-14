@@ -16,7 +16,7 @@ from pathlib import Path
 
 import yaml
 
-from . import authfaults, checks, dcgm, k8s, topology
+from . import authfaults, checks, dcgm, k8s, slurmupgrade, topology
 from .nodes import node_names
 
 ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "http://127.0.0.1:8000/sim/inject",
@@ -31,7 +31,7 @@ JIRA_REAL_URL = "http://127.0.0.1:8083"
 JIRA_REAL_MODES = ("outage", "restore", "bad_logins", "clear_logins", "rate_limit", "rate_limit_off", "token_revoke", "token_restore",
                    "proxy_503", "proxy_429", "proxy_slow", "proxy_off")  # real faults on the real Jira (issue 303); proxy_* through benchctl/jira_proxy.py (issue 305)
 JIRA_REAL_TICKET_ACTIONS = ("create", "transition", "comment")  # `tickets:` steps on the real Jira go through the REST driver (issue 306)
-HOST_TARGETS = ("slurm", "ssh", "jira-real", "k8s", "dcgm", "auth")  # steps that need Docker on the host
+HOST_TARGETS = ("slurm", "slurm-upgrade", "ssh", "jira-real", "k8s", "dcgm", "auth")  # steps that need Docker on the host
 SSH_STATES = ("down", "up", "hung")
 NODE_SSHD_STATES = ("down", "up")
 RAMP_STEP_S = 10.0
@@ -166,6 +166,9 @@ def validate(sc: dict, sim: dict) -> list[str]:
             problems += [f"step {i}: {m}" for m in jira_ticket_problems(do["tickets"])]
         if t == "slurm":
             problems += [f"step {i}: {m}" for m in daemon_problems(do)]
+        if t == "slurm-upgrade":
+            problems += [f"step {i}: {m}" for m in slurmupgrade.problems(do, nodes)]
+            continue
         if t == "dcgm" and sum(bool(do.get(v)) for v in ("stop", "start", "restart")) != 1:
             problems.append(f"step {i}: dcgm needs one of stop, start, restart: true")
         if t == "auth":
@@ -271,7 +274,7 @@ SLURM_STATES = {"drain": "drain", "down": "down", "resume": "resume", "power_off
 
 def disruptive(sc: dict) -> bool:
     """True when a step restarts or stops a Slurm daemon or starts a job: the governor must admit that first (GV-9)."""
-    return any(set(s.get("do") or {}) & set(DAEMON_KEYS) for s in sc.get("steps", []))
+    return any(set(s.get("do") or {}) & set(DAEMON_KEYS) or s.get("target") == "slurm-upgrade" for s in sc.get("steps", []))
 
 
 def submit_command(sub: dict, sim: dict | None = None) -> list[str]:
@@ -467,13 +470,16 @@ def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcom
                 r = runner(cmd)
                 if r.returncode:
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+        elif step.target == "slurm-upgrade":
+            bad = slurmupgrade.apply(step.do, runner)
+            return Outcome(label, "failed", bad) if bad else Outcome(label, "ok")
         elif step.target == "dcgm":
             return _dcgm(step, label, runner)
         elif step.target == "k8s":
             k8s.write_pod(step.do)
             for args in k8s.step_args(step.do):
                 r = runner(k8s.kubectl_cmd(k8s.current_sim(), *args))
-                if r.returncode:
+                if r.returncode and args[0] != "drain":  # a drain that the disruption budget blocks times out: that is what the step plays
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip()[-300:])
         elif step.target == "jira-real":
             return jira_real_fault(step, label, runner)
@@ -620,6 +626,30 @@ def jira_search(jql: str) -> list[dict]:
         return []
 
 
+def storage_mount(node: str, mount: str) -> dict | None:
+    """One mount as the exporter farm shows it to `node` (GET /sim/storage), or None when it cannot be read."""
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:9400/sim/storage?node={urllib.parse.quote(node)}", timeout=5) as r:
+            return next((m for m in json.loads(r.read())["mounts"] if m["path"] == mount), None)
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def storage_holds(args: dict) -> bool:
+    """`storage.mount`: the mount is at least `min_used_pct` full, `min_inodes_used_pct` of its inodes used, `stale` (default false) for the
+    node, or the user's usage is over the quota (`quota_exceeded: USER`)."""
+    m = storage_mount(args.get("node", "cn001"), args["mount"])
+    if m is None:
+        return False
+    if "min_used_pct" in args and m["used"] * 100 < float(args["min_used_pct"]) * m["size"]:
+        return False
+    if "min_inodes_used_pct" in args and m["files_used"] * 100 < float(args["min_inodes_used_pct"]) * m["files"]:
+        return False
+    if "quota_exceeded" in args and not (m["quotas"].get(args["quota_exceeded"]) or {}).get("exceeded"):
+        return False
+    return bool(m["stale"]) == bool(args.get("stale", False))
+
+
 def jira_labels(labels: list[str]) -> bool:
     jql = "labels = " + " AND labels = ".join(labels)
     url = "http://127.0.0.1:8080/rest/api/2/search?jql=" + urllib.parse.quote(jql)
@@ -668,6 +698,10 @@ def expectation(exp: dict, runner=checks.run, host: bool = True):
         return label, lambda: k8s.node_ready(args["node"], runner) == bool(args.get("ready", True)), within
     if kind == "k8s.pod_status" and host:  # the pod's phase or a container's waiting/terminated reason is `reason`
         return label, lambda: args["reason"] in k8s.pod_reasons(args["namespace"], args["name"], runner).split(), within
+    if kind == "k8s.pods_on_node" and host:  # at least `min` (default 1) Running pods matching `selector` on the node
+        return label, lambda: (k8s.pods_on_node(args["node"], args["namespace"], args["selector"], runner) or 0) >= int(args.get("min", 1)), within
+    if kind == "storage.mount" and host:  # the declared mount is as full, stale or over quota as the scenario made it
+        return label, lambda: storage_holds(args), within
     if kind == "jira.issue_created":
         return label, lambda: jira_labels(args["labels"]), within
     search = (lambda q: real_search(q)) if args.get("target") == "real" else (lambda q: jira_search(q))  # `target: real` asks the real Jira

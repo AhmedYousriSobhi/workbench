@@ -82,7 +82,7 @@ ls /dev/workbench-gpu*                # the fake GPUs (GPU nodes only)
   governor's `start` command or `benchctl up`.
 - Nodes are small: each is capped at 60 MB and runs `slurmd` and `munge`, not a full set of system services.
 - Scaling down (`benchctl scale 2`) removes nodes, and a shell open on one ends.
-- Nodes run `sshd`, reachable only through the login node (`ssh cn001` there, ADR 0014). There is no real NFS or Lustre; storage is faked with metrics only.
+- Nodes run `sshd`, reachable only through the login node (`ssh cn001` there, ADR 0014). There is no real NFS or Lustre: the mounts are declared (`df`, `df -i`, `lfs df`, `lfs quota` and the `node_filesystem_*` series show them), and `/scratch` is one real shared directory on every node and the login node for datasets and job output ([storage guide](../guides/storage.md)).
 - Do not add `--privileged`, extra capabilities or the Docker socket to a container; `benchctl doctor` fails the stack if
   you do, and the governor's watchdog flags it.
 
@@ -203,7 +203,7 @@ scheduler, controller manager) and KWOK, which plays the nodes. About 0.3 GB of 
 Slurm nodes: `kcn001`, `kcn002` (CPU) and `kgpu001`, `kgpu002` (8 GPUs each, labelled as GPU Feature Discovery does); change them
 under `kubernetes:` in `sim.yaml`, or set the counts with `--k8s-nodes N` (GPU nodes) and `--k8s-cpu-nodes N`, or in the page (Cluster architecture). Pods never really run, so there are no real pod
 logs; a pod labelled `workbench_fault` (the fixtures have crash-looping, OOM-killed, image-pull and failed-job ones) shows the status a kubelet
-would report. The first start pulls about 400 MB of images.
+would report. Each GPU node also publishes a DRA `ResourceSlice` (driver `gpu.sim.test`, one device per GPU, UUIDs as in the DCGM series), and the pod `dra-train` in `team-a` gets its GPU through a `ResourceClaim` the real scheduler allocates (`kubectl -n team-a get resourceclaim -o yaml`, ADR 0076). The fixtures also carry three priority classes (`inference`, `training`, `best-effort`), a quota of two DRA devices in `team-a`, and an `inference` deployment with a disruption budget that blocks a drain; scenarios `k8s-preempt`, `k8s-drain-blocked` and `k8s-api-throttled` play them (ADR 0077). The first start pulls about 400 MB of images.
 
 **s-login and k-login.** A login node can serve one scheduler: add `:slurm` or `:k8s` to its mode. An s-login has the Slurm tools and no
 kubeconfig; a k-login has `kubectl` and the kubeconfigs and no Slurm configuration. A bare `ssh` serves both (as before). The Cluster

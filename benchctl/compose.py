@@ -14,16 +14,20 @@ from . import (
     jira_real,
     k8s,
     logins,
+    mig,
     nhc,
+    objectstore,
     qos,
     real_gpu,
     slurmconf,
+    slurmver,
+    storage,
     teleport,
     topology,
 )
 from .nodes import KIND_GROUP, hardware_nodes, node_names
 
-OBSERVABILITY = "../observability.yml"  # static; hosts prometheus, grafana, gpu-exporter-farm
+OBSERVABILITY = "../observability.yml"  # static; hosts prometheus, grafana, gpu-exporter-farm, alertmanager
 
 # group -> service -> (image, mem_mb, priority class). Images are built from images/ and components/.
 CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {
@@ -42,6 +46,8 @@ CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {
     "dcgm": {dcgm.SERVICE: ("workbench/dcgm-exporter:dev", dcgm.LIMIT_MB, 6)},  # the real DCGM exporter on a mock NVML (issue 426); off by default
     "real-gpu": {real_gpu.SERVICE: ("workbench/dcgm-exporter:dev", real_gpu.LIMIT_MB, 6)},  # the host's own NVIDIA card with the real exporter (issue 428); off by default
     "jump": {"jump": ("workbench/jump:dev", 24, 2)},  # a bare sshd bastion (SPEC C-21)
+    # tier 3 of the storage tiers (ADR 0078): one Garage node speaking S3, off by default (issue 672)
+    "objectstore": {objectstore.SERVICE: (objectstore.image(), objectstore.LIMIT_MB, 6)},
     # the tag is replaced from sim.yaml teleport.version (benchctl/teleport.py); the limit is a planning estimate until measured
     "teleport": {"teleport": (f"{teleport.IMAGE}:{teleport.DEFAULT_VERSION}", 320, 2)},
     # a real control plane with KWOK nodes (ADR 0034); the image tags are replaced from sim.yaml kubernetes.version (benchctl/k8s.py)
@@ -51,7 +57,23 @@ SSH_PORT = 2222
 # Every image whose entrypoint is node-base's installs the munge and JWT keys from this mount (images/node-base/entrypoint.sh).
 SLURM_KEY_IMAGES = ("workbench/node-base:dev", "workbench/slurm-ctl:dev", "workbench/login:dev")
 SLURM_KEYS_MOUNT = "./secrets/slurm:/run/workbench/slurm:ro"
-SLURMD_MB = 60
+SLURMD_MB = 60  # slurmd and the node's shell: 13 MB measured
+JOB_MB = 128    # default room on top of that for what the jobs allocate; sim.yaml compute.job_memory_mb / gpu.job_memory_mb (issue 670)
+MAX_JOB_MB = 4096
+
+
+class JobMemoryError(ValueError):
+    pass
+
+
+def job_memory_mb(sim: dict, kind: str) -> int:
+    """The room a job gets on a node of this kind, above slurmd's own: a node's limit is SLURMD_MB + this. A cap, not a reservation:
+    the plan counts what the nodes use (measured), and the governor sees the limit."""
+    group = sim.get("gpu" if kind in ("gpu", "real-gpu", "k8s-gpu") else "compute", {})
+    v = group.get("job_memory_mb", JOB_MB)
+    if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= MAX_JOB_MB:
+        raise JobMemoryError(f"{'gpu' if group is sim.get('gpu') else 'compute'}.job_memory_mb is {v!r}: use a whole number of MB from 0 to {MAX_JOB_MB}")
+    return v
 SLURMD_PRIO = 4
 
 
@@ -77,6 +99,8 @@ def _service(image: str, mem_mb: int, prio: int, build: str | None = None) -> di
 
 
 def generate(sim: dict, profile: dict) -> dict:
+    if bad := slurmver.problems(sim):  # one message, before anything is written (issue 221)
+        raise slurmver.SlurmVersionError("; ".join(bad))
     if bad := topology.problems(sim, profile.get("compute_nodes")):  # one message per condition, before anything is written (issue 543)
         raise topology.TopologyError("; ".join(bad))
     services: dict = {}
@@ -94,13 +118,18 @@ def generate(sim: dict, profile: dict) -> dict:
                 services[lname] = {k: v for k, v in copy.deepcopy(services["login"]).items() if k != "build"}
     if problems := logins.problems(sim, {p for p, n in (("teleport", "teleport"), ("k8s", k8s.API)) if n in services}):
         raise logins.LoginError("; ".join(problems))
+    if "slurmctld" in services and (m := mig.config(sim)):  # the GPU allocation feed maps a slice index to its physical GPU (issue 546)
+        services["slurmctld"].setdefault("environment", {}).update({"WORKBENCH_MIG_TYPE": mig.gres_type(sim), "WORKBENCH_MIG_SLICES": str(m["slices"])})
     for name, kind in node_names(sim, profile.get("compute_nodes")):
-        svc = _service("workbench/node-base:dev", SLURMD_MB, SLURMD_PRIO, "../../images/node-base")
+        svc = _service("workbench/node-base:dev", SLURMD_MB + job_memory_mb(sim, kind), SLURMD_PRIO, "../../images/node-base")
         svc["hostname"] = name
         svc["labels"]["workbench.node"] = kind
+        svc["cap_add"] = ["SYS_PTRACE"]  # the one exception to "unprivileged" (issue 674, ADR 0074): slurmd reads /proc/PID/io of the users' job processes
         svc["environment"] = {"WORKBENCH_IB": str(sim["gpu"]["gpus_per_node"] if kind == "gpu" else 0 if kind == "real-gpu" else 1)}  # InfiniBand ports nhc expects
         if kind == "gpu":
-            svc["environment"]["WORKBENCH_GPUS"] = str(sim["gpu"]["gpus_per_node"])
+            svc["environment"]["WORKBENCH_GPUS"] = str(sim["gpu"]["gpus_per_node"])  # physical GPUs: what nhc expects of the exporter's series
+            if mig.is_mig(sim, name):  # typed GRES units need one stand-in device file each (issue 546)
+                svc["environment"]["WORKBENCH_GRES_DEVICES"] = str(mig.units(sim))
         if kind == "real-gpu":  # the real card as a CDI device: unprivileged, no stand-in files (WORKBENCH_GPUS stays 0 so nhc's simulated-GPU checks skip it)
             svc["devices"] = [real_gpu.DEVICE]
         if "slurmctld" in services:
@@ -157,6 +186,7 @@ def generate(sim: dict, profile: dict) -> dict:
             if svc["labels"].get("workbench.node") or any(svc is services.get(n) for n in logins.via_teleport(sim)) or (
                     svc is services.get(controller.CONTROLLER) and controller.enabled(sim)):
                 svc["volumes"].append(f"./secrets/teleport:{teleport.CONTAINER_SECRETS}:ro")
+    objectstore.wire(services, os.getuid(), os.getgid(), [n for n, s in services.items() if logins.is_login(n) or s["labels"].get("workbench.node")])  # no-op unless the part is on
     dcgm.wire(services, sim)  # no-op unless the dcgm part is on
     real_gpu.wire(services)  # no-op unless the real-gpu part is on
     k8s.wire(services, sim)  # no-op unless the k8s part is on
@@ -182,8 +212,13 @@ def generate(sim: dict, profile: dict) -> dict:
         raise qos.QosError("; ".join(bad))
     _wire_slurm_services(services)
     for svc in services.values():  # munge and JWT keys are made by `up` (ensure_slurm_keys), never baked into an image (issue 465)
-        if svc.get("image") in SLURM_KEY_IMAGES:
+        if slurmver.retag(svc.get("image") or "", {}) in SLURM_KEY_IMAGES:
             svc.setdefault("volumes", []).append(SLURM_KEYS_MOUNT)
+    named_volumes, shared_mounts = storage.volumes(sim)
+    for name, svc in services.items():  # a shared mount is one directory on every Slurm node and login node (issue 461, ADR 0078)
+        if shared_mounts and (logins.is_login(name) or svc["labels"].get("workbench.node")):
+            svc.setdefault("volumes", []).extend(shared_mounts)
+            svc.setdefault("environment", {})["WORKBENCH_SHARED_MOUNTS"] = " ".join(m.split(":", 1)[1] for m in shared_mounts)
     ips = addressing.plan(sim, profile.get("compute_nodes"))
     for name, svc in services.items():  # a fixed address for everything (ADR 0018)
         if ip := addressing.address_of(ips, name):
@@ -191,9 +226,15 @@ def generate(sim: dict, profile: dict) -> dict:
     nets = {"default": {"ipam": {"config": [{"subnet": addressing.INTERNAL, "gateway": addressing.GATEWAY}]}}}
     if "bmc-farm" in services:
         nets["ipmi"] = {"ipam": {"config": [{"subnet": addressing.IPMI, "gateway": addressing.IPMI_GATEWAY}]}}
+    for svc in services.values():  # a Slurm other than the pinned one has its own image tags (ADR 0079)
+        if "image" in svc:
+            svc["image"] = slurmver.retag(svc["image"], sim)
     out = {"name": "workbench", "include": [OBSERVABILITY], "networks": nets, "services": services}
+    vols: dict = dict(named_volumes)  # the data survives `down`; `benchctl remove storage-state` removes it
     if "jira-real" in services:  # named volumes: the data survives `down`; `benchctl remove jira-real-state` removes them
-        out["volumes"] = {v: {} for v in jira_real.VOLUMES}
+        vols.update({v: {} for v in jira_real.VOLUMES})
+    if vols:
+        out["volumes"] = vols
     return out
 
 

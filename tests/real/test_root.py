@@ -143,3 +143,34 @@ def test_nf1_memory_hog_stopped_in_ladder_order_without_oom(tmp_path):
 def running(name: str) -> bool:
     r = sh("docker", "inspect", "-f", "{{.State.Running}}", name)
     return r.stdout.strip() == "true"
+
+
+def oomd_pressure() -> str:
+    return sh("systemctl", "show", "workbench.slice", "-p", "ManagedOOMMemoryPressure", "--value").stdout.strip()
+
+
+def test_oomd_backstop_installs_covers_the_class_slices_and_uninstalls():
+    """GV-10 / ADR 0010 addendum: --oomd-only adds the drop-in on workbench.slice, a P4 container sits under it, and --without-oomd
+    removes it again. Never touches systemd-oomd itself or /etc/systemd/oomd.conf."""
+    dropin = Path("/etc/systemd/system/workbench.slice.d/50-oomd.conf")
+    if dropin.exists():
+        pytest.skip("the backstop is already installed on this host; remove it first (--without-oomd)")
+    script = str(ROOT / "scripts/install-governor.sh")
+    oomd_conf = Path("/etc/systemd/oomd.conf")
+    before = oomd_conf.read_bytes() if oomd_conf.exists() else None
+    name = f"workbench-test-{uuid.uuid4().hex[:6]}"
+    r = sh("docker", "run", "-d", "--rm", "--name", name, "--cgroup-parent", "workbench-p4.slice",
+           "--memory", "50m", "busybox", "sleep", "120")
+    assert r.returncode == 0, r.stderr
+    try:
+        assert sh(script, "--oomd-only").returncode == 0
+        assert dropin.is_file()
+        assert wait_for(lambda: oomd_pressure() == "kill")
+        cg = sh("docker", "inspect", "-f", "{{.HostConfig.CgroupParent}}", name).stdout.strip()
+        assert cg == "workbench-p4.slice"  # nested under workbench.slice by systemd's dash rule
+        assert sh(script, "--without-oomd").returncode == 0
+        assert not dropin.exists() and wait_for(lambda: oomd_pressure() != "kill")
+        assert (oomd_conf.read_bytes() if oomd_conf.exists() else None) == before  # the host's global config is untouched
+    finally:
+        sh(script, "--without-oomd")
+        sh("docker", "rm", "-f", name)

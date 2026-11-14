@@ -143,7 +143,7 @@ def test_the_governor_runs_the_steps_and_serves_the_trace_for_the_page(cluster):
     try:
         res = checks.governor_request({"cmd": "slurm-trace", "nodes": [NODE], "since": 30}, sock)
     except OSError as e:
-        pytest.skip(f"no governor to ask: {e}")
+        pytest.skip(f"test_the_governor_runs_the_steps_and_serves_the_trace_for_the_page: no governor answers at {sock} (start one with `benchctl start`): {e}")
     assert res.get("ok"), res
     data = res["trace"]
     assert NODE in data["nodes"] and "jobs" in data and "workbench-slurmctld-1" in data["logs"]

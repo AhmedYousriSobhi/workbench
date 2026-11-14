@@ -39,7 +39,14 @@ Skills live in your home directory, not in this repository (`.claude/` is not co
 > The governor can say no. `REFUSED` means starting would risk the machine's memory: close something or pick a smaller profile, and do not retry in a loop.
 
 > [!NOTE]
-> The workbench ships no Prometheus alert rules, so `get alerts` and `wait alert` stay empty until rules are loaded. The app under test brings its own alerting.
+> The workbench ships seven small Prometheus alert rules (`GpuXidCritical`, `GpuTempHigh`, `InfinibandPortDown`, `NodeDrained`, `NodeDown`, `ExporterDown`, `JiraErrors`, in `observability/rules.yml`), so `get alerts` and `wait alert` have something to read. They watch the simulated cluster only; the app under test brings its own alerting. Alertmanager (127.0.0.1:9093) sends every alert to the Jira mock, which opens one ticket per alert, so `get alerts` and the ticket list agree.
+
+## MCP server: what was checked
+
+`benchctl serve mcp` has fifteen tools (the verbs above plus `scenario_status`, `fault_clear` and `capture_once`). Checked so far:
+
+- **Exercised:** the server process over stdio with the MCP SDK's own client (`tests/test_mcp_stdio.py`): the handshake, the tool list and each tool's annotations (`workbench_down` and `fault_inject` are destructive; the read tools are read-only), and the calls `workbench_describe`, `scenario_run` with `dry_run` and `wait` (a precondition comes back as data, not as a protocol error).
+- **Not exercised yet:** an agent runtime configured with the server, and whether it asks the person before `workbench_down`. The annotation is set; whether a given client honours it is the client's behaviour. No client configuration snippet is published until that has been tried.
 
 ## Learn more
 

@@ -63,7 +63,7 @@ def test_slurmd_count_follows_profile():
 def test_budget_matches_limits():
     data = compose.generate(SIM, compose.load_profile("min"))
     nodes = 4 + SIM["gpu"]["nodes"]  # every node also has its BMC forwarder
-    assert compose.budget_mb(data) == 200 + 60 + 3 * 100 + 40 + nodes * (60 + compose.BMC_FORWARDER_MB)
+    assert compose.budget_mb(data) == 200 + 60 + 3 * 100 + 40 + nodes * (60 + compose.JOB_MB + compose.BMC_FORWARDER_MB)
 
 
 def test_write_marks_generated(tmp_path):
@@ -174,3 +174,62 @@ def test_the_l1_pause_flag_directory_is_mounted_read_only_on_the_login_and_the_j
     svcs = compose.generate(SIM, compose.load_profile("std"))["services"]
     assert "./flags:/run/workbench-flags:ro" in svcs["login"]["volumes"]
     assert "./flags:/run/workbench-flags:ro" in svcs["jira-mock"]["volumes"]
+
+
+def test_prometheus_loads_the_default_alert_rules():
+    """Issue 633: the rule file is mounted, listed in rule_files, and every rule has a name, an expression and a severity."""
+    root = Path(__file__).resolve().parent.parent
+    prom = yaml.safe_load((root / "observability/prometheus.yml").read_text())
+    assert prom["rule_files"] == ["/etc/prometheus/rules.yml"]
+    mounts = yaml.safe_load((root / "compose/observability.yml").read_text())["services"]["prometheus"]["volumes"]
+    assert "../observability/rules.yml:/etc/prometheus/rules.yml:ro" in mounts
+    rules = [r for g in yaml.safe_load((root / "observability/rules.yml").read_text())["groups"] for r in g["rules"]]
+    assert {r["alert"] for r in rules} == {"GpuXidCritical", "GpuTempHigh", "InfinibandPortDown", "NodeDrained", "NodeDown", "ExporterDown", "JiraErrors"}
+    assert all(r["expr"] and r["labels"]["severity"] for r in rules)
+
+
+def test_alertmanager_is_a_core_service_wired_to_prometheus_and_the_jira_mock():
+    """Issue 460, ADR 0072: a P1 service at its planned address, Prometheus sends to it, and every alert goes to the mock's receiver."""
+    root = Path(__file__).resolve().parent.parent
+    svc = yaml.safe_load((root / "compose/observability.yml").read_text())["services"]["alertmanager"]
+    assert svc["cgroup_parent"] == "workbench-p1.slice" and svc["mem_limit"] == "64m"
+    assert svc["ports"] == ["127.0.0.1:9093:9093"] and "cap_add" not in svc and "privileged" not in svc
+    assert "../observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro" in svc["volumes"]
+    prom = yaml.safe_load((root / "observability/prometheus.yml").read_text())
+    assert prom["alerting"]["alertmanagers"][0]["static_configs"][0]["targets"] == ["alertmanager:9093"]
+    assert {"job_name": "jira-mock", "static_configs": [{"targets": ["jira-mock:8080"]}]} in prom["scrape_configs"]
+    am = yaml.safe_load((root / "observability/alertmanager.yml").read_text())
+    hook = am["receivers"][0]["webhook_configs"][0]
+    assert am["route"]["receiver"] == am["receivers"][0]["name"] and hook["url"] == "http://jira-mock:8080/sim/alerts" and hook["send_resolved"]
+
+
+def test_every_default_rule_has_a_promtool_case():
+    """tests/rules/rules_test.yml holds one case per rule; tests/real/test_alerting_real.py runs it in the Prometheus image."""
+    root = Path(__file__).resolve().parent.parent
+    rules = {r["alert"] for g in yaml.safe_load((root / "observability/rules.yml").read_text())["groups"] for r in g["rules"]}
+    cases = yaml.safe_load((root / "tests/rules/rules_test.yml").read_text())["tests"]
+    tested = {t["alertname"] for case in cases for t in case["alert_rule_test"]}
+    assert tested == rules
+
+
+def test_a_nodes_limit_is_slurmd_plus_the_room_for_jobs_and_the_room_is_adjustable():
+    limit = lambda sim, n: next(int(v["mem_limit"][:-1]) for k, v in compose.generate(sim, compose.load_profile("min"))["services"].items() if k == n)
+    assert limit(SIM, "cn001") == compose.SLURMD_MB + compose.JOB_MB and limit(SIM, "gpu001") == compose.SLURMD_MB + compose.JOB_MB
+    big = {**SIM, "compute": {**SIM["compute"], "job_memory_mb": 512}, "gpu": {**SIM["gpu"], "job_memory_mb": 1024}}
+    assert limit(big, "cn001") == 60 + 512 and limit(big, "gpu001") == 60 + 1024
+
+
+def test_a_wrong_job_memory_is_refused_with_one_message():
+    for bad in (-1, 5000, "big", True, 1.5):
+        sim = {**SIM, "compute": {**SIM["compute"], "job_memory_mb": bad}}
+        with pytest.raises(compose.JobMemoryError, match="compute.job_memory_mb"):
+            compose.generate(sim, compose.load_profile("min"))
+
+
+def test_only_the_slurm_nodes_get_the_one_capability_job_accounting_needs():
+    """Issue 674: slurmd reads /proc/PID/io of users' jobs, which root cannot do in a container without SYS_PTRACE; nothing else gets a capability."""
+    from benchctl import compose
+    out = compose.generate(_sim(), {"groups": ["core", "access", "accounting", "mocks"], "compute_nodes": 2})["services"]
+    nodes = {n: s for n, s in out.items() if s["labels"].get("workbench.node")}
+    assert nodes and all(s["cap_add"] == ["SYS_PTRACE"] and not s.get("privileged") for s in nodes.values())
+    assert not [n for n, s in out.items() if n not in nodes and "cap_add" in s]

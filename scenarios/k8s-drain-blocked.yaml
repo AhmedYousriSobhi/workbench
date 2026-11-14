@@ -1,0 +1,8 @@
+name: k8s-drain-blocked
+ref: SC-39
+description: A node is drained while it holds a pod of a deployment whose disruption budget allows no eviction; the drain blocks and the pod stays
+steps:
+  - {at: 0s,   target: k8s, do: {drain: {node: kgpu001, timeout: 30}}}
+  - {at: 100s, target: k8s, do: {uncordon: [kgpu001]}}
+expect:
+  - k8s.pods_on_node: {node: kgpu001, namespace: team-a, selector: app=inference, min: 1, within: 20s}

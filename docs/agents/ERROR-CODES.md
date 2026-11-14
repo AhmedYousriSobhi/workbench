@@ -12,6 +12,7 @@ With `BENCHCTL_AGENT=1` an error is one line on stderr: `CODE: message | fix: CO
 | `WB-DOCTOR-LIBVIRT` | libvirt is not reachable (some profiles only). | `benchctl doctor` |
 | `WB-DOCTOR-MEMLOCK` | The hard memlock limit is too low for the governor. | `benchctl doctor` |
 | `WB-DOCTOR-MEMORY-PSI` | /proc/pressure/memory is missing. | `benchctl doctor` |
+| `WB-DOCTOR-OOMD-BACKSTOP` | The optional systemd-oomd backstop is installed but not active. | `benchctl doctor` |
 | `WB-DOCTOR-SIM-CONTAINERS` | A simulation container is unhealthy. | `benchctl status` |
 | `WB-DOCTOR-SWAP` | No swap, or heavily used swap. | `benchctl doctor` |
 | `WB-DOCTOR-TOOL-DOCKER` | The docker tool is missing. | `benchctl doctor` |

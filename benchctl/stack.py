@@ -24,10 +24,13 @@ from . import (
     k8s,
     logins,
     memory,
+    objectstore,
+    promtargets,
     qos,
     ready,
     real_gpu,
     slurmconf,
+    slurmver,
     teleport,
     topology,
     workbench,
@@ -37,12 +40,13 @@ COMPOSE_FILE = Path("compose/generated/docker-compose.yml")
 PROJECT = "workbench"
 PROFILE_FILE = Path("compose/generated/profile")  # the profile `up` last started; scale's default
 STAGES = [  # (label, service-name pattern); later stages depend on earlier ones
-    ("observability", r"prometheus|grafana|gpu-exporter-farm"),
+    ("observability", r"prometheus|grafana|gpu-exporter-farm|alertmanager"),
     ("slurm core", r"slurmctld|mariadb|slurmdbd"),
     ("slurm services", r"slurmrestd|accounting-init"),
     ("mocks", r"bmc-farm|bcm-mock|jira-mock"),
     ("jira real", r"jira-db|jira-real"),
     ("teleport", r"teleport"),
+    ("object store", r"objectstore"),
     ("kubernetes", r"k8s-etcd|k8s-apiserver|k8s-controller-manager|k8s-scheduler"),
     ("kubernetes nodes", r"kwok-controller"),  # starts only once the stages exist: with none it exits
     ("bmc addresses", r"bmc-(cn|gpu)\d+"),
@@ -123,7 +127,7 @@ def _save_stamps(path: Path, stamps: dict) -> None:
         pass  # a missing stamp only means the next up builds again
 
 
-def image_hashes(names: list[str], services: dict, path: Path, base_name: str | None) -> dict[str, tuple[str | None, str | None]]:
+def image_hashes(names: list[str], services: dict, path: Path, base_name: str | None, salt: str = "") -> dict[str, tuple[str | None, str | None]]:
     """{service: (inputs hash, image tag)}. Images built FROM the node base also hash the base, so a base change rebuilds them."""
     def ctx_of(n: str) -> Path | None:
         if n == GPU_FARM[0]:
@@ -131,12 +135,12 @@ def image_hashes(names: list[str], services: dict, path: Path, base_name: str | 
         b = (services.get(n) or {}).get("build")
         return path.parent / b if b else None
     base_ctx = ctx_of(base_name) if base_name else None
-    base_hash = (context_hash(base_ctx) or "") if base_ctx else ""
+    base_hash = ((context_hash(base_ctx) or "") + salt) if base_ctx else ""  # the Slurm version is part of every Slurm image's inputs
     out = {}
     for n in names:
         ctx = ctx_of(n)
         derived = bool(ctx and (ctx / "Dockerfile").is_file() and "FROM workbench/node-base" in (ctx / "Dockerfile").read_text()) and n != base_name
-        out[n] = (context_hash(ctx, base_hash if derived else "") if ctx else None, GPU_FARM[2] if n == GPU_FARM[0] else (services.get(n) or {}).get("image"))
+        out[n] = (context_hash(ctx, base_hash if derived else (salt if n == base_name else "")) if ctx else None, GPU_FARM[2] if n == GPU_FARM[0] else (services.get(n) or {}).get("image"))
     return out
 
 
@@ -257,6 +261,9 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     except topology.TopologyError as e:
         say(f"FAILED topology: {e}")
         return False
+    except compose.JobMemoryError as e:
+        say(f"FAILED node memory: {e}")
+        return False
     except qos.QosError as e:
         say(f"FAILED qos: {e}")
         return False
@@ -305,7 +312,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         except OSError as e:
             say(f"FAILED login node keys: {e}")
             return False
-    names = [n for n in data["services"] if n not in skip] + ["prometheus", "grafana", "gpu-exporter-farm"]
+    names = [n for n in data["services"] if n not in skip] + ["prometheus", "grafana", "gpu-exporter-farm", "alertmanager"]
     node_re = r"(cn|gpu|rgpu)\d+"
     changed = False
     before = set(_project_services(runner))
@@ -337,14 +344,14 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     # Build stamp (issue 576): an image whose build inputs hash matches the last good build, and that still exists, is not built again;
     # a changed mock or entrypoint changes the hash, so issue 449's guarantee stays. WORKBENCH_FORCE_BUILD=1 builds everything.
     wanted = ([first] if first is not None else []) + [t for t in build_targets(todo, names) if t != first] + [GPU_FARM[0]]  # gpu-exporter-farm is in compose/observability.yml, not in the generated services (#462): built like every other image
-    stamps, hashes = _stamps(path), image_hashes(wanted, data["services"], path, first)
+    stamps, hashes = _stamps(path), image_hashes(wanted, data["services"], path, first, slurmver.version(sim))
     stale = stale_images(hashes, stamps, runner, bool(os.environ.get(FORCE_BUILD)))
     built_now: list[str] = []
     t0 = time.monotonic()
     # slurmctld, slurmrestd and login build FROM node-base's tag, which only a node service rebuilds. Build it first,
     # or a changed base leaves the controller on the old image (the keys are mounted now, issue 465, but the entrypoint is in the base).
     if first in stale:
-        r = runner(dc("build", first, file=path))
+        r = runner(dc("build", *slurmver.build_args(sim, False), first, file=path))
         if r.returncode != 0:
             say(f"FAILED node base image: {r.stderr.strip()[-300:]}")
             stamps.pop(first, None)
@@ -354,7 +361,12 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     targets = [t for t in stale if t != first]  # the node base was built above; build once (issue 449): the per-stage `up` calls below no longer build
     if targets:
         say(f"building images: {', '.join(targets)}")
-        r = runner(dc("build", *targets, file=path))
+        extra = slurmver.build_args(sim, True)  # empty for the pinned Slurm: one build call, as always
+        slurm_images = [t for t in targets if str(data["services"].get(t, {}).get("image", "")).split(":")[0] in slurmver.BASES]
+        groups = [(extra, slurm_images), ([], [t for t in targets if t not in slurm_images])] if extra else [([], targets)]
+        for args, group in groups:
+            if group and (r := runner(dc("build", *args, *group, file=path))).returncode != 0:
+                break
         if r.returncode != 0:
             say(f"FAILED image build: {r.stderr.strip()[-300:]}")
             for t in targets:
@@ -380,6 +392,12 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         except (OSError, teleport.TeleportError) as e:
             say(f"FAILED teleport setup: {e}")
             return False
+    if objectstore.SERVICE in todo:
+        try:
+            objectstore.prepare(COMPOSE_FILE.parent)
+        except OSError as e:
+            say(f"FAILED object store setup: {e}")
+            return False
     if dcgm.SERVICE in todo and (bad := dcgm.problems(sim)):
         say(f"FAILED dcgm: {bad[0]}")
         return False
@@ -396,6 +414,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         except (OSError, k8s.K8sError) as e:
             say(f"FAILED kubernetes setup: {e}")
             return False
+    if promtargets.prepare(sim, set(todo), prof.get("compute_nodes"), COMPOSE_FILE.parent):  # the jobs of the selected parts (ADR 0073)
+        runner(["docker", "kill", "-s", "HUP", f"{PROJECT}-prometheus-1"])  # a running Prometheus re-reads them; one that is not running reads them at its start
     for label, svcs in stage_services(names):
         say(f"starting {label}: {', '.join(svcs)}")
         stage({"stage": label.capitalize(), "state": "running"})

@@ -40,6 +40,8 @@ Optional parts (Teleport, jump host, Kubernetes, real Jira): `benchctl get endpo
 | `benchctl get faults` | What is wrong right now |
 | `benchctl get endpoints` | Where a client connects, and which file holds each credential |
 | `benchctl get traffic` | Who called which mock, how it ended and how long it took |
+| `benchctl get scenario-status` | The web page's scenario run |
+| `benchctl clear faults` | Clear every injected node fault at once, as the page's Clear faults does for each node (a hot or failed-fan BMC, a GPU XID, an InfiniBand or NIC problem |
 | `benchctl scenario run` | Play a scenario against the running stack |
 | `benchctl wait ready` | Until every started service answers (the same check `start` uses) |
 | `benchctl export profile` | Write a profile file the monitoring client can import |
@@ -59,5 +61,5 @@ Add `--json` to any read verb. Scenarios: `benchctl scenario list`. Recipes (one
 - Do not name or imitate the monitoring client in files you commit.
 
 <!-- BEGIN contract -->
-JSON contract version 1.3. Schemas: `docs/agents/schemas/`. Changes: `docs/agents/CHANGELOG.md`. Error codes: `docs/agents/ERROR-CODES.md`.
+JSON contract version 2.2. Schemas: `docs/agents/schemas/`. Changes: `docs/agents/CHANGELOG.md`. Error codes: `docs/agents/ERROR-CODES.md`.
 <!-- END contract -->

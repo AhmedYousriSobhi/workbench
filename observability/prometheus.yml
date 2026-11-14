@@ -1,10 +1,27 @@
 global:
   scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+# `benchctl up` writes both of these from the selection (benchctl/promtargets.py, ADR 0073): one target per simulated node, and
+# one job per selected part that has metrics (real DCGM, real GPU, Kubernetes, Teleport). Never edit them by hand.
+scrape_config_files:
+  - /etc/prometheus/generated/scrape-*.yml
 
 scrape_configs:
   - job_name: sim-nodes
     file_sd_configs:
-      - files: ["/etc/prometheus/targets/*.json"]
+      - files: ["/etc/prometheus/generated/targets/*.json"]
+  - job_name: jira-mock  # answers only while the Jira part runs; the JiraErrors rule reads it
+    static_configs:
+      - targets: ["jira-mock:8080"]
   - job_name: governor
     static_configs:
       - targets: ["host.docker.internal:9401"]
