@@ -157,7 +157,11 @@ def check_run(page, shot: str) -> list[str]:
     names = page.locator("#list .scnsel").evaluate_all("els => els.map(e => e.dataset.name)")
     for name in names:  # the preview says what is CLI-only before anything runs, and says it in words
         page.click(f'#list .scnsel[data-name="{name}"]')
-        page.wait_for_function("n => document.querySelector('#runtitle').textContent.startsWith(n) && document.querySelectorAll('#timeline li').length > 0", arg=name)
+        try:
+            page.wait_for_function("n => document.querySelector('#runtitle').textContent.startsWith(n) && document.querySelectorAll('#timeline li').length > 0", arg=name, timeout=15000)
+        except PlaywrightError:  # name the scenario: a bare timeout does not say which preview never drew
+            bad.append(f"{name}: the preview drew no title or timeline within 15 s (title now: {page.locator('#runtitle').text_content()!r})")
+            continue
         tags, notice = page.locator("#timeline .clitag").count(), page.locator("#runcli").is_visible()
         cli_exp = "(CLI only)" in page.locator("#expects").inner_text()
         if bool(tags or cli_exp) != notice:
