@@ -64,20 +64,20 @@ def finish(proc: subprocess.Popen, timeout: float = 240) -> dict:
 
 
 def test_gpu_fault_to_alert_the_default_rules_fire_and_resolve(live):
-    """The recipe: play gpu-xid-storm, `wait alert GpuXid`, `get faults`, `get alerts`. Sped up 3x (the 3 minute timeline takes one)."""
+    """The recipe: play gpu-xid-storm, `wait alert GpuXidCritical`, `get faults`, `get alerts`. Sped up 3x (the 3 minute timeline takes one)."""
     play = background("scenario", "run", "gpu-xid-storm", "--speed", "3", "--json")
     try:
-        fired = benchctl("wait", "alert", "GpuXid", "--timeout", "90")
+        fired = benchctl("wait", "alert", "GpuXidCritical", "--timeout", "90")
         assert fired.returncode == 0, fired.stdout + fired.stderr
         assert json.loads(fired.stdout)["outcome"] == "met"
         assert {f["target"] for f in faults()} >= {"gpu001", "gpu002"}
         alerts = json.loads(benchctl("get", "alerts", "--json").stdout)["items"]
-        assert "GpuXid" in {a["name"] for a in alerts if a["state"] == "firing"}
-        assert {a["labels"]["node"] for a in alerts if a["name"] == "GpuXid"} >= {"gpu001", "gpu002"}
+        assert "GpuXidCritical" in {a["name"] for a in alerts if a["state"] == "firing"}
+        assert {a["labels"]["node"] for a in alerts if a["name"] == "GpuXidCritical"} >= {"gpu001", "gpu002"}
     finally:
         report = finish(play)
     assert all(s["status"] == "ok" for s in report["steps"]), report["steps"]  # the expect that needs a ticket-filing app is not asserted
-    resolved = benchctl("wait", "alert", "GpuXid", "--resolved", "--timeout", "120")
+    resolved = benchctl("wait", "alert", "GpuXidCritical", "--resolved", "--timeout", "120")
     assert resolved.returncode == 0, resolved.stdout + resolved.stderr
     assert not [f for f in faults() if f["target"] in ("gpu001", "gpu002")]
 

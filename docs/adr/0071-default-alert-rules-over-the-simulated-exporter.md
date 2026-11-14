@@ -13,3 +13,6 @@ Prometheus shipped with no rules, so `get alerts` and `wait alert` (ADR 0066) al
 ## Consequences
 - A small file the owner can extend; `tests/test_compose.py` checks it is loaded and `promtool check rules` passes.
 - Not every injected fault raises an alert (for example `gpu-xid-storm` does not fire `GpuOverheat`); the recipe says which rule each fault fires.
+
+## Addendum (2026-11-14, issue 460)
+The rule set grew to six and two rules were renamed to the lab's names: `GpuXid` is now `GpuXidCritical` and `GpuOverheat` is now `GpuTempHigh`. Alertmanager now delivers them (ADR 0072). Everything above still holds for the three original rules.

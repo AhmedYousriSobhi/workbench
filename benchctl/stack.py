@@ -37,7 +37,7 @@ COMPOSE_FILE = Path("compose/generated/docker-compose.yml")
 PROJECT = "workbench"
 PROFILE_FILE = Path("compose/generated/profile")  # the profile `up` last started; scale's default
 STAGES = [  # (label, service-name pattern); later stages depend on earlier ones
-    ("observability", r"prometheus|grafana|gpu-exporter-farm"),
+    ("observability", r"prometheus|grafana|gpu-exporter-farm|alertmanager"),
     ("slurm core", r"slurmctld|mariadb|slurmdbd"),
     ("slurm services", r"slurmrestd|accounting-init"),
     ("mocks", r"bmc-farm|bcm-mock|jira-mock"),
@@ -305,7 +305,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         except OSError as e:
             say(f"FAILED login node keys: {e}")
             return False
-    names = [n for n in data["services"] if n not in skip] + ["prometheus", "grafana", "gpu-exporter-farm"]
+    names = [n for n in data["services"] if n not in skip] + ["prometheus", "grafana", "gpu-exporter-farm", "alertmanager"]
     node_re = r"(cn|gpu|rgpu)\d+"
     changed = False
     before = set(_project_services(runner))

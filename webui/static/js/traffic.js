@@ -78,6 +78,7 @@ export const PART_INFO = {
   'kwok': 'Creates the fake Kubernetes nodes and their pods; no real kubelet runs.',
   'prometheus': 'Scrapes metrics from the targets on a schedule and stores them.',
   'grafana': 'Dashboards over Prometheus; also receives governor annotations.',
+  'alertmanager': 'Receives the alerts Prometheus fires and posts each one to the Jira mock, which opens a ticket.',
   'gpu-exporter': 'The simulated GPU exporter (DCGM style metrics) that tests can also inject faults into.',
   'real-gpu': 'This machine\'s own NVIDIA card with the real DCGM exporter (optional, needs the driver and container toolkit).',
   'dcgm-exporter': 'The official DCGM exporter on a mock NVML, standing for the first GPU node (optional, about 125 MB).',
@@ -86,12 +87,12 @@ export const PART_INFO = {
   'storage': 'Shared storage for job data. Planned, not built yet.'
 };
 export const PART_ICON = { jump: 'lock', controller: 'gear', clients: 'screen', login: 'lock', teleport: 'lock', slurmrestd: 'gear', slurmctld: 'gear', slurmdbd: 'db', slurmd: 'server', nodes: 'server', 'bmc-farm': 'server', 'bcm-mock': 'server', 'k8s-api': 'gear',
-  'kube-scheduler': 'gear', 'kube-controller-manager': 'gear', etcd: 'db', prometheus: 'chart', grafana: 'chart', 'gpu-exporter': 'chart', 'dcgm-exporter': 'chart', 'real-gpu': 'chart', governor: 'gear', 'sim-nodes': 'server', storage: 'db' };
+  'kube-scheduler': 'gear', 'kube-controller-manager': 'gear', etcd: 'db', prometheus: 'chart', grafana: 'chart', alertmanager: 'chart', 'gpu-exporter': 'chart', 'dcgm-exporter': 'chart', 'real-gpu': 'chart', governor: 'gear', 'sim-nodes': 'server', storage: 'db' };
 export const TR_GROUPS = [  // the fixed architecture, two rows by four columns, callers at the left: [title, grid column, grid row, colour, parts]; a part with no link in this cluster is drawn grayed, never dropped
   ['External clients', 0, 0.5, 'access', ['clients']],
   ['Access', 1, 0, 'access', ['jump', 'login', 'teleport', 'slurmrestd']], ['Slurm', 2, 0, 'control', ['controller', 'slurmctld', 'slurmdbd', 'slurmd', 'nodes']], ['Storage', 3, 0, 'data', ['storage']],
   ['Management', 1, 1, 'management', ['bmc-farm', 'bcm-mock', 'jira-mock', 'jira-real']], ['Kubernetes', 2, 1, 'k8s', ['k8s-api', 'kube-scheduler', 'kube-controller-manager', 'etcd', 'kwok']],
-  ['Monitoring', 3, 1, 'monitoring', ['prometheus', 'grafana', 'gpu-exporter', 'dcgm-exporter', 'real-gpu', 'governor', 'sim-nodes']]];
+  ['Monitoring', 3, 1, 'monitoring', ['prometheus', 'grafana', 'alertmanager', 'gpu-exporter', 'dcgm-exporter', 'real-gpu', 'governor', 'sim-nodes']]];
 export const hhmmss = t => new Date(t).toTimeString().slice(0, 8);
 export function paintTrTimeline(links) {
   const now = Date.now(), from = now - S.trRange * 1000, ev = S.trHist.filter(h => h.t >= from), say = h => {

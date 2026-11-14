@@ -87,6 +87,7 @@ that does. Components not built yet are skipped with a note.
 |---|---|
 | Grafana dashboards and governor annotations | http://127.0.0.1:3000 (user `admin`, password `admin`). For a monitoring client: datasource uid `prometheus`, GPU host label `Hostname`, and a read-only service-account token in `compose/generated/secrets/grafana_viewer_token` |
 | Prometheus | http://127.0.0.1:9090 (the `governor` job scrapes the governor's `/metrics`: `workbench_governor_level`, `workbench_host_mem_available_bytes`, ...) |
+| Alertmanager | http://127.0.0.1:9093. Six default rules (`observability/rules.yml`) fire on injected faults; every alert opens one ticket in the Jira mock (`curl http://127.0.0.1:8080/sim/tickets`). Try it: `./scripts/benchctl scenario run gpu-xid-storm`, then `./scripts/benchctl get alerts`. Needs the Jira part for the tickets (on by default) |
 | Fake BMCs (Redfish) | `curl http://127.0.0.1:8000/cn001/redfish/v1/Systems/1`; standard TLS surface for real clients: `curl -k --resolve bmc-cn001:8443:127.0.0.1 https://bmc-cn001:8443/redfish/v1` (login with the account in `compose/generated/secrets/bmc_credentials`, ADR 0012) |
 | Fake BCM (CMDaemon JSON) | `curl -X POST http://127.0.0.1:8081/json -d '{"service": "cmdevice", "call": "getDevices"}'` |
 | Fake Jira | `curl -X POST http://127.0.0.1:8080/rest/api/2/issue -d '{"fields": {"project": {"key": "OPS"}, "summary": "hi"}}'`; failures: `curl -X POST http://127.0.0.1:8080/sim/failure -d '{"mode": "429", "count": 3}'` |

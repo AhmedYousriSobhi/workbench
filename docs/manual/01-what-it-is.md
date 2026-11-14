@@ -32,7 +32,7 @@ Most of what the app talks to is an API, not an operating system. So:
 | `bcm-mock` | fake BCM (CMDaemon JSON); the login node also answers `cmsh -c "device; list"` from its state (ADR 0013) | http://127.0.0.1:8081 |
 | `jira-mock` | fake Jira REST with failure modes | http://127.0.0.1:8080 |
 | `gpu-exporter-farm` | fake DCGM GPU metrics | http://127.0.0.1:9400 |
-| Prometheus, Grafana | metrics and dashboards | :9090, :3000 |
+| Prometheus, Grafana, Alertmanager | metrics, dashboards and alerts (each alert opens a Jira mock ticket) | :9090, :3000, :9093 |
 | Web page | one dashboard over everything | http://127.0.0.1:8088 |
 | Governor | memory protection on the host | `benchctl status` |
 | `benchctl scenario`, `benchctl load` | timed faults and simulated users (host CLI and login node, no container) | see [chapter 6](06-scenarios.md) |

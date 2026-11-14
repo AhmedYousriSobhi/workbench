@@ -42,6 +42,7 @@ Largest working set seen (MB), the cap the container may reach, and what the pla
 | MariaDB (accounting) | 204 | 250 | 235 |
 | Teleport | 222 | 320 | 256 |
 | Prometheus / Grafana / GPU exporter | 22 / 54 / 19 | 300 / 300 / 100 | 26 / 62 / 22 |
+| Alertmanager (estimate, not measured yet) | 20 | 64 | 23 |
 | **Jira (real), Data Center** | **2045** | **2176** | **2176** |
 | Postgres for the real Jira | 130 | 256 | 150 |
 

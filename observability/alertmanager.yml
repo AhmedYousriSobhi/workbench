@@ -1,0 +1,18 @@
+# Alertmanager for the workbench (issue 460, ADR 0072). Every alert goes to the Jira mock's webhook receiver, which opens one
+# ticket per alert (or comments on its open one). The timings are short on purpose: a simulated fault should reach a ticket in
+# seconds, not minutes. The app under test keeps its own alerting; this one exists so the read side has something to read.
+global:
+  resolve_timeout: 1m
+
+route:
+  receiver: jira-mock
+  group_by: [alertname, node]
+  group_wait: 5s
+  group_interval: 15s
+  repeat_interval: 1h
+
+receivers:
+  - name: jira-mock
+    webhook_configs:
+      - url: http://jira-mock:8080/sim/alerts  # answers only while the Jira part runs; otherwise Alertmanager logs one failed delivery
+        send_resolved: true

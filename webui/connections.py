@@ -105,6 +105,7 @@ def actions_for(e: dict, sim: dict, user: str) -> list[dict]:
         "real-gpu": [link("Open the real GPU metrics", f"http://{LOCAL}:{real_gpu.PORT}/metrics")],
         "prometheus": [link("Open Prometheus", f"http://{LOCAL}:9090")],
         "grafana": [link("Open Grafana", f"http://{LOCAL}:3000")],
+        "alertmanager": [link("Open Alertmanager", f"http://{LOCAL}:9093")],
         "slurm": [copy("Copy sinfo", "benchctl exec slurmctld -- sinfo")],
         "ui": [link("Open this page", f"http://{LOCAL}:8088")],
     }.get(i, [])
@@ -189,6 +190,9 @@ def _rows(sim: dict) -> list[dict]:
          "how": "Only with `benchctl up --with real-gpu` on a machine with an NVIDIA card, its driver and the container toolkit (SPEC C-23). Real series from the real card, labelled Hostname rgpu001; no login, localhost only. `docker exec workbench-real-gpu-1 dcgmi discovery -l` and `nvidia-smi` work in that container."},
         {"id": "prometheus", "name": "Prometheus", "kind": "http", "address": f"http://{ip['prometheus']}:9090",
          "command": f"curl -s http://{ip['prometheus']}:9090/-/ready", "credential": None, "how": "No login. Also on 127.0.0.1:9090."},
+        {"id": "alertmanager", "name": "Alertmanager", "kind": "http", "address": f"http://{ip['alertmanager']}:9093",
+         "command": f"curl -s http://{ip['alertmanager']}:9093/api/v2/alerts", "credential": None,
+         "how": "No login. Prometheus sends every firing alert here and Alertmanager posts it to the Jira mock, which opens a ticket (ADR 0072). Also on 127.0.0.1:9093."},
         {"id": "grafana", "name": "Grafana", "kind": "http", "address": f"http://{ip['grafana']}:3000",
          "command": f"cat {SECRETS}/grafana_viewer_token", "credential": f"{SECRETS}/grafana_viewer_token",
          "how": "A read-only viewer token for clients; it changes at every `benchctl up`. Also on 127.0.0.1:3000."},

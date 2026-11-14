@@ -729,7 +729,7 @@ def get_traffic(output: str = OUTPUT, json_: bool = JSON,
 
 @get_app.command("alerts")
 def get_alerts(output: str = OUTPUT, json_: bool = JSON, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
-    """The alerts Prometheus is firing or about to fire (read-only). The workbench ships three default rules (GpuXid, GpuOverheat, NodeDown), so empty means none is firing. Exit 1 when Prometheus is not running."""
+    """The alerts Prometheus is firing or about to fire (read-only). The workbench ships six default rules (GpuXidCritical, GpuTempHigh, InfinibandPortDown, NodeDown, ExporterDown, JiraErrors), so empty means none is firing. Exit 1 when Prometheus is not running."""
     def rows() -> list[dict]:
         try:
             return alerts.fetch()

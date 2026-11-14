@@ -19,6 +19,20 @@ services:
     ports: ["127.0.0.1:9090:9090"]
     cgroup_parent: workbench-p1.slice
     extra_hosts: ["host.docker.internal:host-gateway"]
+  alertmanager:
+    networks:
+      default:
+        ipv4_address: 10.141.255.23  # benchctl/addressing.py SERVICE_HOSTS
+    image: prom/alertmanager:v0.27.0
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ../observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    tmpfs: ["/alertmanager:size=16m,uid=65534,gid=65534"]  # silences and the notification log: disposable like the rest
+    mem_limit: 64m
+    ports: ["127.0.0.1:9093:9093"]
+    cgroup_parent: workbench-p1.slice
   grafana:
     networks:
       default:

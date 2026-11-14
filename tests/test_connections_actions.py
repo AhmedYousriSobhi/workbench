@@ -83,3 +83,9 @@ def test_kubernetes_row_names_the_read_only_kubeconfig_and_never_the_admin_one()
     assert row["address"] == "https://10.141.255.40:6443" and row["credential"].endswith("secrets/k8s/viewer.kubeconfig")
     assert "kubectl get nodes" in row["command"] and "admin.kubeconfig" not in row["credential"] + row["command"]
     assert [a["kind"] for a in row["actions"]] == ["copy"]
+
+
+def test_alertmanager_row_has_its_address_command_and_a_localhost_link():
+    row = {e["id"]: e for e in rows()}["alertmanager"]
+    assert row["address"].endswith(":9093") and "/api/v2/alerts" in row["command"] and row["credential"] is None
+    assert [a["value"] for a in row["actions"]] == ["http://127.0.0.1:9093"]

@@ -23,7 +23,7 @@ from . import (
 )
 from .nodes import KIND_GROUP, hardware_nodes, node_names
 
-OBSERVABILITY = "../observability.yml"  # static; hosts prometheus, grafana, gpu-exporter-farm
+OBSERVABILITY = "../observability.yml"  # static; hosts prometheus, grafana, gpu-exporter-farm, alertmanager
 
 # group -> service -> (image, mem_mb, priority class). Images are built from images/ and components/.
 CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {

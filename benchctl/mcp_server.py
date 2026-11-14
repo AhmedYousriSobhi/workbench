@@ -92,7 +92,7 @@ def build(run: Callable[..., dict] = run_cli) -> MCPServer:
     def traffic_get(since: float = 0.0) -> dict:
         return run(["get", "traffic", "--json", "--since", str(since)])
 
-    @s.tool(description="The alerts Prometheus is pending or firing. The workbench ships three default rules (GpuXid, GpuOverheat, NodeDown); an empty list means none is firing.", annotations=READ)
+    @s.tool(description="The alerts Prometheus is pending or firing. The workbench ships six default rules (GpuXidCritical, GpuTempHigh, InfinibandPortDown, NodeDown, ExporterDown, JiraErrors); an empty list means none is firing.", annotations=READ)
     def alerts_get() -> dict:
         return run(["get", "alerts", "--json"])
 
