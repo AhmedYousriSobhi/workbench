@@ -27,7 +27,15 @@ The app under test (your monitoring client) is reserved at **1 GB** until you me
 ./scripts/benchctl measure app --match NAME --duration 120 --save
 ```
 
-`NAME` is any part of the client's process name or command line (`--pid N` also works; both repeat). It first prints which programs matched (`matched: electron x7 (460 MB), ...`) and warns when more than 4 different ones do, because a loose word such as `name` also matches unrelated programs and inflates the result; read that line before `--save`. It sums the PSS of every matching process, prints peak, typical use and a suggested reserve (peak + 10%, rounded up to 100 MB), and `--save` keeps it in `compose/generated/app_reserve.json` (gitignored). The plan then says `measured on DATE`. Delete the file to return to 1024. One measured session (a desktop client with one cluster, a terminal, the real Jira and every view opened during the `client-stress` scenario): 469 MB idle, 664 MB peak, so 800 MB; the default is 1024 (664 MB plus room for a second cluster or terminal), and a session with several clusters should be measured on its own. Precedence: `--app-mb`, then `WORKBENCH_APP_MB`, then the saved measurement, then 1024. If it already runs, its memory is already out of the free figure: add `--app-mb 0` to `plan`, `up`, `apply` or `start` (or set `WORKBENCH_APP_MB=0`).
+`NAME` is any part of the client's process name or command line (`--pid N` also works; both repeat).
+
+- It first prints which programs matched (`matched: electron x7 (460 MB), ...`) and warns when more than 4 different ones do, because a loose word such as `name` also matches unrelated programs and inflates the result. Read that line before `--save`.
+- It sums the PSS of every matching process and prints peak, typical use and a suggested reserve (peak + 10%, rounded up to 100 MB).
+- `--save` keeps it in `compose/generated/app_reserve.json` (gitignored). The plan then says `measured on DATE`. Delete the file to return to 1024.
+
+One measured session (a desktop client with one cluster, a terminal, the real Jira and every view opened during the `client-stress` scenario): 469 MB idle, 664 MB peak, so 800 MB. The default is 1024 (664 MB plus room for a second cluster or terminal); a session with several clusters should be measured on its own.
+
+Precedence of the reserve: `--app-mb`, then `WORKBENCH_APP_MB`, then the saved measurement, then 1024. If the app already runs, its memory is already out of the free figure: add `--app-mb 0` to `plan`, `up`, `apply` or `start` (or set `WORKBENCH_APP_MB=0`).
 
 ## What each part really uses
 

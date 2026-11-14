@@ -32,9 +32,34 @@ this machine can use the page, so keep it private. The page listens on `127.0.0.
 |---|---|
 | **Overview cards** | in the left rail: nodes healthy, services up, GPUs busy (only with GPU nodes) and faults applied, all counted from the cluster data the page already reads |
 | **View choice** | under the nav on Infrastructure: **All** (diagram and node list), **Topology** (diagram only, wider) or **Nodes** (list and details only); remembered in this browser |
-| **Left nav** | the workspaces: **Overview**, **Test run**, **Topology** (the Infrastructure diagram), **Traffic & Communication** (the documented links: protocol, port, real or simulated, observed or configured, the measured probe latency, above the table slurmctld's own request counts from `sdiag`, slurmdbd's answer to one `sacctmgr` query, and Prometheus's scrape links). The links are also drawn as a diagram (the plane is the line's colour and dash pattern). The page opens in the dark Midnight theme until you pick another with the theme button. Filter by plane, software or evidence, click a link's source to open its inspector; a toolbar of plane chips with zoom, Fit and full screen; below the diagram, a **Traffic activity timeline** (requests and faults this page was told about, 1 m to 1 h, kept only while the page is open); the diagram is one fixed architecture (every group always drawn; a part this cluster lacks, the page cannot read yet (slurmdbd, until it answers a query), or that is planned and not built (shared storage), is grayed, never dropped) and clicking a part shows what it is, whether it answers and its links; the node parts (`nodes`, `slurmd`, and `kwok` for Kubernetes) show how many nodes are in service (`▲ nodes 5/6`) and follow a drain, power-off, GPU or Kubernetes fault within about 5 seconds without a reload (Slurm's states come from one `sinfo` through the governor, the rest from the cluster poll), the links to them say `▲ up, 1 of 6 nodes out`, and every change is a line in the activity timeline; the parts inside a group can be reordered (drag a part up or down, press Alt+Up / Alt+Down, or use the **▲ Up** / **▼ Down** buttons in its inspector, which also work with a finger; a press that barely moves is a click), a group can be dragged (or moved with the arrow keys; on a touch screen turn on the **Move** button first, otherwise a finger scrolls the page) with the lines re-routing, kept in the browser, **Reset layout** undoes it, and press **Follow the path** to see the chain it belongs to, **Connections**, then **Scenarios** and **Cluster architecture**. **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **☰ Menu** (Health checks, Export), help and the theme switch (press it to cycle Auto, Light, Dark, **Midnight** with deep navy and neon accents, and **Dim** with soft slate and low glare; the choice is remembered). The strip is for status only. **☰ Menu** lists the actions in three groups, each with a one-line hint: *Run* (**▶ Scenarios**), *Configure* (**▦ Cluster architecture**: nodes, GPUs per node, optional parts and the plan; **✚ Health checks**) and *Share* (**⇩ Export**). Esc closes it. Pressing the level or memory chip opens the **Governor** panel |
+| **Left nav** | the workspaces: **Overview**, **Test run**, **Topology** (the Infrastructure diagram), **Traffic & Communication** (the documented links; see below) |
+| **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **☰ Menu**, help and the theme switch (see below) |
 | **Tabs and Needs attention** | the tabs *Nodes* and *Connections*, and one slim bar next to them with every item that needs you, or "All clear" |
 | **Stage** (Infrastructure) | three areas that fill the window. **Left:** the **Infrastructure architecture**, drawn to the shape of its panel (clients across the top, the access layer under them, the cluster nodes below that, the services in a column at the right). **Top right:** the **node list** (Compute, GPU and Services). **Bottom right:** **Connections**, how to reach each part (address and a Copy button), which shows the selected part instead when you click one, and a **Timeline** tab of recent traffic and faults. **Topology** (left rail) gives the right column to Connections; the choice is remembered |
+
+### Traffic & Communication
+
+The workspace lists the documented links: protocol, port, real or simulated, observed or configured, and the measured probe latency. Above the table are slurmctld's own request counts from `sdiag`, slurmdbd's answer to one `sacctmgr` query, and Prometheus's scrape links. The links are also drawn as a diagram (the plane is the line's colour and dash pattern). The page opens in the dark Midnight theme until you pick another with the theme button.
+
+- Filter by plane, software or evidence; click a link's source to open its inspector.
+- A toolbar of plane chips with zoom, Fit and full screen.
+- Below the diagram, a **Traffic activity timeline** (requests and faults this page was told about, 1 m to 1 h, kept only while the page is open).
+- The diagram is one fixed architecture: every group is always drawn. A part this cluster lacks, that the page cannot read yet (slurmdbd, until it answers a query), or that is planned and not built (shared storage) is grayed, never dropped. Clicking a part shows what it is, whether it answers and its links.
+- The node parts (`nodes`, `slurmd`, and `kwok` for Kubernetes) show how many nodes are in service (`▲ nodes 5/6`) and follow a drain, power-off, GPU or Kubernetes fault within about 5 seconds without a reload (Slurm's states come from one `sinfo` through the governor, the rest from the cluster poll). The links to them say `▲ up, 1 of 6 nodes out`, and every change is a line in the activity timeline.
+
+To rearrange it:
+
+- Reorder the parts inside a group: drag a part up or down, press Alt+Up / Alt+Down, or use the **▲ Up** / **▼ Down** buttons in its inspector (these also work with a finger; a press that barely moves is a click).
+- Move a group: drag it, or use the arrow keys; on a touch screen turn on the **Move** button first, otherwise a finger scrolls the page. The lines re-route.
+- The layout is kept in the browser; **Reset layout** undoes it.
+- **Follow the path** shows the chain a part belongs to; then **Connections**, then **Scenarios** and **Cluster architecture**.
+
+### Top strip and menu
+
+- The strip is for status only: governor level, free memory, healthy services and nodes, the running scenario.
+- The theme switch cycles Auto, Light, Dark, **Midnight** (deep navy and neon accents) and **Dim** (soft slate, low glare); the choice is remembered.
+- **☰ Menu** lists the actions in three groups, each with a one-line hint: *Run* (**▶ Scenarios**), *Configure* (**▦ Cluster architecture**: nodes, GPUs per node, optional parts and the plan; **✚ Health checks**) and *Share* (**⇩ Export**). Esc closes it.
+- Pressing the level or memory chip opens the **Governor** panel.
 
 Two panels open on top of the page from the top strip or its **☰ Menu** and close with **✕ Close**, Esc or a click outside: **Cluster architecture** and **Governor**. Scenarios are no longer a panel: they are the **Test run** workspace. A node is different: it opens in the **Connections** area (below), so the Infrastructure architecture and the node list stay in view.
 
@@ -80,9 +105,15 @@ Read it from left to right:
 
 A login node that is in the selection but not running (never built, or stopped) is drawn **dashed with "✗ not running"**: the page checks whether anything answers on its port 22, so the diagram shows what runs, not only what you picked. With the whole stack down they all look dim instead.
 
-**Colours.** The boxes do not say *mock*; colour does, and the **Key** button above the diagram repeats it (it opens a small panel with every colour, mark and line style). A **dashed outline** marked *sim* is simulated, a **solid outline** marked *real* is real (a neutral colour, never a hue). The **border** is the state (teal with a ✓ up, red dashed not reachable, grey dotted off). Two overlays sit on top and
-combine with everything else: a pulsing dot means traffic now (on a node tile: GPU work running), a red ring with a red triangle means a fault
-was applied in the last 30 seconds. So one box can be up, busy and faulted at the same time. The lines between parts follow their **plane**: access (solid), control (long dash), Kubernetes (dash-dot), data (dotted), monitoring (short dash) and management (dash-dot-dot) each have one colour and one line type in every view, so they stay apart even without colour. Amber means a part needs attention, never a plane. All colours are listed in the [colour system](../guides/colour-system.md). The real Jira has no request counter, so it shows up or down only.
+**Colours.** The boxes do not say *mock*; colour does, and the **Key** button above the diagram repeats it (it opens a small panel with every colour, mark and line style).
+
+- A **dashed outline** marked *sim* is simulated; a **solid outline** marked *real* is real (a neutral colour, never a hue).
+- The **border** is the state: teal with a ✓ is up, red dashed is not reachable, grey dotted is off.
+- Two overlays sit on top and combine with everything else: a pulsing dot means traffic now (on a node tile: GPU work running); a red ring with a red triangle means a fault was applied in the last 30 seconds. So one box can be up, busy and faulted at the same time.
+- Amber means a part needs attention, never a plane.
+- The real Jira has no request counter, so it shows up or down only.
+
+The lines between parts follow their **plane**: access (solid), control (long dash), Kubernetes (dash-dot), data (dotted), monitoring (short dash) and management (dash-dot-dot) each have one colour and one line type in every view, so they stay apart even without colour. All colours are listed in the [colour system](../guides/colour-system.md).
 
 Every line says **how** it connects:
 
@@ -99,9 +130,23 @@ Every line says **how** it connects:
 | `Teleport` from the Teleport box to the nodes (long dashes) | the nodes are also reachable through the proxy (agentless OpenSSH) |
 | `HTTP …` and `tsh · HTTPS` (thin) | an API call from a client to a service, or the `tsh` connection to the proxy |
 
-A round dot travels along a line for each real request (a **triangle** for an answer the mock counted as an error, such as a 404 or an injected 503; the service box and the Timeline also say "2 errors", and a service that keeps no error counter shows none); a diamond travels from *Faults* to the node it hits and a ring flashes on that
-tile. *Pause* stops the dots; they also stop at governor L3 and under reduced motion, and the live feed runs only while
-the page is visible and the Infrastructure workspace is open. **Key** (top right of the diagram) opens the legend: kinds, states, the dot, diamond and ring, the node marks, and a sample of each line style. The **view switcher** under the title (*2.5D*, *Flat*, *Overview*) picks how the diagram is drawn and at what level; the focus, selection and node list stay as they are when you switch. *Overview* is the level of detail: The *overview* condenses the cluster to one card (clients, access, the node groups with a health bar, the services and the fault count); above 24 nodes the page opens there. Hover the card (or Tab to it) to see the design underneath, double-click it, press Enter or use **Open full design** to enter, and use the **All clusters** link or Esc to go back. With several clusters the overview is a grid of cards (the cluster's name, nodes healthy, services and faults, and a condensed *access → nodes* picture when the card is big enough); a card with a failing part is marked with ▲. Entering one shows that cluster's diagram and node list. On a phone, tap the card. A table of clusters is in the page for screen readers.
+### Dots, diamonds and the Key
+
+- A round dot travels along a line for each real request. A **triangle** is an answer the mock counted as an error, such as a 404 or an injected 503; the service box and the Timeline also say "2 errors", and a service that keeps no error counter shows none.
+- A diamond travels from *Faults* to the node it hits, and a ring flashes on that tile.
+- *Pause* stops the dots. They also stop at governor L3 and under reduced motion, and the live feed runs only while the page is visible and the Infrastructure workspace is open.
+- **Key** (top right of the diagram) opens the legend: kinds, states, the dot, diamond and ring, the node marks, and a sample of each line style.
+
+### The view switcher
+
+The **view switcher** under the title (*2.5D*, *Flat*, *Overview*) picks how the diagram is drawn and at what level. The focus, selection and node list stay as they are when you switch.
+
+*Overview* is the level of detail: it condenses the cluster to one card (clients, access, the node groups with a health bar, the services and the fault count). Above 24 nodes the page opens there.
+
+- Hover the card (or Tab to it) to see the design underneath.
+- Double-click it, press Enter or use **Open full design** to enter; use the **All clusters** link or Esc to go back.
+- With several clusters the overview is a grid of cards (the cluster's name, nodes healthy, services and faults, and a condensed *access → nodes* picture when the card is big enough). A card with a failing part is marked with ▲; entering one shows that cluster's diagram and node list.
+- On a phone, tap the card. A table of clusters is in the page for screen readers.
 
 ![The overview: one card for the cluster, with a preview of the design underneath](img/web-global-view-light.png)
 
@@ -241,10 +286,34 @@ live state.
 
 ![The Cluster architecture sheet: Slurm and Kubernetes node counts, login nodes, optional parts, and the summary](img/web-cluster-architecture-light.png)
 
-**▦ Cluster architecture** opens a wide sheet with one card per concern and a summary beside it that stays in view. **Slurm cluster**: steppers for CPU nodes, GPU nodes and GPUs per node, each with what one node is (for example 8 CPUs, 4 GB; H200). **Kubernetes cluster**: an Enabled switch and steppers for its own CPU and GPU nodes (KWOK), separate from the Slurm nodes. **Login nodes**: one card per login node with two choices, *Way in* (SSH, Teleport, Both) and *Serves* (Slurm, Kubernetes, Both: an s-login, a k-login or a shared login), and two presets, *One shared login* and *Separate s-login and k-login*. **Optional parts**: toggles grouped by category as in the `--ticketing`, `--hardware` flags (accounting, Jira, BMC, BCM, Teleport, scenarios, load; each shows the memory limit it adds, and the toggles show what is built now). The summary lists the node counts per scheduler, the logins, the memory it needs against free memory, and the command for a terminal; on a phone it stacks under the cards. The memory bar reads like "1.7 GB needed of 4.5 GB free". The sheet shows the change against what runs now ("GPU nodes 2 → 3 (+1)") and the
-`benchctl up ...` command for a terminal. Editing the numbers only estimates. **Projected memory** (under the memory bar, read-only) states the budget (free memory minus the 1 GB safety floor), the projected need and what is left, with a table of expected use and cap per part (nodes, each service, observability, what already runs, Docker overhead, the app). When the selection needs more than the budget, a **▲ Over budget** notice says by how much, in words and an icon, not colour alone. The page only shows the projection: the governor still refuses an over-budget Apply (GV-9), and changes still go through Apply. **Review changes** (top of the summary) says what Apply will do before you press it: **+ Adds** (nodes, parts, login nodes), **− Removes** and **↻ Restarts** (slurmctld, only when the Slurm node list changed or accounting was added). When a node to be removed is `allocated` or `mixed` in Slurm (one `sinfo`, read when the sheet opens), the sheet says jobs will stop and **Apply** stays disabled until you tick **I understand**. If Slurm's states cannot be read it says so; it does not guess. It does not list job ids: the page has no Slurm access beyond node states. The cards are compact: the three Slurm steppers share a row, and the Kubernetes card collapses to one line while it is off. **Apply to the running workbench** (press
-twice: the second press confirms) asks the governor to rebuild it; new nodes start and nodes you no longer want are
-removed. While it runs, a **Progress** list shows the governor's stages (Build images, each start stage, Restart slurmctld) as waiting, running, done with seconds, or failed, and the sheet names the job (`Job #7: nodes (1 of 3 stages done)`); the stages come from the governor, not from the log text. If a governor older than the page reports no stages, the sheet says so and points to Governor activity. See [choose the workbench](../guides/choose-workbench.md).
+**▦ Cluster architecture** opens a wide sheet with one card per concern and a summary beside it that stays in view (on a phone the summary stacks under the cards).
+
+| Card | What you set |
+|---|---|
+| **Slurm cluster** | steppers for CPU nodes, GPU nodes and GPUs per node, each with what one node is (for example 8 CPUs, 4 GB; H200) |
+| **Kubernetes cluster** | an Enabled switch and steppers for its own CPU and GPU nodes (KWOK), separate from the Slurm nodes; the card collapses to one line while it is off |
+| **Login nodes** | one card per login node: *Way in* (SSH, Teleport, Both) and *Serves* (Slurm, Kubernetes, Both: an s-login, a k-login or a shared login); two presets, *One shared login* and *Separate s-login and k-login* |
+| **Optional parts** | toggles grouped by category as in the `--ticketing`, `--hardware` flags (accounting, Jira, BMC, BCM, Teleport, scenarios, load); each shows the memory limit it adds, and the toggles show what is built now |
+
+The three Slurm steppers share a row to keep the cards compact.
+
+### Read the summary
+
+- It lists the node counts per scheduler, the logins, the memory it needs against free memory (for example "1.7 GB needed of 4.5 GB free"), and the `benchctl up ...` command for a terminal.
+- It shows the change against what runs now ("GPU nodes 2 → 3 (+1)"). Editing the numbers only estimates.
+- **Projected memory** (under the memory bar, read-only) states the budget (free memory minus the 1 GB safety floor), the projected need and what is left, with a table of expected use and cap per part (nodes, each service, observability, what already runs, Docker overhead, the app).
+- When the selection needs more than the budget, a **▲ Over budget** notice says by how much, in words and an icon, not colour alone.
+- The page only shows the projection: the governor still refuses an over-budget Apply (GV-9), and changes still go through Apply.
+
+### Review, then apply
+
+1. **Review changes** (top of the summary) says what Apply will do before you press it:
+   **+ Adds** (nodes, parts, login nodes), **− Removes** and **↻ Restarts** (slurmctld, only when the Slurm node list changed or accounting was added).
+2. If a node to be removed is `allocated` or `mixed` in Slurm (one `sinfo`, read when the sheet opens), the sheet says jobs will stop and **Apply** stays disabled until you tick **I understand**. If Slurm's states cannot be read it says so; it does not guess. It does not list job ids: the page has no Slurm access beyond node states.
+3. Press **Apply to the running workbench** twice (the second press confirms). The governor rebuilds the workbench: new nodes start and nodes you no longer want are removed.
+4. A **Progress** list shows the governor's stages (Build images, each start stage, Restart slurmctld) as waiting, running, done with seconds, or failed, and the sheet names the job (`Job #7: nodes (1 of 3 stages done)`). The stages come from the governor, not from the log text. If a governor older than the page reports no stages, the sheet says so and points to Governor activity.
+
+See [choose the workbench](../guides/choose-workbench.md).
 
 **If the sheet says "Could not load the options".** The page and the process behind it are different versions (the page was updated
 while an older one kept running). Restart it and reload:
@@ -345,12 +414,18 @@ successful download the sheet lists what to set by hand: the SSH key (`benchctl 
 (`compose/generated/secrets/grafana_viewer_token`), the BMC password if asked for, and that Jira needs no token. It also
 warns when Slurm accounting is missing (`sacct` would fail). See [export a profile](../guides/export-profile.md).
 
-**Power off and Slurm.** Power off sets the BMC and BCM state, makes the GPU exporter stop publishing the node (its GPU series vanish from Grafana), and
-asks the governor to **freeze the node's container**. Its `slurmd` then stops answering, exactly as on a dead host, and
-`slurmctld` notices by itself: `sinfo` shows the node `down*` (reason *Not responding*) after about 30 s (`SlurmdTimeout=15`, `MessageTimeout=5`).
-Power on thaws it, and with `ReturnToService=1` Slurm returns it on its own after its next answer. This needs the governor
-started with `--workdir` (the launcher does) and level L0-L1; otherwise the page says the node was not frozen and names
-`benchctl set node NAME off`. The fault buttons include **InfiniBand port down** and **NIC flapping**; the node card shows them as a warning and the health check drains the node. The node panel also has a **Workload** card: *Run 1 CPU, 5 min* (GPU nodes: 1 GPU or all GPUs, 5 or 30 min) submits a job on that node through the governor (`benchctl submit`), so `squeue` lists it, the node shows allocated and a GPU job shows its GPUs busy. `benchctl set node NAME down|resume` sets the Slurm state by hand instead.
+**Power off and Slurm.** Power off does four things:
+
+1. sets the BMC and BCM state;
+2. makes the GPU exporter stop publishing the node (its GPU series vanish from Grafana);
+3. asks the governor to **freeze the node's container**, so its `slurmd` stops answering, exactly as on a dead host;
+4. `slurmctld` notices by itself: `sinfo` shows the node `down*` (reason *Not responding*) after about 30 s (`SlurmdTimeout=15`, `MessageTimeout=5`).
+
+Power on thaws it, and with `ReturnToService=1` Slurm returns it on its own after its next answer. Freezing needs the governor started with `--workdir` (the launcher does) and level L0-L1; otherwise the page says the node was not frozen and names `benchctl set node NAME off`.
+
+The fault buttons include **InfiniBand port down** and **NIC flapping**; the node card shows them as a warning and the health check drains the node.
+
+The node panel also has a **Workload** card: *Run 1 CPU, 5 min* (GPU nodes: 1 GPU or all GPUs, 5 or 30 min) submits a job on that node through the governor (`benchctl submit`), so `squeue` lists it, the node shows allocated and a GPU job shows its GPUs busy. `benchctl set node NAME down|resume` sets the Slurm state by hand instead.
 
 A node set `down` by hand (`benchctl set node NAME down`) stays down until `resume`; one that went down by not answering returns
 by itself (`ReturnToService=1`). A cluster built before this setting keeps the old behaviour until its `slurm.conf` is regenerated
