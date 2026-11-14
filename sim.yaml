@@ -37,6 +37,7 @@ partitions:
 #   - {name: scavenger, priority: 1, max_gpus_per_user: 2}
 #   - {name: urgent, priority: 1000, preempt: [scavenger], grace_time_s: 30}
 # slurm:
+#   version: 25.11.9   # build and run this Slurm release instead of the pin (25.05.9, 25.11.9, 26.05.5, 26.05.6; --slurm-version; ADR 0079)
 #   priority: {weight_qos: 1000, weight_age: 100, weight_fairshare: 10000, decay_half_life: 7-0}
 
 controller:             # a controller node (SPEC C-20, issue 416): slurmctld's host with sshd, the BCM head node (cmsh); off: the login node acts as the head node
