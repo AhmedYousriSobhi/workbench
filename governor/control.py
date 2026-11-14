@@ -8,9 +8,11 @@ import threading
 from collections.abc import Callable
 from pathlib import Path
 
+from . import netem
+
 log = logging.getLogger("governor.control")
 
-ALLOWED = {"status", "scale", "freeze", "thaw", "stop", "start", "set-profile", "admit", "apply-plan", "node-state", "submit-job", "slurm-step", "slurm-trace", "slurm-stats", "capture-start", "capture-read", "capture-stop", "refresh-jira-licence"}
+ALLOWED = {"status", "scale", "freeze", "thaw", "stop", "start", "set-profile", "admit", "apply-plan", "node-state", "submit-job", "slurm-step", "slurm-trace", "slurm-stats", "capture-start", "capture-read", "capture-stop", "refresh-jira-licence", "netem-set", "netem-clear"}
 MAX_REQUEST = 4096
 TARGETED = {"freeze", "thaw", "stop", "start"}  # require a known group name
 
@@ -102,6 +104,13 @@ def dispatch(line: bytes, handle: Handler, groups: Callable[[], set[str]]) -> di
             return {"ok": False, "error": "slurm-trace needs nodes:[NAME, ...] (at most 8) and since:number (unix seconds)"}
         if cmd == "capture-start" and not (isinstance(req.get("node"), str) and NODE_RE.fullmatch(req["node"])):
             return {"ok": False, "error": "capture-start needs node:NAME (cn001)"}
+        if cmd == "netem-set":
+            if not (isinstance(req.get("node"), str) and NODE_RE.fullmatch(req["node"])):
+                return {"ok": False, "error": "netem-set needs node:NAME (cn001)"}
+            if bad := netem.problems(req.get("delay_ms"), req.get("loss_pct"), req.get("ttl_s")):
+                return {"ok": False, "error": "; ".join(bad)}
+        if cmd == "netem-clear" and req.get("node") is not None and not (isinstance(req["node"], str) and NODE_RE.fullmatch(req["node"])):
+            return {"ok": False, "error": "netem-clear takes an optional node:NAME (cn001)"}
         if cmd == "capture-read" and not (isinstance(req.get("since", 0), int) and not isinstance(req.get("since", 0), bool) and req.get("since", 0) >= 0):
             return {"ok": False, "error": "capture-read takes an optional since:int>=0"}
         if cmd == "admit" and not (isinstance(req.get("budget_mb"), int) and not isinstance(req["budget_mb"], bool)

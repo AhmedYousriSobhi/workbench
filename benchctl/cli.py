@@ -31,6 +31,7 @@ from . import (
     machine,
     measure,
     memory,
+    netemfaults,
     nhc,
     nodes,
     ready,
@@ -790,6 +791,25 @@ def set_node(node: str = TARGET, state: str = typer.Argument(..., help="off or o
     raise typer.Exit(0 if o.status == "ok" else 1)
 
 
+@set_app.command("netem")
+def set_netem(node: str = typer.Argument(..., help="a Slurm node of this cluster, e.g. cn001"),
+              delay: str = typer.Option(None, "--delay", help="added latency, 1ms to 500ms, e.g. 200ms"),
+              loss: str = typer.Option(None, "--loss", help="packet loss, 0.1% to 20%, e.g. 5%"),
+              ttl: str = typer.Option("60s", "--ttl", help="the fault ends by itself after this long, 1s to 10m (60s by default)")) -> None:
+    """`benchctl set netem cn001 --delay 200ms --loss 5% --ttl 60s` slows the node's own network with `tc netem` (issue 478, ADR 0056).
+    Only the optional root governor service can do it (`sudo ./scripts/install-governor.sh`); the page never offers it. Bounded targets
+    (Slurm nodes of this cluster), bounded values, always a TTL, only at memory levels L0-L1. `benchctl clear netem` removes it early;
+    the governor also clears every rule when it starts or stops."""
+    do = {"nodes": [node], "ttl": ttl, **({"delay": delay} if delay else {}), **({"loss": loss} if loss else {})}
+    if bad := netemfaults.problems(do, {n for n, _ in nodes.node_names(_sim())}):
+        typer.echo("\n".join(bad), err=True)
+        raise typer.Exit(1)
+    if why := netemfaults.apply(do):
+        typer.echo(f"cannot set netem on {node}: {why}", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"{node}: netem {' '.join(f'{k} {v}' for k, v in (('delay', delay), ('loss', loss)) if v)}, ends in {ttl} (`benchctl clear netem` removes it now)")
+
+
 clear_app = typer.Typer(cls=SuggestingGroup, help="Put things back: the injected node faults")
 app.add_typer(clear_app, name="clear")
 
@@ -807,6 +827,19 @@ def clear_faults_cmd(output: str = OUTPUT, json_: bool = JSON) -> None:
         for r in data["cleared"]:
             typer.echo(f"{r['target']}: {r['status']}" + (f" ({r['detail']})" if r["detail"] else ""))
     raise typer.Exit(0 if data["ok"] else 1)
+
+
+@clear_app.command("netem")
+def clear_netem_cmd(node: str = typer.Argument(None, help="one node; every node when left out")) -> None:
+    """Remove the `tc netem` faults the root governor service set (all nodes, or one). Safe to repeat, allowed at every memory level."""
+    do = {"clear": True, **({"nodes": [node]} if node else {})}
+    if bad := netemfaults.problems(do, {n for n, _ in nodes.node_names(_sim())}):
+        typer.echo("\n".join(bad), err=True)
+        raise typer.Exit(1)
+    if why := netemfaults.apply(do):
+        typer.echo(f"cannot clear netem: {why}", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"netem cleared on {node or 'every node'}")
 
 
 CHECK = typer.Argument(..., autocompletion=completion.checks, help="check name, see `benchctl get checks`")

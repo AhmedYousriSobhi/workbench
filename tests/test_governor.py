@@ -660,3 +660,22 @@ def test_a_change_reports_a_job_id_and_its_stages_in_status(tmp_path):
 def test_status_has_no_change_before_one_runs(tmp_path):
     g, _ = _calm_gov(tmp_path)
     assert g.handle("status", {})["change"] is None
+
+
+def test_netem_is_root_service_only_bounded_and_l0_l1(tmp_path):
+    """Issue 478, ADR 0056: no netemer (user mode, or no root) refuses with the install script; a dry run refuses; set only at L0-L1; clear always."""
+    from governor import control
+    from governor.netem import USER_MODE_MSG
+    g, _ = _calm_gov(tmp_path)
+    r = control.dispatch(b'{"cmd":"netem-set","node":"cn001","delay_ms":10,"ttl_s":5}', g.handle, g.group_names)
+    assert r == {"ok": False, "error": USER_MODE_MSG} and "install-governor.sh" in USER_MODE_MSG
+    assert g.handle("status", {})["netem"] is None
+    calls = []
+    g.netem = __import__("governor.netem", fromlist=["Netem"]).Netem(lambda c: calls.append(c) or (1, "", "x"), lambda: g.ladder.level, g._record)
+    g.dry_run = True
+    assert "dry run" in g.handle("netem-set", {"node": "cn001", "delay_ms": 10, "ttl_s": 5})["error"] and not calls
+    g.dry_run = False
+    g.ladder.level = 2
+    assert "L0-L1" in g.handle("netem-set", {"node": "cn001", "delay_ms": 10, "ttl_s": 5})["error"] and not calls
+    assert g.handle("netem-clear", {})["ok"] is True  # clearing is allowed under pressure
+    assert g.handle("status", {})["netem"] == []

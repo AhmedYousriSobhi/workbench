@@ -21,8 +21,8 @@
   paths: ["images/node-base/**", "images/slurm-ctl/**"]
   tests: ALL
 - name: governor
-  paths: ["governor/**", "systemd/**", "scripts/install-governor.sh", "scripts/real-test-root.sh", "benchctl/checks.py", "benchctl/memory.py"]
-  tests: [test_real, test_root, test_pressure_real, test_user_mode_real, test_apply_real, test_stack_real, test_webui_real]
+  paths: ["governor/**", "systemd/**", "scripts/install-governor.sh", "scripts/real-test-root.sh", "benchctl/checks.py", "benchctl/memory.py", "benchctl/netemfaults.py"]
+  tests: [test_real, test_root, test_netem_root, test_pressure_real, test_user_mode_real, test_apply_real, test_stack_real, test_webui_real]
 - name: Slurm configuration
   paths: ["benchctl/slurmconf.py", "benchctl/topology.py", "benchctl/qos.py", "scripts/verify.d/**"]
   tests: [test_topology_real, test_qos_real, test_power_real, test_slurmresilience_real, test_cluster_real, test_stack_real, test_slurmkeys_real, test_compose_real]

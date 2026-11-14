@@ -1,0 +1,6 @@
+name: netem-slow-link
+ref: SC-45
+description: "cn001's own network gets 200 ms of added latency and 5% packet loss for 60 s (tc netem through the root governor service, L0-L1 only, never from the page); slurmctld sees slow or lost replies, and every rule is cleared at 90 s even if the TTL did not"
+steps:
+  - {at: 0s,  target: netem, do: {nodes: [cn001], delay: 200ms, loss: 5%, ttl: 60s}}
+  - {at: 90s, target: netem, do: {clear: true}}

@@ -158,11 +158,23 @@ def main(argv: list[str] | None = None) -> None:
             cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]
         return subprocess.Popen(cmd, cwd=args.workdir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
+    def netemer(cmd: list[str]) -> tuple[int, str, str]:
+        """A host command for netem (docker inspect, nsenter, tc); only the root service gets this runner."""
+        try:
+            r = subprocess.run(cmd, capture_output=True, timeout=20, check=False, text=True)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            return 127, "", f"{cmd[0]}: {e}"
+        return r.returncode, r.stdout, r.stderr
+
+    netem_ok = not args.user_mode and not args.dry_run and os.geteuid() == 0  # ADR 0056: netem exists only in the root service
     gov = Governor(sampler, ladder, groups, executor, args.dry_run, watchdog, args.watch_interval,
                    annotator, discover_docker, args.refresh_interval,
                    effector if args.workdir else None, tracer=tracer if args.workdir else None,
                    statser=statser if args.workdir else None, capturer=capturer if args.workdir else None,
-                   streamer=streamer if args.workdir else None, admit_floor=int(floor * GB))
+                   streamer=streamer if args.workdir else None, admit_floor=int(floor * GB),
+                   netemer=netemer if netem_ok else None)
+    if gov.netem:
+        gov.netem.clear_all("governor start")  # a crashed scenario leaves nothing behind
     srv = control.serve(args.socket, gov.handle, gov.group_names, gid=args.socket_gid) \
         if args.socket else None
     msrv = None
@@ -197,6 +209,8 @@ def main(argv: list[str] | None = None) -> None:
             else:
                 time.sleep(args.interval)
     finally:
+        if gov.netem:
+            gov.netem.clear_all("governor exit")
         if msrv:
             msrv.shutdown()
         if srv:
