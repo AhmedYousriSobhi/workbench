@@ -53,7 +53,23 @@ SSH_PORT = 2222
 # Every image whose entrypoint is node-base's installs the munge and JWT keys from this mount (images/node-base/entrypoint.sh).
 SLURM_KEY_IMAGES = ("workbench/node-base:dev", "workbench/slurm-ctl:dev", "workbench/login:dev")
 SLURM_KEYS_MOUNT = "./secrets/slurm:/run/workbench/slurm:ro"
-SLURMD_MB = 60
+SLURMD_MB = 60  # slurmd and the node's shell: 13 MB measured
+JOB_MB = 128    # default room on top of that for what the jobs allocate; sim.yaml compute.job_memory_mb / gpu.job_memory_mb (issue 670)
+MAX_JOB_MB = 4096
+
+
+class JobMemoryError(ValueError):
+    pass
+
+
+def job_memory_mb(sim: dict, kind: str) -> int:
+    """The room a job gets on a node of this kind, above slurmd's own: a node's limit is SLURMD_MB + this. A cap, not a reservation:
+    the plan counts what the nodes use (measured), and the governor sees the limit."""
+    group = sim.get("gpu" if kind in ("gpu", "real-gpu", "k8s-gpu") else "compute", {})
+    v = group.get("job_memory_mb", JOB_MB)
+    if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= MAX_JOB_MB:
+        raise JobMemoryError(f"{'gpu' if group is sim.get('gpu') else 'compute'}.job_memory_mb is {v!r}: use a whole number of MB from 0 to {MAX_JOB_MB}")
+    return v
 SLURMD_PRIO = 4
 
 
@@ -99,7 +115,7 @@ def generate(sim: dict, profile: dict) -> dict:
     if "slurmctld" in services and (m := mig.config(sim)):  # the GPU allocation feed maps a slice index to its physical GPU (issue 546)
         services["slurmctld"].setdefault("environment", {}).update({"WORKBENCH_MIG_TYPE": mig.gres_type(sim), "WORKBENCH_MIG_SLICES": str(m["slices"])})
     for name, kind in node_names(sim, profile.get("compute_nodes")):
-        svc = _service("workbench/node-base:dev", SLURMD_MB, SLURMD_PRIO, "../../images/node-base")
+        svc = _service("workbench/node-base:dev", SLURMD_MB + job_memory_mb(sim, kind), SLURMD_PRIO, "../../images/node-base")
         svc["hostname"] = name
         svc["labels"]["workbench.node"] = kind
         svc["environment"] = {"WORKBENCH_IB": str(sim["gpu"]["gpus_per_node"] if kind == "gpu" else 0 if kind == "real-gpu" else 1)}  # InfiniBand ports nhc expects
