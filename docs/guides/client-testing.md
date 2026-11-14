@@ -254,6 +254,20 @@ benchctl load on --personas --day 600
 
 `--personas` gives each user the job mix of the `persona:` in `sim.yaml`: `alice` (ml-trainer) submits mostly 1 to 4 GPU jobs, long, with 4 or 8 CPUs per task; `bob` (mpi-researcher) submits mostly cpu jobs. About 10% of jobs fail (they end early with exit code 1, so `squeue -t all` and `sacct` show FAILED) and 5 to 10% are cancelled by their owner a few seconds after starting (CANCELLED). `--day 600` squeezes a simulated day into 600 real seconds: the arrival rate follows a curve (busiest at 14:00, quiet at night; the ml-trainer peaks at 22:00), so the queue grows and drains within minutes. Add `--seed N` for repeatable arrivals. `benchctl load off` stops everything.
 
+### Fake engineers working tickets
+
+`benchctl load on --tickets` also starts the ticket bot on the login node. It works only the alert tickets (project OPS, label `alert`, opened by `POST /sim/alerts` or a node fault) in **jira-mock**, never a real Jira. For each open alert ticket:
+
+- about 15% stay unassigned;
+- the rest are assigned to an engineer (bob, carol, dave or erin), moved to In Progress, get a comment, and are Resolved after `--ticket-resolve` seconds (default 600);
+- about 10% of resolved tickets are reopened and worked again.
+
+It acts about once every `--ticket-every` seconds (default 120, 10 to 3600) and, with `--day`, follows the same daily rhythm as the simulated users. The governor's L1 flag pauses it; `benchctl load off` stops it. Add `--seed N` for repeatable choices. Its calls arrive with the User-Agent `workbench-ticket-bot`, so the Traffic tab names it. The flows and the default rate are a recommendation the owner has not confirmed; both are settings.
+
+```
+benchctl load on --tickets --ticket-every 30 --ticket-resolve 120
+```
+
 A job pinned to a node that is down stays pending (*ReqNodeNotAvail*) until the node is back or you `scancel` it.
 
 ## Taking a node down so Slurm notices

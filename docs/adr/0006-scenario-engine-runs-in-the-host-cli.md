@@ -26,6 +26,9 @@ SECONDS real seconds; `benchctl load on --personas --day 600`). Without them not
 capped at 40, and the governor's L1 flag still pauses arrivals. The mix, rhythm and plan are pure functions of a seeded RNG and the hour, so
 unit tests need no cluster. A persona unknown to the table gets the default mix. The ticket bot is a separate issue (#681).
 
+## Addendum: the ticket bot (issue 681)
+The ticket bot is a second small script on the login node, `images/login/ticket_bot.py`, started by `benchctl load on --tickets` the way the demo client is (copied in with `docker cp`, so no rebuild; no container, no extra memory beyond a stdlib process). It talks only to jira-mock over REST (comments, transitions, assignee, search; no new endpoint), never to a real Jira. It is a separate process from `user_sim.py` because it does no Slurm work and must be switchable alone. Decisions are a pure `Bot.step` over a seeded RNG, so tests need no cluster; the rhythm curve is the same as the simulator's (a test keeps them equal). Flows and rate (assign, start, comment, resolve after N seconds, some unassigned, some reopened; one action per 120 s) are the research recommendation, not yet confirmed by the owner, and are settings.
+
 ## Consequences
 - The Web UI (W-3: governor socket only) cannot run the engine itself. Options when the UI is built: the UI
   backend runs scenarios in-process as the unprivileged `workbench` user (only the HTTP targets), or the governor
