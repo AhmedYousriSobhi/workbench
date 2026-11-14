@@ -9,26 +9,40 @@ from webui import cluster
 SIM = yaml.safe_load((Path(__file__).resolve().parent.parent / "sim.yaml").read_text())
 
 
-def make_fetch(power=None, temps=None, fans=None, bcm=None, xid="", down=()):
-    """A fake of http_json answering like the BMC farm, BCM mock and GPU exporter."""
-    power, temps, fans, bcm = power or {}, temps or {}, fans or {}, bcm or {}
+def make_fetch(power=None, temps=None, fans=None, bcm=None, xid="", down=(), calls=None, ib=None, flap=(), util=None):
+    """A fake of http_json answering like the BMC farm, BCM mock and GPU exporter (their bulk /sim/summary answers).
+
+    `xid` is the old scrape text form: lines `DCGM_FI_DEV_XID_ERRORS{node=...} N` become the summary's xid.
+    """
+    import re
+
+    power, temps, fans, bcm, ib, util = power or {}, temps or {}, fans or {}, bcm or {}, ib or {}, util or {}
+    xids = {m[1]: int(m[2]) for m in re.finditer(r'DCGM_FI_DEV_XID_ERRORS\{node="([^"]+)"[^}]*\} (\d+)', xid)}
 
     def fetch(url, body=None, timeout=2.0):
+        if calls is not None:
+            calls.append(url)
         if any(d in url for d in down):
             raise OSError("refused")
         if "/healthz" in url:
             return {"ok": True}
+        if url.endswith(":8000/sim/summary"):
+            names = {n for n, _ in cluster_nodes()}
+            return {n: {"power": power.get(n, "On"), "temp": temps.get(n, 50.0), "fans_failed": fans.get(n, 0)} for n in names}
+        if url.endswith(":9400/sim/summary"):
+            return {n: {"gpu_util": util.get(n, []), "xid": xids.get(n, 0), "ib_down": ib.get(n, 0), "nic_flap": n in flap}
+                    for n in {n for n, _ in cluster_nodes()}}
         if url.endswith(":9400/metrics"):
             return xid
         if url.endswith("/json"):
             return {"result": [{"hostname": n, "status": s} for n, s in bcm.items()]}
-        node = url.split("/")[3]
-        if url.endswith("Systems/1"):
-            return {"PowerState": power.get(node, "On")}
-        return {"Temperatures": [{"Name": "CPU", "ReadingCelsius": temps.get(node, 50.0)}, {"Name": "Inlet", "ReadingCelsius": 24}],
-                "Fans": [{"Status": {"Health": "Critical" if i < fans.get(node, 0) else "OK"}} for i in range(6)]}
+        raise AssertionError(f"unexpected call {url}")
 
     return fetch
+
+
+def cluster_nodes():
+    return cluster.node_names(SIM)
 
 
 def test_xid_by_node_takes_the_highest_per_node():
@@ -153,15 +167,10 @@ def test_gpu_util_by_node_groups_every_gpu():
 
 
 def test_infiniband_and_nic_faults_show_on_the_node_card():
-    text = ('node_infiniband_state_id{node="gpu001",Hostname="gpu001",device="mlx5_0",port="1"} 1\n'
-            'node_infiniband_state_id{node="gpu001",Hostname="gpu001",device="mlx5_1",port="1"} 4\n'
-            'node_infiniband_state_id{node="cn001",Hostname="cn001",device="mlx5_0",port="1"} 4\n'
-            'sim_nic_flapping{node="cn001"} 1\nsim_nic_flapping{node="gpu001"} 0\n')
-    assert cluster.ib_by_node(text) == ({"gpu001": 1}, {"cn001"})
     base = {"power": "On", "temp": 50, "fans_failed": 0, "xid": 0, "bcm": "UP"}
     assert cluster.classify({**base, "ib_down": 2}) == ("warn", "2 InfiniBand port(s) down")
     assert cluster.classify({**base, "nic_flap": True}) == ("warn", "NIC flapping")
-    snap = cluster.Cluster(SIM, fetch=make_fetch(xid=text)).snapshot()
+    snap = cluster.Cluster(SIM, fetch=make_fetch(ib={"gpu001": 1}, flap={"cn001"})).snapshot()
     by = {n["name"]: n for n in snap["nodes"]}
     assert by["gpu001"]["label"] == "1 InfiniBand port(s) down" and by["cn001"]["label"] == "NIC flapping"
     sent = []
@@ -179,3 +188,39 @@ def test_snapshot_lists_the_real_jira_only_when_the_part_is_built(monkeypatch):
     assert "jira-real" not in c.snapshot()["services"]
     monkeypatch.setattr(cluster, "jira_real_built", lambda: True)
     assert c.snapshot()["services"]["jira-real"] is True
+
+
+@pytest.mark.parametrize("cpu,gpu", [(4, 2), (20, 12)])
+def test_snapshot_makes_the_same_calls_whatever_the_node_count(cpu, gpu):
+    """Issue 450: the node cards cost one call to the BMC farm, BCM and the exporter each, not two per node."""
+    sim = {**SIM, "compute": {**SIM["compute"], "count": cpu}, "gpu": {**SIM["gpu"], "nodes": gpu}}
+    calls: list[str] = []
+    fetch = make_fetch(calls=calls)
+
+    def sized(url, body=None, timeout=2.0):
+        if url.endswith("/sim/summary"):
+            calls.append(url)
+            return {n: {"power": "On", "temp": 50.0, "fans_failed": 0, "gpu_util": [1], "xid": 0, "ib_down": 0, "nic_flap": False}
+                    for n, _ in cluster.node_names(sim)}
+        return fetch(url, body, timeout)
+
+    snap = cluster.Cluster(sim, fetch=sized).snapshot()
+    assert len(snap["nodes"]) == cpu + gpu and {n["state"] for n in snap["nodes"]} == {"ok"}
+    per_service = [u for u in calls if "/sim/summary" in u]
+    assert sorted(u.rsplit("/sim/", 1)[0] for u in per_service) == ["http://127.0.0.1:8000", "http://127.0.0.1:9400"]
+    assert not any("/redfish/" in u for u in calls)
+
+
+def test_snapshot_call_count_is_independent_of_node_count():
+    def count(cpu, gpu):
+        sim = {**SIM, "compute": {**SIM["compute"], "count": cpu}, "gpu": {**SIM["gpu"], "nodes": gpu}}
+        calls: list[str] = []
+
+        def fetch(url, body=None, timeout=2.0):
+            calls.append(url)
+            return {}
+
+        cluster.Cluster(sim, fetch=fetch).snapshot()
+        return len(calls)
+
+    assert count(4, 2) == count(40, 24)

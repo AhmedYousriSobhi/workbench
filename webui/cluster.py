@@ -123,19 +123,6 @@ def xid_by_node(metrics: str) -> dict[str, int]:
     return out
 
 
-def ib_by_node(metrics: str) -> tuple[dict[str, int], set[str]]:
-    """(InfiniBand ports that are not active per node, nodes whose NIC is flapping) from a Prometheus text scrape."""
-    down: dict[str, int] = {}
-    for line in metrics.splitlines():
-        if line.startswith("node_infiniband_state_id{") and not line.endswith(" 4"):
-            m = re.search(r'node="([^"]+)"', line)
-            if m:
-                down[m.group(1)] = down.get(m.group(1), 0) + 1
-    flap = {m.group(1) for line in metrics.splitlines() if line.startswith("sim_nic_flapping{") and line.endswith(" 1")
-            for m in [re.search(r'node="([^"]+)"', line)] if m}
-    return down, flap
-
-
 def gpu_util_by_node(metrics: str) -> dict[str, list[float]]:
     """DCGM_FI_DEV_GPU_UTIL per GPU, grouped by node, from a Prometheus text scrape."""
     out: dict[str, list[float]] = {}
@@ -182,19 +169,17 @@ class Cluster:
         except (OSError, ValueError):
             return None
 
-    def _node(self, name: str, kind: str) -> dict:
-        system = self._try(f"{BMC}/{name}/redfish/v1/Systems/1")
-        thermal = self._try(f"{BMC}/{name}/redfish/v1/Chassis/1/Thermal") or {}
-        temps = [t.get("ReadingCelsius") for t in thermal.get("Temperatures", []) if t.get("Name") == "CPU"]
-        fans = [f for f in thermal.get("Fans", []) if f.get("Status", {}).get("Health") == "Critical"]
+    def _node(self, name: str, kind: str, bmc: dict | None) -> dict:
+        """One node's card from its entry in the BMC farm's bulk summary (None when the farm does not answer)."""
+        bmc = bmc or {}
         return {"name": name, "kind": kind, "gpus": self.gpus if kind == "gpu" else 1 if kind == "real-gpu" else 0,
-                "power": system.get("PowerState") if isinstance(system, dict) else None,
-                "temp": temps[0] if temps else None, "fans_failed": len(fans)}
+                "power": bmc.get("power"), "temp": bmc.get("temp"), "fans_failed": bmc.get("fans_failed", 0)}
 
     def snapshot(self) -> dict:
         """{"services": {name: bool}, "nodes": [...]}: one pass over the mocks.
 
         Sequential on purpose: localhost calls take a few ms, and a thread pool pushed the UI over its 50 MB budget.
+        The node cards cost one call to the BMC farm, one to the BCM mock and one to the exporter, whatever the node count (issue 450).
         """
         probes = {**SERVICES, **({"teleport": f"{TELEPORT}/healthz"} if teleport_built() else {}),
                   **({"jira-real": f"{JIRA_REAL}/status"} if jira_real_built() else {}),
@@ -215,20 +200,21 @@ class Cluster:
 
             names.append("k8s-api")
             up.append(k8s.api_up())
-        rows = [self._node(*nk) for nk in self.nodes]
+        bmc = self._try(f"{BMC}/sim/summary")
+        bmc = bmc if isinstance(bmc, dict) else {}
+        rows = [self._node(*nk, bmc.get(nk[0])) for nk in self.nodes]
         devices = self._try(f"{BCM}/json", {"service": "cmdevice", "call": "getDevices"})
         bcm = {d["hostname"]: d["status"] for d in (devices or {}).get("result", [])} if isinstance(devices, dict) else {}
-        scrape = self._try(SERVICES["gpu-exporter"]) or ""
-        scrape = scrape if isinstance(scrape, str) else ""
-        xids, utils = xid_by_node(scrape), gpu_util_by_node(scrape)
-        ib, flap = ib_by_node(scrape)
+        exp = self._try(f"{EXPORTER}/sim/summary")
+        exp = exp if isinstance(exp, dict) else {}
         for row in rows:
-            if row["name"] in utils:
-                u = utils[row["name"]]
+            e = exp.get(row["name"], {})
+            u = e.get("gpu_util")
+            if u:
                 row["gpu_util"], row["gpus_busy"] = round(sum(u) / len(u)), sum(1 for x in u if x >= 50)
             row["bcm"] = bcm.get(row["name"])
-            row["xid"] = xids.get(row["name"], 0)
-            row["ib_down"], row["nic_flap"] = ib.get(row["name"], 0), row["name"] in flap
+            row["xid"] = e.get("xid", 0)
+            row["ib_down"], row["nic_flap"] = e.get("ib_down", 0), bool(e.get("nic_flap"))
             row["state"], row["label"] = classify(row)
         for row in rows:
             if row["kind"] == "real-gpu":  # no BMC entry yet (issue 431): the card's own exporter says whether it is up and how busy it is
