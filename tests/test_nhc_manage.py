@@ -41,7 +41,7 @@ def names(src):
 def test_the_shipped_checks_are_valid_and_in_the_original_order(src):
     assert nhc.problems(src) == []
     assert names(src) == ["gpu-count", "gpu-xid", "ib-ports", "nic-flap"]
-    assert [t["name"] for t in nhc.templates(src)] == ["metric-above", "metric-below"]
+    assert [t["name"] for t in nhc.templates(src)] == ["metric-above", "metric-below", "real-gpu-health"]
 
 
 def test_a_template_check_is_added_with_its_parameters_at_a_position(src):
@@ -241,7 +241,7 @@ def test_the_page_lists_reorders_toggles_adds_and_removes(page):
     base, out = page
     code, state = call(base)
     assert code == 200 and state["checks"][0]["name"] == "gpu-count" and state["problems"] == []
-    assert [t["name"] for t in state["templates"]] == ["metric-above", "metric-below"]
+    assert [t["name"] for t in state["templates"]] == ["metric-above", "metric-below", "real-gpu-health"]
     order = ["nic-flap", "gpu-count", "gpu-xid", "ib-ports"]
     assert [c["name"] for c in call(base, {"op": "reorder", "order": order})[1]["checks"]] == order
     assert (out / "checks.conf").read_text().splitlines()[3].startswith("nic-flap")  # delivered to the nodes' mount at once
