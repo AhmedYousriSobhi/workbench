@@ -37,9 +37,9 @@ K8S_JOBS = {"k8s-controller-manager": ("https", "k8s-controller-manager:10257"),
 
 
 def node_targets(inventory: dict, exporter: str = EXPORTER) -> list[dict]:
-    """One target per node: the farm is one process, so the node is a query parameter and the `instance` label."""
+    """One target per simulated node: the farm is one process, so the node is a query parameter and the `instance` label."""
     return [{"targets": [exporter], "labels": {"job": "sim-nodes", "instance": n["name"], "__param_node": n["name"]}}
-            for n in inventory["nodes"]]
+            for n in inventory["nodes"] if n["kind"] != "real-gpu"]  # the card has its own exporter and job (issue 431)
 
 
 def part_jobs(sim: dict, services: set[str], k8s_ready: bool = True) -> list[dict]:

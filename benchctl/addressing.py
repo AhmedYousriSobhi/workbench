@@ -52,8 +52,8 @@ def _prefix(subnet: str) -> tuple[int, int]:
 
 REAL_GPU_IP = "10.141.254.1"  # the real card's node (benchctl/real_gpu.py): third octet 254 is unused by every block below
 GPU_BLOCK = 100  # the third octet GPU nodes start at; compute nodes use 0..99 (25,400 of them)
-BLOCK = {"compute": 0, "gpu": GPU_BLOCK, "k8s-cpu": 200, "k8s-gpu": 230}  # first third octet of each kind (Kubernetes nodes: BMC and BCM addresses)
-ROOM = {"compute": 100, "gpu": 100, "k8s-cpu": 30, "k8s-gpu": 24}         # how many third octets each kind may use
+BLOCK = {"compute": 0, "gpu": GPU_BLOCK, "k8s-cpu": 200, "k8s-gpu": 230, "real-gpu": 254}  # first third octet of each kind (Kubernetes nodes: BMC and BCM addresses)
+ROOM = {"compute": 100, "gpu": 100, "k8s-cpu": 30, "k8s-gpu": 24, "real-gpu": 1}         # how many third octets each kind may use
 
 
 def host_ip(subnet: str, index: int, kind: str = "compute") -> str:
