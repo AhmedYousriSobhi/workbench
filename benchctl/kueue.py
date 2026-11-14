@@ -54,10 +54,21 @@ def queue_problems(q) -> list[str]:
     return out
 
 
+def _shares(objs: list[dict], cq: str, pending: int) -> dict[tuple[str, str], int]:
+    """Split `pending` over the LocalQueues of `cq` in the proportion of their fixture backlogs (all to the first when those are 0)."""
+    lqs = [o for o in objs if o["kind"] == "LocalQueue" and o["spec"]["clusterQueue"] == cq]
+    base = [o["status"]["pendingWorkloads"] for o in lqs]
+    vals = [pending * b // sum(base) for b in base] if sum(base) else [0] * len(lqs)
+    if vals:
+        vals[0] += pending - sum(vals)
+    return {(o["metadata"]["namespace"], o["metadata"]["name"]): v for o, v in zip(lqs, vals)}
+
+
 def queue_calls(q: dict) -> list[list[str]]:
     """The patches for a scenario step `queue: {name, active, pending}`: the ClusterQueue and every LocalQueue that points at it."""
     objs = objects()
     out = []
+    share = _shares(objs, q["name"], q["pending"]) if "pending" in q else {}
     for o in objs:
         name = o["metadata"]["name"]
         if o["kind"] == "ClusterQueue" and name == q["name"]:
@@ -71,8 +82,8 @@ def queue_calls(q: dict) -> list[list[str]]:
             st["conditions"] = [{"type": "Active", "status": "True", "reason": "Ready", "message": ok_msg} if q["active"] else
                                 {"type": "Active", "status": "False",
                                  **(STOPPED if kind == "ClusterQueue" else {"reason": "ClusterQueueIsInactive", "message": "Can't submit new workloads to clusterQueue"})}]
-        if "pending" in q and kind == "ClusterQueue":
-            st["pendingWorkloads"] = q["pending"]
+        if "pending" in q:  # the LocalQueues' backlogs add up to the ClusterQueue's
+            st["pendingWorkloads"] = q["pending"] if kind == "ClusterQueue" else share[(o["metadata"]["namespace"], name)]
         if st:
             ns = ["-n", o["metadata"]["namespace"]] if o["metadata"].get("namespace") else []
             out.append([*ns, "patch", PLURAL[kind], name, "--subresource=status", "--type=merge", "-p", json.dumps({"status": _stamped(st)})])

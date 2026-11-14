@@ -496,3 +496,17 @@ def test_the_queue_step_validates_and_patches_the_cluster_queue_and_its_local_qu
     assert __import__("json").loads(k8s.step_args({"queue": {"name": "gpu-training", "active": True}})[0][-1])["status"]["conditions"][0]["status"] == "True"
     sc = next(s for s in scenario.list_all(ROOT / "scenarios") if s["name"] == "k8s-queue-inactive")
     assert scenario.validate(sc, SIM) == []
+
+
+def test_a_queue_step_with_pending_keeps_the_local_queues_adding_up_and_limited_reads_team_a_queues():
+    import json
+    calls = kueue.queue_calls({"name": "gpu-training", "pending": 19})
+    local = [json.loads(c[-1])["status"]["pendingWorkloads"] for c in calls if "localqueues.v1beta2.kueue.x-k8s.io" in c]
+    assert len(local) == 2 and sum(local) == 19 and all(n > 0 for n in local)
+    cq = kueue.queue_calls({"name": "gpu-inference", "pending": 4})  # fixture backlog 0: all to its one local queue
+    assert [json.loads(c[-1])["status"]["pendingWorkloads"] for c in cq] == [4, 4]
+    assert all("pendingWorkloads" not in json.loads(c[-1])["status"] for c in kueue.queue_calls({"name": "gpu-training", "active": False}))
+    docs = list(yaml.safe_load_all((ROOT / "k8s/fixtures/46-rbac-kueue.yaml").read_text()))
+    role = next(d for d in docs if d["kind"] == "Role")
+    assert role["metadata"]["namespace"] == "team-a" and role["rules"][0]["resources"] == ["localqueues"]
+    assert next(d for d in docs if d["kind"] == "RoleBinding")["subjects"][0]["name"] == "limited"
