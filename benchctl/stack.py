@@ -258,6 +258,9 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     except topology.TopologyError as e:
         say(f"FAILED topology: {e}")
         return False
+    except compose.JobMemoryError as e:
+        say(f"FAILED node memory: {e}")
+        return False
     except qos.QosError as e:
         say(f"FAILED qos: {e}")
         return False

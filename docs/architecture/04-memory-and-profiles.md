@@ -17,7 +17,7 @@ Host reserve (OS, desktop, IDE, browser): **about 3 GB**, never governed. Page c
 | App under test | 1.0 GB assumed until measured on your machine (664 MB peak in one session) (`benchctl measure app --save`, `--app-mb`) | P1 |
 | bmc-farm + bcm-mock + jira-mock + gpu-exporter-farm | 0.3 GB | P2 |
 | Kubernetes control plane (etcd, apiserver, controller manager, scheduler) + KWOK, five containers (ADR 0034) | 0.9 GB cap, about 0.3 GB measured | P3 |
-| slurmd containers | ~60 MB each (16 nodes about 1 GB) | P4 |
+| slurmd containers | 60 MB + 128 MB room for jobs (`job_memory_mb`) cap each, about 13 MB used | P4 |
 | Fidelity VM | 2.0 GB cap | P6 |
 | Jira DC (jira-real only) | 2.1 GB cap + Postgres 0.25 GB (measured, trimmed JVM) | P6 |
 

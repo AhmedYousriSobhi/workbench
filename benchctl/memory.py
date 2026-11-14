@@ -36,7 +36,7 @@ MEASURED_MB: dict[str, int] = {
 # must be listed here (tests/test_memory.py finds it by generating two sizes), and its cap and measurement must fit under it. A
 # part that cannot be a few MB per node is shared (one container for every node) or optional.
 PER_NODE_MB: dict[str, int] = {
-    "slurmd": 60,          # every compute node; 13 MB measured
+    "slurmd": 188,         # every compute node: 60 MB for slurmd plus the default 128 MB a job may allocate (job_memory_mb); 13 MB measured
     "bmc-forwarder": 32,   # every per-node BMC address; 18 MB measured
     "dcgm-exporter": 150,  # optional (--with dcgm), real-gpu nodes only; 125 MB measured, the one part that is not a few MB
 }

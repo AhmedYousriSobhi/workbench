@@ -63,7 +63,7 @@ def test_slurmd_count_follows_profile():
 def test_budget_matches_limits():
     data = compose.generate(SIM, compose.load_profile("min"))
     nodes = 4 + SIM["gpu"]["nodes"]  # every node also has its BMC forwarder
-    assert compose.budget_mb(data) == 200 + 60 + 3 * 100 + 40 + nodes * (60 + compose.BMC_FORWARDER_MB)
+    assert compose.budget_mb(data) == 200 + 60 + 3 * 100 + 40 + nodes * (60 + compose.JOB_MB + compose.BMC_FORWARDER_MB)
 
 
 def test_write_marks_generated(tmp_path):
@@ -210,3 +210,17 @@ def test_every_default_rule_has_a_promtool_case():
     cases = yaml.safe_load((root / "tests/rules/rules_test.yml").read_text())["tests"]
     tested = {t["alertname"] for case in cases for t in case["alert_rule_test"]}
     assert tested == rules
+
+
+def test_a_nodes_limit_is_slurmd_plus_the_room_for_jobs_and_the_room_is_adjustable():
+    limit = lambda sim, n: next(int(v["mem_limit"][:-1]) for k, v in compose.generate(sim, compose.load_profile("min"))["services"].items() if k == n)
+    assert limit(SIM, "cn001") == compose.SLURMD_MB + compose.JOB_MB and limit(SIM, "gpu001") == compose.SLURMD_MB + compose.JOB_MB
+    big = {**SIM, "compute": {**SIM["compute"], "job_memory_mb": 512}, "gpu": {**SIM["gpu"], "job_memory_mb": 1024}}
+    assert limit(big, "cn001") == 60 + 512 and limit(big, "gpu001") == 60 + 1024
+
+
+def test_a_wrong_job_memory_is_refused_with_one_message():
+    for bad in (-1, 5000, "big", True, 1.5):
+        sim = {**SIM, "compute": {**SIM["compute"], "job_memory_mb": bad}}
+        with pytest.raises(compose.JobMemoryError, match="compute.job_memory_mb"):
+            compose.generate(sim, compose.load_profile("min"))
