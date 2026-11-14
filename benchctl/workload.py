@@ -47,6 +47,8 @@ def command(sim: dict, node: str, gpus: int = 0, duration: int = 300, user: str 
 
 SIM_SCRIPT = "images/login/user_sim.py"
 SIM_PATH = "/usr/local/bin/user-sim"
+MOCK_SCRIPT = "images/login/mock_sim.py"
+MOCK_PATH = "/usr/local/bin/mock-sim"
 
 
 def load_on(sim: dict, rate: float = 6, duration: float = 120, seed: int | None = None) -> list[list[str]]:
@@ -65,3 +67,17 @@ def load_on(sim: dict, rate: float = 6, duration: float = 120, seed: int | None 
 
 def load_off() -> list[str]:
     return ["docker", "exec", LOGIN, "pkill", "-f", SIM_PATH]
+
+
+def mocks_on(sim: dict, rate: float = 30) -> list[list[str]]:
+    """Commands that (re)start the demo client for the mocks on the login node (issue 650): the calls a monitoring client makes to
+    jira-mock, bcm-mock and bmc-farm, so the Traffic tab has counted requests. Copied in first, so no rebuild is needed."""
+    if not 1 <= rate <= 600:
+        raise WorkloadError("mock rate must be 1 to 600 requests per minute")
+    names = [n for n, kind in nodes.node_names(sim) if kind == "compute"][:3] or [n for n, _ in nodes.node_names(sim)][:1] or ["cn001"]
+    return [["docker", "cp", MOCK_SCRIPT, f"{LOGIN}:{MOCK_PATH}"], mocks_off(),
+            ["docker", "exec", "-d", LOGIN, "python3", MOCK_PATH, "--rate", f"{rate:g}", "--nodes", ",".join(names)]]
+
+
+def mocks_off() -> list[str]:
+    return ["docker", "exec", LOGIN, "pkill", "-f", MOCK_PATH]

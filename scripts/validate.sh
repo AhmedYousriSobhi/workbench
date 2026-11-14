@@ -66,6 +66,7 @@ step "progress docs"
 python3 -m benchctl.progress --check || bad "docs/PROGRESS.md or progress.html is stale"
 python3 scripts/make_logo_assets.py --check || bad "logo files or web page icons are stale (python scripts/make_logo_assets.py)"
 python3 scripts/make_doc_art.py --check || bad "documentation art is stale (python scripts/make_doc_art.py)"
+python3 scripts/make_palette.py --check || bad "colour tokens are stale (python scripts/make_palette.py)"
 
 step "json"
 for f in $(git ls-files '*.json'); do python3 -m json.tool "$f" >/dev/null || bad "json $f"; done

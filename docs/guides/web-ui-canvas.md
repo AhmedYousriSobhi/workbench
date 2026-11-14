@@ -15,9 +15,9 @@ For contributors working on the page's diagrams. The visual language comes from 
 
 ## Colours and fonts
 
-Use the CSS variables from `webui/static/canvas.css`, never the hex values: `--cv-ground`, `--cv-surface`, `--cv-text`,
+Use the CSS variables from `webui/static/tokens.css` (generated from `docs/assets/palette.yaml`; a canvas follows the page theme), never the hex values: `--cv-ground`, `--cv-surface`, `--cv-text`,
 `--cv-text-muted`, `--cv-error`, `--cv-no-current`, and one per plane: `--plane-access`, `--plane-control`, `--plane-k8s`,
-`--plane-data`, `--plane-monitoring`, `--plane-management`. Give the element that holds a diagram the class `canvas` (dark dot-grid ground,
+`--plane-data`, `--plane-monitoring`, `--plane-management`. Give the element that holds a diagram the class `canvas` (dot-grid ground in the page theme's colours,
 Inter) and put addresses, ports and counts in `.mono` (JetBrains Mono). Text must stay at 4.5:1 on the ground; the tokens do.
 
 ## Adding a wire
@@ -83,7 +83,7 @@ round trip and that nothing polls while another tab is open.
 <p align="center"><img src="../assets/art/guide-web-ui-canvas-diagram.svg" alt="Colour tokens, a wire drawn as halo, core and pulse, and the three zoom levels Fleet, Cluster and Pool" width="720"></p>
 
 > [!HOOD]
-> Colours come from `webui/static/canvas.css` tokens, pinned by `webui/tests/js/tokens.test.mjs`. A wire is a halo, a core and a moving pulse, one colour per plane (`wire.js`). The page's zoom has three levels, Fleet, Cluster and Pool.
+> Colours come from `docs/assets/palette.yaml`, generated into `webui/static/tokens.css` (see [the colour system](colour-system.md); each plane has one colour and one line type), pinned by `webui/tests/js/tokens.test.mjs`. A wire is a halo, a core and a moving pulse, one colour per plane (`wire.js`). The page's zoom has three levels, Fleet, Cluster and Pool.
 > The Focused wire capture runs only through the governor (`capture-start`, `capture-read`, `capture-stop`): off by default, one wire at a time, at L0 and L1, class P5, ended after 5 minutes or when the panel closes. It never stores a body and never touches Docker from the page (SPEC W-3, ADR 0042).
 
 Source: `webui/static/canvas.css`, `webui/static/js/wire.js`, [ADR 0038](../adr/0038-redesign-canvas-tokens-and-wire.md), [ADR 0041](../adr/0041-per-request-traffic-record.md), [ADR 0042](../adr/0042-on-demand-wire-capture.md)

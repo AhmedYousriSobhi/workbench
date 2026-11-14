@@ -80,10 +80,9 @@ Read it from left to right:
 
 A login node that is in the selection but not running (never built, or stopped) is drawn **dashed with "✗ not running"**: the page checks whether anything answers on its port 22, so the diagram shows what runs, not only what you picked. With the whole stack down they all look dim instead.
 
-**Colours.** The boxes do not say *mock*; colour does, and the **Key** button above the diagram repeats it (it opens a small panel with every colour, mark and line style). Violet with a dashed stripe is simulated,
-blue with a solid stripe is real. The **border** is the state (green up, red dashed not reachable, grey dotted off). Two overlays sit on top and
-combine with everything else: a pulsing blue dot means traffic now (on a node tile: GPU work running), a red ring with a red triangle means a fault
-was applied in the last 30 seconds. So one box can be up, busy and faulted at the same time. The real Jira has no request counter, so it shows up or down only.
+**Colours.** The boxes do not say *mock*; colour does, and the **Key** button above the diagram repeats it (it opens a small panel with every colour, mark and line style). A **dashed outline** marked *sim* is simulated, a **solid outline** marked *real* is real (a neutral colour, never a hue). The **border** is the state (teal with a ✓ up, red dashed not reachable, grey dotted off). Two overlays sit on top and
+combine with everything else: a pulsing dot means traffic now (on a node tile: GPU work running), a red ring with a red triangle means a fault
+was applied in the last 30 seconds. So one box can be up, busy and faulted at the same time. The lines between parts follow their **plane**: access (solid), control (long dash), Kubernetes (dash-dot), data (dotted), monitoring (short dash) and management (dash-dot-dot) each have one colour and one line type in every view, so they stay apart even without colour. Amber means a part needs attention, never a plane. All colours are listed in the [colour system](../guides/colour-system.md). The real Jira has no request counter, so it shows up or down only.
 
 Every line says **how** it connects:
 
@@ -156,8 +155,8 @@ square in a rack is one node (one per 8 nodes above 64); a square that needs att
 
 #### Zoom: Fleet, Cluster, Pool
 
-Above the page's panels, one **zoom rail** (− FLEET CLUSTER POOL TRAFFIC +) is the way up and down. **Traffic** is its deepest stop: the Traffic &
-Communication page of the cluster you are in, with a **Back to the cluster** button, so you never need the left bar to get back. The left bar still opens
+Above the page's panels, one **zoom rail** (− FLEET CLUSTER POOL TRAFFIC REQUESTS +) is the way up and down. **Traffic** is the fourth stop: the Traffic &
+Communication page of the cluster you are in (the links between the parts), with a **Back to the cluster** button, so you never need the left bar to get back. Zoom in once more to **Requests**, the request analysis (below), which has **Back to the links**: the two are never stacked on one page. The left bar still opens
 the same pages. Other ways to move: **Ctrl + scroll** (or a pinch on a trackpad) zooms in on the card or rack under the pointer and out from anywhere, **+** and
 **-** step a level, **Escape** steps out of a pool or Traffic. Each move takes about 0.7 s (none under reduced motion) and the old level is gone afterwards.
 
@@ -180,7 +179,7 @@ the same pages. Other ways to move: **Ctrl + scroll** (or a pinch on a trackpad)
 
 ![The Traffic tab's analysis: the request river, the probe, what was found and the rhythm](img/web-traffic-analysis-light.png)
 
-At the top of the **Traffic** tab (the TRAFFIC stop of the zoom rail) the page reads the mocks' own record of client requests (`/api/traffic`, every 3 seconds, on every screen while the page is visible and never while it is hidden, so a rate exists when you open the tab; only the Traffic tab draws it). It records only **who asked** (the User-Agent's product token, for example `curl`), the method and path shape, how it ended and how long it took; never a value, a header or a secret.
+At the **Requests** stop (one zoom level deeper than Traffic) the page reads the mocks' own record of client requests (`/api/traffic`, every 3 seconds, on every screen while the page is visible and never while it is hidden, so a rate exists when you open the tab; only the Traffic tab draws it). It records only **who asked** (the User-Agent's product token, for example `curl`), the method and path shape, how it ended and how long it took; never a value, a header or a secret.
 
 - **Request river**: callers on the left, the service that answered in the middle, how it ended on the right (2xx, slower than the 95th percentile, 4xx, 5xx). A band's width follows the square root of requests a minute; moving dots are live requests; red is an error. A rate needs two readings 5 seconds apart, so the first seconds say "not measured", never 0. Pick a stream chip to look at one alone. A hidden table repeats the numbers for screen readers.
 - **Probe**: Rate, Delay, Errors, Rhythm and Path for the chosen stream, a big reading, the last two minutes as a trace, and a one-line verdict. Delay shows the edge of a latency bucket ("10 ms or less"), not an exact figure.

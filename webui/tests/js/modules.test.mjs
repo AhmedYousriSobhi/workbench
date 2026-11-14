@@ -7,7 +7,7 @@ import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const dir = fileURLToPath(new URL('../../static/js/', import.meta.url));
-const modules = readdirSync(dir).filter(f => f.endsWith('.js') && !['main.js', 'testhook.js'].includes(f));
+const modules = readdirSync(dir).filter(f => f.endsWith('.js') && !['main.js', 'testhook.js', 'theme-init.js'].includes(f));
 
 test('there is a module per area, not one big file', () => assert.ok(modules.length >= 15, `found ${modules.length}`));
 

@@ -16,19 +16,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs/assets/art"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import make_palette as mp
 from make_logo_assets import FULL as LOGO_BODY  # the mark, so the hero uses the real logo
 
-# token: (light, dark). Planes follow docs/guides/web-ui-canvas.md (dark values are the page's own).
-PALETTE = {
-    "surface": ("#f4f8f7", "#111b19"), "surface2": ("#e3ece9", "#1b2a27"), "line": ("#9db3ae", "#3a4e4a"),
-    "ink": ("#14211f", "#e5eeec"), "muted": ("#44544f", "#a9bbb7"),
-    "teal": ("#0b8f80", "#2fc4b2"), "amber": ("#b86e00", "#f0a030"), "red": ("#c0392b", "#ff7b72"),
-    "access": ("#1d7fd1", "#5CB8FF"), "control": ("#475569", "#E2E8F0"), "k8s": ("#4f6ad6", "#7C9CFF"),
-    "data": ("#8a4fd6", "#C49BFF"), "monitoring": ("#138a5a", "#4BE3A0"), "management": ("#b86e00", "#FFB347"),
-}
+PLANES = ("access", "control", "k8s", "data", "monitoring", "management")
+_RES = mp.resolve_all(mp.load())      # standalone SVGs cannot read tokens.css, so they get the palette's literal values (issue 647)
+
+
+def _pair(token: str) -> tuple[str, str]:
+    return (_RES["light"][token], _RES["dark"][token])
+
+
+# token: (light, dark), from docs/assets/palette.yaml
+PALETTE = {"surface": _pair("ground"), "surface2": _pair("raised"), "line": _pair("line_2"), "ink": _pair("text"), "muted": _pair("muted"),
+           "teal": _pair("brand"), "amber": _pair("attention"), "red": _pair("bad"), **{p: _pair(f"plane_{p}") for p in PLANES}}
 # text class -> (text token, ground token); the test checks both themes
 TEXT_PAIRS = {"tx": ("ink", "surface"), "tm": ("muted", "surface"), "tx2": ("ink", "surface2"), "tm2": ("muted", "surface2")}
-PLANES = ("access", "control", "k8s", "data", "monitoring", "management")
 SANS = "system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif"
 MONO = "ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace"
 MAX_BYTES = 60 * 1024

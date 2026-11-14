@@ -12,13 +12,16 @@ import sys
 from pathlib import Path
 from urllib.parse import quote
 
+import yaml
+
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "docs/assets"
 PAGE = ROOT / "webui/static/index.html"
 
-STYLE = ("<style>.m{fill:#0b8f80}.i{fill:#14211f}.l{fill:none;stroke:#14211f;stroke-linecap:round;stroke-linejoin:round}"
-         ".a{fill:none;stroke:#b86e00;stroke-dasharray:7 6;stroke-linecap:round}"
-         "@media (prefers-color-scheme:dark){.m{fill:#2fc4b2}.i{fill:#e5eeec}.l{stroke:#e5eeec}.a{stroke:#f0a030}}</style>")
+A = yaml.safe_load((ASSETS / "palette.yaml").read_text())["anchors"]      # the logo's teal, ink and amber live in one place (issue 647)
+STYLE = (f"<style>.m{{fill:{A['teal']['light']}}}.i{{fill:{A['ink']['light']}}}.l{{fill:none;stroke:{A['ink']['light']};stroke-linecap:round;stroke-linejoin:round}}"
+         f".a{{fill:none;stroke:{A['amber']['light']};stroke-dasharray:7 6;stroke-linecap:round}}"
+         f"@media (prefers-color-scheme:dark){{.m{{fill:{A['teal']['dark']}}}.i{{fill:{A['ink']['dark']}}}.l{{stroke:{A['ink']['dark']}}}.a{{stroke:{A['amber']['dark']}}}}}</style>")
 LABEL = "workbench logo: servers linked in a W on a bench"
 FULL = """<g>
 <polyline class="l" points="16,22 38,78 53,55" stroke-width="8"/><polyline class="l" points="67,55 82,78 104,22" stroke-width="8"/>

@@ -284,8 +284,6 @@ class Wiki:
 
 
 STYLE = """
-:root{color-scheme:light dark;--bg:#f6f8fa;--panel:#fff;--line:#d0d7de;--fg:#1f2328;--dim:#57606a;--accent:#0969da;--on-accent:#fff}
-@media(prefers-color-scheme:dark){:root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--fg:#e6edf3;--dim:#9da7b3;--accent:#58a6ff;--on-accent:#0d1117}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .skip{position:absolute;left:-999px;top:8px;background:var(--accent);color:var(--on-accent);padding:8px 12px;border-radius:6px}.skip:focus{left:8px}
@@ -312,8 +310,7 @@ kbd{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg);b
 details{margin:12px 0;padding:4px 14px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}details[open]{padding-bottom:10px}summary{cursor:pointer;font-weight:600;min-height:32px;display:flex;align-items:center}
 .alert{margin:14px 0;padding:6px 14px;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:8px;background:var(--bg);color:var(--fg)}
 .alert p{margin:6px 0}.alert-title{font-size:15px}
-.alert-tip,.alert-didyouknow{border-left-color:#1a7f37}.alert-important{border-left-color:#8250df}.alert-warning{border-left-color:#9a6700}.alert-caution{border-left-color:#cf222e;border-left-style:double;border-left-width:7px}.alert-hood{border-left-style:dashed}
-@media(prefers-color-scheme:dark){.alert-tip,.alert-didyouknow{border-left-color:#3fb950}.alert-important{border-left-color:#a371f7}.alert-warning{border-left-color:#d29922}.alert-caution{border-left-color:#f85149}}
+.alert-tip,.alert-didyouknow{border-left-color:var(--alert-tip)}.alert-important{border-left-color:var(--alert-important)}.alert-warning{border-left-color:var(--alert-warning)}.alert-caution{border-left-color:var(--alert-caution);border-left-style:double;border-left-width:7px}.alert-hood{border-left-style:dashed}
 .hit{padding:10px 0;border-bottom:1px solid var(--line)}.hit p{margin:2px 0;color:var(--dim);font-size:14px}
 @media(max-width:860px){.wrap{grid-template-columns:minmax(0,1fr);padding:12px 16px 32px}nav.side{position:static;max-height:none;order:2}article{padding:4px 16px 24px}header.top{padding:10px 16px}}
 """
@@ -325,7 +322,7 @@ def page(wiki: Wiki, title: str, body: str, current: str = "", query: str = "") 
             f'<a href="/help/{esc(slug)}"{" aria-current=page" if slug == current else ""}>{esc(t)}</a>' for slug, t in items)
         for label, items in wiki.nav())
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{esc(title)} · workbench help</title><style>{STYLE}</style></head><body>
+<title>{esc(title)} · workbench help</title><link rel="stylesheet" href="/static/tokens.css"><style>{STYLE}</style></head><body>
 <a class="skip" href="#content">Skip to content</a>
 <header class="top"><a class="back" href="/">← Dashboard</a><strong>workbench help</strong>
 <form class="search" action="/help/search" method="get" role="search"><input type="search" name="q" value="{esc(query)}" aria-label="Search the help" placeholder="Search the help"><button type="submit">Search</button></form></header>

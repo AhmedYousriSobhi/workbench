@@ -14,7 +14,7 @@ so all but the first jump at each loop.
   `--plane-*` for the six planes). Code uses the tokens, never the hex values. Values are the brief's; `--cv-wire-base` (`#141C26`) is
   taken from the mockup, where the brief names no value. `webui/tests/js/tokens.test.mjs` checks contrast (text 4.5:1, plane colours 4.5:1 on
   the ground) and the animation rules on the stylesheet itself.
-- **A canvas is always dark**, in every page theme, like a terminal inside a light page: the plane colours are chosen for a dark ground and the
+- **A canvas is always dark** (superseded by ADR 0069, issue 649: canvases now follow the page theme), in every page theme, like a terminal inside a light page: the plane colours are chosen for a dark ground and the
   brief defines no light variants. The page's own themes are untouched. Revisit if the owner wants light canvases (it needs a second set of
   plane colours that still reach 4.5:1 on white; amber and green do not today).
 - **One wire component**, `webui/static/js/wire.js`: four strokes (base 7, halo 9 at 12 %, core 1.5 at 55 %, pulse `2 18`), a red `1 60` dash
