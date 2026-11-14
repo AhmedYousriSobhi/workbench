@@ -28,7 +28,7 @@
   tests: [test_topology_real, test_qos_real, test_power_real, test_slurmresilience_real, test_cluster_real, test_stack_real, test_slurmkeys_real, test_compose_real]
 - name: Slurm statistics and workload
   paths: ["benchctl/slurmstats.py", "benchctl/slurmtrace.py", "benchctl/workload.py"]
-  tests: [test_gpu_follows_slurm_real, test_scenario_real, test_cluster_real, test_traffic_record_real]
+  tests: [test_gpu_follows_slurm_real, test_scenario_real, test_cluster_real, test_traffic_record_real, test_usersim_real]
 - name: Kubernetes
   paths: ["benchctl/k8s.py", "benchctl/dra.py", "k8s/**"]
   tests: [test_k8s_real, test_wire_capture_real, test_compose_real]
@@ -85,7 +85,7 @@
   tests: [test_webui_real, test_webui_browser, test_flow_real, test_cluster_real, test_launcher_real, test_traffic_record_real]
 - name: access, login and jump nodes
   paths: ["images/login/**", "images/jump/**", "benchctl/logins.py", "benchctl/teleport.py", "benchctl/nodeshell.py", "benchctl/nodes.py"]
-  tests: [test_login_real, test_access_real, test_teleport_real, test_node_ssh_real, test_ssh_faults_real, test_node_tools_real, test_cmsh_real]
+  tests: [test_login_real, test_access_real, test_teleport_real, test_node_ssh_real, test_ssh_faults_real, test_node_tools_real, test_cmsh_real, test_usersim_real]
 - name: scenarios and faults
   paths: ["benchctl/scenario.py", "benchctl/authfaults.py", "scenarios/**"]
   tests: [test_scenario_real, test_authfaults_real, test_slurmresilience_real, test_ssh_faults_real]

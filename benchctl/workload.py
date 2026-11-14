@@ -51,18 +51,21 @@ MOCK_SCRIPT = "images/login/mock_sim.py"
 MOCK_PATH = "/usr/local/bin/mock-sim"
 
 
-def load_on(sim: dict, rate: float = 6, duration: float = 120, seed: int | None = None) -> list[list[str]]:
+def load_on(sim: dict, rate: float = 6, duration: float = 120, seed: int | None = None, personas: bool = False,
+            day: float = 0) -> list[list[str]]:
     """Commands that (re)start the user simulator on the login node. The script is copied in first, so a cluster built before
     it existed needs no rebuild."""
     if not 0.1 <= rate <= 120:
         raise WorkloadError("rate must be 0.1 to 120 jobs per minute")
     if not 5 <= duration <= 3600:
         raise WorkloadError("duration must be 5 to 3600 seconds")
-    users = ",".join(u["name"] for u in sim.get("users", [])) or "alice,bob"
+    if day and not 60 <= day <= 86400:
+        raise WorkloadError("day must be 60 to 86400 seconds (0: no daily rhythm)")
+    users = ",".join(u["name"] + (f":{u['persona']}" if personas and u.get("persona") else "") for u in sim.get("users", [])) or "alice,bob"
     gpus = sim.get("gpu", {}).get("gpus_per_node", 0) if sim.get("gpu", {}).get("nodes") else 0
     return [["docker", "cp", SIM_SCRIPT, f"{LOGIN}:{SIM_PATH}"], load_off(),
             ["docker", "exec", "-d", LOGIN, "python3", SIM_PATH, "--rate", f"{rate:g}", "--duration", f"{duration:g}", "--users", users,
-             "--gpus", str(gpus), *(["--seed", str(seed)] if seed is not None else [])]]
+             "--gpus", str(gpus), *(["--personas"] if personas else []), *(["--day", f"{day:g}"] if day else []), *(["--seed", str(seed)] if seed is not None else [])]]
 
 
 def load_off() -> list[str]:
