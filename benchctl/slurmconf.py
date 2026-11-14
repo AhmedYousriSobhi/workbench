@@ -41,7 +41,11 @@ def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool 
         # Jobs are synthetic and containers get no cgroup write access (26.05 accepts CgroupPlugin=disabled).
         "ProctrackType=proctrack/linuxproc",
         "TaskPlugin=task/none",
-        "JobAcctGatherType=jobacct_gather/none",
+        # Usage per job from /proc (sstat, sacct TRES usage; no privilege needed, issue 459); sampled every 10 s so a short job shows some.
+        "JobAcctGatherType=jobacct_gather/linux",
+        "JobAcctGatherFrequency=task=10",
+        # Slurm's own Prometheus endpoint on the controller's port (/metrics/jobs, nodes, partitions, scheduler; ADR 0074).
+        "MetricsType=metrics/openmetrics",
         "MailProg=/bin/true",
         "SlurmdParameters=config_overrides",
         "SelectType=select/cons_tres",

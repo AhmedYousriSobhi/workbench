@@ -20,3 +20,6 @@ SPEC C-7 lists Alertmanager in the observability stack, but none existed: Promet
 - Every `up` starts one more container (64 MB limit, about 20 MB used). The observability budget rises accordingly.
 - The monitored app can read the alert history at Alertmanager `127.0.0.1:9093` and the tickets from the Jira mock; the app's own alerting is untouched.
 - The rule names are part of what agents read (`get alerts`); a rename is a docs change in the recipes and the verbs guide.
+
+## Addendum (2026-11-14, issue 459)
+`NodeDrained` is built: it reads `slurm_nodes_drain` from Slurm's own metrics (ADR 0074), so the rule set is seven. The "Not done" note about it above no longer holds.

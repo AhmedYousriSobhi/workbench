@@ -1,0 +1,168 @@
+{
+  "uid": "slurm-overview",
+  "title": "Slurm (workbench, Slurm's own metrics)",
+  "schemaVersion": 39,
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Nodes by state",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "slurm_nodes_alloc",
+          "legendFormat": "alloc"
+        },
+        {
+          "expr": "slurm_nodes_mixed",
+          "legendFormat": "mixed"
+        },
+        {
+          "expr": "slurm_nodes_idle",
+          "legendFormat": "idle"
+        },
+        {
+          "expr": "slurm_nodes_down",
+          "legendFormat": "down"
+        },
+        {
+          "expr": "slurm_nodes_drain",
+          "legendFormat": "drain"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Jobs",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "slurm_jobs_running",
+          "legendFormat": "running"
+        },
+        {
+          "expr": "slurm_jobs_pending",
+          "legendFormat": "pending"
+        },
+        {
+          "expr": "slurm_jobs_completing",
+          "legendFormat": "completing"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "GPUs and CPUs allocated",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "slurm_jobs_gpus_alloc",
+          "legendFormat": "GPUs allocated"
+        },
+        {
+          "expr": "sum(slurm_node_gpus)",
+          "legendFormat": "GPUs total"
+        },
+        {
+          "expr": "slurm_jobs_cpus_alloc",
+          "legendFormat": "CPUs allocated"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Pending jobs per partition",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "slurm_partition_jobs_pending"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Drained nodes",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 16
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "slurm_nodes_drain"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Down nodes",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 16
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "slurm_nodes_down"
+        }
+      ]
+    }
+  ]
+}

@@ -2,7 +2,6 @@
 # Jira mock, which opens a ticket. They give `benchctl get alerts` and `benchctl wait alert` something to read, and the
 # gpu-fault-to-alert recipe an end-to-end assert. The app under test keeps its own alerting; these watch the simulated cluster.
 # `promtool test rules` cases for every rule are in tests/rules/.
-# Not here yet: NodeDrained. Prometheus has no Slurm node state until Slurm metrics exist (issue 459).
 groups:
   - name: workbench-default
     interval: 15s
@@ -30,6 +29,12 @@ groups:
         expr: count by (node) (DCGM_FI_DEV_GPU_TEMP offset 3m) unless count by (node) (DCGM_FI_DEV_GPU_TEMP)
         labels: {severity: page}
         annotations: {summary: "{{ $labels.node }} stopped publishing metrics", description: "{{ $labels.node }} has published no GPU series for the last scrape."}
+      # Slurm's own node counts (job slurm-nodes, ADR 0074): nodes carrying the DRAIN flag, however many; the ticket says how many.
+      - alert: NodeDrained
+        expr: slurm_nodes_drain > 0
+        for: 30s
+        labels: {severity: warning}
+        annotations: {summary: "{{ $value | printf \"%.0f\" }} Slurm node(s) drained", description: "sinfo -R lists which nodes and why."}
       # One target per node (benchctl/promtargets.py): a powered-off node answers 503, and a stopped farm fails every node's scrape.
       - alert: ExporterDown
         expr: up{job="sim-nodes"} == 0

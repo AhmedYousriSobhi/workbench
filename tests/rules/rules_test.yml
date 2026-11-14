@@ -106,3 +106,20 @@ tests:
             exp_annotations:
               summary: "The Jira mock answered 9 requests with an error in the last minute"
               description: "Look at GET /sim/traffic on the Jira mock for which paths."
+
+  - name: NodeDrained fires while any node is drained and not at zero
+    interval: 15s
+    input_series:
+      - series: 'slurm_nodes_drain{job="slurm-nodes"}'
+        values: '0 0 2 2 2 2 2 2 2'
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: NodeDrained
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: NodeDrained
+        exp_alerts:
+          - exp_labels: {job: slurm-nodes, severity: warning}
+            exp_annotations:
+              summary: "2 Slurm node(s) drained"
+              description: "sinfo -R lists which nodes and why."
