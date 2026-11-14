@@ -23,6 +23,7 @@ from pathlib import Path
 
 import yaml
 
+from . import dra
 from .nodes import node_names
 
 VERSION = "v1.36.1"            # Kubernetes (the control-plane images and kubectl); sim.yaml kubernetes.version overrides
@@ -218,6 +219,7 @@ def prepare(sim: dict, ips: dict, secrets_dir: Path | None = None, state_dir: Pa
     (d / "audit-policy.yaml").write_text(AUDIT_POLICY)  # always rewritten: a cluster made before this existed gets it on its next start
     (d / "audit-policy.yaml").chmod(0o600)
     (st / "nodes.yaml").write_text(nodes_yaml(sim, gpu_override))
+    (st / "50-dra.yaml").write_text(dra.slices_yaml(node_list(sim, gpu_override)))  # the DeviceClass and a ResourceSlice per GPU node (ADR 0076)
 
 
 # ---- compose wiring ----
@@ -414,7 +416,8 @@ def bootstrap(sim: dict, ips: dict, say: Callable[[str], None] = print, runner: 
     r = kubectl(sim, "apply", "--server-side", "--force-conflicts", "-f", "/k8s/fixtures", runner=runner, mounts=src)
     if r.returncode != 0:
         say(f"FAILED kubernetes fixtures: {(r.stderr or r.stdout).strip()[-300:]}")
-    return r.returncode == 0
+        return False
+    return apply("/state/50-dra.yaml", "DRA devices")
 
 
 # ---- scenario steps and expectations (target `k8s`, run by benchctl/scenario.py on the host) ----

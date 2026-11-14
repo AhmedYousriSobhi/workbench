@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**90% built** (39 done, 100 in review, 9 partial, 6 to do, 154 items).
+**90% built** (39 done, 101 in review, 9 partial, 6 to do, 155 items).
 
 ## Roadmap
 
@@ -14,7 +14,7 @@ flowchart LR
     p2["Slurm<br/>100%"]:::review
     p3["Mocks<br/>83%"]:::partial
     p4["People and chaos<br/>25%"]:::partial
-    p5["Kubernetes<br/>100%"]:::done
+    p5["Kubernetes<br/>100%"]:::review
     p6["Fidelity VM<br/>0%"]:::todo
     p7["Web UI and profiles<br/>94%"]:::partial
     p8["macOS agent and CI<br/>0%"]:::todo
@@ -191,10 +191,11 @@ _Mixed real and fake K8s nodes._
 
 | Part | Status | How it is built | Where | PR |
 |---|---|---|---|---|
+| DRA ResourceSlices on the KWOK GPU nodes | 🔍 In review | A DeviceClass and a resource.k8s.io/v1 ResourceSlice per GPU node (driver gpu.sim.test, attributes uuid, model, index, NVLink domain; memory capacity), generated at up into compose/generated/k8s/50-dra.yaml; the fixture pod dra-train claims one GPU and the real scheduler allocates it. Device UUIDs are the UUID labels of the node's DCGM series. Written and unit-tested; the live run (verify.sh --unit k8s) is not done. Issue 547, ADR 0076. | `benchctl/dra.py`, `benchctl/k8s.py`, `k8s/fixtures/55-dra-claims.yaml`, `tests/test_k8s.py`, `tests/real/test_k8s_real.py`, `docs/adr/0076-dra-resource-slices-on-kwok-gpu-nodes.md` | - |
 | Cluster fixtures | ✅ Done | Namespaces, workloads, failure signals and a read-only RBAC role, applied with apply.sh. | `k8s/fixtures` | - |
 | Kubernetes part (real control plane plus KWOK nodes) | ✅ Done | Optional part (`benchctl up --with k8s` or `--workload kubernetes`, off by default; issue 232, ADR 0034): etcd, kube-apiserver, kube-controller-manager, kube-scheduler and the KWOK controller as five unprivileged, memory-limited compose services at fixed addresses (API 10.141.255.40:6443), P3, measured about 0.3 GB (cap 0.77 GB). Nodes (kcn001..., kgpu001... with nvidia.com/gpu and GPU Feature Discovery labels) come from sim.yaml kubernetes.nodes; a PKI and read-only kubeconfigs are generated into secrets/k8s; the login node has kubectl (from the official image) and per-user ~/.kube/config (cluster-wide) and limited.yaml (namespace team-a), mode 600. Failing pods get a kubelet's status from KWOK stages (label workbench_fault: CrashLoopBackOff, OOMKilled, ImagePullBackOff, failed job). Scenario target k8s (down/up, cordon, pod, delete_pod, scale, apply; expect k8s.node_ready, k8s.pod_status): k8s-node-notready, pod-crashloop. Login nodes can be an s-login (`ssh:slurm`) or a k-login (`ssh:k8s`) (issue 380): the k-login has kubectl and the kubeconfigs and no Slurm configuration; the diagram shows the Kubernetes nodes as their own group, each login pointing at the group it serves; printed ssh commands carry -o IdentitiesOnly=yes. The Cluster architecture sheet is a wide two-column layout (Slurm card, Kubernetes card with its own CPU and GPU node counts, a card per login node with Way in and Serves choices, optional parts, a sticky summary); --k8s-cpu-nodes. The diagram has a Kubernetes API box (up or down, no request counter) and the client export puts the k8s block on the k-login's entry (checked with the client's own importer). Kubernetes nodes are machines: they get BMCs (a rule per node group, --bmc-groups), BCM entries (categories k8s-cpu, k8s-gpu; BCM managing them is an option, `bcm.manage_kubernetes`, `--no-bcm-k8s`, issue 413; with a controller node the BCM head node is the controller, ADR 0036) and GPU metrics. The Scenarios panel is a docked drawer toggled from the top strip. Verified live (verify.sh --unit k8s); the client's screens not yet tried (desktop app). Not built: a real agent node (privileged), metrics-server, Teleport access. | `benchctl/k8s.py`, `benchctl/compose.py`, `benchctl/stack.py`, `benchctl/scenario.py`, `k8s/kwok`, `k8s/fixtures`, `images/login`, `tests/test_k8s.py`, `tests/real/test_k8s_real.py`, `docs/adr/0034-kubernetes-kwok-first.md` | [#379](https://github.com/AhmedYousriSobhi/workbench/pull/379) |
 
-2/2 done
+2/3 done
 
 ### Fidelity VM (0%)
 

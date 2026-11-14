@@ -116,6 +116,8 @@ phases:
     title: Kubernetes
     goal: Mixed real and fake K8s nodes
     items:
+      - {name: DRA ResourceSlices on the KWOK GPU nodes, status: review, where: "benchctl/dra.py, benchctl/k8s.py, k8s/fixtures/55-dra-claims.yaml, tests/test_k8s.py, tests/real/test_k8s_real.py, docs/adr/0076-dra-resource-slices-on-kwok-gpu-nodes.md",
+         how: "A DeviceClass and a resource.k8s.io/v1 ResourceSlice per GPU node (driver gpu.sim.test, attributes uuid, model, index, NVLink domain; memory capacity), generated at up into compose/generated/k8s/50-dra.yaml; the fixture pod dra-train claims one GPU and the real scheduler allocates it. Device UUIDs are the UUID labels of the node's DCGM series. Written and unit-tested; the live run (verify.sh --unit k8s) is not done. Issue 547, ADR 0076."}
       - {name: Cluster fixtures, status: done, where: k8s/fixtures,
          how: "Namespaces, workloads, failure signals and a read-only RBAC role, applied with apply.sh."}
       - {name: Kubernetes part (real control plane plus KWOK nodes), status: done, pr: 379, where: "benchctl/k8s.py, benchctl/compose.py, benchctl/stack.py, benchctl/scenario.py, k8s/kwok, k8s/fixtures, images/login, tests/test_k8s.py, tests/real/test_k8s_real.py, docs/adr/0034-kubernetes-kwok-first.md",
