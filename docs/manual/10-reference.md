@@ -57,7 +57,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 |---|---|
 | `scripts/sync_wiki.py --out DIR \| --push` | generate the GitHub Wiki from `docs/`, or sync it to the wiki repository ([how](../guides/github-wiki.md)) |
 | `scripts/check-machine.sh` | stdlib-only machine check, before any build |
-| `scripts/install-governor.sh [--uninstall\|--print]` | optional root governor service (sudo) |
+| `scripts/install-governor.sh [--uninstall\|--print\|--with-oomd\|--oomd-only\|--without-oomd\|--print-oomd]` | optional root governor service and systemd-oomd backstop (sudo) |
 | `scripts/install-hooks.sh` | git hooks for contributors (no sudo) |
 | `scripts/validate.sh` | lint, tests, privacy scan: run before every commit |
 | `scripts/verify.sh [--changed [BASE] [--explain]] [--full [--with-jira]] [--serial] [--trust-ci] [--revalidate] [--skip-browser] [--unit NAME [--clean]] [--install-nightly [HH:MM] \| --remove-nightly]` | validate (in the background next to the live tests; skipped when it passed for this exact tree) plus real-host tests, with seconds per step and a `SLOW` line. `--changed` before a PR to `dev`, `--full --with-jira` before `dev` to `main` and nightly |

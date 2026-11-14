@@ -43,6 +43,7 @@ REGISTRY: dict[str, tuple[str, str]] = {
     "WB-DOCTOR-TOOL-TC": ("The tc tool is missing (some profiles only).", "benchctl doctor"),
     "WB-DOCTOR-TSH": ("The local tsh is newer than the Teleport server.", "benchctl doctor"),
     "WB-DOCTOR-GOVERNOR": ("The governor is not reachable.", "benchctl start"),
+    "WB-DOCTOR-OOMD-BACKSTOP": ("The optional systemd-oomd backstop is installed but not active.", "benchctl doctor"),
     "WB-DOCTOR-SIM-CONTAINERS": ("A simulation container is unhealthy.", "benchctl status"),
 }
 CODE = re.compile(r"^WB-[A-Z]+(-[A-Z0-9]+)*$")
