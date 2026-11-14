@@ -91,8 +91,8 @@ Real clusters are mixed, so the Kubernetes part must not assume "one cluster = S
 ## Decisions on the questions raised
 - SPEC C-2 changes to "KWOK first, real agent deferred": approved by the owner as a start; it may be modified later.
 - One Kubernetes cluster now, but shaped as above (heterogeneous, per cluster, multi-cluster possible later).
-- Still open: should the Kubernetes API also be reachable through Teleport, or only over SSH from a login node? Not
-  decided; phase 1 does SSH only.
+- Kubernetes through Teleport (`tsh kube`): decided 2026-11-14, not needed at the moment. The Kubernetes API is reached over SSH from a login node
+  (`tsh ssh` to the login node works as for Slurm). Reopen only if a client needs `tsh kube` (issue 383).
 
 ## As built (phase 1, issue 232)
 Decided with the owner while building; each can be changed later.
