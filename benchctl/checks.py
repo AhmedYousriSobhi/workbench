@@ -120,6 +120,22 @@ def check_memlock() -> Check:
     return Check("memlock", FAIL, f"hard limit {hard} bytes", "set LimitMEMLOCK=infinity (the unit does)")
 
 
+OOMD_DROPIN = Path("/etc/systemd/system/workbench.slice.d/50-oomd.conf")
+
+
+def check_oomd(dropin: Path = OOMD_DROPIN, runner=run) -> Check:
+    """The optional systemd-oomd backstop (SPEC GV-10, ADR 0010 addendum): off by default, so not installed is fine."""
+    name = "oomd backstop"
+    if not dropin.exists():
+        return Check(name, OK, "off (optional, not installed)", "enable: sudo ./scripts/install-governor.sh --with-oomd")
+    if runner(["systemctl", "is-active", "systemd-oomd"]).stdout.strip() != "active":
+        return Check(name, WARN, "installed on workbench.slice, but systemd-oomd is not running, so it does nothing",
+                     "sudo systemctl enable --now systemd-oomd")
+    if "kill" not in runner(["systemctl", "show", "workbench.slice", "-p", "ManagedOOMMemoryPressure", "--value"]).stdout:
+        return Check(name, WARN, "drop-in installed but not applied to workbench.slice", "sudo systemctl daemon-reload")
+    return Check(name, OK, "active on workbench.slice (kill at the pressure limit)")
+
+
 def check_tools(which=shutil.which) -> list[Check]:
     out = []
     for tool, need in (("docker", True), ("virsh", False), ("vagrant", False), ("tc", False)):
@@ -183,7 +199,7 @@ def check_tsh(sim: dict | None = None, runner=None) -> Check | None:
 def run_all() -> list[Check]:
     tsh = check_tsh()
     return [check_cgroup_v2(), check_psi(), check_kernel(), check_docker(), check_libvirt(),
-            check_swap(), check_memlock(), *check_tools(), *([tsh] if tsh else []), check_containers(), check_governor()]
+            check_swap(), check_memlock(), *check_tools(), *([tsh] if tsh else []), check_containers(), check_governor(), check_oomd()]
 
 
 # ---- profile pre-flight (SPEC 6) ----

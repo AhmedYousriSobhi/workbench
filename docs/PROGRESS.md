@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**91% built** (39 done, 107 in review, 10 partial, 4 to do, 160 items).
+**91% built** (40 done, 107 in review, 10 partial, 4 to do, 161 items).
 
 ## Roadmap
 
@@ -123,6 +123,7 @@ _A root service that keeps the host alive by escalating through a ladder._
 | Monitored slurmrestd exception | ✅ Done | slurmrestd runs with two unshare steps disabled (ADR 0004). Any wider SLURMRESTD_SECURITY option is a violation; doctor lists the accepted exception. | `governor/watchdog.py` | #44 |
 | Inventory refresh and Grafana annotations | ✅ Done | Re-discovers containers so late starters are governed; posts audit events to Grafana with a token from the environment (SPEC GV-6). | `governor/annotate.py`, `governor/core.py` | #36 |
 | systemd unit installed permanently | 🟡 Partial | Unit and slice pass systemd-analyze and ran as a transient service in tests; scripts/install-governor.sh installs it as the standing service (printed unit tested; the sudo install itself is run by the user). | `systemd` | - |
+| systemd-oomd backstop (optional) | ✅ Done | Drop-in on workbench.slice (ManagedOOMMemoryPressure=kill, limit 60%) covering the P0-P6 container slices; only with the root installer's --with-oomd, removed by --without-oomd and --uninstall, never the host oomd.conf; doctor line oomd backstop (SPEC GV-10, ADR 0010 addendum). Unit and installer dry-run tests; the root test is run by the owner. | `systemd/workbench.slice.d/50-oomd.conf`, `scripts/install-governor.sh`, `benchctl/checks.py` | [#686](https://github.com/AhmedYousriSobhi/workbench/pull/686) |
 | Admission and real scale / set-profile | ✅ Done | admit command (GV-9): refused at L2+ or if it would breach the floor; scale and set-profile run benchctl in the background at L0-L1 only (GV-8). benchctl up/scale ask first. Verified live through the socket. | `governor/core.py` | #48 |
 | Swap storm, memory.events and compressed swap signals (issue 463) | ✅ Done | Sustained pswpout adds one level (up to L3); per-container memory.events high/oom/oom_kill in status and /metrics, oom_kill an audit event; zswap and zram pools taken off MemAvailable. Unit tests with the signals file; live in test_pressure_real. | `governor/signals.py`, `governor/ladder.py`, `governor/core.py`, `governor/metrics.py`, `docs/adr/0059-governor-signal-model.md` | - |
 | PSI trigger, pre-opened signal files, thresholds from sim.yaml (issue 464) | ✅ Done | A kernel PSI trigger (2 s window, works as a normal user) wakes the loop early, polling fallback with the reason logged; /proc files opened once and read with preadv; L1/L4/calm memory thresholds and the admission floor derive from host.reserve_gb and safety_floor_gb. Latency gain not measured. | `governor/psi.py`, `governor/hostsize.py`, `governor/signals.py`, `governor/__main__.py`, `docs/adr/0059-governor-signal-model.md` | - |
@@ -130,7 +131,7 @@ _A root service that keeps the host alive by escalating through a ladder._
 | Live ladder test on the real stack | ✅ Done | Dry-run governor against the running containers: L0 to L3 and back, /metrics, Grafana annotations and the planned throttle/freeze/thaw actions. The root variant passes on the dev machine: L3 really freezes a live container's cgroup (cgroup.events frozen 1), keeps P1 services running, and thaws on recovery; it also exposed and fixed the nested-slice cgroup path bug (PR 64). | `tests/real/test_pressure_real.py` | #60 |
 | Host tuning script and benchctl top | ⬜ To do | zram, swappiness and THP tuning with confirmation, and a live view of the governor. | - | - |
 
-14/16 done
+15/17 done
 
 ### Slurm (100%)
 

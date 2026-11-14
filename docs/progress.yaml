@@ -43,6 +43,8 @@ phases:
          how: "Re-discovers containers so late starters are governed; posts audit events to Grafana with a token from the environment (SPEC GV-6)."}
       - {name: systemd unit installed permanently, status: partial, where: systemd,
          how: "Unit and slice pass systemd-analyze and ran as a transient service in tests; scripts/install-governor.sh installs it as the standing service (printed unit tested; the sudo install itself is run by the user)."}
+      - {name: systemd-oomd backstop (optional), status: done, pr: 686, where: "systemd/workbench.slice.d/50-oomd.conf, scripts/install-governor.sh, benchctl/checks.py",
+         how: "Drop-in on workbench.slice (ManagedOOMMemoryPressure=kill, limit 60%) covering the P0-P6 container slices; only with the root installer's --with-oomd, removed by --without-oomd and --uninstall, never the host oomd.conf; doctor line oomd backstop (SPEC GV-10, ADR 0010 addendum). Unit and installer dry-run tests; the root test is run by the owner."}
       - {name: Admission and real scale / set-profile, status: done, pr: 48, where: governor/core.py,
          how: "admit command (GV-9): refused at L2+ or if it would breach the floor; scale and set-profile run benchctl in the background at L0-L1 only (GV-8). benchctl up/scale ask first. Verified live through the socket."}
       - {name: "Swap storm, memory.events and compressed swap signals (issue 463)", status: done, where: "governor/signals.py, governor/ladder.py, governor/core.py, governor/metrics.py, docs/adr/0059-governor-signal-model.md",
