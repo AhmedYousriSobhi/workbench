@@ -1,0 +1,12 @@
+name: k8s-preempt
+ref: SC-38
+description: Filler pods hold a GPU node; an inference pod needs more GPUs than are free, so the real scheduler preempts the fillers (events say Preempted)
+steps:
+  - {at: 0s,  target: k8s, do: {pod: {namespace: team-b, name: fill-a, gpus: 3, priority_class: best-effort, node: kgpu001}}}
+  - {at: 2s,  target: k8s, do: {pod: {namespace: team-b, name: fill-b, gpus: 3, priority_class: best-effort, node: kgpu001}}}
+  - {at: 20s, target: k8s, do: {pod: {namespace: team-b, name: urgent, gpus: 4, priority_class: inference, node: kgpu001}}}
+  - {at: 3m,  target: k8s, do: {delete_pod: {namespace: team-b, name: urgent}}}
+  - {at: 3m,  target: k8s, do: {delete_pod: {namespace: team-b, name: fill-a}}}
+  - {at: 3m,  target: k8s, do: {delete_pod: {namespace: team-b, name: fill-b}}}
+expect:
+  - k8s.pod_status: {namespace: team-b, name: urgent, reason: Running, within: 90s}

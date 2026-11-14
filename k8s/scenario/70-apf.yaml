@@ -1,0 +1,24 @@
+# API Priority and Fairness for the client's user (issue 548, ADR 0077). Not a fixture: `up` applies every file in k8s/fixtures, and this
+# one changes how the API server treats a user, so only scenario k8s-api-throttled applies it (step `apply`) and removes it (step `remove`).
+# `viewer` is the user a monitoring client is given; its requests go to a level with about three seats and no queue, so a burst is answered 429.
+apiVersion: flowcontrol.apiserver.k8s.io/v1
+kind: PriorityLevelConfiguration
+metadata: {name: viewer-throttled}
+spec:
+  type: Limited
+  limited:
+    nominalConcurrencyShares: 1
+    lendablePercent: 0
+    limitResponse: {type: Reject}
+---
+apiVersion: flowcontrol.apiserver.k8s.io/v1
+kind: FlowSchema
+metadata: {name: viewer-throttled}
+spec:
+  matchingPrecedence: 500
+  priorityLevelConfiguration: {name: viewer-throttled}
+  distinguisherMethod: {type: ByUser}
+  rules:
+  - subjects: [{kind: User, user: {name: viewer}}]
+    resourceRules: [{verbs: ["*"], apiGroups: ["*"], resources: ["*"], clusterScope: true, namespaces: ["*"]}]
+    nonResourceRules: [{verbs: ["*"], nonResourceURLs: ["*"]}]

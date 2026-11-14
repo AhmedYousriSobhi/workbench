@@ -473,7 +473,7 @@ def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcom
             k8s.write_pod(step.do)
             for args in k8s.step_args(step.do):
                 r = runner(k8s.kubectl_cmd(k8s.current_sim(), *args))
-                if r.returncode:
+                if r.returncode and args[0] != "drain":  # a drain that the disruption budget blocks times out: that is what the step plays
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip()[-300:])
         elif step.target == "jira-real":
             return jira_real_fault(step, label, runner)
@@ -668,6 +668,8 @@ def expectation(exp: dict, runner=checks.run, host: bool = True):
         return label, lambda: k8s.node_ready(args["node"], runner) == bool(args.get("ready", True)), within
     if kind == "k8s.pod_status" and host:  # the pod's phase or a container's waiting/terminated reason is `reason`
         return label, lambda: args["reason"] in k8s.pod_reasons(args["namespace"], args["name"], runner).split(), within
+    if kind == "k8s.pods_on_node" and host:  # at least `min` (default 1) Running pods matching `selector` on the node
+        return label, lambda: (k8s.pods_on_node(args["node"], args["namespace"], args["selector"], runner) or 0) >= int(args.get("min", 1)), within
     if kind == "jira.issue_created":
         return label, lambda: jira_labels(args["labels"]), within
     search = (lambda q: real_search(q)) if args.get("target") == "real" else (lambda q: jira_search(q))  # `target: real` asks the real Jira
