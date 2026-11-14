@@ -161,11 +161,12 @@ try:
             if flow: q.evaluate(FLOW)
             q.wait_for_timeout(400)
             return q
-        def save(path):  # a long phone page is a flat-colour image: keep the file small (budget 300 KB, tests/test_docs.py)
+        def save(path):  # a flat-colour image: keep the file small (budget 300 KB, tests/test_docs.py)
             im = Image.open(path).convert("RGB")
             if path.stat().st_size > 250 * 1024:
                 im.quantize(colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).save(path, optimize=True)
-        phone = sample_page(390, 800); phone.screenshot(path=str(OUT / f"web-phone-{SCHEME}.png"), full_page=True); save(OUT / f"web-phone-{SCHEME}.png"); phone.close()
+        phone = sample_page(390, 844); phone.screenshot(path=str(OUT / f"web-phone-{SCHEME}.png"))  # one phone screen (390x844), not the whole page: a 6x tall strip looks nothing like the tool (#701)
+        save(OUT / f"web-phone-{SCHEME}.png"); phone.close()
         off = {**cluster, "nodes": [{**n, "state": "down", "label": "Powered off", "power": "Off", "temp": 18, "bcm": "DOWN"} if n["name"] == "cn002" else n for n in cluster["nodes"]]}
         pg2 = sample_page(1280, 900, off); pg2.evaluate("showNode('cn002')"); pg2.wait_for_selector("#nodepane:not([hidden])"); pg2.wait_for_timeout(600)
         pg2.screenshot(path=str(OUT / f"web-node-powered-off-{SCHEME}.png"))
