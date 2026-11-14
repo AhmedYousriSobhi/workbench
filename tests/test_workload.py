@@ -131,7 +131,7 @@ def test_load_on_with_mocks_starts_both_and_load_off_stops_both(monkeypatch):
     r = runner.invoke(cli.app, ["load", "on", "--mocks", "--mock-rate", "12"])
     assert r.exit_code == 0 and len(ran) == 6 and "demo client" in r.output
     ran.clear()
-    assert runner.invoke(cli.app, ["load", "off"]).exit_code == 0 and ran == [workload.mocks_off(), workload.load_off()]
+    assert runner.invoke(cli.app, ["load", "off"]).exit_code == 0 and ran == [workload.mocks_off(), workload.tickets_off(), workload.load_off()]
 
 
 def _user_sim():

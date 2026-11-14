@@ -49,6 +49,8 @@ SIM_SCRIPT = "images/login/user_sim.py"
 SIM_PATH = "/usr/local/bin/user-sim"
 MOCK_SCRIPT = "images/login/mock_sim.py"
 MOCK_PATH = "/usr/local/bin/mock-sim"
+TICKET_SCRIPT = "images/login/ticket_bot.py"
+TICKET_PATH = "/usr/local/bin/ticket-bot"
 
 
 def load_on(sim: dict, rate: float = 6, duration: float = 120, seed: int | None = None, personas: bool = False,
@@ -84,3 +86,21 @@ def mocks_on(sim: dict, rate: float = 30) -> list[list[str]]:
 
 def mocks_off() -> list[str]:
     return ["docker", "exec", LOGIN, "pkill", "-f", MOCK_PATH]
+
+
+def tickets_on(every: float = 120, resolve_after: float = 600, day: float = 0, seed: int | None = None) -> list[list[str]]:
+    """Commands that (re)start the ticket bot on the login node (issue 681): fake engineers assign, work, comment on and resolve
+    the alert tickets in jira-mock (never a real Jira), one action about every `every` seconds. Copied in first, so no rebuild."""
+    if not 10 <= every <= 3600:
+        raise WorkloadError("ticket interval must be 10 to 3600 seconds")
+    if not 10 <= resolve_after <= 86400:
+        raise WorkloadError("ticket resolve time must be 10 to 86400 seconds")
+    if day and not 60 <= day <= 86400:
+        raise WorkloadError("day must be 60 to 86400 seconds (0: no daily rhythm)")
+    return [["docker", "cp", TICKET_SCRIPT, f"{LOGIN}:{TICKET_PATH}"], tickets_off(),
+            ["docker", "exec", "-d", LOGIN, "python3", TICKET_PATH, "--every", f"{every:g}", "--resolve-after", f"{resolve_after:g}",
+             *(["--day", f"{day:g}"] if day else []), *(["--seed", str(seed)] if seed is not None else [])]]
+
+
+def tickets_off() -> list[str]:
+    return ["docker", "exec", LOGIN, "pkill", "-f", TICKET_PATH]
