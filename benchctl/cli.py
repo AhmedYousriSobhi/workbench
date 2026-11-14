@@ -13,6 +13,7 @@ from typer.core import TyperGroup
 
 from . import (
     agentmode,
+    agentverbs,
     alerts,
     capture,
     checks,
@@ -643,20 +644,33 @@ def get_slurm_stats() -> None:
 
 
 CAPTURE_NODE = typer.Argument(..., help="a Slurm node or a Kubernetes node, e.g. cn001, gpu001 or kw001")
-CAPTURE_SECONDS = typer.Option(300, "--seconds", min=1, max=300, help="stop after this many seconds (at most 300)")
+CAPTURE_SECONDS = typer.Option(None, "--seconds", min=1, max=300, help="stop after this many seconds (default 300 streaming, 10 with --once; at most 300, 60 with --once)")
+CAPTURE_ONCE = typer.Option(False, "--once", help="one bounded answer: a single JSON object with the messages seen (for scripts and agents); asks the governor first")
+CAPTURE_MESSAGES = typer.Option(agentverbs.CAPTURE_ONCE_MESSAGES, "--max-messages", min=1, max=agentverbs.CAPTURE_ONCE_MAX_MESSAGES, help="with --once: stop after this many messages")
 
 
 @get_app.command("capture")
-def get_capture(node: str = CAPTURE_NODE, seconds: int = CAPTURE_SECONDS) -> None:
+def get_capture(node: str = CAPTURE_NODE, seconds: int = CAPTURE_SECONDS, once: bool = CAPTURE_ONCE, max_messages: int = CAPTURE_MESSAGES,
+                output: str = OUTPUT, json_: bool = JSON) -> None:
     """The messages on one node's wire as they happen, one JSON object per line (issue 505): Slurm messages by tcpdump inside the node,
     or the Kubernetes API audit events about the node. Nothing from a message body; nothing written to disk. The page asks the governor
-    for it; it ends by itself after --seconds."""
+    for it; it ends by itself after --seconds. `--once` waits for the limit (10 s, 200 messages by default) and prints one JSON object
+    with every message instead (issue 635; `--json` means the same as `--once`); like the page it is refused when the governor admits no new work (memory level L2 and above)."""
     import signal
     import sys
 
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))  # the governor stops it with SIGTERM: let tcpdump be stopped on the way out
+    once = once or contract.wanted(output, json_) == "json"
     try:
-        capture.run(_sim(), node, lambda m: typer.echo(json.dumps(m), nl=True) or sys.stdout.flush(), seconds)
+        if once:
+            if seconds is not None and seconds > agentverbs.CAPTURE_ONCE_MAX_SECONDS:
+                raise typer.BadParameter(f"with --once the longest wait is {agentverbs.CAPTURE_ONCE_MAX_SECONDS} seconds", param_hint="--seconds")
+            if not stack.governor_admits(0, lambda m: typer.echo(m, err=True)):
+                typer.echo(errors.render("WB-REFUSED-GOVERNOR", "no capture: the governor admits no new work at this memory level"), err=True)
+                raise typer.Exit(1)
+            typer.echo(contract.dumps(agentverbs.capture_once(_sim(), node, seconds or agentverbs.CAPTURE_ONCE_SECONDS, max_messages)))
+            return
+        capture.run(_sim(), node, lambda m: typer.echo(json.dumps(m), nl=True) or sys.stdout.flush(), seconds or capture.DEFAULT_SECONDS)
     except (ValueError, RuntimeError) as e:
         typer.echo(f"capture failed: {e}", err=True)
         raise typer.Exit(1) from e
@@ -715,7 +729,7 @@ def get_traffic(output: str = OUTPUT, json_: bool = JSON,
 
 @get_app.command("alerts")
 def get_alerts(output: str = OUTPUT, json_: bool = JSON, selector: list[str] = SELECTOR, sort_by: str = SORT_BY) -> None:
-    """The alerts Prometheus is firing or about to fire (read-only). The workbench ships no alert rules, so this is empty until rules are loaded. Exit 1 when Prometheus is not running."""
+    """The alerts Prometheus is firing or about to fire (read-only). The workbench ships three default rules (GpuXid, GpuOverheat, NodeDown), so empty means none is firing. Exit 1 when Prometheus is not running."""
     def rows() -> list[dict]:
         try:
             return alerts.fetch()
@@ -723,6 +737,22 @@ def get_alerts(output: str = OUTPUT, json_: bool = JSON, selector: list[str] = S
             typer.echo(errors.render("WB-PART-NOT-RUNNING", f"{e}; start it with: {alerts.ENABLE}"), err=True)
             raise typer.Exit(1) from e
     _get(rows, contract.wanted(output, json_), selector, sort_by, False, 2.0)
+
+
+@get_app.command("scenario-status")
+def get_scenario_status(output: str = OUTPUT, json_: bool = JSON) -> None:
+    """The web page's scenario run: running or not, which one, each step's status and the `expect` verdicts so far (read-only, issue 635).
+    A scenario started with `scenario run` is not shown: that command blocks and prints its own report. Exit 1 when the page is not running."""
+    try:
+        data = agentverbs.scenario_status(_page_run_state())
+    except (OSError, ValueError) as e:
+        typer.echo(errors.render("WB-PART-NOT-RUNNING", f"the web page does not answer ({e}); start it with: benchctl start"), err=True)
+        raise typer.Exit(1) from e
+    if contract.wanted(output, json_) == "json":
+        typer.echo(contract.dumps(data))
+        return
+    typer.echo(f"{data['name'] or 'no scenario run yet'}: {'running' if data['running'] else 'not running'}"
+               + (f", {data['steps_done']}/{data['steps_total']} steps" if data["steps_total"] else "") + (f", ok={data['ok']}" if data["ok"] is not None else ""))
 
 
 @get_app.command("scenarios")
@@ -754,6 +784,25 @@ def set_node(node: str = TARGET, state: str = typer.Argument(..., help="off or o
         o = scenario.execute(slurm_only, poster=post, host=True, runner=run)
     typer.echo(f"{node}: {state}" if o.status == "ok" else f"cannot set {node}: {o.detail}", err=o.status != "ok")
     raise typer.Exit(0 if o.status == "ok" else 1)
+
+
+clear_app = typer.Typer(cls=SuggestingGroup, help="Put things back: the injected node faults")
+app.add_typer(clear_app, name="clear")
+
+
+@clear_app.command("faults")
+def clear_faults_cmd(output: str = OUTPUT, json_: bool = JSON) -> None:
+    """Clear every injected node fault at once, as the page's Clear faults does for each node (a hot or failed-fan BMC, a GPU XID, an
+    InfiniBand or NIC problem; a powered-off node is powered on). Faults on a service or a credential are not touched (scenarios restore
+    those). Safe to repeat. `benchctl get faults` shows what is left."""
+    run, post = (lambda c: stack._run(c)), (lambda url, body: scenario.post(url, body))
+    data = agentverbs.clear_faults(_sim(), post, run)
+    if contract.wanted(output, json_) == "json":
+        typer.echo(contract.dumps(data))
+    else:
+        for r in data["cleared"]:
+            typer.echo(f"{r['target']}: {r['status']}" + (f" ({r['detail']})" if r["detail"] else ""))
+    raise typer.Exit(0 if data["ok"] else 1)
 
 
 CHECK = typer.Argument(..., autocompletion=completion.checks, help="check name, see `benchctl get checks`")

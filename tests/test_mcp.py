@@ -19,9 +19,12 @@ TOOLS = {
     "fault_inject": ({"node": "cn001", "state": "drain", "reason": "t"}, ["set", "node", "cn001", "drain", "--reason", "t"]),
     "traffic_get": ({"since": 5.0}, ["get", "traffic", "--json", "--since", "5.0"]),
     "alerts_get": ({}, ["get", "alerts", "--json"]),
+    "scenario_status": ({}, ["get", "scenario-status", "--json"]),
+    "fault_clear": ({}, ["clear", "faults", "--json"]),
+    "capture_once": ({"node": "cn001", "seconds": 5, "max_messages": 50}, ["get", "capture", "cn001", "--once", "--seconds", "5", "--max-messages", "50"]),
     "wait": ({"kind": "node-state", "name": "cn001", "state": "running", "timeout": 5}, ["wait", "node-state", "cn001", "running", "--timeout", "5.0"]),
 }
-READ_ONLY = {"workbench_describe", "workbench_plan", "scenario_list", "faults_get", "endpoints_get", "traffic_get", "alerts_get", "wait"}
+READ_ONLY = {"workbench_describe", "workbench_plan", "scenario_list", "faults_get", "endpoints_get", "traffic_get", "alerts_get", "wait", "scenario_status", "capture_once"}
 DESTRUCTIVE = {"workbench_down", "fault_inject"}
 
 

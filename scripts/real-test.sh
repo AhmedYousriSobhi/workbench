@@ -7,4 +7,4 @@ cd "$(dirname "$0")/.."
 # Explicit module files (verify.sh --changed) replace the whole folder; anything else is added to it.
 targets=(tests/real)
 for a in "$@"; do case "$a" in tests/real/test_*.py) targets=() ;; esac; done
-WORKBENCH_REAL=1 exec python3 -m pytest -v -rfE --durations=25 "${targets[@]}" "$@"
+WORKBENCH_REAL=1 exec python3 -m pytest -v -rfEs --durations=25 "${targets[@]}" "$@"
