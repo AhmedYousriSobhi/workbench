@@ -2,6 +2,10 @@
 
 Every JSON output of `benchctl` carries `contract_version` (`MAJOR.MINOR`); the schemas are in [schemas/](schemas/) (JSON Schema draft 2020-12). Adding a field is a minor bump. Removing or renaming a field, or changing a type, is a major bump. Every change gets a line here (SPEC AG-3, ADR 0062).
 
+## 2.0 (2026-11-14)
+
+Major, one field removed. `describe workbench`: a scenario row is `name` and `seconds`; `summary` is gone so the call stays within its 6,500-character budget as scenarios are added. What a scenario does is in `get scenarios --json` (the drill-down). Nothing else changed (issue 678).
+
 ## 1.4 (2026-11-14)
 
 Minor, nothing removed. New JSON outputs: `get scenario-status` (the web page's scenario run: running, name, ok, steps done and each step's status, the `expect` verdicts), `clear faults` (clears every injected node fault; one entry per target) and `get capture NODE --once` (a bounded, one-shot capture: one object with the messages seen, `--seconds` at most 60, `--max-messages`). `get faults` now also reads back an expired Teleport certificate (a row of kind `auth`, target `teleport`, label `certificate of USER expired`). The workbench now ships three default Prometheus alert rules (`GpuXid`, `GpuOverheat`, `NodeDown`), so `get alerts` and `wait alert` have something to read.
