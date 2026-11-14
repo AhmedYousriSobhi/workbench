@@ -50,7 +50,7 @@ workstation, so read the numbers as an order of magnitude.
 | 4 | 0.11 s | 0.67 s | 0.64 s |
 | 12 | 0.33 s | 2.08 s | 2.05 s |
 
-About 28 ms per pause and 175 ms per stop, linear in the number of containers, no action failures. The wait equals the
+About 28 ms per pause and 175 ms per stop (measured with the docker CLI, before issue 452 moved the governor to the Engine API socket; not re-measured, expect less per call since no process starts), linear in the number of containers, no action failures. The wait equals the
 whole plan, so a profile with dozens of containers would block a socket request for several seconds at L4 (extrapolated,
 not measured). The loop also cannot re-sample while the plan runs.
 
