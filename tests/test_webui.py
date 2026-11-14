@@ -372,7 +372,7 @@ def test_a_slow_plan_does_not_stall_the_other_requests(ui, monkeypatch):
 def test_connections_endpoint_lists_every_entity_with_credential_paths_only(ui):
     code, body = req(ui, "/api/connections")
     rows = {e["id"]: e for e in json.loads(body)["entities"]}
-    assert code == 200 and {"login", "nodes", "bmc", "bcm", "jira", "slurm", "gpu", "prometheus", "grafana", "ui"} <= set(rows)
+    assert code == 200 and {"login", "nodes", "bmc", "bcm", "jira", "slurm", "gpu", "prometheus", "alertmanager", "grafana", "ui"} <= set(rows)
     assert rows["login"]["address"] == "10.141.255.254:22" and "127.0.0.1:2222" in rows["login"]["how"] and rows["login"]["credential"].endswith("ssh/id_ed25519")
     assert rows["bmc"]["credential"].endswith("bmc_credentials") and "admin:<password>" in rows["bmc"]["command"]
     assert req(ui, "/api/connections", auth=False)[0] == 401

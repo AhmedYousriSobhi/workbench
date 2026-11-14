@@ -88,6 +88,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 | 9400 | gpu-exporter-farm |
 | 3000 | Grafana (admin / admin) |
 | 9090 | Prometheus |
+| 9093 | Alertmanager |
 | 9401 | governor `/metrics` (on the docker bridge address, so Prometheus can scrape it) |
 
 ## Environment variables

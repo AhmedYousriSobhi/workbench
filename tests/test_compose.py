@@ -184,5 +184,29 @@ def test_prometheus_loads_the_default_alert_rules():
     mounts = yaml.safe_load((root / "compose/observability.yml").read_text())["services"]["prometheus"]["volumes"]
     assert "../observability/rules.yml:/etc/prometheus/rules.yml:ro" in mounts
     rules = [r for g in yaml.safe_load((root / "observability/rules.yml").read_text())["groups"] for r in g["rules"]]
-    assert {r["alert"] for r in rules} == {"GpuXid", "GpuOverheat", "NodeDown"}
+    assert {r["alert"] for r in rules} == {"GpuXidCritical", "GpuTempHigh", "InfinibandPortDown", "NodeDown", "ExporterDown", "JiraErrors"}
     assert all(r["expr"] and r["labels"]["severity"] for r in rules)
+
+
+def test_alertmanager_is_a_core_service_wired_to_prometheus_and_the_jira_mock():
+    """Issue 460, ADR 0072: a P1 service at its planned address, Prometheus sends to it, and every alert goes to the mock's receiver."""
+    root = Path(__file__).resolve().parent.parent
+    svc = yaml.safe_load((root / "compose/observability.yml").read_text())["services"]["alertmanager"]
+    assert svc["cgroup_parent"] == "workbench-p1.slice" and svc["mem_limit"] == "64m"
+    assert svc["ports"] == ["127.0.0.1:9093:9093"] and "cap_add" not in svc and "privileged" not in svc
+    assert "../observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro" in svc["volumes"]
+    prom = yaml.safe_load((root / "observability/prometheus.yml").read_text())
+    assert prom["alerting"]["alertmanagers"][0]["static_configs"][0]["targets"] == ["alertmanager:9093"]
+    assert {"job_name": "jira-mock", "static_configs": [{"targets": ["jira-mock:8080"]}]} in prom["scrape_configs"]
+    am = yaml.safe_load((root / "observability/alertmanager.yml").read_text())
+    hook = am["receivers"][0]["webhook_configs"][0]
+    assert am["route"]["receiver"] == am["receivers"][0]["name"] and hook["url"] == "http://jira-mock:8080/sim/alerts" and hook["send_resolved"]
+
+
+def test_every_default_rule_has_a_promtool_case():
+    """tests/rules/rules_test.yml holds one case per rule; tests/real/test_alerting_real.py runs it in the Prometheus image."""
+    root = Path(__file__).resolve().parent.parent
+    rules = {r["alert"] for g in yaml.safe_load((root / "observability/rules.yml").read_text())["groups"] for r in g["rules"]}
+    cases = yaml.safe_load((root / "tests/rules/rules_test.yml").read_text())["tests"]
+    tested = {t["alertname"] for case in cases for t in case["alert_rule_test"]}
+    assert tested == rules

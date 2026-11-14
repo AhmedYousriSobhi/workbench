@@ -19,7 +19,7 @@ let spec = null, els = {};
 
 export function facts() {
   const c = clusterNow(), mon = S.monLinks || [];
-  return circuitFacts(c, { dbd: !!S.dbdLink, monitoring: mon.some(l => l.from === 'prometheus'), grafana: mon.some(l => l.from === 'grafana') });
+  return circuitFacts(c, { dbd: !!S.dbdLink, monitoring: mon.some(l => l.from === 'prometheus'), grafana: mon.some(l => l.from === 'grafana'), alertmanager: mon.some(l => l.to === 'alertmanager') });
 }
 
 // The link a wire stands for, found by its two ends among the documented links, the monitoring links and the accounting probe.
@@ -202,7 +202,7 @@ export function paintLayerStack() {
 }
 export function setLayer(k) { S.cvLayer = k; applyLayer(); announce(`${LAYERS.find(x => x[0] === k)[1]}: ${LAYER_TEXT[k]}`); }
 export const circuitOn = () => !!S.circuit;
-export function circuitSignature() { const f = facts(); return JSON.stringify([f.slurm, f.k8s, f.ctl, f.jump, f.tele, f.dbd, f.monitoring, f.grafana, !!f.sLogin, !!f.kLogin, Object.keys(f.services).sort()]); }
+export function circuitSignature() { const f = facts(); return JSON.stringify([f.slurm, f.k8s, f.ctl, f.jump, f.tele, f.dbd, f.monitoring, f.grafana, f.alertmanager, !!f.sLogin, !!f.kLogin, Object.keys(f.services).sort()]); }
 
 export function init() {
   const box = $('cvstack'); if (!box) return;

@@ -1,0 +1,106 @@
+# `promtool test rules tests/rules/rules_test.yml` (run from the repository root; tests/real/test_alerting_real.py runs it in
+# the Prometheus image). One case per rule: it fires on the fault and stays quiet without it.
+rule_files: [../../observability/rules.yml]
+evaluation_interval: 15s
+
+tests:
+  - name: GpuXidCritical fires on a non-zero XID and not on zero
+    interval: 15s
+    input_series:
+      - series: 'DCGM_FI_DEV_XID_ERRORS{node="gpu001",gpu="0"}'
+        values: '79+0x8'
+      - series: 'DCGM_FI_DEV_XID_ERRORS{node="gpu002",gpu="0"}'
+        values: '0+0x8'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: GpuXidCritical
+        exp_alerts:
+          - exp_labels: {node: gpu001, severity: page}
+            exp_annotations:
+              summary: "XID error 79 on gpu001"
+              description: "A GPU on gpu001 reports a non-zero XID error code."
+
+  - name: GpuTempHigh fires above 85 only
+    interval: 15s
+    input_series:
+      - series: 'DCGM_FI_DEV_GPU_TEMP{node="gpu001",gpu="0"}'
+        values: '92+0x8'
+      - series: 'DCGM_FI_DEV_GPU_TEMP{node="gpu002",gpu="0"}'
+        values: '70+0x8'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: GpuTempHigh
+        exp_alerts:
+          - exp_labels: {node: gpu001, severity: warning}
+            exp_annotations:
+              summary: "GPU on gpu001 at 92 C"
+              description: "A GPU on gpu001 is above 85 C."
+
+  - name: InfinibandPortDown fires once per node with a port in state 1
+    interval: 15s
+    input_series:
+      - series: 'node_infiniband_state_id{node="gpu001",device="mlx5_0",port="1"}'
+        values: '1+0x8'
+      - series: 'node_infiniband_state_id{node="gpu001",device="mlx5_1",port="1"}'
+        values: '1+0x8'
+      - series: 'node_infiniband_state_id{node="gpu002",device="mlx5_0",port="1"}'
+        values: '4+0x8'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: InfinibandPortDown
+        exp_alerts:
+          - exp_labels: {node: gpu001, severity: page}
+            exp_annotations:
+              summary: "2 InfiniBand port(s) down on gpu001"
+              description: "The fabric link of gpu001 is down."
+
+  - name: NodeDown fires when a node that published stops, and a node that never published is not reported
+    interval: 1m
+    input_series:
+      - series: 'DCGM_FI_DEV_GPU_TEMP{node="gpu001",gpu="0"}'
+        values: '60 60 60 60 stale'
+      - series: 'DCGM_FI_DEV_GPU_TEMP{node="gpu002",gpu="0"}'
+        values: '60+0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: NodeDown
+        exp_alerts:
+          - exp_labels: {node: gpu001, severity: page}
+            exp_annotations:
+              summary: "gpu001 stopped publishing metrics"
+              description: "gpu001 has published no GPU series for the last scrape."
+      - eval_time: 10m
+        alertname: NodeDown
+        exp_alerts: []
+
+  - name: ExporterDown fires when the farm target is down for 30 s
+    interval: 15s
+    input_series:
+      - series: 'up{job="sim-nodes",instance="gpu-exporter-farm:9400"}'
+        values: '0+0x8'
+      - series: 'up{job="governor",instance="host.docker.internal:9401"}'
+        values: '0+0x8'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ExporterDown
+        exp_alerts:
+          - exp_labels: {job: sim-nodes, instance: "gpu-exporter-farm:9400", severity: page}
+            exp_annotations:
+              summary: "The GPU exporter farm does not answer"
+              description: "Prometheus cannot scrape gpu-exporter-farm:9400."
+
+  - name: JiraErrors fires on three or more client errors in a minute, not on a quiet counter
+    interval: 15s
+    input_series:
+      - series: 'jira_mock_errors_total{job="jira-mock"}'
+        values: '0 0 0 0 3 6 9 12 12 12'
+      - series: 'jira_mock_errors_total{job="other"}'
+        values: '0+0x9'
+    alert_rule_test:
+      - eval_time: 90s
+        alertname: JiraErrors
+        exp_alerts:
+          - exp_labels: {job: jira-mock, severity: warning}
+            exp_annotations:
+              summary: "The Jira mock answered 9 requests with an error in the last minute"
+              description: "Look at GET /sim/traffic on the Jira mock for which paths."

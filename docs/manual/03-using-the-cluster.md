@@ -77,6 +77,9 @@ Timed, repeatable faults are [scenarios](06-scenarios.md).
   file-provisioned; the governor posts an annotation for every action it takes.
 - **Prometheus** http://127.0.0.1:9090, about two days of retention. The `governor` job scrapes the governor's
   `/metrics` (`workbench_governor_level`, `workbench_host_mem_available_bytes`, and more).
+- **Alertmanager** http://127.0.0.1:9093. Prometheus evaluates six default rules (GPU XID, GPU temperature, an InfiniBand port
+  down, a node that stopped publishing, the exporter not answering, Jira errors) and Alertmanager sends each alert to the Jira
+  mock, which opens one ticket per alert and comments when it fires again or resolves. Read them with `./scripts/benchctl get alerts`.
 
 ## Progress and diagrams
 

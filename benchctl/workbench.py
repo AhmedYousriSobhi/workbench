@@ -16,7 +16,7 @@ import yaml
 from . import compose, dcgm, k8s, logins, memory, nodes, real_gpu
 
 SAVED = Path("compose/generated/workbench.yaml")  # the spec `apply`/`up` last built; absent after a plain profile `up`
-OBSERVABILITY = {"prometheus": 300, "grafana": 300, "gpu-exporter-farm": 100}  # limits, compose/observability.yml
+OBSERVABILITY = {"prometheus": 300, "grafana": 300, "gpu-exporter-farm": 100, "alertmanager": 64}  # limits, compose/observability.yml
 OBSERVABILITY_MB = sum(OBSERVABILITY.values())
 FLOOR_MB = 1024                                   # MemAvailable that must remain after the start (same floor as preflight)
 # part -> (compose group, services it adds; None = the whole group)

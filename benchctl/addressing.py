@@ -26,7 +26,7 @@ BMC_NODE_PORT_BASE = 9000          # the farm's per-node TLS port: 9000 + index 
 SERVICE_HOSTS = {"slurmctld": 1, "slurmrestd": 2, "slurmdbd": 3, "mariadb": 4, "jump": 5, "bcm-mock": 10, "jira-mock": 11,
                  "bmc-farm": 12, "jira-real": 16, "jira-db": 17,
                  "teleport": 30, "k8s-apiserver": 40, "k8s-etcd": 41, "k8s-controller-manager": 42, "k8s-scheduler": 43,
-                 "kwok-controller": 44, "prometheus": 20, "grafana": 21, "gpu-exporter-farm": 22}
+                 "kwok-controller": 44, "prometheus": 20, "grafana": 21, "gpu-exporter-farm": 22, "alertmanager": 23}
 
 
 class AddressingError(Exception):

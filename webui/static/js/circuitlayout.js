@@ -35,13 +35,13 @@ export function rackSquares(nodes) {
 }
 
 // The facts the layout needs, from a cluster snapshot (the page's scoped() view of it), as plain values.
-export function circuitFacts(c, { dbd = false, monitoring = false, grafana = false } = {}) {
+export function circuitFacts(c, { dbd = false, monitoring = false, grafana = false, alertmanager = false } = {}) {
   const nodes = c.nodes || [], logins = c.logins || [], services = c.services || {};
   const slurmNodes = nodes.filter(n => n.kind !== 'k8s'), k8sNodes = nodes.filter(n => n.kind === 'k8s');
   const sLogin = logins.find(l => (l.kind || 'both') !== 'k8s'), kLogin = logins.find(l => (l.kind || 'both') !== 'slurm');
   return {
     slurm: slurmNodes.length > 0 || !!sLogin, k8s: k8sNodes.length > 0 || 'k8s-api' in services,
-    ctl: 'controller' in services, jump: 'jump' in services, tele: 'teleport' in services, dbd, monitoring, grafana,
+    ctl: 'controller' in services, jump: 'jump' in services, tele: 'teleport' in services, dbd, monitoring, grafana, alertmanager,
     sLogin: sLogin || null, kLogin: kLogin || null, kViaSlurmLogin: !!kLogin && kLogin === sLogin,
     pools: {
       sc: slurmNodes.filter(n => n.kind === 'compute'), sg: slurmNodes.filter(n => n.kind === 'gpu' || n.kind === 'real-gpu'),
@@ -85,6 +85,7 @@ export function circuitSpec(f) {
   const row = [['slurmrestd', 'slurmrestd', ':6820 HTTP + JWT', 'access', slurm], ['bmc-farm', 'BMC farm', 'Redfish :8443', 'management', 'bmc-farm' in f.services],
     ['bcm-mock', 'BCM', 'cmsh · :8081', 'management', 'bcm-mock' in f.services], ['gpu-exporter', 'GPU exporter', ':9400 DCGM', 'monitoring', 'gpu-exporter' in f.services],
     ['prometheus', 'Prometheus', ':9090', 'monitoring', f.monitoring], ['grafana', 'Grafana', ':3000', 'monitoring', f.grafana], ['jira-mock', 'Jira', ':8080', 'management', 'jira-mock' in f.services],
+    ['alertmanager', 'Alertmanager', ':9093', 'monitoring', f.alertmanager],
     ...OPTIONAL_SERVICES.filter(([k]) => k in f.services).map(([k, t, s, pl]) => [k, t, s, pl, true])];
   const n = row.length, gap = 20, w = Math.min(184, Math.floor((1620 - (n - 1) * gap) / n)), x0 = 64, y = 890, h = 84;
   row.forEach(([id, title, sub, plane, present], i) => add(box(id, x0 + i * (w + gap), y, w, h, { role: 'service', title, sub, plane, present: !!present })));
@@ -122,6 +123,7 @@ export function circuitSpec(f) {
   const side = (key, from, to, label) => wire(key, from, to, 'monitoring', [Lf(P[from]), R(P[to])], { link: [from, to === 'gpu-exporter' ? null : to], label });
   side('prom-gpu', 'prometheus', 'gpu-exporter', 'scrape');
   side('graf-prom', 'grafana', 'prometheus', 'query');
+  side('am-jira', 'alertmanager', 'jira-mock', 'tickets');
   for (const w2 of wires) if (w2.requires === 'ctl') w2.present = w2.present && f.ctl;
   const bands = { slurm: { x: 290, y: 50, w: 1370, h: 360, present: slurm, note: 'Not in this cluster: no Slurm' }, k8s: { x: 290, y: 430, w: 1370, h: 370, present: k8s, note: 'Not in this cluster: no Kubernetes' } };
   return { parts, wires, bands, row: row.map(r => r[0]), size: { w: CV_W, h: CV_H } };

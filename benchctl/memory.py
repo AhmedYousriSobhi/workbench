@@ -25,6 +25,7 @@ MEASURED_MB: dict[str, int] = {
     "slurmd": 13, "bmc-forwarder": 18, "bmc-farm": 14, "bcm-mock": 12, "jira-mock": 20, "login": 10, "jump": 2,  # jump host: 1.9 MB peak after five forwarded sessions (issue 415)
     "mariadb": 204, "slurmdbd": 7, "slurmctld": 41, "slurmrestd": 7, "teleport": 222,
     "prometheus": 22, "grafana": 54, "gpu-exporter-farm": 19,
+    "alertmanager": 20,  # estimate from the upstream footprint, not yet measured here (issue 460): run `benchctl measure` and replace
     # Kubernetes (ADR 0034): 4 KWOK nodes and the fixtures, one run (issue 232); etcd sat at its first 128 MB cap, so 130 is a floor
     "k8s-etcd": 130, "k8s-apiserver": 201, "k8s-controller-manager": 47, "k8s-scheduler": 18, "kwok-controller": 11,
     "real-gpu": 481,  # the real driver: host engine 404 MB + exporter 77 MB, one run on a laptop RTX card (issue 428)
