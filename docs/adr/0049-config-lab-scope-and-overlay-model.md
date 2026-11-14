@@ -23,3 +23,9 @@ The simulator runs real Slurm, Kubernetes, Prometheus and Teleport. That is enou
 ## Consequences
 
 Part A of the epic (real Slurm, Kubernetes and Prometheus features, no new process) is delivered first and benefits G5 on its own. Idle cost is the Part A features plus the lab node containers (about 13 MB each, up to 64; the memory table in the epic counts them). Accounting (about 244 MB) is needed in every profile that uses QOS or fairshare. Previously decided items stand: 453, 455, 457, 478.
+
+## Addendum (issue 550, import)
+
+- The export folder has fixed file names (`slurm.conf`, `topology.conf`, `gres.conf`, `sacctmgr.dump`, `qos.txt`, `trace.sacct`, `k8s/`, `rules/`, `teleport/`, `versions.yaml`); production versions come from `versions.yaml` because none of the other files carries them reliably. A missing version is "not given", never guessed.
+- `slurm.conf` is stored whole with secrets scrubbed; the "policy keys only" rule is applied later by `KEY_CLASS` (issue 551), so a key class can change without a re-import.
+- The residual secret scan reuses the token rules of `scripts/check-privacy.sh` (a test keeps them in step) and adds assignments to password-like names. It reports `file:line [rule]` only and a refused import writes nothing.
