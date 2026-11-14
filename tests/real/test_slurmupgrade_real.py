@@ -24,6 +24,11 @@ def run(container: str, *cmd: str) -> str:
     return (r.stdout + r.stderr).strip()
 
 
+def started(container: str, daemon: str) -> str:
+    """When the daemon's process began (its pid is 1 when it is the container's main process, so the pid cannot tell a restart)."""
+    return run(container, "sh", "-c", f"stat -c %Y /proc/$(pgrep -x {daemon} | head -1)")
+
+
 def release(container: str, daemon: str) -> str:
     return run(container, daemon, "-V")
 
@@ -48,11 +53,11 @@ def test_every_stage_upgrades_only_its_daemon_and_the_job_survives(cluster):
     stepd = run("cn001", "pgrep", "-x", "slurmstepd")
     assert stepd
     for daemons, d in ((["slurmdbd"], "slurmdbd"), (["slurmctld", "slurmrestd"], "slurmctld"), (["cn001"], "slurmd")):
-        pid = run(where[d], "pgrep", "-x", d)
+        began = started(where[d], d)
         o = scenario.execute(scenario.Step(0, "slurm-upgrade", {"to": TO, "daemons": daemons}))
         assert o.status == "ok", o.detail
         assert release(where[d], d) == f"slurm {TO}"
-        assert run(where[d], "pgrep", "-x", d) != pid  # a new process
+        assert started(where[d], d) != began  # a new process
         assert run("slurmctld", "squeue", "-h", "-j", job, "-o", "%T") == "RUNNING", f"job lost after upgrading {daemons}"
         assert run("cn001", "pgrep", "-x", "slurmstepd") == stepd, f"slurmstepd changed after upgrading {daemons}"
     run("slurmctld", "scancel", job)

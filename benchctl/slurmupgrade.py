@@ -77,7 +77,7 @@ def swap_commands(name: str, source: str) -> list[list[str]]:
     """Put the new tree beside the old one and rename it into place: running processes keep their old files open."""
     c = container(name)
     return [["docker", "exec", "-u", "0", c, "sh", "-c", "rm -rf /opt/slurm.next && mkdir /opt/slurm.next"],
-            ["docker", "cp", f"{source}:/opt/slurm/.", f"{c}:/opt/slurm.next"],
+            ["sh", "-c", f"docker cp {source}:/opt/slurm/. - | docker cp - {c}:/opt/slurm.next"],  # docker cp cannot copy between containers; a tar stream keeps owners and modes
             ["docker", "exec", "-u", "0", c, "sh", "-c", SWAP]]
 
 

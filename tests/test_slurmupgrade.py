@@ -24,9 +24,9 @@ class Fake:
             out = "tmp123\n"
         if cmd[-2:] == ["/opt/slurm/bin/sinfo", "-V"] or cmd[-1] == "-V":
             out = f"slurm {self.ver.get(cmd[2], '25.11.9')}\n"
-        if cmd[:2] == ["docker", "cp"]:
-            self.ver[cmd[3].split(":")[0]] = "26.05.5"
-        if self.fail_on and self.fail_on in cmd:
+        if cmd[:2] == ["sh", "-c"] and "docker cp" in cmd[2]:
+            self.ver[cmd[2].rsplit(" ", 1)[1].split(":")[0]] = "26.05.5"
+        if self.fail_on and cmd[0] == self.fail_on:
             rc = 1
         return subprocess.CompletedProcess(cmd, rc, out, "boom" if rc else "")
 
@@ -54,7 +54,7 @@ def test_each_daemon_gets_the_tree_copied_beside_the_old_one_then_renamed_and_re
     assert slurmupgrade.apply({"to": "26.05.5", "daemons": ["cn001", "slurmdbd"]}, f, say=msgs.append, sleep=lambda s: None) is None
     flat = [" ".join(c) for c in f.cmds]
     assert flat.index("docker restart -t 10 workbench-slurmdbd-1") < flat.index("docker exec workbench-cn001-1 pkill -x slurmd")
-    assert "docker cp tmp123:/opt/slurm/. workbench-cn001-1:/opt/slurm.next" in flat
+    assert "sh -c docker cp tmp123:/opt/slurm/. - | docker cp - workbench-cn001-1:/opt/slurm.next" in flat
     assert not any(c[:2] in (["docker", "run"], ["docker", "up"]) or "rm" in c[:2] and c[2] != "-f" for c in f.cmds)  # nothing recreated
     assert flat[-1] == "docker rm -f tmp123" and msgs == ["upgraded slurmdbd: 25.11.9 -> 26.05.5", "upgraded cn001: 25.11.9 -> 26.05.5"]
 
@@ -73,6 +73,6 @@ def test_a_missing_image_is_built_with_the_checked_release_and_checksum():
 
 
 def test_a_failed_copy_stops_with_the_daemon_named_and_still_removes_the_temporary_container():
-    f = Fake(fail_on="cp")
+    f = Fake(fail_on="sh")
     bad = slurmupgrade.apply({"to": "26.05.5", "daemons": ["cn001"]}, f, say=lambda m: None, sleep=lambda s: None)
     assert bad and bad.startswith("cn001:") and f.cmds[-1][:3] == ["docker", "rm", "-f"]
