@@ -66,6 +66,11 @@ bcm:
 bmc:
   per_node: true   # one BMC address per node (ADR 0018); a workbench selection can limit which nodes (--bmc-nodes)
 
+# storage:               # declared mounts and a shared scratch (issue 461, ADR 0078, docs/guides/storage.md); without it /home (NFS) and /scratch (Lustre, shared) apply
+#   mounts:
+#     - {path: /scratch, kind: lustre, size_tb: 500, used_pct: 40, shared: true}
+#     - {path: /datasets, kind: ddn, size_tb: 2000, shared: true, host_path: /mnt/bigdisk/datasets}   # users' training data on a disk you name
+
 host:
   reserve_gb: 3
   safety_floor_gb: 1

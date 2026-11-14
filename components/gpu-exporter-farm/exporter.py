@@ -38,9 +38,30 @@ def load_gpu_type(inventory: Path) -> str:
     return str(json.loads(Path(inventory).read_text()).get("gpu_type", "")).lower()
 
 
+TIB = 1024**4
+# an inventory from before issue 461 has no storage block: one mount, as the exporter always showed (deterministic now)
+LEGACY_MOUNTS = [{"path": MOUNT, "fstype": "lustre", "source": "mgs01@tcp:/lustre", "size_tb": 500, "used_pct": 40, "inodes": 4_000_000_000,
+                  "inodes_used_pct": 25, "quota": {"gb": 20000, "files": 50_000_000}}]
+
+
+def load_storage(inventory: Path) -> list[dict]:
+    """The declared mounts from `inventory.json` (benchctl/storage.py), or the legacy single mount for an older file."""
+    return json.loads(Path(inventory).read_text()).get("storage", {}).get("mounts") or LEGACY_MOUNTS
+
+
+def load_users(inventory: Path) -> list[str]:
+    return list(json.loads(Path(inventory).read_text()).get("users") or [])
+
+
 class State:
-    def __init__(self, nodes: dict[str, int], rng: random.Random | None = None, gpu_type: str = ""):
+    def __init__(self, nodes: dict[str, int], rng: random.Random | None = None, gpu_type: str = "", mounts: list[dict] | None = None,
+                 users: list[str] | None = None):
         self.nodes = nodes
+        self.mounts = {m["path"]: m for m in (mounts or LEGACY_MOUNTS)}
+        self.users = users or []
+        self.fill: dict[str, dict[str, float]] = {}      # mount -> {"used_pct": .., "inodes_used_pct": ..}: a scenario's override of what is declared
+        self.stale: dict[str, set[str]] = {}             # node -> mounts that node cannot reach (a stale NFS handle, a lost Lustre client)
+        self.user_used: dict[tuple[str, str], float] = {}  # (mount, user) -> GB the user holds, when a scenario set it
         self.fb_total = FB_TOTAL_MIB.get(gpu_type, FB_DEFAULT_MIB)
         self.model = MODEL_NAME.get(gpu_type, gpu_type.upper() or "NVIDIA GPU")
         self.rng = rng or random.Random()
@@ -60,16 +81,60 @@ class State:
         """One HCA per GPU on a GPU node, one port on a compute node."""
         return max(1, self.nodes[node])
 
+    def mount_numbers(self, path: str) -> dict:
+        """Bytes and inodes of one mount as declared, with a scenario's fill level applied."""
+        m, f = self.mounts[path], self.fill.get(path, {})
+        size = int(float(m["size_tb"]) * TIB)
+        used = int(size * float(f.get("used_pct", m["used_pct"])) / 100)
+        files = int(m["inodes"])
+        files_used = int(files * float(f.get("inodes_used_pct", m["inodes_used_pct"])) / 100)
+        return {"size": size, "used": used, "free": size - used, "files": files, "files_used": files_used, "files_free": files - files_used}
+
+    def user_quota(self, path: str, user: str) -> dict:
+        """One user's usage and limits on a mount: a few percent of the quota unless a scenario set the usage."""
+        q = self.mounts[path]["quota"]
+        gb = self.user_used.get((path, user), round(q["gb"] * 0.07, 1))
+        return {"user": user, "used_gb": gb, "quota_gb": q["gb"], "files_used": int(q["files"] * 0.03), "quota_files": q["files"], "exceeded": gb >= q["gb"]}
+
+    def storage_view(self, node: str) -> dict:
+        """What `df` and `lfs` on `node` print: the mounts with their numbers, which of them this node cannot reach, and each user's quota."""
+        return {"node": node, "mounts": [{**self.mounts[p], **self.mount_numbers(p), "stale": p in self.stale.get(node, ()),
+                                          "quotas": {u: self.user_quota(p, u) for u in self.users}} for p in self.mounts]}
+
+    def inject_storage(self, node: str, req: dict) -> None:
+        path = req["mount"]
+        if path not in self.mounts:
+            raise ValueError(f"no mount {path}; mounts: {', '.join(self.mounts)}")
+        if req.get("reset"):
+            self.fill.pop(path, None)
+            self.stale.get(node, set()).discard(path)
+            for k in [k for k in self.user_used if k[0] == path]:
+                del self.user_used[k]
+            return
+        for key in ("used_pct", "inodes_used_pct"):
+            if key in req:
+                v = float(req[key])
+                if not 0 <= v <= 100:
+                    raise ValueError(f"{key} must be 0 to 100")
+                self.fill.setdefault(path, {})[key] = v
+        if "stale" in req:
+            (self.stale.setdefault(node, set()).add if req["stale"] else self.stale.setdefault(node, set()).discard)(path)
+        if "user" in req:
+            self.user_used[(path, str(req["user"]))] = float(req["used_gb"])
+
     def inject(self, req: dict) -> None:
         node = req["node"]
         if node not in self.nodes:
             raise KeyError(node)
+        if "storage" in req:
+            self.inject_storage(node, req["storage"])
         if "down" in req:
             (self.down.add if req["down"] else self.down.discard)(node)
         if req.get("clear"):
             for gone in (self.xid, self.temp_override, self.ib_down):
                 gone.pop(node, None)
             self.flapping.discard(node)
+            self.stale.pop(node, None)
             return
         if "ib_down" in req:
             n = int(req["ib_down"])
@@ -171,14 +236,21 @@ class State:
                 self.carrier[n] = self.carrier.get(n, 0) + 2
         per_node("node_network_carrier_changes_total", "Link state changes", lambda n: self.carrier.get(n, 0), ',device="eth0"', "counter")
         per_node("sim_nic_flapping", "1 while a NIC flap is injected", lambda n: int(n in self.flapping))
-        mp = f',mountpoint="{MOUNT}"'
-        per_node("node_filesystem_size_bytes", "Fake filesystem size", lambda n: FS_SIZE, mp)
-        per_node(
-            "node_filesystem_free_bytes",
-            "Fake filesystem free",
-            lambda n: int(FS_SIZE * r.uniform(0.2, 0.6)),
-            mp,
-        )
+        for name, help_, key in (("node_filesystem_size_bytes", "Declared filesystem size", "size"), ("node_filesystem_free_bytes", "Declared filesystem free", "free"),
+                                 ("node_filesystem_avail_bytes", "Declared filesystem available to users", "free"),
+                                 ("node_filesystem_files", "Declared inodes", "files"), ("node_filesystem_files_free", "Declared free inodes", "files_free")):
+            head(name, help_)
+            for n in nodes:
+                for path, m in self.mounts.items():
+                    if path not in self.stale.get(n, ()):  # a mount a node cannot reach gives no size, as node_exporter does
+                        out.append(f'{name}{{node="{n}",mountpoint="{path}",device="{m["source"]}",fstype="{m["fstype"]}"}} {self.mount_numbers(path)[key]}')
+        head("node_filesystem_readonly", "Filesystem read-only (0 or 1)")
+        head("node_filesystem_device_error", "1 when the mount could not be read (a stale handle)")
+        for n in nodes:
+            for path, m in self.mounts.items():
+                lab = f'node="{n}",mountpoint="{path}",device="{m["source"]}",fstype="{m["fstype"]}"'
+                out.append(f"node_filesystem_readonly{{{lab}}} 0")
+                out.append(f"node_filesystem_device_error{{{lab}}} {int(path in self.stale.get(n, ()))}")
         return "\n".join(out) + "\n"
 
 
@@ -213,6 +285,9 @@ def make_handler(state: State):
         def do_GET(self):
             if self.path == "/sim/stats":
                 self._send(200, json.dumps(stats), "application/json")
+            elif urlparse(self.path).path == "/sim/storage":  # what df and lfs print on a node (benchctl/storage.py, images/node-base/fakefs.py)
+                node = (parse_qs(urlparse(self.path).query).get("node") or [""])[0]  # a login node is not a hardware node: it reaches every mount
+                self._send(200, json.dumps(state.storage_view(node)), "application/json")
             elif urlparse(self.path).path == "/metrics":
                 node = (parse_qs(urlparse(self.path).query).get("node") or [None])[0]
                 if node is None:
@@ -293,7 +368,7 @@ def write_dcgm(state: State, path: str = DCGM_OVERRIDES, interval: float = 2, st
 def main() -> None:
     inventory = Path(sys.argv[1] if len(sys.argv) > 1 else "/inventory.json")
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 9400
-    state = State(load_nodes(inventory), gpu_type=load_gpu_type(inventory))
+    state = State(load_nodes(inventory), gpu_type=load_gpu_type(inventory), mounts=load_storage(inventory), users=load_users(inventory))
     threading.Thread(target=follow_slurm, args=(state,), daemon=True).start()
     if DCGM_OVERRIDES:
         threading.Thread(target=write_dcgm, args=(state,), daemon=True).start()
