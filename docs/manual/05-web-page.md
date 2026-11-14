@@ -301,7 +301,7 @@ Text is sized in `rem`, so the browser's own font-size setting (and zoom) scales
 
 ## Content-Security-Policy
 
-The page and its files are served with a strict Content-Security-Policy: scripts and styles only from the page's own origin, no inline script or style, no framing, no objects. If you add a template, set sizes through classes or the `data-w`, `data-flex`, `data-p` and `data-bg` attributes (`paintDyn` applies them); a `style="..."` attribute is blocked and a test fails. The help pages (`/help`) are not covered yet.
+The page and its files are served with a strict Content-Security-Policy: scripts and styles only from the page's own origin, no inline script or style, no framing, no objects. If you add a template, set sizes through classes or the `data-w`, `data-flex`, `data-p` and `data-bg` attributes (`paintDyn` applies them); a `style="..."` attribute is blocked and a test fails. The help pages (`/help`) carry the same policy; their stylesheet is `static/help.css`.
 
 ## One message per condition
 

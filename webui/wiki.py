@@ -283,37 +283,7 @@ class Wiki:
         return self.title(path), "\n".join(out)
 
 
-STYLE = """
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.skip{position:absolute;left:-999px;top:8px;background:var(--accent);color:var(--on-accent);padding:8px 12px;border-radius:6px}.skip:focus{left:8px}
-header.top{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:10px 24px;background:var(--panel);border-bottom:1px solid var(--line)}
-header.top a.back{font-weight:600;text-decoration:none;color:var(--accent);min-height:40px;display:inline-flex;align-items:center}
-header.top strong{margin-right:auto}
-form.search{display:flex;gap:8px}form.search input{font:inherit;min-height:40px;min-width:0;width:240px;max-width:100%;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);padding:0 10px}
-form.search button{font:inherit;font-weight:600;min-height:40px;padding:0 14px;border:0;border-radius:6px;background:var(--accent);color:var(--on-accent);cursor:pointer}
-.wrap{display:grid;grid-template-columns:260px minmax(0,1fr);gap:24px;max-width:1280px;margin:0 auto;padding:16px 24px 48px;align-items:start}
-nav.side{position:sticky;top:72px;max-height:calc(100vh - 88px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
-nav.side h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin:12px 8px 4px}nav.side h2:first-child{margin-top:0}
-nav.side a{display:block;padding:6px 8px;border-radius:6px;color:var(--fg);text-decoration:none;font-size:14px;min-height:32px}
-nav.side a:hover{background:var(--bg)}nav.side a[aria-current=page]{background:var(--accent);color:var(--on-accent);font-weight:600}
-article{min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 32px 32px}
-article h1{font-size:28px;letter-spacing:-.01em}article h2{margin-top:32px;padding-bottom:6px;border-bottom:1px solid var(--line)}article h3{margin-top:24px}
-a{color:var(--accent)}img{max-width:100%;height:auto;border:1px solid var(--line);border-radius:8px;display:block;margin:8px 0}
-code{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg);padding:1px 5px;border-radius:4px}
-pre.code{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow:auto}pre.code code{background:none;padding:0}
-.tablewrap{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:12px 0}th,td{text-align:left;vertical-align:top;padding:8px 10px;border:1px solid var(--line)}th{background:var(--bg)}
-blockquote{margin:12px 0;padding:4px 14px;border-left:4px solid var(--accent);background:var(--bg);border-radius:4px}
-.center{text-align:center}.center img{margin:8px auto}img[src$=".svg"]{border:0}
-figure.img{margin:12px 0}figure.img img{margin:0 0 6px}figure.center{text-align:center}figure.center img{margin:0 auto 6px}figcaption{color:var(--dim);font-size:14px;font-style:italic}
-kbd{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 6px}
-details{margin:12px 0;padding:4px 14px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}details[open]{padding-bottom:10px}summary{cursor:pointer;font-weight:600;min-height:32px;display:flex;align-items:center}
-.alert{margin:14px 0;padding:6px 14px;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:8px;background:var(--bg);color:var(--fg)}
-.alert p{margin:6px 0}.alert-title{font-size:15px}
-.alert-tip,.alert-didyouknow{border-left-color:var(--alert-tip)}.alert-important{border-left-color:var(--alert-important)}.alert-warning{border-left-color:var(--alert-warning)}.alert-caution{border-left-color:var(--alert-caution);border-left-style:double;border-left-width:7px}.alert-hood{border-left-style:dashed}
-.hit{padding:10px 0;border-bottom:1px solid var(--line)}.hit p{margin:2px 0;color:var(--dim);font-size:14px}
-@media(max-width:860px){.wrap{grid-template-columns:minmax(0,1fr);padding:12px 16px 32px}nav.side{position:static;max-height:none;order:2}article{padding:4px 16px 24px}header.top{padding:10px 16px}}
-"""
+STYLE = (Path(__file__).parent / "static" / "help.css").read_text()  # served at /static/help.css; no inline style (#525, ADR 0047)
 
 
 def page(wiki: Wiki, title: str, body: str, current: str = "", query: str = "") -> str:
@@ -322,7 +292,7 @@ def page(wiki: Wiki, title: str, body: str, current: str = "", query: str = "") 
             f'<a href="/help/{esc(slug)}"{" aria-current=page" if slug == current else ""}>{esc(t)}</a>' for slug, t in items)
         for label, items in wiki.nav())
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{esc(title)} · workbench help</title><link rel="stylesheet" href="/static/tokens.css"><style>{STYLE}</style></head><body>
+<title>{esc(title)} · workbench help</title><link rel="stylesheet" href="/static/tokens.css"><link rel="stylesheet" href="/static/help.css"></head><body>
 <a class="skip" href="#content">Skip to content</a>
 <header class="top"><a class="back" href="/">← Dashboard</a><strong>workbench help</strong>
 <form class="search" action="/help/search" method="get" role="search"><input type="search" name="q" value="{esc(query)}" aria-label="Search the help" placeholder="Search the help"><button type="submit">Search</button></form></header>
