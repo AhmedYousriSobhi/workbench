@@ -33,7 +33,7 @@ def test_the_login_page_and_the_help_style_have_no_colour_literals():
 def test_the_page_and_the_help_load_tokens_before_their_own_styles():
     html = (ROOT / "webui/static/index.html").read_text()
     assert html.index("/static/tokens.css") < html.index("/static/app.css") < html.index("/static/canvas.css")
-    assert '<link rel="stylesheet" href="/static/tokens.css"><style>{STYLE}</style>' in (ROOT / "webui/wiki.py").read_text()
+    assert '<link rel="stylesheet" href="/static/tokens.css"><link rel="stylesheet" href="/static/help.css">' in (ROOT / "webui/wiki.py").read_text()
 
 
 def test_tokens_css_is_served_under_the_same_policy():

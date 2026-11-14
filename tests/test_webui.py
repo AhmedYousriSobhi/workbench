@@ -284,6 +284,18 @@ def test_page_and_static_files_carry_a_strict_csp_and_the_page_has_no_inline_sty
     assert not re.search(r"setAttribute\('style'", src)
 
 
+def test_help_pages_carry_the_same_csp_and_have_no_inline_style(ui):
+    """#525: /help links /static/help.css instead of an inline <style>, so the strict policy covers it."""
+    for path in ("/help/search?q=slurm", "/help/manual/README", "/static/help.css"):
+        r = urllib.request.Request(ui + path, headers={"Authorization": f"Bearer {TOKEN}"})
+        with urllib.request.urlopen(r, timeout=5) as resp:
+            csp, body = resp.headers["Content-Security-Policy"], resp.read().decode()
+        assert csp and "style-src 'self'" in csp and "unsafe-inline" not in csp, path
+        assert not re.search(r"<style\b|\sstyle=\"|\son[a-z]+=\"|<script\b", body), path
+        if path.startswith("/help"):
+            assert '<link rel="stylesheet" href="/static/help.css">' in body
+
+
 def test_every_module_the_page_imports_is_served_and_nothing_else_is(ui):
     """Walk the import graph from main.js over HTTP: every file answers, so no module is missing from static/js."""
     seen, todo = set(), ["main.js"]
