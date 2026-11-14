@@ -77,8 +77,9 @@ def test_json_output_matches_its_schema_and_o_json(name, argv):
     jsonschema.validate(data, schema(name), cls=jsonschema.Draft202012Validator)
     assert data["contract_version"] == contract.CONTRACT_VERSION
     assert runner.invoke(cli.app, [*argv, "-o", "json"]).stdout == r.stdout  # `--json` is only an alias
+    scanned = r.stdout.replace("systemd-zram-setup@zram0.service", "")  # a public unit name that looks like an email
     for pat in SECRETS:
-        assert not pat.search(r.stdout), f"{name}: output matches {pat.pattern}"
+        assert not pat.search(scanned), f"{name}: output matches {pat.pattern}"
 
 
 def test_scenario_run_json_keeps_stdout_to_one_object_and_the_exit_code():

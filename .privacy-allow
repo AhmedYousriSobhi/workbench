@@ -2,3 +2,4 @@
 ecdsa-sha2-nistp256-cert-v01@openssh.com
 ssh-ed25519-cert-v01@openssh.com
 -cert-v01@openssh.com
+systemd-zram-setup@zram0.service

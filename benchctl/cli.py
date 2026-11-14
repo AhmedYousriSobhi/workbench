@@ -42,6 +42,7 @@ from . import (
     storage,
     teleport,
     ticketbot,
+    tuning,
     wait,
     workbench,
 )
@@ -121,9 +122,11 @@ def check() -> None:
 def doctor(output: str = OUTPUT, json_: bool = JSON) -> None:
     """Check host prerequisites (SPEC P-1..P-3); exits 1 on any failure."""
     results = checks.run_all()
+    tune = tuning.plan()
     failed = any(c.status == checks.FAIL for c in results)
     if contract.wanted(output, json_) == "json":
-        typer.echo(contract.dumps({"ok": not failed, "checks": [{"name": c.name, "code": errors.doctor_code(c.name), "status": c.status, "detail": c.detail, "fix": c.fix} for c in results]}))
+        typer.echo(contract.dumps({"ok": not failed, "checks": [{"name": c.name, "code": errors.doctor_code(c.name), "status": c.status, "detail": c.detail, "fix": c.fix} for c in results],
+                                   "tuning": [tuning.as_dict(t) for t in tune]}))
         raise typer.Exit(1 if failed else 0)
     if agentmode.agent():  # only what needs attention, one coded line each
         for c in results:
@@ -131,11 +134,17 @@ def doctor(output: str = OUTPUT, json_: bool = JSON) -> None:
                 typer.echo(f"{errors.doctor_code(c.name)} {c.status}: {' '.join(c.detail.split())}" + (f" | fix: {c.fix}" if c.fix else ""))
         if not any(c.status != checks.OK for c in results):
             typer.echo("ok: every check passed")
+        todo = [t.setting for t in tune if not t.applied]
+        if todo:  # one line; the commands are in `benchctl doctor` (text) and `doctor --json` (tuning)
+            typer.echo(f"tuning: {', '.join(todo)} not as recommended (print-only; commands in `benchctl doctor --json`)")
         raise typer.Exit(1 if failed else 0)
     for c in results:
         typer.echo(f"[{ICON[c.status]}] {c.name}: {c.detail}")
         if c.fix and c.status != checks.OK:
             typer.echo(f"       fix: {c.fix}")
+    block = tuning.render(tune)
+    if block:
+        typer.echo(block)
     raise typer.Exit(1 if failed else 0)
 
 
