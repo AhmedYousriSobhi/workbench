@@ -53,6 +53,9 @@
 - name: prometheus targets
   paths: ["benchctl/promtargets.py", "benchctl/k8s.py", "benchctl/teleport.py", "benchctl/dcgm.py", "benchctl/real_gpu.py"]
   tests: [test_prom_targets_real, test_k8s_real, test_teleport_real, test_slurm_metrics_real]
+- name: typed GPU shapes
+  paths: ["benchctl/mig.py", "images/slurm-ctl/alloc_feed.py", "images/node-base/entrypoint.sh"]
+  tests: [test_mig_real, test_gpu_follows_slurm_real]
 - name: slurm metrics
   paths: ["benchctl/slurmconf.py", "observability/dashboards/slurm-overview.json"]
   tests: [test_slurm_metrics_real]

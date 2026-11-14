@@ -17,6 +17,10 @@ gpu:
   type: h200
   cpus: 64                # per GPU node, 8 per GPU: the same in Slurm, Redfish and BCM (issue 462)
   memory_mb: 16384        # fake RealMemory per GPU node, 2048 per GPU
+  # mig:                  # optional, off by default (issue 546, ADR 0075): split every GPU of the listed nodes into slices;
+  #   nodes: [gpu002]     #   Slurm then advertises gpu:h200_1g:56 there (8 GPUs x 7) and jobs ask --gres=gpu:h200_1g:N
+  #   profile: 1g
+  #   slices: 7           #   per GPU, 1 to 7
 
 partitions:
   - {name: cpu, nodes: compute}

@@ -23,7 +23,7 @@ inventories are generated from it, so node names agree everywhere. **Never hand-
 | `time_dilation` | above 1 compresses job durations and arrival intervals |
 | `jira.mode` | `mock` (default), `cloud`, `dc` |
 | `compute` | `count`, `prefix` (names `cn001`...), `memory_mb` and `cpus` (the fake size Slurm advertises) |
-| `gpu` | `nodes`, `prefix` (`gpu001`...), `gpus_per_node`, `type` |
+| `gpu` | `nodes`, `prefix` (`gpu001`...), `gpus_per_node`, `type`; optional `mig: {nodes: [gpu002], profile: 1g, slices: 7}` splits every GPU of the listed nodes into slices (Slurm then advertises `gpu:h200_1g:56` there; request it with `--gres=gpu:h200_1g:N`; off by default) |
 | `partitions` | name and which nodes (`cpu`, `gpu`) |
 | `users` | name, persona, QOS; UIDs are assigned in order from 1001 |
 | `kubernetes` | `version` (Kubernetes release of the control plane), `nodes`: groups of KWOK nodes with `prefix`, `count`, `cpus`, `memory_gb`, `pool` and, for GPU nodes, `gpus` and `gpu_type` (the optional Kubernetes part, [chapter 4](04-nodes-and-shells.md)) |
