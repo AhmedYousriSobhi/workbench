@@ -78,3 +78,58 @@ def test_the_selection_carries_the_version_into_the_simulation_and_is_checked():
     assert workbench.from_dict(spec.to_dict(), workbench.defaults(SIM)).slurm_version == "25.11.9"
     spec.slurm_version = "1.2.3"
     assert any("1.2.3" in p for p in spec.problems())
+
+
+class _Resp:
+    def __init__(self, data):
+        import io
+        self.b = io.BytesIO(data)
+
+    def __enter__(self):
+        return self.b
+
+    def __exit__(self, *a):
+        return False
+
+
+def test_fetch_hashes_the_download_and_prints_a_paste_ready_line():
+    import hashlib
+    sha = slurmver.fetch_sha256("25.11.10", opener=lambda url: _Resp(b"abc") if url.endswith("slurm-25.11.10.tar.bz2") else None)
+    assert sha == hashlib.sha256(b"abc").hexdigest()
+    assert slurmver.table_line("25.11.10", sha) == f'    "25.11.10": "{sha}",'
+
+
+def test_fetch_is_bounded_and_refuses_bad_input():
+    with pytest.raises(slurmver.SlurmVersionError, match="larger"):
+        slurmver.fetch_sha256("25.11.10", opener=lambda u: _Resp(b"x" * 100), max_bytes=10)
+    with pytest.raises(slurmver.SlurmVersionError, match="not a Slurm release"):
+        slurmver.fetch_sha256("../etc", opener=lambda u: _Resp(b"x"))
+    with pytest.raises(slurmver.SlurmVersionError, match="no data"):
+        slurmver.fetch_sha256("25.11.10", opener=lambda u: _Resp(b""))
+
+    def boom(u):
+        raise OSError("404")
+    with pytest.raises(slurmver.SlurmVersionError, match="could not download"):
+        slurmver.fetch_sha256("25.11.10", opener=boom)
+
+
+def test_check_refuses_an_unrecorded_version_and_a_mismatch():
+    v = "25.11.9"
+    assert "matches" in slurmver.check(v, slurmver.VERSIONS[v])
+    with pytest.raises(slurmver.SlurmVersionError, match="no recorded SHA256"):
+        slurmver.check("24.11.1", "0" * 64)
+    with pytest.raises(slurmver.SlurmVersionError, match="do not build"):
+        slurmver.check(v, "0" * 64)
+
+
+def test_cli_prints_the_line_and_never_edits_the_table(monkeypatch):
+    from typer.testing import CliRunner
+
+    from benchctl import cli
+    monkeypatch.setattr(slurmver, "_opener", lambda u: _Resp(b"abc"))
+    monkeypatch.setattr(slurmver, "fetch_sha256", lambda v, **k: "a" * 64)
+    before = dict(slurmver.VERSIONS)
+    r = CliRunner().invoke(cli.app, ["get", "slurm-checksum", "25.11.10"])
+    assert r.exit_code == 0 and f'"25.11.10": "{"a" * 64}",' in r.output and slurmver.VERSIONS == before
+    r = CliRunner().invoke(cli.app, ["get", "slurm-checksum", "25.11.9"])
+    assert r.exit_code == 1 and "do not build" in r.output
