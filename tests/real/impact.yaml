@@ -49,7 +49,10 @@
   tests: [test_jira_dc_real]
 - name: GPU exporters
   paths: ["components/gpu-exporter-farm/**", "components/dcgm-exporter/**", "benchctl/dcgm.py", "observability/**"]
-  tests: [test_mocks_real, test_gpu_follows_slurm_real, test_gpu_grafana_real, test_dcgm_real, test_agent_recipes_real, test_alerting_real]
+  tests: [test_mocks_real, test_gpu_follows_slurm_real, test_gpu_grafana_real, test_dcgm_real, test_agent_recipes_real, test_alerting_real, test_prom_targets_real]
+- name: prometheus targets
+  paths: ["benchctl/promtargets.py", "benchctl/k8s.py", "benchctl/teleport.py", "benchctl/dcgm.py", "benchctl/real_gpu.py"]
+  tests: [test_prom_targets_real, test_k8s_real, test_teleport_real]
 - name: alerting
   paths: ["compose/observability.yml", "components/jira-mock/**", "benchctl/alerts.py"]
   tests: [test_alerting_real]

@@ -13,7 +13,8 @@ services:
     volumes:
       - ../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ../observability/rules.yml:/etc/prometheus/rules.yml:ro
-      - ../observability/targets:/etc/prometheus/targets:ro
+      - ./generated/prometheus:/etc/prometheus/generated:ro  # targets and part jobs written by `benchctl up` (benchctl/promtargets.py)
+      - ./generated/secrets/prometheus:/etc/prometheus/secrets:ro  # the Kubernetes CA and the metrics-only token, nothing else
     tmpfs: ["/prometheus:size=200m,uid=65534,gid=65534"]
     mem_limit: 300m
     ports: ["127.0.0.1:9090:9090"]

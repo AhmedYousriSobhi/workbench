@@ -231,6 +231,7 @@ def wire(services: dict, sim: dict) -> None:
     flags = {
         "k8s-etcd": ["--name=node0", "--auto-compaction-retention=1", "--quota-backend-bytes=536870912", "--data-dir=/etcd-data",
                      "--listen-client-urls=http://0.0.0.0:2379", "--advertise-client-urls=http://k8s-etcd:2379",
+                     "--listen-metrics-urls=http://0.0.0.0:2381",  # /metrics for Prometheus on its own plain port (benchctl/promtargets.py)
                      "--listen-peer-urls=http://127.0.0.1:2380", "--initial-advertise-peer-urls=http://127.0.0.1:2380",
                      "--initial-cluster=node0=http://127.0.0.1:2380"],
         "k8s-apiserver": ["--etcd-servers=http://k8s-etcd:2379", "--etcd-prefix=/registry", "--allow-privileged=true",  # kept on: the team-b privileged-pod fixture (k8s/fixtures/20-signals.yaml) is a security signal and would be rejected (#466)

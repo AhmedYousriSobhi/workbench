@@ -1,0 +1,11 @@
+[
+  {
+    "targets": [
+      "gpu-exporter-farm:9400"
+    ],
+    "labels": {
+      "job": "sim-nodes",
+      "nodes": "cn001,cn002,cn003,cn004,gpu001,gpu002"
+    }
+  }
+]

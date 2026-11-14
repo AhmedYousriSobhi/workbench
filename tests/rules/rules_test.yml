@@ -73,21 +73,23 @@ tests:
         alertname: NodeDown
         exp_alerts: []
 
-  - name: ExporterDown fires when the farm target is down for 30 s
+  - name: ExporterDown fires for the node whose target is down for 30 s, not for the others
     interval: 15s
     input_series:
-      - series: 'up{job="sim-nodes",instance="gpu-exporter-farm:9400"}'
+      - series: 'up{job="sim-nodes",instance="gpu001"}'
         values: '0+0x8'
+      - series: 'up{job="sim-nodes",instance="gpu002"}'
+        values: '1+0x8'
       - series: 'up{job="governor",instance="host.docker.internal:9401"}'
         values: '0+0x8'
     alert_rule_test:
       - eval_time: 1m
         alertname: ExporterDown
         exp_alerts:
-          - exp_labels: {job: sim-nodes, instance: "gpu-exporter-farm:9400", severity: page}
+          - exp_labels: {job: sim-nodes, instance: gpu001, severity: page}
             exp_annotations:
-              summary: "The GPU exporter farm does not answer"
-              description: "Prometheus cannot scrape gpu-exporter-farm:9400."
+              summary: "The metrics of gpu001 cannot be scraped"
+              description: "gpu001 is down or the exporter farm does not answer."
 
   - name: JiraErrors fires on three or more client errors in a minute, not on a quiet counter
     interval: 15s
