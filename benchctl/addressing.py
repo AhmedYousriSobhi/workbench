@@ -9,6 +9,7 @@ the kind, so scaling one kind never renumbers the other); the head node (login) 
 import this file); tests/test_addressing.py keeps the two equal."""
 import ipaddress
 
+from . import dcgm
 from . import logins as logins_mod
 from .nodes import hardware_nodes
 
@@ -23,10 +24,12 @@ IPMI_LOGIN_IP = "10.148.255.254"  # the head node is also on the BMC network (th
 IPMI_FARM_IP = "10.148.255.12"    # the farm that owns every BMC's state
 BMC_NODE_PORT_BASE = 9000          # the farm's per-node TLS port: 9000 + index in node order (components/bmc-farm/bmc.py)
 # service -> last octet in 10.141.255.0/24 (13 to 15 are reserved, unused: the scenario engine, user sim and ticket bot are not containers, ADR 0006). observability.yml (a static file) repeats the three observability ones.
+DCGM_BASE = 50  # the real DCGM exporters (benchctl/dcgm.py) take 50, 51, ... in node order, one per node (up to 8), named by dcgm.service; planned only when the part is on (issue 434)
 SERVICE_HOSTS = {"slurmctld": 1, "slurmrestd": 2, "slurmdbd": 3, "mariadb": 4, "jump": 5, "bcm-mock": 10, "jira-mock": 11,
                  "bmc-farm": 12, "jira-real": 16, "jira-db": 17,
                  "teleport": 30, "objectstore": 31, "k8s-apiserver": 40, "k8s-etcd": 41, "k8s-controller-manager": 42, "k8s-scheduler": 43,
-                 "kwok-controller": 44, "prometheus": 20, "grafana": 21, "gpu-exporter-farm": 22, "alertmanager": 23}
+                 "kwok-controller": 44, "prometheus": 20, "grafana": 21, "gpu-exporter-farm": 22, "alertmanager": 23,
+                 "real-gpu": 24}  # the real card's exporter (benchctl/real_gpu.py), planned always, used when that part is on
 
 
 class AddressingError(Exception):
@@ -64,6 +67,11 @@ def host_ip(subnet: str, index: int, kind: str = "compute") -> str:
     return f"{a}.{b}.{index // 254 + BLOCK[kind]}.{index % 254 + 1}"
 
 
+def dcgm_hosts(sim: dict) -> dict[str, int]:
+    """{service: last octet} of the real DCGM exporters this simulation has (none without a GPU node)."""
+    return {dcgm.service(sim, n): DCGM_BASE + i for i, n in enumerate(dcgm.nodes(sim))}
+
+
 def plan(sim: dict, compute_override: int | None = None) -> dict:
     """{"internal", "ipmi", "login", "nodes": {name: ip}, "bmc": {node: ip}, "services": {name: ip}}."""
     a, b = _prefix(INTERNAL)
@@ -79,7 +87,7 @@ def plan(sim: dict, compute_override: int | None = None) -> dict:
     logins = {logins_mod.name(i): login_ip(i) for i, _ in enumerate(logins_mod.modes(sim))}
     return {"internal": INTERNAL, "ipmi": IPMI, "login": LOGIN_IP, "logins": logins, "ipmi_logins": {n: login_ip(i, IPMI) for i, n in enumerate(logins)}, "nodes": nodes, "bmc": bmc,
             "bmc_port": {n: BMC_NODE_PORT_BASE + i for i, (n, _) in enumerate(hardware_nodes(sim, compute_override))},
-            "services": {s: f"{a}.{b}.255.{h}" for s, h in SERVICE_HOSTS.items()}}
+            "services": {s: f"{a}.{b}.255.{h}" for s, h in {**SERVICE_HOSTS, **dcgm_hosts(sim)}.items()}}
 
 
 def address_of(p: dict, name: str) -> str | None:
