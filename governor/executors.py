@@ -1,7 +1,8 @@
-"""Real actions: cgroup v2 files for freeze/throttle/reclaim, Docker CLI for stop/start, virsh for VMs.
+"""Real actions: cgroup v2 files for freeze/throttle/reclaim, the Docker Engine API for stop/start, virsh for VMs.
 
 cgroup writes go through pre-opened file handles (MitigationPath) so L3 needs no new allocation
-(GV-8). Docker/virsh calls spawn a process; they are used only at L4+ and are time-boxed.
+(GV-8). Docker actions use a DockerAPI connection opened at startup (no fork); without one (the socket cannot be
+reached at startup) they fall back to the docker CLI. virsh spawns a process and is used only at L4+, time-boxed.
 """
 import json
 import logging
@@ -9,6 +10,7 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
+from .dockerapi import DockerAPI, DockerError
 from .memlock import MitigationPath
 from .planner import Action, Group
 
@@ -58,7 +60,8 @@ def discover_docker(run_cmd: Callable = run) -> tuple[list[Group], dict[str, Pat
 class Executor:
     def __init__(self, groups: list[Group], cgroups: dict[str, Path],
                  path: MitigationPath | None = None, run_cmd: Callable = run,
-                 arrivals_flag: str = ARRIVALS_FLAG):
+                 arrivals_flag: str = ARRIVALS_FLAG, docker: DockerAPI | None = None):
+        self.docker = docker
         self.kinds = {g.name: g.kind for g in groups}
         self.cgroups, self.path, self.run = cgroups, path or MitigationPath(), run_cmd
         self.arrivals_flag = arrivals_flag
@@ -83,6 +86,19 @@ class Executor:
                         self.path.open(str(p))
                     except OSError as e:
                         log.warning("cannot open %s: %s", p, e)
+
+    def _docker(self, a: Action, op: str, target: str, tolerate: str = "") -> None:
+        """One docker pause|unpause|kill|stop|start: the Engine API when connected, else the CLI. `tolerate` is a message that is fine."""
+        if self.docker is not None:
+            try:
+                self.docker.call(op, target)
+            except DockerError as e:
+                if not (tolerate and tolerate in str(e)):
+                    raise RuntimeError(f"{a} failed: {e}") from e
+            return
+        r = self.run(["docker", op, *(["-t", "2"] if op == "stop" else []), target], timeout=20)
+        if r.returncode != 0 and not (tolerate and tolerate in r.stderr):
+            raise RuntimeError(f"{a} failed: {r.stderr.strip()}")
 
     def _write(self, name: str, fname: str, data: str) -> None:
         p = str(self.cgroups[name] / fname)
@@ -119,9 +135,9 @@ class Executor:
             cg = self.cgroups.get(target)
             if cg and self.path.has(str(cg / "cgroup.kill")):
                 self._write(target, "cgroup.kill", "1")
-            self._check(self.run(["docker", "stop", "-t", "2", target], timeout=20), a)
+            self._docker(a, "stop", target)
         elif verb == "start":
-            self._check(self.run(["docker", "start", target]), a)
+            self._docker(a, "start", target)
         elif verb == "save":
             self._check(self.run(["virsh", "-c", LIBVIRT_URI, "managedsave", target], timeout=60), a)
         else:
@@ -136,7 +152,7 @@ class Executor:
 class UserExecutor(Executor):
     """Rootless governor (no sudo): the Docker API replaces the cgroup files only root can write.
 
-    freeze/thaw -> docker pause/unpause, stop -> docker stop. throttle (memory.high) and reclaim need root and are
+    freeze/thaw -> docker pause/unpause, stop -> docker kill then stop (Engine API, no fork). throttle (memory.high) and reclaim need root and are
     skipped with one log line each: the ladder still runs, it just has fewer rungs. See ADR 0010.
     """
 
@@ -146,11 +162,6 @@ class UserExecutor(Executor):
 
     def prealloc(self) -> None:  # nothing to pre-open: no cgroup files are used
         pass
-
-    def _docker(self, a: Action, *cmd: str, tolerate: str = "") -> None:
-        r = self.run(["docker", *cmd], timeout=20)
-        if r.returncode != 0 and not (tolerate and tolerate in r.stderr):
-            raise RuntimeError(f"{a} failed: {r.stderr.strip()}")
 
     def __call__(self, a: Action) -> None:
         verb, target = a.verb.split("=")[0], a.target
@@ -162,7 +173,7 @@ class UserExecutor(Executor):
             # SIGKILL first, like cgroup.kill in the root path: `docker stop -t 2` waits for SIGTERM, which a runaway
             # PID 1 ignores, and the kernel OOM killer wins that race (found by the live hog test). Then stop reconciles.
             self._docker(a, "kill", target, tolerate="is not running")
-            self._docker(a, "stop", "-t", "2", target)
+            self._docker(a, "stop", target)
         elif verb in ("throttle", "unthrottle", "reclaim"):
             if verb not in self._warned:
                 self._warned.add(verb)

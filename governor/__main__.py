@@ -15,6 +15,7 @@ from pathlib import Path
 from . import control, metrics
 from .annotate import Annotator
 from .core import Governor
+from .dockerapi import DockerAPI, socket_path
 from .executors import ARRIVALS_FLAG, Executor, UserExecutor, discover_docker
 from .hostsize import derive, read_host
 from .ladder import Ladder, Thresholds
@@ -48,6 +49,21 @@ def arrivals_flag_path(given: str, user_mode: bool, workdir: str | None = None) 
     if user_mode and given == ARRIVALS_FLAG:
         return str(Path(os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/workbench-{os.getuid()}") / "workbench" / "arrivals.paused")
     return given
+
+
+def open_docker() -> DockerAPI | None:
+    """The Docker Engine API on a connection opened now, before pressure: stop, kill, pause and start then fork nothing (GV-8, issue 452).
+    None (the docker CLI is used instead, with this one warning) when $DOCKER_HOST is not a Unix socket or the socket cannot be opened."""
+    path = socket_path()
+    try:
+        if path is None:
+            raise OSError("DOCKER_HOST is not a unix:// socket")
+        api = DockerAPI(path)
+    except OSError as e:
+        log.warning("Docker Engine API unavailable (%s): mitigations will run the docker CLI, which forks under pressure", e)
+        return None
+    log.info("Docker Engine API connected at %s: mitigations fork nothing", path)
+    return api
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -95,7 +111,8 @@ def main(argv: list[str] | None = None) -> None:
     ladder = Ladder(Thresholds(**{**derive(reserve, floor), **json.loads(args.thresholds or "{}")}))
     log.info("memory thresholds from reserve %.1f GB, floor %.1f GB: L4 < %.2f, L1 < %.2f, calm > %.2f GB",
              reserve, floor, ladder.t.l4_mem / GB, ladder.t.l1_mem / GB, ladder.t.l0_mem / GB)
-    executor = (UserExecutor if args.user_mode else Executor)(groups, cgroups, path, arrivals_flag=arrivals_flag_path(args.arrivals_flag, args.user_mode, args.workdir))
+    executor = (UserExecutor if args.user_mode else Executor)(groups, cgroups, path, arrivals_flag=arrivals_flag_path(args.arrivals_flag, args.user_mode, args.workdir),
+                                                              docker=None if args.dry_run else open_docker())
     if clear_stale_flag(executor.arrivals_flag, args.dry_run):
         log.warning("removed a stale arrivals pause flag left by an earlier governor (%s)", executor.arrivals_flag)
     watchdog = None if args.no_watchdog else Watchdog()
