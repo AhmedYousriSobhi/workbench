@@ -43,8 +43,8 @@ def test_a_file_put_on_one_node_is_read_on_another(built):
     put = on("cn001", "head -c 3000000 /dev/urandom > /tmp/obj.bin && sha256sum /tmp/obj.bin > /tmp/obj.sum && s5cmd cp /tmp/obj.bin s3://$WORKBENCH_S3_BUCKET/obj.bin")
     assert put.returncode == 0, put.stderr
     want = on("cn001", "cut -d' ' -f1 /tmp/obj.sum").stdout.strip()
-    got = on("cn002", "s5cmd cp s3://$WORKBENCH_S3_BUCKET/obj.bin /tmp/back.bin && sha256sum /tmp/back.bin | cut -d' ' -f1")
-    assert got.returncode == 0 and got.stdout.strip() == want, got.stderr
+    got = on("cn002", "s5cmd cp s3://$WORKBENCH_S3_BUCKET/obj.bin /tmp/back.bin && sha256sum /tmp/back.bin | cut -d' ' -f1")  # s5cmd prints its own `cp ...` line first
+    assert got.returncode == 0 and got.stdout.strip().splitlines()[-1] == want, got.stdout + got.stderr
     listing = on("cn002", "s5cmd ls s3://$WORKBENCH_S3_BUCKET/")
     assert "obj.bin" in listing.stdout
 
