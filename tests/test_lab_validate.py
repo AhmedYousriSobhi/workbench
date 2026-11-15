@@ -182,9 +182,18 @@ def test_accounting_drops_the_database_even_when_the_one_shot_raises(tmp_path):
     assert re.search(r"DROP DATABASE IF EXISTS `lab_validate_[0-9a-f]{8}`", ex.text()) and "docker rm -f lab-validate-" in ex.text()
 
 
-def test_accounting_without_the_grant_is_skipped_with_the_fix(tmp_path):
+def test_accounting_that_cannot_create_the_scratch_database_fails_with_the_reason(tmp_path):
     r, _ = accounting(tmp_path, Fake(sacct_routes(db_reply=(1, "ERROR 1044 (42000): Access denied for user 'slurm'@'%' to database 'lab_validate_x'"))))
-    assert r["status"] == "skipped" and "benchctl up" in r["messages"][0]
+    assert r["status"] == "failed" and "could not create the scratch database" in r["messages"][0] and "Access denied" in r["messages"][0]
+
+
+def test_every_accounting_check_drops_leftover_scratch_databases_first(tmp_path):
+    ex = Fake(sacct_routes(run=(0, out("sacctmgr-run-ok.txt"))) + [("SHOW DATABASES", (0, "lab_validate_aa11bb22\nlab_validate_cc33dd44\n"))])
+    accounting(tmp_path, ex)
+    sqls = [s for a, s in ex.calls if s]
+    drops = [i for i, s in enumerate(sqls) if s.startswith(("DROP DATABASE IF EXISTS `lab_validate_aa11bb22`", "DROP DATABASE IF EXISTS `lab_validate_cc33dd44`"))]
+    create = next(i for i, s in enumerate(sqls) if s.startswith("CREATE DATABASE"))
+    assert len(drops) == 2 and max(drops) < create
 
 
 def test_qos_script_refuses_shell_characters():
@@ -194,10 +203,55 @@ def test_qos_script_refuses_shell_characters():
         lab_validate.qos_script([{"Name": "x", "Priority": "1$(id)"}])
 
 
-def test_grant_for_scratch_databases_is_generated():
+def _like(pattern: str) -> re.Pattern:
+    """MariaDB database-name pattern semantics in a grant: `\\_` and `\\%` literal, `_` one character, `%` any run."""
+    rx, i = "", 0
+    while i < len(pattern):
+        c = pattern[i]
+        if c == "\\" and i + 1 < len(pattern):
+            rx += re.escape(pattern[i + 1])
+            i += 1
+        else:
+            rx += {"_": ".", "%": ".*"}.get(c, re.escape(c))
+        i += 1
+    return re.compile(rx)
+
+
+def test_grant_pattern_escapes_underscores_and_never_matches_the_accounting_database():
     from benchctl import slurmconf
 
-    assert "lab\\_validate\\_%" in slurmconf.LAB_GRANT_SQL and "'slurm'@'%'" in slurmconf.LAB_GRANT_SQL
+    pat = _like(slurmconf.LAB_DB_PATTERN)
+    assert slurmconf.LAB_DB_PATTERN == "lab\\_validate\\_%"
+    assert pat.fullmatch("lab_validate_ab12cd34") and pat.fullmatch("lab_validate_")
+    for other in ("slurm_acct_db", "labXvalidateXab12", "lab_validate", "mysql", "lab-validate-ab12"):
+        assert not pat.fullmatch(other), other
+    assert _like("lab_validate_%").fullmatch("labXvalidateXab12")  # unescaped, `_` would be a wildcard
+
+
+def test_grant_gives_only_what_slurmdbd_needs_and_nothing_global():
+    from benchctl import slurmconf
+
+    sql = slurmconf.LAB_GRANT_SQL
+    assert sql.startswith("GRANT CREATE, DROP, ALTER, INDEX, SELECT, INSERT, UPDATE, DELETE, LOCK TABLES, CREATE TEMPORARY TABLES ON ")
+    assert "ON `lab\\_validate\\_%`.* TO 'slurm'@'%'" in sql
+    assert "GRANT OPTION" not in sql.upper() and "*.*" not in sql and "ALL" not in sql.split("ON")[0].upper().split()
+
+
+def test_the_grant_file_is_generated_for_fresh_databases_and_the_root_password_is_kept(tmp_path):
+    from benchctl import compose, slurmconf
+
+    out = tmp_path / "gen" / "docker-compose.yml"
+    data = compose.generate(SIM, compose.load_profile("std"))
+    compose.write(data, out, SIM, 16)
+    assert (tmp_path / "gen" / "slurm" / "lab-grant.sql").read_text() == slurmconf.LAB_GRANT_SQL
+    env = (tmp_path / "gen" / "secrets" / "mariadb.env")
+    root = next(ln.split("=", 1)[1] for ln in env.read_text().splitlines() if ln.startswith("MARIADB_ROOT_PASSWORD="))
+    assert len(root) >= 24 and "RANDOM_ROOT" not in env.read_text()
+    live = next(ln.split("=", 1)[1] for ln in env.read_text().splitlines() if ln.startswith("MARIADB_DATABASE="))
+    assert live == "slurm_acct_db" and not _like(slurmconf.LAB_DB_PATTERN).fullmatch(live)  # the stack's real accounting database is out of reach
+    compose.write(data, out, SIM, 16)
+    assert f"MARIADB_ROOT_PASSWORD={root}" in env.read_text()  # a running database keeps matching
+    assert env.stat().st_mode & 0o077 == 0
 
 
 # ---- promtool

@@ -334,9 +334,7 @@ def check_accounting(lab_dir: Path, ex: Executor, work: Path, sim_secrets: Path 
     db, name = f"{DB_PREFIX}{run_id}", f"lab-validate-{run_id}"
     rc, out = sql(f"CREATE DATABASE `{db}`;")
     if rc != 0:
-        why = ("the accounting database has no grant for scratch databases yet (recreate it: `benchctl down` then `benchctl up`)"
-               if re.search(r"denied|1044|1142", out) else f"could not create the scratch database: {_first_line(out)}")
-        return result(tool, shown, "skipped", [f"skipped: {why}"])
+        return result(tool, shown, "failed", [f"could not create the scratch database: {_first_line(out)}"])
     try:
         work.mkdir(parents=True, exist_ok=True)
         (work / "sacctmgr.dump").write_text(dump)

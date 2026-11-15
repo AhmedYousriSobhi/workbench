@@ -62,7 +62,7 @@ Question it answers: does production's configuration run in the lab, and which k
 
 A tool whose part is not running (accounting, Kubernetes, Teleport) is a `SKIP` line with the command to start it, and the summary says `passed with N skipped`, never just `passed`. Exit codes: 0 passed, 1 failed or refused, 3 `--side candidate` (comes with issue 553; one line, not a failure). A line marked `[restart required]` means applying that configuration restarts slurmctld.
 
-It runs through the governor (`lab-validate`) only when the memory level is L0 or L1, one run at a time; otherwise one message says why (`refused at L2: ...`). The one-shots are class P5, have no `workbench.class` label, are removed afterwards and the scratch database is dropped. Accounting needs the grant that `benchctl up` now sets on the database: if accounting was started before this change, `benchctl down` then `benchctl up` once (until then the line is skipped and says so).
+It runs through the governor (`lab-validate`) only when the memory level is L0 or L1, one run at a time; otherwise one message says why (`refused at L2: ...`). The one-shots are class P5, have no `workbench.class` label, are removed afterwards and the scratch database is dropped. Accounting: `benchctl up` gives the database user `slurm` the rights slurmdbd needs (create, drop, alter, index, select, insert, update, delete, lock tables, create temporary tables) on databases named `lab_validate_*` only, never on the real accounting database and without grant option, every time it runs, so an existing stack needs no restart. Each run first drops any `lab_validate_*` database an interrupted run left.
 
 ## What is read
 
@@ -94,6 +94,7 @@ Imported files stay local: `compose/generated/` is gitignored and `scripts/check
 | `no recognised file` | the folder needs at least one file from the table |
 | `refused at L2: ...` (validate) | wait for the memory level to drop, or check `./scripts/benchctl status` |
 | `the governor is not reachable` (validate) | `./scripts/benchctl start` |
+| `could not create the scratch database` (sacctmgr load) | run `./scripts/benchctl up` (it applies the database grant), then validate again |
 | `skipped: ... is not running` | start that part (`benchctl up --with accounting`, `--with k8s`, `--with teleport`) and run again |
 
 ## Under the hood
