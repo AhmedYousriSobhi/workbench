@@ -1,7 +1,51 @@
-SYNTHETIC (not captured from a real tool; the owner is to replace it with a capture: `./scripts/verify.sh --unit lab --clean`)
-slurmctld: error: Configured MailProg is invalid
-slurmctld: error: _find_node_record: lookup failure for node "cpu001"
-slurmctld: error: cgroup notice: CgroupPlugin=disabled
-slurmctld: error: slurm_persist_conn_open_without_init: failed to open persistent connection to host:localhost:6819: Connection refused
-slurmctld: slurmctld version 25.11.9 started on cluster prodsim
-slurmctld: Running as primary controller
+CAPTURED from slurmctld 26.05.5 in the throwaway one-shot (check_slurm), debug lines left out (issue 778)
+[2026-11-15T09:32:33.836] error: HealthCheckTimeout (60) must be less than HealthCheckInterval (30), please review.
+[2026-11-15T09:32:33.843] error: Job accounting information gathered, but not stored
+[2026-11-15T09:32:33.845] slurmctld version 26.05.5 started on cluster workbench(0)
+[2026-11-15T09:32:33.845] cred/munge: init: Munge credential signature plugin loaded
+[2026-11-15T09:32:33.845] select/cons_tres: init: select/cons_tres loaded
+[2026-11-15T09:32:33.845] preempt/qos: init: preempt/qos loaded
+[2026-11-15T09:32:33.845] warning: Even though we are collecting accounting information you have asked for it not to be stored (no AccountingStorageType set). If this is not what you have in mind you will need to change it.
+[2026-11-15T09:32:33.846] creating clustername file: ClusterName=workbench ClusterID=246
+[2026-11-15T09:32:33.847] No memory enforcing mechanism configured.
+[2026-11-15T09:32:33.847] topology/flat: init: topology Flat plugin loaded
+[2026-11-15T09:32:33.850] sched: Backfill scheduler plugin loaded
+[2026-11-15T09:32:33.850] No node state file (/var/spool/slurmctld/node_state) to recover
+[2026-11-15T09:32:33.851] error: _xgetaddrinfo: getaddrinfo(cpu001:6818) failed: Temporary failure in name resolution
+[2026-11-15T09:32:33.851] error: slurm_set_addr: Unable to resolve "cpu001"
+[2026-11-15T09:32:33.851] error: slurm_get_port: Address family '0' not supported
+[2026-11-15T09:32:33.851] error: _set_node_addrs: failure on cpu001
+[2026-11-15T09:32:33.851] error: _xgetaddrinfo: getaddrinfo(cpu002:6818) failed: Temporary failure in name resolution
+[2026-11-15T09:32:33.851] error: slurm_set_addr: Unable to resolve "cpu002"
+[2026-11-15T09:32:33.851] error: slurm_get_port: Address family '0' not supported
+[2026-11-15T09:32:33.851] error: _set_node_addrs: failure on cpu002
+[2026-11-15T09:32:33.851] error: _xgetaddrinfo: getaddrinfo(cpu003:6818) failed: Temporary failure in name resolution
+[2026-11-15T09:32:33.851] error: slurm_set_addr: Unable to resolve "cpu003"
+[2026-11-15T09:32:33.851] error: slurm_get_port: Address family '0' not supported
+[2026-11-15T09:32:33.851] error: _set_node_addrs: failure on cpu003
+[2026-11-15T09:32:33.851] error: _xgetaddrinfo: getaddrinfo(cpu004:6818) failed: Temporary failure in name resolution
+[2026-11-15T09:32:33.851] error: slurm_set_addr: Unable to resolve "cpu004"
+[2026-11-15T09:32:33.851] error: slurm_get_port: Address family '0' not supported
+[2026-11-15T09:32:33.851] error: _set_node_addrs: failure on cpu004
+[2026-11-15T09:32:33.852] error: _xgetaddrinfo: getaddrinfo(gpu001:6818) failed: Temporary failure in name resolution
+[2026-11-15T09:32:33.852] error: slurm_set_addr: Unable to resolve "gpu001"
+[2026-11-15T09:32:33.852] error: slurm_get_port: Address family '0' not supported
+[2026-11-15T09:32:33.852] error: _set_node_addrs: failure on gpu001
+[2026-11-15T09:32:33.852] error: _xgetaddrinfo: getaddrinfo(gpu002:6818) failed: Temporary failure in name resolution
+[2026-11-15T09:32:33.852] error: slurm_set_addr: Unable to resolve "gpu002"
+[2026-11-15T09:32:33.852] error: slurm_get_port: Address family '0' not supported
+[2026-11-15T09:32:33.852] error: _set_node_addrs: failure on gpu002
+[2026-11-15T09:32:33.852] No job state file (/var/spool/slurmctld/job_state) to recover
+[2026-11-15T09:32:33.852] select/cons_tres: part_data_create_array: select/cons_tres: preparing for 2 partitions
+[2026-11-15T09:32:33.852] power: automatic power save mode disabled
+[2026-11-15T09:32:33.852] No reservation state file (/var/spool/slurmctld/resv_state) to recover
+[2026-11-15T09:32:33.852] No trigger state file (/var/spool/slurmctld/trigger_state) to recover
+[2026-11-15T09:32:33.852] read_slurm_conf: backup_controller not specified
+[2026-11-15T09:32:33.852] select/cons_tres: select_p_reconfigure: select/cons_tres: reconfigure
+[2026-11-15T09:32:33.852] select/cons_tres: part_data_create_array: select/cons_tres: preparing for 2 partitions
+[2026-11-15T09:32:33.852] Running as primary controller
+[2026-11-15T09:32:34.337] Terminate signal SIGTERM received
+[2026-11-15T09:32:34.338] Saving all slurm state
+[2026-11-15T09:32:34.348] No job state file (/var/spool/slurmctld/job_state) found
+[2026-11-15T09:32:34.379] sched/backfill: fini: Backfill scheduler plugin shutting down
+[2026-11-15T09:32:34.380] Unable to remove pidfile '/run/slurmctld.pid': Permission denied

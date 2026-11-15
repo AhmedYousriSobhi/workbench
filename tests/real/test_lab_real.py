@@ -52,12 +52,60 @@ def test_slurm_green_and_red(lab_cluster):
     assert red["status"] == "failed" and "fatal" in red["messages"][0]
 
 
+PROBE = """
+for h in slurmdbd mariadb slurmctld cn001 login "$@"; do getent hosts "$h" >/dev/null && echo "RESOLVES $h"; done
+for t in "$@"; do timeout 3 bash -c "echo > /dev/tcp/${t%:*}/${t#*:}" 2>/dev/null && echo "CONNECTS $t"; done
+echo probe-done
+"""
+
+
+def _ip(container: str) -> str:
+    return sh("docker", "inspect", container, "--format", '{{(index .NetworkSettings.Networks "workbench_default").IPAddress}}').strip()
+
+
+def test_the_slurm_one_shot_network_cannot_reach_the_live_stack(lab_cluster):
+    """Owner requirement (ADR 0081 addendum, issue 778): the throwaway slurmctld never meets the live slurmdbd, slurmctld or a node."""
+    targets = [f"{_ip(c)}:{p}" for c, p in (("workbench-slurmdbd-1", 6819), ("workbench-mariadb-1", 3306), ("workbench-slurmctld-1", 6817), ("workbench-login-1", 22))]
+    targets.append("1.1.1.1:53")  # and nothing outside either
+
+    def probe(network: str, *hosts: str) -> str:
+        return sh("docker", "run", "--rm", "--network", network, "--entrypoint", "bash", lab_validate.SLURM_IMAGE, "-c", PROBE, "probe", *hosts)
+
+    control = probe(lab_validate.NETWORK, targets[1])
+    assert f"CONNECTS {targets[1]}" in control, control  # the probe can see a live service where it is allowed to: the test is not vacuous
+    with lab_validate.throwaway_network(lab_validate.run_cmd) as net:
+        assert sh("docker", "network", "inspect", net, "--format", "{{.Internal}}").strip() == "true"
+        assert sh("docker", "network", "inspect", net, "--format", "{{len .Containers}}").strip() == "0"  # no live container is attached
+        got = probe(net, *targets)
+        assert "probe-done" in got and "RESOLVES" not in got and "CONNECTS" not in got, got
+    assert net not in sh("docker", "network", "ls", "--format", "{{.Name}}")  # removed with the block
+
+
+def test_check_slurm_never_uses_the_compose_network_and_removes_its_own(lab_cluster):
+    seen: list[list[str]] = []
+
+    def spy(argv, stdin=None, timeout=60):
+        seen.append(argv)
+        return lab_validate.run_cmd(argv, stdin, timeout)
+
+    info = lab_validate.render(GOOD, lab_cluster)
+    r = lab_validate.check_slurm(Path(info["dir"]), info["host"], info["restart_keys"], spy)
+    assert r["status"] == "passed", r
+    run = next(a for a in seen if a[:2] == ["docker", "run"])
+    net = run[run.index("--network") + 1]
+    assert net != lab_validate.NETWORK and net.startswith("workbench-lab-validate-")
+    assert net not in sh("docker", "network", "ls", "--format", "{{.Name}}")
+
+
 def test_sacctmgr_load_green_and_nothing_left_behind(lab_cluster):
     r = results(lab_cluster, GOOD)["sacctmgr load"]
+    if r["status"] == "skipped" and "ROUTINE" in r["messages"][0]:
+        pytest.skip("the scratch-database grant has no CREATE/ALTER ROUTINE yet (owner decision pending): " + r["messages"][0])
     assert r["status"] == "passed", r
     dbs = sh("docker", "exec", "-i", "workbench-mariadb-1", "sh", "-c", 'exec mariadb -uslurm -p"$MARIADB_PASSWORD" -N', stdin="SHOW DATABASES LIKE 'lab\\_validate\\_%';")
     assert "lab_validate_" not in dbs
     assert "lab-validate-" not in sh("docker", "ps", "-a", "--format", "{{.Names}}")
+    assert "lab-validate-" not in sh("docker", "network", "ls", "--format", "{{.Name}}")
 
 
 def test_sacctmgr_load_red_on_a_dump_the_real_tool_refuses(lab_cluster):

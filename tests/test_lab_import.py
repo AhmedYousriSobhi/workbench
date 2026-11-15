@@ -199,3 +199,10 @@ def test_cli_import_prints_a_summary_and_one_line_on_refusal(tmp_path, monkeypat
 
 def test_lab_store_is_refused_by_the_privacy_script_when_staged():
     assert "compose/generated" in (ROOT / "scripts" / "check-privacy.sh").read_text()
+
+
+def test_a_real_sacctmgr_dump_starts_with_qos_records_that_are_not_accounts():
+    """Captured (issue 778): `sacctmgr dump` writes `QOS - 'name':...` lines before the cluster; the QOS come from `sacctmgr show qos`."""
+    text = "QOS - 'normal':Description='Normal QOS default'\nCluster - 'c1':Fairshare=1\nParent - 'root'\nAccount - 'a':Description='a':Fairshare=1\n"
+    got = li.parse_sacctmgr_dump(text)
+    assert got["cluster"] == "c1" and [a["name"] for a in got["accounts"]] == ["a"]

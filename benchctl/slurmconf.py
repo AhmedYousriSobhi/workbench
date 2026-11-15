@@ -126,7 +126,8 @@ def _range(names: list[str]) -> str:
 # Applied twice: the init file (a fresh database) and at every `benchctl up` (stack.grant_lab_databases), because the init directory
 # only runs when the database is first created.
 LAB_DB_PATTERN = "lab\\_validate\\_%"
-LAB_PRIVS = "CREATE, DROP, ALTER, INDEX, SELECT, INSERT, UPDATE, DELETE, LOCK TABLES, CREATE TEMPORARY TABLES"
+LAB_PRIVS = ("CREATE, DROP, ALTER, INDEX, SELECT, INSERT, UPDATE, DELETE, LOCK TABLES, CREATE TEMPORARY TABLES, "
+             "CREATE ROUTINE, ALTER ROUTINE, EXECUTE")  # slurmdbd creates the stored procedure get_lineage in its database (captured, issue 778)
 LAB_GRANT_SQL = f"GRANT {LAB_PRIVS} ON `{LAB_DB_PATTERN}`.* TO 'slurm'@'%';\n"
 
 

@@ -2,7 +2,7 @@
 
 Checks the lab's *baseline* (the imported production configuration, rendered for the lab) with throwaway one-shots:
 
-    slurm.conf         a throwaway slurmctld on the rendered config (no network, empty state, no live key)
+    slurm.conf         a throwaway slurmctld on the rendered config (its own internal network, empty state, no live key)
     sacctmgr load      the dump and QOS loaded into a scratch database through a throwaway slurmdbd, then diffed
     promtool           `check rules` and `test rules`
     kubectl            `apply --dry-run=server` against the lab's API server
@@ -16,6 +16,7 @@ never start a container. One-shots carry no `workbench.class` label (the governo
 """
 from __future__ import annotations
 
+import contextlib
 import difflib
 import json
 import re
@@ -24,7 +25,7 @@ import shlex
 import shutil
 import subprocess
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import yaml
@@ -46,7 +47,9 @@ START_WAIT_S = 20  # slurmctld must report that it started within this
 ONE_SHOT_TIMEOUT_S = 90
 SIDES = ("baseline", "candidate")
 NOT_AVAILABLE = 3  # exit code of `--side candidate` until issue 553: not a failure, not a pass
-STARTED = re.compile(r"started on cluster|running as primary|primary mode|running in primary", re.IGNORECASE)
+# slurmctld logs "started on cluster" BEFORE it checks the nodes, partitions and plugins (a bad partition QOS is a `fatal:` 5 ms later),
+# so only the line it writes when the whole configuration is loaded counts (captured from 25.11 and 26.05, issue 778)
+STARTED = re.compile(r"Running as primary controller", re.IGNORECASE)
 SAFE = re.compile(r"[A-Za-z0-9_.@:=,/<>+ -]*")
 IDENT = re.compile(r"[A-Za-z0-9_.-]+")
 
@@ -167,6 +170,7 @@ SLURM_SCRIPT = f"""set -u
 export PATH=/opt/slurm/sbin:/opt/slurm/bin:$PATH
 mkdir -p /etc/slurm /etc/munge /run/munge /var/log/munge /var/lib/munge /var/spool/slurmctld /var/spool/slurmd
 cp /render/* /etc/slurm/
+sed -i '/^PartitionName=/s/ QOS=[^ ]*//' /etc/slurm/slurm.conf  # a partition QOS is checked against accounting, which this one-shot has not
 dd if=/dev/urandom of=/etc/munge/munge.key bs=1 count=1024 2>/dev/null
 chown -R munge:munge /etc/munge /var/lib/munge /var/log/munge /run/munge
 chmod 400 /etc/munge/munge.key
@@ -179,7 +183,7 @@ pid=$!
 i=0
 while [ $i -lt {START_WAIT_S * 2} ]; do
   grep -q 'fatal:' /tmp/ctld.log && break
-  grep -qiE 'started on cluster|running as primary|primary mode|running in primary' /tmp/ctld.log && break
+  grep -q 'Running as primary controller' /tmp/ctld.log && break
   kill -0 $pid 2>/dev/null || break
   sleep 0.5
   i=$((i+1))
@@ -198,19 +202,41 @@ def parse_slurmctld(out: str) -> tuple[bool, list[str], list[str]]:
     return (bool(STARTED.search(out)) and not fatal), fatal, warn
 
 
+@contextlib.contextmanager
+def throwaway_network(ex: Executor) -> Iterator[str]:
+    """A per-run Docker network with `--internal` (no gateway, no route out) that no workbench container is attached to; it is removed
+    when the block ends, on an error too. Never the compose network (issue 778, ADR 0081 addendum)."""
+    net = f"{PROJECT}-lab-validate-{secrets.token_hex(4)}"
+    assert net != NETWORK
+    rc, out = ex(["docker", "network", "create", "--internal", net], timeout=30)
+    if rc != 0:
+        raise LabError(f"could not create the throwaway network: {_first_line(out)}")
+    try:
+        yield net
+    finally:
+        ex(["docker", "network", "rm", net], timeout=30)
+
+
 def check_slurm(render_dir: Path, host: str, restart_keys: list[str], ex: Executor, image: str = SLURM_IMAGE) -> dict:
-    argv = ["docker", "run", "--rm", "--network", "none", "--memory", "192m", "--pids-limit", "256", "--hostname", host,
-            "-v", f"{Path(render_dir).resolve()}:/render:ro", "--entrypoint", "sh", image, "-c", SLURM_SCRIPT]
-    shown = "docker run --rm --network none --memory 192m " + image + " slurmctld -D -vvv  (rendered slurm.conf)"
+    """slurmctld needs a non-loopback address to bind (with `--network none` it dies in `_open_ports`, also with SlurmctldHost=name(127.0.0.1):
+    captured, issue 778), so the one-shot joins a throwaway `--internal` network of its own: unreachable from and to the live stack."""
+    shown = "docker run --rm --network <internal, throwaway> --memory 192m " + image + " slurmctld -D -vvv  (rendered slurm.conf)"
     if not IDENT.fullmatch(host):
         return result("slurm.conf", shown, "failed", [f"SlurmctldHost {host!r} is not a plain host name"])
-    rc, out = ex(argv, timeout=ONE_SHOT_TIMEOUT_S)
+    try:
+        with throwaway_network(ex) as net:
+            argv = ["docker", "run", "--rm", "--network", net, "--memory", "192m", "--pids-limit", "256", "--hostname", host,
+                    "-v", f"{Path(render_dir).resolve()}:/render:ro", "--entrypoint", "sh", image, "-c", SLURM_SCRIPT]
+            rc, out = ex(argv, timeout=ONE_SHOT_TIMEOUT_S)
+    except LabError as e:
+        return result("slurm.conf", shown, "failed", [str(e)])
     started, fatal, warn = parse_slurmctld(out)
     if started:
         msg = "slurmctld started on the rendered configuration"
         if restart_keys:
             msg += f"; applying it restarts slurmctld ({', '.join(restart_keys[:5])}{' ...' if len(restart_keys) > 5 else ''})"
-        return result("slurm.conf", shown, "passed", [msg], bool(restart_keys), warnings=warn)
+        return result("slurm.conf", shown, "passed", [msg], bool(restart_keys),
+                      warnings=["partition QOS options are not checked here (no accounting in the one-shot); `sacctmgr load` covers the QOS"] + warn)
     if fatal:
         return result("slurm.conf", shown, "failed", [fatal[0]], bool(restart_keys), warnings=warn)
     why = _first_line(out) if rc != 0 and not out.strip().startswith("#") and "slurmctld" not in out else f"slurmctld did not report that it started within {START_WAIT_S} s"
@@ -223,6 +249,21 @@ QOS_SET = ("Priority", "GraceTime", "MaxWall", "MaxJobsPerUser", "MaxSubmitJobsP
            "MaxTRESPerAccount", "GrpTRES", "GrpJobs", "GrpSubmitJobs", "Preempt", "PreemptMode", "PreemptExemptTime", "Flags", "UsageFactor",
            "UsageThreshold", "MinTRES", "MinTRESPerJob")
 _QOS_ALIAS = {"MaxTRESPU": "MaxTRESPerUser"}
+
+
+_HMS = re.compile(r"(?:(\d+)-)?(\d+):(\d\d):(\d\d)")
+TRES_NAME = re.compile(r"\b((?:gres|license|bb)/[A-Za-z0-9_.-]+(?::[A-Za-z0-9_.-]+)?)")
+
+
+def _seconds(v: str) -> str:
+    """`sacctmgr show qos` prints GraceTime as [D-]HH:MM:SS but `modify qos set GraceTime=` only takes seconds (captured, issue 778)."""
+    m = _HMS.fullmatch(v)
+    return str(((int(m.group(1) or 0) * 24 + int(m.group(2))) * 60 + int(m.group(3))) * 60 + int(m.group(4))) if m else v
+
+
+def tres_names(*texts: str) -> list[str]:
+    """Every gres/license TRES the lab's QOS or dump mention: slurmdbd rejects a limit on a TRES it was not told to track."""
+    return sorted({m for t in texts for m in TRES_NAME.findall(t)})
 
 
 def qos_script(rows: list[dict[str, str]]) -> str:
@@ -242,13 +283,35 @@ def qos_script(rows: list[dict[str, str]]) -> str:
             if v and not (k == "PreemptMode" and v == "cluster"):
                 if not SAFE.fullmatch(v):
                     raise LabError(f"QOS {n} {k}={v!r} has characters the lab does not pass to sacctmgr")
-                sets.append(f"{_QOS_ALIAS.get(k, k)}={shlex.quote(v)}")
+                sets.append(f"{_QOS_ALIAS.get(k, k)}={shlex.quote(_seconds(v) if k == 'GraceTime' else v)}")
         if sets:
             lines.append(f"sacctmgr -i modify qos where name={n} set " + " ".join(sets))
     return "\n".join(lines) + "\n"
 
 
-def accounting_script(db: str, cluster: str) -> str:
+def tres_script(cluster: str, tres: list[str]) -> str:
+    """slurmdbd learns the gres/license TRES only from a slurmctld that registers with `AccountingStorageTRES=` (there is no `sacctmgr add tres`;
+    captured, issue 778): run one for a moment against the scratch database, with one node and its own state, then stop it. It listens only
+    inside this one-shot and knows no live node or database."""
+    if not tres:
+        return ""
+    return f"""printf 'ClusterName={cluster}\\nSlurmctldHost=%s\\nAuthType=auth/munge\\nSlurmUser=slurm\\nStateSaveLocation=/var/spool/slurmctld\\nAccountingStorageType=accounting_storage/slurmdbd\\nAccountingStorageHost=localhost\\nAccountingStoragePort={DBD_PORT}\\nAccountingStorageTRES={",".join(tres)}\\nNodeName=lab1 CPUs=1\\nPartitionName=lab Nodes=lab1\\n' "$(hostname)" > /etc/slurm/slurm.conf
+chown -R slurm:slurm /var/spool/slurmctld
+slurmctld -D >/tmp/ctld.log 2>&1 &
+cpid=$!
+i=0
+while [ $i -lt 40 ]; do
+  grep -q 'Running as primary controller' /tmp/ctld.log && break
+  kill -0 $cpid 2>/dev/null || break
+  sleep 0.5
+  i=$((i+1))
+done
+kill $cpid 2>/dev/null
+sleep 1
+"""
+
+
+def accounting_script(db: str, cluster: str, tres: list[str] | None = None) -> str:
     return f"""set -u
 export PATH=/opt/slurm/sbin:/opt/slurm/bin:$PATH
 mkdir -p /etc/slurm /etc/munge /run/munge /var/log/munge /var/lib/munge /var/spool/slurmctld
@@ -256,7 +319,7 @@ dd if=/dev/urandom of=/etc/munge/munge.key bs=1 count=1024 2>/dev/null
 chown -R munge:munge /etc/munge /var/lib/munge /var/log/munge /run/munge
 chmod 400 /etc/munge/munge.key
 su -s /bin/sh munge -c 'munged --force'
-printf 'ClusterName=lab\\nAuthType=auth/munge\\nAccountingStorageType=accounting_storage/slurmdbd\\nAccountingStorageHost=localhost\\nAccountingStoragePort={DBD_PORT}\\n' > /etc/slurm/slurm.conf
+printf 'ClusterName=lab\\nSlurmctldHost=localhost\\nAuthType=auth/munge\\nAccountingStorageType=accounting_storage/slurmdbd\\nAccountingStorageHost=localhost\\nAccountingStoragePort={DBD_PORT}\\n' > /etc/slurm/slurm.conf
 printf 'AuthType=auth/munge\\nDbdHost=localhost\\nDbdPort={DBD_PORT}\\nSlurmUser=slurm\\nLogFile=/tmp/dbd.log\\nPidFile=/tmp/dbd.pid\\nStorageType=accounting_storage/mysql\\nStorageHost=mariadb\\nStorageUser=slurm\\nStoragePass=%s\\nStorageLoc={db}\\n' "$MARIADB_PASSWORD" > /etc/slurm/slurmdbd.conf
 chown slurm:slurm /etc/slurm/slurmdbd.conf
 chmod 600 /etc/slurm/slurmdbd.conf
@@ -268,7 +331,7 @@ until sacctmgr -i show cluster >/dev/null 2>&1; do
   if [ $i -gt 60 ] || ! kill -0 $pid 2>/dev/null; then echo '@@DBD_FAILED'; cat /tmp/dbd.out /tmp/dbd.log 2>/dev/null; exit 0; fi
   sleep 1
 done
-echo '@@QOS'
+{tres_script(cluster, tres or [])}echo '@@QOS'
 sh /lab/qos.sh 2>&1
 echo '@@LOAD'
 sacctmgr -i load file=/lab/sacctmgr.dump 2>&1
@@ -301,7 +364,7 @@ def diff_dump(before: str, after: str) -> tuple[list[str], list[str]]:
                 continue
             for k, v in (x["opts"] or {}).items():
                 w = got[x["name"]]["opts"].get(k)
-                if w is not None and w != v:
+                if w is not None and w != v and not (k == "QOS" and set(w.split(",")) == set(v.split(","))):  # sacctmgr sorts the list
                     changed.append(f"{label} {x['name']}: {k} {v} -> {w}")
     return missing, changed
 
@@ -341,10 +404,14 @@ def check_accounting(lab_dir: Path, ex: Executor, work: Path, sim_secrets: Path 
         (work / "qos.sh").write_text(qos)
         rc, out = ex(["docker", "run", "--rm", "--name", name, "--network", NETWORK, "--memory", "128m", "--pids-limit", "256",
                       "--env-file", str((sim_secrets / "mariadb.env").resolve()), "-v", f"{work.resolve()}:/lab:ro",
-                      "--entrypoint", "sh", SLURM_IMAGE, "-c", accounting_script(db, cluster)], timeout=ONE_SHOT_TIMEOUT_S)
+                      "--entrypoint", "sh", SLURM_IMAGE, "-c", accounting_script(db, cluster, tres_names(dump, *[" ".join(r.values()) for r in qos_rows]))], timeout=ONE_SHOT_TIMEOUT_S)
     finally:
         ex(["docker", "rm", "-f", name], timeout=20)
         sql(f"DROP DATABASE IF EXISTS `{db}`;")
+    if "@@DBD_FAILED" in out and re.search(r"routine command denied", out, re.IGNORECASE):
+        why = ("skipped: slurmdbd needs CREATE ROUTINE and ALTER ROUTINE on the scratch databases `lab_validate_%`; "
+               "the grant `benchctl up` applies does not give them yet (pending owner approval)")
+        return result(tool, shown, "skipped", [why])
     if "@@DBD_FAILED" in out:
         return result(tool, shown, "failed", ["the throwaway slurmdbd did not come up: " + _first_line(_section(out, "DBD_FAILED") or out)])
     if "@@LOAD_RC=" not in out:
