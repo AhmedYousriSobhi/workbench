@@ -7,6 +7,7 @@ import yaml
 from benchctl import scenario
 
 SIM = yaml.safe_load(Path("sim.yaml").read_text())
+WITH_TOPOLOGY = {**SIM, "topology": {"plugin": "tree", "spines": 1, "leaves_per_spine": 2}}  # the switch scenario needs one (issue 543)
 
 
 class CP:
@@ -21,8 +22,8 @@ def test_parse_duration():
 
 
 def test_every_shipped_scenario_is_valid():
-    with_topology = {**SIM, "topology": {"plugin": "tree", "spines": 1, "leaves_per_spine": 2}}  # the switch scenario needs one (issue 543)
-    for sc in scenario.list_all():
+    with_topology = WITH_TOPOLOGY
+    for sc in scenario.list_all(sim=WITH_TOPOLOGY):
         assert scenario.validate(sc, with_topology) == [], sc["name"]
 
 
@@ -575,7 +576,7 @@ def test_preview_marks_what_the_page_cannot_run_before_play():
 
 
 def test_every_shipped_scenario_previews():
-    for sc in scenario.list_all():
+    for sc in scenario.list_all(sim=WITH_TOPOLOGY):
         p = scenario.preview(sc)
         assert p["name"] == sc["name"] and len(p["steps"]) >= len(sc["steps"])
 
@@ -586,7 +587,6 @@ NO_EXPECT = {
     "auth-slurm-token-expiry": "no expect form for the REST token's 401",
     "auth-teleport-cert-expiry": "no expect form for the login node's refusal of the identity",
     "bmc-tls-expired": "no expect form for the BMC farm's certificate",
-    "fan-failure": "no expect form for the BMC event log or temperature",
     "jira-429": "no expect form for the Jira mock's failure mode",
     "jira-outage": "no expect form for the Jira mock's failure mode",
     "jira-real-429": "no expect form for the real Jira's rate limiting",
@@ -614,3 +614,76 @@ def test_every_scenario_has_an_expect_or_a_documented_exemption():
     bare = {sc["name"] for sc in scenario.list_all() if not sc.get("expect")}
     assert bare == set(NO_EXPECT), (sorted(bare - set(NO_EXPECT)), sorted(set(NO_EXPECT) - bare))
     assert set(NO_EXPECT) <= names and all(NO_EXPECT.values())
+
+
+# --- node selectors and the fault model (issue 470) ---
+
+def test_selectors_pick_nodes_by_place_count_and_kind():
+    from benchctl import selectors
+    r = lambda v: selectors.resolve(v, SIM)
+    assert r(["first gpu node", "second gpu node"]) == ["gpu001", "gpu002"]
+    assert r({"node": "fourth cpu node"}) == {"node": "cn004"}
+    assert r(["any 2 cpu nodes"]) == ["cn001", "cn002"] and r(["last 2 cpu nodes"]) == ["cn003", "cn004"]
+    assert r(["all gpu nodes", "keep"]) == ["gpu001", "gpu002", "keep"]
+    assert r({"node": "first k8s gpu node"}) == {"node": "kgpu001"} and r(["first k8s cpu node"]) == ["kcn001"]
+    assert r("xid on {first gpu node}: {FIRST CPU NODE}") == "xid on gpu001: cn001"
+    assert r({"at": "5s", "n": 3, "x": None, "reason": "xid 79"}) == {"at": "5s", "n": 3, "x": None, "reason": "xid 79"}
+    for bad in (["third gpu node"], ["any 3 gpu nodes"], {"node": "all gpu nodes"}, "{all gpu nodes}", ["first 2 gpu node"]):
+        with pytest.raises(selectors.SelectorError):
+            r(bad)
+    with pytest.raises(selectors.SelectorError):
+        selectors.resolve(["first gpu node"], {**SIM, "gpu": {"nodes": 0, "prefix": "gpu"}})
+
+
+def test_load_resolves_selectors_only_when_given_a_sim():
+    assert scenario.load("gpu-xid-storm")["steps"][0]["do"]["nodes"] == ["first gpu node", "second gpu node"]
+    assert scenario.load("gpu-xid-storm", sim=SIM)["steps"][0]["do"]["nodes"] == ["gpu001", "gpu002"]
+    assert scenario.load("gpu-xid-storm", sim=SIM)["expect"][2]["jira.issue_created"]["labels"] == ["fault-xid", "node-gpu001"]
+    no_gpu = {**SIM, "gpu": {**SIM["gpu"], "nodes": 0}}
+    assert scenario.list_all(sim=no_gpu)  # a scenario naming absent nodes is listed, not fatal
+    with pytest.raises(scenario.ScenarioError, match="gpu-xid-storm"):
+        scenario.load("gpu-xid-storm", sim=no_gpu)
+
+
+def test_a_fault_step_expands_into_its_physical_effects():
+    sc = {"steps": [{"at": "10s", "target": "fault", "do": {"inject": "gpu-fell-off-bus", "nodes": ["gpu001"]}},
+                    {"at": "1m", "target": "fault", "do": {"clear": "gpu-fell-off-bus", "nodes": ["gpu001"]}}]}
+    assert scenario.validate(sc, SIM) == []
+    steps = scenario.plan(sc)
+    assert [(s.at, s.target) for s in steps] == [(10, "gpu-exporter"), (10, "bmc-farm"), (60, "gpu-exporter"), (60, "bmc-farm")]
+    assert steps[0].do == {"nodes": ["gpu001"], "xid": 79} and steps[1].do["event"].startswith("GPU has fallen off the bus")
+    # it injects the cause only: nothing in the expansion drains or resumes a node
+    assert not any(s.target == "slurm" for s in steps)
+    # the effects are applied as the engine always did: a ticket follows the XID
+    assert any(x.target == "jira" for x in scenario.side_effects(steps[0]))
+
+
+def test_fault_defaults_and_overrides_and_problems():
+    sc = {"steps": [{"at": "0s", "target": "fault", "do": {"inject": "fan-failure", "nodes": ["gpu002"], "fans": 2, "to": 80, "over": "20s"}}]}
+    steps = scenario.plan(sc)
+    assert steps[0].do == {"nodes": ["gpu002"], "fan_fail": 2} and steps[-1].do["temp"] == 80.0 and steps[-1].at == 30
+    assert scenario.plan({"steps": [{"at": 0, "target": "fault", "do": {"inject": "ib-port-down", "nodes": ["gpu001"]}}]})[0].do["ib_down"] == 1
+    for do, text in (({"nodes": ["gpu001"]}, "exactly one"), ({"inject": "x", "clear": "y", "nodes": ["gpu001"]}, "exactly one"),
+                     ({"inject": "nope", "nodes": ["gpu001"]}, "unknown fault"), ({"inject": "nic-flap"}, "needs nodes"),
+                     ({"inject": "nic-flap", "nodes": ["gpu001"], "speed": 1}, "unknown setting"), ({"inject": "nic-flap", "nodes": ["gpu999"]}, "gpu999")):
+        got = scenario.validate({"steps": [{"at": "0s", "target": "fault", "do": do}]}, SIM)
+        assert got and text in got[0], (do, got)
+
+
+# A scenario names no node: every node is a selector, so it runs on any sim.yaml. Free text (description) may name nodes.
+def test_no_shipped_scenario_names_a_node_by_hand():
+    import json
+
+    from benchctl.selectors import NODE_NAME
+    for sc in scenario.list_all():
+        body = json.dumps({"steps": sc["steps"], "expect": sc.get("expect", [])})
+        assert not NODE_NAME.search(body), f"{sc['name']} names {NODE_NAME.findall(body)}: use a selector such as `first gpu node`"
+
+
+def test_gpu_xid_storm_injects_only_the_cause_and_asserts_the_reaction():
+    sc = scenario.load("gpu-xid-storm", sim=SIM)
+    steps = scenario.plan(sc)
+    assert {s.target for s in steps} == {"gpu-exporter", "bmc-farm"}  # no scripted drain, resume or ramp
+    kinds = [next(iter(e)) for e in sc["expect"]]
+    assert kinds.count("slurm.node_state") == 2 and "jira.issue_created" in kinds
+    assert scenario.preview(sc)["steps"] and scenario.validate(sc, SIM) == []

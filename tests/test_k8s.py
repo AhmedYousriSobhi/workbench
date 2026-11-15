@@ -220,7 +220,7 @@ def test_steps_become_kubectl_calls_and_a_pod_step_writes_its_manifest(tmp_path)
 def test_scenario_validates_runs_and_judges_k8s_steps():
     sc = {"steps": [{"at": "0s", "target": "k8s", "do": {"down": ["kgpu001"]}}, {"at": "1s", "target": "k8s", "do": {"down": ["nope"]}}]}
     assert scenario.validate(sc, SIM) == ["step 2: unknown Kubernetes node 'nope'"]
-    assert all(not scenario.validate(s, SIM) for s in scenario.list_all(ROOT / "scenarios") if s["name"] in ("k8s-node-notready", "pod-crashloop"))
+    assert all(not scenario.validate(s, SIM) for s in scenario.list_all(ROOT / "scenarios", SIM) if s["name"] in ("k8s-node-notready", "pod-crashloop"))
     seen = []
     out = scenario.execute(scenario.Step(0, "k8s", {"cordon": ["kcn001"]}), runner=lambda c: seen.append(c) or ok())
     assert out.status == "ok" and seen[0][-2:] == ["cordon", "kcn001"] and seen[0][0] == "docker"
@@ -416,7 +416,7 @@ def test_a_blocked_drain_is_not_a_failed_step_and_pods_on_node_counts_running_po
 
 def test_the_policy_scenarios_validate_against_the_default_sim():
     names = {"k8s-preempt", "k8s-drain-blocked", "k8s-api-throttled"}
-    found = [s for s in scenario.list_all(ROOT / "scenarios") if s["name"] in names]
+    found = [s for s in scenario.list_all(ROOT / "scenarios", SIM) if s["name"] in names]
     assert {s["name"] for s in found} == names and all(not scenario.validate(s, SIM) for s in found)
 
 
