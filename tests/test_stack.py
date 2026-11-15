@@ -181,7 +181,7 @@ def test_up_on_a_running_stack_is_not_refused_for_low_memory(tmp_path, monkeypat
     sim = yaml.safe_load((root / "sim.yaml").read_text())
     from benchctl import compose
     every = "\n".join([*compose.generate(sim, compose.load_profile("min"))["services"],
-                       "prometheus", "grafana", "gpu-exporter-farm"])
+                       "prometheus", "grafana", "gpu-exporter-farm", "alertmanager"])
     said: list[str] = []
 
     def runner(cmd):
@@ -460,7 +460,7 @@ def test_up_with_a_selection_removes_unwanted_nodes_and_restarts_slurmctld(tmp_p
     spec = workbench.from_dict({"cpu_nodes": 1, "gpu_nodes": 0, "gpus_per_node": 1}, workbench.defaults(sim))
     s2, prof = workbench.effective(sim, spec)
     from benchctl import compose
-    every = [*compose.generate(s2, prof)["services"], "prometheus", "grafana", "gpu-exporter-farm", "cn002", "cn003"]
+    every = [*compose.generate(s2, prof)["services"], "prometheus", "grafana", "gpu-exporter-farm", "alertmanager", "cn002", "cn003"]
     calls: list[list[str]] = []
 
     def runner(cmd):
@@ -489,7 +489,7 @@ def test_adding_accounting_to_a_running_stack_restarts_slurmctld(tmp_path, monke
 
     def runner(cmd):
         calls.append(cmd)
-        return cp(out="\n".join([*running, "prometheus", "grafana", "gpu-exporter-farm"])) if "ps" in cmd else cp()
+        return cp(out="\n".join([*running, "prometheus", "grafana", "gpu-exporter-farm", "alertmanager"])) if "ps" in cmd else cp()
 
     monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
     monkeypatch.setattr(stack, "provision_token", lambda **kw: kw.get("path", tmp_path / "t"))
@@ -498,6 +498,8 @@ def test_adding_accounting_to_a_running_stack_restarts_slurmctld(tmp_path, monke
     assert stack.up(s2, "workbench", runner=runner, say=said.append, available=8 * 1024**3, wait=1, prof=prof)
     assert any("accounting setup" in m for m in said)
     assert any("--force-recreate" in c and "slurmctld" in c for c in calls)
+    grants = [c for c in calls if "mariadb" in c and "exec" in c and any("GRANT" in a for a in c)]  # the config lab's grant, at this `up` (issue 552)
+    assert len(grants) == 1
 
 
 def test_a_one_shot_job_that_exited_zero_counts_as_started():
@@ -520,7 +522,7 @@ def test_a_changed_slurm_conf_restarts_a_running_slurmctld(tmp_path, monkeypatch
     conf = tmp_path / "compose" / "generated" / "slurm" / "slurm.conf"
     conf.parent.mkdir(parents=True)
     conf.write_text("# an older slurm.conf\n")
-    running = [*compose.generate(sim, prof)["services"], "prometheus", "grafana", "gpu-exporter-farm"]
+    running = [*compose.generate(sim, prof)["services"], "prometheus", "grafana", "gpu-exporter-farm", "alertmanager"]
     calls: list[list[str]] = []
 
     def runner(cmd):
@@ -563,3 +565,15 @@ def test_stage_lines_print_only_when_the_governor_asks(monkeypatch, capsys):
     monkeypatch.setenv(stack.STAGE_ENV, "1")
     stack.stage_lines({"plan": ["A"]})
     assert capsys.readouterr().out == '@stage {"plan": ["A"]}\n'
+
+
+def test_grant_lab_databases_runs_in_the_container_and_never_shows_a_password(tmp_path):
+    from benchctl import slurmconf
+    calls = []
+    ok = stack.grant_lab_databases(lambda c: calls.append(c) or cp(), tmp_path / "c.yml", lambda m: None)
+    argv = calls[0]
+    assert ok and argv[argv.index("exec"):][:3] == ["exec", "-T", "mariadb"] and slurmconf.LAB_GRANT_SQL in argv
+    assert '"$MARIADB_ROOT_PASSWORD"' in " ".join(argv)  # read inside the container, not by us
+    said = []
+    bad = stack.grant_lab_databases(lambda c: cp(rc=1, err="ERROR 1045 Access denied"), tmp_path / "c.yml", said.append)
+    assert not bad and said[0].startswith("WARN") and "Access denied" in said[0]

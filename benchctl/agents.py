@@ -15,7 +15,7 @@ from . import contract
 AGENTS = Path("AGENTS.md")
 MAX_TOKENS = 2000
 # the ten verbs that matter, as the command path; the one-line meaning is the command's own help text
-VERBS = ["start", "stop", "plan", "describe workbench", "get faults", "get endpoints", "get traffic", "scenario run", "wait ready", "export profile"]
+VERBS = ["start", "stop", "plan", "describe workbench", "get faults", "get endpoints", "get traffic", "get scenario-status", "clear faults", "scenario run", "wait ready", "export profile"]
 SAYS = {"start": "Check the machine, build, start the cluster and the web page", "get endpoints": "Where a client connects, and which file holds each credential"}  # where the command's own help is not a one-liner
 CORE_ENDPOINTS = ("login", "nodes", "bmc", "bcm", "jira", "slurm", "gpu")  # the others are optional parts: `get endpoints` lists them
 

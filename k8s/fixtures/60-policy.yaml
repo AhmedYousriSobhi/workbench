@@ -1,0 +1,51 @@
+# Scheduling policy objects (issue 548, ADR 0077): priority classes, a quota on GPU claims and a disruption budget.
+# Preemption, a drain the budget blocks and a quota rejection are real API behaviour; scenarios k8s-preempt and k8s-drain-blocked play them.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata: {name: inference}
+value: 2000
+description: Serving workloads; they preempt lower classes.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata: {name: training}
+value: 1000
+description: Batch training.
+---
+# Below the default priority (0) and never preempts anyone.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata: {name: best-effort}
+value: -100
+preemptionPolicy: Never
+description: Filler work that gives way to everything else.
+---
+# DRA devices of the simulated driver (ADR 0076): team-a may hold two. The fixture pod dra-train holds one.
+apiVersion: v1
+kind: ResourceQuota
+metadata: {name: gpu-claims, namespace: team-a}
+spec:
+  hard: {gpu.sim.test.deviceclass.resource.k8s.io/devices: "2"}
+---
+# Two replicas on different nodes (a spread constraint), and a budget that allows no voluntary eviction: `kubectl drain` of a node that holds one blocks.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: inference, namespace: team-a}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: inference}}
+  template:
+    metadata: {labels: {app: inference}}
+    spec:
+      priorityClassName: inference
+      nodeSelector: {pool: gpu}
+      topologySpreadConstraints:
+      - {maxSkew: 1, topologyKey: kubernetes.io/hostname, whenUnsatisfiable: DoNotSchedule, labelSelector: {matchLabels: {app: inference}}}
+      containers: [{name: c, image: "rancher/mirrored-pause:3.6"}]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: inference, namespace: team-a}
+spec:
+  minAvailable: 2
+  selector: {matchLabels: {app: inference}}

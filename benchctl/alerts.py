@@ -1,16 +1,17 @@
 """Prometheus alerts, read back (`get alerts`, `wait alert`; ADR 0066).
 
 The workbench's Prometheus (127.0.0.1:9090, part of every start) answers `GET /api/v1/alerts` with the alerts its rules are
-firing or about to fire. The workbench itself ships no alert rules: the list is empty until rules are loaded into that
-Prometheus. When Prometheus does not answer, the part is not running, which is not the same as "no alerts".
+firing or about to fire. The workbench ships seven default rules (`observability/rules.yml`: GpuXidCritical, GpuTempHigh, InfinibandPortDown, NodeDrained, NodeDown, ExporterDown, JiraErrors), so an empty list
+means none is firing. When Prometheus does not answer, the part is not running, which is not the same as "no alerts".
 """
 from __future__ import annotations
 
 import json
+import os
 import urllib.request
 from collections.abc import Callable
 
-PROMETHEUS = "http://127.0.0.1:9090"
+PROMETHEUS = os.environ.get("WORKBENCH_PROMETHEUS", "http://127.0.0.1:9090")  # the variable is for tests that must not meet a running cluster
 ENABLE = "benchctl start"  # Prometheus is part of every start (always: slurm, Prometheus, Grafana)
 
 

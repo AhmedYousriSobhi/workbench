@@ -89,6 +89,23 @@ def test_call_reports_http_and_service_errors(monkeypatch):
         cmsh.call("x", "y")
 
 
+def test_only_a_probe_call_carries_the_workbench_header(monkeypatch):
+    import io
+    import urllib.request
+
+    monkeypatch.undo()
+    seen = []
+
+    def fake(req, *a, **k):
+        seen.append(dict(req.header_items()))
+        return io.BytesIO(b'{"result": []}')
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    cmsh.call("cmdevice", "getDevices")
+    cmsh.call("cmevents", "getEvents", [0], probe=True)
+    assert "X-workbench-probe" not in seen[0] and seen[1]["X-workbench-probe"] == "1"  # a user's cmsh stays visible as client traffic
+
+
 def session(monkeypatch, text):
     import io
     monkeypatch.setattr(cmsh.socket, "gethostname", lambda: "login")

@@ -8,6 +8,7 @@ Host header: bmc-<node> or <node>, e.g. the compose-network alias bmc-cn001; any
 Everything but the service root needs a session (POST /redfish/v1/SessionService/Sessions, X-Auth-Token) or Basic
 auth with the account in the credentials file; with no file, auth is off.
 
+GET  /sim/summary  {node: {"power", "temp", "fans_failed"}} for every node in one answer (the page's one call per snapshot, issue 450)
 POST /sim/tls  {"expired": true|false}: present an expired certificate (or the good one again) on the TLS ports
 GET /sim/tls   {"served": bool, "expired": bool}: whether TLS is served and which certificate it presents
 POST /sim/inject  {"node": n, "temp": 95} | {"node": n, "fan_fail": 2} | {"node": n, "power": "Off"}
@@ -34,7 +35,7 @@ RESET_TO = {"On": "On", "ForceOn": "On", "ForceOff": "Off", "GracefulShutdown": 
 
 def load_nodes(inventory: Path) -> dict[str, dict]:
     """{node: {"gpus": n, "memory_mb": m, "cpus": c, "serial": s}} from the generated inventory.json (benchctl/hwinventory.py), in its order."""
-    return {n["name"]: {"gpus": n["gpus"], "memory_mb": n["memory_mb"], "cpus": n["cpus"], "serial": n["serial"]}
+    return {n["name"]: {"gpus": n["gpus"], "memory_mb": n["memory_mb"], "cpus": n["cpus"], "serial": n["serial"], "gpu_model": n.get("gpu_model", "")}
             for n in json.loads(Path(inventory).read_text())["nodes"]}
 
 
@@ -81,6 +82,15 @@ class Farm:
         self.power[node] = RESET_TO[kind]
         self.event(node, f"Reset {kind}")
 
+    def summary(self) -> dict[str, dict]:
+        """Power state, CPU temperature and failed fans of every node: what the page's node cards need, in one answer."""
+        out = {}
+        for n in self.nodes:
+            on = self.power[n] == "On"
+            out[n] = {"power": self.power[n], "fans_failed": self.fans_failed.get(n, 0),
+                      "temp": self.temp.get(n, round(self.rng.uniform(40, 65), 1)) if on else 18.0}
+        return out
+
     # --- Redfish resources -------------------------------------------------
     def resource(self, node: str, path: str, root: str | None = None) -> dict | None:
         """One Redfish resource; `root` is the service root in links (legacy /<node>/redfish/v1 when None)."""
@@ -101,7 +111,7 @@ class Farm:
                           "PowerState": self.power[node], "Status": healthy,
                           "ProcessorSummary": {"Count": info["cpus"], "Status": healthy},
                           "MemorySummary": {"TotalSystemMemoryGiB": info["memory_mb"] // 1024, "Status": healthy},
-                          "Oem": {"GpuCount": info["gpus"]},
+                          "Oem": {"GpuCount": info["gpus"], **({"GpuModel": info["gpu_model"]} if info.get("gpu_model") else {})},
                           "Actions": {"#ComputerSystem.Reset": {
                               "target": f"{base}/Systems/1/Actions/ComputerSystem.Reset",
                               "ResetType@Redfish.AllowableValues": sorted(RESET_TO)}},
@@ -343,6 +353,8 @@ def make_handler(farm: Farm, sessions: Sessions | None = None, stats: dict | Non
                 return self._send(200, dict(stats))
             if self.path == "/sim/paths":
                 return self._send(200, SHAPES.snapshot())
+            if self.path == "/sim/summary":
+                return self._send(200, farm.summary())
             if self.path == "/sim/tls":
                 return self._send(200, {"served": farm.set_tls is not None, "expired": farm.tls_expired})
             if self.path.split("?")[0] == "/sim/traffic":

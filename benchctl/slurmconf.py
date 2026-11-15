@@ -3,7 +3,7 @@ import os
 import secrets
 from pathlib import Path
 
-from . import hwinventory, qos, topology
+from . import hwinventory, mig, qos, topology
 from .nodes import node_names
 
 CTLD = "slurmctld"
@@ -41,7 +41,11 @@ def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool 
         # Jobs are synthetic and containers get no cgroup write access (26.05 accepts CgroupPlugin=disabled).
         "ProctrackType=proctrack/linuxproc",
         "TaskPlugin=task/none",
-        "JobAcctGatherType=jobacct_gather/none",
+        # Usage per job from /proc (sstat, sacct TRES usage; no privilege needed, issue 459); sampled every 10 s so a short job shows some.
+        "JobAcctGatherType=jobacct_gather/linux",
+        "JobAcctGatherFrequency=task=10",
+        # Slurm's own Prometheus endpoint on the controller's port (/metrics/jobs, nodes, partitions, scheduler; ADR 0074).
+        "MetricsType=metrics/openmetrics",
         "MailProg=/bin/true",
         "SlurmdParameters=config_overrides",
         "SelectType=select/cons_tres",
@@ -70,12 +74,14 @@ def slurm_conf(sim: dict, compute_override: int | None = None, accounting: bool 
     if compute:
         lines.append(f"NodeName={_range(compute)} CPUs={c['cpus']} RealMemory={c['memory_mb']} State=UNKNOWN")
     if gpu:
-        gres = f"gpu:{g['type']}:{g['gpus_per_node']}"
         shape = hwinventory.gpu_shape(sim)  # one shape for a GPU node in Slurm, Redfish and BCM (issue 462)
-        lines.append(f"NodeName={_range(gpu)} CPUs={shape['cpus']} RealMemory={shape['memory_mb']} "
-                     f"Gres={gres} State=UNKNOWN")
+        sliced = [n for n in gpu if mig.is_mig(sim, n)]  # MIG-style typed GRES (issue 546): its own NodeName line, the rest unchanged
+        for members, gres in ((sliced, f"gpu:{mig.gres_type(sim)}:{mig.units(sim)}"), ([n for n in gpu if n not in sliced], f"gpu:{g['type']}:{g['gpus_per_node']}")):
+            if members:
+                lines.append(f"NodeName={_range(members)} CPUs={shape['cpus']} RealMemory={shape['memory_mb']} Gres={gres} State=UNKNOWN")
     if real:  # the card's own node and partition: one real GPU, a device file the driver provides (issue 428)
-        lines.append(f"NodeName={real[0]} CPUs={c['cpus']} RealMemory={c['memory_mb']} Gres=gpu:{sim['real_gpu']['type']}:1 State=UNKNOWN")
+        shape = hwinventory.real_gpu_shape(sim)  # the same shape in Slurm, Redfish and BCM (issue 431)
+        lines.append(f"NodeName={real[0]} CPUs={shape['cpus']} RealMemory={shape['memory_mb']} Gres=gpu:{sim['real_gpu']['type']}:1 State=UNKNOWN")
     for p in sim.get("partitions", []):
         members = compute if p["nodes"] == "compute" else gpu
         if members:
@@ -93,9 +99,12 @@ def gres_conf(sim: dict) -> str:
     out = head
     gpu = [n for n, k in node_names(sim) if k == "gpu"]
     if g.get("nodes") and gpu:
-        last = g["gpus_per_node"] - 1
-        files = f"/dev/workbench-gpu[0-{last}]" if last else "/dev/workbench-gpu0"
-        out += f"NodeName={_range(gpu)} Name=gpu Type={g['type']} File={files}\n"
+        sliced = [n for n in gpu if mig.is_mig(sim, n)]
+        for members, kind, count in ((sliced, mig.gres_type(sim), mig.units(sim)), ([n for n in gpu if n not in sliced], g["type"], g["gpus_per_node"])):
+            if members:
+                last = count - 1
+                files = f"/dev/workbench-gpu[0-{last}]" if last else "/dev/workbench-gpu0"
+                out += f"NodeName={_range(members)} Name=gpu Type={kind} File={files}\n"
     real = [n for n, k in node_names(sim) if k == "real-gpu"]
     if real:  # the real card: the driver's own device file, passed into the node as a CDI device
         out += f"NodeName={real[0]} Name=gpu Type={sim['real_gpu']['type']} File=/dev/nvidia0\n"
@@ -109,6 +118,17 @@ def _range(names: list[str]) -> str:
     prefix = names[0].rstrip("0123456789")
     nums = [n[len(prefix):] for n in names]
     return f"{prefix}[{nums[0]}-{nums[-1]}]"
+
+
+# The config lab's validation (issue 552) loads sacctmgr data into a scratch database `lab_validate_<id>` of this MariaDB. The `slurm` user
+# gets exactly what slurmdbd needs to build and use its tables there, on databases of that name only: no GRANT OPTION, nothing global.
+# In a database-name pattern `_` and `%` are wildcards, so the underscores are escaped: the pattern must not match `slurm_acct_db`.
+# Applied twice: the init file (a fresh database) and at every `benchctl up` (stack.grant_lab_databases), because the init directory
+# only runs when the database is first created.
+LAB_DB_PATTERN = "lab\\_validate\\_%"
+LAB_PRIVS = ("CREATE, DROP, ALTER, INDEX, SELECT, INSERT, UPDATE, DELETE, LOCK TABLES, CREATE TEMPORARY TABLES, "
+             "CREATE ROUTINE, ALTER ROUTINE, EXECUTE")  # slurmdbd creates the stored procedure get_lineage in its database (captured, issue 778)
+LAB_GRANT_SQL = f"GRANT {LAB_PRIVS} ON `{LAB_DB_PATTERN}`.* TO 'slurm'@'%';\n"
 
 
 def slurmdbd_conf(password: str) -> str:
@@ -150,8 +170,14 @@ def write(sim: dict, out_dir: Path, compute_override: int | None = None,
         (out_dir / "topology.conf").unlink(missing_ok=True)  # an earlier run's switches must not outlive the `topology:` key
     if accounting:
         files["accounting.sh"] = accounting_script(sim)
+        files["lab-grant.sql"] = LAB_GRANT_SQL
     for name, text in files.items():
         (out_dir / name).write_text(text)
+    from . import (
+        lab_apply,  # an active config lab's settings go back on top of the regenerated file (issue 553)
+    )
+
+    lab_apply.reapply(out_dir)
     if accounting:
         _write_secrets(sim, out_dir.parent / "secrets", out_dir)
     return [out_dir / n for n in files]
@@ -162,12 +188,11 @@ def _write_secrets(sim: dict, sec: Path, slurm_dir: Path) -> None:
     running database keeps matching after a regeneration."""
     env = sec / "mariadb.env"
     sec.mkdir(parents=True, exist_ok=True)
-    pw = None
-    if env.exists():
-        pw = next((ln.split("=", 1)[1] for ln in env.read_text().splitlines()
-                   if ln.startswith("MARIADB_PASSWORD=")), None)
-    pw = pw or secrets.token_urlsafe(24)
-    env.write_text(f"MARIADB_RANDOM_ROOT_PASSWORD=yes\nMARIADB_USER=slurm\nMARIADB_PASSWORD={pw}\n"
+    old = env.read_text().splitlines() if env.exists() else []
+    pw = next((ln.split("=", 1)[1] for ln in old if ln.startswith("MARIADB_PASSWORD=")), None) or secrets.token_urlsafe(24)
+    # the root password is kept for the same reason; `benchctl up` uses it (inside the container, never printed) to apply LAB_GRANT_SQL
+    root = next((ln.split("=", 1)[1] for ln in old if ln.startswith("MARIADB_ROOT_PASSWORD=")), None) or secrets.token_urlsafe(24)
+    env.write_text(f"MARIADB_ROOT_PASSWORD={root}\nMARIADB_USER=slurm\nMARIADB_PASSWORD={pw}\n"
                    "MARIADB_DATABASE=slurm_acct_db\n")
     etc = sec / "slurmdbd"
     etc.mkdir(exist_ok=True)

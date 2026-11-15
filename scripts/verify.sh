@@ -80,7 +80,7 @@ fi
 shopt -s nullglob
 [ -n "${PYLIBS:-}" ] && export PYTHONPATH="$PYLIBS${PYTHONPATH:+:$PYTHONPATH}"
 units() {  # test_bmc_tls_real.py -> bmc_tls: one name per component that has tests
-  local f; for f in tests/test_*.py tests/real/test_*.py; do f=$(basename "$f" .py); f=${f#test_}; f=${f%_real}; echo "${f%_browser}"; done | sort -u
+  local f; for f in tests/test_*.py tests/real/test_*.py; do f=$(basename "$f" .py); f=${f#test_}; f=${f%_real}; echo "${f%_browser}"; done | LC_ALL=C sort -u  # byte order, whatever the locale: a name with an underscore sorts the same everywhere
 }
 if [ "$list" = 1 ]; then units; exit 0; fi
 fast=() live=() hook=""
@@ -159,6 +159,7 @@ step() {  # step NAME CMD...: run with a live status line, record, keep the outp
     mkdir -p compose/generated; keep="compose/generated/verify-fail-${name%% *}-$(date +%H%M%S).log"; cp "$log" "$keep"
     echo "      full output of this step: $keep  (attach it; nothing needs re-running with -vv)"; fi
   awk '/slowest .*durations/{f=1} f&&/^=+ .* in [0-9.]+s/{f=0} f' "$log" | sed 's/^/      /'  # where the time went (pytest --durations)
+  grep '^SKIPPED' "$log" | sed 's/^/      /'  # a skipped test names its file, line and reason (issue 639), so a pass with skips is never anonymous
   grep '^SLOW ' "$log" | sed 's/^/      /'  # per-module seconds from tests/real/verify_times.py (issue 576)
   timings+=("${secs}s $name")
 }
@@ -183,7 +184,7 @@ if [ "$unit_given" = 1 ]; then
     [ -n "$hook" ] && step "reset $unit state ($hook)" "$hook"
   fi
   [ ${#fast[@]} -gt 0 ] && step "$unit unit tests" python3 -m pytest -v "${fast[@]}"
-  if [ ${#live[@]} -gt 0 ]; then step "$unit live tests" env WORKBENCH_REAL=1 python3 -m pytest -v -rfE --durations=25 "${live[@]}"
+  if [ ${#live[@]} -gt 0 ]; then step "$unit live tests" env WORKBENCH_REAL=1 python3 -m pytest -v -rfEs --durations=25 "${live[@]}"
   else echo "NOTE  $unit has no live tests (tests/real/test_${unit}*.py)"; fi
 else
   run_validate=0

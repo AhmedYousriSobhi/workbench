@@ -23,7 +23,7 @@ inventories are generated from it, so node names agree everywhere. **Never hand-
 | `time_dilation` | above 1 compresses job durations and arrival intervals |
 | `jira.mode` | `mock` (default), `cloud`, `dc` |
 | `compute` | `count`, `prefix` (names `cn001`...), `memory_mb` and `cpus` (the fake size Slurm advertises) |
-| `gpu` | `nodes`, `prefix` (`gpu001`...), `gpus_per_node`, `type` |
+| `gpu` | `nodes`, `prefix` (`gpu001`...), `gpus_per_node`, `type`; optional `mig: {nodes: [gpu002], profile: 1g, slices: 7}` splits every GPU of the listed nodes into slices (Slurm then advertises `gpu:h200_1g:56` there; request it with `--gres=gpu:h200_1g:N`; off by default) |
 | `partitions` | name and which nodes (`cpu`, `gpu`) |
 | `users` | name, persona, QOS; UIDs are assigned in order from 1001 |
 | `kubernetes` | `version` (Kubernetes release of the control plane), `nodes`: groups of KWOK nodes with `prefix`, `count`, `cpus`, `memory_gb`, `pool` and, for GPU nodes, `gpus` and `gpu_type` (the optional Kubernetes part, [chapter 4](04-nodes-and-shells.md)) |
@@ -61,9 +61,11 @@ Generated secrets (database password, the governor's Grafana token, the web page
 ## Under the hood
 
 > [!HOOD]
-> `benchctl compose` reads `sim.yaml` plus `profiles/NAME.yaml`, builds the compose model from a component catalogue (`CATALOG`) and writes `compose/generated/docker-compose.yml` with a "GENERATED, do not edit" header. A copy of the `sim.yaml` it used is written beside it, because `scale` and a saved workbench selection change the counts, so the repository file is the default and not the running truth.
-> Every component gets a memory limit and a priority class label (`workbench.class: P0` to `P6`) from that catalogue, which is how the governor knows what to pause first.
-> `scale` changes only the node count of a running stack; for any other `sim.yaml` change, bring the stack down and up again so every container sees the same values.
+> `benchctl compose` reads `sim.yaml` plus `profiles/NAME.yaml`. It builds the compose model from a component catalogue (`CATALOG`) and writes `compose/generated/docker-compose.yml` with a "GENERATED, do not edit" header.
+>
+> - A copy of the `sim.yaml` it used is written beside it. `scale` and a saved workbench selection change the counts, so the repository file is the default, not the running truth.
+> - Every component gets a memory limit and a priority class label (`workbench.class: P0` to `P6`) from the catalogue. That is how the governor knows what to pause first.
+> - `scale` changes only the node count of a running stack. For any other `sim.yaml` change, bring the stack down and up again, so every container sees the same values.
 
 Source: `benchctl/compose.py` (`CATALOG`, `write`), `benchctl/stack.py` (`scale`), SPEC section 3
 

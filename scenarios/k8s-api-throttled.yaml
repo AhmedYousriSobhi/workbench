@@ -1,0 +1,6 @@
+name: k8s-api-throttled
+ref: SC-40
+description: The API server puts the client's user (viewer) on a level with about three seats and no queue; a burst of requests is answered 429, then the level is removed
+steps:
+  - {at: 0s,   target: k8s, do: {apply: [scenario/70-apf.yaml]}}
+  - {at: 120s, target: k8s, do: {remove: [scenario/70-apf.yaml]}}

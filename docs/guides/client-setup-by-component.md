@@ -11,10 +11,19 @@
 ./scripts/benchctl ssh-key install     # the key where the client can read it
 ```
 
-[client-testing.md](client-testing.md) lists every endpoint; the [manual](../manual/README.md) shows the tool from
-scratch. Quickest alternative: [import everything from a file](export-profile.md) and set only the key and token by hand. This page is for the other case: the cluster is running and you want to connect **one** part of your client
-(SSH, Slurm, Grafana, storage, Jira, BCM, BMC) without reading the rest. Each section says what to start, where to find
-each value, what to type, what you should see, and the usual failure.
+Use this page when the cluster is running and you want to connect **one** part of your client (SSH, Slurm, Grafana, storage, Jira, BCM, BMC) without reading the rest.
+
+Each section says:
+- what to start;
+- where to find each value;
+- what to type;
+- what you should see;
+- the usual failure.
+
+Other routes:
+- The quickest is to [import everything from a file](export-profile.md) and set only the key and token by hand.
+- [client-testing.md](client-testing.md) lists every endpoint.
+- The [manual](../manual/README.md) shows the tool from scratch.
 
 Every section uses synthetic data on the cluster's fixed private addresses (`10.141.x.x`, standard ports; [ADR 0018](../adr/0018-fixed-addressing-plan.md)); `127.0.0.1` with the published ports is the fallback (`benchctl export profile --loopback`) for a client that cannot route to the Docker network or insists on HTTPS for non-local hosts. Field names are the client's own labels, as in its cluster form.
 
@@ -138,12 +147,16 @@ Press **Test BCM Connection** (save the cluster first). You can check by hand wh
 | User / password | `admin` / the password after the colon in `compose/generated/secrets/bmc_credentials` (the file reads `admin:<password>`) |
 | Certificate | self-signed, the same on every BMC; the client must be told to trust or pin it |
 
-Each BMC is a small container on the BMC network (`10.148.0.0/16`) with its own fixed IP at the standard port 443
-([ADR 0018](../adr/0018-fixed-addressing-plan.md)). The address works from this machine and from the login node (the jump
-host is also on that network). `benchctl export profile --bmc` writes one target per node with its own address.
-Every machine has a BMC by default, the Kubernetes nodes too (when that part is on). Choose which in **▦ Cluster architecture** (the BMC part has a switch per node group, Slurm CPU, Slurm GPU, Kubernetes CPU and Kubernetes GPU, with the memory each costs, and a collapsed list to leave out single nodes) or with `--bmc-groups slurm-gpu,k8s-gpu` and `--bmc-nodes cn001,gpu001`;
-each BMC costs about 32 MB. A client that cannot route to the cluster network uses the old single listener,
-`127.0.0.1:8443` with the Host header `bmc-<node>` (`--loopback`).
+Each BMC is a small container on the BMC network (`10.148.0.0/16`) with its own fixed IP at the standard port 443 ([ADR 0018](../adr/0018-fixed-addressing-plan.md)).
+- The address works from this machine and from the login node. The jump host is also on that network.
+- `benchctl export profile --bmc` writes one target per node with its own address.
+- A client that cannot route to the cluster network uses the single listener instead: `127.0.0.1:8443` with the Host header `bmc-<node>` (`--loopback`).
+
+Every machine has a BMC by default, the Kubernetes nodes too (when that part is on). Each BMC costs 16 MB at most (about 3 MB used).
+
+**Choose which nodes get one:**
+- In **▦ Cluster architecture**: the BMC part has a switch per node group (Slurm CPU, Slurm GPU, Kubernetes CPU, Kubernetes GPU) with the memory each costs, and a collapsed list to leave out single nodes.
+- On the command line: `--bmc-groups slurm-gpu,k8s-gpu` and `--bmc-nodes cn001,gpu001`.
 
 Check by hand: `curl -sk -u "admin:<password>" https://10.148.100.1/redfish/v1/` (or, with the old listener, `curl -sk -H "Host: bmc-gpu001" -u "admin:<password>" https://127.0.0.1:8443/redfish/v1/`) (it answers "gpu001 service root"). Break something with
 `./scripts/benchctl scenario run fan-failure`.

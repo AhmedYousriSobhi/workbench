@@ -179,13 +179,13 @@ def test_the_part_adds_two_localhost_unprivileged_limited_containers():
         assert svc["labels"]["workbench.class"] == "P6" and svc["mem_limit"].endswith("m")
         assert "cap_add" not in svc and "privileged" not in svc and "ipv4_address" in svc["networks"]["default"]
     assert "--lc-collate=C" in db["environment"]["POSTGRES_INITDB_ARGS"]
-    assert set(data["volumes"]) == set(jira_real.VOLUMES)
+    assert set(data["volumes"]) == set(jira_real.VOLUMES) | {"shared-scratch"}  # the shared scratch (issue 461) is always there
     assert "jira-mock" in data["services"]  # next to the mock, not instead of it
 
 
 def test_without_the_part_nothing_changes():
     data, _, _ = _services(["jira"])
-    assert "jira-real" not in data["services"] and "jira-db" not in data["services"] and "volumes" not in data
+    assert "jira-real" not in data["services"] and "jira-db" not in data["services"] and set(data.get("volumes", {})) == {"shared-scratch"}
 
 
 def test_the_part_is_in_the_estimate_and_never_turned_on_by_all_or_addons():

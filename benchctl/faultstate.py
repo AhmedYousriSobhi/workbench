@@ -10,11 +10,14 @@ from __future__ import annotations
 
 import base64
 import json
+import struct
 import time
 from collections.abc import Callable
 from pathlib import Path
 
 from . import authfaults
+
+TELEPORT_IDENTITIES = Path("compose/generated/secrets/teleport/identity")  # benchctl/teleport.py SECRETS_DIR
 
 BMC_TLS = "http://127.0.0.1:8000/sim/tls"
 JIRA_FAILURE = "http://127.0.0.1:8080/sim/failure"
@@ -65,6 +68,47 @@ def slurm_token(path: Path = authfaults.TOKEN_FILE, now: float | None = None) ->
     return [row("slurmrestd", "auth", "saved Slurm token expired")] if exp < (time.time() if now is None else now) else []
 
 
+def _ssh_cert_valid_before(line: str) -> int:
+    """`valid before` (epoch seconds) of the OpenSSH certificate on one identity-file line (`TYPE-cert-v01 BASE64 ...`, an OpenSSH certificate).
+    Only that line is read: the key lines above it are never touched. Wire format: type, nonce, the public key's fields
+    (RSA 2, ECDSA 2, Ed25519 1), serial, type, key id, principals, valid after, valid before."""
+    kind, blob = line.split()[:2]
+    raw, pos = base64.b64decode(blob), 0
+
+    def string() -> bytes:
+        nonlocal pos
+        (n,) = struct.unpack_from(">I", raw, pos)
+        pos += 4 + n
+        return raw[pos - n:pos]
+
+    string(), string()  # type, nonce
+    for _ in range(1 if kind.startswith("ssh-ed25519") else 2):
+        string()
+    pos += 8 + 4  # serial, certificate type
+    string(), string()  # key id, principals
+    return struct.unpack_from(">QQ", raw, pos)[1]
+
+
+def teleport_cert(folder: Path = TELEPORT_IDENTITIES, now: float | None = None) -> list[dict]:
+    """A simulated user's Teleport identity file whose certificate has ended (`teleport_cert_ttl`; `ssh` then says it expired).
+    A file that cannot be read or parsed is skipped; key material is never read into a row."""
+    out = []
+    t = time.time() if now is None else now
+    try:
+        files = sorted(p for p in folder.iterdir() if p.is_file())
+    except OSError:
+        return []
+    for f in files:
+        try:
+            line = next(x for x in f.read_text().splitlines() if "-cert-v01@openssh.com " in x)
+            before = _ssh_cert_valid_before(line)
+        except (OSError, StopIteration, ValueError, struct.error):
+            continue
+        if before < t:
+            out.append(row("teleport", "auth", f"certificate of {f.name} expired"))
+    return out
+
+
 def munge(nodes: list[str], runner: Callable) -> list[dict]:
     """A node holding a wrong munge key keeps its own key as munge.key.good (authfaults.MUNGE_WRONG)."""
     out = []
@@ -76,4 +120,4 @@ def munge(nodes: list[str], runner: Callable) -> list[dict]:
 
 
 def collect(fetch: Callable, runner: Callable, running_nodes: list[str]) -> list[dict]:
-    return [*jira_failure(fetch), *bmc_tls(fetch), *k8s_cert(), *slurm_token(), *munge(running_nodes, runner)]
+    return [*jira_failure(fetch), *bmc_tls(fetch), *k8s_cert(), *slurm_token(), *teleport_cert(), *munge(running_nodes, runner)]

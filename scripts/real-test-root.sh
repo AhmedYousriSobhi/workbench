@@ -6,4 +6,4 @@ set -eu
 cd "$(dirname "$0")/.."
 [ -n "${PYLIBS:-}" ] && export PYTHONPATH="$PYLIBS${PYTHONPATH:+:$PYTHONPATH}"
 py=python3; [ -x .venv/bin/python ] && py=.venv/bin/python  # sudo has no pytest on the system python
-WORKBENCH_REAL=1 exec "$py" -m pytest -v -p no:cacheprovider tests/real/test_root.py "$@"
+WORKBENCH_REAL=1 exec "$py" -m pytest -v -p no:cacheprovider tests/real/test_root.py tests/real/test_netem_root.py "$@"

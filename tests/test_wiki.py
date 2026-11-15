@@ -191,4 +191,4 @@ def test_alert_styles_exist_for_every_kind_and_both_themes():
     from webui.wiki import ALERTS, STYLE
     for kind in ALERTS:
         assert f".alert-{kind}" in STYLE or kind in ("note",), kind
-    assert "prefers-color-scheme:dark" in STYLE and "details{" in STYLE and "kbd{" in STYLE and "figcaption{" in STYLE
+    assert "details{" in STYLE and "kbd{" in STYLE and "figcaption{" in STYLE

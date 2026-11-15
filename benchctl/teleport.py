@@ -20,16 +20,19 @@ from pathlib import Path
 
 import yaml
 
-from . import addressing, controller, logins
+from . import addressing, controller, k8s, logins
 
 IMAGE = "public.ecr.aws/gravitational/teleport-distroless"
 DEFAULT_VERSION = "18.11.8"   # a Community Edition tag; licence note in ADR 0020. Teleport supports a tsh one major behind it.
 DEFAULT_TTL = "12h"
 CLUSTER = "workbench"
+KUBE_PORT = 3027               # the Kubernetes service listens here inside the container (not published; clients use the web port)
 DIAG_PORT = 3434               # diagnostics (/healthz, /metrics), published on 127.0.0.1 only; the page reads it for status and traffic dots
 PROXY_PORT = 3080              # web UI, the API and (single-port mode, config v3) the SSH proxy
 DNS_NAME = "teleport.workbench.test"  # a container alias on the cluster network; `.test` is reserved (RFC 6761), so it never clashes with a real name
 ROLE = "workbench-user"
+KUBE_GROUP = "workbench-k8s-viewers"  # the Kubernetes group the role grants when the k8s part is on; bound to the read-only role in k8s/fixtures/47-rbac-teleport.yaml
+KUBECONFIG = "kube.kubeconfig"        # under the secrets folder (mounted at CONTAINER_SECRETS): the static kubeconfig of the Kubernetes Service
 CONF_DIR = Path("compose/generated/teleport")             # mounted read-only at /etc/teleport; data/ is writable
 SECRETS_DIR = Path("compose/generated/secrets/teleport")  # CA key, host certificates, identity files (never tracked)
 CONTAINER_SECRETS = "/run/workbench/teleport"
@@ -81,11 +84,13 @@ def image(sim: dict) -> str:
     return f"{IMAGE}:{settings(sim)['version']}"
 
 
-def config(sim: dict) -> str:
+def config(sim: dict, kube: bool = False) -> str:
     """teleport.yaml for auth + proxy only (no ssh_service: nodes are agentless). `proxy_listener_mode: multiplex` (auth_service) serves
     everything on one port, so only 3080 is published; without it tsh finds no SSH proxy address. A self-signed certificate (no https_keypairs), local users with
     one-time codes (OTP): Teleport 18 cannot turn MFA off (`second_factor: off` makes auth exit with "cannot disable
-    multi-factor authentication"), and `second_factors` is its documented setting. Identity files need no code."""
+    multi-factor authentication"), and `second_factors` is its documented setting. Identity files need no code.
+    `kube` (the k8s part is selected, ADR 0083): adds a `kubernetes_service` in the same process, registering the simulated cluster from a static
+    kubeconfig; clients reach it on the same web port (config v3 multiplexes), so no port is added."""
     settings(sim)
     conf = {"version": "v3",
             "teleport": {"nodename": "teleport", "data_dir": "/var/lib/teleport", "diag_addr": f"0.0.0.0:{DIAG_PORT}",
@@ -96,6 +101,12 @@ def config(sim: dict) -> str:
             "ssh_service": {"enabled": False},
             "proxy_service": {"enabled": True, "web_listen_addr": f"0.0.0.0:{PROXY_PORT}",
                               "public_addr": [proxy_addr(sim), f"{DNS_NAME}:{PROXY_PORT}"]}}  # the address and the name clients use, in the certificate and in links
+    if kube:
+        # Teleport 18 refuses a kubernetes_service in this process without `listen_addr` or a proxy to dial out to (found live: "set
+        # kubernetes_service.listen_addr if this process can be reached from a teleport proxy"). The listener stays inside the container:
+        # nothing publishes 3027, so clients still use only the web port.
+        conf["kubernetes_service"] = {"enabled": True, "listen_addr": f"0.0.0.0:{KUBE_PORT}", "kubeconfig_file": f"{CONTAINER_SECRETS}/{KUBECONFIG}",
+                                      "labels": {"env": "workbench"}}
     return yaml.safe_dump(conf, sort_keys=False)
 
 
@@ -122,13 +133,16 @@ def targets(sim: dict, ips: dict) -> dict[str, str]:
     return {n: ips["logins"][n] for n in logins.via_teleport(sim)} | ctl | dict(ips["nodes"])
 
 
-def resources(sim: dict, ips: dict) -> str:
-    """The role, the users and the nodes as one multi-document YAML for `tctl create -f`."""
+def resources(sim: dict, ips: dict, kube: bool = False) -> str:
+    """The role, the users and the nodes as one multi-document YAML for `tctl create -f`. With `kube` the role also allows the registered
+    cluster and impersonating KUBE_GROUP (role v7: `kubernetes_resources` left out means every resource and verb; the group's RBAC limits it)."""
     t = settings(sim)
     users = [u["name"] for u in sim.get("users", [])]
+    allow = {"logins": users, "node_labels": {"*": "*"}}
+    if kube:
+        allow |= {"kubernetes_labels": {"*": "*"}, "kubernetes_groups": [KUBE_GROUP]}
     docs = [{"kind": "role", "version": "v7", "metadata": {"name": ROLE},
-             "spec": {"options": {"max_session_ttl": t["cert_ttl"]},
-                      "allow": {"logins": users, "node_labels": {"*": "*"}}}}]
+             "spec": {"options": {"max_session_ttl": t["cert_ttl"]}, "allow": allow}}]
     for name, ip in targets(sim, ips).items():
         kind = "login" if logins.is_login(name) else "controller" if name == controller.ALIAS else "gpu" if name.startswith("gpu") else "compute"
         docs.append({"kind": "node", "version": "v2", "sub_kind": "openssh",
@@ -195,9 +209,12 @@ def reset(conf: Path = CONF_DIR, secrets: Path = SECRETS_DIR) -> list[Path]:
     return gone
 
 
-def prepare(sim: dict, ips: dict, conf: Path = CONF_DIR, secrets: Path = SECRETS_DIR) -> None:
+def prepare(sim: dict, ips: dict, conf: Path = CONF_DIR, secrets: Path = SECRETS_DIR, kube: bool = False,
+            kube_dir: Path | None = None) -> bool:
     """Write the config and resource files and make the directories the container writes to (owned by this user:
-    Docker would create them as root, and the container runs as the invoking user)."""
+    Docker would create them as root, and the container runs as the invoking user). With `kube` also the Kubernetes Service's kubeconfig
+    (from the k8s credentials, so `k8s.prepare` runs first). Returns True when the config or that kubeconfig differs from what a running
+    Teleport read at its start: the caller then recreates the container (it reads both only at start)."""
     data = conf / "data"
     fresh = not data.is_dir() or not any(data.iterdir())  # a new cluster has a new CA: what the old one signed is useless
     data.mkdir(parents=True, exist_ok=True)
@@ -210,10 +227,19 @@ def prepare(sim: dict, ips: dict, conf: Path = CONF_DIR, secrets: Path = SECRETS
         for old in (*(secrets / "hosts").iterdir(), secrets / "openssh_ca.pub"):
             old.unlink(missing_ok=True)
     (secrets / "identity").mkdir(exist_ok=True, mode=0o700)
-    (conf / "teleport.yaml").write_text(config(sim))
-    (conf / "resources.yaml").write_text(resources(sim, ips))
+    kube_text = k8s.teleport_kubeconfig(ips, kube_dir) if kube else None
+    old = [(p.read_text() if p.is_file() else None) for p in (conf / "teleport.yaml", secrets / KUBECONFIG)]
+    (conf / "teleport.yaml").write_text(config(sim, kube))
+    if kube_text is not None:
+        (secrets / KUBECONFIG).write_text(kube_text)
+        (secrets / KUBECONFIG).chmod(0o600)
+    else:
+        (secrets / KUBECONFIG).unlink(missing_ok=True)
+    (conf / "resources.yaml").write_text(resources(sim, ips, kube))
+    changed = old != [(conf / "teleport.yaml").read_text(), kube_text]
     for u in (u["name"] for u in sim.get("users", [])):
         (conf / f"user-{u}.yaml").write_text(user_resource(u))
+    return changed
 
 
 def _tctl(runner: Callable, dc: Callable, *args: str):

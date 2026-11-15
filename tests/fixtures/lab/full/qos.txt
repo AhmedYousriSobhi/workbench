@@ -1,0 +1,3 @@
+Name|Priority|GraceTime|Preempt|PreemptMode|MaxTRESPU
+normal|0|00:00:00||cluster|
+high|1000|00:00:30|normal|requeue|gres/gpu=4

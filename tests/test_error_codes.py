@@ -34,6 +34,7 @@ def test_every_code_used_in_the_source_is_registered_and_every_non_doctor_code_i
 
 
 def test_every_doctor_check_has_a_code(monkeypatch):
+    monkeypatch.setattr(checks, "check_oomd", lambda *a, **k: checks.Check("oomd backstop", checks.OK, "off"))
     monkeypatch.setattr(checks, "check_tsh", lambda *a, **k: checks.Check("tsh 17.0.1", checks.OK, "fine"))
     names = [c.name for c in checks.run_all()]
     assert names, "doctor ran no checks"

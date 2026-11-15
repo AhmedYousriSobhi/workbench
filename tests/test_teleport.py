@@ -351,3 +351,102 @@ def test_doctor_check_warns_on_a_newer_tsh_and_says_ok_otherwise():
     assert ok.status == checks.OK and "18.11.8" in ok.detail
     assert checks.check_tsh(sim, fake_tsh("", rc=127)) is None
 
+
+
+# ---- Kubernetes through Teleport (issue 383, ADR 0083) ----
+
+def _kube_dir(tmp_path):
+    from benchctl import k8s
+    d = tmp_path / "k8s"
+    k8s.prepare(SIM, IPS, d, tmp_path / "st")
+    return d
+
+
+def test_config_has_a_kubernetes_service_only_when_the_k8s_part_is_selected():
+    off, on = yaml.safe_load(teleport.config(SIM)), yaml.safe_load(teleport.config(SIM, kube=True))
+    assert "kubernetes_service" not in off
+    ks = on.pop("kubernetes_service")
+    assert ks["enabled"] and ks["kubeconfig_file"] == f"{teleport.CONTAINER_SECRETS}/{teleport.KUBECONFIG}"
+    assert ks["listen_addr"] == f"0.0.0.0:{teleport.KUBE_PORT}"  # Teleport 18 exits without it (found live)
+    assert on == off  # nothing else changes: same version, same single web port, no kube_listen_addr, no new port
+    assert "kube_listen_addr" not in on["proxy_service"] and on["auth_service"]["proxy_listener_mode"] == "multiplex"
+
+
+def test_the_role_grants_the_viewers_group_only_with_the_k8s_part():
+    role = lambda kube: yaml.safe_load_all(teleport.resources(SIM, IPS, kube))
+    off = next(role(False))["spec"]["allow"]
+    on = next(role(True))["spec"]["allow"]
+    assert "kubernetes_groups" not in off and "kubernetes_labels" not in off
+    assert on["kubernetes_groups"] == [teleport.KUBE_GROUP] and on["kubernetes_labels"] == {"*": "*"}
+    assert on["logins"] == off["logins"]
+
+
+def test_the_rbac_fixture_lets_teleport_impersonate_and_binds_the_group_to_the_read_only_role():
+    docs = list(yaml.safe_load_all((ROOT / "k8s/fixtures/47-rbac-teleport.yaml").read_text()))
+    role = next(d for d in docs if d["kind"] == "ClusterRole")
+    verbs = {(tuple(r["apiGroups"]), tuple(r["resources"])): set(r["verbs"]) for r in role["rules"]}
+    assert verbs[(("",), ("users", "groups", "serviceaccounts"))] == {"impersonate"}
+    assert all(not (v & {"update", "delete", "patch", "*", "list"}) for v in verbs.values())  # it cannot change or list anything itself
+    binds = {d["metadata"]["name"]: d for d in docs if d["kind"] == "ClusterRoleBinding"}
+    assert binds["workbench-teleport"]["subjects"] == [{"kind": "User", "name": "teleport"}]
+    viewers = binds["workbench-teleport-viewers"]
+    assert viewers["subjects"][0]["name"] == teleport.KUBE_GROUP and viewers["roleRef"]["name"] == "workbench-viewer"
+    assert "cluster-admin" not in (ROOT / "k8s/fixtures/47-rbac-teleport.yaml").read_text()
+
+
+def test_prepare_writes_a_token_kubeconfig_without_host_paths_and_reports_a_change(tmp_path):
+    from benchctl import k8s
+    kd = _kube_dir(tmp_path)
+    conf, sec = tmp_path / "conf", tmp_path / "sec"
+    assert teleport.prepare(SIM, IPS, conf, sec, kube=True, kube_dir=kd) is True       # first time: new
+    assert teleport.prepare(SIM, IPS, conf, sec, kube=True, kube_dir=kd) is False      # nothing changed: no recreate
+    kc = yaml.safe_load((sec / teleport.KUBECONFIG).read_text())
+    assert [c["name"] for c in kc["contexts"]] == [k8s.CONTEXT]
+    assert kc["users"][0]["user"] == {"token": k8s._token(k8s.TELEPORT_USER, kd)}      # the teleport user, not the admin certificate
+    assert kc["clusters"][0]["cluster"]["server"] == f"https://{k8s.api_ip(IPS)}:6443"
+    text = (sec / teleport.KUBECONFIG).read_text()
+    assert "admin" not in text and str(tmp_path) not in text and "client-key" not in text
+    assert (sec / teleport.KUBECONFIG).stat().st_mode & 0o777 == 0o600
+    assert teleport.prepare(SIM, IPS, conf, sec) is True                               # k8s deselected: config changes, kubeconfig goes
+    assert not (sec / teleport.KUBECONFIG).exists() and "kubernetes_service" not in (conf / "teleport.yaml").read_text()
+
+
+def test_prepare_with_k8s_but_no_credentials_says_so(tmp_path):
+    from benchctl import k8s
+    with pytest.raises(k8s.K8sError, match="teleport user"):
+        teleport.prepare(SIM, IPS, tmp_path / "c", tmp_path / "s", kube=True, kube_dir=tmp_path / "none")
+
+
+def test_the_teleport_stage_starts_after_the_api_server_and_before_the_nodes():
+    labels = [label for label, _ in stack.stage_services(["teleport", "k8s-apiserver", "kwok-controller", "cn001", "login"])]
+    assert labels.index("kubernetes") < labels.index("kubernetes nodes") < labels.index("teleport") < labels.index("nodes")
+
+
+def test_up_with_both_parts_registers_the_cluster_and_recreates_a_running_teleport_on_a_change(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    for d in ("profiles", "components", "images", "k8s"):
+        shutil.copytree(ROOT / d, tmp_path / d, dirs_exist_ok=True)
+    calls: list[list[str]] = []
+    started: list[str] = []
+
+    def runner(cmd):
+        calls.append(cmd)
+        if "up" in cmd:
+            started.extend(cmd[cmd.index("--no-deps") + 1:])
+        return cp(out="\n".join(started)) if "ps" in cmd else cp()
+
+    from benchctl import k8s
+    monkeypatch.setattr(stack, "governor_admits", lambda n, say: True)
+    monkeypatch.setattr(stack, "provision_token", lambda **kw: kw.get("path", tmp_path / "t"))
+    monkeypatch.setattr(teleport, "fetch_ca", lambda *a, **k: "ssh-ed25519 AAAA\n")
+    monkeypatch.setattr(k8s, "bootstrap", lambda *a, **k: True)
+    monkeypatch.setattr(stack, "_project_services", lambda r: ["teleport"])   # Teleport is already running
+    sim, prof = workbench.effective(SIM, workbench.Spec(parts=["teleport", "k8s"], cpu_nodes=1, gpu_nodes=0))
+    msgs: list[str] = []
+    assert stack.up(sim, "workbench", runner=runner, say=msgs.append, available=12 * 1024**3, wait=1, prof=prof)
+    assert "kubernetes_service" in (tmp_path / "compose/generated/teleport/teleport.yaml").read_text()
+    tele_up = [c for c in calls if "up" in c and "teleport" in c]
+    assert tele_up and "--force-recreate" in tele_up[0]
+    assert any("kube login workbench-k8s" in m for m in msgs)
+    secrets_text = " ".join(msgs)
+    assert k8s._token(k8s.TELEPORT_USER, tmp_path / "compose/generated/secrets/k8s") not in secrets_text  # the token is never printed

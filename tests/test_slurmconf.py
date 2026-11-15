@@ -130,3 +130,11 @@ def test_test_timers_are_opt_in_and_shorter(monkeypatch):
 def test_a_node_that_stops_answering_is_marked_down_within_about_half_a_minute():
     conf = slurmconf.slurm_conf(SIM, 4)
     assert "SlurmdTimeout=15\n" in conf and "MessageTimeout=5\n" in conf and "ReturnToService=1\n" in conf
+
+
+def test_job_usage_from_proc_and_slurms_own_metrics_endpoint():
+    """Issue 459: sstat and sacct have usage (jobacct_gather/linux) and slurmctld serves its own Prometheus metrics."""
+    lines = slurmconf.slurm_conf(SIM, 4).splitlines()
+    assert "JobAcctGatherType=jobacct_gather/linux" in lines and "JobAcctGatherFrequency=task=10" in lines
+    assert "MetricsType=metrics/openmetrics" in lines
+    assert not any("jobacct_gather/none" in line for line in lines)

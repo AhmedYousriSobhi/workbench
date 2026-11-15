@@ -24,6 +24,7 @@ Keep the HTTP surface on `127.0.0.1:8000` unchanged and add a TLS surface on `12
 
 ## Consequences
 - Fault injection (`/sim/inject`) shows on both surfaces. TLS requests count toward `/sim/stats`.
+- `GET /sim/summary` (issue 450) answers power, CPU temperature and failed fans of every node at once, for the web page's snapshot (one call instead of two per node); it is under `/sim/`, so it is not client traffic and the Redfish surface is unchanged.
 - Direct host access needs a `Host` header or `curl --resolve`; the first node answers otherwise.
 - Real BMC quirks (slow responses, vendor shapes, `ThermalSubsystem`) are not simulated; only the legacy
   Thermal/Power shape is.

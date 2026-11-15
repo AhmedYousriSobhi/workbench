@@ -43,11 +43,14 @@ goes through the governor: the job and daemon steps (`slurm-step`, `submit-job`)
 (`slurm-trace`, which runs `benchctl get trace`). The governor must have been started with `--workdir` (`benchctl start`
 does that); without it the steps show **skipped** and the Slurm trace box is refused with that reason.
 
-The page's trace has one entry per step, shown under the timeline. Because the governor does the step in the
-background, entry *i* covers everything between running step *i* and running step *i+1* (the last one ends with the run),
-so the first entry appears when the second step starts. The text is the same as in the terminal. Use
-`./scripts/benchctl get trace --node cn001 --since 60` for the raw JSON at any time, and `benchctl set slurmd cn001
-restart|stop|start`, `benchctl set slurmctld restart` and `benchctl remove jobs` to do one step by hand.
+The page's trace has one entry per step, shown under the timeline. The text is the same as in the terminal.
+
+The governor does each step in the background. Entry *i* therefore covers everything between running step *i* and running step *i+1* (the last one ends with the run). The first entry appears when the second step starts.
+
+| Need | Command |
+|---|---|
+| the raw JSON at any time | `./scripts/benchctl get trace --node cn001 --since 60` |
+| one step by hand | `benchctl set slurmd cn001 restart\|stop\|start`, `benchctl set slurmctld restart`, `benchctl remove jobs` |
 
 ## Reading the trace
 
@@ -91,7 +94,7 @@ What the seven passing tests checked on the containers:
 
 The two slowest were the drain test and the shipped scenarios, about 44 s each; the rest took 12 s or less.
 
-The skipped test is not named in the run output. The only skip in the module is the governor test (`test_the_governor_runs_the_steps_and_serves_the_trace_for_the_page`), which skips when no governor answers, so that is the one to check; it is not recorded as passed. Run it with a governor started by `benchctl start` to cover it.
+The first run's output did not name the skipped test (since issue 639 `verify.sh` and `real-test.sh` run pytest with `-rs`, and `verify.sh` prints each `SKIPPED file:line: reason` line under the step, so a skip is named). The only skip in the module is the governor test (`test_the_governor_runs_the_steps_and_serves_the_trace_for_the_page`), which skips when no governor answers, so that is the one to check; it is not recorded as passed. Run it with a governor started by `benchctl start` to cover it.
 
 ## Limits
 

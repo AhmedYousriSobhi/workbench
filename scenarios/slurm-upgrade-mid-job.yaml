@@ -1,0 +1,13 @@
+name: slurm-upgrade-mid-job
+ref: SC-44
+description: "Slurm is upgraded in place while a real job runs, in SchedMD's order (slurmdbd, slurmctld, slurmd, login); the job and its slurmstepd must survive. Start the cluster on an older release first: benchctl up --with accounting --slurm-version 25.11.9 (run with --trace)"
+steps:
+  - {at: 0s,   target: slurm, do: {submit: {node: first cpu node, duration: 600}}}
+  - {at: 15s,  target: slurm-upgrade, do: {to: 26.05.5, daemons: [slurmdbd]}}
+  - {at: 45s,  target: slurm-upgrade, do: {to: 26.05.5, daemons: [slurmctld, slurmrestd]}}
+  - {at: 75s,  target: slurm-upgrade, do: {to: 26.05.5, daemons: [first cpu node, second cpu node, third cpu node, fourth cpu node, first gpu node, second gpu node]}}
+  - {at: 105s, target: slurm-upgrade, do: {to: 26.05.5, daemons: [login]}}
+  - {at: 120s, target: slurm, do: {cancel: true}}
+expect:
+  - slurm.job_state: {node: first cpu node, state: RUNNING, within: 110s}
+  - slurm.stepd: {node: first cpu node, alive: true, within: 110s}

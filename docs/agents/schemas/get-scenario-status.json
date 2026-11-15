@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "get scenario-status",
+  "description": "The web page's scenario run. name is null and running false when nothing has run since the page started. Exit 1 when the page is not running.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "running": {
+      "type": "boolean"
+    },
+    "name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "speed": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "ok": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "stopped": {
+      "type": "boolean"
+    },
+    "steps_total": {
+      "type": "integer"
+    },
+    "steps_done": {
+      "type": "integer"
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "at": {},
+          "target": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "status"
+        ]
+      }
+    },
+    "expects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "status"
+        ]
+      }
+    }
+  },
+  "required": [
+    "contract_version",
+    "running",
+    "name",
+    "ok",
+    "stopped",
+    "steps_total",
+    "steps_done",
+    "steps",
+    "expects"
+  ]
+}

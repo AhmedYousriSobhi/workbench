@@ -33,3 +33,23 @@ test('lens chips: Telemetry is shown as Monitoring, ids are the plane ids, All i
   assert.equal(LENSES.find(l => l.id === 'telemetry').label, 'Monitoring');
   assert.deepEqual(LENSES.map(l => l.id), ['all', 'access', 'management', 'telemetry', 'tickets', 'faults', 'client']);
 });
+test('Slurm reason and running jobs are shown when the stats are readable', () => {
+  const rows = nodeSummary(gpu(), null, { reason: 'Kill task failed', jobs: [{ id: '12', user: 'alice' }, { id: '13_4', user: 'bob' }] });
+  assert.equal(get(rows, 'Reason').v, "Kill task failed (Slurm's reason)");
+  assert.equal(get(rows, 'Jobs').v, '12 (alice), 13_4 (bob)');
+  const idle = nodeSummary(gpu({ state: 'ok', xid: 0 }), null, { reason: undefined, jobs: [] });
+  assert.equal(get(idle, 'Reason').v, 'none (healthy)'); assert.equal(get(idle, 'Jobs').v, 'none running');
+});
+test('without Slurm stats there is one notice and no Jobs row', () => {
+  const rows = nodeSummary(gpu(), null, null);
+  assert.equal(get(rows, 'Jobs'), undefined);
+  assert.match(get(rows, 'Reason').v, /Slurm stats are unavailable.*describe node gpu001/);
+});
+test('the Tickets row: none, some, unreadable, and no row before it was asked', () => {
+  assert.equal(get(nodeSummary(gpu(), null, null), 'Tickets'), undefined);
+  assert.equal(get(nodeSummary(gpu(), null, null, []), 'Tickets').v, 'none in the Jira mock (label node-gpu001)');
+  const t = [{ key: 'OPS-3', summary: 'gpu001: GPU fault', status: 'Open', priority: 'High' }];
+  assert.equal(get(nodeSummary(gpu(), null, null, t), 'Tickets').v, 'OPS-3 Open, High: gpu001: GPU fault');
+  assert.match(get(nodeSummary(gpu(), null, null, null), 'Tickets').v, /^not read/);
+  assert.ok(get(nodeSummary({ name: 'k8s-gpu001', kind: 'k8s', state: 'ok' }, null, null, []), 'Tickets'));
+});

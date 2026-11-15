@@ -1,7 +1,7 @@
 import './setup.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildReport, eyeBase, eyeRows, runVerdict, timelineRows } from '../../static/js/testrunmodel.js';
+import { describe, buildReport, eyeBase, eyeRows, runVerdict, timelineRows } from '../../static/js/testrunmodel.js';
 
 const prev = { name: 'sc', ref: 'SC-09', steps: [
   { at: 0, target: 'slurm', do: { drain: ['cn001'] }, page: true, why: '' },
@@ -48,4 +48,9 @@ test('a ticket step reads as words, not JSON', async () => {
   const { describe } = await import('../../static/js/testrunmodel.js');
   assert.equal(describe({ do: { tickets: { action: 'create', count: 4, summary: 'Wave' } } }), 'Create 4 Jira tickets: Wave');
   assert.equal(describe({ do: { tickets: { action: 'transition', to: 'In Progress' } } }), 'Move Jira ticket to In Progress');
+});
+
+test('a Kubernetes drain step (an object, not a list) is described, not a crash', () => {
+  assert.match(describe({ do: { drain: { node: 'kgpu001', timeout: 30 } } }), /Kubernetes node kgpu001/);
+  assert.match(describe({ do: { drain: ['cn001'], reason: 'x' } }), /Drain cn001 in Slurm/);
 });

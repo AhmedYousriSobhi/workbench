@@ -8,7 +8,18 @@ import jsonschema
 import pytest
 from typer.testing import CliRunner
 
-from benchctl import alerts, checks, cli, contract, describe, faultstate, inventory, scenario, stack
+from benchctl import (
+    agentverbs,
+    alerts,
+    checks,
+    cli,
+    contract,
+    describe,
+    faultstate,
+    inventory,
+    scenario,
+    stack,
+)
 from webui import cluster, traffic
 
 runner = CliRunner()
@@ -40,6 +51,9 @@ def in_repo(monkeypatch):
     ran = scenario.Report("node-down", [scenario.Outcome("bmc-farm power", "ok")], [scenario.Outcome("expect node down", "failed", "did not hold")])
     monkeypatch.setattr(scenario, "run", lambda sc, **k: ran)
     monkeypatch.setattr(alerts, "fetch", lambda get=None: [{"name": "NodeDown", "state": "firing", "severity": "page", "labels": {"alertname": "NodeDown"}, "active_at": "2026-11-13T10:00:00Z"}])
+    monkeypatch.setattr(cli, "_page_run_state", lambda: {"running": False, "name": "node-down", "ok": True, "steps": [{"at": 0, "target": "bmc-farm", "do": {}, "status": "ok", "detail": ""}], "expects": []})
+    monkeypatch.setattr(agentverbs, "clear_faults", lambda sim, post, run: {"ok": True, "cleared": [{"target": "bmc-farm", "nodes": ["cn001"], "status": "ok", "detail": ""}]})
+    monkeypatch.setattr(agentverbs.capture, "run", lambda sim, node, emit, seconds, packets=0, stop=None: emit({"t": 1.0, "dir": "out", "kind": "request", "type": "REQUEST_PING"}))
     monkeypatch.setattr(describe, "gather", lambda *a, **k: {"name": "cn001", "kind": "compute", "notes": [], "container": {"state": "running"}})
 
 
@@ -52,7 +66,7 @@ VERBS = [("get-nodes", ["get", "nodes"]), ("get-services", ["get", "services"]),
          ("get-checks", ["get", "checks"]), ("get-scenarios", ["get", "scenarios"]), ("scenario-list", ["scenario", "list"]),
          ("get-workbench", ["get", "workbench"]), ("describe-node", ["describe", "node", "cn001"]), ("doctor", ["doctor"]),
          ("status", ["status"]), ("get-alerts", ["get", "alerts"]), ("describe-workbench", ["describe", "workbench"]), ("get-endpoints", ["get", "endpoints"]), ("get-faults", ["get", "faults"]),
-         ("get-traffic", ["get", "traffic"]), ("scenario-run", ["scenario", "run", "node-down"]), ("plan", ["plan", "--cpu-nodes", "2", "--gpu-nodes", "1"])]
+         ("get-traffic", ["get", "traffic"]), ("get-scenario-status", ["get", "scenario-status"]), ("clear-faults", ["clear", "faults"]), ("get-capture-once", ["get", "capture", "cn001", "--once"]), ("scenario-run", ["scenario", "run", "node-down"]), ("plan", ["plan", "--cpu-nodes", "2", "--gpu-nodes", "1"])]
 
 
 @pytest.mark.parametrize(("name", "argv"), VERBS, ids=[v[0] for v in VERBS])
@@ -63,8 +77,9 @@ def test_json_output_matches_its_schema_and_o_json(name, argv):
     jsonschema.validate(data, schema(name), cls=jsonschema.Draft202012Validator)
     assert data["contract_version"] == contract.CONTRACT_VERSION
     assert runner.invoke(cli.app, [*argv, "-o", "json"]).stdout == r.stdout  # `--json` is only an alias
+    scanned = r.stdout.replace("systemd-zram-setup@zram0.service", "")  # a public unit name that looks like an email
     for pat in SECRETS:
-        assert not pat.search(r.stdout), f"{name}: output matches {pat.pattern}"
+        assert not pat.search(scanned), f"{name}: output matches {pat.pattern}"
 
 
 def test_scenario_run_json_keeps_stdout_to_one_object_and_the_exit_code():

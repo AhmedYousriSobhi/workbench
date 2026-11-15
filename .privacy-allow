@@ -1,1 +1,5 @@
 # Public third-party strings that look like emails but are safe to publish (one exact string per line).
+ecdsa-sha2-nistp256-cert-v01@openssh.com
+ssh-ed25519-cert-v01@openssh.com
+-cert-v01@openssh.com
+systemd-zram-setup@zram0.service

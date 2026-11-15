@@ -11,6 +11,7 @@ from benchctl import (
     jira_real,
     k8s,
     logins,
+    objectstore,
     real_gpu,
     teleport,
 )
@@ -101,10 +102,12 @@ def actions_for(e: dict, sim: dict, user: str) -> list[dict]:
         "jira-real": [link("Open Jira (real)", f"http://{LOCAL}:{jira_real.PORT}"),
                       {"kind": "post", "label": "Refresh licence (restarts Jira)", "value": "/api/jira-real/refresh"}],
         "gpu": [link("Open the metrics", f"http://{LOCAL}:9400/metrics")],
+        "objectstore": [copy("Copy s5cmd ls", "benchctl exec cn001 -- bash -lc 's5cmd ls s3://$WORKBENCH_S3_BUCKET/'")],
         "dcgm": [link("Open the real DCGM metrics", f"http://{LOCAL}:{dcgm.PORT}/metrics")],
         "real-gpu": [link("Open the real GPU metrics", f"http://{LOCAL}:{real_gpu.PORT}/metrics")],
         "prometheus": [link("Open Prometheus", f"http://{LOCAL}:9090")],
         "grafana": [link("Open Grafana", f"http://{LOCAL}:3000")],
+        "alertmanager": [link("Open Alertmanager", f"http://{LOCAL}:9093")],
         "slurm": [copy("Copy sinfo", "benchctl exec slurmctld -- sinfo")],
         "ui": [link("Open this page", f"http://{LOCAL}:8088")],
     }.get(i, [])
@@ -135,6 +138,7 @@ def _rows(sim: dict) -> list[dict]:
     def ssh_for(ip: str) -> str:
         return f"ssh {SSH_OPTS} {user}@{ip}"
     admin = (controller.allowed_users(sim) or [user])[0]
+    dcgm_ip = ip.get(dcgm.SERVICE) or f"10.141.255.{addressing.DCGM_BASE}"  # a cluster with no GPU node plans none (the part refuses to start there)
     bmc, bcm, jira = ip["bmc-farm"], ip["bcm-mock"], ip["jira-mock"]
     return [
         *login_rows(sim, users, user, ssh_for),
@@ -181,14 +185,20 @@ def _rows(sim: dict) -> list[dict]:
          "how": "JWT, minted per user with scontrol token (not root). Reachable on the cluster network only, not on 127.0.0.1."},
         {"id": "gpu", "name": "GPU exporter (DCGM metrics)", "kind": "http", "address": f"http://{ip['gpu-exporter-farm']}:9400/metrics",
          "command": f"curl -s http://{ip['gpu-exporter-farm']}:9400/metrics | head", "credential": None, "how": "No login. Also on 127.0.0.1:9400."},
-        {"id": "dcgm", "name": "DCGM exporter (real, first GPU node)", "kind": "http", "address": f"http://{LOCAL}:{dcgm.PORT}/metrics",
-         "command": f"curl -s http://{LOCAL}:{dcgm.PORT}/metrics | head", "credential": None,
-         "how": "Only with `benchctl up --with dcgm`. The official dcgm-exporter on a mock NVML for the first GPU node (ADR 0025); no login, localhost only. A GPU a Slurm job holds reads busy; a scenario clear restarts it (DCGM keeps the last XID), a powered-off node stops it; `--dcgm-nodes N` adds one per GPU node (ports 9410, 9411, ...)."},
-        {"id": "real-gpu", "name": "Real GPU (this machine's NVIDIA card)", "kind": "http", "address": f"http://{LOCAL}:{real_gpu.PORT}/metrics",
-         "command": f"curl -s http://{LOCAL}:{real_gpu.PORT}/metrics | head", "credential": None,
-         "how": "Only with `benchctl up --with real-gpu` on a machine with an NVIDIA card, its driver and the container toolkit (SPEC C-23). Real series from the real card, labelled Hostname rgpu001; no login, localhost only. `docker exec workbench-real-gpu-1 dcgmi discovery -l` and `nvidia-smi` work in that container."},
+        {"id": "dcgm", "name": "DCGM exporter (real, first GPU node)", "kind": "http", "address": f"http://{dcgm_ip}:9400/metrics",
+         "command": f"curl -s http://{dcgm_ip}:9400/metrics | head", "credential": None,
+         "how": f"Only with `benchctl up --with dcgm`. The official dcgm-exporter on a mock NVML for the first GPU node (ADR 0025); no login. Prometheus scrapes it (job dcgm-exporter). Also on 127.0.0.1:{dcgm.PORT}. A GPU a Slurm job holds reads busy; a scenario clear restarts it (DCGM keeps the last XID), a powered-off node stops it; `--dcgm-nodes N` adds one per GPU node (cluster addresses 10.141.255.51, .52, ...; localhost ports 9410, 9411, ...)."},
+        {"id": "objectstore", "name": "Object store (Garage, S3)", "kind": "http", "address": f"http://{LOCAL}:{objectstore.HOST_PORT}",
+         "command": "benchctl exec cn001 -- bash -lc 's5cmd ls'", "credential": "compose/generated/secrets/objectstore/s3.env",
+         "how": "Only with `benchctl up --with objectstore` (ADR 0078). S3 API with region garage and the key pair in the file; every Slurm and login node has it in /run/workbench/objectstore/s3.env and `s5cmd` installed. Localhost only."},
+        {"id": "real-gpu", "name": "Real GPU (this machine's NVIDIA card)", "kind": "http", "address": f"http://{ip['real-gpu']}:9400/metrics",
+         "command": f"curl -s http://{ip['real-gpu']}:9400/metrics | head", "credential": None,
+         "how": f"Only with `benchctl up --with real-gpu` on a machine with an NVIDIA card, its driver and the container toolkit (SPEC C-23). Real series from the real card, labelled Hostname rgpu001; no login. Prometheus scrapes it (job real-gpu). Also on 127.0.0.1:{real_gpu.PORT}. `docker exec workbench-real-gpu-1 dcgmi discovery -l` and `nvidia-smi` work in that container."},
         {"id": "prometheus", "name": "Prometheus", "kind": "http", "address": f"http://{ip['prometheus']}:9090",
          "command": f"curl -s http://{ip['prometheus']}:9090/-/ready", "credential": None, "how": "No login. Also on 127.0.0.1:9090."},
+        {"id": "alertmanager", "name": "Alertmanager", "kind": "http", "address": f"http://{ip['alertmanager']}:9093",
+         "command": f"curl -s http://{ip['alertmanager']}:9093/api/v2/alerts", "credential": None,
+         "how": "No login. Prometheus sends every firing alert here and Alertmanager posts it to the Jira mock, which opens a ticket (ADR 0072). Also on 127.0.0.1:9093."},
         {"id": "grafana", "name": "Grafana", "kind": "http", "address": f"http://{ip['grafana']}:3000",
          "command": f"cat {SECRETS}/grafana_viewer_token", "credential": f"{SECRETS}/grafana_viewer_token",
          "how": "A read-only viewer token for clients; it changes at every `benchctl up`. Also on 127.0.0.1:3000."},

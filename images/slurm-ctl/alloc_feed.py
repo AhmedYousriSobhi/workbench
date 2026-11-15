@@ -3,6 +3,7 @@
 GET /alloc  ->  {"nodes": {"gpu001": [0, 1]}}   GPU indexes that running jobs hold, per node
 """
 import json
+import os
 import re
 import subprocess
 import time
@@ -12,6 +13,9 @@ PORT = 9401
 TTL = 2.0  # seconds a scontrol answer is reused, so a scrape burst costs one call
 
 BLOCK = re.compile(r"Nodes=(\S+) CPU_IDs=\S+ Mem=\S+ GRES=(\S*)")
+# MIG-style nodes (issue 546): a typed GRES such as gpu:h200_1g holds slice indexes, WORKBENCH_MIG_SLICES per physical GPU.
+MIG_TYPE = os.environ.get("WORKBENCH_MIG_TYPE", "")
+MIG_SLICES = int(os.environ.get("WORKBENCH_MIG_SLICES", "1") or 1)
 IDX = re.compile(r"IDX:([0-9,\-]+)")
 
 
@@ -39,8 +43,9 @@ def indexes(text: str) -> list[int]:
     return out
 
 
-def parse_jobs(text: str) -> dict[str, list[int]]:
-    """`scontrol show job -d -o` output -> {node: [gpu index]} for RUNNING jobs."""
+def parse_jobs(text: str, mig_type: str = MIG_TYPE, slices: int = MIG_SLICES) -> dict[str, list[int]]:
+    """`scontrol show job -d -o` output -> {node: [gpu index]} for RUNNING jobs. A slice of a MIG-style typed GRES (`gpu:<mig_type>`)
+    counts for the physical GPU it belongs to: slice index // slices."""
     held: dict[str, set[int]] = {}
     for line in text.splitlines():
         if "JobState=RUNNING" not in line:
@@ -49,8 +54,11 @@ def parse_jobs(text: str) -> dict[str, list[int]]:
             m = IDX.search(gres) if gres.startswith("gpu") else None
             if not m:
                 continue
+            idx = indexes(m.group(1))
+            if mig_type and gres.startswith(f"gpu:{mig_type}"):
+                idx = [i // max(slices, 1) for i in idx]
             for n in expand_nodes(nodes):
-                held.setdefault(n, set()).update(indexes(m.group(1)))
+                held.setdefault(n, set()).update(idx)
     return {n: sorted(g) for n, g in held.items()}
 
 

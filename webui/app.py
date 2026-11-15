@@ -41,21 +41,21 @@ from .graph import attach as attach_graph
 from .wiki import Wiki, WikiError, esc, page
 
 STATIC = Path(__file__).parent / "static"
-# The page and its modules run under a strict policy: no inline script or style (#517, ADR 0047). Help pages (/help) render
-# their own inline stylesheet and are left out.
+# The page and its modules run under a strict policy: no inline script or style (#517, ADR 0047). /help carries it too (its
+# stylesheet is static/help.css, #525).
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; "
        "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 
 
 class CSPMiddleware:
-    """Pure ASGI (no buffering, so the SSE feeds stream): add the policy to the page and /static responses."""
+    """Pure ASGI (no buffering, so the SSE feeds stream): add the policy to the page, /static and /help responses."""
 
     def __init__(self, app):
         self.app = app
 
     async def __call__(self, scope, receive, send):
         path = scope.get("path", "")
-        if scope["type"] != "http" or not (path == "/" or path.startswith("/static/")):
+        if scope["type"] != "http" or not (path == "/" or path.startswith(("/static/", "/help"))):
             return await self.app(scope, receive, send)
 
         async def send_with_csp(msg):
@@ -114,7 +114,7 @@ class Runs:
 
     def start(self, name: str, speed: float, trace: bool = False) -> dict:
         try:
-            sc = scenario.load(name, self.root)
+            sc = scenario.load(name, self.root, self.sim)
         except scenario.ScenarioError as e:
             raise HTTPException(404, str(e)) from e
         problems = scenario.validate(sc, self.sim)
@@ -360,7 +360,9 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             flags += " --bcm-k8s" if spec.bcm_k8s else " --no-bcm-k8s"
         flags += f" --login {','.join(spec.login_nodes)} --app-mb 0"
         return JSONResponse({"fits": ok, "message": msg, "total_mb": est["total_mb"], "need_mb": est["need_mb"], "expected_mb": est["expected_mb"],
-                             "running_mb": est["running_mb"], "available_mb": avail,
+                             "running_mb": est["running_mb"], "available_mb": avail, "floor_mb": workbench.FLOOR_MB,
+                             "budget_mb": avail - workbench.FLOOR_MB, "headroom_mb": avail - workbench.FLOOR_MB - est["need_mb"],
+                             "breakdown": workbench.breakdown(est),
                              "text": workbench.render(spec, est), "command": f"benchctl up {flags}"})
 
     async def jira_refresh(request: Request):
@@ -456,6 +458,13 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             services = set()
         return JSONResponse({"info": info, "text": describe.render(info), "ip": plan["nodes"].get(node),
                              "bmc_ip": plan["bmc"].get(node) if f"bmc-{node}" in services else None})
+
+    async def node_tickets(request: Request):
+        try:
+            found = await asyncio.to_thread(cluster.tickets, request.path_params["node"])
+        except KeyError as e:
+            raise HTTPException(404, f"unknown node {e.args[0]}") from e
+        return JSONResponse({"source": "jira-mock", "tickets": found})
 
     licence = {"text": "", "asked": 0.0}  # the real Jira's licence as the watcher last saw it, and when it last asked for a renewal
 
@@ -560,6 +569,27 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             return JSONResponse({"error": "since must be a number"}, status_code=400)
         return JSONResponse(await asyncio.to_thread(traffic.collect, since))
 
+    async def ticket_bot(request: Request):
+        """GET: the settings the running ticket bot was last given. POST: change them (the governor runs `benchctl set ticket-bot`, issue 728)."""
+        body = {}
+        if request.method == "POST":
+            try:
+                body = await request.json()
+            except ValueError as e:
+                raise HTTPException(422, "send a JSON object") from e
+            if not isinstance(body, dict):
+                raise HTTPException(422, "send a JSON object")
+        req = {"cmd": "ticket-bot-set", **{k: body[k] for k in ("every", "resolve", "ignore", "reopen") if k in body}} if request.method == "POST" else {"cmd": "ticket-bot-get"}
+        try:
+            res = await asyncio.to_thread(checks.governor_request, req, socket)
+        except (OSError, ValueError) as e:
+            raise HTTPException(503, "the governor is not reachable: start it with ./scripts/benchctl start") from e
+        if not res.get("ok"):
+            raise HTTPException(409, res.get("error", "the governor refused"))
+        if res.get("dry_run"):
+            return JSONResponse({"started": False, "message": "The governor is in dry-run mode, so nothing was changed. Run: ./scripts/benchctl set ticket-bot ..."})
+        return JSONResponse(res if request.method == "GET" else {"started": True, "message": "Sent: the bot applies it within one cycle."})
+
     async def capture_call(req: dict) -> JSONResponse:
         """One wire's messages, on demand and only through the governor (issue 505): it starts, reads and stops the capture; this page never touches Docker."""
         try:
@@ -637,7 +667,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
     async def scenario_preview(request: Request):
         try:
-            sc = scenario.load(request.path_params["name"], scenarios)
+            sc = scenario.load(request.path_params["name"], scenarios, sim)
         except scenario.ScenarioError as e:
             raise HTTPException(404, str(e)) from e
         return JSONResponse(scenario.preview(sc))
@@ -699,6 +729,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/help/files/{rel:path}", protected(help_file)),
             Route("/help/{slug:path}", protected(help_page)),
             Route("/api/traffic", protected(traffic_record)),
+            Route("/api/ticket-bot", protected(ticket_bot)),
+            Route("/api/ticket-bot", protected(ticket_bot, write=True), methods=["POST"]),
             Route("/api/capture/start", protected(capture_start, write=True), methods=["POST"]),
             Route("/api/capture/read", protected(capture_read)),
             Route("/api/capture/stop", protected(capture_stop, write=True), methods=["POST"]),
@@ -717,6 +749,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/connections", protected(connections)),
             Route("/api/export/profile", protected(export_profile)),
             Route("/api/nodes/{node}", protected(node_detail)),
+            Route("/api/nodes/{node}/tickets", protected(node_tickets)),
             Route("/api/nodes/{node}/workload", protected(node_workload, write=True), methods=["POST"]),
             Route("/api/nodes/{node}/{action}", protected(node_action, write=True), methods=["POST"]),
             Route("/api/scenarios", protected(list_scenarios)),

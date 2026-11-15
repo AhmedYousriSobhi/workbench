@@ -6,14 +6,23 @@
 
 ## The command: `benchctl`
 
-One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [flags]`**. Run it as `./scripts/benchctl`
-(no activation needed), or as `benchctl` once the venv is active. Tab completion for verbs, resources, node and service names, profiles, scenarios, users, parts, `-o` formats and `-l`/`--sort-by` keys:
-`benchctl completion install` (once, no sudo, then open a new terminal; `benchctl start` offers it too; `completion remove` undoes it; `completion bash|zsh|fish` prints the script). A wrong profile, node or scenario gets one message with `Did you mean` and the valid values. What each verb does not do, exit codes, and what to use in a script: [the verbs guide](../guides/benchctl-verbs.md).
+One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [flags]`**.
+
+Run it as `./scripts/benchctl` (no activation needed), or as `benchctl` once the venv is active.
+
+**Tab completion** covers verbs, resources, node and service names, profiles, scenarios, users, parts, `-o` formats and `-l`/`--sort-by` keys.
+- Install it once, with no sudo: `benchctl completion install`. Then open a new terminal. `benchctl start` offers it too.
+- Undo it: `benchctl completion remove`.
+- Print the script: `benchctl completion bash|zsh|fish`.
+
+A wrong profile, node or scenario gets one message with `Did you mean` and the valid values.
+
+What each verb does not do, exit codes, and what to use in a script: [the verbs guide](../guides/benchctl-verbs.md).
 
 | Verb | Does |
 |---|---|
 | `submit NODE [--gpus N] [--cpus N] [--duration S] [--user U]` | submit a `sleep` job pinned to the node as a simulated user (the node panel's Workload buttons, through the governor); `squeue` lists it and its GPUs show busy |
-| `load on [--rate N] [--duration S] [--seed N]` / `load off` | simulated users (`alice`, `bob`) submit cpu jobs and GPU jobs at random (Poisson arrivals, default 6 a minute, about 2 min each) so `squeue` and the node states have a live queue; off by default |
+| `load on [--rate N] [--duration S] [--seed N] [--personas] [--day S] [--mocks] [--mock-rate N] [--tickets] [--ticket-every S] [--ticket-resolve S]` / `load off` | simulated users (`alice`, `bob`) submit cpu jobs and GPU jobs at random (Poisson arrivals, default 6 a minute, about 2 min each) so `squeue` and the node states have a live queue; off by default. `--personas` adds persona job mixes with failing and cancelled jobs, `--day S` a daily rhythm over a simulated day of S seconds (see the client-testing guide). `--mocks` also starts a demo client on the login node that calls Jira, BCM and the BMC farm (default 30 requests a minute, its own User-Agent `workbench-demo-client`), so the Traffic tab's links and the request river have counted requests; `--tickets` also starts the ticket bot: fake engineers assign, work, comment on and resolve the alert tickets in jira-mock (never a real Jira), one action about every 120 s, some left unassigned and some reopened (see the client-testing guide); `load off` stops all |
 | `set jira-activity on|off [--every S] [--seed N]` | the Jira mock's background team: moves tickets along the workflow, comments, reassigns, reopens, files new ones (on by default, about every 45 s) |
 | `remove teleport-state [-y]` | forget the Teleport cluster (data and saved identity); see [Keep or reset the Teleport cluster](04-nodes-and-shells.md#keep-or-reset-the-teleport-cluster) |
 | `get checks` / `add check NAME ...` / `set check NAME ...` / `remove check NAME` / `validate checks` / `reload checks` | add, change, remove, validate and deliver the node health checks; see [NHC checks](../guides/nhc-checks.md) |
@@ -57,7 +66,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 |---|---|
 | `scripts/sync_wiki.py --out DIR \| --push` | generate the GitHub Wiki from `docs/`, or sync it to the wiki repository ([how](../guides/github-wiki.md)) |
 | `scripts/check-machine.sh` | stdlib-only machine check, before any build |
-| `scripts/install-governor.sh [--uninstall\|--print]` | optional root governor service (sudo) |
+| `scripts/install-governor.sh [--uninstall\|--print\|--with-oomd\|--oomd-only\|--without-oomd\|--print-oomd]` | optional root governor service and systemd-oomd backstop (sudo) |
 | `scripts/install-hooks.sh` | git hooks for contributors (no sudo) |
 | `scripts/validate.sh` | lint, tests, privacy scan: run before every commit |
 | `scripts/verify.sh [--changed [BASE] [--explain]] [--full [--with-jira]] [--serial] [--trust-ci] [--revalidate] [--skip-browser] [--unit NAME [--clean]] [--install-nightly [HH:MM] \| --remove-nightly]` | validate (in the background next to the live tests; skipped when it passed for this exact tree) plus real-host tests, with seconds per step and a `SLOW` line. `--changed` before a PR to `dev`, `--full --with-jira` before `dev` to `main` and nightly |
@@ -88,6 +97,7 @@ One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [fl
 | 9400 | gpu-exporter-farm |
 | 3000 | Grafana (admin / admin) |
 | 9090 | Prometheus |
+| 9093 | Alertmanager |
 | 9401 | governor `/metrics` (on the docker bridge address, so Prometheus can scrape it) |
 
 ## Environment variables

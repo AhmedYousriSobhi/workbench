@@ -12,7 +12,7 @@
 - One container per fake compute node, all from **one shared base image** (shared file-backed pages). Community projects such as `giovtorres/slurm-docker-cluster` already use this pattern (controller, DB, and `c1`/`c2` `slurmd` containers under Docker Compose); use it as a starting point rather than writing from scratch.
 - Container-friendly `slurm.conf` starting points (validate on your Slurm version): `ProctrackType=proctrack/linuxproc`, `TaskPlugin=task/none`, fake `RealMemory`, and GPUs declared as GRES by count (`Name=gpu Type=h200 Count=8`, no device files) so GPU partitions behave like a DGX/HGX fleet.
 - Jobs are synthetic (`sleep`, `stress-ng` with capped memory), never real training.
-- Optional later optimization: build Slurm with multiple-slurmd support to host many logical nodes in one container if per-container overhead matters.
+- Multiple-slurmd (many logical nodes in one container) is not the scaling path: it shares one IP and breaks per-node addresses, sshd, NHC and "freeze a node" faults (ADR 0080). Revisit only if a client test needs more than about 64 Slurm nodes.
 
 ### 4.2 Kubernetes: one real mini-cluster + KWOK for scale
 - Replace the multi-VM Vagrant K8s with a real control plane (etcd, kube-apiserver, scheduler, controller manager from the upstream images) and **no real worker**: k3d/kind with a real agent was rejected (ADR 0034).
@@ -59,5 +59,5 @@ Client-facing HTTP and SSH paths get a userspace fault proxy (the repository's o
 ### 4.9 Storage, network and time simulation
 - **Fake shared filesystems.** No NFS/Lustre servers. Emit static `node_exporter` textfile metrics (`node_filesystem_size_bytes`, `node_filesystem_free_bytes`) for dummy mounts such as `/mnt/lustre`; scenarios like `disk-full` just change the numbers.
 - **tmpfs for ephemeral state.** MariaDB (Slurm accounting) and the Prometheus TSDB live on a capped tmpfs (MariaDB 100 MB, Prometheus 200 MB, with `retention.size` 150 MB so it never fills it). State need not survive a host reboot, and this avoids IO saturation next to 30+ containers.
-- **Network chaos.** Client-facing paths use userspace proxies. Inside the cluster, `tc netem` latency, loss and partitions on the Docker bridge networks between `core` and `mocks`/`compute` run only through the optional root governor service: bounded targets and values, a TTL, cleared at start, L0-L1 only (ADR 0056). Not built yet.
+- **Network chaos.** Client-facing paths use userspace proxies. Inside the cluster, `tc netem` latency, loss and partitions on the Docker bridge networks between `core` and `mocks`/`compute` run only through the optional root governor service: bounded targets and values, a TTL, cleared at start, L0-L1 only (ADR 0056, `benchctl set netem`, [guide](../guides/network-faults.md)); built as per-node delay and loss inside a Slurm node's own network namespace, not bridge-wide partitions.
 - **Time dilation.** `time_dilation` in `sim.yaml` scales synthetic job durations and arrival rates (inversely) in `user-sim` and `scenario-engine`, so a 24 h queue pattern can run in minutes.

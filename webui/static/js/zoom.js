@@ -1,4 +1,5 @@
 // The infrastructure zoom (redesign step 4): three levels, Fleet, Cluster and Pool, each a full layer, and the move between them.
+// Traffic is the fourth stop (the communication links) and Requests the fifth (the request river): both live in the Traffic tab, one at a time (issue 650).
 //
 // Levels map onto what the page already has: Fleet is the overview level (curLevel() === 'overview'), Cluster is the Circuit
 // view, Pool is S.pool. Moving is a transient: the outgoing layer scales (2.6x going in, 0.35x going out) and fades, then is
@@ -15,15 +16,15 @@ import { POOLS } from './circuitlayout.js';
 import { paintCrumb } from './focus.js';
 import { selectTab } from './shell.js';
 
-export const ZOOM_LEVELS = ['fleet', 'cluster', 'pool', 'traffic'], LEVEL_WORD = { fleet: 'Fleet', cluster: 'Cluster', pool: 'Pool', traffic: 'Traffic' };
+export const ZOOM_LEVELS = ['fleet', 'cluster', 'pool', 'traffic', 'requests'], LEVEL_WORD = { fleet: 'Fleet', cluster: 'Cluster', pool: 'Pool', traffic: 'Traffic', requests: 'Requests' };
 export const MS = 700, EASE = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
 const scroller = () => document.querySelector('#trafficpanel > .flowscroll');
-const layerEl = lv => lv === 'fleet' ? $('fleetview') : lv === 'pool' ? $('poolview') : lv === 'traffic' ? $('tab-traffic') : scroller();
+const layerEl = lv => lv === 'fleet' ? $('fleetview') : lv === 'pool' ? $('poolview') : lv === 'traffic' || lv === 'requests' ? $('tab-traffic') : scroller();
 const onTraffic = () => !$('tab-traffic').hidden, onConn = () => !$('tab-conn').hidden;
 
 // The level of the infrastructure itself, and the level the page is at: Traffic is the deepest stop, a tab of its own that the rail reaches.
 export const infraLevel = () => !S.circuit ? null : curLevel() === 'overview' ? 'fleet' : S.pool ? 'pool' : 'cluster';
-export const levelNow = () => !S.circuit ? null : onTraffic() ? 'traffic' : infraLevel();
+export const levelNow = () => !S.circuit ? null : onTraffic() ? (S.trReq ? 'requests' : 'traffic') : infraLevel();
 const firstPool = () => Object.keys(POOLS).find(k => facts().pools[k].length);
 
 function paintLevel(lv) { if (lv === 'fleet') paintFleet(); else if (lv === 'pool') paintPool(); }
@@ -39,17 +40,19 @@ function paintRail(lv) {
     const on = !none && b.dataset.level === lv; b.setAttribute('aria-pressed', on); if (on) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
     if (b.dataset.level === 'pool') b.disabled = !firstPool() && lv !== 'pool';
   });
-  $('zr-out').disabled = lv === 'fleet'; $('zr-in').disabled = lv === 'traffic';
+  $('zr-out').disabled = lv === 'fleet'; $('zr-in').disabled = lv === 'requests';
 }
 
 // Show exactly the layer of the current level, with no transition: used on every data change, on a rebuild and when a transition ends.
 export function syncZoom() {
   if (S.zoomHold) return;
+  if (!onTraffic()) S.trReq = false;       // leaving the Traffic tab by any way ends at the links, the first stop
+  const tl = $('tab-traffic'); if (S.circuit) tl.dataset.tl = S.trReq ? 'requests' : 'links'; else tl.removeAttribute('data-tl');  // the classic diagram keeps both blocks
   const lv = infraLevel();
   for (const k of ['fleet', 'cluster', 'pool']) { const el = layerEl(k); if (!el) continue; const on = lv === null ? k === 'cluster' : k === lv; el.hidden = !on; el.inert = !on; }
   const cluster = lv === 'cluster'; $('cvstack').hidden = !cluster; $('cvcap').hidden = !cluster;
   $('subseg').hidden = !!S.circuit || $('tab-nodes').hidden;  // the zoom replaces the All / Topology / Nodes switch
-  $('zback').hidden = !(S.circuit && onTraffic()); $('zback-where').textContent = `Traffic of ${clusterTitle()}`;
+  $('zback').hidden = !(S.circuit && onTraffic()); $('zback-where').textContent = `${S.trReq ? 'Requests' : 'Traffic'} of ${clusterTitle()}`; $('tr-back').textContent = S.trReq ? '◂ Back to the links' : '◂ Back to the cluster';
   paintLevel(lv); paintRail(levelNow()); paintCrumb();
 }
 
@@ -104,15 +107,27 @@ function viaTab(level, o) {
   out.finished.then(arrive, () => {}); setTimeout(arrive, half + 200);
 }
 
+// The Requests stop is a second view inside the Traffic tab: the two blocks trade places (a short zoom-in, none under reduced motion).
+function viaRequests(level, from, o) {
+  if (from === 'requests' && level !== 'traffic') { S.trReq = false; syncZoom(); return zoomTo(level, o); }   // out to a lower level: first back to the links
+  const going = level === 'requests';
+  S.trReq = going;
+  if (from !== 'traffic' && going) { viaTab('traffic', o); announce('Requests level'); return; }   // from the infrastructure: the tab opens at Requests
+  syncZoom();
+  if (moves()) { const el = $('tab-traffic'); el.style.transformOrigin = '50% 20%'; el.animate([{ transform: `scale(${going ? 0.9 : 1.1})`, opacity: 0 }, { transform: 'scale(1)', opacity: 1 }], { duration: MS / 2, easing: EASE }).finished.then(() => el.style.removeProperty('transform-origin'), () => {}); }
+  announce(`${LEVEL_WORD[level]} level`);
+}
+
 // Move to a level. `o.origin` is the element the new layer grows from (a card or a rack); `o.pool` picks the pool, `o.cluster` the cluster.
 export function zoomTo(level, o = {}) {
   if (!S.circuit) return;
   settle(); S.zoomHold = false; syncZoom();  // a move still running ends where it was going
   if (S.circuit && offInfra() && !onConn()) {  // from Home or Test run: open the diagram first, then it is at the level asked for
-    if (level === 'traffic') { selectTab('traffic', false); syncZoom(); return; }
+    if (level === 'traffic' || level === 'requests') { S.trReq = level === 'requests'; selectTab('traffic', false); syncZoom(); return; }
     setInfra(level, o); selectTab('nodes', false); syncZoom(); return;
   }
   const from = levelNow();
+  if (level === 'requests' || from === 'requests') return viaRequests(level, from, o);
   if (level === from && !(level === 'pool' && o.pool && o.pool !== S.pool)) return;
   if (level === 'pool' && !(o.pool || firstPool())) return;  // nothing to open: a cluster with no nodes has no pool
   if (from === 'traffic' || level === 'traffic') viaTab(level, o);
@@ -152,12 +167,13 @@ export function init() {
   const rail = $('zoomrail'); if (!rail) return;
   rail.querySelectorAll('[data-level]').forEach(b => { b.onclick = () => zoomTo(b.dataset.level, { origin: b }); });
   $('zr-out').onclick = () => zoomStep(-1); $('zr-in').onclick = () => zoomStep(1);
-  $('tr-back').onclick = () => zoomTo(infraLevel());
+  $('tr-back').onclick = () => zoomTo(S.trReq ? 'traffic' : infraLevel());
   document.addEventListener('wheel', onWheel, { passive: false });
   document.addEventListener('keydown', e => {
     if (!S.circuit || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.('input, textarea, select, [contenteditable]') || document.querySelector('dialog[open]:not(.drawer)')) return;
     if (e.key === '+' || e.key === '=') zoomStep(1); else if (e.key === '-' || e.key === '_') zoomStep(-1);
     else if (e.key === 'Escape' && levelNow() === 'pool' && !S.openNode && $('ckey').hidden && $('pop').hidden) zoomTo('cluster');
+    else if (e.key === 'Escape' && levelNow() === 'requests') zoomTo('traffic');
     else if (e.key === 'Escape' && levelNow() === 'traffic') zoomTo(infraLevel());
   });
 }

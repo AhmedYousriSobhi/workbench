@@ -2,23 +2,19 @@
 
 # 1. What workbench is
 
-**In 30 seconds:** workbench is a pretend HPC cluster for one 16 GB laptop. Most of what a monitoring app talks to is an API, so workbench fakes the APIs, runs real Slurm in small containers, and keeps a governor outside everything that stops the least important parts before memory runs out.
+**In 30 seconds:** workbench is a pretend HPC cluster for one 16 GB laptop, built to be the thing your monitoring client talks to. Most of what a monitoring client calls is an API, so workbench fakes the APIs, runs real Slurm in small containers, and keeps a governor outside everything that stops the least important parts before memory runs out.
 
 ## Do it
 
-Read this chapter once, then start the cluster with `./scripts/benchctl start` ([chapter 2](02-install-and-start.md)). Everything below explains what you will be looking at.
+Start the cluster with `./scripts/benchctl start` ([chapter 2](02-install-and-start.md)), then come back here to see what you are looking at. Not sure a bigger cluster fits? `./scripts/benchctl preflight --profile std` says so before anything starts.
 
-workbench simulates an HPC/AI cluster on one **16 GB Ubuntu workstation** so the application under test has a
-realistic cluster to talk to: Slurm, BMCs, BCM, Jira, Grafana, with users, jobs, faults and tickets. A **governor**
-runs outside everything and stops low-priority parts before memory runs out.
+## What it simulates
 
-## Why it is cheap
-
-Most of what the app talks to is an API, not an operating system. So:
+A cluster with Slurm, BMCs, BCM, Jira and Grafana, with users, jobs, faults and tickets, so the client under test has a realistic site to connect to. It fits on one **16 GB Ubuntu workstation** because:
 
 - One process (`bmc-farm`) answers for every node's Redfish BMC, and one (`gpu-exporter-farm`) for every GPU's metrics.
-- Slurm is real (built from source) but every `slurmd` is a small container from one shared image, and jobs are synthetic.
-- A real VM (the fidelity VM) is deferred: no client endpoint needs it (ADR 0033).
+- Slurm is real (built from source), but every `slurmd` is a small container from one shared image, and jobs are synthetic.
+- A real VM (the fidelity VM) is deferred: no client endpoint needs it ([ADR 0033](../adr/0033-defer-the-fidelity-vm.md)).
 - Everything is generated from [sim.yaml](../../sim.yaml), so node names agree everywhere.
 
 ## The parts
@@ -32,13 +28,12 @@ Most of what the app talks to is an API, not an operating system. So:
 | `bcm-mock` | fake BCM (CMDaemon JSON); the login node also answers `cmsh -c "device; list"` from its state (ADR 0013) | http://127.0.0.1:8081 |
 | `jira-mock` | fake Jira REST with failure modes | http://127.0.0.1:8080 |
 | `gpu-exporter-farm` | fake DCGM GPU metrics | http://127.0.0.1:9400 |
-| Prometheus, Grafana | metrics and dashboards | :9090, :3000 |
+| Prometheus, Grafana, Alertmanager | metrics, dashboards and alerts (each alert opens a Jira mock ticket) | :9090, :3000, :9093 |
 | Web page | one dashboard over everything | http://127.0.0.1:8088 |
 | Governor | memory protection on the host | `benchctl status` |
 | `benchctl scenario`, `benchctl load` | timed faults and simulated users (host CLI and login node, no container) | see [chapter 6](06-scenarios.md) |
 
-Everything listens on `127.0.0.1` only, except the governor's metrics, which bind the Docker bridge address. **Not built yet:** the Profile and Budget manager
-page, the user simulator and ticket bot. Teleport access is an optional part ([chapter 4](04-nodes-and-shells.md)). See [PROGRESS.md](../PROGRESS.md).
+Everything listens on `127.0.0.1` only, except the governor's metrics, which bind the Docker bridge address. Teleport access is an optional part ([chapter 4](04-nodes-and-shells.md)). Simulated users and a ticket bot run on the login node with `benchctl load on` ([client testing guide](../guides/client-testing.md#give-the-client-a-live-queue)). [PROGRESS.md](../PROGRESS.md) lists what is built.
 
 ## Profiles
 
@@ -47,9 +42,9 @@ A profile chooses which parts run and carries a memory budget that `benchctl up`
 | Profile | What is on | Budget |
 |---|---|---|
 | `min` | core, mocks, 4 compute nodes, scenarios | 0.5 GB expected |
-| `std` | `min` plus accounting, 16 compute nodes, load simulators | 1.2 GB expected |
-| `full` | `std` plus 32 compute nodes, more fake nodes | 1.8 GB expected |
-| `jira-real` | `std` with a real Jira Data Center instead of the mock | 3.5 GB expected |
+| `std` | `min` plus accounting, 16 compute nodes, load simulators | 0.9 GB expected |
+| `full` | `std` plus 32 compute nodes, more fake nodes | 1.2 GB expected |
+| `jira-real` | `std` with a real Jira Data Center instead of the mock | 3.2 GB expected |
 | `mac-agent` | `min` plus an external macOS agent | 0.5 GB local |
 
 The quick start uses `min`. `up` refuses a profile that does not fit in the memory free right now and names one that does.

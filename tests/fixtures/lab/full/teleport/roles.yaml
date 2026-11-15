@@ -1,0 +1,11 @@
+kind: role
+version: v7
+metadata: {name: hpc-user}
+spec:
+  allow: {logins: ['{{internal.logins}}'], node_labels: {'*': '*'}}
+  options: {max_session_ttl: 12h}
+---
+kind: token
+version: v2
+metadata: {name: join-token}
+spec: {roles: [Node]}

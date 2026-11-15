@@ -21,10 +21,16 @@ GET|POST /sim/activity {"on": true, "every": 30, "seed": 1}   (background change
 POST /sim/failure  {"mode": "401|429|503|slow", "count": 3, "delay": 2}   (applies to the next /rest requests)
 GET  /sim/failure  the failure now set: {"mode", "count" (requests still to fail), "delay"}
 GET|POST /sim/tickets   {"action": "create|transition|comment|fault|reset", ...}: tickets without a client (scenarios, #107)
+POST /sim/alerts   an Alertmanager webhook body (version 4): a firing alert opens a ticket (or comments on its open one), a resolved alert comments (#460)
+GET  /metrics   Prometheus text: jira_mock_requests_total, jira_mock_errors_total (client requests only; not counted itself)
 GET  /rest/api/{2,3}/issue/KEY/editmeta            (priority, labels, description, summary: what an edit form draws)
 GET  /rest/api/search?cql=type = page AND (label in ("a") OR title ~ "x")&limit=25&start=0   Confluence page search (issue 289), also at
      /wiki/rest/api/search (Cloud): results[].title|url|lastModified|resultGlobalContainer.title|content.space.name, _links.base|next
 GET|POST /sim/pages   {"action": "add|reset|clear", "title", "labels", "space", "body"}: the pages that search finds
+GET  /rest/api/{2,3}/attachment/ID                  metadata (self, filename, author, created, size, mimeType, content, thumbnail); DELETE removes it
+GET  /rest/api/3/attachment/content/ID[?redirect=false]   303 to the download URL, or 200 with the bytes (Cloud); Data Center: GET /secure/attachment/ID/NAME
+POST /rest/api/3/search/approximate-count  {"jql"} -> {"count": N}  (Cloud)
+GET  /rest/api/{2,3}/user/bulk?accountId=a&accountId=b   (Cloud paging: startAt, maxResults 10, total, isLast, values); ?username= or ?key= also read
 GET  /healthz
 Workflow: Open -> In Progress -> Resolved (needs "resolution") -> Closed; Reopen from any later state.
 """
@@ -74,6 +80,7 @@ SCREEN = {  # what a form needs to draw a field: the shape of Jira's own transit
     "description": {"name": "Description", "schema": {"type": "string"}, "operations": ["set"]},
     "summary": {"name": "Summary", "schema": {"type": "string"}, "operations": ["set"]},
 }
+PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
 QUERYABLE = ("project", "status", "assignee", "labels", "issuetype", "key")
 
 
@@ -144,6 +151,7 @@ class Jira:
         self.stop = threading.Event()
         self.rng = random.Random()
         self.pages: list[dict] = []
+        self.attachments: dict[str, tuple[str, bytes]] = {}  # id -> (issue key, content)
         self.sim_pages({"action": "reset"})
 
     def sim_pages(self, req: dict) -> dict:
@@ -225,7 +233,7 @@ class Jira:
                 "issuetype": {"name": (f.get("issuetype") or {}).get("name", "Task")},
                 "status": status_of("Open"), "labels": f.get("labels") or [], "assignee": person(f.get("assignee")),
                 "reporter": person(f.get("reporter") or ME), "priority": {"name": (f.get("priority") or {}).get("name", "Medium")},
-                "resolution": None, "created": now, "updated": now, "comment": {"comments": []},
+                "resolution": None, "created": now, "updated": now, "comment": {"comments": []}, "attachment": [],
                 "watches": {"watchCount": 0, "isWatching": False}}}
             self.issues[key] = issue
         self.fire("jira:issue_created", issue)
@@ -332,6 +340,41 @@ class Jira:
     def worklog(self, key: str) -> dict:
         return self.get(key)["fields"].get("worklog") or {"startAt": 0, "maxResults": 1000, "total": 0, "worklogs": []}
 
+    def attach(self, key: str, filename: str, content: bytes, mime: str = "text/plain", author: str = "") -> dict:
+        """Add an attachment to a ticket. URLs hold @BASE@ / @V@ / @CONTENT:id:name@ markers that the handler fills per request
+        (host, API version, Cloud or Data Center download path)."""
+        issue = self.get(key)
+        with self.lock:
+            aid = str(max((int(a) for a in self.attachments), default=10099) + 1)
+            self.attachments[aid] = (key, content)
+        att = {"self": f"@BASE@/rest/api/@V@/attachment/{aid}", "id": aid, "filename": filename, "author": person(author or ME),
+               "created": stamp(), "size": len(content), "mimeType": mime, "content": f"@CONTENT:{aid}:{filename}@"}
+        if mime.startswith("image/"):
+            att["thumbnail"] = f"@BASE@/secure/thumbnail/{aid}/{filename}"
+        issue["fields"].setdefault("attachment", []).append(att)
+        touch(issue)
+        return att
+
+    def find_attachment(self, aid: str) -> dict:
+        key = self.attachments.get(aid, ("",))[0]
+        if key in self.issues:
+            for a in self.issues[key]["fields"]["attachment"]:
+                if a["id"] == aid:
+                    return a
+        raise JiraError(404, [f"The attachment with id '{aid}' does not exist"] if aid.isdigit() else ["Not found"])
+
+    def delete_attachment(self, aid: str) -> None:
+        att = self.find_attachment(aid)
+        self.issues[self.attachments.pop(aid)[0]]["fields"]["attachment"].remove(att)
+
+    def users_bulk(self, ids: list[str], names: list[str], start: int, limit: int) -> dict:
+        """Cloud's GET /user/bulk: the known accounts among those asked for (an unknown id is left out, as Jira does)."""
+        if not ids and not names:
+            raise JiraError(400, errors={"accountId": "The accountId query parameter is required"})
+        known = [u for u in self.users("") if u["accountId"] in ids or u["name"] in names]
+        page = [{**u, "accountType": "atlassian", "timeZone": "UTC", "locale": "en_US"} for u in known[start:start + limit]]
+        return {"maxResults": limit, "startAt": start, "total": len(known), "isLast": start + limit >= len(known), "values": page}
+
     def users(self, query: str) -> list[dict]:
         names = {ME, "bob"}
         for i in self.issues.values():
@@ -382,6 +425,39 @@ class Jira:
             return self.fault(body)
         raise JiraError(400, ["action must be create, transition, comment, fault or reset"])
 
+    def alerts(self, body: dict) -> dict:
+        """An Alertmanager webhook (version 4) as a team's ticket flow: a firing alert opens one ticket (project OPS, labelled
+        `alert` and `alert-<fingerprint>`) or, while that ticket is still open, comments on it; a resolved alert comments on it.
+        Nobody closes the ticket for the engineer. Only labels and annotations the alert carries are written; nothing else is kept."""
+        alerts = body.get("alerts")
+        if not isinstance(alerts, list):
+            raise JiraError(400, ["alerts must be a list (an Alertmanager webhook body)"])
+        created, commented = [], []
+        for a in alerts:
+            labels, notes = a.get("labels") or {}, a.get("annotations") or {}
+            name = str(labels.get("alertname") or "alert")
+            fp = str(a.get("fingerprint") or "-".join(f"{k}-{v}" for k, v in sorted(labels.items())))
+            tag = "alert-" + "".join(c for c in fp if c.isalnum() or c in "-_")[:60]
+            text = f"{notes.get('summary') or name}" + (f"\n\n{notes['description']}" if notes.get("description") else "")
+            with self.lock:
+                open_key = next((k for k, i in self.issues.items() if tag in (i["fields"]["labels"] or [])
+                                 and i["fields"]["status"]["name"] not in ("Resolved", "Closed")), None)
+            if a.get("status") == "resolved":
+                if open_key:
+                    self.comment(open_key, {"body": f"Alert {name} resolved (ended {a.get('endsAt') or 'now'})."})
+                    commented.append(open_key)
+            elif open_key:
+                self.comment(open_key, {"body": f"Alert {name} is still firing.\n\n{text}"})
+                commented.append(open_key)
+            else:
+                created.append(self.create({"fields": {
+                    "project": {"key": body.get("project", "OPS")},
+                    "summary": f"[ALERT] {name}" + (f" on {labels['node']}" if labels.get("node") else ""),
+                    "description": text, "labels": ["alert", f"alertname-{name}", tag],
+                    "issuetype": {"name": "Task"},
+                    "priority": {"name": "High" if labels.get("severity") == "page" else "Medium"}}})["key"])
+        return {"created": created, "commented": commented}
+
     def set_activity(self, req: dict) -> dict:
         """Background activity (#158): every `every` seconds (a little jittered) one change a team would make: a ticket moves
         along the workflow, gets a comment or a new owner, is reopened, or a new one is filed. Tickets touched in the last
@@ -410,6 +486,12 @@ class Jira:
                                           "assignee": ME if n % 2 == 0 else ENGINEERS[n % 4]}})["key"]
             if status != "Open":
                 self.move_to(self.issues[key], status)
+            if n % 3 == 0:  # a log or a screenshot on some tickets, and a teammate mentioned the Cloud way
+                self.attach(key, "slurmd.log", b"slurmd: error: Node configuration differs from hardware\n", "text/plain", ENGINEERS[n % 4])
+            if n % 3 == 1:
+                self.attach(key, "grafana.png", PNG, "image/png", ME)
+            if n % 2 == 1:
+                self.comment(key, {"body": f"[~accountid:{ENGINEERS[(n + 1) % 4]}-id] can you take a look?"}, ENGINEERS[n % 4])
 
     def _run_activity(self, stop: threading.Event) -> None:
         stop.wait(5)  # the first change comes soon, not after a whole interval
@@ -788,7 +870,7 @@ PROBE = "x-workbench-probe"  # the web UI sets this on its own polls so they are
 
 def counted(path: str, headers) -> bool:
     """A real client request: not a health check, not /sim control, not a UI probe."""
-    return not (path.startswith(("/healthz", "/sim/")) or headers.get(PROBE))
+    return not (path.startswith(("/healthz", "/metrics", "/sim/")) or headers.get(PROBE))
 
 
 # --- request shapes (issue 475): which paths a client calls and which 404. Method and path shape only: a segment with a digit
@@ -886,14 +968,30 @@ def make_handler(jira: Jira):
                     stats["requests"] += 1
                     if code >= 400:  # an error answer (401, 404, 503 ...): the page draws it as a different dot (#314)
                         stats["errors"] += 1
-            data = b"" if obj is None else json.dumps(obj).encode()
+            headers = dict(headers or {})
+            if isinstance(obj, bytes):
+                data, ctype = obj, headers.pop("Content-Type", "application/octet-stream")
+            else:
+                data, ctype = (b"" if obj is None else json.dumps(obj).encode()), "application/json"
+                if b"@BASE@" in data or b"@CONTENT:" in data:
+                    data = self._fill(data)
             self.send_response(code)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
-            for k, v in (headers or {}).items():
+            for k, v in headers.items():
                 self.send_header(k, v)
             self.end_headers()
             self.wfile.write(data)
+
+        def _base(self) -> str:
+            return f"http://{self.headers.get('Host', 'localhost')}"
+
+        def _fill(self, data: bytes) -> bytes:
+            """Attachment URLs for this request: the API version asked, and Cloud's /rest/api/3/attachment/content/ID or Data Center's /secure/attachment/ID/NAME."""
+            ver = (re.match(r"/rest/api/(\d)/", self.path) or [0, "2"])[1]
+            text = data.decode().replace("@BASE@", self._base()).replace("@V@", ver)
+            return re.sub(r"@CONTENT:(\d+):([^@]*)@", lambda m: f"{self._base()}/rest/api/3/attachment/content/{m[1]}" if ver == "3"
+                          else f"{self._base()}/secure/attachment/{m[1]}/{m[2]}", text).encode()
 
         def _body(self) -> dict:
             try:
@@ -921,11 +1019,18 @@ def make_handler(jira: Jira):
                 return 200, jira.set_activity(self._body()) if method == "POST" else dict(jira.activity)
             if url.path == "/sim/tickets":
                 return 200, jira.sim_tickets(self._body()) if method == "POST" else jira.overview()
+            if url.path == "/sim/alerts" and method == "POST":
+                return 200, jira.alerts(self._body())
             if url.path == "/sim/pages":
                 return 200, jira.sim_pages(self._body()) if method == "POST" else {"pages": len(jira.pages)}
             if url.path in ("/rest/api/search", "/wiki/rest/api/search") and method == "GET":
                 jira.gate()
                 return 200, self._page_search(url.path.startswith("/wiki"), url.query)
+            if url.path.startswith("/secure/attachment/") and method == "GET":  # Data Center's download path
+                jira.gate()
+                aid = url.path.split("/")[3]
+                att = jira.find_attachment(aid)
+                return 200, jira.attachments[aid][1], {"Content-Type": att["mimeType"]}
             api = API.match(url.path)
             if not (api or url.path == "/rest/webhooks/1.0/webhook"):
                 raise JiraError(404, ["Not found"])
@@ -937,6 +1042,25 @@ def make_handler(jira: Jira):
                 return 201, jira.create(self._body())
             if parts in (["search"], ["search", "jql"]) and method in ("GET", "POST"):
                 return 200, self._search(parts, method, url.query)
+            if parts == ["search", "approximate-count"] and method == "POST":
+                return 200, {"count": jira.search(str(self._body().get("jql") or ""), 0, 0, [])["total"]}
+            if parts[0] == "attachment" and len(parts) == 2 and method in ("GET", "DELETE"):
+                if method == "DELETE":
+                    jira.delete_attachment(parts[1])
+                    return 204, None
+                return 200, jira.find_attachment(parts[1])
+            if parts[:2] == ["attachment", "content"] and len(parts) == 3 and method == "GET":
+                att = jira.find_attachment(parts[2])
+                if (parse_qs(url.query).get("redirect") or ["true"])[0].lower() == "false":
+                    return 200, jira.attachments[parts[2]][1], {"Content-Type": att["mimeType"]}
+                return 303, None, {"Location": f"{self._base()}/secure/attachment/{parts[2]}/{att['filename']}"}
+            if parts == ["user", "bulk"] and method == "GET":
+                asked = parse_qs(url.query)
+                try:
+                    start, limit = int((asked.get("startAt") or ["0"])[0]), int((asked.get("maxResults") or ["10"])[0])
+                except ValueError:
+                    raise JiraError(400, ["startAt and maxResults must be numbers"]) from None
+                return 200, jira.users_bulk(asked.get("accountId", []), asked.get("username", []) + asked.get("key", []), start, limit)
             if parts == ["myself"] and method == "GET":
                 return 200, self._myself()
             if parts == ["serverInfo"] and method == "GET":
@@ -1046,7 +1170,20 @@ def make_handler(jira: Jira):
                     return {**me, "emailAddress": email}
             return person(ME)
 
+        def _metrics(self) -> None:
+            with lock:
+                n, err = stats["requests"], stats["errors"]
+            data = ("# TYPE jira_mock_requests_total counter\n" f"jira_mock_requests_total {n}\n"
+                    "# TYPE jira_mock_errors_total counter\n" f"jira_mock_errors_total {err}\n").encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; version=0.0.4")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
         def _handle(self, method: str) -> None:
+            if method == "GET" and urlparse(self.path).path == "/metrics":
+                return self._metrics()
             try:
                 self._send(*self._route(method))
             except JiraError as e:

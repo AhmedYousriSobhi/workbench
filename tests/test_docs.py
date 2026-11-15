@@ -145,6 +145,21 @@ def test_screenshots_come_in_light_and_dark_pairs_within_budget():
         assert p.stat().st_size <= 3 * 1024 * 1024, f"{p.name} is over 3 MB"
 
 
+def test_screenshots_are_not_tall_strips():
+    """No manual image is taller than 1400 px or more than 2.2 x its width (a phone screen is 390x844); a light/dark pair has one size (#701)."""
+    import struct
+
+    def dims(p):  # header only, no Pillow (CI does not install it)
+        b = p.read_bytes()[:32]
+        return struct.unpack(">II", b[16:24]) if b[:4] == b"\x89PNG" else struct.unpack("<HH", b[6:10])
+    sizes = {}
+    for p in sorted((MANUAL / "img").glob("*.png")) + sorted((MANUAL / "img").glob("*.gif")):
+        w, h = dims(p)
+        assert h <= 1400 and h <= 2.2 * w, f"{p.name} is {w}x{h}: capture a region or a fixed viewport"
+        sizes.setdefault(p.name.rsplit("-", 1)[0], set()).add((w, h))
+    assert all(len(v) == 1 for v in sizes.values()), f"light and dark differ in size: {[k for k, v in sizes.items() if len(v) > 1]}"
+
+
 def test_no_old_names_left():
     """simctl, opti and hpcsim were removed (#111): a tracked file may name them only to explain the migration."""
     import subprocess

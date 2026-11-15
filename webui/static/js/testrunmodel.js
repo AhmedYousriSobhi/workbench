@@ -3,6 +3,7 @@
 
 export function describe(s) {
   const d = s.do, n = (d.nodes || []).join(', ');
+  if (d.drain && !Array.isArray(d.drain)) return `Drain Kubernetes node ${d.drain.node} (waits ${d.drain.timeout || 60} s for evictions)`;
   if (d.drain) return `Drain ${d.drain.join(', ')} in Slurm (${d.reason || 'scenario'})`;
   if (d.resume) return `Resume ${d.resume.join(', ')} in Slurm`;
   if (d.submit) return `Submit a ${d.submit.duration || 600} s job on ${d.submit.node}${d.submit.gpus ? ` holding ${d.submit.gpus} GPUs` : ''}`;

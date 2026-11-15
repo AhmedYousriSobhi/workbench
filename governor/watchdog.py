@@ -17,6 +17,15 @@ log = logging.getLogger("governor.watchdog")
 ACCEPTED_SLURMRESTD = frozenset({"disable_unshare_sysv", "disable_unshare_files"})
 
 
+# The one capability a container may add, and only a Slurm node (label workbench.node): without it slurmd cannot read /proc/PID/io of a
+# user's job process, so sstat shows no memory for any user but root (ADR 0074 addendum, issue 674).
+NODE_CAPS = frozenset({"SYS_PTRACE"})
+
+
+def _node_caps_ok(c: dict, caps: list[str]) -> bool:
+    return bool((c.get("Config") or {}).get("Labels", {}).get("workbench.node")) and set(caps) <= NODE_CAPS
+
+
 def _slurmrestd_options(c: dict) -> set[str]:
     env = dict(e.partition("=")[::2] for e in (c.get("Config") or {}).get("Env") or [])
     return {o for o in env.get("SLURMRESTD_SECURITY", "").split(",") if o}
@@ -24,8 +33,10 @@ def _slurmrestd_options(c: dict) -> set[str]:
 
 def accepted_exceptions(inspected: list[dict]) -> list[str]:
     """Known, documented deviations (not violations); doctor lists them so they stay visible."""
-    return [f"{c['Name'].lstrip('/')}: slurmrestd skips its unshare steps (ADR 0004)"
-            for c in inspected if _slurmrestd_options(c) & ACCEPTED_SLURMRESTD]
+    out = [f"{c['Name'].lstrip('/')}: slurmrestd skips its unshare steps (ADR 0004)"
+           for c in inspected if _slurmrestd_options(c) & ACCEPTED_SLURMRESTD]
+    return out + [f"{c['Name'].lstrip('/')}: SYS_PTRACE so job accounting reads users' processes (ADR 0074)"
+                  for c in inspected if (caps := c["HostConfig"].get("CapAdd")) and _node_caps_ok(c, caps)]
 
 
 def container_violations(inspected: list[dict]) -> list[str]:
@@ -35,7 +46,7 @@ def container_violations(inspected: list[dict]) -> list[str]:
         name, hc = c["Name"].lstrip("/"), c["HostConfig"]
         if hc.get("Privileged"):
             bad.append(f"{name}: privileged")
-        if hc.get("CapAdd"):
+        if hc.get("CapAdd") and not _node_caps_ok(c, hc["CapAdd"]):
             bad.append(f"{name}: extra capabilities {hc['CapAdd']}")
         if any("unconfined" in o for o in hc.get("SecurityOpt") or []):
             bad.append(f"{name}: confinement disabled {hc['SecurityOpt']}")

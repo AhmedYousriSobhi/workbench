@@ -1,0 +1,7 @@
+CAPTURED from slurmctld 26.05.5 in the throwaway one-shot (check_slurm), debug lines left out (issue 778)
+[2026-11-15T09:32:35.755] error: HealthCheckTimeout (60) must be less than HealthCheckInterval (30), please review.
+[2026-11-15T09:32:35.762] error: Job accounting information gathered, but not stored
+[2026-11-15T09:32:35.764] slurmctld version 26.05.5 started on cluster workbench(0)
+[2026-11-15T09:32:35.764] cred/munge: init: Munge credential signature plugin loaded
+[2026-11-15T09:32:35.765] error: cannot create select context for select/doesnotexist
+[2026-11-15T09:32:35.765] fatal: failed to initialize node selection plugin

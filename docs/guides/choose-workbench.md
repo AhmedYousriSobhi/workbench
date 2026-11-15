@@ -26,11 +26,16 @@ It prints the nodes and parts, the memory by item (expected use and the cap), th
 - `does not fit: ... short by 273 MB ... Try: drop jira-real (2 GB); drop accounting (360 MB); 5 fewer node(s)`: exit code 1,
   and it says what to remove. When the workbench alone fits and only the app's reserve does not, it names the largest reserve that does (`--app-mb 700 if the app needs less than 1024 MB`); start the app after the workbench.
 
-**Expected** is what each part was measured to use plus 15 percent (never above its cap); **cap** is the container limit the
-governor enforces. Admission compares the expected use plus the app's reserve with free memory, so a start that fits is no longer
-refused because caps are generous. Services of the workbench that already run are left out of what the plan needs, for the same reason (the free figure no longer contains them). If the app under test already runs, its memory is already out of the free figure too: add
-`--app-mb 0` (to `plan`, `up`, `apply` or `start`) or set `WORKBENCH_APP_MB=0`. The numbers and how to re-measure them:
-[memory contract](../architecture/04-memory-and-profiles.md); the per-part table is in [how much memory it uses](memory.md).
+- **Expected** is what each part was measured to use, plus 15 percent (never above its cap).
+- **Cap** is the container limit the governor enforces.
+
+Admission compares the expected use plus the app's reserve with free memory. A start that fits is therefore not refused because caps are generous.
+
+Services of the workbench that already run are left out of what the plan needs, for the same reason: the free figure no longer contains them.
+
+If the app under test already runs, its memory is already out of the free figure too. Add `--app-mb 0` (to `plan`, `up`, `apply` or `start`), or set `WORKBENCH_APP_MB=0`.
+
+The numbers and how to re-measure them: [memory contract](../architecture/04-memory-and-profiles.md). The per-part table is in [how much memory it uses](memory.md).
 
 ## 2. Build
 
@@ -51,7 +56,7 @@ nothing) when the estimate does not fit. Check: `benchctl get nodes`, `benchctl 
 | `--ticketing jira`, `--hardware bmc,bcm`, `--access teleport`, ... | the same parts by category, see below |
 | `--addons` | every optional part (`--without teleport` still removes one) |
 | `--login ssh,teleport,both` | the login nodes, one auth mode each (`login`, `login2`, ...; 1 to 8); a Teleport mode turns Teleport on. See [login nodes](../manual/04-nodes-and-shells.md#login-nodes-how-many-and-how-each-one-lets-you-in) |
-| `--bmc-groups LIST` | node groups that get a BMC: `slurm-cpu`, `slurm-gpu`, `k8s-cpu`, `k8s-gpu` (default all); each BMC is about 32 MB; `--bmc-nodes` then leaves out single nodes |
+| `--bmc-groups LIST` | node groups that get a BMC: `slurm-cpu`, `slurm-gpu`, `k8s-cpu`, `k8s-gpu` (default all); each BMC costs 16 MB at most (about 3 MB used); `--bmc-nodes` then leaves out single nodes |
 | `--controller` / `--no-controller` | a controller node (`sim.yaml` `controller.enabled`, default off): slurmctld's host with ssh for whitelisted admins (`controller.allow.users`, `controller.allow.groups`; default group `admins`, alice is in it), 24 MB more, and the BCM head node: `cmsh` moves there from the login nodes. `ssh -i KEY alice@controller` from a login node, 10.141.255.1:22 or 127.0.0.1:2221 from outside |
 | `--access jump` | the jump host: a bare sshd bastion (nothing else installed), 10.141.255.5, 127.0.0.1:2220. Reach a login node through it: `ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -o ProxyCommand='ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -W %h:%p alice@10.141.255.5' alice@10.141.255.254` (`ssh -J` does not pass `-i` or `-o` to the jump leg, so the key goes in the ProxyCommand; with the key in your ssh-agent or `~/.ssh/config`, `ssh -J alice@10.141.255.5 alice@10.141.255.254` is enough). Teleport nodes keep Teleport |
 | `--bcm-k8s` / `--no-bcm-k8s` | whether BCM manages the Kubernetes nodes (`sim.yaml` `bcm.manage_kubernetes`, default on); off: `cmsh -c "device; list"` and the CMDaemon API show no Kubernetes nodes and no `k8s-cpu`/`k8s-gpu` categories, the cluster itself is unchanged |
@@ -83,7 +88,11 @@ Name the parts by what they are for. Values are comma separated or repeated, `al
 ./scripts/benchctl start --addons --without teleport              # everything except one
 ```
 
-Category flags add to the default parts (`jira`, `bmc`, `bcm`, `accounting`); `--without` removes. A typo gets a hint: `unknown ticketing item 'jirra'. Did you mean 'jira'?`. A plain `benchctl start` with no flags is the `min` preset, which has none of the optional parts. `start` never reuses the workbench you last built: its first line names what it starts and, if one was saved, what it replaces (`Starting the min size preset. This replaces the workbench last built (2 compute + 3 GPU nodes, parts ...)`). `benchctl start --profile min` is the plain default, spelled out, and `start` with parts builds the default workbench plus those parts.
+- Category flags add to the default parts (`jira`, `bmc`, `bcm`, `accounting`). `--without` removes.
+- A typo gets a hint: `unknown ticketing item 'jirra'. Did you mean 'jira'?`.
+- A plain `benchctl start` with no flags is the `min` preset, which has none of the optional parts. `benchctl start --profile min` spells out the same default.
+- `start` with parts builds the default workbench plus those parts.
+- `start` never reuses the workbench you last built. Its first line names what it starts and, if one was saved, what it replaces: `Starting the min size preset. This replaces the workbench last built (2 compute + 3 GPU nodes, parts ...)`.
 
 ## A workbench file
 
@@ -111,11 +120,20 @@ you chose, not the numbers in `sim.yaml`.
 
 ## From the web page
 
-**left nav → ⚙ Cluster architecture** in the top bar of the dashboard opens a panel with the same form (steppers for the counts, toggles for the parts) and a memory bar. Editing the numbers only estimates. **Apply to the
-running workbench** asks the governor to rebuild it to the plan: new nodes start, nodes you no longer want are removed,
-and Slurm's node list is reloaded. Progress shows in the entity list, the Infrastructure architecture and *Governor activity* (in the Governor panel). It needs the governor
-started by `./scripts/benchctl start` (it has the repository path) and calm memory (L0-L1); otherwise the page says why
-in one line. **GB needed** on the page is the number admission compares with free memory (expected use, minus what already runs, no app reserve), not the sum of the caps; hover it for the parts. `benchctl plan` shows the same number plus the 1024 MB app reserve, so the CLI figure is higher unless you pass `--app-mb 0`. The page counts the app under test as already running (no 1 GB reserve, `--app-mb 0` in the command it shows and in the rebuild). You can always copy the command shown and run it in a terminal instead.
+**left nav → ⚙ Cluster architecture** in the top bar of the dashboard opens a panel with the same form (steppers for the counts, toggles for the parts) and a memory bar. Editing the numbers only estimates.
+
+1. Change the counts and parts.
+2. Press **Apply to the running workbench**. It asks the governor to rebuild the workbench to the plan: new nodes start, nodes you no longer want are removed, and Slurm's node list is reloaded.
+3. Watch the progress in the entity list, the Infrastructure architecture and *Governor activity* (in the Governor panel).
+
+Apply needs the governor started by `./scripts/benchctl start` (it has the repository path) and calm memory (L0-L1); otherwise the page says why in one line. You can always copy the command shown and run it in a terminal instead.
+
+**GB needed** on the page is the number admission compares with free memory (expected use, minus what already runs, no app reserve), not the sum of the caps; hover it for the parts.
+
+| | App reserve | Figure |
+|---|---|---|
+| the page | none: it counts the app under test as already running (`--app-mb 0` in the command it shows and in the rebuild) | lower |
+| `benchctl plan` | 1024 MB | higher, unless you pass `--app-mb 0` |
 
 ## Going back
 
@@ -149,8 +167,12 @@ when it restarts. The node counts stay as they are because a selection takes the
 <p align="center"><img src="../assets/art/guide-choose-workbench-diagram.svg" alt="A selection becomes an effective sim, then a plan, then governor admission, then a start" width="720"></p>
 
 > [!HOOD]
-> A selection (flags or a workbench file) becomes an effective `sim` and a profile (`benchctl/workbench.py`); the estimate is the sum of the generated container limits plus the always-on observability stack, which is the figure the governor admits against. `compose.write` writes the effective `sim` to `compose/generated/sim.yaml`, and `slurm.conf`, the BMC farm, the BCM mock and the GPU exporter all come from that one copy, so they cannot disagree.
-> `plan` changes nothing and exits 1 when the estimate does not fit. From the page, **Apply** asks the governor to rebuild to the plan through `apply-plan`, only at L0 and L1 (ADR 0017).
+> A selection (flags or a workbench file) becomes an effective `sim` and a profile (`benchctl/workbench.py`).
+>
+> - The estimate is the sum of the generated container limits plus the always-on observability stack. It is the figure the governor admits against.
+> - `compose.write` writes the effective `sim` to `compose/generated/sim.yaml`. `slurm.conf`, the BMC farm, the BCM mock and the GPU exporter all come from that one copy, so they cannot disagree.
+> - `plan` changes nothing and exits 1 when the estimate does not fit.
+> - From the page, **Apply** asks the governor to rebuild to the plan through `apply-plan`, only at L0 and L1 (ADR 0017).
 
 Source: `benchctl/workbench.py` (`effective`, `estimate`, `verdict`), [ADR 0016](../adr/0016-workbench-selection-and-effective-sim.md), [ADR 0017](../adr/0017-apply-a-plan-through-the-governor.md), [ADR 0021](../adr/0021-parts-by-category.md), SPEC W-13 and W-15
 

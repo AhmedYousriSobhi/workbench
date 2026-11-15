@@ -1,0 +1,17 @@
+# DRA (issue 547, ADR 0076): a claim template for one GPU of the simulated driver and a pod that uses it. The real kube-scheduler
+# allocates the claim against the ResourceSlices benchctl generates at `up` (compose/generated/k8s/50-dra.yaml).
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata: {name: one-gpu, namespace: team-a}
+spec:
+  spec:
+    devices:
+      requests: [{name: gpu, exactly: {deviceClassName: gpu.sim.test, count: 1}}]
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: dra-train, namespace: team-a}
+spec:
+  nodeSelector: {nvidia.com/gpu.present: "true"}
+  resourceClaims: [{name: gpu, resourceClaimTemplateName: one-gpu}]
+  containers: [{name: c, image: "rancher/mirrored-pause:3.6", resources: {claims: [{name: gpu}]}}]

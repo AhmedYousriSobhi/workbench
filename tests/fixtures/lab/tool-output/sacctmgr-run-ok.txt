@@ -1,0 +1,67 @@
+CAPTURED from slurmdbd and sacctmgr 26.05.5 (MariaDB 11.8) in the throwaway one-shot, on tests/fixtures/lab/full (issue 778)
+@@QOS
+ Adding QOS(s)
+  high
+ Settings
+  Description    = high
+ Modified qos...
+  normal
+ Modified qos...
+  high
+@@LOAD
+For cluster prodsim
+Accounts
+      Name                Descr                  Org                  QOS 
+---------- -------------------- -------------------- -------------------- 
+   physics              physics                  sci                      
+        ml                   ml                  sci                      
+---------------------------------------------------
+
+Account Associations
+   Account ParentName     Share   GrpTRESMins GrpTRESRunMin       GrpTRES GrpJobs GrpJobsAccrue  GrpMem GrpNodes GrpSubmit     GrpWall   MaxTRESMins       MaxTRES MaxTRESPerNode MaxJobs MaxSubmit MaxNodes     MaxWall                  QOS   Def QOS 
+---------- ---------- --------- ------------- ------------- ------------- ------- ------------- ------- -------- --------- ----------- ------------- ------------- -------------- ------- --------- -------- ----------- -------------------- --------- 
+   physics       root        10                                                                                                                                                                                                   high,normal           
+        ml       root        20                                                                                                                                                                                                   high,normal           
+--------------------------------------------------------------
+
+Users
+      Name   Def Acct  Def WCKey                  QOS     Admin       Coord Accounts 
+---------- ---------- ---------- -------------------- --------- -------------------- 
+        u1    physics                                   Not Set                      
+        u2         ml                                   Not Set                      
+---------------------------------------------------
+
+User Associations
+      User    Account     Share   GrpTRESMins GrpTRESRunMin       GrpTRES GrpJobs GrpJobsAccrue  GrpMem GrpNodes GrpSubmit     GrpWall   MaxTRESMins       MaxTRES MaxTRESPerNode MaxJobs MaxSubmit MaxNodes     MaxWall                  QOS   Def QOS 
+---------- ---------- --------- ------------- ------------- ------------- ------- ------------- ------- -------- --------- ----------- ------------- ------------- -------------- ------- --------- -------- ----------- -------------------- --------- 
+        u1    physics         1                                                                                                                                                                                                                         
+        u2         ml         1                                                                                                                                                                                                                         
+--------------------------------------------------------------
+
+sacctmgr: Done adding cluster in usec=3502
+@@LOAD_RC=0
+@@AFTER
+# To edit this file start with a cluster line for the new cluster
+# Cluster - 'cluster_name':MaxTRESPerJob=node=50
+# Followed by Accounts you want in this fashion (root is created by default)...
+# Parent - 'root'
+# Account - 'cs':MaxTRESPerJob=node=5:MaxJobs=4:MaxTRESMinsPerJob=cpu=20:FairShare=399:MaxWallDurationPerJob=40:Description='Computer Science':Organization='LC'
+# Any of the options after a ':' can be left out and they can be in any order.
+# If you want to add any sub accounts just list the Parent THAT HAS ALREADY
+# BEEN CREATED before the account line in this fashion...
+# Parent - 'cs'
+# Account - 'test':MaxTRESPerJob=node=1:MaxJobs=1:MaxTRESMinsPerJob=cpu=1:FairShare=1:MaxWallDurationPerJob=1:Description='Test Account':Organization='Test'
+# To add users to a account add a line like this after a Parent - 'line'
+# User - 'lipari':MaxTRESPerJob=node=2:MaxJobs=3:MaxTRESMinsPerJob=cpu=4:FairShare=1:MaxWallDurationPerJob=1
+QOS - 'normal':Description='Normal QOS default'
+QOS - 'high':Description='high':GraceTime=30:MaxTRESPerUser=gres/gpu=4:Preempt='normal':PreemptMode='requeue':Priority=1000
+Cluster - 'prodsim':Fairshare=1:QOS='normal'
+Parent - 'root'
+User - 'root':DefaultAccount='root':AdminLevel='Administrator':Fairshare=1
+Account - 'ml':Description='ml':Organization='sci':Fairshare=20:QOS='high,normal'
+Account - 'physics':Description='physics':Organization='sci':Fairshare=10:QOS='high,normal'
+Parent - 'ml'
+User - 'u2':DefaultAccount='ml':Fairshare=1
+Parent - 'physics'
+User - 'u1':DefaultAccount='physics':Fairshare=1
+@@END

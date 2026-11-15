@@ -16,7 +16,17 @@ from pathlib import Path
 
 import yaml
 
-from . import authfaults, checks, dcgm, k8s, topology
+from . import (
+    authfaults,
+    checks,
+    dcgm,
+    faultmodel,
+    k8s,
+    netemfaults,
+    selectors,
+    slurmupgrade,
+    topology,
+)
 from .nodes import node_names
 
 ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "http://127.0.0.1:8000/sim/inject",
@@ -31,7 +41,7 @@ JIRA_REAL_URL = "http://127.0.0.1:8083"
 JIRA_REAL_MODES = ("outage", "restore", "bad_logins", "clear_logins", "rate_limit", "rate_limit_off", "token_revoke", "token_restore",
                    "proxy_503", "proxy_429", "proxy_slow", "proxy_off")  # real faults on the real Jira (issue 303); proxy_* through benchctl/jira_proxy.py (issue 305)
 JIRA_REAL_TICKET_ACTIONS = ("create", "transition", "comment")  # `tickets:` steps on the real Jira go through the REST driver (issue 306)
-HOST_TARGETS = ("slurm", "ssh", "jira-real", "k8s", "dcgm", "auth")  # steps that need Docker on the host
+HOST_TARGETS = ("slurm", "slurm-upgrade", "ssh", "jira-real", "k8s", "dcgm", "auth", "netem")  # steps that need Docker (or the root governor service, netem) on the host
 SSH_STATES = ("down", "up", "hung")
 NODE_SSHD_STATES = ("down", "up")
 RAMP_STEP_S = 10.0
@@ -79,7 +89,13 @@ class Report:
         return all(o.status != "failed" for o in self.steps + self.expects)
 
 
-def load(name: str, root: Path = SCENARIOS) -> dict:
+def load(name: str, root: Path = SCENARIOS, sim: dict | None = None) -> dict:
+    """The scenario file; with `sim`, node selectors (`first gpu node`, benchctl/selectors.py) are replaced by that cluster's names."""
+    sc = _load(name, root)
+    return selectors.resolve_scenario(sc, sim) if sim is not None else sc
+
+
+def _load(name: str, root: Path) -> dict:
     path = root / f"{name}.yaml"
     if not path.is_file():  # a reference number works too: SC-02 or sc-2
         m = re.fullmatch(r"(?i)sc-?0*(\d+)", name.strip())
@@ -121,14 +137,22 @@ def preview(sc: dict) -> dict:
             "cli_only": sum(1 for s in steps if not s["page"]) + sum(1 for e in expects if not e["page"])}
 
 
-def list_all(root: Path = SCENARIOS) -> list[dict]:
-    return sorted((yaml.safe_load(p.read_text()) for p in root.glob("*.yaml")), key=lambda s: s["name"])
+def list_all(root: Path = SCENARIOS, sim: dict | None = None) -> list[dict]:
+    found = sorted((yaml.safe_load(p.read_text()) for p in root.glob("*.yaml")), key=lambda s: s["name"])
+    return [_resolved_or_raw(sc, sim) for sc in found] if sim is not None else found
+
+
+def _resolved_or_raw(sc: dict, sim: dict) -> dict:
+    try:
+        return selectors.resolve_scenario(sc, sim)
+    except ScenarioError:  # this cluster lacks the kind of node it names (no Kubernetes nodes): listed, but a run says why it cannot play
+        return sc
 
 
 def plan(sc: dict) -> list[Step]:
     """Steps in time order; a `ramp: {to, over}` step becomes temperature steps every RAMP_STEP_S."""
     out: list[Step] = []
-    for s in sc.get("steps", []):
+    for s in fault_steps(sc.get("steps", [])):
         at, target, do = parse_duration(s["at"]), s["target"], dict(s.get("do") or {})
         ramp = do.pop("ramp", None)
         if ramp:
@@ -139,6 +163,17 @@ def plan(sc: dict) -> list[Step]:
         if not ramp or set(do) - {"nodes"}:  # a ramp's own step carries nothing but the node list
             out.append(Step(at, target, do))
     return sorted(out, key=lambda s: s.at)
+
+
+def fault_steps(steps: list[dict]) -> list[dict]:
+    """The steps with each `fault` step (benchctl/faultmodel.py) replaced by its physical effects."""
+    out = []
+    for s in steps:
+        if s.get("target") != "fault":
+            out.append(s)
+            continue
+        out += [{"at": parse_duration(s["at"]) + delay, "target": target, "do": do} for delay, target, do in faultmodel.effects(s["do"])]
+    return out
 
 
 def validate(sc: dict, sim: dict) -> list[str]:
@@ -157,6 +192,11 @@ def validate(sc: dict, sim: dict) -> list[str]:
         if t == "switch":
             problems += [f"step {i}: {m}" for m in topology.switch_problems(s.get("do") or {}, sim)]
             continue
+        if t == "fault":
+            bad = faultmodel.problems(s.get("do") or {})
+            problems += [f"step {i}: {m}" for m in bad]
+            problems += [f"step {i}: unknown node {n!r}" for n in (s.get("do") or {}).get("nodes") or [] if n not in nodes] if not bad else []
+            continue
         if t not in ENDPOINTS and t not in HOST_TARGETS:
             problems.append(f"step {i}: unknown target {t!r}")
         do = s.get("do") or {}
@@ -166,8 +206,14 @@ def validate(sc: dict, sim: dict) -> list[str]:
             problems += [f"step {i}: {m}" for m in jira_ticket_problems(do["tickets"])]
         if t == "slurm":
             problems += [f"step {i}: {m}" for m in daemon_problems(do)]
+        if t == "slurm-upgrade":
+            problems += [f"step {i}: {m}" for m in slurmupgrade.problems(do, nodes)]
+            continue
         if t == "dcgm" and sum(bool(do.get(v)) for v in ("stop", "start", "restart")) != 1:
             problems.append(f"step {i}: dcgm needs one of stop, start, restart: true")
+        if t == "netem":
+            problems += [f"step {i}: {m}" for m in netemfaults.problems(do, nodes)]
+            continue
         if t == "auth":
             problems += [f"step {i}: {m}" for m in authfaults.problems(do, nodes, {u["name"] for u in sim.get("users", [])})]
             continue
@@ -271,7 +317,7 @@ SLURM_STATES = {"drain": "drain", "down": "down", "resume": "resume", "power_off
 
 def disruptive(sc: dict) -> bool:
     """True when a step restarts or stops a Slurm daemon or starts a job: the governor must admit that first (GV-9)."""
-    return any(set(s.get("do") or {}) & set(DAEMON_KEYS) for s in sc.get("steps", []))
+    return any(set(s.get("do") or {}) & set(DAEMON_KEYS) or s.get("target") == "slurm-upgrade" for s in sc.get("steps", []))
 
 
 def submit_command(sub: dict, sim: dict | None = None) -> list[str]:
@@ -467,16 +513,22 @@ def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcom
                 r = runner(cmd)
                 if r.returncode:
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip())
+        elif step.target == "slurm-upgrade":
+            bad = slurmupgrade.apply(step.do, runner)
+            return Outcome(label, "failed", bad) if bad else Outcome(label, "ok")
         elif step.target == "dcgm":
             return _dcgm(step, label, runner)
         elif step.target == "k8s":
             k8s.write_pod(step.do)
             for args in k8s.step_args(step.do):
                 r = runner(k8s.kubectl_cmd(k8s.current_sim(), *args))
-                if r.returncode:
+                if r.returncode and args[0] != "drain":  # a drain that the disruption budget blocks times out: that is what the step plays
                     return Outcome(label, "failed", (r.stderr or r.stdout).strip()[-300:])
         elif step.target == "jira-real":
             return jira_real_fault(step, label, runner)
+        elif step.target == "netem":
+            bad = netemfaults.apply(step.do)
+            return Outcome(label, "failed", bad) if bad else Outcome(label, "ok")
         elif step.target == "auth":
             bad = authfaults.apply(step.do, runner, poster, k8s.current_sim())
             return Outcome(label, "failed", bad) if bad else Outcome(label, "ok")
@@ -620,6 +672,30 @@ def jira_search(jql: str) -> list[dict]:
         return []
 
 
+def storage_mount(node: str, mount: str) -> dict | None:
+    """One mount as the exporter farm shows it to `node` (GET /sim/storage), or None when it cannot be read."""
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:9400/sim/storage?node={urllib.parse.quote(node)}", timeout=5) as r:
+            return next((m for m in json.loads(r.read())["mounts"] if m["path"] == mount), None)
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def storage_holds(args: dict) -> bool:
+    """`storage.mount`: the mount is at least `min_used_pct` full, `min_inodes_used_pct` of its inodes used, `stale` (default false) for the
+    node, or the user's usage is over the quota (`quota_exceeded: USER`)."""
+    m = storage_mount(args.get("node", "cn001"), args["mount"])
+    if m is None:
+        return False
+    if "min_used_pct" in args and m["used"] * 100 < float(args["min_used_pct"]) * m["size"]:
+        return False
+    if "min_inodes_used_pct" in args and m["files_used"] * 100 < float(args["min_inodes_used_pct"]) * m["files"]:
+        return False
+    if "quota_exceeded" in args and not (m["quotas"].get(args["quota_exceeded"]) or {}).get("exceeded"):
+        return False
+    return bool(m["stale"]) == bool(args.get("stale", False))
+
+
 def jira_labels(labels: list[str]) -> bool:
     jql = "labels = " + " AND labels = ".join(labels)
     url = "http://127.0.0.1:8080/rest/api/2/search?jql=" + urllib.parse.quote(jql)
@@ -668,6 +744,10 @@ def expectation(exp: dict, runner=checks.run, host: bool = True):
         return label, lambda: k8s.node_ready(args["node"], runner) == bool(args.get("ready", True)), within
     if kind == "k8s.pod_status" and host:  # the pod's phase or a container's waiting/terminated reason is `reason`
         return label, lambda: args["reason"] in k8s.pod_reasons(args["namespace"], args["name"], runner).split(), within
+    if kind == "k8s.pods_on_node" and host:  # at least `min` (default 1) Running pods matching `selector` on the node
+        return label, lambda: (k8s.pods_on_node(args["node"], args["namespace"], args["selector"], runner) or 0) >= int(args.get("min", 1)), within
+    if kind == "storage.mount" and host:  # the declared mount is as full, stale or over quota as the scenario made it
+        return label, lambda: storage_holds(args), within
     if kind == "jira.issue_created":
         return label, lambda: jira_labels(args["labels"]), within
     search = (lambda q: real_search(q)) if args.get("target") == "real" else (lambda q: jira_search(q))  # `target: real` asks the real Jira

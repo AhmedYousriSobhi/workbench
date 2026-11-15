@@ -92,9 +92,24 @@ def build(run: Callable[..., dict] = run_cli) -> MCPServer:
     def traffic_get(since: float = 0.0) -> dict:
         return run(["get", "traffic", "--json", "--since", str(since)])
 
-    @s.tool(description="The alerts Prometheus is pending or firing. The workbench ships no alert rules: empty until rules are loaded.", annotations=READ)
+    @s.tool(description="The alerts Prometheus is pending or firing. The workbench ships seven default rules (GpuXidCritical, GpuTempHigh, InfinibandPortDown, NodeDrained, NodeDown, ExporterDown, JiraErrors); an empty list means none is firing.", annotations=READ)
     def alerts_get() -> dict:
         return run(["get", "alerts", "--json"])
+
+    @s.tool(description="The state of the web page's scenario run: running or not, which one, each step's status and the expect verdicts so far. "
+                        "A scenario started with scenario_run is not shown (that call blocks and returns its own report). Needs the web page.", annotations=READ)
+    def scenario_status() -> dict:
+        return run(["get", "scenario-status", "--json"])
+
+    @s.tool(description="Clear every injected node fault at once (hot BMC, failed fans, GPU XID, InfiniBand or NIC trouble; powered-off nodes are powered on), like the page's Clear faults. "
+                        "Service and credential faults are not touched. Safe to repeat.", annotations=WRITE)
+    def fault_clear() -> dict:
+        return run(["clear", "faults", "--json"])
+
+    @s.tool(description="The messages on one node's wire for a bounded time (Slurm messages, or Kubernetes API events for a Kubernetes node): type, direction, size, timing, never a body. "
+                        "Stops at seconds (default 10, at most 60) or max_messages (default 200), whichever comes first. The governor can refuse it at memory level L2 and above.", annotations=READ)
+    def capture_once(node: str, seconds: int = 10, max_messages: int = 200) -> dict:
+        return run(["get", "capture", node, "--once", "--seconds", str(seconds), "--max-messages", str(max_messages)], timeout=seconds + 60)
 
     @s.tool(description="Block until something is true, one call instead of polling. kind: ready | node-state (name=node, state) | alert (name, resolved) | scenario (name). "
                         "outcome met, timeout, failed or precondition (a precondition needs a part that is not running).", annotations=READ)

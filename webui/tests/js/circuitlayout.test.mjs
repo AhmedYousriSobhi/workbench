@@ -12,7 +12,7 @@ const k8sOnly = { nodes: [node('kw001', 'k8s')], logins: [{ name: 'k-login', mod
 
 test('every cluster gets the same parts and the same wires in the same places (W-17)', () => {
   const specs = [slurmOnly, full, k8sOnly, { nodes: [], logins: [], services: {} }].map(c => circuitSpec(circuitFacts(c)));
-  const ids = s => Object.keys(s.parts).filter(k => !s.row.includes(k) || ['slurmrestd', 'bmc-farm', 'bcm-mock', 'gpu-exporter', 'prometheus', 'grafana', 'jira-mock'].includes(k));
+  const ids = s => Object.keys(s.parts).filter(k => !s.row.includes(k) || ['slurmrestd', 'bmc-farm', 'bcm-mock', 'gpu-exporter', 'prometheus', 'grafana', 'jira-mock', 'alertmanager'].includes(k));
   for (const s of specs.slice(1)) {
     assert.deepEqual(ids(s), ids(specs[0]));
     for (const id of ids(s)) assert.deepEqual([s.parts[id].x, s.parts[id].y, s.parts[id].w, s.parts[id].h], [specs[0].parts[id].x, specs[0].parts[id].y, specs[0].parts[id].w, specs[0].parts[id].h], id);
@@ -71,7 +71,7 @@ test('every wire belongs to a layer of the stack; isolating a layer lights only 
 
 test('services row: the fixed services, then the opt-in real parts the cluster has', () => {
   const plain = circuitSpec(circuitFacts(slurmOnly)).row, withReal = circuitSpec(circuitFacts({ ...slurmOnly, services: { ...slurmOnly.services, 'dcgm-exporter': true } })).row;
-  assert.deepEqual(plain, ['slurmrestd', 'bmc-farm', 'bcm-mock', 'gpu-exporter', 'prometheus', 'grafana', 'jira-mock']);
+  assert.deepEqual(plain, ['slurmrestd', 'bmc-farm', 'bcm-mock', 'gpu-exporter', 'prometheus', 'grafana', 'jira-mock', 'alertmanager']);
   assert.deepEqual(withReal.slice(-1), ['dcgm-exporter']);
 });
 

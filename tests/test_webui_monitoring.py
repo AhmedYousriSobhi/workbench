@@ -61,3 +61,21 @@ def test_grafana_link_only_while_it_answers_and_nothing_without_prometheus():
 
     assert monitoring.links(down) == []
     assert monitoring.links(lambda url, *a: "not json") == []
+
+
+def test_alertmanager_link_only_while_it_answers():
+    def fetch(url, *a):
+        if "/api/v1/targets" in url:
+            return TARGETS
+        if ":9093" in url:
+            return {}
+        raise OSError("down")
+
+    got = {link["to"]: link for link in monitoring.links(fetch)}
+    am = got["alertmanager"]
+    assert (am["from"], am["port"], am["plane"], am["real"], am["measured"]) == ("prometheus", 9093, "monitoring", True, False)
+    assert "alertmanager" not in {link["to"] for link in monitoring.links(fetcher(grafana=False))}
+
+
+def test_the_jira_mock_scrape_is_drawn_as_simulated():
+    assert "jira-mock" in monitoring.SIMULATED_JOBS

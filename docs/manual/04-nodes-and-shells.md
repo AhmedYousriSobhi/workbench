@@ -38,12 +38,17 @@ docker exec workbench-slurmctld-1 sinfo -N -l                       # Slurm's vi
 ./scripts/benchctl describe node gpu001          # add --json for scripts
 ```
 
-It prints, like `kubectl describe`: the container (state, image, memory limit, priority class), Slurm's view (state,
-partitions, CPUs, memory, reason when drained), the jobs running on it, the GPUs (how many, which are busy and which
-idle, any XID error), the BMC (power, CPU temperature, fans) and how to `ssh` to it. A source that does not answer
-becomes one `Note:` line (for example `container not found: is the stack up?`), never an error. The web page shows the
-same text in the **Info** card of a node's panel (click the node in the list), without the Docker and Slurm lines (the page has no Docker access by
-design).
+It prints, like `kubectl describe`:
+- the container: state, image, memory limit, priority class;
+- Slurm's view: state, partitions, CPUs, memory, and the reason when drained;
+- the jobs running on it;
+- the GPUs: how many, which are busy and which idle, any XID error;
+- the BMC: power, CPU temperature, fans;
+- how to `ssh` to it.
+
+A source that does not answer becomes one `Note:` line (for example `container not found: is the stack up?`), never an error.
+
+The web page shows the same text in the **Info** card of a node's panel, without the Docker and Slurm lines. The page has no Docker access by design.
 
 ## Open a shell
 
@@ -76,13 +81,15 @@ ls /dev/workbench-gpu*                # the fake GPUs (GPU nodes only)
 
 ## Limits to know
 
-- **Nodes can freeze or stop under memory pressure.** The governor pauses (L3) then stops (L4) low-priority containers,
-  compute nodes among the first (class P4). A shell that hangs may be a paused container: check
-  `./scripts/benchctl status`. Un-pausing happens by itself after 60 s calm, and a stopped node comes back with the
-  governor's `start` command or `benchctl up`.
+- **Nodes can freeze or stop under memory pressure.** The governor pauses (L3) then stops (L4) low-priority containers. Compute nodes are among the first (class P4).
+  - A shell that hangs may be a paused container. Check `./scripts/benchctl status`.
+  - Un-pausing happens by itself after 60 s calm.
+  - A stopped node comes back with the governor's `start` command or `benchctl up`.
 - Nodes are small: each is capped at 60 MB and runs `slurmd` and `munge`, not a full set of system services.
 - Scaling down (`benchctl scale 2`) removes nodes, and a shell open on one ends.
-- Nodes run `sshd`, reachable only through the login node (`ssh cn001` there, ADR 0014). There is no real NFS or Lustre; storage is faked with metrics only.
+- Nodes run `sshd`, reachable only through the login node (`ssh cn001` there, ADR 0014).
+- There is no real NFS or Lustre. The mounts are declared, and `df`, `df -i`, `lfs df`, `lfs quota` and the `node_filesystem_*` series show them.
+- `/scratch` is one real shared directory on every node and the login node, for datasets and job output ([storage guide](../guides/storage.md)).
 - Do not add `--privileged`, extra capabilities or the Docker socket to a container; `benchctl doctor` fails the stack if
   you do, and the governor's watchdog flags it.
 
@@ -144,15 +151,26 @@ tsh --proxy=10.141.255.30:3080 --insecure -i $ID ssh alice@login2               
 
 `-o IdentitiesOnly=yes` matters if you use `ssh-agent`: without it ssh offers every agent key first, and the server ends the login after six ("Too many authentication failures") before the cluster key is tried.
 
-A key offered to a `teleport` node is refused (`Permission denied`), and it has no published port. A node set to `ssh` is not registered in Teleport, so `tsh ls` does not list it. Fewer login nodes than before: the extra containers are removed on the next `up`. The client profile export (`benchctl export profile`) uses the first node that takes a key.
+- A key offered to a `teleport` node is refused (`Permission denied`), and it has no published port.
+- A node set to `ssh` is not registered in Teleport, so `tsh ls` does not list it.
+- With fewer login nodes than before, the extra containers are removed on the next `up`.
+- The client profile export (`benchctl export profile`) uses the first node that takes a key.
 
 ## Teleport: `tsh` to the login nodes and the nodes
 
-The optional **Teleport** part (auth and proxy in one container, about 256 MB limit, [ADR 0020](../adr/0020-teleport-agentless-openssh.md))
-lets a client reach the login nodes that use Teleport (`teleport` or `both`, see above) and every compute and GPU node through Teleport. Nodes keep their own `sshd` and trust
-the Teleport CA (Teleport's agentless OpenSSH mode); no Teleport process runs on a node. It is off by default.
+The optional **Teleport** part is auth and proxy in one container, with about a 256 MB limit ([ADR 0020](../adr/0020-teleport-agentless-openssh.md)). It is off by default.
 
-**Match your `tsh` to the server.** Teleport supports a `tsh` of the same or one older major version, not a newer one. `benchctl doctor` (and `benchctl up` with Teleport on) compares the `tsh` on your machine with `teleport.version` in `sim.yaml` and prints one line naming both versions and the fix when yours is newer: install a `tsh` of the server's major version, or set `teleport.version` to yours.
+With it, a client reaches through Teleport:
+- the login nodes that use Teleport (`teleport` or `both`, see above);
+- every compute and GPU node.
+
+Nodes keep their own `sshd` and trust the Teleport CA (Teleport's agentless OpenSSH mode). No Teleport process runs on a node.
+
+**Match your `tsh` to the server.** Teleport supports a `tsh` of the same or one older major version, not a newer one.
+
+`benchctl doctor` (and `benchctl up` with Teleport on) compares your `tsh` with `teleport.version` in `sim.yaml`. When yours is newer, it prints one line naming both versions and the fix:
+- install a `tsh` of the server's major version, or
+- set `teleport.version` to yours.
 
 ### Steps
 
@@ -188,27 +206,51 @@ tsh login --proxy=10.141.255.30:3080 --insecure --user=alice
 tsh ls
 ```
 
-The web UI is at `https://10.141.255.30:3080` (same login). The proxy has its own private address and the name `teleport.workbench.test` (resolved inside the cluster; on this machine add it once, your sudo, never run for you: `echo '10.141.255.30 teleport.workbench.test' | sudo tee -a /etc/hosts`). `127.0.0.1:3080` stays as a fallback. The page lists the address and the command in **Connections** (the Teleport row), and shows Teleport's traffic in the Infrastructure architecture.
+The Teleport web UI is at `https://10.141.255.30:3080` (same login).
+- The proxy has its own private address and the name `teleport.workbench.test`. The name resolves inside the cluster.
+- On this machine, add it once. It needs your sudo, and workbench never runs it for you: `echo '10.141.255.30 teleport.workbench.test' | sudo tee -a /etc/hosts`
+- `127.0.0.1:3080` stays as a fallback.
+- The page lists the address and the command in **Connections** (the Teleport row), and shows Teleport's traffic in the Infrastructure architecture.
 
 ![The Infrastructure architecture with Teleport: a dot travels from the clients to the Teleport box for each SSH connection](img/web-infrastructure-light.png)
 
-**The same Teleport cluster survives a rebuild** (see *Keep or reset the Teleport cluster* below). **A login or compute node you drop is forgotten.** `benchctl up` removes the Teleport registration and the host certificate of every node the workbench no longer has, so `tsh ls` lists only what exists (before this, a dropped `login2` stayed registered and a dial failed with *no route to host*). **Your password survives `up`.** `benchctl up` creates a Teleport user only when it does not exist yet, so the password and one-time code you chose from an invite stay. (Before this fix every `up` replaced the users and `tsh login` then said *invalid username or password*; run `benchctl add invite <user>` once to set them again.) **Good to know.** A Teleport container created before the page showed Teleport has no diagnostics port yet, so the card says `not answering` and no dots appear; run `./scripts/benchctl up --with teleport` once to recreate it. Your `tsh` must not be a newer major version than the server (`teleport.version` in `sim.yaml`, default 18.x); use a separate
-`TELEPORT_HOME` if you keep other Teleport profiles. Not simulated: the Teleport agent's extras (dynamic labels, session
-recording that survives a dropped connection, session sharing), Kubernetes, web and database access.
+**What survives a rebuild.**
+
+- **The same Teleport cluster** (see *Keep or reset the Teleport cluster* below).
+- **Your password survives `up`.** `benchctl up` creates a Teleport user only when it does not exist yet, so the password and one-time code you chose from an invite stay. (Before this fix every `up` replaced the users and `tsh login` then said *invalid username or password*; run `benchctl add invite <user>` once to set them again.)
+
+**A login or compute node you drop is forgotten.** `benchctl up` removes the Teleport registration and the host certificate of every node the workbench no longer has, so `tsh ls` lists only what exists (before this, a dropped `login2` stayed registered and a dial failed with *no route to host*).
+
+**Good to know.**
+
+- A Teleport container created before the page showed Teleport has no diagnostics port yet, so the card says `not answering` and no dots appear; run `./scripts/benchctl up --with teleport` once to recreate it.
+- Your `tsh` must not be a newer major version than the server (`teleport.version` in `sim.yaml`, default 18.x); use a separate `TELEPORT_HOME` if you keep other Teleport profiles.
+- Not simulated: the Teleport agent's extras (dynamic labels, session recording that survives a dropped connection, session sharing), Kubernetes, web and database access.
 
 ### Kubernetes (optional part)
 
-`./scripts/benchctl up --with k8s` (or `--workload kubernetes`) adds a real Kubernetes control plane (etcd, API server,
-scheduler, controller manager) and KWOK, which plays the nodes. About 0.3 GB of memory. The nodes are fake and separate from the
-Slurm nodes: `kcn001`, `kcn002` (CPU) and `kgpu001`, `kgpu002` (8 GPUs each, labelled as GPU Feature Discovery does); change them
-under `kubernetes:` in `sim.yaml`, or set the counts with `--k8s-nodes N` (GPU nodes) and `--k8s-cpu-nodes N`, or in the page (Cluster architecture). Pods never really run, so there are no real pod
-logs; a pod labelled `workbench_fault` (the fixtures have crash-looping, OOM-killed, image-pull and failed-job ones) shows the status a kubelet
-would report. The first start pulls about 400 MB of images.
+```bash
+./scripts/benchctl up --with k8s        # or --workload kubernetes
+```
 
-**s-login and k-login.** A login node can serve one scheduler: add `:slurm` or `:k8s` to its mode. An s-login has the Slurm tools and no
-kubeconfig; a k-login has `kubectl` and the kubeconfigs and no Slurm configuration. A bare `ssh` serves both (as before). The Cluster
-architecture sheet has a second list per login node, and the diagram draws the Slurm nodes and the Kubernetes nodes as separate groups,
-each login pointing at the group it serves (`jump host` for Slurm, `kubectl` for Kubernetes):
+This adds a real Kubernetes control plane (etcd, API server, scheduler, controller manager) and KWOK, which plays the nodes. About 0.3 GB of memory. The first start pulls about 400 MB of images.
+
+- **Nodes:** fake and separate from the Slurm nodes: `kcn001`, `kcn002` (CPU) and `kgpu001`, `kgpu002` (8 GPUs each, labelled as GPU Feature Discovery does). Change them under `kubernetes:` in `sim.yaml`, set the counts with `--k8s-nodes N` (GPU nodes) and `--k8s-cpu-nodes N`, or use the page (Cluster architecture).
+- **Pods:** they never really run, so there are no real pod logs. A pod labelled `workbench_fault` (the fixtures have crash-looping, OOM-killed, image-pull and failed-job ones) shows the status a kubelet would report.
+- **DRA:** each GPU node also publishes a `ResourceSlice` (driver `gpu.sim.test`, one device per GPU, UUIDs as in the DCGM series). The pod `dra-train` in `team-a` gets its GPU through a `ResourceClaim` the real scheduler allocates (`kubectl -n team-a get resourceclaim -o yaml`, ADR 0076).
+- **Queues (Kueue):** `kubectl api-resources | grep kueue` lists `clusterqueues`, `localqueues` and `resourceflavors` (Kueue v0.20.6, v1beta2). There is no Kueue controller, so the counts are fixtures.
+  - As alice on the login node, list the cluster queues with `kubectl get clusterqueues`. It shows pending and admitted counts for `gpu-training`, `gpu-inference`, `cpu-batch` and `legacy-h100` (inactive).
+  - Also try `kubectl get localqueues -A` and `kubectl get clusterqueue legacy-h100 -o jsonpath='{.status.conditions}'`.
+  - The `limited` user (`~/.kube/limited.yaml`) can read only the LocalQueues of `team-a`.
+  - Scenario `k8s-queue-inactive` takes `gpu-training` out of service and back (ADR 0034 addendum).
+- **Priorities and quotas:** the fixtures carry three priority classes (`inference`, `training`, `best-effort`), a quota of two DRA devices in `team-a`, and an `inference` deployment with a disruption budget that blocks a drain. Scenarios `k8s-preempt`, `k8s-drain-blocked` and `k8s-api-throttled` play them (ADR 0077).
+
+**s-login and k-login.** A login node can serve one scheduler. Add `:slurm` or `:k8s` to its mode.
+- An s-login has the Slurm tools and no kubeconfig.
+- A k-login has `kubectl` and the kubeconfigs and no Slurm configuration.
+- A bare `ssh` serves both.
+
+The Cluster architecture sheet has a second list per login node. The diagram draws the Slurm nodes and the Kubernetes nodes as separate groups. Each login points at the group it serves (`jump host` for Slurm, `kubectl` for Kubernetes):
 
 ```bash
 ./scripts/benchctl up --with k8s --login ssh:slurm,ssh:k8s      # login = s-login, login2 = k-login
@@ -233,11 +275,15 @@ A Teleport cluster has an identity: its certificate authority, its users and the
 is signed by that authority. If the cluster is rebuilt with a new one, the session fails with
 `remote error: tls: unknown certificate authority` (even though `tsh status` says it is still valid) and every password is gone.
 
-**Normal use: do nothing.** `benchctl down`, `benchctl up` and `benchctl add invite` save the identity to
-`compose/generated/secrets/teleport/state`. When the Teleport data (`compose/generated/teleport/data`) is empty at the next `up`
-and `teleport.version` in `sim.yaml` is unchanged, the saved identity is restored: same authority, so sessions, passwords and node
-certificates still work. Nothing to type; the clients stay logged in. The save is taken at those three commands, so a password you
-set in the browser is safe after the next `down` or `up`, not after a power cut before that.
+**Normal use: do nothing.** `benchctl down`, `benchctl up` and `benchctl add invite` save the identity to `compose/generated/secrets/teleport/state`.
+
+At the next `up`, the saved identity is restored when both hold:
+- the Teleport data (`compose/generated/teleport/data`) is empty;
+- `teleport.version` in `sim.yaml` is unchanged.
+
+It is the same authority, so sessions, passwords and node certificates still work. The clients stay logged in.
+
+The save is taken at those three commands. A password you set in the browser is therefore safe after the next `down` or `up`, but not after a power cut before that.
 
 **Start a really new cluster** (a clean test, a corrupted Teleport, a new `teleport.version`): stop first, then delete both folders.
 Do it after `down`, because `down` saves the identity again.
@@ -268,7 +314,10 @@ The screenshots in this chapter are real terminal output from the `min` profile;
 
 ## Under the hood
 
-The login node is the only machine you reach from the host. Compute and GPU nodes run `sshd` too, but publish no port, so they are reached only through the login node. Access is by key, with no root and no password, for the simulated users only. `benchctl exec` skips SSH altogether and uses `docker exec`, and the shell it opens is root inside the container, not on your host.
+The login node is the only machine you reach from the host.
+- Compute and GPU nodes run `sshd` too, but publish no port. You reach them only through the login node.
+- Access is by key, with no root and no password, for the simulated users only.
+- `benchctl exec` skips SSH and uses `docker exec`. The shell it opens is root inside the container, not on your host.
 
 > [!HOOD]
 > One host key and one cluster key are shared by all nodes (a simulation shortcut, like the shared munge key), and the login node trusts that host key, so the hop to a node asks no question. With Teleport on, nodes keep their own `sshd` and trust Teleport's certificate authority; no Teleport process runs on a node.

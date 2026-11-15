@@ -47,21 +47,83 @@ def command(sim: dict, node: str, gpus: int = 0, duration: int = 300, user: str 
 
 SIM_SCRIPT = "images/login/user_sim.py"
 SIM_PATH = "/usr/local/bin/user-sim"
+MOCK_SCRIPT = "images/login/mock_sim.py"
+MOCK_PATH = "/usr/local/bin/mock-sim"
+TICKET_SCRIPT = "images/login/ticket_bot.py"
+TICKET_PATH = "/usr/local/bin/ticket-bot"
 
 
-def load_on(sim: dict, rate: float = 6, duration: float = 120, seed: int | None = None) -> list[list[str]]:
+def load_on(sim: dict, rate: float = 6, duration: float = 120, seed: int | None = None, personas: bool = False,
+            day: float = 0) -> list[list[str]]:
     """Commands that (re)start the user simulator on the login node. The script is copied in first, so a cluster built before
     it existed needs no rebuild."""
     if not 0.1 <= rate <= 120:
         raise WorkloadError("rate must be 0.1 to 120 jobs per minute")
     if not 5 <= duration <= 3600:
         raise WorkloadError("duration must be 5 to 3600 seconds")
-    users = ",".join(u["name"] for u in sim.get("users", [])) or "alice,bob"
+    if day and not 60 <= day <= 86400:
+        raise WorkloadError("day must be 60 to 86400 seconds (0: no daily rhythm)")
+    users = ",".join(u["name"] + (f":{u['persona']}" if personas and u.get("persona") else "") for u in sim.get("users", [])) or "alice,bob"
     gpus = sim.get("gpu", {}).get("gpus_per_node", 0) if sim.get("gpu", {}).get("nodes") else 0
     return [["docker", "cp", SIM_SCRIPT, f"{LOGIN}:{SIM_PATH}"], load_off(),
             ["docker", "exec", "-d", LOGIN, "python3", SIM_PATH, "--rate", f"{rate:g}", "--duration", f"{duration:g}", "--users", users,
-             "--gpus", str(gpus), *(["--seed", str(seed)] if seed is not None else [])]]
+             "--gpus", str(gpus), *(["--personas"] if personas else []), *(["--day", f"{day:g}"] if day else []), *(["--seed", str(seed)] if seed is not None else [])]]
 
 
 def load_off() -> list[str]:
     return ["docker", "exec", LOGIN, "pkill", "-f", SIM_PATH]
+
+
+def mocks_on(sim: dict, rate: float = 30) -> list[list[str]]:
+    """Commands that (re)start the demo client for the mocks on the login node (issue 650): the calls a monitoring client makes to
+    jira-mock, bcm-mock and bmc-farm, so the Traffic tab has counted requests. Copied in first, so no rebuild is needed."""
+    if not 1 <= rate <= 600:
+        raise WorkloadError("mock rate must be 1 to 600 requests per minute")
+    names = [n for n, kind in nodes.node_names(sim) if kind == "compute"][:3] or [n for n, _ in nodes.node_names(sim)][:1] or ["cn001"]
+    return [["docker", "cp", MOCK_SCRIPT, f"{LOGIN}:{MOCK_PATH}"], mocks_off(),
+            ["docker", "exec", "-d", LOGIN, "python3", MOCK_PATH, "--rate", f"{rate:g}", "--nodes", ",".join(names)]]
+
+
+def mocks_off() -> list[str]:
+    return ["docker", "exec", LOGIN, "pkill", "-f", MOCK_PATH]
+
+
+def tickets_on(every: float = 120, resolve_after: float = 600, day: float = 0, seed: int | None = None) -> list[list[str]]:
+    """Commands that (re)start the ticket bot on the login node (issue 681): fake engineers assign, work, comment on and resolve
+    the alert tickets in jira-mock (never a real Jira), one action about every `every` seconds. Copied in first, so no rebuild."""
+    if not 10 <= every <= 3600:
+        raise WorkloadError("ticket interval must be 10 to 3600 seconds")
+    if not 10 <= resolve_after <= 86400:
+        raise WorkloadError("ticket resolve time must be 10 to 86400 seconds")
+    if day and not 60 <= day <= 86400:
+        raise WorkloadError("day must be 60 to 86400 seconds (0: no daily rhythm)")
+    return [["docker", "cp", TICKET_SCRIPT, f"{LOGIN}:{TICKET_PATH}"], tickets_off(),
+            ["docker", "exec", "-d", LOGIN, "python3", TICKET_PATH, "--every", f"{every:g}", "--resolve-after", f"{resolve_after:g}",
+             *(["--day", f"{day:g}"] if day else []), *(["--seed", str(seed)] if seed is not None else [])]]
+
+
+def tickets_off() -> list[str]:
+    return ["docker", "exec", LOGIN, "pkill", "-f", TICKET_PATH]
+
+
+TICKET_SETTINGS = "/tmp/ticketbot.json"  # the bot reads it every cycle (images/login/ticket_bot.py, issue 728)
+TICKET_KEYS = {"every": (10, 3600), "resolve_after": (10, 86400), "ignore": (0, 1), "reopen": (0, 1)}
+
+
+def ticket_settings_set(**changes: float | None) -> list[str]:
+    """The command that merges the given settings into the running bot's file; a value of None is left alone."""
+    import json
+    given = {k: v for k, v in changes.items() if v is not None}
+    if not given:
+        raise WorkloadError("give at least one of --every, --resolve, --ignore, --reopen")
+    for k, v in given.items():
+        lo, hi = TICKET_KEYS[k]
+        if not lo <= v <= hi:
+            raise WorkloadError(f"{k.replace('_', '-')} must be {lo:g} to {hi:g}")
+    script = ("import json,sys;p=sys.argv[1];d={}\ntry: d=json.load(open(p))\nexcept Exception: pass\n"
+              "d.update(json.loads(sys.argv[2]));json.dump(d,open(p,'w'));print(json.dumps(d))")
+    return ["docker", "exec", LOGIN, "python3", "-c", script, TICKET_SETTINGS, json.dumps(given)]
+
+
+def ticket_settings_get() -> list[str]:
+    return ["docker", "exec", LOGIN, "sh", "-c", f"cat {TICKET_SETTINGS} 2>/dev/null || echo '{{}}'"]

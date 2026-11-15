@@ -48,7 +48,10 @@ Key nuance: **pausing/freezing does not release RAM**, it only stops CPU use. Fr
 
 ### 6.5 Host tuning (one-time, scripted by `benchctl doctor`)
 - Confirm cgroup v2 and PSI (`cat /proc/pressure/memory`).
-- **zram** swap (zstd, about 25-50% of RAM), low-ish `vm.swappiness`, THP set to `madvise`.
+- **zram** swap (zstd, about 25-50% of RAM), `vm.swappiness=100` (zram swap is in RAM, so the kernel doc's equal-cost point applies; 10 is for disk swap, 180 is a common aggressive choice), THP set to `madvise`.
 - Docker: `max-size` log rotation, `--pids-limit`, per-container `--memory` and `--memory-reservation`.
 - Enable KSM only if you use several similar VMs (it merges QEMU memory; it won't help ordinary containers).
 - Slim defaults: MariaDB `innodb_buffer_pool_size` small, Grafana analytics/plugins off, Prometheus retention short.
+
+
+Addendum (issue 683, decided 2026-11-14): `systemd-oomd` is an optional extra of the root installer only, limited to the project's own slices, off by default; the host's global `oomd.conf` is never edited. Tracked in issue 686, not built.

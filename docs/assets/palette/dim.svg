@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 128" role="img" aria-label="Main colours of the dim theme">
+<title>dim theme</title>
+<rect width="100%" height="100%" fill="#151820"/>
+<rect x="8" y="6" width="60" height="30" rx="6" fill="#151820" stroke="#545861"/>
+<text x="8" y="52" font-size="9" font-family="system-ui,sans-serif" fill="#f6f7f9">ground</text>
+<rect x="84" y="6" width="60" height="30" rx="6" fill="#22262f" stroke="#545861"/>
+<text x="84" y="52" font-size="9" font-family="system-ui,sans-serif" fill="#f6f7f9">panel</text>
+<rect x="160" y="6" width="60" height="30" rx="6" fill="#2f333c" stroke="#545861"/>
+<text x="160" y="52" font-size="9" font-family="system-ui,sans-serif" fill="#f6f7f9">raised</text>
+<rect x="236" y="6" width="60" height="30" rx="6" fill="#f6f7f9" stroke="#545861"/>
+<text x="236" y="52" font-size="9" font-family="system-ui,sans-serif" fill="#f6f7f9">text</text>
+<rect x="312" y="6" width="60" height="30" rx="6" fill="#2fc4b2" stroke="#545861"/>
+<text x="312" y="52" font-size="9" font-family="system-ui,sans-serif" fill="#f6f7f9">accent_text</text>
+<rect x="388" y="6" width="60" height="30" rx="6" fill="#2fc4b2" stroke="#545861"/>
+<text x="388" y="52" font-size="9" font-family="system-ui,sans-serif" fill="#f6f7f9">ok</text>
+<rect x="464" y="6" width="60" height="30" rx="6" fill="#f0a030" stroke="#545861"/>
+<text x="464" y="52" font-size="9" font-family="system-ui,sans-serif" fill="#f6f7f9">warn</text>
+<rect x="540" y="6" width="60" height="30" rx="6" fill="#ff6a68" stroke="#545861"/>
+<text x="540" y="52" font-size="9" font-family="system-ui,sans-serif" fill="#f6f7f9">bad</text>
+<rect x="616" y="6" width="60" height="30" rx="6" fill="#5cb8ff" stroke="#545861"/>
+<text x="616" y="52" font-size="9" font-family="system-ui,sans-serif" fill="#f6f7f9">access</text>
+<rect x="692" y="6" width="60" height="30" rx="6" fill="#e2e8f0" stroke="#545861"/>
+<text x="692" y="52" font-size="9" font-family="system-ui,sans-serif" fill="#f6f7f9">control</text>
+<rect x="8" y="70" width="60" height="30" rx="6" fill="#8ea2ff" stroke="#545861"/>
+<text x="8" y="116" font-size="9" font-family="system-ui,sans-serif" fill="#f6f7f9">k8s</text>
+<rect x="84" y="70" width="60" height="30" rx="6" fill="#c49bff" stroke="#545861"/>
+<text x="84" y="116" font-size="9" font-family="system-ui,sans-serif" fill="#f6f7f9">data</text>
+<rect x="160" y="70" width="60" height="30" rx="6" fill="#a6d96a" stroke="#545861"/>
+<text x="160" y="116" font-size="9" font-family="system-ui,sans-serif" fill="#f6f7f9">monitoring</text>
+<rect x="236" y="70" width="60" height="30" rx="6" fill="#f48fb1" stroke="#545861"/>
+<text x="236" y="116" font-size="9" font-family="system-ui,sans-serif" fill="#f6f7f9">management</text>
+<rect x="312" y="70" width="60" height="30" rx="6" fill="#2c73d2" stroke="#545861"/>
+<text x="312" y="116" font-size="9" font-family="system-ui,sans-serif" fill="#f6f7f9">chart_1</text>
+<rect x="388" y="70" width="60" height="30" rx="6" fill="#ff8c42" stroke="#545861"/>
+<text x="388" y="116" font-size="9" font-family="system-ui,sans-serif" fill="#f6f7f9">chart_2</text>
+<rect x="464" y="70" width="60" height="30" rx="6" fill="#009e73" stroke="#545861"/>
+<text x="464" y="116" font-size="9" font-family="system-ui,sans-serif" fill="#f6f7f9">chart_3</text>
+<rect x="540" y="70" width="60" height="30" rx="6" fill="#cc79a7" stroke="#545861"/>
+<text x="540" y="116" font-size="9" font-family="system-ui,sans-serif" fill="#f6f7f9">chart_4</text>
+<rect x="616" y="70" width="60" height="30" rx="6" fill="#9b8cff" stroke="#545861"/>
+<text x="616" y="116" font-size="9" font-family="system-ui,sans-serif" fill="#f6f7f9">chart_5</text>
+<rect x="692" y="70" width="60" height="30" rx="6" fill="#b5e48c" stroke="#545861"/>
+<text x="692" y="116" font-size="9" font-family="system-ui,sans-serif" fill="#f6f7f9">chart_6</text>
+</svg>

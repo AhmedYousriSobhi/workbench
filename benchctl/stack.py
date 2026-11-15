@@ -22,12 +22,16 @@ from . import (
     errors,
     jira_real,
     k8s,
+    lab_apply,
     logins,
     memory,
+    objectstore,
+    promtargets,
     qos,
     ready,
     real_gpu,
     slurmconf,
+    slurmver,
     teleport,
     topology,
     workbench,
@@ -37,14 +41,15 @@ COMPOSE_FILE = Path("compose/generated/docker-compose.yml")
 PROJECT = "workbench"
 PROFILE_FILE = Path("compose/generated/profile")  # the profile `up` last started; scale's default
 STAGES = [  # (label, service-name pattern); later stages depend on earlier ones
-    ("observability", r"prometheus|grafana|gpu-exporter-farm"),
+    ("observability", r"prometheus|grafana|gpu-exporter-farm|alertmanager"),
     ("slurm core", r"slurmctld|mariadb|slurmdbd"),
     ("slurm services", r"slurmrestd|accounting-init"),
     ("mocks", r"bmc-farm|bcm-mock|jira-mock"),
     ("jira real", r"jira-db|jira-real"),
-    ("teleport", r"teleport"),
+    ("object store", r"objectstore"),
     ("kubernetes", r"k8s-etcd|k8s-apiserver|k8s-controller-manager|k8s-scheduler"),
     ("kubernetes nodes", r"kwok-controller"),  # starts only once the stages exist: with none it exits
+    ("teleport", r"teleport"),  # after the API server: its Kubernetes Service registers that cluster at start (ADR 0083); before the nodes, which read its host certificates
     ("bmc addresses", r"bmc-(cn|gpu)\d+"),
     ("nodes", r"(cn|gpu|rgpu)\d+"),
     ("login node", r"login\d*"),
@@ -123,7 +128,7 @@ def _save_stamps(path: Path, stamps: dict) -> None:
         pass  # a missing stamp only means the next up builds again
 
 
-def image_hashes(names: list[str], services: dict, path: Path, base_name: str | None) -> dict[str, tuple[str | None, str | None]]:
+def image_hashes(names: list[str], services: dict, path: Path, base_name: str | None, salt: str = "") -> dict[str, tuple[str | None, str | None]]:
     """{service: (inputs hash, image tag)}. Images built FROM the node base also hash the base, so a base change rebuilds them."""
     def ctx_of(n: str) -> Path | None:
         if n == GPU_FARM[0]:
@@ -131,12 +136,12 @@ def image_hashes(names: list[str], services: dict, path: Path, base_name: str | 
         b = (services.get(n) or {}).get("build")
         return path.parent / b if b else None
     base_ctx = ctx_of(base_name) if base_name else None
-    base_hash = (context_hash(base_ctx) or "") if base_ctx else ""
+    base_hash = ((context_hash(base_ctx) or "") + salt) if base_ctx else ""  # the Slurm version is part of every Slurm image's inputs
     out = {}
     for n in names:
         ctx = ctx_of(n)
         derived = bool(ctx and (ctx / "Dockerfile").is_file() and "FROM workbench/node-base" in (ctx / "Dockerfile").read_text()) and n != base_name
-        out[n] = (context_hash(ctx, base_hash if derived else "") if ctx else None, GPU_FARM[2] if n == GPU_FARM[0] else (services.get(n) or {}).get("image"))
+        out[n] = (context_hash(ctx, base_hash if derived else (salt if n == base_name else "")) if ctx else None, GPU_FARM[2] if n == GPU_FARM[0] else (services.get(n) or {}).get("image"))
     return out
 
 
@@ -184,6 +189,17 @@ def admit(profile: str, available: int | None = None) -> tuple[bool, str]:
     avail = checks.mem_available() if available is None else available
     app = memory.app_mb() / 1024  # the app under test's reserve, on top of every profile's own expected use
     return checks.preflight(profile, {n: b + app for n, b in checks.load_profiles().items()}, avail)
+
+
+def grant_lab_databases(runner: Runner, file: Path, say: Callable[[str], None]) -> bool:
+    """Apply slurmconf.LAB_GRANT_SQL as MariaDB's root (issue 552). A GRANT is idempotent, so it runs at every `up`; the init directory
+    alone only covers a fresh database. The root password is read inside the container from its environment: never printed or logged."""
+    script = 'exec mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" -e "$0"'
+    r = runner(dc("exec", "-T", "mariadb", "sh", "-c", script, slurmconf.LAB_GRANT_SQL, file=file))
+    if r.returncode != 0:
+        say("WARN the config lab's database grant was not applied (the lab's `sacctmgr load` check will report it): "
+            + (r.stderr.strip().splitlines() or ["no message"])[-1][:120])
+    return r.returncode == 0
 
 
 ONESHOT = {"accounting-init"}  # run once and exit; success is exit code 0, not "running"
@@ -257,6 +273,9 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     except topology.TopologyError as e:
         say(f"FAILED topology: {e}")
         return False
+    except compose.JobMemoryError as e:
+        say(f"FAILED node memory: {e}")
+        return False
     except qos.QosError as e:
         say(f"FAILED qos: {e}")
         return False
@@ -268,6 +287,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         return (conf.read_text() if conf.is_file() else None, topo.read_text() if topo.is_file() else None)
     old_conf = conf_text() if conf.is_file() else None
     path = compose.write(data, sim=sim, compute_nodes=prof.get("compute_nodes"))
+    lab_apply.note_active(say, conf.parent.parent / "lab")  # the writer re-applied the active lab's settings (issue 553)
     conf_changed = old_conf is not None and conf.is_file() and conf_text() != old_conf
     skip = unbuildable(data["services"], path.parent)
     todo = {n: v for n, v in data["services"].items() if n not in skip}
@@ -305,7 +325,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         except OSError as e:
             say(f"FAILED login node keys: {e}")
             return False
-    names = [n for n in data["services"] if n not in skip] + ["prometheus", "grafana", "gpu-exporter-farm"]
+    names = [n for n in data["services"] if n not in skip] + ["prometheus", "grafana", "gpu-exporter-farm", "alertmanager"]
     node_re = r"(cn|gpu|rgpu)\d+"
     changed = False
     before = set(_project_services(runner))
@@ -337,14 +357,14 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     # Build stamp (issue 576): an image whose build inputs hash matches the last good build, and that still exists, is not built again;
     # a changed mock or entrypoint changes the hash, so issue 449's guarantee stays. WORKBENCH_FORCE_BUILD=1 builds everything.
     wanted = ([first] if first is not None else []) + [t for t in build_targets(todo, names) if t != first] + [GPU_FARM[0]]  # gpu-exporter-farm is in compose/observability.yml, not in the generated services (#462): built like every other image
-    stamps, hashes = _stamps(path), image_hashes(wanted, data["services"], path, first)
+    stamps, hashes = _stamps(path), image_hashes(wanted, data["services"], path, first, slurmver.version(sim))
     stale = stale_images(hashes, stamps, runner, bool(os.environ.get(FORCE_BUILD)))
     built_now: list[str] = []
     t0 = time.monotonic()
     # slurmctld, slurmrestd and login build FROM node-base's tag, which only a node service rebuilds. Build it first,
     # or a changed base leaves the controller on the old image (the keys are mounted now, issue 465, but the entrypoint is in the base).
     if first in stale:
-        r = runner(dc("build", first, file=path))
+        r = runner(dc("build", *slurmver.build_args(sim, False), first, file=path))
         if r.returncode != 0:
             say(f"FAILED node base image: {r.stderr.strip()[-300:]}")
             stamps.pop(first, None)
@@ -354,7 +374,12 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     targets = [t for t in stale if t != first]  # the node base was built above; build once (issue 449): the per-stage `up` calls below no longer build
     if targets:
         say(f"building images: {', '.join(targets)}")
-        r = runner(dc("build", *targets, file=path))
+        extra = slurmver.build_args(sim, True)  # empty for the pinned Slurm: one build call, as always
+        slurm_images = [t for t in targets if str(data["services"].get(t, {}).get("image", "")).split(":")[0] in slurmver.BASES]
+        groups = [(extra, slurm_images), ([], [t for t in targets if t not in slurm_images])] if extra else [([], targets)]
+        for args, group in groups:
+            if group and (r := runner(dc("build", *args, *group, file=path))).returncode != 0:
+                break
         if r.returncode != 0:
             say(f"FAILED image build: {r.stderr.strip()[-300:]}")
             for t in targets:
@@ -374,11 +399,11 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     if first is not None or wanted:
         stage({"stage": "Build images", "state": "done"})
     ips = addressing.plan(sim, prof.get("compute_nodes"))
-    if "teleport" in todo:
+    if objectstore.SERVICE in todo:
         try:
-            teleport.prepare(sim, ips)
-        except (OSError, teleport.TeleportError) as e:
-            say(f"FAILED teleport setup: {e}")
+            objectstore.prepare(COMPOSE_FILE.parent)
+        except OSError as e:
+            say(f"FAILED object store setup: {e}")
             return False
     if dcgm.SERVICE in todo and (bad := dcgm.problems(sim)):
         say(f"FAILED dcgm: {bad[0]}")
@@ -396,11 +421,21 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         except (OSError, k8s.K8sError) as e:
             say(f"FAILED kubernetes setup: {e}")
             return False
+    tele_changed = False
+    if "teleport" in todo:  # after k8s.prepare: the Kubernetes Service's kubeconfig is made from its credentials
+        try:
+            tele_changed = teleport.prepare(sim, ips, kube=k8s.API in todo)
+        except (OSError, teleport.TeleportError, k8s.K8sError) as e:
+            say(f"FAILED teleport setup: {e}")
+            return False
+    if promtargets.prepare(sim, set(todo), prof.get("compute_nodes"), COMPOSE_FILE.parent):  # the jobs of the selected parts (ADR 0073)
+        runner(["docker", "kill", "-s", "HUP", f"{PROJECT}-prometheus-1"])  # a running Prometheus re-reads them; one that is not running reads them at its start
     for label, svcs in stage_services(names):
         say(f"starting {label}: {', '.join(svcs)}")
         stage({"stage": label.capitalize(), "state": "running"})
         stage_began = time.monotonic()
-        r = runner(dc("up", "-d", "--no-deps", *svcs, file=path))
+        recreate = ["--force-recreate"] if label == "teleport" and tele_changed and "teleport" in before else []  # config read only at start
+        r = runner(dc("up", "-d", "--no-deps", *recreate, *svcs, file=path))
         if r.returncode != 0:
             say(f"FAILED {label}: {r.stderr.strip()[-300:]}")
             return False
@@ -410,6 +445,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         if (late := _answering(svcs, runner, path, wait)):
             say(f"FAILED {label}: running but not answering: {', '.join(late)}")
             return False
+        if "mariadb" in svcs:
+            grant_lab_databases(runner, path, say)  # an existing database gets the config lab's grant without a restart (issue 552)
         if label == "teleport" and not teleport.bootstrap(sim, ips, runner, dc, say):  # before the nodes read their certificates
             return False
         if label == "teleport" and controller.enabled(sim):  # slurmctld started in an earlier stage, before its host certificate existed
@@ -449,6 +486,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     if "slurmctld" in todo and controller.enabled(sim) and "teleport" in todo:
         say(f"controller: through Teleport too: tsh --proxy={teleport.proxy_addr(sim)} --insecure -i {teleport.SECRETS_DIR}/identity/<user> ssh <user>@{controller.ALIAS} "
             "(only the whitelisted users get a shell)")
+    if "teleport" in todo and k8s.API in todo:
+        say(f"kubernetes through Teleport: tsh --proxy={teleport.proxy_addr(sim)} --insecure -i {teleport.SECRETS_DIR}/identity/<user> kube login {k8s.CONTEXT}; then kubectl get nodes (docs/guides/teleport-kube.md)")
     if "teleport" in todo and (warn := teleport.tsh_problem(sim)):
         say(f"WARN {warn}")
     if "teleport" in todo:
@@ -501,6 +540,7 @@ def scale(sim: dict, profile: str, n: int, runner: Runner = _run,
     prof = compose.load_profile(profile)
     data = compose.generate(sim, {**prof, "compute_nodes": n})
     path = compose.write(data, sim=sim, compute_nodes=n)
+    lab_apply.note_active(say, COMPOSE_FILE.parent / "lab")
     want = [s for s in data["services"] if re.fullmatch(r"cn\d+", s)]
     now = running_nodes(runner)
     grow = [s for s in want if s not in now]

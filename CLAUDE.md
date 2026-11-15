@@ -45,6 +45,7 @@ See [docs/architecture/08-repository-and-migration.md](docs/architecture/08-repo
 
 - Python 3.11+, Typer for the CLI, Starlette for the web UI (ADR 0008), type hints, `ruff` for lint/format, `pytest` for tests.
 - Generated files (compose, `slurm.conf`, Prometheus targets) are derived from `sim.yaml`; never hand-edit them.
+- Colours are edited only in `docs/assets/palette.yaml`; `python scripts/make_palette.py` regenerates `webui/static/tokens.css` and [docs/guides/colour-system.md](docs/guides/colour-system.md) (`validate.sh` fails when they are stale). Never write a hex value in the page, the JS or the help: use a token or a `data-plane` / `data-state` attribute (ADR 0069). `scripts/style_dump.py` proves a stylesheet change left every colour alone.
 - Every component declares a memory budget and priority class (P0-P6).
 
 ## Hard rules
@@ -71,7 +72,7 @@ See [docs/architecture/08-repository-and-migration.md](docs/architecture/08-repo
 - `./scripts/benchctl measure run <label> [--duration S]`, then `measure report <idle> [<loaded>]`: Phase 0 read-only memory sampling (host, containers, PSS by process, VMs). Results go to `docs/measurements/` (gitignored); copy the suggested budgets into docs/architecture/04-memory-and-profiles.md (section 5), the README profile table and `profiles/*.yaml`.
 
 - Images: put OS packages in `images/node-base`'s single apt layer, never in a `RUN apt-get` after `FROM workbench/node-base` (login, slurm-ctl): any node-base change would re-run it (ADR 0014 addendum, 40 s measured). To time a rebuild, build node-base first, then the derived images (`docker compose build` of both at once builds them against the old base).
-- Containers must stay unprivileged (no `cap_add`, no `apparmor=unconfined`, no Docker socket) and memory-limited; `benchctl doctor` fails otherwise. Slurm is built from source in `images/node-base` (pinned version + SHA256, ADR 0002).
+- Containers must stay unprivileged (no `cap_add`, no `apparmor=unconfined`, no Docker socket) and memory-limited. **One owner-approved exception (issue 674, ADR 0074):** the Slurm node containers (label `workbench.node`) hold `SYS_PTRACE`, nothing else, so job accounting reads the users' processes and `sstat`/`sacct` show their memory as on a real cluster; the watchdog and `doctor` accept exactly that and list it, and fail on any other capability or on this one elsewhere; `benchctl doctor` fails otherwise. Slurm is built from source in `images/node-base` (pinned version + SHA256, ADR 0002).
 
 - Generated secrets (DB password) live only in `compose/generated/secrets` (gitignored); never copy them into tracked files or output. REST access to Slurm: JWT via `scontrol token username=<user>` (not root), see ADR 0003.
 

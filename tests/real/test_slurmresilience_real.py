@@ -12,6 +12,7 @@ import pytest
 import yaml
 from helpers import bring_up, exporter_up, release, wait_for
 
+from benchctl import k8s as _k8s
 from benchctl import scenario
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -131,7 +132,7 @@ def test_drain_under_a_running_job_lets_it_finish():
 def test_the_shipped_scenarios_run_and_trace(cluster):
     lines: list[str] = []
     for name in ("slurmd-restart-mid-job", "drain-mid-job"):
-        sc = scenario.load(name)
+        sc = scenario.load(name, sim=_k8s.current_sim())
         report = scenario.run(sc, speed=3, say=lines.append)
         assert report.ok, "\n".join(lines)
 
@@ -143,7 +144,7 @@ def test_the_governor_runs_the_steps_and_serves_the_trace_for_the_page(cluster):
     try:
         res = checks.governor_request({"cmd": "slurm-trace", "nodes": [NODE], "since": 30}, sock)
     except OSError as e:
-        pytest.skip(f"no governor to ask: {e}")
+        pytest.skip(f"test_the_governor_runs_the_steps_and_serves_the_trace_for_the_page: no governor answers at {sock} (start one with `benchctl start`): {e}")
     assert res.get("ok"), res
     data = res["trace"]
     assert NODE in data["nodes"] and "jobs" in data and "workbench-slurmctld-1" in data["logs"]
