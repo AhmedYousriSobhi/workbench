@@ -573,6 +573,17 @@ get_app = typer.Typer(cls=SuggestingGroup, help="List what exists: nodes, servic
 app.add_typer(get_app, name="get")
 
 
+@get_app.command("ticket-bot")
+def get_ticket_bot() -> None:
+    """The settings the running ticket bot was last given with `benchctl set ticket-bot` (empty: its start values, see `load on --tickets`)."""
+    from . import workload
+    r = stack._run(workload.ticket_settings_get())
+    if r.returncode:
+        typer.echo("cannot reach the login node: start the cluster first (benchctl up)", err=True)
+        raise typer.Exit(1)
+    typer.echo(r.stdout.strip())
+
+
 def _get(rows_fn, output: str, selector: list[str] | None, sort_by: str | None, watch: bool, interval: float) -> None:
     """One list command: query, render, and optionally redraw. Query mistakes exit 2 (usage), like an unknown flag."""
     import time
@@ -838,6 +849,26 @@ def set_node(node: str = TARGET, state: str = typer.Argument(..., help="off or o
         o = scenario.execute(slurm_only, poster=post, host=True, runner=run)
     typer.echo(f"{node}: {state}" if o.status == "ok" else f"cannot set {node}: {o.detail}", err=o.status != "ok")
     raise typer.Exit(0 if o.status == "ok" else 1)
+
+
+@set_app.command("ticket-bot")
+def set_ticket_bot(every: float = typer.Option(None, "--every", help="mean seconds between actions (10 to 3600)"),
+                   resolve: float = typer.Option(None, "--resolve", help="seconds a ticket stays In Progress before it is resolved (10 to 86400)"),
+                   ignore: float = typer.Option(None, "--ignore", help="share of tickets nobody picks up (0 to 1)"),
+                   reopen: float = typer.Option(None, "--reopen", help="share of resolved tickets that are reopened (0 to 1)")) -> None:
+    """Change the running ticket bot without a restart (`benchctl load on --tickets` first): it re-reads the settings each cycle.
+    `benchctl set ticket-bot --every 10 --resolve 30` makes a test fast; `benchctl get ticket-bot` shows what is in force."""
+    from . import workload
+    try:
+        cmd = workload.ticket_settings_set(every=every, resolve_after=resolve, ignore=ignore, reopen=reopen)
+    except workload.WorkloadError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(2)
+    r = stack._run(cmd)
+    if r.returncode:
+        typer.echo("cannot reach the login node: start the cluster first (benchctl up)", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"ticket bot settings: {r.stdout.strip()}")
 
 
 clear_app = typer.Typer(cls=SuggestingGroup, help="Put things back: the injected node faults")

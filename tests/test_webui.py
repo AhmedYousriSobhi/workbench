@@ -803,6 +803,14 @@ def test_flat_is_the_default_view_everywhere():
     assert "max-width: 640px)').matches, false)" not in src
 
 
+def test_the_circuit_is_the_default_and_the_classic_diagram_lasts_one_visit():
+    """#730: a new visit opens the circuit; choosing the classic diagram is kept in sessionStorage, never localStorage."""
+    src = page_source()
+    assert "S.circuit = sessionStorage.getItem('workbench-circuit') !== '0'" in src
+    assert "sessionStorage.setItem('workbench-circuit'" in src and "localStorage.setItem('workbench-circuit'" not in src
+    assert "localStorage.removeItem('workbench-circuit')" in src  # an older saved choice is cleared
+
+
 def test_node_tickets_search_the_mock_by_node_label():
     import yaml
 
@@ -824,3 +832,42 @@ def test_node_tickets_endpoint_answers_null_without_the_mock(ui):
     code, body = req(ui, "/api/nodes/cn001/tickets")
     assert code == 200 and json.loads(body) == {"source": "jira-mock", "tickets": None}
     assert req(ui, "/api/nodes/zzz/tickets")[0] == 404 and req(ui, "/api/nodes/cn001/tickets", auth=False)[0] == 401
+
+
+def test_ticket_bot_sheet_talks_to_the_governor_only(tmp_path):
+    asked = []
+
+    def handle(cmd, r):
+        if cmd == "ticket-bot-get":
+            return {"ok": True, "settings": {"every": 30}}
+        if cmd == "ticket-bot-set":
+            asked.append(r)
+            return {"ok": True}
+        return STATUS
+
+    sock = str(tmp_path / "g.sock")
+    gov = control.serve(sock, handle, lambda: {"compute"})
+    port = free_port()
+    server = uvicorn.Server(uvicorn.Config(create_app(TOKEN, sock, tmp_path, ROOT / "sim.yaml", fetch=no_stack, poster=lambda u, b: {}),
+                                           host="127.0.0.1", port=port, log_level="error"))
+    threading.Thread(target=server.run, daemon=True).start()
+    while not server.started:
+        time.sleep(0.02)
+    base, h = f"http://127.0.0.1:{port}", {"X-Requested-With": "workbench"}
+
+    def post(data):
+        r = urllib.request.Request(base + "/api/ticket-bot", method="POST", data=data,
+                                   headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json", **h})
+        try:
+            with urllib.request.urlopen(r, timeout=5) as resp:
+                return resp.status
+        except HTTPError as e:
+            return e.code
+    try:
+        assert json.loads(req(base, "/api/ticket-bot")[1]) == {"ok": True, "settings": {"every": 30}}
+        assert post(b'{"every": 10, "junk": 1}') == 200
+        assert asked == [{"cmd": "ticket-bot-set", "every": 10}]               # the governor validated; unknown keys never reach it
+        assert post(b"[1]") == 422 and post(b'{"every": 1}') == 409          # out of range: refused by the governor
+    finally:
+        server.should_exit = True
+        gov.shutdown()

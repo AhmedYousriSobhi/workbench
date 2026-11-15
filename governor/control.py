@@ -10,7 +10,7 @@ from pathlib import Path
 
 log = logging.getLogger("governor.control")
 
-ALLOWED = {"status", "scale", "freeze", "thaw", "stop", "start", "set-profile", "admit", "apply-plan", "node-state", "submit-job", "slurm-step", "slurm-trace", "slurm-stats", "capture-start", "capture-read", "capture-stop", "refresh-jira-licence"}
+ALLOWED = {"status", "scale", "freeze", "thaw", "stop", "start", "set-profile", "admit", "apply-plan", "node-state", "submit-job", "slurm-step", "slurm-trace", "slurm-stats", "capture-start", "capture-read", "capture-stop", "refresh-jira-licence", "ticket-bot-set", "ticket-bot-get"}
 LAB_VERBS = {"lab-validate"}  # the config lab verbs (ADR 0049); issue 553 adds lab-apply and lab-restore here
 ALLOWED |= LAB_VERBS
 MAX_REQUEST = 4096
@@ -23,6 +23,7 @@ LAB_NAME_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,40}")  # mirrors benchctl.lab.NAM
 NODE_RE = re.compile(r"[a-z]{2,8}[0-9]{3}")  # sim.yaml node names: cn001, gpu002
 SLURM_STEPS = ("slurmd-restart", "slurmd-stop", "slurmd-start", "slurmctld-restart", "cancel-jobs")  # resilience scenarios (#220)
 NODE_STEPS = ("slurmd-restart", "slurmd-stop", "slurmd-start")
+TICKET_RANGES = {"every": (10, 3600), "resolve": (10, 86400), "ignore": (0, 1), "reopen": (0, 1)}  # mirrors benchctl.workload.TICKET_KEYS
 REASON_RE = re.compile(r"[A-Za-z0-9 .,:_/()+-]{0,60}")  # a drain reason: short, no shell characters
 LOGIN_MODES = {"ssh", "teleport", "both"}  # mirrors benchctl.logins.MODES
 BMC_GROUPS = {"slurm-cpu", "slurm-gpu", "k8s-cpu", "k8s-gpu"}  # mirrors benchctl.nodes.GROUPS
@@ -104,6 +105,11 @@ def dispatch(line: bytes, handle: Handler, groups: Callable[[], set[str]]) -> di
                                                 for k, lo, hi in (("gpus", 0, 8), ("duration", 10, 3600)))
                                         and re.fullmatch(r"[a-z][a-z0-9_-]{0,15}", req.get("user") or "x")):
             return {"ok": False, "error": "submit-job needs node:NAME, gpus:int 0..8, duration:int 10..3600 and an optional user"}
+        if cmd == "ticket-bot-set":  # the ticket bot's settings (issue 728): numbers only, ranges as `benchctl set ticket-bot`
+            given = {k: req[k] for k in TICKET_RANGES if req.get(k) is not None}
+            if not given or not all(isinstance(v, (int, float)) and not isinstance(v, bool) and TICKET_RANGES[k][0] <= v <= TICKET_RANGES[k][1]
+                                    for k, v in given.items()):
+                return {"ok": False, "error": "ticket-bot-set needs at least one of every 10..3600, resolve 10..86400, ignore 0..1, reopen 0..1 (numbers)"}
         if cmd == "slurm-step" and not (req.get("name") in SLURM_STEPS
                                         and (req["name"] not in NODE_STEPS or (isinstance(req.get("node"), str) and NODE_RE.fullmatch(req["node"])))):
             return {"ok": False, "error": f"slurm-step needs name: {'|'.join(SLURM_STEPS)} (and node:NAME for slurmd-*)"}

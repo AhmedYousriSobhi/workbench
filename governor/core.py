@@ -34,7 +34,7 @@ class Governor:
                  executor: Executor, dry_run: bool = True, watchdog: Watchdog | None = None,
                  watch_interval: float = 15.0, annotator: Annotator | None = None,
                  inventory: Callable[[], tuple[list[Group], dict]] | None = None,
-                 refresh_interval: float = 30.0, effector: Effector | None = None, tracer: Callable | None = None, statser: Callable | None = None, capturer: Callable | None = None,
+                 refresh_interval: float = 30.0, effector: Effector | None = None, tracer: Callable | None = None, statser: Callable | None = None, capturer: Callable | None = None, reader: Callable | None = None,
                  streamer: Streamer | None = None, admit_floor: int = ADMIT_FLOOR, lab_exists: Callable[[str], bool] | None = None):
         self.sampler, self.ladder, self.groups = sampler, ladder, groups
         self.admit_floor = admit_floor
@@ -60,6 +60,7 @@ class Governor:
         self.tracer = tracer
         self.capture = Capture(capturer, lambda: self.ladder.level, self._record) if capturer else None  # on-demand wire capture, one at a time (issue 505)
         self.statser = statser
+        self.reader = reader  # `benchctl get ...` as text, for read-only verbs
         self.inventory, self.refresh_interval = inventory, refresh_interval
         self._next_refresh = refresh_interval
         self._static = [g for g in groups if g.kind == "vm"]  # VMs are configured, not discovered
@@ -81,8 +82,11 @@ class Governor:
         if not self.dry_run:
             try:
                 with self._exec_lock:  # slow (docker stop is up to 20 s); `status` needs only `_lock`
-                    self.executor(a)
+                    note = self.executor(a)
                 with self._lock:
+                    if isinstance(note, str):  # a verb the executor cannot do (rootless mode): say so, GV-6
+                        self.counts["actions_skipped"] = self.counts.get("actions_skipped", 0) + 1
+                        self._record(f"SKIPPED {a}: {note}")
                     if a.verb in ("stop", "save"):
                         self.stopped.add(a.target)
                     elif a.verb == "start":
@@ -305,6 +309,13 @@ class Governor:
                 return {"ok": True, "stats": self.statser()}
             except Exception as e:  # noqa: BLE001
                 return {"ok": False, "error": f"slurm stats failed: {e}"}
+        if cmd == "ticket-bot-get":  # read-only: the settings the running bot was last given
+            if not self.reader:
+                return {"ok": False, "error": "no ticket bot settings without --workdir (the governor runs `benchctl get ticket-bot`)"}
+            try:
+                return {"ok": True, "settings": json.loads(self.reader(["get", "ticket-bot"]))}
+            except Exception as e:  # noqa: BLE001
+                return {"ok": False, "error": f"ticket bot settings failed: {e}"}
         if cmd in ("capture-start", "capture-read", "capture-stop"):  # a P5 workload: a tcpdump or an audit-log read for the Focused wire panel only
             if not self.capture:
                 return {"ok": False, "error": "no capture without --workdir (the governor runs `benchctl get capture`)"}
@@ -347,6 +358,12 @@ class Governor:
                 args = ["submit", req["node"], "--gpus", str(req["gpus"]), "--duration", str(req["duration"])] + (
                     ["--user", req["user"]] if req.get("user") else [])
                 return self._change(f"submit-job={req['node']}:{req['gpus']}gpu", args)
+            if cmd == "ticket-bot-set":  # the page's Ticket bot sheet: `benchctl set ticket-bot`, applied by the running bot within one cycle
+                args = ["set", "ticket-bot"]
+                for k in ("every", "resolve", "ignore", "reopen"):
+                    if req.get(k) is not None:
+                        args += [f"--{k}", f"{req[k]:g}"]
+                return self._change("ticket-bot-set", args)
             if cmd == "refresh-jira-licence":  # the page's button: restart the real Jira, whose test licence counts from its start
                 return self._change("refresh-jira-licence", ["refresh", "jira-real-licence"])
             if cmd == "lab-validate":  # issue 552: P5 one-shots (throwaway slurmctld and slurmdbd, promtool, kubectl), one at a time, L0-L1 only
