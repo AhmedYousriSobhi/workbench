@@ -39,7 +39,8 @@ def test_budget_title_dark_and_motion():
         text = p.read_text()
         assert len(text.encode()) <= art.MAX_BYTES, p.name
         assert re.search(r"<title[^>]*>[^<]+</title>", text), p.name
-        assert "prefers-color-scheme:dark" in text, p.name
+        fixed = re.search(r"-(light|dark)\.svg$", p.name)
+        assert ("prefers-color-scheme:dark" in text) != bool(fixed), p.name   # a fixed twin carries one theme only
         if "animation:" in text:
             assert "prefers-reduced-motion:reduce" in text, p.name
 
@@ -56,3 +57,18 @@ def test_text_contrast_both_themes():
             assert ratio(art.PALETTE[fg][i], art.PALETTE[bg][i]) >= 4.5, f"{name} {theme}"
     # the governor badge text is a fixed dark ink on a fixed amber, in both themes
     assert ratio("#14211f", "#f0a030") >= 4.5
+
+
+def test_fixed_twins_carry_their_theme_for_picture():
+    """README and wiki Home art as <picture> pairs (issue 797): GitHub chooses by its theme, the SVG must not switch."""
+    for stem in art.FIXED:
+        for i, theme in enumerate(art.THEMES):
+            text = (art.OUT / f"{stem}-{theme}.svg").read_text()
+            assert f"--surface:{art.PALETTE['surface'][i]}" in text and f"--surface:{art.PALETTE['surface'][1 - i]}" not in text, (stem, theme)
+    assert art._THEME == ["auto"]   # rendering a twin leaves the default alone
+
+
+def test_home_emblem_shows_a_held_node_and_a_pulse():
+    hero = art.home_hero()
+    assert hero.count('class="warn"') == 1 and hero.count('class="ok"') >= 5 and 'class="sb"' in hero
+    assert "Kubernetes" in hero and "workbench" in hero
