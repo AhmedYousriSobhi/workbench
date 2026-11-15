@@ -61,6 +61,7 @@ Without `benchctl start` the governor is not started, so nothing protects the ho
   play those, use the terminal.
 - A **fault action** in a node's panel on the web page (power off, fan failure, XID) is one step applied right now.
 - To give Slurm a switch topology (`topology.conf`) and take a leaf switch down, follow [Slurm topology](../guides/topology.md).
+- To import a production cluster's exported configuration into the config lab, follow [Config lab](../guides/config-lab.md).
 - To add, change or remove a node health check (what drains a node), follow [NHC checks](../guides/nhc-checks.md).
 - To test a client's SSH handling, follow [SSH connection testing](../guides/ssh-connection-testing.md).
 

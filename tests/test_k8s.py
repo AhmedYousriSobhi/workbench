@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from benchctl import addressing, compose, k8s, scenario, stack, workbench
+from benchctl import addressing, compose, k8s, kueue, scenario, stack, workbench
 
 ROOT = Path(__file__).resolve().parent.parent
 SIM = yaml.safe_load((ROOT / "sim.yaml").read_text())
@@ -116,10 +116,12 @@ def test_bootstrap_applies_definitions_then_stages_then_nodes_then_fixtures_and_
     assert k8s.bootstrap(SIM, addressing.plan(SIM), lambda m: None, runner=run, ready=lambda ips: True, sleep=lambda s: None)
     files = [c[-1] for c in calls if c[0] == "apply"]
     assert files == ["/k8s/kwok/crds.yaml", "/k8s/kwok/stage-fast.yaml", "/k8s/kwok/stage-faults.yaml", "/state/nodes.yaml",
-                     "/k8s/fixtures/00-namespaces.yaml", "/k8s/fixtures", "/state/50-dra.yaml"]
+                     "/k8s/fixtures/00-namespaces.yaml", "/k8s/fixtures", "/state/50-dra.yaml",
+                     "/k8s/kueue/crds.yaml", "/k8s/kueue/queues.yaml"]
     assert any(c[0] == "wait" and "crd/stages.kwok.x-k8s.io" in c for c in calls)  # stages cannot be applied before their definition exists
     first_sa = next(i for i, c in enumerate(calls) if "serviceaccount" in c)
-    assert first_sa < len(calls) - 2 and calls[-2][-1] == "/k8s/fixtures"  # pods are refused until the default service account exists
+    fx = next(i for i, c in enumerate(calls) if c[-1] == "/k8s/fixtures")
+    assert first_sa < fx  # pods are refused until the default service account exists
 
 
 def test_bootstrap_stops_with_one_message_where_it_failed():
@@ -218,7 +220,7 @@ def test_steps_become_kubectl_calls_and_a_pod_step_writes_its_manifest(tmp_path)
 def test_scenario_validates_runs_and_judges_k8s_steps():
     sc = {"steps": [{"at": "0s", "target": "k8s", "do": {"down": ["kgpu001"]}}, {"at": "1s", "target": "k8s", "do": {"down": ["nope"]}}]}
     assert scenario.validate(sc, SIM) == ["step 2: unknown Kubernetes node 'nope'"]
-    assert all(not scenario.validate(s, SIM) for s in scenario.list_all(ROOT / "scenarios") if s["name"] in ("k8s-node-notready", "pod-crashloop"))
+    assert all(not scenario.validate(s, SIM) for s in scenario.list_all(ROOT / "scenarios", SIM) if s["name"] in ("k8s-node-notready", "pod-crashloop"))
     seen = []
     out = scenario.execute(scenario.Step(0, "k8s", {"cordon": ["kcn001"]}), runner=lambda c: seen.append(c) or ok())
     assert out.status == "ok" and seen[0][-2:] == ["cordon", "kcn001"] and seen[0][0] == "docker"
@@ -291,7 +293,7 @@ def test_a_metrics_user_reads_only_metrics_and_an_older_cluster_gets_one(tmp_pat
     lines = [ln for ln in (d / "tokens.csv").read_text().splitlines() if ln.split(",")[1] != "metrics"]
     (d / "tokens.csv").write_text("\n".join(lines) + "\n")
     k8s.prepare(SIM, ips, d, tmp_path / "st")
-    assert k8s.metrics_token(d) and len((d / "tokens.csv").read_text().splitlines()) == 3
+    assert k8s.metrics_token(d) and len((d / "tokens.csv").read_text().splitlines()) == 4
 
 
 def test_api_requests_sums_the_counter_and_is_none_when_unreadable(monkeypatch):
@@ -414,5 +416,97 @@ def test_a_blocked_drain_is_not_a_failed_step_and_pods_on_node_counts_running_po
 
 def test_the_policy_scenarios_validate_against_the_default_sim():
     names = {"k8s-preempt", "k8s-drain-blocked", "k8s-api-throttled"}
-    found = [s for s in scenario.list_all(ROOT / "scenarios") if s["name"] in names]
+    found = [s for s in scenario.list_all(ROOT / "scenarios", SIM) if s["name"] in names]
     assert {s["name"] for s in found} == names and all(not scenario.validate(s, SIM) for s in found)
+
+
+def test_kueue_definitions_serve_one_version_so_no_conversion_webhook_is_needed():
+    crds = [d for d in yaml.safe_load_all((ROOT / "k8s/kueue/crds.yaml").read_text()) if d]
+    assert {d["metadata"]["name"] for d in crds} == set(kueue.CRDS)
+    for d in crds:
+        assert "conversion" not in d["spec"]
+        assert [(v["name"], v["served"], v["storage"]) for v in d["spec"]["versions"]] == [("v1beta2", True, True)]
+    cq = next(d for d in crds if d["spec"]["names"]["kind"] == "ClusterQueue")
+    assert cq["spec"]["versions"][0]["subresources"] == {"status": {}}  # why the status needs its own patch
+
+
+def test_kueue_objects_are_queues_with_believable_counts_and_one_inactive():
+    objs = kueue.objects()
+    assert {o["apiVersion"] for o in objs} == {"kueue.x-k8s.io/v1beta2"}
+    cqs = {o["metadata"]["name"]: o for o in objs if o["kind"] == "ClusterQueue"}
+    assert len(cqs) >= 3
+    active = {n: next(c["status"] for c in o["status"]["conditions"] if c["type"] == "Active") for n, o in cqs.items()}
+    assert sorted(active.values()) == ["False", "True", "True", "True"]
+    for o in objs:
+        if o["kind"] in ("ClusterQueue", "LocalQueue"):
+            st = o["status"]
+            assert st["admittedWorkloads"] >= 0 and st["pendingWorkloads"] >= 0
+            if o["kind"] == "LocalQueue":
+                assert o["spec"]["clusterQueue"] in cqs and o["metadata"]["namespace"] in ("team-a", "team-b")
+    flavors = {o["metadata"]["name"] for o in objs if o["kind"] == "ResourceFlavor"}
+    used = {f["name"] for o in cqs.values() for g in o["spec"]["resourceGroups"] for f in g["flavors"]}
+    assert used - flavors == {"h100-80gb"}  # only the inactive queue names a missing flavor
+
+
+def test_kueue_status_goes_through_the_status_subresource_and_the_viewer_may_read_it():
+    calls = kueue.status_calls()
+    assert len(calls) == 9 and all("--subresource=status" in c and "patch" in c for c in calls)
+    first = calls[0]
+    assert first[:4] == ["patch", "clusterqueues.v1beta2.kueue.x-k8s.io", "gpu-training", "--subresource=status"]
+    body = __import__("json").loads(first[-1])["status"]
+    assert body["pendingWorkloads"] == 7 and body["conditions"][0]["lastTransitionTime"].endswith("Z")
+    assert ["-n", "team-a", "patch"] == next(c for c in calls if "localqueues.v1beta2.kueue.x-k8s.io" in c)[:3]
+    rbac = list(yaml.safe_load_all((ROOT / "k8s/fixtures/46-rbac-kueue.yaml").read_text()))
+    assert rbac[0]["rules"][0]["resources"] == ["clusterqueues", "localqueues", "resourceflavors"]
+    assert rbac[0]["rules"][0]["verbs"] == ["get", "list", "watch"] and rbac[1]["subjects"][0]["name"] == "viewer"
+
+
+def test_bootstrap_waits_for_the_kueue_definitions_then_applies_queues_then_status_and_says_where_it_failed():
+    calls = []
+
+    def run(cmd, **kw):
+        calls.append(cmd[cmd.index(f"--kubeconfig={k8s.CONTAINER_PKI}/component.kubeconfig") + 1:])
+        return ok()
+
+    assert k8s.bootstrap(SIM, addressing.plan(SIM), lambda m: None, runner=run, ready=lambda ips: True, sleep=lambda s: None)
+    tail = calls[-(2 + 1 + 9 + 0):]
+    assert tail[0][-1] == "/k8s/kueue/crds.yaml" and tail[1][0] == "wait" and "crd/clusterqueues.kueue.x-k8s.io" in tail[1]
+    assert tail[2][-1] == "/k8s/kueue/queues.yaml" and all(c[0] == "patch" or "patch" in c for c in tail[3:])
+    said = []
+    assert not k8s.bootstrap(SIM, addressing.plan(SIM), said.append, ready=lambda ips: True, sleep=lambda s: None,
+                             runner=lambda c, **k: bad("nope") if "patch" in c else ok())
+    assert said[0].startswith("FAILED kubernetes Kueue status: nope")
+    said.clear()
+    assert not k8s.bootstrap(SIM, addressing.plan(SIM), said.append, ready=lambda ips: True, sleep=lambda s: None,
+                             runner=lambda c, **k: bad("late") if "crd/clusterqueues.kueue.x-k8s.io" in c else ok())
+    assert "Kueue definitions did not become ready" in said[0]
+
+
+def test_the_queue_step_validates_and_patches_the_cluster_queue_and_its_local_queues():
+    assert k8s.step_problems({"queue": {"name": "nope"}}, set()) != []
+    assert k8s.step_problems({"queue": {"name": "gpu-training", "active": "no", "pending": -1}}, set()) == [
+        "k8s queue active is true or false", "k8s queue pending is a whole number"]
+    do = {"queue": {"name": "gpu-training", "active": False, "pending": 19}}
+    assert k8s.step_problems(do, set()) == []
+    calls = k8s.step_args(do)
+    assert len(calls) == 3 and calls[0][1] == "clusterqueues.v1beta2.kueue.x-k8s.io"  # the ClusterQueue and train in team-a and team-b
+    body = __import__("json").loads(calls[0][-1])["status"]
+    assert body["pendingWorkloads"] == 19 and body["conditions"][0]["status"] == "False"
+    assert __import__("json").loads(calls[1][-1])["status"]["conditions"][0]["reason"] == "ClusterQueueIsInactive"
+    assert __import__("json").loads(k8s.step_args({"queue": {"name": "gpu-training", "active": True}})[0][-1])["status"]["conditions"][0]["status"] == "True"
+    sc = next(s for s in scenario.list_all(ROOT / "scenarios") if s["name"] == "k8s-queue-inactive")
+    assert scenario.validate(sc, SIM) == []
+
+
+def test_a_queue_step_with_pending_keeps_the_local_queues_adding_up_and_limited_reads_team_a_queues():
+    import json
+    calls = kueue.queue_calls({"name": "gpu-training", "pending": 19})
+    local = [json.loads(c[-1])["status"]["pendingWorkloads"] for c in calls if "localqueues.v1beta2.kueue.x-k8s.io" in c]
+    assert len(local) == 2 and sum(local) == 19 and all(n > 0 for n in local)
+    cq = kueue.queue_calls({"name": "gpu-inference", "pending": 4})  # fixture backlog 0: all to its one local queue
+    assert [json.loads(c[-1])["status"]["pendingWorkloads"] for c in cq] == [4, 4]
+    assert all("pendingWorkloads" not in json.loads(c[-1])["status"] for c in kueue.queue_calls({"name": "gpu-training", "active": False}))
+    docs = list(yaml.safe_load_all((ROOT / "k8s/fixtures/46-rbac-kueue.yaml").read_text()))
+    role = next(d for d in docs if d["kind"] == "Role")
+    assert role["metadata"]["namespace"] == "team-a" and role["rules"][0]["resources"] == ["localqueues"]
+    assert next(d for d in docs if d["kind"] == "RoleBinding")["subjects"][0]["name"] == "limited"

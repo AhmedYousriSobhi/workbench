@@ -22,6 +22,7 @@ from . import (
     errors,
     jira_real,
     k8s,
+    lab_apply,
     logins,
     memory,
     objectstore,
@@ -45,10 +46,10 @@ STAGES = [  # (label, service-name pattern); later stages depend on earlier ones
     ("slurm services", r"slurmrestd|accounting-init"),
     ("mocks", r"bmc-farm|bcm-mock|jira-mock"),
     ("jira real", r"jira-db|jira-real"),
-    ("teleport", r"teleport"),
     ("object store", r"objectstore"),
     ("kubernetes", r"k8s-etcd|k8s-apiserver|k8s-controller-manager|k8s-scheduler"),
     ("kubernetes nodes", r"kwok-controller"),  # starts only once the stages exist: with none it exits
+    ("teleport", r"teleport"),  # after the API server: its Kubernetes Service registers that cluster at start (ADR 0083); before the nodes, which read its host certificates
     ("bmc addresses", r"bmc-(cn|gpu)\d+"),
     ("nodes", r"(cn|gpu|rgpu)\d+"),
     ("login node", r"login\d*"),
@@ -190,6 +191,17 @@ def admit(profile: str, available: int | None = None) -> tuple[bool, str]:
     return checks.preflight(profile, {n: b + app for n, b in checks.load_profiles().items()}, avail)
 
 
+def grant_lab_databases(runner: Runner, file: Path, say: Callable[[str], None]) -> bool:
+    """Apply slurmconf.LAB_GRANT_SQL as MariaDB's root (issue 552). A GRANT is idempotent, so it runs at every `up`; the init directory
+    alone only covers a fresh database. The root password is read inside the container from its environment: never printed or logged."""
+    script = 'exec mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" -e "$0"'
+    r = runner(dc("exec", "-T", "mariadb", "sh", "-c", script, slurmconf.LAB_GRANT_SQL, file=file))
+    if r.returncode != 0:
+        say("WARN the config lab's database grant was not applied (the lab's `sacctmgr load` check will report it): "
+            + (r.stderr.strip().splitlines() or ["no message"])[-1][:120])
+    return r.returncode == 0
+
+
 ONESHOT = {"accounting-init"}  # run once and exit; success is exit code 0, not "running"
 
 
@@ -275,6 +287,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         return (conf.read_text() if conf.is_file() else None, topo.read_text() if topo.is_file() else None)
     old_conf = conf_text() if conf.is_file() else None
     path = compose.write(data, sim=sim, compute_nodes=prof.get("compute_nodes"))
+    lab_apply.note_active(say, conf.parent.parent / "lab")  # the writer re-applied the active lab's settings (issue 553)
     conf_changed = old_conf is not None and conf.is_file() and conf_text() != old_conf
     skip = unbuildable(data["services"], path.parent)
     todo = {n: v for n, v in data["services"].items() if n not in skip}
@@ -386,12 +399,6 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     if first is not None or wanted:
         stage({"stage": "Build images", "state": "done"})
     ips = addressing.plan(sim, prof.get("compute_nodes"))
-    if "teleport" in todo:
-        try:
-            teleport.prepare(sim, ips)
-        except (OSError, teleport.TeleportError) as e:
-            say(f"FAILED teleport setup: {e}")
-            return False
     if objectstore.SERVICE in todo:
         try:
             objectstore.prepare(COMPOSE_FILE.parent)
@@ -414,13 +421,21 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         except (OSError, k8s.K8sError) as e:
             say(f"FAILED kubernetes setup: {e}")
             return False
+    tele_changed = False
+    if "teleport" in todo:  # after k8s.prepare: the Kubernetes Service's kubeconfig is made from its credentials
+        try:
+            tele_changed = teleport.prepare(sim, ips, kube=k8s.API in todo)
+        except (OSError, teleport.TeleportError, k8s.K8sError) as e:
+            say(f"FAILED teleport setup: {e}")
+            return False
     if promtargets.prepare(sim, set(todo), prof.get("compute_nodes"), COMPOSE_FILE.parent):  # the jobs of the selected parts (ADR 0073)
         runner(["docker", "kill", "-s", "HUP", f"{PROJECT}-prometheus-1"])  # a running Prometheus re-reads them; one that is not running reads them at its start
     for label, svcs in stage_services(names):
         say(f"starting {label}: {', '.join(svcs)}")
         stage({"stage": label.capitalize(), "state": "running"})
         stage_began = time.monotonic()
-        r = runner(dc("up", "-d", "--no-deps", *svcs, file=path))
+        recreate = ["--force-recreate"] if label == "teleport" and tele_changed and "teleport" in before else []  # config read only at start
+        r = runner(dc("up", "-d", "--no-deps", *recreate, *svcs, file=path))
         if r.returncode != 0:
             say(f"FAILED {label}: {r.stderr.strip()[-300:]}")
             return False
@@ -430,6 +445,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         if (late := _answering(svcs, runner, path, wait)):
             say(f"FAILED {label}: running but not answering: {', '.join(late)}")
             return False
+        if "mariadb" in svcs:
+            grant_lab_databases(runner, path, say)  # an existing database gets the config lab's grant without a restart (issue 552)
         if label == "teleport" and not teleport.bootstrap(sim, ips, runner, dc, say):  # before the nodes read their certificates
             return False
         if label == "teleport" and controller.enabled(sim):  # slurmctld started in an earlier stage, before its host certificate existed
@@ -469,6 +486,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     if "slurmctld" in todo and controller.enabled(sim) and "teleport" in todo:
         say(f"controller: through Teleport too: tsh --proxy={teleport.proxy_addr(sim)} --insecure -i {teleport.SECRETS_DIR}/identity/<user> ssh <user>@{controller.ALIAS} "
             "(only the whitelisted users get a shell)")
+    if "teleport" in todo and k8s.API in todo:
+        say(f"kubernetes through Teleport: tsh --proxy={teleport.proxy_addr(sim)} --insecure -i {teleport.SECRETS_DIR}/identity/<user> kube login {k8s.CONTEXT}; then kubectl get nodes (docs/guides/teleport-kube.md)")
     if "teleport" in todo and (warn := teleport.tsh_problem(sim)):
         say(f"WARN {warn}")
     if "teleport" in todo:
@@ -521,6 +540,7 @@ def scale(sim: dict, profile: str, n: int, runner: Runner = _run,
     prof = compose.load_profile(profile)
     data = compose.generate(sim, {**prof, "compute_nodes": n})
     path = compose.write(data, sim=sim, compute_nodes=n)
+    lab_apply.note_active(say, COMPOSE_FILE.parent / "lab")
     want = [s for s in data["services"] if re.fullmatch(r"cn\d+", s)]
     now = running_nodes(runner)
     grow = [s for s in want if s not in now]

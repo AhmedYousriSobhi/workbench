@@ -15,6 +15,7 @@ from pathlib import Path
 from . import control, metrics
 from .annotate import Annotator
 from .core import Governor
+from .dockerapi import DockerAPI, socket_path
 from .executors import ARRIVALS_FLAG, Executor, UserExecutor, discover_docker
 from .hostsize import derive, read_host
 from .ladder import Ladder, Thresholds
@@ -48,6 +49,21 @@ def arrivals_flag_path(given: str, user_mode: bool, workdir: str | None = None) 
     if user_mode and given == ARRIVALS_FLAG:
         return str(Path(os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/workbench-{os.getuid()}") / "workbench" / "arrivals.paused")
     return given
+
+
+def open_docker() -> DockerAPI | None:
+    """The Docker Engine API on a connection opened now, before pressure: stop, kill, pause and start then fork nothing (GV-8, issue 452).
+    None (the docker CLI is used instead, with this one warning) when $DOCKER_HOST is not a Unix socket or the socket cannot be opened."""
+    path = socket_path()
+    try:
+        if path is None:
+            raise OSError("DOCKER_HOST is not a unix:// socket")
+        api = DockerAPI(path)
+    except OSError as e:
+        log.warning("Docker Engine API unavailable (%s): mitigations will run the docker CLI, which forks under pressure", e)
+        return None
+    log.info("Docker Engine API connected at %s: mitigations fork nothing", path)
+    return api
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -95,7 +111,8 @@ def main(argv: list[str] | None = None) -> None:
     ladder = Ladder(Thresholds(**{**derive(reserve, floor), **json.loads(args.thresholds or "{}")}))
     log.info("memory thresholds from reserve %.1f GB, floor %.1f GB: L4 < %.2f, L1 < %.2f, calm > %.2f GB",
              reserve, floor, ladder.t.l4_mem / GB, ladder.t.l1_mem / GB, ladder.t.l0_mem / GB)
-    executor = (UserExecutor if args.user_mode else Executor)(groups, cgroups, path, arrivals_flag=arrivals_flag_path(args.arrivals_flag, args.user_mode, args.workdir))
+    executor = (UserExecutor if args.user_mode else Executor)(groups, cgroups, path, arrivals_flag=arrivals_flag_path(args.arrivals_flag, args.user_mode, args.workdir),
+                                                              docker=None if args.dry_run else open_docker())
     if clear_stale_flag(executor.arrivals_flag, args.dry_run):
         log.warning("removed a stale arrivals pause flag left by an earlier governor (%s)", executor.arrivals_flag)
     watchdog = None if args.no_watchdog else Watchdog()
@@ -150,6 +167,17 @@ def main(argv: list[str] | None = None) -> None:
             raise RuntimeError((r.stderr or r.stdout).strip()[:200])
         return json.loads(r.stdout)
 
+    def reader(argv: list[str]) -> str:
+        """`benchctl ARGV` as the repository's owner, its stdout as text (read-only verbs only, chosen by the governor, never by the page)."""
+        cmd = [sys.executable, "-m", "benchctl.cli", *argv]
+        owner = Path(args.workdir).stat().st_uid
+        if os.geteuid() == 0 and owner != 0:
+            cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]
+        r = subprocess.run(cmd, cwd=args.workdir, capture_output=True, timeout=30, check=False, text=True)
+        if r.returncode:
+            raise RuntimeError((r.stderr or r.stdout).strip()[:200])
+        return r.stdout
+
     def capturer(node: str, seconds: int):
         """`benchctl get capture NODE` as the repository's owner, its JSON lines on stdout (issue 505)."""
         cmd = [sys.executable, "-m", "benchctl.cli", "get", "capture", node, "--seconds", str(seconds)]
@@ -166,12 +194,22 @@ def main(argv: list[str] | None = None) -> None:
             return 127, "", f"{cmd[0]}: {e}"
         return r.returncode, r.stdout, r.stderr
 
+    def lab_status() -> dict | None:
+        """Config lab (issue 553): the marker's status block (a plain file read; the governor imports nothing of benchctl)."""
+        try:
+            m = json.loads((Path(args.workdir) / "compose/generated/lab/active.json").read_text())
+            return {"name": m["name"], "side": m.get("side"), "time_scale": m.get("time_scale", 1.0), "state": "applied"}
+        except (OSError, ValueError, KeyError):
+            return None
+
     netem_ok = not args.user_mode and not args.dry_run and os.geteuid() == 0  # ADR 0056: netem exists only in the root service
     gov = Governor(sampler, ladder, groups, executor, args.dry_run, watchdog, args.watch_interval,
                    annotator, discover_docker, args.refresh_interval,
                    effector if args.workdir else None, tracer=tracer if args.workdir else None,
-                   statser=statser if args.workdir else None, capturer=capturer if args.workdir else None,
+                   statser=statser if args.workdir else None, capturer=capturer if args.workdir else None, reader=reader if args.workdir else None,
                    streamer=streamer if args.workdir else None, admit_floor=int(floor * GB),
+                   lab_exists=(lambda n: (Path(args.workdir) / 'compose/generated/lab' / n / 'manifest.json').is_file()) if args.workdir else None,
+                   lab_status=lab_status if args.workdir else None,
                    netemer=netemer if netem_ok else None)
     if gov.netem:
         gov.netem.clear_all("governor start")  # a crashed scenario leaves nothing behind

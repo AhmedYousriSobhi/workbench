@@ -79,3 +79,17 @@ def test_bcm_manages_the_kubernetes_nodes_only_when_configured(tmp_path):
     on, off = names(True), names(False)
     assert any(n.startswith("kcn") for n in on) and names(None) == on  # unset keeps today's behaviour
     assert not any(n.startswith(("kcn", "kgpu")) for n in off) and off < on
+
+
+def test_state_changes_become_events(server):
+    base, nodes = server
+    node = next(iter(nodes))
+    assert rpc(base, "cmevents", "getEvents", 0)["result"] == {"seq": 0, "events": []}
+    post(base, "/sim/inject", {"node": node, "state": "DOWN"})
+    post(base, "/sim/inject", {"node": node, "state": "DOWN"})  # no change, no event
+    rpc(base, "cmdevice", "powerOn", node)
+    r = rpc(base, "cmevents", "getEvents", 0)["result"]
+    assert r["seq"] == 2
+    assert [(e["severity"], e["host"], e["text"]) for e in r["events"]] == [
+        ("alert", node, "Device status changed from UP to DOWN"), ("notice", node, "Device status changed from DOWN to UP")]
+    assert [e["seq"] for e in rpc(base, "cmevents", "getEvents", 1)["result"]["events"]] == [2]

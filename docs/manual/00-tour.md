@@ -74,7 +74,12 @@ Or in the page: click a node, press **Power off** under *Actions*.
 
 ### 8. Watch it heal
 
-The `node-down` scenario powers `cn002` off, marks it down in the BMC and BCM mocks, drains it in Slurm after 5 seconds, then powers it on and resumes it at 40 seconds. In the page the node turns grey, then comes back. If you broke something by hand, **Clear faults** undoes it.
+The `node-down` scenario runs this timeline:
+- **0 s:** powers `cn002` off and marks it down in the BMC and BCM mocks.
+- **5 s:** drains it in Slurm.
+- **40 s:** powers it on and resumes it.
+
+In the page the node turns grey, then comes back. If you broke something by hand, **Clear faults** undoes it.
 
 ![The page while a scenario plays: a timeline of steps and the affected node (sample data)](img/web-scenario-running-light.png)
 

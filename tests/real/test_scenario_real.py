@@ -9,6 +9,7 @@ import pytest
 import yaml
 from helpers import bring_up, release, wait_for
 
+from benchctl import k8s as _k8s
 from benchctl import scenario
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -70,7 +71,7 @@ def test_each_target_changes_real_state(live):
 
 
 def test_shipped_node_down_runs_fast_forwarded_and_recovers(live):
-    rep = scenario.run(scenario.load("node-down"), speed=20, say=lambda m: None)
+    rep = scenario.run(scenario.load("node-down", sim=_k8s.current_sim()), speed=20, say=lambda m: None)
     assert rep.ok, rep
     assert wait_for(lambda: "drain" not in slurm_state("cn002"), timeout=20)  # the scenario's own resume step
     assert json.loads(get("http://127.0.0.1:8000/cn002/redfish/v1/Systems/1"))["PowerState"] == "On"

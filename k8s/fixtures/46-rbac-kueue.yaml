@@ -1,0 +1,25 @@
+# Read of the Kueue objects (issue 469): a client lists the queues with `kubectl get` where `kubectl api-resources --api-group=kueue.x-k8s.io` lists them (checked in the client's snapshot script).
+# `viewer` reads all three kinds. `limited` (namespace team-a, pods and events only elsewhere) reads LocalQueues in team-a only:
+# ClusterQueues are cluster-scoped and `limited` has no cluster-wide rule.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: workbench-kueue-viewer}
+rules:
+- {apiGroups: [kueue.x-k8s.io], resources: [clusterqueues, localqueues, resourceflavors], verbs: [get, list, watch]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: workbench-kueue-viewer}
+subjects: [{kind: User, name: viewer}]
+roleRef: {kind: ClusterRole, name: workbench-kueue-viewer, apiGroup: rbac.authorization.k8s.io}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: localqueues-read, namespace: team-a}
+rules: [{apiGroups: [kueue.x-k8s.io], resources: [localqueues], verbs: [get, list]}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: limited-localqueues, namespace: team-a}
+subjects: [{kind: User, name: limited}]
+roleRef: {kind: Role, name: localqueues-read, apiGroup: rbac.authorization.k8s.io}

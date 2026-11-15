@@ -82,7 +82,7 @@ def test_ladder_really_pauses_and_stops_live_containers_and_recovers(sim, tmp_pa
 
         signals(sig, avail_gb=4, some=25)  # L2: throttle, which rootless mode skips rather than fails
         assert wait_for(lambda: ask(sock, {"cmd": "status"})["level"] == 2, 30)
-        assert wait_for(lambda: any("throttle" in m for m in ask(sock, {"cmd": "status"})["audit"]), 15)
+        assert wait_for(lambda: any(m.startswith("SKIPPED") and "throttle" in m for m in ask(sock, {"cmd": "status"})["audit"]), 15)  # #453: skipped is audited, not shown as done
         assert high(cn) in ("max", "")  # untouched: no memory.high write without root
         assert inspect(cn, "{{.State.Running}}") == "true"
 

@@ -6,19 +6,16 @@
 
 ## Do it
 
-```bash
-./scripts/benchctl status
-./scripts/benchctl diag            # writes workbench-diag-<time>.tar.gz
-```
-
-Start with two commands:
+Run these two while the problem is happening: `diag` records the memory pressure of that moment.
 
 ```bash
 ./scripts/benchctl status          # governor level and security findings
-./scripts/benchctl diag            # one masked tar.gz with host, Docker, libvirt and governor state
+./scripts/benchctl diag            # one masked tar.gz: host, Docker, libvirt and governor state
 ```
 
 **Attach the `diag` file to any bug report.** Secrets in it are masked.
+
+## Find your symptom
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
@@ -38,16 +35,6 @@ Start with two commands:
 | `ssh cn001` fails from the host | nodes are reachable only through the login node | `ssh` to the login node, then `ssh cn001`; or `docker exec -it workbench-cn001-1 bash` ([chapter 4](04-nodes-and-shells.md)) |
 | `doctor` fails on privileged containers | a container was changed by hand | remove it and run `benchctl up` again |
 | Everything is slow, then things stop | memory pressure; the governor is doing its job | `benchctl status`; free host memory |
-
-## Upgrading from the old names
-
-Earlier versions used `simctl`, `scripts/opti`, `OPTI_*` and, inside, the name `hpcsim` (Docker project, labels, the
-governor socket, the systemd units). All are now `benchctl` and `workbench`. Once, after updating:
-
-1. `./scripts/benchctl down -y` with the old checkout still running, or remove leftovers with `docker ps -a --filter label=hpcsim.class` and `docker rm -f` on them.
-2. If you installed the root governor service: `sudo ./scripts/install-governor.sh` (it removes the old `hpcsim-governor` units and installs `workbench-governor`).
-3. Rename in your own scripts: `simctl` and the `opti` script to `benchctl`, `OPTI_UI_PORT` and `OPTI_GOVERNOR` to `BENCHCTL_UI_PORT` and `BENCHCTL_GOVERNOR`, `HPCSIM_GRAFANA_TOKEN` to `WORKBENCH_GRAFANA_TOKEN`, `/run/hpcsim/gov.sock` to `/run/workbench/gov.sock`.
-4. The Prometheus metrics start with `workbench_` now (`workbench_governor_level`, ...); update any dashboard of your own.
 
 ## Developers: tests that look like failures
 
@@ -71,7 +58,7 @@ Source: `benchctl/diag.py` (`collect`, `mask`, `write_bundle`)
 ## Tips
 
 > [!TIP]
-> Run `diag` while the problem is happening: it records memory pressure at that moment.
+> Not sure whether it is workbench or your client? `benchctl status` first: a governor at L2 or above refuses `up` and may pause containers, which looks like a client problem and is not.
 
 ## If it goes wrong
 

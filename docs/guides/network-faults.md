@@ -34,7 +34,7 @@ A value outside the range, a node that is not a container of this cluster, or a 
 - {at: 90s, target: netem, do: {clear: true}}
 ```
 
-`scenarios/netem-slow-link.yaml` (SC-45) is this. Run it with `./scripts/benchctl scenario run netem-slow-link`. `scenario run --dry-run` and validation check the values without a governor. The page's scenario player **skips** the step ("needs the host CLI"): netem is CLI and scenarios only, so the root verb is never on the web path (SPEC W-3).
+`scenarios/netem-slow-link.yaml` (SC-46) is this. Run it with `./scripts/benchctl scenario run netem-slow-link`. `scenario run --dry-run` and validation check the values without a governor. The page's scenario player **skips** the step ("needs the host CLI"): netem is CLI and scenarios only, so the root verb is never on the web path (SPEC W-3).
 
 ## What it does, and what keeps it safe
 

@@ -165,7 +165,8 @@ def generate(sim: dict, profile: dict) -> dict:
         ctl.setdefault("environment", {}).update({"WORKBENCH_SSHD": "1", "WORKBENCH_CONTROLLER": "1", "WORKBENCH_SSH_ALLOW": " ".join(controller.allowed_users(sim)),
                                                   "WORKBENCH_HEAD_IP": addressing.service_ip("slurmctld"),
                                                   "WORKBENCH_TELEPORT_NAME": controller.ALIAS})
-        ctl["volumes"] += ["./secrets/ssh:/run/workbench/ssh:ro", "../../images/login/cmsh.py:/usr/local/bin/cmsh:ro"]
+        ctl["volumes"] += ["./secrets/ssh:/run/workbench/ssh:ro", "../../images/login/cmsh.py:/usr/local/bin/cmsh:ro",
+                         "../../images/login/events_log.py:/usr/local/bin/events-log:ro"]
         ctl["ports"] = [f"127.0.0.1:{controller.SSH_PORT}:22"]
         ctl.setdefault("networks", {}).setdefault("default", {})["aliases"] = [controller.ALIAS]
         for lname in lkinds:  # the login nodes are no longer the head node: no cmsh there
@@ -238,7 +239,8 @@ def generate(sim: dict, profile: dict) -> dict:
     return out
 
 
-BMC_FORWARDER_MB = 32
+BMC_FORWARDER_MB = 16  # a static Go binary on scratch, about 2 MB resident (issue 454); the Python forwarder needed 32
+BMC_FORWARDER_IMAGE = "workbench/bmc-forwarder"
 
 
 def _wire_jira_real(services: dict) -> None:
@@ -270,13 +272,15 @@ def bmc_nodes(sim: dict, profile: dict | None = None) -> list[str]:
 
 def _bmc_forwarders(services: dict, sim: dict, profile: dict) -> None:
     """One small container per BMC, its own IP on the ipmi network at the standard port (ADR 0018). It forwards to the
-    farm, which keeps the state, so a node without a forwarder simply has no BMC address."""
+    farm, which keeps the state, so a node without a forwarder simply has no BMC address. They share one image
+    (components/bmc-forwarder, built by the first one), a static binary on scratch (issue 454)."""
     p = addressing.plan(sim, profile.get("compute_nodes"))
+    build = "../../components/bmc-forwarder"
     for n in bmc_nodes(sim, profile):
         port = p["bmc_port"][n]
-        svc = _service("python:3.12-slim", BMC_FORWARDER_MB, 2)
-        svc.update({"command": ["python", "/app/forward.py", f"443:bmc-farm:{port}", f"8443:bmc-farm:{port}"],
-                    "volumes": ["../../components/bmc-farm/forward.py:/app/forward.py:ro"], "depends_on": ["bmc-farm"],
+        svc = _service(BMC_FORWARDER_IMAGE, BMC_FORWARDER_MB, 2, build)
+        build = None
+        svc.update({"command": [f"443:bmc-farm:{port}", f"8443:bmc-farm:{port}"], "depends_on": ["bmc-farm"],
                     "networks": {"ipmi": {"ipv4_address": p["bmc"][n]}}})
         services[f"bmc-{n}"] = svc
     services["bmc-farm"]["networks"] = {"default": {}, "ipmi": {"ipv4_address": addressing.IPMI_FARM_IP}}
@@ -308,6 +312,7 @@ def _wire_slurm_services(services: dict) -> None:
         "command": ["--innodb-buffer-pool-size=32M", "--innodb-log-file-size=8M", "--max-connections=20",
                     "--performance-schema=OFF"],
         "tmpfs": ["/var/lib/mysql:size=100m"],
+        "volumes": ["./slurm/lab-grant.sql:/docker-entrypoint-initdb.d/20-lab-validate.sql:ro"],  # scratch databases of the config lab (issue 552)
         "healthcheck": {"test": ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"],
                         "interval": "3s", "timeout": "3s", "retries": 30},
     })

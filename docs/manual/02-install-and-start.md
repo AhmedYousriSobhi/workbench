@@ -10,7 +10,7 @@
 ./scripts/benchctl start
 ```
 
-Open the link it prints. The sections below list the prerequisites and the same steps one at a time.
+`start` prints four numbered steps (`1/4 checking the machine` to `4/4 starting the cluster`), then a login link. Open the link to reach the web page. The first run builds images, so it takes a few minutes; later starts are fast. The sections below list the prerequisites and the same steps one at a time.
 
 ## Prerequisites
 
@@ -25,7 +25,7 @@ Check all of this before building anything:
 ./scripts/check-machine.sh      # needs only system python3; ends READY or NOT READY with a fix line per problem
 ```
 
-## The one-command way
+## Start, check and stop
 
 ```bash
 ./scripts/benchctl start            # machine check, tools, governor, cluster (min), web page; prints the login link
@@ -41,9 +41,9 @@ bigger profile. The login link signs you in once and expires after a minute (the
 (`auto|user|system|off`, default `auto`: the system service if it runs, otherwise a governor started as you).
 `off` disables memory protection; do not use it on a workstation you care about.
 
-## The step-by-step way
+## Start step by step
 
-Same result, one visible step at a time:
+Same result, one visible step at a time. Use this when `start` stops and you want to see which step fails:
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'   # once; venv is per shell
@@ -53,8 +53,6 @@ python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'   # onc
 .venv/bin/python -m webui                     # then ./scripts/benchctl open for the login link
 ```
 
-Without activating the venv, prefix commands with `./scripts/benchctl` instead of `python -m benchctl.cli`.
-
 ## Stopping and cleaning up
 
 ```bash
@@ -62,20 +60,20 @@ Without activating the venv, prefix commands with `./scripts/benchctl` instead o
 ./scripts/benchctl down           # only the cluster; removes the workbench compose project and nothing else
 ```
 
-Both touch only the `workbench` project, never your other containers.
+`stop` undoes everything `start` began; `down` stops only the cluster. Both touch only the `workbench` project, never your other containers.
 
 ## Optional: the root governor service
+
+The governor already protects you without `sudo`. The root service adds cgroup throttling and reclaim and starts at boot.
 
 ```bash
 sudo ./scripts/install-governor.sh              # starts at boot, adds cgroup throttle and reclaim
 sudo ./scripts/install-governor.sh --uninstall
 ```
 
+Optional on top of it, off by default: a `systemd-oomd` backstop that only watches the workbench containers (`workbench.slice`) and never changes the host's `oomd.conf`. `sudo ./scripts/install-governor.sh --with-oomd` adds it (`--oomd-only` without touching the service, `--without-oomd` removes it, `--uninstall` removes everything). It acts only while `systemd-oomd` runs; `./scripts/benchctl doctor` shows the `oomd backstop` line (off, active, or installed but oomd not running, with the command to fix it).
+
 You can skip it. See [the governor](07-governor.md) for what it adds.
-
-## What you will see
-
-`start` prints four numbered steps (`1/4 checking the machine` to `4/4 starting the cluster`), then the login link and how to stop everything. `./scripts/benchctl status` then shows the governor, the cluster and the web page at a glance.
 
 ## Under the hood
 
@@ -89,7 +87,7 @@ You can skip it. See [the governor](07-governor.md) for what it adds.
 Then it starts the web page in the background and prints a one-time login link.
 
 > [!HOOD]
-> Image builds are skipped when a hash of the build context and its base image matches the stamp from the last build, and a stage counts as started only when its services answer, not when the container is merely running (issue 449).
+> Image builds are skipped when a hash of the build context and its base image matches the stamp from the last build, and a stage counts as started only when its services answer, not when the container is merely running.
 
 Source: `scripts/benchctl-launch`, `benchctl/stack.py`, `benchctl/ready.py`, ADR 0010, SPEC GV-9.
 

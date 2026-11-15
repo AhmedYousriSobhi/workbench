@@ -78,7 +78,7 @@ Real clusters are mixed, so the Kubernetes part must not assume "one cluster = S
   kubeconfig on a `k-login`, and leaves the existing login unchanged.
 - **One controller.** As in a DGX system, one head node (bcm-mock, the BCM head node) is the control point for the whole
   cluster; the other nodes are changed by Ansible playbooks. bcm-mock lists the Kubernetes nodes and their category in
-  `device; list` and `category; list` (C-4). An Ansible control path is a later issue; nothing here blocks it.
+  `device; list` and `category; list` (C-4). An Ansible control path is decided in ADR 0082 (it runs on the controller node) and still to be built (issue 389).
 - **Portal UI and Horovod.** A portal UI and Horovod (MPI jobs) sit on top of Kubernetes and Slurm. They are later issues.
   Phase 1 keeps the API, the node labels and the namespaces they need (Kubeflow-style `MPIJob` CRD, a portal namespace)
   possible, and does not build them.
@@ -91,8 +91,8 @@ Real clusters are mixed, so the Kubernetes part must not assume "one cluster = S
 ## Decisions on the questions raised
 - SPEC C-2 changes to "KWOK first, real agent deferred": approved by the owner as a start; it may be modified later.
 - One Kubernetes cluster now, but shaped as above (heterogeneous, per cluster, multi-cluster possible later).
-- Still open: should the Kubernetes API also be reachable through Teleport, or only over SSH from a login node? Not
-  decided; phase 1 does SSH only.
+- Kubernetes through Teleport (`tsh kube`): first decided 2026-11-14 as not needed; **reversed by the owner on 2026-11-15** and built (issue 383,
+  [ADR 0083](0083-kubernetes-through-teleport.md)): Teleport's Kubernetes Service registers this cluster when both parts are selected.
 
 ## As built (phase 1, issue 232)
 Decided with the owner while building; each can be changed later.
@@ -124,3 +124,24 @@ Decided with the owner while building; each can be changed later.
 - **Node names** are separate from the Slurm nodes (`kcn001`, `kgpu001`); `--k8s-nodes N` sets the GPU node count.
 - **Phase 2 candidates:** one real k3s or kind worker for real CPU pods and pod logs (privileged container, own ADR),
   metrics-server, Kubernetes through Teleport, a k-login node, the Infrastructure architecture diagram.
+
+## Addendum: Kueue as definitions and status fixtures, no controller (issue 469, owner decision 2026-11-14)
+
+The client reads queue status with `kubectl get`, only when `kubectl api-resources` lists the definition: `clusterqueues.kueue.x-k8s.io`
+(`.status.pendingWorkloads`, `.status.admittedWorkloads`, the `Active` condition) and `localqueues` (pending and admitted counts).
+
+- **Built:** the ClusterQueue, LocalQueue and ResourceFlavor definitions of Kueue v0.20.6 (released 2026-11) and a set of objects
+  (`k8s/kueue/`): three active ClusterQueues (`gpu-training`, `gpu-inference`, `cpu-batch`), one inactive (`legacy-h100`, it names a
+  missing flavor, reason `FlavorNotFound`), LocalQueues in `team-a` and `team-b`. The `viewer` user may read them
+  (`k8s/fixtures/46-rbac-kueue.yaml`). **No controller and no new container**: the counts are fixtures, nothing admits a workload.
+- **One version, no webhook.** Upstream serves v1beta2 from v0.15, stores it from v0.16 and stops serving v1beta1 at v0.20
+  (checked in the v0.20.6 `manifests.yaml`: v1beta1 `served: false`). The file keeps only v1beta2 and drops the `conversion`
+  block, so the API server needs no conversion webhook (v0.20.6 itself fixes the stale webhook reference of an unserved version).
+- **Status** of a CRD with a status subresource is ignored by `kubectl apply`, so `benchctl/kueue.py` writes it with
+  `kubectl patch --subresource=status` after the objects exist (`bootstrap_kueue` in `benchctl/k8s.py`, after the DRA step).
+  The scenario step `queue: {name, active, pending}` rewrites a ClusterQueue and its LocalQueues the same way
+  (`k8s-queue-inactive`).
+- **Not built (owner decision):** kube-state-metrics and DCGM series for KWOK nodes; the Kueue controller and its Workload objects.
+  Volcano and Kubeflow (pytorchjobs, mpijobs) definitions are not added: their CRDs are large and several versions, and the client
+  only looks for them; say if the evidence needs them.
+- **Upgrade:** `k8s/kueue/README.md`.

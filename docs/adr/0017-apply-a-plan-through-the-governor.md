@@ -19,3 +19,8 @@ only at L0-L1 (GV-8, ADR 0010).
 ## Consequences
 The page can change the cluster only by what the governor allows: counts and parts, not arbitrary commands. A rebuild
 takes minutes; the page polls the cluster view and the audit log rather than holding a request open.
+
+## Addendum: W-7 is a calculator, not a form editor (issue 683)
+Owner decision of 2026-11-14: the Budget Manager (SPEC W-7) is a read-only projected-memory calculator plus a warning.
+Every change still goes through the plan/apply sheet and the governor described above; the `sim.yaml` form editor is
+dropped. Budgets stay in `profiles/*.yaml` as presets (SPEC section 3). The build is tracked in issue 684.

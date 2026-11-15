@@ -83,7 +83,7 @@ try:
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page(viewport={"width": 1280, "height": 900}, color_scheme=SCHEME)
-        pg.add_init_script("window.__WB_TEST = true; try { localStorage.setItem('workbench-circuit', '0'); localStorage.setItem('workbench-theme', '" + SCHEMES[SCHEME] + "'); sessionStorage.getItem('workbench-tab') || sessionStorage.setItem('workbench-tab', 'nodes'); } catch (e) {}")  # exposes the page modules as globals (webui/static/js/testhook.js)
+        pg.add_init_script("window.__WB_TEST = true; try { sessionStorage.setItem('workbench-circuit', '0'); localStorage.setItem('workbench-theme', '" + SCHEMES[SCHEME] + "'); sessionStorage.getItem('workbench-tab') || sessionStorage.setItem('workbench-tab', 'nodes'); } catch (e) {}")  # exposes the page modules as globals (webui/static/js/testhook.js)
         pg.route("**/api/cluster", lambda r: r.fulfill(json=cluster))
         pg.route("**/api/flow*", lambda r: r.abort())
         pg.route("**/api/connections", lambda r: r.fulfill(json={"entities": connections.entities(SIM)}))
@@ -98,7 +98,7 @@ try:
         pg.click("#nd-gpu001"); pg.wait_for_selector("#pop dl"); pg.wait_for_timeout(500); pg.screenshot(path=str(OUT / f"web-architecture-popup-{SCHEME}.png")); pg.keyboard.press("Escape")
         pg.evaluate("setLevel('overview', false)"); pg.wait_for_timeout(500); pg.mouse.move(420, 480); pg.wait_for_timeout(250); pg.screenshot(path=str(OUT / f"web-global-view-{SCHEME}.png")); pg.mouse.move(2, 2); pg.evaluate("setLevel('full', false)"); pg.wait_for_timeout(500)  # the global view (#321)
         pg.evaluate("setTree(false, false)"); pg.wait_for_timeout(400); pg.screenshot(path=str(OUT / f"web-architecture-wide-{SCHEME}.png")); pg.evaluate("setTree(true, false)"); pg.wait_for_timeout(300)
-        pg.click("#vw-cv"); pg.wait_for_selector("#flow[data-cv] .cv-box"); pg.wait_for_timeout(600); pg.evaluate("document.querySelector('header.top').style.setProperty('position', 'static', 'important')"); pg.locator("#trafficpanel").screenshot(path=str(OUT / f"web-circuit-{SCHEME}.png")); pg.evaluate("zoomTo('pool', {pool: 'sg'})"); pg.wait_for_timeout(1100); pg.locator("#trafficpanel").screenshot(path=str(OUT / f"web-pool-{SCHEME}.png")); pg.evaluate("zoomTo('fleet')"); pg.wait_for_timeout(1100); pg.locator("#trafficpanel").screenshot(path=str(OUT / f"web-fleet-{SCHEME}.png")); pg.route("**/api/traffic*", traffic_route()); pg.evaluate("zoomTo('cluster'); zoomTo('traffic')"); pg.wait_for_timeout(8500); pg.locator("#tan").screenshot(path=str(OUT / f"web-traffic-analysis-{SCHEME}.png")); pg.route("**/api/capture/*", capture_route()); pg.evaluate("location.hash = 'workbench-gpu001'"); pg.wait_for_timeout(3500); pg.locator("#an-focus").screenshot(path=str(OUT / f"web-wire-capture-{SCHEME}.png")); pg.evaluate("history.replaceState(null, '', location.pathname + location.search)"); pg.wait_for_timeout(300); pg.unroute("**/api/capture/*"); pg.unroute("**/api/traffic*"); pg.evaluate("zoomTo('fleet')"); pg.wait_for_timeout(1100); pg.evaluate("sessionStorage.removeItem('workbench-level'); setCircuit(false); setView(false, false)"); pg.wait_for_timeout(300)
+        pg.click("#vw-cv"); pg.wait_for_selector("#flow[data-cv] .cv-box"); pg.wait_for_timeout(600); pg.evaluate("document.querySelector('header.top').style.setProperty('position', 'static', 'important')"); pg.locator("#trafficpanel").screenshot(path=str(OUT / f"web-circuit-{SCHEME}.png")); pg.evaluate("zoomTo('pool', {pool: 'sg'})"); pg.wait_for_timeout(1100); pg.locator("#trafficpanel").screenshot(path=str(OUT / f"web-pool-{SCHEME}.png")); pg.evaluate("zoomTo('fleet')"); pg.wait_for_timeout(1100); pg.locator("#trafficpanel").screenshot(path=str(OUT / f"web-fleet-{SCHEME}.png")); pg.route("**/api/traffic*", traffic_route()); pg.evaluate("zoomTo('cluster'); zoomTo('traffic')"); pg.wait_for_timeout(1500); pg.evaluate("zoomTo('requests')"); pg.wait_for_timeout(8500); pg.locator("#tan").screenshot(path=str(OUT / f"web-traffic-analysis-{SCHEME}.png")); pg.route("**/api/capture/*", capture_route()); pg.evaluate("location.hash = 'workbench-gpu001'"); pg.wait_for_timeout(3500); pg.locator("#an-focus").screenshot(path=str(OUT / f"web-wire-capture-{SCHEME}.png")); pg.evaluate("history.replaceState(null, '', location.pathname + location.search)"); pg.wait_for_timeout(300); pg.unroute("**/api/capture/*"); pg.unroute("**/api/traffic*"); pg.evaluate("zoomTo('fleet')"); pg.wait_for_timeout(1100); pg.evaluate("sessionStorage.removeItem('workbench-level'); setCircuit(false); setView(false, false)"); pg.wait_for_timeout(300)
         pg.click("#tb-conn"); pg.wait_for_selector("#conn-rows tr td code"); pg.wait_for_timeout(300)
         pg.locator("#conn-rows tr[data-id='teleport']").scroll_into_view_if_needed()
         pg.evaluate("document.querySelector('#conn-rows tr[data-id=teleport]').classList.add('focus')")
@@ -161,11 +161,12 @@ try:
             if flow: q.evaluate(FLOW)
             q.wait_for_timeout(400)
             return q
-        def save(path):  # a long phone page is a flat-colour image: keep the file small (budget 300 KB, tests/test_docs.py)
+        def save(path):  # a flat-colour image: keep the file small (budget 300 KB, tests/test_docs.py)
             im = Image.open(path).convert("RGB")
             if path.stat().st_size > 250 * 1024:
                 im.quantize(colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).save(path, optimize=True)
-        phone = sample_page(390, 800); phone.screenshot(path=str(OUT / f"web-phone-{SCHEME}.png"), full_page=True); save(OUT / f"web-phone-{SCHEME}.png"); phone.close()
+        phone = sample_page(390, 844); phone.screenshot(path=str(OUT / f"web-phone-{SCHEME}.png"))  # one phone screen (390x844), not the whole page: a 6x tall strip looks nothing like the tool (#701)
+        save(OUT / f"web-phone-{SCHEME}.png"); phone.close()
         off = {**cluster, "nodes": [{**n, "state": "down", "label": "Powered off", "power": "Off", "temp": 18, "bcm": "DOWN"} if n["name"] == "cn002" else n for n in cluster["nodes"]]}
         pg2 = sample_page(1280, 900, off); pg2.evaluate("showNode('cn002')"); pg2.wait_for_selector("#nodepane:not([hidden])"); pg2.wait_for_timeout(600)
         pg2.screenshot(path=str(OUT / f"web-node-powered-off-{SCHEME}.png"))

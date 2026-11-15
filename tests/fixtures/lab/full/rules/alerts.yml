@@ -1,0 +1,7 @@
+groups:
+  - name: nodes
+    rules:
+      - alert: NodeDown
+        expr: up == 0
+        for: 1m
+        labels: {severity: page}

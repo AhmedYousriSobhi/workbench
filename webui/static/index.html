@@ -28,6 +28,7 @@
     <button class="pillchip" id="c-mem" aria-haspopup="dialog" aria-label="Free memory: open the governor panel">Memory …</button>
     <span class="pillchip" id="c-svc">Services …</span>
     <span class="pillchip" id="c-nodes">Nodes …</span>
+    <span class="pillchip" id="c-lab" role="status" hidden></span>
     <button class="pillchip" id="scn-toggle" aria-controls="tab-run">▶ Scenarios</button>
     <button class="pillchip" id="c-run" hidden></button>
     <span id="conn" role="status"><i></i><span>connecting…</span></span>
@@ -35,6 +36,7 @@
       <div id="menu" class="menu" hidden>
         <p class="menugroup" id="mg-conf">Configure</p>
         <button class="menuitem" id="nhcbtn" aria-haspopup="dialog"><b aria-hidden="true">✚</b><span><span class="mi-t">Health checks</span><span class="mi-h">What makes a node drain</span></span></button>
+        <button class="menuitem" id="tbbtn" aria-haspopup="dialog"><b aria-hidden="true">✎</b><span><span class="mi-t">Ticket bot</span><span class="mi-h">Pace of the fake engineers</span></span></button>
         <p class="menugroup" id="mg-share">Share</p>
         <button class="menuitem" id="expbtn" aria-haspopup="dialog"><b aria-hidden="true">⇩</b><span><span class="mi-t">Export</span><span class="mi-h">A profile file for the monitoring client</span></span></button>
       </div></span>
@@ -258,11 +260,29 @@
           <dl class="psum" id="pl-sum"></dl></section>
         <section class="fit" aria-label="Does it fit"><div class="fitnum"><b id="pl-need">–</b><span class="dim small" id="pl-free"></span></div>
           <progress id="pl-bar" max="100" value="0" aria-label="Memory needed as a share of free memory"></progress>
-          <p id="pl-msg" role="status" class="small"></p><p id="pl-diff" class="small"></p></section>
+          <p id="pl-msg" role="status" class="small"></p><p id="pl-diff" class="small"></p>
+          <div class="revjobs" id="pl-over" role="alert" hidden></div>
+          <details class="budget" id="pl-budget"><summary class="small">Projected memory (read-only)</summary>
+            <p class="small" id="pl-budget-sum"></p>
+            <table class="small budgettab"><caption class="srtable">Projected memory by part, in MB</caption><thead><tr><th scope="col">Part</th><th scope="col">Expected</th><th scope="col">Cap</th></tr></thead><tbody id="pl-budget-rows"></tbody></table>
+            <p class="small dim">A projection only. The governor decides at Apply (GV-9); this page changes nothing.</p></details></section>
         <details class="cmdbox"><summary class="small">Command for a terminal</summary><pre id="pl-cmd" class="small"></pre><button class="btn small" id="pl-copy" hidden>Copy command</button></details>
       </div>
     </div>
     <div class="sheet-f"><p id="pl-apply-msg" role="status" class="small"></p><button class="btn small" id="plan-cancel">Cancel</button><button class="btn" id="pl-apply" hidden>Apply to the running workbench</button></div>
+  </dialog>
+  <dialog id="tbdlg" class="sheet" aria-labelledby="tb-h">
+    <div class="sheet-h"><div><h2 id="tb-h">Ticket bot</h2><p class="dim small">How fast the fake engineers work the alert tickets of the Jira mock (never a real Jira). Changes reach the running bot within one cycle. Start it with <code>benchctl load on --tickets</code>.</p></div>
+      <button class="btn small" id="tb-close" aria-label="Close the ticket bot settings">✕ Close</button></div>
+    <form class="sheet-b" id="tb-form">
+      <label>Seconds between actions (10 to 3600)<input id="tb-every" type="number" min="10" max="3600" step="any" inputmode="decimal"></label>
+      <label>Seconds In Progress before Resolved (10 to 86400)<input id="tb-resolve" type="number" min="10" max="86400" step="any" inputmode="decimal"></label>
+      <label>Share nobody picks up (0 to 1)<input id="tb-ignore" type="number" min="0" max="1" step="any" inputmode="decimal"></label>
+      <label>Share of resolved tickets reopened (0 to 1)<input id="tb-reopen" type="number" min="0" max="1" step="any" inputmode="decimal"></label>
+      <p class="small dim">Empty boxes stay as they are. Terminal: <code>benchctl set ticket-bot --every 10 --resolve 30</code>.</p>
+      <button class="btn" id="tb-apply">Apply</button>
+    </form>
+    <div class="sheet-f"><p id="tb-msg" role="status" class="small"></p><button class="btn small" id="tb-done">Close</button></div>
   </dialog>
   <dialog id="nhcdlg" class="sheet" aria-labelledby="nhc-h">
     <div class="sheet-h"><div><h2 id="nhc-h">Node health checks</h2><p class="dim small">What every node's health check looks at, in the order it runs. Drag a block (or use ↑ ↓) to reorder; changes are validated, then reach the nodes within 30 s.</p></div>

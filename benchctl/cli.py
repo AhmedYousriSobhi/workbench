@@ -27,6 +27,11 @@ from . import (
     faultstate,
     inventory,
     jira_real,
+    lab,
+    lab_apply,
+    lab_candidate,
+    lab_diff,
+    lab_validate,
     logins,
     machine,
     measure,
@@ -39,10 +44,12 @@ from . import (
     situation,
     slurmstats,
     slurmtrace,
+    slurmver,
     stack,
     storage,
     teleport,
     ticketbot,
+    tuning,
     wait,
     workbench,
 )
@@ -122,9 +129,11 @@ def check() -> None:
 def doctor(output: str = OUTPUT, json_: bool = JSON) -> None:
     """Check host prerequisites (SPEC P-1..P-3); exits 1 on any failure."""
     results = checks.run_all()
+    tune = tuning.plan()
     failed = any(c.status == checks.FAIL for c in results)
     if contract.wanted(output, json_) == "json":
-        typer.echo(contract.dumps({"ok": not failed, "checks": [{"name": c.name, "code": errors.doctor_code(c.name), "status": c.status, "detail": c.detail, "fix": c.fix} for c in results]}))
+        typer.echo(contract.dumps({"ok": not failed, "checks": [{"name": c.name, "code": errors.doctor_code(c.name), "status": c.status, "detail": c.detail, "fix": c.fix} for c in results],
+                                   "tuning": [tuning.as_dict(t) for t in tune]}))
         raise typer.Exit(1 if failed else 0)
     if agentmode.agent():  # only what needs attention, one coded line each
         for c in results:
@@ -132,11 +141,17 @@ def doctor(output: str = OUTPUT, json_: bool = JSON) -> None:
                 typer.echo(f"{errors.doctor_code(c.name)} {c.status}: {' '.join(c.detail.split())}" + (f" | fix: {c.fix}" if c.fix else ""))
         if not any(c.status != checks.OK for c in results):
             typer.echo("ok: every check passed")
+        todo = [t.setting for t in tune if not t.applied]
+        if todo:  # one line; the commands are in `benchctl doctor` (text) and `doctor --json` (tuning)
+            typer.echo(f"tuning: {', '.join(todo)} not as recommended (print-only; commands in `benchctl doctor --json`)")
         raise typer.Exit(1 if failed else 0)
     for c in results:
         typer.echo(f"[{ICON[c.status]}] {c.name}: {c.detail}")
         if c.fix and c.status != checks.OK:
             typer.echo(f"       fix: {c.fix}")
+    block = tuning.render(tune)
+    if block:
+        typer.echo(block)
     raise typer.Exit(1 if failed else 0)
 
 
@@ -403,13 +418,27 @@ def up(profile: str = typer.Option(None, "--profile", autocompletion=completion.
 
 
 @app.command()
-def apply(file: str = typer.Option(..., "-f", "--file", help="workbench file to build"), name: str = NAME,
+def apply(resource: str = typer.Argument(None, help="`lab NAME` puts a config lab on the running cluster through the governor (see `benchctl diff lab`)"),
+          lab_name: str = typer.Argument(None, help="the lab to apply (with `lab`)"),
+          file: str = typer.Option(None, "-f", "--file", help="workbench file to build"), name: str = NAME,
           cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS, with_: list[str] = WITH,
           without: list[str] = WITHOUT, k8s_nodes: int = K8S, k8s_cpu_nodes: int = K8S_CPU, bmc_nodes: str = BMC_NODES, bmc_groups: str = BMC_GROUPS, bcm_k8s: bool = BCM_K8S, controller: bool = CONTROLLER, dcgm_nodes: int = DCGM_NODES, slurm_version: str = SLURM_VERSION,
           workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING,
           ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE, access: list[str] = ACCESS,
-          addons: bool = ADDONS, login: list[str] = LOGIN, app_mb: int = APP_MB_OPT) -> None:
-    """Build the workbench a file describes (the same as `up -f FILE`)."""
+          addons: bool = ADDONS, login: list[str] = LOGIN, app_mb: int = APP_MB_OPT,
+          side: str = typer.Option("baseline", "--side", help="with `lab`: baseline (as imported) or candidate (your edits)"),
+          execute: bool = typer.Option(False, "--execute", hidden=True, help="with `lab`: run here, not through the governor (the governor's own child)")) -> None:
+    """Build the workbench a file describes (the same as `up -f FILE`), or `apply lab NAME [--side baseline|candidate]`: put one side of a config lab
+    on the running cluster through the governor (L0-L1): QOS and accounts, Kubernetes, Prometheus rules, Teleport roles, slurm.conf keys, then
+    reconfigure or restart; verifies `scontrol show config`. `benchctl remove lab NAME` undoes it."""
+    if resource is not None:
+        if resource != "lab" or not lab_name:
+            typer.echo("usage: benchctl apply lab NAME [--side baseline|candidate]   (or: benchctl apply -f FILE)", err=True)
+            raise typer.Exit(2)
+        _lab_run("apply", lab_name, side, execute)
+    if file is None:
+        typer.echo("Missing option '-f' / '--file' (or use: benchctl apply lab NAME)", err=True)
+        raise typer.Exit(2)
     with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, addons, login)
     _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes, login, bmc_groups, bcm_k8s, controller, dcgm_nodes, slurm_version)
 
@@ -562,6 +591,17 @@ get_app = typer.Typer(cls=SuggestingGroup, help="List what exists: nodes, servic
 app.add_typer(get_app, name="get")
 
 
+@get_app.command("ticket-bot")
+def get_ticket_bot() -> None:
+    """The settings the running ticket bot was last given with `benchctl set ticket-bot` (empty: its start values, see `load on --tickets`)."""
+    from . import workload
+    r = stack._run(workload.ticket_settings_get())
+    if r.returncode:
+        typer.echo("cannot reach the login node: start the cluster first (benchctl up)", err=True)
+        raise typer.Exit(1)
+    typer.echo(r.stdout.strip())
+
+
 def _get(rows_fn, output: str, selector: list[str] | None, sort_by: str | None, watch: bool, interval: float) -> None:
     """One list command: query, render, and optionally redraw. Query mistakes exit 2 (usage), like an unknown flag."""
     import time
@@ -648,6 +688,29 @@ def get_slurm_stats() -> None:
     typer.echo(json.dumps(slurmstats.collect(lambda c: stack._run(c))))
 
 
+@get_app.command("slurm-checksum")
+def get_slurm_checksum(version: str = typer.Argument(..., help="a Slurm release, e.g. 25.11.9")) -> None:
+    """Download SchedMD's tarball for a release (at most 100 MB and 5 minutes, nothing kept), hash it and compare with the SHA256 digest
+    GitHub publishes for the same release asset (a second, independent source). Both are printed; a disagreement is refused (exit 1,
+    WB-REFUSED-CHECKSUM). Without a GitHub digest the computed hash is advice only. Prints the line to paste into benchctl/slurmver.py;
+    it never edits the file. For a recorded release it also says whether the hash matches. Needs internet."""
+    try:
+        sha = slurmver.fetch_sha256(version)
+        digest, why = slurmver.github_digest(version)
+        both = slurmver.compare(version, sha, digest, why)
+        if version in slurmver.VERSIONS:
+            typer.echo(both)
+            typer.echo(slurmver.check(version, sha))
+            return
+    except slurmver.DigestDisagreement as e:
+        typer.echo(errors.render("WB-REFUSED-CHECKSUM", str(e)), err=True)
+        raise typer.Exit(1) from e
+    except slurmver.SlurmVersionError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(1) from e
+    typer.echo(f"slurm-{version}.tar.bz2\n{both}\nTo accept it, add this line to VERSIONS in benchctl/slurmver.py:\n{slurmver.table_line(version, sha)}")
+
+
 CAPTURE_NODE = typer.Argument(..., help="a Slurm node or a Kubernetes node, e.g. cn001, gpu001 or kw001")
 CAPTURE_SECONDS = typer.Option(None, "--seconds", min=1, max=300, help="stop after this many seconds (default 300 streaming, 10 with --once; at most 300, 60 with --once)")
 CAPTURE_ONCE = typer.Option(False, "--once", help="one bounded answer: a single JSON object with the messages seen (for scripts and agents); asks the governor first")
@@ -687,6 +750,21 @@ def _endpoint_rows(full: bool) -> list[dict]:
 
     keep = ("id", "name", "kind", "address", "credential") + (("command",) if full else ())
     return [{k: e.get(k) if k != "credential" else (e.get(k) or "-") for k in keep} for e in conn.entities(_sim())]
+
+
+@get_app.command("lab")
+def get_lab(name: str = typer.Argument(..., help="a lab made with `benchctl import lab`"),
+            max_nodes: int = typer.Option(None, "--max-nodes", min=1, max=64, help="lab node budget (default lab.max_nodes, 24)"),
+            keep_users: bool = typer.Option(False, "--keep-users", help="keep production user names instead of lab-u001..."),
+            target_hours: float = typer.Option(None, "--target-hours", help="run length per side, 0.5 to 6 (default lab.target_hours, 2)"),
+            output: str = OUTPUT) -> None:
+    """Show how a lab would be downscaled: nodes per group, sampled jobs, user mapping, time dilation, key classes and memory. Changes nothing."""
+    try:
+        p = lab.plan(name, _base_sim(), max_nodes=max_nodes, keep_users=keep_users, target_hours=target_hours)
+    except lab.LabError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    typer.echo(json.dumps(p, indent=2) if output == "json" else lab.plan_text(p))
 
 
 @get_app.command("endpoints")
@@ -810,6 +888,26 @@ def set_netem(node: str = typer.Argument(..., help="a Slurm node of this cluster
     typer.echo(f"{node}: netem {' '.join(f'{k} {v}' for k, v in (('delay', delay), ('loss', loss)) if v)}, ends in {ttl} (`benchctl clear netem` removes it now)")
 
 
+@set_app.command("ticket-bot")
+def set_ticket_bot(every: float = typer.Option(None, "--every", help="mean seconds between actions (10 to 3600)"),
+                   resolve: float = typer.Option(None, "--resolve", help="seconds a ticket stays In Progress before it is resolved (10 to 86400)"),
+                   ignore: float = typer.Option(None, "--ignore", help="share of tickets nobody picks up (0 to 1)"),
+                   reopen: float = typer.Option(None, "--reopen", help="share of resolved tickets that are reopened (0 to 1)")) -> None:
+    """Change the running ticket bot without a restart (`benchctl load on --tickets` first): it re-reads the settings each cycle.
+    `benchctl set ticket-bot --every 10 --resolve 30` makes a test fast; `benchctl get ticket-bot` shows what is in force."""
+    from . import workload
+    try:
+        cmd = workload.ticket_settings_set(every=every, resolve_after=resolve, ignore=ignore, reopen=reopen)
+    except workload.WorkloadError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(2)
+    r = stack._run(cmd)
+    if r.returncode:
+        typer.echo("cannot reach the login node: start the cluster first (benchctl up)", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"ticket bot settings: {r.stdout.strip()}")
+
+
 clear_app = typer.Typer(cls=SuggestingGroup, help="Put things back: the injected node faults")
 app.add_typer(clear_app, name="clear")
 
@@ -850,7 +948,7 @@ add_app = typer.Typer(cls=SuggestingGroup, help="Add something: a health check, 
 app.add_typer(add_app, name="add")
 remove_app = typer.Typer(cls=SuggestingGroup, help="Remove something: a health check, the simulated users' jobs")
 app.add_typer(remove_app, name="remove")
-validate_app = typer.Typer(cls=SuggestingGroup, help="Check files without changing anything: the health checks")
+validate_app = typer.Typer(cls=SuggestingGroup, help="Check files without changing anything: the health checks, a config lab")
 app.add_typer(validate_app, name="validate")
 reload_app = typer.Typer(cls=SuggestingGroup, help="Push edited files to the running nodes: the health checks")
 app.add_typer(reload_app, name="reload")
@@ -1048,6 +1146,58 @@ def validate_checks() -> None:
     typer.echo(f"ok: {len(nhc.load())} checks valid")
 
 
+def _lab_wait(sock: str, job: int, timeout: float = 600) -> str | None:
+    """Wait for the governor's lab-validate change to end; None when it ended, else why not."""
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        time.sleep(1)
+        try:
+            ch = checks.governor_request({"cmd": "status"}, sock).get("change")
+        except OSError as e:
+            return f"the governor stopped answering: {e}"
+        if ch and ch.get("job") == job and ch.get("state") != "running":
+            return None
+    return f"the validation did not finish within {int(timeout)} s"
+
+
+@validate_app.command("lab")
+def validate_lab(name: str = typer.Argument(..., help="a lab made with `benchctl import lab`"),
+                 side: str = typer.Option("baseline", "--side", help="baseline (the imported configuration); candidate comes with issue 553"),
+                 run_here: bool = typer.Option(False, "--run-here", hidden=True, help="run the checks in this process (the governor uses it)"),
+                 output: str = OUTPUT) -> None:
+    """Check the lab's imported configuration with the real tools (a throwaway slurmctld, sacctmgr load, promtool, kubectl dry-run, Teleport roles, secret scan, versions). Runs through the governor at L0-L1. Exit 0 passed (skips are listed), 1 failed, 3 not available."""
+    if side not in lab_validate.SIDES:
+        typer.echo(f"--side must be baseline or candidate, not {side!r}", err=True)
+        raise typer.Exit(1)
+    if side == "candidate":
+        typer.echo("the candidate side is not available yet: it comes with issue 553 (diff and apply); `--side baseline` checks the imported configuration")
+        raise typer.Exit(lab_validate.NOT_AVAILABLE)
+    try:
+        if not lab.exists(name):
+            raise lab.LabError(f"no lab {name}: import it first (benchctl import lab {name} --from DIR)")
+        if run_here:
+            report = lab_validate.run(name, _base_sim(), side)
+        else:
+            sock = os.environ.get("WORKBENCH_GOV_SOCKET", checks.GOV_SOCKET)
+            try:
+                r = checks.governor_request({"cmd": "lab-validate", "name": name, "side": side}, sock)
+            except OSError as e:
+                raise lab.LabError(f"the governor is not reachable at {sock} ({e}); start it: ./scripts/benchctl start") from e
+            if not r.get("ok"):
+                raise lab.LabError(str(r.get("error")))
+            if r.get("dry_run"):
+                typer.echo("governor in dry-run: nothing was run")
+                raise typer.Exit(0)
+            if (why := _lab_wait(sock, r.get("job"))):
+                raise lab.LabError(why)
+            report = json.loads((lab.path(name) / "validate.json").read_text())
+    except lab.LabError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    typer.echo(json.dumps(report, indent=2) if output == "json" else lab_validate.text(report))
+    raise typer.Exit(1 if report["summary"].startswith("failed") else 0)
+
+
 @reload_app.command("checks")
 def reload_checks() -> None:
     """After editing a check file or images/node-base/nhc.d/checks.conf by hand: validate, then push to the running nodes. Nothing is pushed when a check is invalid."""
@@ -1083,25 +1233,35 @@ app.add_typer(load_app, name="load")
 def load_on(rate: float = typer.Option(6, "--rate", help="jobs per minute (Poisson arrivals)"),
             duration: float = typer.Option(120, "--duration", help="mean job length in seconds"),
             seed: int = typer.Option(None, "--seed", help="a fixed seed makes the arrivals repeatable"),
+            personas: bool = typer.Option(False, "--personas", help="each user follows the job mix of the persona in sim.yaml, with some failing and cancelled jobs"),
+            day: float = typer.Option(0, "--day", help="daily rhythm: seconds one simulated day lasts (60 to 86400; 0 = off), the arrival rate rises and falls"),
             mocks: bool = typer.Option(False, "--mocks", help="also start a demo client that calls Jira, BCM and the BMC farm, so the Traffic tab has requests"),
-            mock_rate: float = typer.Option(30, "--mock-rate", help="demo client requests per minute")) -> None:
+            mock_rate: float = typer.Option(30, "--mock-rate", help="demo client requests per minute"),
+            tickets: bool = typer.Option(False, "--tickets", help="also start the ticket bot: fake engineers work the alert tickets in jira-mock (never a real Jira)"),
+            ticket_every: float = typer.Option(120, "--ticket-every", help="ticket bot: mean seconds between actions (10 to 3600)"),
+            ticket_resolve: float = typer.Option(600, "--ticket-resolve", help="ticket bot: seconds a ticket stays In Progress before it is resolved")) -> None:
     """Start the user simulator: alice and bob submit cpu jobs and GPU jobs at random, so squeue and the node states have a live queue."""
     from . import workload
 
     try:
-        cmds = workload.load_on(_sim(), rate, duration, seed)
+        cmds = workload.load_on(_sim(), rate, duration, seed, personas, day)
         if mocks:
             cmds += workload.mocks_on(_sim(), mock_rate)
+        if tickets:
+            cmds += workload.tickets_on(ticket_every, ticket_resolve, day, seed)
     except workload.WorkloadError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(1) from e
     for cmd in cmds:
         r = stack._run(cmd)
-        if r.returncode and cmd not in (workload.load_off(), workload.mocks_off()):  # pkill finding nothing to stop is fine
+        if r.returncode and cmd not in (workload.load_off(), workload.mocks_off(), workload.tickets_off()):  # pkill finding nothing to stop is fine
             typer.echo(f"cannot start the load: {(r.stderr or r.stdout).strip()}", err=True)
             raise typer.Exit(1)
     typer.echo(f"load: on, about {rate:g} job(s) a minute, each about {duration:g} s (benchctl load off to stop)"
-               + (f"; demo client for Jira, BCM and the BMC farm: about {mock_rate:g} request(s) a minute" if mocks else ""))
+               + ("; personas on: job mixes by persona, some jobs fail or are cancelled" if personas else "")
+               + (f"; daily rhythm: a day lasts {day:g} s" if day else "")
+               + (f"; demo client for Jira, BCM and the BMC farm: about {mock_rate:g} request(s) a minute" if mocks else "")
+               + (f"; ticket bot on jira-mock: about one action every {ticket_every:g} s" if tickets else ""))
 
 
 @load_app.command("off")
@@ -1110,6 +1270,7 @@ def load_off() -> None:
     from . import workload
 
     stack._run(workload.mocks_off())
+    stack._run(workload.tickets_off())
     r = stack._run(workload.load_off())
     typer.echo("load: off" if r.returncode in (0, 1) else f"cannot stop the load: {(r.stderr or r.stdout).strip()}",
                err=r.returncode not in (0, 1))
@@ -1279,7 +1440,7 @@ def describe_workbench(output: str = OUTPUT, json_: bool = JSON) -> None:
              "governor_level": gov["level"] if gov else None, "mem_available_mb": checks.mem_available() // (1024 * 1024)}
     info = situation.gather(
         state=state, spec=spec.to_dict() if spec else None, sim=sim, k8s_nodes=sim.get("kubernetes", {}).get("nodes", []) if cluster.k8s_built() else [],
-        entities=conn.entities(sim), faults=_fault_rows(), scenarios=scenario.list_all(), plan=scenario.plan,
+        entities=conn.entities(sim), faults=_fault_rows(), scenarios=scenario.list_all(sim=sim), plan=scenario.plan,
         fault_targets=[*cluster.ACTIONS, *sorted(scenario.HOST_TARGETS), *sorted(k for k in scenario.ENDPOINTS if not k.startswith("jira-"))])
     if contract.wanted(output, json_) == "json":
         typer.echo(contract.dumps(info, compact=True))
@@ -1341,6 +1502,75 @@ def wait_scenario(name: str = typer.Argument(..., autocompletion=completion.scen
                   timeout: float = TIMEOUT) -> None:
     """Until the web page's run of NAME has ended (exit 1 if it ended failed). Scenarios started with `scenario run` block by themselves. Exit 2 when the page is not running."""
     _wait(wait.scenario_check(name, _page_run_state), timeout, {"for": "scenario", "name": name})
+
+
+import_app = typer.Typer(cls=SuggestingGroup, help="Bring exported files in: a production cluster's configuration (config lab)")
+app.add_typer(import_app, name="import")
+
+
+@import_app.command("lab")
+def import_lab(name: str = typer.Argument(..., help="lab name: lowercase letters, digits and -"),
+               src: str = typer.Option(..., "--from", help="folder of exported files (slurm.conf, topology.conf, gres.conf, sacctmgr.dump, qos.txt, trace.sacct, k8s/, rules/, teleport/, versions.yaml)"),
+               replace: bool = typer.Option(False, "--replace", help="overwrite a lab of the same name")) -> None:
+    """Import exported production configuration into a config lab: parse, scrub secrets, record versions. Reads files only; never connects to production."""
+    try:
+        m = lab.import_lab(name, _Path(src), replace=replace, sim=_base_sim())
+    except lab.LabError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    typer.echo(lab.summary(m))
+
+
+diff_app = typer.Typer(cls=SuggestingGroup, help="Compare: a config lab's candidate against its baseline")
+app.add_typer(diff_app, name="diff")
+@add_app.command("candidate")
+def add_candidate(name: str = typer.Argument(..., help="a lab made with `benchctl import lab`"),
+                  replace: bool = typer.Option(False, "--replace", help="start again from the baseline, dropping your edits")) -> None:
+    """Copy the lab's baseline into compose/generated/lab/NAME/candidate/ for editing; `diff lab` and `apply lab --side candidate` read it."""
+    try:
+        files = lab_candidate.init(name, replace=replace)
+    except lab.LabError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    typer.echo(f"candidate of lab {name}: {len(files)} file(s) in compose/generated/lab/{name}/candidate; edit them, then `benchctl diff lab {name}`")
+
+
+@diff_app.command("lab")
+def diff_lab(name: str = typer.Argument(..., help="a lab made with `benchctl import lab`"), output: str = OUTPUT) -> None:
+    """The candidate against the baseline, one note per change (live, restart, not applied, not tested), and whether apply restarts slurmctld."""
+    try:
+        entries = lab_diff.diff(name)
+    except lab.LabError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    typer.echo(json.dumps({"name": name, "changes": entries, "restart_keys": lab_diff.restart_keys(entries)}, indent=2) if output == "json" else lab_diff.text(name, entries))
+
+
+def _lab_env() -> lab_apply.Env:
+    return lab_apply.Env(sim=_base_sim(), running=lambda s: s in workbench.running_services(), say=typer.echo)
+
+
+def _lab_run(op: str, name: str, side: str, execute: bool) -> None:
+    if execute:  # the governor's child process
+        raise typer.Exit(0 if lab_apply.execute(op, name, side, _lab_env()) else 1)
+    try:
+        lab.valid_name(name)
+        lab_candidate.check_side(side)
+    except lab.LabError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    req = {"cmd": "lab-apply", "name": name, "side": side} if op == "apply" else {"cmd": "lab-restore", "name": name}
+    ok, lines = lab_apply.ask_governor(req, name, lambda r: checks.governor_request(r, checks.GOV_SOCKET, timeout=10))
+    for ln in lines:
+        typer.echo(ln, err=not ok)
+    raise typer.Exit(0 if ok else 1)
+
+
+@remove_app.command("lab")
+def remove_lab(name: str = typer.Argument(..., help="the lab that is applied"),
+               execute: bool = typer.Option(False, "--execute", hidden=True, help="run here, not through the governor (the governor's own child)")) -> None:
+    """Return to the plain sim.yaml cluster through the governor: restores the pre-lab accounting, deletes what the lab made, puts slurm.conf back. The imported lab stays on disk."""
+    _lab_run("remove", name, "baseline", execute)
 
 
 export_app = typer.Typer(cls=SuggestingGroup, help="Write the workbench in a form another tool can import")
@@ -1462,6 +1692,11 @@ def scenario_run(name: str = typer.Argument(..., autocompletion=completion.scena
         sc = scenario.load(name)
     except scenario.ScenarioError as e:
         typer.echo(errors.render("WB-UNKNOWN-SCENARIO", completion.explain(name, completion.scenarios(""), "scenario")) if completion.scenarios("") else str(e), err=True)
+        raise typer.Exit(1) from e
+    try:
+        sc = scenario.selectors.resolve_scenario(sc, sim)  # `first gpu node` becomes this cluster's node name
+    except scenario.ScenarioError as e:
+        typer.echo(f"invalid: {e}", err=True)
         raise typer.Exit(1) from e
     problems = scenario.validate(sc, sim)
     for p in problems:

@@ -151,7 +151,7 @@ def test_scenario_and_cli_validation_and_requests():
 
 
 def test_shipped_scenario_validates_and_the_page_cannot_play_it():
-    sc = scenario.load("netem-slow-link")
+    sc = scenario.load("netem-slow-link", sim=yaml.safe_load(Path("sim.yaml").read_text()))
     sim = yaml.safe_load(Path("sim.yaml").read_text())
     assert scenario.validate(sc, sim) == []
     assert "netem" in scenario.HOST_TARGETS

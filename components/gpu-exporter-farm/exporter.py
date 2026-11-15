@@ -1,6 +1,7 @@
 """Fake DCGM-style exporter: one process serving metrics for every simulated node.
 
 GET  /metrics      Prometheus text format; /metrics?node=NAME is one node (a dead one answers 503), as Prometheus scrapes it (issue 458)
+GET  /sim/summary  {node: {"gpu_util": [per GPU], "xid", "ib_down", "nic_flap"}} for every node that is up, in one small answer (the page, issue 450)
 POST /sim/inject   {"node": "gpu001", "xid": 79} | {"node": ..., "temp": 92} | {"node": ..., "clear": true}
 """
 import json
@@ -30,8 +31,8 @@ ALLOC_STALE_S = 30  # keep the last answer this long when the feed is unreachabl
 
 def load_nodes(inventory: Path) -> dict[str, int]:
     """Return {node_name: gpu_count} from the generated inventory.json (benchctl/hwinventory.py); compute nodes have 0 GPUs and the
-    Kubernetes nodes are there when that part is on."""
-    return {n["name"]: n["gpus"] for n in json.loads(Path(inventory).read_text())["nodes"]}
+    Kubernetes nodes are there when that part is on. The real card's node is not: its own exporter serves it (issue 431)."""
+    return {n["name"]: n["gpus"] for n in json.loads(Path(inventory).read_text())["nodes"] if n["kind"] != "real-gpu"}
 
 
 def load_gpu_type(inventory: Path) -> str:
@@ -176,6 +177,14 @@ class State:
             devices[g] = dev
         return {"devices": devices}
 
+    def summary(self) -> dict[str, dict]:
+        """What the page's node cards read from a scrape, without the scrape: per node the GPU utilisation, XID, InfiniBand ports down and NIC flap."""
+        r = self.rng
+        return {n: {"gpu_util": [r.randint(70, 100) if g in self.alloc.get(n, ()) else r.randint(0, 3) for g in range(gpus)],
+                    "xid": self.xid.get(n, 0), "ib_down": min(self.ib_down.get(n, 0), self.ib_ports(n)),
+                    "nic_flap": n in self.flapping}
+                for n, gpus in self.nodes.items() if n not in self.down}
+
     def render(self, only: str | None = None) -> str:
         """The metrics of every node that is up, or of `only` (what Prometheus scrapes per node, issue 458)."""
         r = self.rng
@@ -285,6 +294,8 @@ def make_handler(state: State):
         def do_GET(self):
             if self.path == "/sim/stats":
                 self._send(200, json.dumps(stats), "application/json")
+            elif self.path == "/sim/summary":
+                self._send(200, json.dumps(state.summary()), "application/json")
             elif urlparse(self.path).path == "/sim/storage":  # what df and lfs print on a node (benchctl/storage.py, images/node-base/fakefs.py)
                 node = (parse_qs(urlparse(self.path).query).get("node") or [""])[0]  # a login node is not a hardware node: it reaches every mount
                 self._send(200, json.dumps(state.storage_view(node)), "application/json")

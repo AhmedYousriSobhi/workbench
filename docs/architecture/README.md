@@ -35,6 +35,7 @@ Every manual chapter and guide has an **Under the hood** section that says how t
 | [Slurm resilience: what a running job does when the daemons change under it](../guides/slurm-resilience.md#under-the-hood) | guides | [ADR 0025](../adr/0025-slurm-is-real-the-rest-is-simulated.md), [ADR 0002](../adr/0002-slurm-from-source-no-extra-privileges.md) |
 | [Testing SSH connections step by step](../guides/ssh-connection-testing.md#under-the-hood) | guides | [ADR 0011](../adr/0011-ssh-login-node.md), [ADR 0014](../adr/0014-sshd-on-compute-nodes.md), [ADR 0023](../adr/0023-login-nodes-and-their-auth.md) |
 | [Slurm topology and a switch going down](../guides/topology.md#under-the-hood) | guides | [ADR 0053](../adr/0053-slurm-topology-from-sim-yaml.md) |
+| [Config lab: import exported production configuration](../guides/config-lab.md#under-the-hood) | guides | [ADR 0049](../adr/0049-config-lab-scope-and-overlay-model.md), [ADR 0050](../adr/0050-config-lab-ab-replay-method.md), [ADR 0081](../adr/0081-config-lab-validation.md) |
 | [Web UI: drawing on a canvas (tokens and wires)](../guides/web-ui-canvas.md#under-the-hood) | guides | [ADR 0038](../adr/0038-redesign-canvas-tokens-and-wire.md), [ADR 0041](../adr/0041-per-request-traffic-record.md), [ADR 0042](../adr/0042-on-demand-wire-capture.md) |
 
 ## The design pages

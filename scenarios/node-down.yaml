@@ -2,11 +2,11 @@ name: node-down
 ref: SC-17
 description: A compute node loses power; BMC and BCM show it down and Slurm drains it, then it recovers
 steps:
-  - {at: 0s,  target: bmc-farm, do: {nodes: [cn002], power: "Off"}}
-  - {at: 0s,  target: bcm-mock, do: {nodes: [cn002], state: DOWN}}
-  - {at: 5s,  target: slurm,    do: {drain: [cn002], reason: "node down"}}
-  - {at: 40s, target: bmc-farm, do: {nodes: [cn002], clear: true}}
-  - {at: 40s, target: bcm-mock, do: {nodes: [cn002], state: UP}}
-  - {at: 40s, target: slurm,    do: {resume: [cn002]}}
+  - {at: 0s,  target: bmc-farm, do: {nodes: [second cpu node], power: "Off"}}
+  - {at: 0s,  target: bcm-mock, do: {nodes: [second cpu node], state: DOWN}}
+  - {at: 5s,  target: slurm,    do: {drain: [second cpu node], reason: "node down"}}
+  - {at: 40s, target: bmc-farm, do: {nodes: [second cpu node], clear: true}}
+  - {at: 40s, target: bcm-mock, do: {nodes: [second cpu node], state: UP}}
+  - {at: 40s, target: slurm,    do: {resume: [second cpu node]}}
 expect:
-  - slurm.node_state: {node: cn002, state: drain, within: 20s}
+  - slurm.node_state: {node: second cpu node, state: drain, within: 20s}

@@ -508,3 +508,5 @@
 /* the Traffic tab shows one block at a time in the Circuit view: the links, or one zoom level deeper the request river (issue 650) */
 #tab-traffic[data-tl=links] > .panel > .tan { display:none; }
 #tab-traffic[data-tl=requests] > .panel > :not(.tan):not(.zback) { display:none; }
+
+  .budget { margin-top:var(--sp3); } .budget summary { cursor:pointer; min-height:40px; display:flex; align-items:center; font-weight:600; } .budgettab th, .budgettab td { padding:2px var(--sp2); text-align:right; font-variant-numeric:tabular-nums; } .budgettab thead th:first-child, .budgettab tbody th { text-align:left; font-weight:400; }

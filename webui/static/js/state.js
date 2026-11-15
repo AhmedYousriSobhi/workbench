@@ -63,7 +63,7 @@ export const S = {
   trPath: null,
   monLinks: [],
   dbdLink: null,
-  slurmNodes: null,
+  slurmNodes: null, slurmReasons: null, slurmJobs: null, nodeTickets: null,
   change: null, applying: false, planStates: null, partsNow: null, partLabels: null, loginsNow: null,  // Cluster architecture: Slurm node states read when it opened; what runs now (Review changes)
   trPrevOut: null,
   trHist: [],

@@ -10,8 +10,20 @@ instead; `benchctl export profile` writes one that matches what the workbench co
 ./scripts/benchctl export profile                # writes bench-profile.json in the current folder
 ```
 
-The file describes the cluster **running now** (read from Docker): a part or node that is stopped is left out. With nothing running it lists the configured cluster and says so; `--configured` forces that. Add `--bmc` for one BMC target per node that has a BMC (each with its own address `10.148.x.y:443`; `--bmc-via name` writes `bmc-<node>` instead), `--user bob` for another SSH user, `--name lab` for another cluster name,
-`-o -` to print instead of write, `--profile std` to export a profile other than the one running. With a workbench built ([choose the workbench](choose-workbench.md)) the file lists exactly its nodes and parts.
+The file describes the cluster **running now** (read from Docker). A part or node that is stopped is left out.
+- With nothing running, it lists the configured cluster and says so. `--configured` forces that.
+- With a workbench built ([choose the workbench](choose-workbench.md)), the file lists exactly its nodes and parts.
+
+Flags:
+
+| Flag | Effect |
+|---|---|
+| `--bmc` | one BMC target per node that has a BMC, each with its own address `10.148.x.y:443` |
+| `--bmc-via name` | write `bmc-<node>` instead of the address |
+| `--user bob` | another SSH user |
+| `--name lab` | another cluster name |
+| `-o -` | print instead of write |
+| `--profile std` | export a profile other than the one running |
 
 Then in the client: **import a profile**, choose `bench-profile.json`. The cluster appears with SSH, Slurm, Grafana,
 Jira and storage already filled in. A file never holds secrets, so set these three by hand (the command prints them):
@@ -29,12 +41,21 @@ Open **☰ Menu → ⇩ Export** in the top strip, tick *One BMC target per node
 
 ## What is in the file
 
-Only parts the chosen profile builds: one **cluster entry per login node**, each with its own way in (`login` direct SSH: `10.141.255.254:22`, user `alice`, private-key auth; a Teleport route: the node's name (`login2`) as the host plus a `teleport` block with the proxy `10.141.255.30:3080`, the user and `insecure` (self-signed proxy); a `both` login gets two entries, direct and `-teleport`; the first entry is a key login and carries Slurm, Grafana and Jira), Slurm (partitions from
-`sim.yaml`), Grafana (`http://10.141.255.21:3000`, dashboard `hpc-overview`, GPU datasource `prometheus`, label
-`Hostname`), Jira (`http://10.141.255.11:8080`, project `OPS`), storage (`~`) and, with `--bmc`, a target per node
-(its own `10.148.x.y:443`, user `admin`). `--loopback` writes `127.0.0.1` and the published ports instead (all BMCs then share `127.0.0.1:8443`) (a client that cannot route to the cluster network, or that insists on HTTPS for non-local Jira). It has no password, token or key path; the client signs in to Teleport itself (its **Log in** button, password and one-time code from `benchctl add invite alice`); it does not use the identity files. The shape was checked against the client's own importer. Kubernetes and BCM are not
-exported: Kubernetes is not built, and BCM is configured in the client over the SSH connection
-([by component](client-setup-by-component.md)).
+Only parts the chosen profile builds:
+
+| Entry | Content |
+|---|---|
+| one **cluster entry per login node** | its own way in. `login` direct SSH: `10.141.255.254:22`, user `alice`, private-key auth. A Teleport route: the node's name (`login2`) as the host plus a `teleport` block with the proxy `10.141.255.30:3080`, the user and `insecure` (self-signed proxy). A `both` login gets two entries, direct and `-teleport`. The first entry is a key login and carries Slurm, Grafana and Jira |
+| Slurm | partitions from `sim.yaml` |
+| Grafana | `http://10.141.255.21:3000`, dashboard `hpc-overview`, GPU datasource `prometheus`, label `Hostname` |
+| Jira | `http://10.141.255.11:8080`, project `OPS` |
+| storage | `~` |
+| with `--bmc` | a target per node (its own `10.148.x.y:443`, user `admin`) |
+
+- `--loopback` writes `127.0.0.1` and the published ports instead (all BMCs then share `127.0.0.1:8443`): for a client that cannot route to the cluster network, or that insists on HTTPS for non-local Jira.
+- It has no password, token or key path. The client signs in to Teleport itself (its **Log in** button, password and one-time code from `benchctl add invite alice`); it does not use the identity files.
+- The shape was checked against the client's own importer.
+- Kubernetes and BCM are not exported: Kubernetes is not built, and BCM is configured in the client over the SSH connection ([by component](client-setup-by-component.md)).
 
 ## One-time setting: the client's file format ID
 
@@ -59,4 +80,8 @@ the client once and copy the first two fields of its file.
 
 ## Jump host entries
 
-With the jump part on (`benchctl up --access jump`), the file has one extra entry per key-login node, named `<cluster>-<login>-jump`, for example `workbench-login-jump`. It connects to the login node's private address on port 22 through a `jumpHost` block: the jump host's address and port, the user and `private-key`. The file holds no key path and no secret, so after importing, set the same private key file (`compose/generated/secrets/ssh/id_ed25519`) on the entry and on its jump host. Teleport entries get none. With `--loopback` the jump host is `127.0.0.1:2220`.
+With the jump part on (`benchctl up --access jump`), the file has one extra entry per key-login node, named `<cluster>-<login>-jump`, for example `workbench-login-jump`.
+- It connects to the login node's private address on port 22 through a `jumpHost` block: the jump host's address and port, the user and `private-key`.
+- The file holds no key path and no secret. After importing, set the same private key file (`compose/generated/secrets/ssh/id_ed25519`) on the entry and on its jump host.
+- Teleport entries get none.
+- With `--loopback`, the jump host is `127.0.0.1:2220`.

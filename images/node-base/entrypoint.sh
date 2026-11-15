@@ -9,6 +9,8 @@ done
 # slurmd runs the health check, prolog and epilog with a bare environment, so what nhc must expect of this node
 # (GPU count, InfiniBand ports) is written to a file it reads.
 printf 'WORKBENCH_GPUS=%s\nWORKBENCH_IB=%s\n' "${WORKBENCH_GPUS:-0}" "${WORKBENCH_IB:-0}" > /etc/workbench-node.env
+# a node whose card is real (rgpu001) is not in the farm: nhc reads its own exporter instead (issue 437)
+[ -n "${WORKBENCH_NHC_URL:-}" ] && printf 'NHC_METRICS_URL=%s\n' "$WORKBENCH_NHC_URL" >> /etc/workbench-node.env
 # Simulated users (name:uid ...) must resolve identically on every Slurm container.
 for u in $WORKBENCH_USERS; do
   id "${u%%:*}" >/dev/null 2>&1 || useradd -m -u "${u##*:}" "${u%%:*}" || [ -d "/home/${u%%:*}" ]  # a shared /home already holds the directory
@@ -43,5 +45,7 @@ if [ "$WORKBENCH_SSHD" = 1 ] && [ -f /run/workbench/ssh/ssh_host_node_ed25519_ke
   install -m 644 /run/workbench/ssh/authorized_keys /etc/ssh/authorized_keys
   /usr/local/sbin/teleport-ssh
   /usr/sbin/sshd -e
+  # the controller is the BCM head node (issue 416): it keeps the fake CMDaemon events log too (issue 714, mounted by compose)
+  [ "$WORKBENCH_CONTROLLER" = 1 ] && [ -r /usr/local/bin/events-log ] && python3 /usr/local/bin/events-log &
 fi
 exec "$@"

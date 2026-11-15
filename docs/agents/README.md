@@ -33,6 +33,14 @@ cp docs/agents/skill/SKILL.md ~/.claude/skills/workbench/SKILL.md
 
 Skills live in your home directory, not in this repository (`.claude/` is not committed).
 
+### Keeping the skill current (for workbench's developers)
+
+- The front-matter `description` says *when* to use the tool (the symptoms and the verbs), not what it is.
+- Keep the skill short: it must stay within 600 tokens (`tests/test_agents_doc.py` checks this). It links to `AGENTS.md`, the recipes and the schemas instead of copying them.
+- Anything that can drift, such as the verb list or the endpoint table, is generated into `AGENTS.md`. Do the same, not a copy, for anything new.
+- Change the numbered steps only when the *workflow* changes. A new verb, part, scenario or error code belongs in a recipe or in `AGENTS.md`.
+- After a contract change, run the steps from a clean copy of `main` and edit the skill only if a command in it stopped working.
+
 ## Good to know
 
 > [!TIP]

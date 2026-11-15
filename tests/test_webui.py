@@ -15,6 +15,7 @@ pytest.importorskip("uvicorn")
 import uvicorn
 from webui_src import page_source
 
+from benchctl import compose
 from governor import control
 from webui import __main__ as launcher
 from webui.app import create_app, governor_status
@@ -284,6 +285,18 @@ def test_page_and_static_files_carry_a_strict_csp_and_the_page_has_no_inline_sty
     assert not re.search(r"setAttribute\('style'", src)
 
 
+def test_help_pages_carry_the_same_csp_and_have_no_inline_style(ui):
+    """#525: /help links /static/help.css instead of an inline <style>, so the strict policy covers it."""
+    for path in ("/help/search?q=slurm", "/help/manual/README", "/static/help.css"):
+        r = urllib.request.Request(ui + path, headers={"Authorization": f"Bearer {TOKEN}"})
+        with urllib.request.urlopen(r, timeout=5) as resp:
+            csp, body = resp.headers["Content-Security-Policy"], resp.read().decode()
+        assert csp and "style-src 'self'" in csp and "unsafe-inline" not in csp, path
+        assert not re.search(r"<style\b|\sstyle=\"|\son[a-z]+=\"|<script\b", body), path
+        if path.startswith("/help"):
+            assert '<link rel="stylesheet" href="/static/help.css">' in body
+
+
 def test_every_module_the_page_imports_is_served_and_nothing_else_is(ui):
     """Walk the import graph from main.js over HTTP: every file answers, so no module is missing from static/js."""
     seen, todo = set(), ["main.js"]
@@ -338,6 +351,8 @@ def test_plan_endpoint_estimates_without_side_effects(ui):
     assert code == 200 and "2 cpu, 4 gpu" in data["text"] and data["total_mb"] > 700
     assert data["command"].startswith("benchctl up --cpu-nodes 2 --gpu-nodes 4") and "--without bmc" in data["command"]
     assert data["command"].endswith("--app-mb 0") and "app under test" not in data["text"]  # the app already runs: no reserve, so Apply can show
+    assert data["budget_mb"] == data["available_mb"] - data["floor_mb"] and data["headroom_mb"] == data["budget_mb"] - data["need_mb"]
+    assert data["breakdown"][0]["name"] == "6 nodes" and sum(r["cap_mb"] or 0 for r in data["breakdown"]) == data["total_mb"]  # the read-only calculator rows (W-7)
     assert req(ui, "/api/plan?cpu_nodes=999")[0] == 422 and req(ui, "/api/plan?cpu_nodes=x")[0] == 422
     assert req(ui, "/api/plan", auth=False)[0] == 401
     assert b'id="plandlg"' in served_page(ui) and b"loadPlan" in served_page(ui)
@@ -489,7 +504,7 @@ def test_settings_lists_the_nodes_for_the_bmc_picker_and_the_sheet_sends_the_cho
 def test_plan_with_a_bmc_selection_costs_less_and_names_the_flag(ui):
     full = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8&parts=bmc")[1])
     one = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8&parts=bmc&bmc_nodes=cn001")[1])
-    assert full["total_mb"] - one["total_mb"] == 2 * 32 and "--bmc-nodes cn001" in one["command"]
+    assert full["total_mb"] - one["total_mb"] == 2 * compose.BMC_FORWARDER_MB and "--bmc-nodes cn001" in one["command"]
     assert req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8&parts=bmc&bmc_nodes=..%2Fx")[0] == 422
 
 
@@ -770,3 +785,89 @@ def test_html_text_sizes_are_rem_and_only_the_svg_diagrams_keep_px():
                 bad.append(f"{css.name}: {sel.strip()[:60]}")
     assert not bad, bad
     assert re.search(r"\.small\s*\{\s*font-size:\s*0\.875rem", (ROOT / "webui/static/app.css").read_text())  # 14 px floor for running text
+
+
+def test_plan_budget_goes_negative_when_over_and_adds_no_write_path(ui, monkeypatch):
+    """W-7: the sheet's calculator is read-only; over budget shows as a negative headroom, blocking stays with the governor."""
+    monkeypatch.setattr("webui.app.checks.mem_available", lambda: 1 * 2**30)
+    data = json.loads(req(ui, "/api/plan?cpu_nodes=2&gpu_nodes=1&gpus_per_node=8")[1])
+    assert data["fits"] is False and data["headroom_mb"] < 0 and data["budget_mb"] == 0
+    assert req(ui, "/api/plan", "POST", headers={"X-Requested-With": "workbench"})[0] == 405
+    assert b"pl-over" in served_page(ui) and b"budgetView" in served_page(ui)
+
+
+def test_flat_is_the_default_view_everywhere():
+    """#525: no saved choice means flat on a desktop too; only a remembered 2.5D changes it."""
+    src = page_source()
+    assert "setView(viewPref === 'iso', false)" in src
+    assert "max-width: 640px)').matches, false)" not in src
+
+
+def test_the_circuit_is_the_default_and_the_classic_diagram_lasts_one_visit():
+    """#730: a new visit opens the circuit; choosing the classic diagram is kept in sessionStorage, never localStorage."""
+    src = page_source()
+    assert "S.circuit = sessionStorage.getItem('workbench-circuit') !== '0'" in src
+    assert "sessionStorage.setItem('workbench-circuit'" in src and "localStorage.setItem('workbench-circuit'" not in src
+    assert "localStorage.removeItem('workbench-circuit')" in src  # an older saved choice is cleared
+
+
+def test_node_tickets_search_the_mock_by_node_label():
+    import yaml
+
+    from webui.cluster import Cluster
+    seen = []
+
+    def fetch(url, *a):
+        seen.append(url)
+        return {"issues": [{"key": "OPS-3", "fields": {"summary": "cn001: node down", "status": {"name": "Open"}, "priority": {"name": "High"}}}]}
+    c = Cluster(yaml.safe_load((ROOT / "sim.yaml").read_text()), fetch=fetch)
+    assert c.tickets("cn001") == [{"key": "OPS-3", "summary": "cn001: node down", "status": "Open", "priority": "High"}]
+    assert "labels%20%3D%20%22node-cn001%22" in seen[0]
+    with pytest.raises(KeyError):
+        c.tickets('x" OR 1=1')  # only known node names reach the query
+    assert Cluster(c.sim, fetch=no_stack).tickets("cn001") is None
+
+
+def test_node_tickets_endpoint_answers_null_without_the_mock(ui):
+    code, body = req(ui, "/api/nodes/cn001/tickets")
+    assert code == 200 and json.loads(body) == {"source": "jira-mock", "tickets": None}
+    assert req(ui, "/api/nodes/zzz/tickets")[0] == 404 and req(ui, "/api/nodes/cn001/tickets", auth=False)[0] == 401
+
+
+def test_ticket_bot_sheet_talks_to_the_governor_only(tmp_path):
+    asked = []
+
+    def handle(cmd, r):
+        if cmd == "ticket-bot-get":
+            return {"ok": True, "settings": {"every": 30}}
+        if cmd == "ticket-bot-set":
+            asked.append(r)
+            return {"ok": True}
+        return STATUS
+
+    sock = str(tmp_path / "g.sock")
+    gov = control.serve(sock, handle, lambda: {"compute"})
+    port = free_port()
+    server = uvicorn.Server(uvicorn.Config(create_app(TOKEN, sock, tmp_path, ROOT / "sim.yaml", fetch=no_stack, poster=lambda u, b: {}),
+                                           host="127.0.0.1", port=port, log_level="error"))
+    threading.Thread(target=server.run, daemon=True).start()
+    while not server.started:
+        time.sleep(0.02)
+    base, h = f"http://127.0.0.1:{port}", {"X-Requested-With": "workbench"}
+
+    def post(data):
+        r = urllib.request.Request(base + "/api/ticket-bot", method="POST", data=data,
+                                   headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json", **h})
+        try:
+            with urllib.request.urlopen(r, timeout=5) as resp:
+                return resp.status
+        except HTTPError as e:
+            return e.code
+    try:
+        assert json.loads(req(base, "/api/ticket-bot")[1]) == {"ok": True, "settings": {"every": 30}}
+        assert post(b'{"every": 10, "junk": 1}') == 200
+        assert asked == [{"cmd": "ticket-bot-set", "every": 10}]               # the governor validated; unknown keys never reach it
+        assert post(b"[1]") == 422 and post(b'{"every": 1}') == 409          # out of range: refused by the governor
+    finally:
+        server.should_exit = True
+        gov.shutdown()

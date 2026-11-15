@@ -19,6 +19,9 @@ SPEC C-12 asked for `tc netem` on the Docker bridge networks and named Toxiproxy
 - A user without the root service loses only in-cluster link faults.
 - SPEC C-12 follows this text; the netem verb is tracked in issue 478.
 
+## Addendum: order and scope (issue 683)
+Decided 2026-11-14: netem is built last, only through the optional root service, for the CLI and scenarios, never the page.
+
 ## Addendum (issue 478): the netem verb as built
 
 Choices the ADR left open, made conservatively:
@@ -31,4 +34,4 @@ Choices the ADR left open, made conservatively:
 - **Root only.** The governor builds the netem runner only when it is root, not `--user-mode` and not `--dry-run`; otherwise every netem request answers one message naming `sudo ./scripts/install-governor.sh`.
 - **Never the page.** Governor commands `netem-set` and `netem-clear`, CLI `benchctl set|clear netem`, scenario target `netem` (a host-CLI target the page skips). The page has no button and the web UI module does not call them (W-3).
 
-See [network faults](../guides/network-faults.md). The live test is `tests/real/test_netem_root.py`, run as root; it was not run when this was written.
+See [network faults](../guides/network-faults.md). The live test is `tests/real/test_netem_root.py`, run as root with `sudo ./scripts/real-test-root.sh`; the owner ran it on 2026-11-15 and all its tests passed.

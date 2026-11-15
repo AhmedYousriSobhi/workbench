@@ -232,3 +232,15 @@ def test_tls_state_can_be_read_back():
         assert call(f"{base}/sim/tls")["expired"] is False
     finally:
         srv.shutdown()
+
+
+def test_summary_answers_every_node_in_one_call_and_follows_injection(server):
+    base, nodes = server
+    s = call(f"{base}/sim/summary")
+    assert set(s) == set(nodes) and all(v["power"] == "On" and v["fans_failed"] == 0 and v["temp"] < 90 for v in s.values())
+    n = next(iter(nodes))
+    call(f"{base}/sim/inject", {"node": n, "temp": 93, "fan_fail": 2})
+    assert call(f"{base}/sim/summary")[n] == {"power": "On", "temp": 93.0, "fans_failed": 2}
+    call(f"{base}/sim/inject", {"node": n, "power": "Off"})
+    assert call(f"{base}/sim/summary")[n]["power"] == "Off" and call(f"{base}/sim/summary")[n]["temp"] == 18.0
+    assert call(f"{base}/sim/stats")["requests"] == 0  # /sim/ is not client traffic

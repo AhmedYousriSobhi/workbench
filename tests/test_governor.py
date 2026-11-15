@@ -679,3 +679,25 @@ def test_netem_is_root_service_only_bounded_and_l0_l1(tmp_path):
     assert "L0-L1" in g.handle("netem-set", {"node": "cn001", "delay_ms": 10, "ttl_s": 5})["error"] and not calls
     assert g.handle("netem-clear", {})["ok"] is True  # clearing is allowed under pressure
     assert g.handle("status", {})["netem"] == []
+
+
+def test_ticket_bot_verbs_validate_and_run(tmp_path):
+    import json as _json
+    import threading
+
+    from governor import control
+    g, _ = _calm_gov(tmp_path)
+    assert g.handle("ticket-bot-get", {})["ok"] is False                       # no workdir
+    g.reader = lambda argv: '{"every": 30}'
+    assert g.handle("ticket-bot-get", {}) == {"ok": True, "settings": {"every": 30}}
+    g.reader = lambda argv: "not json"
+    assert "failed" in g.handle("ticket-bot-get", {})["error"]
+
+    def ask(req):
+        return control.dispatch(_json.dumps(req).encode(), g.handle, lambda: set())
+    for bad in ({}, {"every": 5}, {"every": "10"}, {"ignore": 2}, {"reopen": True}, {"every": 10, "resolve": 1e9}):
+        assert ask({"cmd": "ticket-bot-set", **bad})["ok"] is False, bad
+    calls, done = [], threading.Event()
+    g.effector = lambda a: calls.append(a) or done.set() or 0
+    assert ask({"cmd": "ticket-bot-set", "every": 10, "resolve": 30, "ignore": 0.5})["ok"] is True
+    assert done.wait(5) and calls == [["set", "ticket-bot", "--every", "10", "--resolve", "30", "--ignore", "0.5"]]

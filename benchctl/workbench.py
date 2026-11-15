@@ -293,6 +293,20 @@ def verdict(est: dict, available_mb: int, floor_mb: int = FLOOR_MB, spec: Spec |
                    f"(floor {floor_mb} MB). Try: {'; '.join(hints[:3]) or 'free memory first'}")
 
 
+def breakdown(est: dict) -> list[dict]:
+    """The projected memory as rows {name, expected_mb, cap_mb} (cap_mb None where there is none): the read-only calculator the page
+    shows (W-7). Same numbers as `render`; nothing here starts or changes anything."""
+    rows = [{"name": f"{est['node_count']} nodes", "expected_mb": est["expected_nodes_mb"], "cap_mb": est["nodes_mb"]}]
+    rows += [{"name": n, "expected_mb": est["expected_services_mb"][n], "cap_mb": mb} for n, mb in sorted(est["services_mb"].items())]
+    rows.append({"name": "observability", "expected_mb": est["expected_observability_mb"], "cap_mb": est["observability_mb"]})
+    if est.get("running_mb"):
+        rows.append({"name": "already running", "expected_mb": -est["running_mb"], "cap_mb": None})
+    rows.append({"name": "docker overhead", "expected_mb": est.get("overhead_mb", 0), "cap_mb": None})
+    if est["app_mb"]:
+        rows.append({"name": "app under test", "expected_mb": est["app_mb"], "cap_mb": None})
+    return rows
+
+
 def render(spec: Spec, est: dict) -> str:
     rows = [f"Workbench:   {spec.name}",
             f"Nodes:       {spec.cpu_nodes} cpu, {spec.gpu_nodes} gpu x {spec.gpus_per_node} GPUs",
