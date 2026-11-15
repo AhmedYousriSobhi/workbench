@@ -133,13 +133,19 @@ The owner delegated the five open questions to the implementer, this once (issue
 2. **Circuit view only.** The Circuit view is the default and keeps stable part ids (`data-part`, `data-ent`). The 2.5D classic view keeps its diamonds and gets no badges until it is rebuilt (ADR 0039). In the classic view the Run tab still lists the steps and says that badges are drawn on the Circuit view.
 3. **CLI runs: yes, in phase 4, best effort.** About half the planned steps need the host CLI, so without this they never reach the diagram. The CLI posts step events with the page token when the page answers, and never waits for it or fails because of it.
 4. **The last run does not survive a page restart.** It stays in the page process's memory only, as the run state does today. No new file in `compose/generated`: nothing to clean up, and nothing stale after a restart. The Markdown and JSON export is the durable record.
-5. **On Play the page stays where the user is.** Moving the view on Play is an unexpected change of context (WCAG 3.2.2). The run panel offers "Watch on the diagram", and the run chip in the top strip opens the Topology tab with the Run tab shown.
+5. **On Play the page stays where the user is.** Moving the view on Play is an unexpected change of context (WCAG 3.2.2). The run panel offers **Watch on the diagram**, which opens the Topology tab on the Circuit view with the Run tab shown. The run chip keeps opening Test run.
 
 ### Step ids (phase 1)
 
-`scenario.touches(step)` names parts by the ids the Circuit view draws: node names, service ids (`bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira-mock`, `jira-real`, `k8s-api`, `dcgm-exporter`), and the part ids `slurmctld`, `slurmrestd`, `login` and `teleport`. The page finds a part by `data-ent`, then by `data-part`; a node in a large pool falls back to its group square.
+`scenario.touches(step)` names parts by the ids the Circuit view draws: node names, service ids (`bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira-mock`, `jira-real`, `k8s-api`, `dcgm-exporter`), and the part ids `slurmctld`, `slurmdbd`, `slurmrestd`, `login` and `teleport`. The page finds a part by `data-ent`, then by `data-part`; a node in a large pool falls back to its group square.
 
 A step that names no part carries a reason in words. `tests/test_scenario_touches.py` keeps a list of such steps that may only shrink.
+
+### As built (phase 1, issue 808)
+
+- **The rail sits under the diagram.** The Circuit view gives the diagram the full width and puts the inspector below it. So a strip over the diagram carries the chosen step in words, with Previous, Steps and Next. On a phone the same strip is the bottom sheet.
+- **One more state.** A step whose expansions are only partly applied (a temperature ramp running beside later steps) is ◐ "in progress".
+- **Take off the diagram** hides a finished run's badges; the run stays in the page's memory (decision 4).
 
 ## References
 

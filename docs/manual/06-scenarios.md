@@ -38,6 +38,7 @@ The command exits 1 when a step errors or an `expect` line does not hold.
 - Steps the caller cannot run are reported as **skipped**, not failed.
 - From the web page ([chapter 5](05-web-page.md)) the `slurm` steps go through the governor.
 - Tick **Slurm trace** there for the same trace (see the [resilience guide](../guides/slurm-resilience.md)).
+- On the page, **Watch on the diagram** puts each step's number on the parts it touches ([a scenario run on the diagram](05-web-page.md#a-scenario-run-on-the-diagram)).
 
 ## The scenarios shipped
 
