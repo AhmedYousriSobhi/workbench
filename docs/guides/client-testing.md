@@ -268,6 +268,16 @@ It acts about once every `--ticket-every` seconds (default 120, 10 to 3600) and,
 benchctl load on --tickets --ticket-every 30 --ticket-resolve 120
 ```
 
+**Change it while it runs** (no restart; the bot re-reads its settings every cycle, so a change applies within one gap):
+
+```
+benchctl set ticket-bot --every 10 --resolve 30      # a fast test
+benchctl set ticket-bot --ignore 0.5 --reopen 0.3    # half stay unassigned, 30% reopen
+benchctl get ticket-bot                              # what is in force
+```
+
+Ranges: `--every` 10 to 3600 s, `--resolve` 10 to 86400 s, `--ignore` and `--reopen` 0 to 1. Only the values you give change. A value out of range is refused; a damaged settings file keeps the last good values. `benchctl load off` stops the bot, and the next `load on --tickets` starts from its own options again.
+
 A job pinned to a node that is down stays pending (*ReqNodeNotAvail*) until the node is back or you `scancel` it.
 
 ## Taking a node down so Slurm notices

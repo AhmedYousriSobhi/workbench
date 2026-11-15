@@ -104,3 +104,26 @@ def tickets_on(every: float = 120, resolve_after: float = 600, day: float = 0, s
 
 def tickets_off() -> list[str]:
     return ["docker", "exec", LOGIN, "pkill", "-f", TICKET_PATH]
+
+
+TICKET_SETTINGS = "/tmp/ticketbot.json"  # the bot reads it every cycle (images/login/ticket_bot.py, issue 728)
+TICKET_KEYS = {"every": (10, 3600), "resolve_after": (10, 86400), "ignore": (0, 1), "reopen": (0, 1)}
+
+
+def ticket_settings_set(**changes: float | None) -> list[str]:
+    """The command that merges the given settings into the running bot's file; a value of None is left alone."""
+    import json
+    given = {k: v for k, v in changes.items() if v is not None}
+    if not given:
+        raise WorkloadError("give at least one of --every, --resolve, --ignore, --reopen")
+    for k, v in given.items():
+        lo, hi = TICKET_KEYS[k]
+        if not lo <= v <= hi:
+            raise WorkloadError(f"{k.replace('_', '-')} must be {lo:g} to {hi:g}")
+    script = ("import json,sys;p=sys.argv[1];d={}\ntry: d=json.load(open(p))\nexcept Exception: pass\n"
+              "d.update(json.loads(sys.argv[2]));json.dump(d,open(p,'w'));print(json.dumps(d))")
+    return ["docker", "exec", LOGIN, "python3", "-c", script, TICKET_SETTINGS, json.dumps(given)]
+
+
+def ticket_settings_get() -> list[str]:
+    return ["docker", "exec", LOGIN, "sh", "-c", f"cat {TICKET_SETTINGS} 2>/dev/null || echo '{{}}'"]
