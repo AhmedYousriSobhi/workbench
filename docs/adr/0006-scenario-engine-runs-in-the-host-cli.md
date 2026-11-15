@@ -47,7 +47,7 @@ Decided 2026-11-14. Three changes to the scenario language, all inside `benchctl
 - **Selectors** (`benchctl/selectors.py`): a scenario names nodes as `first gpu node`, `second cpu node`, `any 2 gpu nodes`, `all gpu nodes` (`gpu`, `cpu`,
   `k8s gpu`, `k8s cpu`), alone in a list or in braces inside a text. They are resolved against `sim.yaml` when the CLI or the page loads the scenario
   (`scenario.load(name, sim=...)`); "any N" is the first N, so runs repeat. Too few nodes of a kind is an `invalid:` error from `--dry-run`. A test fails
-  when a shipped scenario writes a node name in `steps` or `expect`; free text such as `description` may.
+  when a shipped scenario writes a node name in `steps` or `expect`; free text such as `description` may. A selector is resolved only as a whole value or in braces; a bare phrase inside a longer string (a Jira `jql`) is sent literally, so write `labels = {second cpu node}` (resolving free text would turn prose into node names); `test_no_selector_phrase_survives_resolution_in_any_shipped_scenario` fails when one remains after resolution on the default, 2-cpu and 0-gpu clusters (issue 772).
 - **Fault model** (`benchctl/faultmodel.py`): a `fault` step (`inject: NAME` or `clear: NAME`, `nodes`) expands in `plan()` into the physical effects of one
   fault (exporter and DCGM, Redfish event log, BMC), so a scenario injects the root cause and asserts what the cluster does (NHC drains, `node_watch` and the
   engine's fault side effects file the ticket) instead of scripting the reaction. The expansion yields ordinary steps, so the timeline, the page preview and
