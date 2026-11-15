@@ -41,7 +41,9 @@ def test_apply_plan_shrinks_then_grows_the_running_workbench(cluster):
     assert ask(cluster, plan)["started"]
     assert wait_for(lambda: {"cn001", "cn002", "gpu001"} <= services() and not ({"cn003", "cn004", "gpu002"} & services()), timeout=300)
     assert wait_for(lambda: slurm_nodes() == {"cn001", "cn002", "gpu001"}, timeout=120), slurm_nodes()
-    assert any("apply-plan" in line and "done" in line for line in ask(cluster, {"cmd": "status"})["audit"])
+    # the governor writes `done` when the background benchctl command has exited, which can be a moment after the nodes change
+    assert wait_for(lambda: any("apply-plan" in line and "done" in line for line in ask(cluster, {"cmd": "status"})["audit"]), timeout=120), \
+        ask(cluster, {"cmd": "status"})["audit"][-8:]
     assert ask(cluster, {**plan, "cpu_nodes": 3, "gpu_nodes": 2})["started"]
     assert wait_for(lambda: {"cn003", "gpu002"} <= services(), timeout=300)
     # let the second `benchctl up` finish (it saves the spec last) before the fixture stops the governor mid-run
