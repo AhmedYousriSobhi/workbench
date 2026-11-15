@@ -219,8 +219,9 @@ def test_prometheus_scrapes_the_control_plane_with_the_metrics_only_token(cluste
     from helpers import prom_up, wait_for
     jobs = ["k8s-apiserver", "k8s-etcd", "k8s-scheduler", "k8s-controller-manager", "kwok-controller"]
     assert wait_for(lambda: all(set(prom_up(j).values()) == {"1"} for j in jobs), timeout=120), {j: prom_up(j) for j in jobs}
-    got = (ROOT / "compose/generated/secrets/prometheus").iterdir()
-    assert sorted(p.name for p in got) == ["k8s-ca.crt", "k8s-metrics.token"]  # no admin or viewer token reaches Prometheus
+    names = sorted(p.name for p in (ROOT / "compose/generated/secrets/prometheus").iterdir())
+    assert [n for n in names if n.startswith("k8s-")] == ["k8s-ca.crt", "k8s-metrics.token"]  # the Kubernetes files, nothing more (other parts add their own metrics tokens, e.g. the object store)
+    assert not [n for n in names if "admin" in n or "viewer" in n], names  # no admin or viewer token reaches Prometheus
 
 
 def test_the_real_scheduler_allocates_a_dra_claim_to_a_device_whose_uuid_is_a_dcgm_series(cluster):

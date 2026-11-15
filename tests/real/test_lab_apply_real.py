@@ -1,13 +1,13 @@
 """Config lab apply and remove on the live stack (issue 553): the real slurmctld shows the applied keys, a restart-class key restarts it,
-a live key reconfigures it, and `remove` returns `scontrol show config` to its pre-lab value. Written against the shared stack; the lab
-uses a generated slurm.conf and one rule file only (no accounting, Kubernetes or Teleport), and removes itself at the end."""
+a live key reconfigures it, and `remove` returns `scontrol show config` to its pre-lab value. Own cold start (ISOLATED_MODULES, like test_lab_real): a workbench selection with no optional parts (Prometheus always runs): no
+accounting, Kubernetes or Teleport (the lab here is a generated slurm.conf and one rule file); it removes itself and stops the stack at the end.
+Not run by the agent: `./scripts/verify.sh --unit lab_apply --clean`."""
 import os
 import subprocess
 from pathlib import Path
 
 import pytest
 import yaml
-from helpers import bring_up, release
 
 from benchctl import lab, lab_apply, stack, workbench
 
@@ -24,16 +24,22 @@ def show_config() -> dict[str, str]:
 @pytest.fixture(scope="module")
 def stack_up():
     os.chdir(ROOT)
-    sim = yaml.safe_load((ROOT / "sim.yaml").read_text())
-    bring_up(sim, "min")
-    yield sim
+    sim, prof = workbench.effective(yaml.safe_load((ROOT / "sim.yaml").read_text()),
+                                    workbench.Spec(parts=[], cpu_nodes=2, gpu_nodes=0))
+    said: list[str] = []
+    if not stack.up(sim, "workbench", say=said.append, available=64 * 1024**3, prof=prof):
+        why = " | ".join(said[-4:])
+        raise AssertionError(("ENVIRONMENT, not a code defect: " if "REFUSED by governor" in why else "") + f"stack.up failed: {why}")
+    assert {"slurmctld", "prometheus"} <= workbench.running_services(), workbench.running_services()
+    yield sim, prof
     if lab_apply.read_marker():
         lab_apply.remove(NAME, lab_apply.Env(sim=sim, running=lambda s: s in workbench.running_services()))
-    release()
+    stack.down(say=lambda m: None)
+    workbench.forget()
 
 
 def test_apply_candidate_then_remove_restores_the_pre_lab_config(stack_up, tmp_path):
-    sim = stack_up
+    sim, prof = stack_up
     export = tmp_path / "export"
     (export / "rules").mkdir(parents=True)
     (export / "slurm.conf").write_text("PriorityWeightQOS=4321\nPreemptMode=REQUEUE\nPreemptType=preempt/qos\nSchedulerParameters=bf_interval=45\n")
@@ -46,7 +52,7 @@ def test_apply_candidate_then_remove_restores_the_pre_lab_config(stack_up, tmp_p
     assert now["PriorityWeightQOS"] == "4321" and now["PreemptMode"].upper() == "REQUEUE"
     assert any("prometheus reloaded" in line for line in res["lines"])
     assert (Path("compose/generated/slurm/slurm.conf").read_text().count("# lab-was") >= 1)
-    stack.up(sim, "min", say=lambda m: None, available=64 * 2**30)  # `up` re-applies the marker and restarts nothing it need not
+    stack.up(sim, "workbench", say=lambda m: None, available=64 * 2**30, prof=prof)  # `up` re-applies the marker and restarts nothing it need not
     assert show_config()["PriorityWeightQOS"] == "4321"
     lab_apply.remove(NAME, env)
     assert lab_apply.comparable(show_config()) == before
