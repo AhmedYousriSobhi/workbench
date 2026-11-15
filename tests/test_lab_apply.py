@@ -169,7 +169,7 @@ def world(tmp_path):
     lab.import_lab("prod-a", export, root=root)
     c = Cluster(tmp_path)
     env = lab_apply.Env(root=root, slurm_dir=c.slurm_dir, prom_dir=tmp_path / "gen", sim={}, runner=c.run, running=lambda s: s in c.services,
-                        kubectl=c.kubectl, http_get=c.http, restart_ctld=c.restart, sleep=lambda s: None, say=lambda s: None)
+                        kubectl=c.kubectl, http_get=c.http, rules_check=lambda paths: [], restart_ctld=c.restart, sleep=lambda s: None, say=lambda s: None)
     (c.slurm_dir.parent / "gen").mkdir(exist_ok=True)
     (root / "prod-a" / "baseline" / "sacctmgr.dump").write_text(PRE_DUMP.replace("workbench", "prodsim") + "Account - 'ml':Description='ml':Organization='sci':Fairshare=20\nParent - 'ml'\nUser - 'u2':DefaultAccount='ml':Fairshare=1\n")
     conf = root / "prod-a" / "baseline" / "slurm.conf"
@@ -372,6 +372,41 @@ def test_rules_are_checked_then_loaded_and_the_reload_is_confirmed(world):
     assert any("kill -s HUP prometheus" in call for call in c.calls)
 
 
+def test_promtool_check_uses_the_validation_executor_and_reports_errors(tmp_path):
+    f = tmp_path / "r.yml"
+    f.write_text("groups: []\n")
+    calls = []
+
+    def ok(argv, stdin=None, timeout=60):
+        calls.append(argv)
+        return 0, "SUCCESS"
+
+    assert lab_apply.promtool_check([f], ok) == [] and lab_apply.promtool_check([], ok) == []
+    argv = calls[0]
+    assert argv[:3] == ["docker", "run", "--rm"] and "promtool" in argv and argv[-3:] == ["check", "rules", "/rules/r.yml"] and f"{tmp_path.resolve()}:/rules:ro" in argv
+    assert "--network" in argv and argv[argv.index("--network") + 1] == "none"
+    bad = lambda argv, stdin=None, timeout=60: (1, "Checking /rules/r.yml\n  FAILED:\n/rules/r.yml: 1:1: error: bad expr\n")
+    assert lab_apply.promtool_check([f], bad) == ["FAILED:", "r.yml: 1:1: error: bad expr"]
+    assert lab_apply.promtool_check([f], lambda argv, stdin=None, timeout=60: (127, "")) == ["promtool exit 127"]
+
+
+def test_accounting_storage_type_is_lab_owned_never_applied_and_shown_so(world):
+    from benchctl import lab_slurm
+    assert lab_slurm.classify("AccountingStorageType") == "lab-owned"
+    env, c, root = world
+    conf = root / "prod-a" / "baseline" / "slurm.conf"
+    assert "AccountingStorageType=accounting_storage/slurmdbd" in conf.read_text()
+    res = lab_apply.apply("prod-a", "baseline", env)
+    m = lab_apply.read_marker(root)
+    assert "AccountingStorageType" not in m["keys"] and "AccountingStorageType" in m["lab_owned"]
+    assert "AccountingStorageType" not in (c.slurm_dir / "slurm.conf").read_text()
+    assert "slurmctld restarts: PreemptType" in "\n".join(res["lines"])
+    lab_apply.remove("prod-a", env)
+    edit_candidate(root, "AccountingStorageType=accounting_storage/slurmdbd", "AccountingStorageType=accounting_storage/none")
+    notes = {e["key"]: e["note"] for e in lab_diff.diff("prod-a", root)}
+    assert notes["AccountingStorageType"].startswith("not tested: lab-owned") and lab_diff.restart_keys(lab_diff.diff("prod-a", root)) == []
+
+
 def test_a_failed_prometheus_reload_is_reported(world):
     env, c, _root = world
     c.reload_ok = "0"
@@ -545,10 +580,10 @@ def test_cli_commands_read_the_lab_and_refuse_bad_input(world, monkeypatch, tmp_
     assert run(cli.app, ["remove", "lab", "prod-a", "--execute"]).exit_code == 0
 
 
-def _gov(tmp_path, labs=None, effector=None):
+def _gov(tmp_path, lab_exists=None, lab_status=None, effector=None):
     f = tmp_path / "s.json"
     f.write_text(json.dumps({"mem_available": 4 * GB, "psi_some": 0, "psi_full": 0}))
-    g = Governor(FileSampler(f), Ladder(), [], lambda a: None, False, effector=effector, labs=labs)
+    g = Governor(FileSampler(f), Ladder(), [], lambda a: None, False, effector=effector, lab_exists=lab_exists, lab_status=lab_status)
     g.step(0)
     return g, f
 
@@ -558,13 +593,13 @@ def d(g, req):
 
 
 def test_governor_rejects_bad_lab_commands_and_names(tmp_path):
-    g, _ = _gov(tmp_path, labs=lambda n: {"exists": n == "prod-a"})
+    g, _ = _gov(tmp_path, lab_exists=lambda n: n == "prod-a")
     for bad in ({"cmd": "lab-apply", "name": "../x", "side": "baseline"}, {"cmd": "lab-apply", "name": "UP", "side": "baseline"}, {"cmd": "lab-apply", "name": "a" * 42, "side": "baseline"},
-                {"cmd": "lab-apply", "name": "prod-a", "side": "both"}, {"cmd": "lab-apply", "name": "prod-a"}, {"cmd": "lab-restore", "name": 5}, {"cmd": "lab-restore"}):
+                {"cmd": "lab-apply", "name": "prod-a", "side": "both"}, {"cmd": "lab-restore", "name": 5}, {"cmd": "lab-restore"}):
         r = d(g, bad)
         assert r["ok"] is False and r["error"].startswith(bad["cmd"] + " needs name"), bad
     assert d(g, {"cmd": "lab-run", "name": "prod-a"})["error"].startswith("unknown command")
-    assert d(g, {"cmd": "lab-restore", "name": "gone"})["error"].startswith("no lab gone: import it first")
+    assert "not on disk" in d(g, {"cmd": "lab-restore", "name": "gone"})["error"] or "no lab gone on disk" in d(g, {"cmd": "lab-restore", "name": "gone"})["error"]
 
 
 def test_governor_runs_lab_apply_and_restore_as_benchctl_changes(tmp_path):
@@ -575,7 +610,7 @@ def test_governor_runs_lab_apply_and_restore_as_benchctl_changes(tmp_path):
         done.set()
         return 0
 
-    g, _ = _gov(tmp_path, labs=lambda n: {"exists": True} if n else {"name": "prod-a", "side": "candidate", "time_scale": 1.0, "state": "applied"}, effector=effector)
+    g, _ = _gov(tmp_path, lab_exists=lambda n: True, lab_status=lambda: {"name": "prod-a", "side": "candidate", "time_scale": 1.0, "state": "applied"}, effector=effector)
     r = d(g, {"cmd": "lab-apply", "name": "prod-a", "side": "candidate"})
     assert r["ok"] and r["started"] and done.wait(5)
     assert seen == [["apply", "lab", "prod-a", "--side", "candidate", "--execute"]]
@@ -592,7 +627,7 @@ def test_governor_runs_lab_apply_and_restore_as_benchctl_changes(tmp_path):
 
 
 def test_governor_refuses_lab_changes_at_l2_with_one_message_and_without_workdir(tmp_path):
-    g, f = _gov(tmp_path, labs=lambda n: {"exists": True})
+    g, f = _gov(tmp_path, lab_exists=lambda n: True)
     f.write_text(json.dumps({"mem_available": int(0.3 * GB), "psi_some": 0, "psi_full": 0}))
     for t in range(1, 40):
         g.step(float(t * 10))
@@ -602,5 +637,5 @@ def test_governor_refuses_lab_changes_at_l2_with_one_message_and_without_workdir
     r = d(g, {"cmd": "lab-apply", "name": "prod-a", "side": "baseline"})
     assert r["ok"] is False and r["error"].startswith(f"refused at L{g.ladder.level}: stack changes are paused")
     plain, _ = _gov(tmp_path)
-    assert "no lab-apply without --workdir" in d(plain, {"cmd": "lab-apply", "name": "prod-a", "side": "baseline"})["error"]
+    assert "no lab prod-a on disk" in d(plain, {"cmd": "lab-apply", "name": "prod-a", "side": "baseline"})["error"]
     assert plain.handle("status", {})["lab"] is None

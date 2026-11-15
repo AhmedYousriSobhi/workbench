@@ -167,6 +167,17 @@ def main(argv: list[str] | None = None) -> None:
             raise RuntimeError((r.stderr or r.stdout).strip()[:200])
         return json.loads(r.stdout)
 
+    def reader(argv: list[str]) -> str:
+        """`benchctl ARGV` as the repository's owner, its stdout as text (read-only verbs only, chosen by the governor, never by the page)."""
+        cmd = [sys.executable, "-m", "benchctl.cli", *argv]
+        owner = Path(args.workdir).stat().st_uid
+        if os.geteuid() == 0 and owner != 0:
+            cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]
+        r = subprocess.run(cmd, cwd=args.workdir, capture_output=True, timeout=30, check=False, text=True)
+        if r.returncode:
+            raise RuntimeError((r.stderr or r.stdout).strip()[:200])
+        return r.stdout
+
     def capturer(node: str, seconds: int):
         """`benchctl get capture NODE` as the repository's owner, its JSON lines on stdout (issue 505)."""
         cmd = [sys.executable, "-m", "benchctl.cli", "get", "capture", node, "--seconds", str(seconds)]
@@ -175,13 +186,10 @@ def main(argv: list[str] | None = None) -> None:
             cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]
         return subprocess.Popen(cmd, cwd=args.workdir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
-    def labs(name: str | None) -> dict | None:
-        """Config lab (issue 553): the marker's status block, or whether the named lab exists (a plain file read; the governor imports nothing of benchctl)."""
-        root = Path(args.workdir) / "compose/generated/lab"
-        if name is not None:
-            return {"exists": (root / name / "manifest.json").is_file()}
+    def lab_status() -> dict | None:
+        """Config lab (issue 553): the marker's status block (a plain file read; the governor imports nothing of benchctl)."""
         try:
-            m = json.loads((root / "active.json").read_text())
+            m = json.loads((Path(args.workdir) / "compose/generated/lab/active.json").read_text())
             return {"name": m["name"], "side": m.get("side"), "time_scale": m.get("time_scale", 1.0), "state": "applied"}
         except (OSError, ValueError, KeyError):
             return None
@@ -189,9 +197,10 @@ def main(argv: list[str] | None = None) -> None:
     gov = Governor(sampler, ladder, groups, executor, args.dry_run, watchdog, args.watch_interval,
                    annotator, discover_docker, args.refresh_interval,
                    effector if args.workdir else None, tracer=tracer if args.workdir else None,
-                   statser=statser if args.workdir else None, capturer=capturer if args.workdir else None,
+                   statser=statser if args.workdir else None, capturer=capturer if args.workdir else None, reader=reader if args.workdir else None,
                    streamer=streamer if args.workdir else None, admit_floor=int(floor * GB),
-                   labs=labs if args.workdir else None)
+                   lab_exists=(lambda n: (Path(args.workdir) / 'compose/generated/lab' / n / 'manifest.json').is_file()) if args.workdir else None,
+                   lab_status=lab_status if args.workdir else None)
     srv = control.serve(args.socket, gov.handle, gov.group_names, gid=args.socket_gid) \
         if args.socket else None
     msrv = None

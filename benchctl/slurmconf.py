@@ -120,6 +120,16 @@ def _range(names: list[str]) -> str:
     return f"{prefix}[{nums[0]}-{nums[-1]}]"
 
 
+# The config lab's validation (issue 552) loads sacctmgr data into a scratch database `lab_validate_<id>` of this MariaDB. The `slurm` user
+# gets exactly what slurmdbd needs to build and use its tables there, on databases of that name only: no GRANT OPTION, nothing global.
+# In a database-name pattern `_` and `%` are wildcards, so the underscores are escaped: the pattern must not match `slurm_acct_db`.
+# Applied twice: the init file (a fresh database) and at every `benchctl up` (stack.grant_lab_databases), because the init directory
+# only runs when the database is first created.
+LAB_DB_PATTERN = "lab\\_validate\\_%"
+LAB_PRIVS = "CREATE, DROP, ALTER, INDEX, SELECT, INSERT, UPDATE, DELETE, LOCK TABLES, CREATE TEMPORARY TABLES"
+LAB_GRANT_SQL = f"GRANT {LAB_PRIVS} ON `{LAB_DB_PATTERN}`.* TO 'slurm'@'%';\n"
+
+
 def slurmdbd_conf(password: str) -> str:
     return "\n".join([
         "# GENERATED; contains a secret, never commit", "AuthType=auth/munge", "DbdHost=slurmdbd",
@@ -159,6 +169,7 @@ def write(sim: dict, out_dir: Path, compute_override: int | None = None,
         (out_dir / "topology.conf").unlink(missing_ok=True)  # an earlier run's switches must not outlive the `topology:` key
     if accounting:
         files["accounting.sh"] = accounting_script(sim)
+        files["lab-grant.sql"] = LAB_GRANT_SQL
     for name, text in files.items():
         (out_dir / name).write_text(text)
     from . import (
@@ -176,12 +187,11 @@ def _write_secrets(sim: dict, sec: Path, slurm_dir: Path) -> None:
     running database keeps matching after a regeneration."""
     env = sec / "mariadb.env"
     sec.mkdir(parents=True, exist_ok=True)
-    pw = None
-    if env.exists():
-        pw = next((ln.split("=", 1)[1] for ln in env.read_text().splitlines()
-                   if ln.startswith("MARIADB_PASSWORD=")), None)
-    pw = pw or secrets.token_urlsafe(24)
-    env.write_text(f"MARIADB_RANDOM_ROOT_PASSWORD=yes\nMARIADB_USER=slurm\nMARIADB_PASSWORD={pw}\n"
+    old = env.read_text().splitlines() if env.exists() else []
+    pw = next((ln.split("=", 1)[1] for ln in old if ln.startswith("MARIADB_PASSWORD=")), None) or secrets.token_urlsafe(24)
+    # the root password is kept for the same reason; `benchctl up` uses it (inside the container, never printed) to apply LAB_GRANT_SQL
+    root = next((ln.split("=", 1)[1] for ln in old if ln.startswith("MARIADB_ROOT_PASSWORD=")), None) or secrets.token_urlsafe(24)
+    env.write_text(f"MARIADB_ROOT_PASSWORD={root}\nMARIADB_USER=slurm\nMARIADB_PASSWORD={pw}\n"
                    "MARIADB_DATABASE=slurm_acct_db\n")
     etc = sec / "slurmdbd"
     etc.mkdir(exist_ok=True)

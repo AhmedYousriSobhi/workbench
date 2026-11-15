@@ -36,6 +36,7 @@
       <div id="menu" class="menu" hidden>
         <p class="menugroup" id="mg-conf">Configure</p>
         <button class="menuitem" id="nhcbtn" aria-haspopup="dialog"><b aria-hidden="true">✚</b><span><span class="mi-t">Health checks</span><span class="mi-h">What makes a node drain</span></span></button>
+        <button class="menuitem" id="tbbtn" aria-haspopup="dialog"><b aria-hidden="true">✎</b><span><span class="mi-t">Ticket bot</span><span class="mi-h">Pace of the fake engineers</span></span></button>
         <p class="menugroup" id="mg-share">Share</p>
         <button class="menuitem" id="expbtn" aria-haspopup="dialog"><b aria-hidden="true">⇩</b><span><span class="mi-t">Export</span><span class="mi-h">A profile file for the monitoring client</span></span></button>
       </div></span>
@@ -269,6 +270,19 @@
       </div>
     </div>
     <div class="sheet-f"><p id="pl-apply-msg" role="status" class="small"></p><button class="btn small" id="plan-cancel">Cancel</button><button class="btn" id="pl-apply" hidden>Apply to the running workbench</button></div>
+  </dialog>
+  <dialog id="tbdlg" class="sheet" aria-labelledby="tb-h">
+    <div class="sheet-h"><div><h2 id="tb-h">Ticket bot</h2><p class="dim small">How fast the fake engineers work the alert tickets of the Jira mock (never a real Jira). Changes reach the running bot within one cycle. Start it with <code>benchctl load on --tickets</code>.</p></div>
+      <button class="btn small" id="tb-close" aria-label="Close the ticket bot settings">✕ Close</button></div>
+    <form class="sheet-b" id="tb-form">
+      <label>Seconds between actions (10 to 3600)<input id="tb-every" type="number" min="10" max="3600" step="any" inputmode="decimal"></label>
+      <label>Seconds In Progress before Resolved (10 to 86400)<input id="tb-resolve" type="number" min="10" max="86400" step="any" inputmode="decimal"></label>
+      <label>Share nobody picks up (0 to 1)<input id="tb-ignore" type="number" min="0" max="1" step="any" inputmode="decimal"></label>
+      <label>Share of resolved tickets reopened (0 to 1)<input id="tb-reopen" type="number" min="0" max="1" step="any" inputmode="decimal"></label>
+      <p class="small dim">Empty boxes stay as they are. Terminal: <code>benchctl set ticket-bot --every 10 --resolve 30</code>.</p>
+      <button class="btn" id="tb-apply">Apply</button>
+    </form>
+    <div class="sheet-f"><p id="tb-msg" role="status" class="small"></p><button class="btn small" id="tb-done">Close</button></div>
   </dialog>
   <dialog id="nhcdlg" class="sheet" aria-labelledby="nhc-h">
     <div class="sheet-h"><div><h2 id="nhc-h">Node health checks</h2><p class="dim small">What every node's health check looks at, in the order it runs. Drag a block (or use ↑ ↓) to reorder; changes are validated, then reach the nodes within 30 s.</p></div>

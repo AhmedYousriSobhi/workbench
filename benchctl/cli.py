@@ -31,6 +31,7 @@ from . import (
     lab_apply,
     lab_candidate,
     lab_diff,
+    lab_validate,
     logins,
     machine,
     measure,
@@ -589,6 +590,17 @@ get_app = typer.Typer(cls=SuggestingGroup, help="List what exists: nodes, servic
 app.add_typer(get_app, name="get")
 
 
+@get_app.command("ticket-bot")
+def get_ticket_bot() -> None:
+    """The settings the running ticket bot was last given with `benchctl set ticket-bot` (empty: its start values, see `load on --tickets`)."""
+    from . import workload
+    r = stack._run(workload.ticket_settings_get())
+    if r.returncode:
+        typer.echo("cannot reach the login node: start the cluster first (benchctl up)", err=True)
+        raise typer.Exit(1)
+    typer.echo(r.stdout.strip())
+
+
 def _get(rows_fn, output: str, selector: list[str] | None, sort_by: str | None, watch: bool, interval: float) -> None:
     """One list command: query, render, and optionally redraw. Query mistakes exit 2 (usage), like an unknown flag."""
     import time
@@ -856,6 +868,26 @@ def set_node(node: str = TARGET, state: str = typer.Argument(..., help="off or o
     raise typer.Exit(0 if o.status == "ok" else 1)
 
 
+@set_app.command("ticket-bot")
+def set_ticket_bot(every: float = typer.Option(None, "--every", help="mean seconds between actions (10 to 3600)"),
+                   resolve: float = typer.Option(None, "--resolve", help="seconds a ticket stays In Progress before it is resolved (10 to 86400)"),
+                   ignore: float = typer.Option(None, "--ignore", help="share of tickets nobody picks up (0 to 1)"),
+                   reopen: float = typer.Option(None, "--reopen", help="share of resolved tickets that are reopened (0 to 1)")) -> None:
+    """Change the running ticket bot without a restart (`benchctl load on --tickets` first): it re-reads the settings each cycle.
+    `benchctl set ticket-bot --every 10 --resolve 30` makes a test fast; `benchctl get ticket-bot` shows what is in force."""
+    from . import workload
+    try:
+        cmd = workload.ticket_settings_set(every=every, resolve_after=resolve, ignore=ignore, reopen=reopen)
+    except workload.WorkloadError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(2)
+    r = stack._run(cmd)
+    if r.returncode:
+        typer.echo("cannot reach the login node: start the cluster first (benchctl up)", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"ticket bot settings: {r.stdout.strip()}")
+
+
 clear_app = typer.Typer(cls=SuggestingGroup, help="Put things back: the injected node faults")
 app.add_typer(clear_app, name="clear")
 
@@ -883,7 +915,7 @@ add_app = typer.Typer(cls=SuggestingGroup, help="Add something: a health check, 
 app.add_typer(add_app, name="add")
 remove_app = typer.Typer(cls=SuggestingGroup, help="Remove something: a health check, the simulated users' jobs")
 app.add_typer(remove_app, name="remove")
-validate_app = typer.Typer(cls=SuggestingGroup, help="Check files without changing anything: the health checks")
+validate_app = typer.Typer(cls=SuggestingGroup, help="Check files without changing anything: the health checks, a config lab")
 app.add_typer(validate_app, name="validate")
 reload_app = typer.Typer(cls=SuggestingGroup, help="Push edited files to the running nodes: the health checks")
 app.add_typer(reload_app, name="reload")
@@ -1079,6 +1111,58 @@ def validate_checks() -> None:
         typer.echo("\n".join(errs), err=True)
         raise typer.Exit(1)
     typer.echo(f"ok: {len(nhc.load())} checks valid")
+
+
+def _lab_wait(sock: str, job: int, timeout: float = 600) -> str | None:
+    """Wait for the governor's lab-validate change to end; None when it ended, else why not."""
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        time.sleep(1)
+        try:
+            ch = checks.governor_request({"cmd": "status"}, sock).get("change")
+        except OSError as e:
+            return f"the governor stopped answering: {e}"
+        if ch and ch.get("job") == job and ch.get("state") != "running":
+            return None
+    return f"the validation did not finish within {int(timeout)} s"
+
+
+@validate_app.command("lab")
+def validate_lab(name: str = typer.Argument(..., help="a lab made with `benchctl import lab`"),
+                 side: str = typer.Option("baseline", "--side", help="baseline (the imported configuration); candidate comes with issue 553"),
+                 run_here: bool = typer.Option(False, "--run-here", hidden=True, help="run the checks in this process (the governor uses it)"),
+                 output: str = OUTPUT) -> None:
+    """Check the lab's imported configuration with the real tools (a throwaway slurmctld, sacctmgr load, promtool, kubectl dry-run, Teleport roles, secret scan, versions). Runs through the governor at L0-L1. Exit 0 passed (skips are listed), 1 failed, 3 not available."""
+    if side not in lab_validate.SIDES:
+        typer.echo(f"--side must be baseline or candidate, not {side!r}", err=True)
+        raise typer.Exit(1)
+    if side == "candidate":
+        typer.echo("the candidate side is not available yet: it comes with issue 553 (diff and apply); `--side baseline` checks the imported configuration")
+        raise typer.Exit(lab_validate.NOT_AVAILABLE)
+    try:
+        if not lab.exists(name):
+            raise lab.LabError(f"no lab {name}: import it first (benchctl import lab {name} --from DIR)")
+        if run_here:
+            report = lab_validate.run(name, _base_sim(), side)
+        else:
+            sock = os.environ.get("WORKBENCH_GOV_SOCKET", checks.GOV_SOCKET)
+            try:
+                r = checks.governor_request({"cmd": "lab-validate", "name": name, "side": side}, sock)
+            except OSError as e:
+                raise lab.LabError(f"the governor is not reachable at {sock} ({e}); start it: ./scripts/benchctl start") from e
+            if not r.get("ok"):
+                raise lab.LabError(str(r.get("error")))
+            if r.get("dry_run"):
+                typer.echo("governor in dry-run: nothing was run")
+                raise typer.Exit(0)
+            if (why := _lab_wait(sock, r.get("job"))):
+                raise lab.LabError(why)
+            report = json.loads((lab.path(name) / "validate.json").read_text())
+    except lab.LabError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    typer.echo(json.dumps(report, indent=2) if output == "json" else lab_validate.text(report))
+    raise typer.Exit(1 if report["summary"].startswith("failed") else 0)
 
 
 @reload_app.command("checks")

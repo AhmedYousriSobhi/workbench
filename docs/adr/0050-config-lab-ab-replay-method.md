@@ -15,7 +15,7 @@ Status: accepted (owner decisions of 2026-11-12). Issue 542; epic 557. Companion
 - **Pressure.** Replay and validation one-shots are class P5 and admitted only if the estimate (250 MB) fits (GV-9). L2 pauses the replay clock (pauses are recorded; over 5 % of run length marks the run not comparable); L3 stops it as "aborted under memory pressure".
 - **Verdict** (thresholds in `sim.yaml lab.verdict`, printed in every report): any hard failure (validation error, lost job, an alert that fired in A and not in B, still-pending up more than 20 %, median wait up more than 20 % in a partition with enough samples) is "Do not ship"; a new cost or a 5 to 20 % regression is "Ship with changes"; at least one improvement over 5 % and nothing worse is "Ship"; everything within 5 % is "No effect". A minimum sample size per partition keeps small partitions from causing false failures.
 - **Suggestions** are rule-based from a small catalogue (preemptions with requeue, QOS limit dominating pending, idle-but-free GPUs, alert flapping, fairshare spread), never generated; "apply suggestion and rerun" edits the candidate overlay and starts a new A/B.
-- **Report:** `report.md` and `report.json` under `compose/generated/lab/NAME/reports/RUN/`; `benchctl export report --anonymize` maps production node names to lab names.
+- **Report:** `report.md` and `report.json` under `compose/generated/lab/NAME/reports/RUN/`; `benchctl export lab-report NAME RUN --anonymize` (issue 614) maps production node names to lab names.
 
 ## Consequences
 

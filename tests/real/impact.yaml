@@ -29,6 +29,9 @@
 - name: config lab apply and remove (live)
   paths: ["benchctl/lab_apply.py"]
   tests: [test_lab_apply_real]
+- name: config lab validation
+  paths: ["benchctl/lab_validate.py", "scripts/verify.d/lab.sh", "tests/fixtures/lab/**"]
+  tests: [test_lab_real]
 - name: Slurm configuration
   paths: ["benchctl/slurmconf.py", "benchctl/topology.py", "benchctl/qos.py", "scripts/verify.d/**"]
   tests: [test_topology_real, test_qos_real, test_power_real, test_slurmresilience_real, test_cluster_real, test_stack_real, test_slurmkeys_real, test_compose_real]

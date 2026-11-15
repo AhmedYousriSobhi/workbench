@@ -322,3 +322,34 @@ def test_cli_fallback_still_runs_when_no_api_is_connected(tmp_path):
     run = Fake()
     ex(run, tmp_path)(Action("freeze", "web", 3))
     assert run.calls == [["docker", "pause", "web"]]
+
+
+def test_a_verb_skipped_in_user_mode_is_in_the_audit_log_every_time(tmp_path):
+    """#453, GV-6: L2 throttle and L3 reclaim need root; the audit log (and so the page and Grafana) must not show them as done."""
+    from governor.ladder import Ladder
+    from governor.signals import FileSampler
+    sig = tmp_path / "s.json"
+    sig.write_text(json.dumps({"mem_available": 8 * 2**30, "psi_some": 0.0, "psi_full": 0.0}))
+    run = Fake()
+    groups = [Group("web", 4)]
+    gov = Governor(FileSampler(sig), Ladder(), groups, UserExecutor(groups, {}, run_cmd=run), False)
+    gov._act(Action("reclaim", "web", 3))
+    gov._act(Action("reclaim", "web", 3))
+    gov._act(Action("freeze", "web", 3))
+    skipped = [m for m in gov.audit if m.startswith("SKIPPED")]
+    assert len(skipped) == 2 and "rootless mode" in skipped[0] and "reclaim" in skipped[0]
+    assert gov.counts["actions_skipped"] == 2 and not any("freeze" in m for m in skipped)
+    assert run.calls == [["docker", "pause", "web"]] or run.calls == []  # the Engine API path may not fork at all
+
+
+def test_the_root_executor_never_reports_a_skip(tmp_path):
+    from governor.ladder import Ladder
+    from governor.signals import FileSampler
+    sig = tmp_path / "s.json"
+    sig.write_text("{}")
+    class Quiet(Executor):
+        def __call__(self, a):
+            return None
+    gov = Governor(FileSampler(sig), Ladder(), [], Quiet([], {}, run_cmd=Fake()), False)
+    gov._act(Action("reclaim", "web", 3))
+    assert not [m for m in gov.audit if m.startswith("SKIPPED")]

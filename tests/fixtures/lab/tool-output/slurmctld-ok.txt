@@ -1,0 +1,7 @@
+SYNTHETIC (not captured from a real tool; the owner is to replace it with a capture: `./scripts/verify.sh --unit lab --clean`)
+slurmctld: error: Configured MailProg is invalid
+slurmctld: error: _find_node_record: lookup failure for node "cpu001"
+slurmctld: error: cgroup notice: CgroupPlugin=disabled
+slurmctld: error: slurm_persist_conn_open_without_init: failed to open persistent connection to host:localhost:6819: Connection refused
+slurmctld: slurmctld version 25.11.9 started on cluster prodsim
+slurmctld: Running as primary controller

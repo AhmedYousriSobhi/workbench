@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import tempfile
 import time
 import urllib.request
 from collections.abc import Callable
@@ -27,7 +28,7 @@ from pathlib import Path
 
 import yaml
 
-from . import lab, lab_candidate, lab_import, lab_slurm
+from . import lab, lab_candidate, lab_import, lab_slurm, lab_validate
 from .lab import LabError
 
 MARKER = "active.json"
@@ -260,7 +261,7 @@ class Env:
     running: Callable[[str], bool] = lambda s: False
     kubectl: Callable | None = None  # (args, stdin) -> CompletedProcess
     http_get: Callable[[str], str] = lambda url: urllib.request.urlopen(url, timeout=5).read().decode()
-    rules_check: Callable[[list[Path]], list[str]] | None = None  # promtool through #552's executor; None = skipped, said so
+    rules_check: Callable[[list[Path]], list[str]] | None = None  # None: promtool_check (issue 552's executor)
     restart_ctld: Callable[[], bool] | None = None
     sleep: Callable[[float], None] = time.sleep
     say: Callable[[str], None] = print
@@ -365,6 +366,21 @@ def partition_warnings(files: dict[str, str], live_conf: str) -> list[str]:
     return [f"warning: {src} names partition {p}, which the lab does not have (partitions come with the run)" for p, src in sorted(named.items()) if p not in have]
 
 
+def promtool_check(files: list[Path], ex: Callable[..., tuple[int, str]] | None = None) -> list[str]:
+    """`promtool check rules` on rule files that sit in one folder, as a throwaway one-shot with the executor and image of the lab
+    validation (issue 552, `lab_validate`); returns the error lines, empty when the rules are valid."""
+    if not files:
+        return []
+    ex = ex or lab_validate.run_cmd
+    d = files[0].parent
+    rc, out = ex(["docker", "run", "--rm", "--network", "none", "--memory", "128m", "--entrypoint", "promtool", "-v", f"{d.resolve()}:/rules:ro",
+                  lab_validate.PROM_IMAGE, "check", "rules", *[f"/rules/{p.name}" for p in files]], timeout=lab_validate.ONE_SHOT_TIMEOUT_S)
+    if rc == 0:
+        return []
+    lines = [ln.strip().replace("/rules/", "") for ln in out.splitlines() if ln.strip()]
+    return [ln for ln in lines if "FAILED" in ln or "error" in ln.lower()][:5] or lines[:1] or [f"promtool exit {rc}"]
+
+
 # ---------------------------------------------------------------- apply
 
 def apply(name: str, side: str, env: Env) -> dict:
@@ -394,19 +410,16 @@ def apply(name: str, side: str, env: Env) -> dict:
             _refuse_clash(env, "teleport", r, name)
     rule_dir = env.prom_dir / RULES_REL
     if rules:
-        stage = [rule_dir.parent / f"_check-{name}-{f}" for f in rules]
-        for p, (f, t) in zip(stage, rules.items(), strict=True):
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(t)
-        try:
-            errs = env.rules_check(stage) if env.rules_check else []
-        finally:
-            for p in stage:
-                p.unlink(missing_ok=True)
+        with tempfile.TemporaryDirectory(prefix="lab-rules-") as tmp:
+            stage = []
+            for f, t in rules.items():
+                p = Path(tmp) / f
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(t)
+                stage.append(p)
+            errs = (env.rules_check or promtool_check)(stage)
         if errs:
             raise LabError("promtool refuses the rules: " + "; ".join(errs[:3]))
-        if not env.rules_check:
-            lines.append("note: rules were not checked with promtool here")
     # ---- pre-lab snapshot (once per lab: a second apply keeps the first)
     rd = render_dir(name, env)
     if not old:

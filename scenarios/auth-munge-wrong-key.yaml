@@ -4,3 +4,5 @@ description: "cn001 gets a different munge key, so slurmctld rejects its message
 steps:
   - {at: 0s,   target: auth, do: {munge_wrong_key: [cn001]}}
   - {at: 120s, target: auth, do: {munge_restore: [cn001]}}
+expect:
+  - slurm.node_state: {node: cn001, state: down, within: 110s}

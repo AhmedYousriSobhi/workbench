@@ -578,3 +578,39 @@ def test_every_shipped_scenario_previews():
     for sc in scenario.list_all():
         p = scenario.preview(sc)
         assert p["name"] == sc["name"] and len(p["steps"]) >= len(sc["steps"])
+
+
+# Scenarios that carry no `expect`, each with the reason (issue 732). A new scenario needs an `expect` or an entry here; an entry is
+# removed once the engine gains a form that can state the expectation.
+NO_EXPECT = {
+    "auth-slurm-token-expiry": "no expect form for the REST token's 401",
+    "auth-teleport-cert-expiry": "no expect form for the login node's refusal of the identity",
+    "bmc-tls-expired": "no expect form for the BMC farm's certificate",
+    "fan-failure": "no expect form for the BMC event log or temperature",
+    "jira-429": "no expect form for the Jira mock's failure mode",
+    "jira-outage": "no expect form for the Jira mock's failure mode",
+    "jira-real-429": "no expect form for the real Jira's rate limiting",
+    "jira-real-captcha": "no expect form for the real Jira's login lock",
+    "jira-real-outage": "no expect form for the real Jira's availability",
+    "jira-real-slow-503": "no expect form for the fault proxy's answers",
+    "jira-real-token-revoked": "no expect form for the token's 401",
+    "k8s-api-throttled": "no expect form for API priority and fairness 429s",
+    "k8s-cert-expired": "no expect form for the API server certificate",
+    "k8s-queue-inactive": "no expect form for a Kueue queue's status",
+    "login-node-down": "no expect form for the login node's ssh state",
+    "login-node-hung": "no expect form for the login node's ssh state",
+    "preempt-burst": "owner to say what a client observes: squeue pending state for a requeued job is not evident",
+    "reboot-asap": "owner to say which sinfo state a powered-down node shows",
+    "ssh-host-key-changed": "no expect form for the login node's host key",
+    "ssh-key-refused": "no expect form for the login node's auth refusal",
+    "ssh-node-sshd-down": "no expect form for a node's sshd",
+    "ssh-session-limit": "no expect form for MaxSessions",
+    "switch-leaf-down": "the nodes under leaf1 depend on the topology in sim.yaml",
+}
+
+
+def test_every_scenario_has_an_expect_or_a_documented_exemption():
+    names = {sc["name"] for sc in scenario.list_all()}
+    bare = {sc["name"] for sc in scenario.list_all() if not sc.get("expect")}
+    assert bare == set(NO_EXPECT), (sorted(bare - set(NO_EXPECT)), sorted(set(NO_EXPECT) - bare))
+    assert set(NO_EXPECT) <= names and all(NO_EXPECT.values())

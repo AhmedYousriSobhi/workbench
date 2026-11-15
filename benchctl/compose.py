@@ -312,6 +312,7 @@ def _wire_slurm_services(services: dict) -> None:
         "command": ["--innodb-buffer-pool-size=32M", "--innodb-log-file-size=8M", "--max-connections=20",
                     "--performance-schema=OFF"],
         "tmpfs": ["/var/lib/mysql:size=100m"],
+        "volumes": ["./slurm/lab-grant.sql:/docker-entrypoint-initdb.d/20-lab-validate.sql:ro"],  # scratch databases of the config lab (issue 552)
         "healthcheck": {"test": ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"],
                         "interval": "3s", "timeout": "3s", "retries": 30},
     })

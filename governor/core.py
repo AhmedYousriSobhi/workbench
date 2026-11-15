@@ -25,6 +25,7 @@ STAGE_PREFIX = "@stage "  # the line `benchctl up` prints for each stage change 
 EVENTS_EVERY = 5.0  # seconds between memory.events reads (one small file per container)
 
 ADMIT_FLOOR = int(1.0 * 1024**3)  # MemAvailable that must remain after a start (matches benchctl preflight)
+LAB_VALIDATE_MB = 250  # a lab validation one-shot set (P5, ADR 0050: the replay and validation estimate)
 CHANGE_MAX_LEVEL = 1  # scale/set-profile fork docker; GV-8 forbids that under pressure (L2+)
 
 
@@ -33,12 +34,13 @@ class Governor:
                  executor: Executor, dry_run: bool = True, watchdog: Watchdog | None = None,
                  watch_interval: float = 15.0, annotator: Annotator | None = None,
                  inventory: Callable[[], tuple[list[Group], dict]] | None = None,
-                 refresh_interval: float = 30.0, effector: Effector | None = None, tracer: Callable | None = None, statser: Callable | None = None, capturer: Callable | None = None,
-                 streamer: Streamer | None = None, admit_floor: int = ADMIT_FLOOR,
-                 labs: Callable[[str | None], dict | None] | None = None):
+                 refresh_interval: float = 30.0, effector: Effector | None = None, tracer: Callable | None = None, statser: Callable | None = None, capturer: Callable | None = None, reader: Callable | None = None,
+                 streamer: Streamer | None = None, admit_floor: int = ADMIT_FLOOR, lab_exists: Callable[[str], bool] | None = None,
+                 lab_status: Callable[[], dict | None] | None = None):
         self.sampler, self.ladder, self.groups = sampler, ladder, groups
         self.admit_floor = admit_floor
-        self.labs = labs  # config lab (issue 553): labs(None) is the active lab's status block, labs(NAME) says whether NAME exists on disk
+        self.lab_status = lab_status  # issue 553: the active lab's status block from compose/generated/lab/active.json, or None
+        self.lab_exists = lab_exists  # issue 552: does compose/generated/lab/NAME exist in the workdir
         self.executor, self.dry_run = executor, dry_run
         self.signals: Signals | None = None
         self.audit: list[str] = []
@@ -60,6 +62,7 @@ class Governor:
         self.tracer = tracer
         self.capture = Capture(capturer, lambda: self.ladder.level, self._record) if capturer else None  # on-demand wire capture, one at a time (issue 505)
         self.statser = statser
+        self.reader = reader  # `benchctl get ...` as text, for read-only verbs
         self.inventory, self.refresh_interval = inventory, refresh_interval
         self._next_refresh = refresh_interval
         self._static = [g for g in groups if g.kind == "vm"]  # VMs are configured, not discovered
@@ -81,8 +84,11 @@ class Governor:
         if not self.dry_run:
             try:
                 with self._exec_lock:  # slow (docker stop is up to 20 s); `status` needs only `_lock`
-                    self.executor(a)
+                    note = self.executor(a)
                 with self._lock:
+                    if isinstance(note, str):  # a verb the executor cannot do (rootless mode): say so, GV-6
+                        self.counts["actions_skipped"] = self.counts.get("actions_skipped", 0) + 1
+                        self._record(f"SKIPPED {a}: {note}")
                     if a.verb in ("stop", "save"):
                         self.stopped.add(a.target)
                     elif a.verb == "start":
@@ -247,6 +253,12 @@ class Governor:
         threading.Thread(target=run, daemon=True, name="change").start()
         return {"ok": True, "started": True, "job": job}
 
+    def _lab_missing(self, req: dict) -> dict | None:
+        """Shared by every lab verb: the named lab must exist on disk (the name pattern was checked by control.lab_args_error)."""
+        if self.lab_exists is None or not self.lab_exists(req["name"]):
+            return {"ok": False, "error": f"no lab {req['name']} on disk: import it first (benchctl import lab {req['name']} --from DIR)"}
+        return None
+
     def _change_view(self) -> dict | None:
         """The latest change for `status`: job id, state and stages (name, state, seconds); no timestamps of its own beyond start and end."""
         c = self.change
@@ -299,6 +311,13 @@ class Governor:
                 return {"ok": True, "stats": self.statser()}
             except Exception as e:  # noqa: BLE001
                 return {"ok": False, "error": f"slurm stats failed: {e}"}
+        if cmd == "ticket-bot-get":  # read-only: the settings the running bot was last given
+            if not self.reader:
+                return {"ok": False, "error": "no ticket bot settings without --workdir (the governor runs `benchctl get ticket-bot`)"}
+            try:
+                return {"ok": True, "settings": json.loads(self.reader(["get", "ticket-bot"]))}
+            except Exception as e:  # noqa: BLE001
+                return {"ok": False, "error": f"ticket bot settings failed: {e}"}
         if cmd in ("capture-start", "capture-read", "capture-stop"):  # a P5 workload: a tcpdump or an audit-log read for the Focused wire panel only
             if not self.capture:
                 return {"ok": False, "error": "no capture without --workdir (the governor runs `benchctl get capture`)"}
@@ -326,7 +345,7 @@ class Governor:
                         "violations": sorted(self.violations),
                         "audit": self.audit[-60:],
                         "change": self._change_view(),
-                        "lab": self.labs(None) if self.labs else None}
+                        "lab": self.lab_status() if self.lab_status else None}
             if cmd == "admit":
                 return self._admit(req["budget_mb"])
             if cmd == "scale":
@@ -342,20 +361,37 @@ class Governor:
                 args = ["submit", req["node"], "--gpus", str(req["gpus"]), "--duration", str(req["duration"])] + (
                     ["--user", req["user"]] if req.get("user") else [])
                 return self._change(f"submit-job={req['node']}:{req['gpus']}gpu", args)
+            if cmd == "ticket-bot-set":  # the page's Ticket bot sheet: `benchctl set ticket-bot`, applied by the running bot within one cycle
+                args = ["set", "ticket-bot"]
+                for k in ("every", "resolve", "ignore", "reopen"):
+                    if req.get(k) is not None:
+                        args += [f"--{k}", f"{req[k]:g}"]
+                return self._change("ticket-bot-set", args)
             if cmd == "refresh-jira-licence":  # the page's button: restart the real Jira, whose test licence counts from its start
                 return self._change("refresh-jira-licence", ["refresh", "jira-real-licence"])
+            if cmd == "lab-validate":  # issue 552: P5 one-shots (throwaway slurmctld and slurmdbd, promtool, kubectl), one at a time, L0-L1 only
+                if (err := self._lab_missing(req)):
+                    return err
+                if req.get("side", "baseline") != "baseline":
+                    return {"ok": False, "error": "the candidate side is not available yet (issue 553)"}
+                if self.change and self.change.get("state") == "running":
+                    return {"ok": False, "error": "a change is already running: wait for it, one lab run at a time"}
+                if self.ladder.level > CHANGE_MAX_LEVEL:
+                    return {"ok": False, "error": f"refused at L{self.ladder.level}: lab runs are paused (GV-8)"}
+                adm = self._admit(LAB_VALIDATE_MB)
+                if not adm.get("ok"):
+                    return adm
+                return self._change(f"lab-validate={req['name']}", ["validate", "lab", req["name"], "--run-here"])
             if cmd == "slurm-step":
                 what = req["name"]
                 args = (["set", "slurmd", req["node"], what.removeprefix("slurmd-")] if what.startswith("slurmd-")
                         else ["set", "slurmctld", "restart"] if what == "slurmctld-restart" else ["remove", "jobs"])
                 return self._change(f"slurm-step={what}" + (f":{req['node']}" if req.get("node") else ""), args)
-            if cmd in ("lab-apply", "lab-restore"):  # config lab: only at L0-L1 (in _change), one change at a time, audit-logged there
-                if not self.labs:
-                    return {"ok": False, "error": f"no {cmd} without --workdir (the governor runs `benchctl apply lab`)"}
-                if not (self.labs(req["name"]) or {}).get("exists"):
-                    return {"ok": False, "error": f"no lab {req['name']}: import it first (benchctl import lab {req['name']} --from DIR)"}
+            if cmd in ("lab-apply", "lab-restore"):  # issue 553: only at L0-L1 (in _change), one change at a time, audit-logged there
+                if (err := self._lab_missing(req)):
+                    return err
                 if cmd == "lab-apply":
-                    return self._change(f"lab-apply={req['name']}:{req['side']}", ["apply", "lab", req["name"], "--side", req["side"], "--execute"])
+                    return self._change(f"lab-apply={req['name']}:{req.get('side', 'baseline')}", ["apply", "lab", req["name"], "--side", req.get("side", "baseline"), "--execute"])
                 return self._change(f"lab-restore={req['name']}", ["remove", "lab", req["name"], "--execute"])
             if cmd == "apply-plan":
                 args = ["up", "--cpu-nodes", str(req["cpu_nodes"]), "--gpu-nodes", str(req["gpu_nodes"]),
