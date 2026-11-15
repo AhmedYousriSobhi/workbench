@@ -51,7 +51,8 @@ def test_apply_candidate_then_remove_restores_the_pre_lab_config(stack_up, tmp_p
     now = show_config()
     assert now["PriorityWeightQOS"] == "4321" and now["PreemptMode"].upper() == "REQUEUE"
     assert any("prometheus reloaded" in line for line in res["lines"])
-    assert (Path("compose/generated/slurm/slurm.conf").read_text().count("# lab-was") >= 1)
+    text = Path("compose/generated/slurm/slurm.conf").read_text()
+    assert "PriorityWeightQOS=4321" in text and (text.count("# lab-was") + text.count("BEGIN lab")) >= 1  # a replaced key keeps its old value in `# lab-was`; a new one sits in the lab block
     stack.up(sim, "workbench", say=lambda m: None, available=64 * 2**30, prof=prof)  # `up` re-applies the marker and restarts nothing it need not
     assert show_config()["PriorityWeightQOS"] == "4321"
     lab_apply.remove(NAME, env)
