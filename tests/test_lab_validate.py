@@ -65,7 +65,8 @@ def test_render_keeps_lab_nodes_replaces_lab_owned_and_scrubbed_keys(tmp_path):
     assert keys["SlurmctldHost"] != "ctl01" and keys["ClusterName"] == "workbench"  # lab-owned: the workbench's own value
     assert keys["PreemptType"] == "preempt/qos" and keys["PriorityWeightQOS"] == "1000"  # policy: production's
     assert {"StoragePass", "AuthInfo", "SlurmctldHost"} <= set(info["replaced"])
-    assert "AccountingStorageType" in info["restart_keys"] and "PreemptType" in info["restart_keys"]
+    assert "AccountingStorageType" not in info["restart_keys"] and "PreemptType" in info["restart_keys"]  # lab-owned since issue 553: the lab keeps its own accounting setup
+    assert "AccountingStorageType" in info["replaced"]
     parsed = li.parse_slurm_conf(conf)
     assert len(parsed["nodes"]) == info["kept_nodes"] == 6 and all(n["State"] == "UNKNOWN" for n in parsed["nodes"])
     assert all(n["PartitionName"] for n in parsed["partitions"]) and (d / "render" / "cgroup.conf").is_file()

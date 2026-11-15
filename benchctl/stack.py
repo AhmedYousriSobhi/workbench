@@ -22,6 +22,7 @@ from . import (
     errors,
     jira_real,
     k8s,
+    lab_apply,
     logins,
     memory,
     objectstore,
@@ -286,6 +287,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         return (conf.read_text() if conf.is_file() else None, topo.read_text() if topo.is_file() else None)
     old_conf = conf_text() if conf.is_file() else None
     path = compose.write(data, sim=sim, compute_nodes=prof.get("compute_nodes"))
+    lab_apply.note_active(say, conf.parent.parent / "lab")  # the writer re-applied the active lab's settings (issue 553)
     conf_changed = old_conf is not None and conf.is_file() and conf_text() != old_conf
     skip = unbuildable(data["services"], path.parent)
     todo = {n: v for n, v in data["services"].items() if n not in skip}
@@ -534,6 +536,7 @@ def scale(sim: dict, profile: str, n: int, runner: Runner = _run,
     prof = compose.load_profile(profile)
     data = compose.generate(sim, {**prof, "compute_nodes": n})
     path = compose.write(data, sim=sim, compute_nodes=n)
+    lab_apply.note_active(say, COMPOSE_FILE.parent / "lab")
     want = [s for s in data["services"] if re.fullmatch(r"cn\d+", s)]
     now = running_nodes(runner)
     grow = [s for s in want if s not in now]

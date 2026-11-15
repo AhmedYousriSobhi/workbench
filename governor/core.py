@@ -35,9 +35,11 @@ class Governor:
                  watch_interval: float = 15.0, annotator: Annotator | None = None,
                  inventory: Callable[[], tuple[list[Group], dict]] | None = None,
                  refresh_interval: float = 30.0, effector: Effector | None = None, tracer: Callable | None = None, statser: Callable | None = None, capturer: Callable | None = None, reader: Callable | None = None,
-                 streamer: Streamer | None = None, admit_floor: int = ADMIT_FLOOR, lab_exists: Callable[[str], bool] | None = None):
+                 streamer: Streamer | None = None, admit_floor: int = ADMIT_FLOOR, lab_exists: Callable[[str], bool] | None = None,
+                 lab_status: Callable[[], dict | None] | None = None):
         self.sampler, self.ladder, self.groups = sampler, ladder, groups
         self.admit_floor = admit_floor
+        self.lab_status = lab_status  # issue 553: the active lab's status block from compose/generated/lab/active.json, or None
         self.lab_exists = lab_exists  # issue 552: does compose/generated/lab/NAME exist in the workdir
         self.executor, self.dry_run = executor, dry_run
         self.signals: Signals | None = None
@@ -342,7 +344,8 @@ class Governor:
                         "services": sorted({g.service for g in self.groups if g.service}),  # as of the last inventory refresh
                         "violations": sorted(self.violations),
                         "audit": self.audit[-60:],
-                        "change": self._change_view()}
+                        "change": self._change_view(),
+                        "lab": self.lab_status() if self.lab_status else None}
             if cmd == "admit":
                 return self._admit(req["budget_mb"])
             if cmd == "scale":
@@ -384,6 +387,12 @@ class Governor:
                 args = (["set", "slurmd", req["node"], what.removeprefix("slurmd-")] if what.startswith("slurmd-")
                         else ["set", "slurmctld", "restart"] if what == "slurmctld-restart" else ["remove", "jobs"])
                 return self._change(f"slurm-step={what}" + (f":{req['node']}" if req.get("node") else ""), args)
+            if cmd in ("lab-apply", "lab-restore"):  # issue 553: only at L0-L1 (in _change), one change at a time, audit-logged there
+                if (err := self._lab_missing(req)):
+                    return err
+                if cmd == "lab-apply":
+                    return self._change(f"lab-apply={req['name']}:{req.get('side', 'baseline')}", ["apply", "lab", req["name"], "--side", req.get("side", "baseline"), "--execute"])
+                return self._change(f"lab-restore={req['name']}", ["remove", "lab", req["name"], "--execute"])
             if cmd == "apply-plan":
                 args = ["up", "--cpu-nodes", str(req["cpu_nodes"]), "--gpu-nodes", str(req["gpu_nodes"]),
                         "--gpus-per-node", str(req["gpus_per_node"]), "--app-mb", "0"]  # the page is used while the app runs

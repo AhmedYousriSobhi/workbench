@@ -4,6 +4,8 @@ global:
 
 rule_files:
   - /etc/prometheus/rules.yml
+  # config lab rules (benchctl apply lab, issue 553): a glob, so an empty directory is fine and removal is a file delete
+  - /etc/prometheus/generated/rules/lab/*.yml
 
 alerting:
   alertmanagers:

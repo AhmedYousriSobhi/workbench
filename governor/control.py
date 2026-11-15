@@ -13,6 +13,8 @@ log = logging.getLogger("governor.control")
 ALLOWED = {"status", "scale", "freeze", "thaw", "stop", "start", "set-profile", "admit", "apply-plan", "node-state", "submit-job", "slurm-step", "slurm-trace", "slurm-stats", "capture-start", "capture-read", "capture-stop", "refresh-jira-licence", "ticket-bot-set", "ticket-bot-get"}
 LAB_VERBS = {"lab-validate"}  # the config lab verbs (ADR 0049); issue 553 adds lab-apply and lab-restore here
 ALLOWED |= LAB_VERBS
+LAB_APPLY_VERBS = {"lab-apply", "lab-restore"}  # issue 553: apply a side of a lab; return to the plain cluster (never the A/B snapshot restore, which gets its own name)
+ALLOWED |= LAB_APPLY_VERBS
 MAX_REQUEST = 4096
 TARGETED = {"freeze", "thaw", "stop", "start"}  # require a known group name
 
@@ -121,7 +123,7 @@ def dispatch(line: bytes, handle: Handler, groups: Callable[[], set[str]]) -> di
             return {"ok": False, "error": "capture-start needs node:NAME (cn001)"}
         if cmd == "capture-read" and not (isinstance(req.get("since", 0), int) and not isinstance(req.get("since", 0), bool) and req.get("since", 0) >= 0):
             return {"ok": False, "error": "capture-read takes an optional since:int>=0"}
-        if cmd in LAB_VERBS and (err := lab_args_error(cmd, req)):
+        if cmd in LAB_VERBS | LAB_APPLY_VERBS and (err := lab_args_error(cmd, req)):
             return {"ok": False, "error": err}
         if cmd == "admit" and not (isinstance(req.get("budget_mb"), int) and not isinstance(req["budget_mb"], bool)
                                    and req["budget_mb"] >= 0):
