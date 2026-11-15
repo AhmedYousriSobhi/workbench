@@ -94,14 +94,20 @@ def _no_git_hook_variables(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _services_answer(monkeypatch):
-    """The fake runners in the `up` tests cannot answer `scontrol ping` or an HTTP probe; readiness has its own tests (test_ready.py)."""
+def _services_answer(request, monkeypatch):
+    """The fake runners in the `up` tests cannot answer `scontrol ping` or an HTTP probe; readiness has its own tests (test_ready.py).
+    Not applied under tests/real: a live test that calls `stack.up` in its body needs the real readiness check."""
+    if "real" in request.node.path.parts:
+        return
     from benchctl import stack
     monkeypatch.setattr(stack, "_answering", lambda names, runner, path, wait: [])
 
 
 @pytest.fixture(autouse=True)
-def _no_docker_state_in_plans(monkeypatch):
-    """`plan` subtracts what is already running (`docker ps`): with a developer's stack up, a plan that should not fit does. A test that wants running services passes them in."""
+def _no_docker_state_in_plans(request, monkeypatch):
+    """`plan` subtracts what is already running (`docker ps`): with a developer's stack up, a plan that should not fit does. A test that wants running services passes them in.
+    Not applied under tests/real: a live test asking which services run must see the real answer (it saw an empty set in a test body, #784)."""
+    if "real" in request.node.path.parts:
+        return
     from benchctl import workbench
     monkeypatch.setattr(workbench, "running_services", lambda: set())

@@ -158,7 +158,7 @@ class Cluster:
         raise AssertionError(args)
 
     def http(self, url):
-        return json.dumps({"data": {"result": [{"value": [0, self.reload_ok]}]}})
+        return f"# HELP prometheus_config_last_reload_successful Whether the last config reload succeeded.\nprometheus_config_last_reload_successful {self.reload_ok}\n"
 
 
 @pytest.fixture

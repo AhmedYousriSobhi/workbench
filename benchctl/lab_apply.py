@@ -17,6 +17,7 @@ State: `compose/generated/lab/active.json` (the marker) and `compose/generated/l
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import tempfile
@@ -373,7 +374,8 @@ def promtool_check(files: list[Path], ex: Callable[..., tuple[int, str]] | None 
         return []
     ex = ex or lab_validate.run_cmd
     d = files[0].parent
-    rc, out = ex(["docker", "run", "--rm", "--network", "none", "--memory", "128m", "--entrypoint", "promtool", "-v", f"{d.resolve()}:/rules:ro",
+    # as the host user: the rules sit in a private temporary folder (mode 700) that the image's own user (nobody) cannot enter
+    rc, out = ex(["docker", "run", "--rm", "--network", "none", "--user", f"{os.getuid()}:{os.getgid()}", "--memory", "128m", "--entrypoint", "promtool", "-v", f"{d.resolve()}:/rules:ro",
                   lab_validate.PROM_IMAGE, "check", "rules", *[f"/rules/{p.name}" for p in files]], timeout=lab_validate.ONE_SHOT_TIMEOUT_S)
     if rc == 0:
         return []
@@ -541,11 +543,11 @@ def _reload_prometheus(env: Env, what: str) -> list[str]:
         raise LabError(f"could not reload Prometheus: {(r.stderr or r.stdout).strip()[-200:]}")
     for _ in range(10):
         env.sleep(1)
-        try:
-            body = json.loads(env.http_get("http://127.0.0.1:9090/api/v1/query?query=prometheus_config_last_reload_successful"))
-            if body["data"]["result"] and body["data"]["result"][0]["value"][1] == "1":
+        try:  # Prometheus's own /metrics, not a query: this Prometheus does not scrape itself, so the series is not in its database (found live)
+            m = re.search(r"^prometheus_config_last_reload_successful\s+(\S+)", env.http_get("http://127.0.0.1:9090/metrics"), re.MULTILINE)
+            if m and float(m.group(1)) == 1.0:
                 return [f"prometheus reloaded with {what}"]
-        except (OSError, ValueError, KeyError, IndexError):
+        except (OSError, ValueError):
             continue
     raise LabError("Prometheus reloaded but prometheus_config_last_reload_successful is not 1: look at `docker logs workbench-prometheus-1`")
 
