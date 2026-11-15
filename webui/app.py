@@ -106,11 +106,19 @@ class SharedStatus:
 class Runs:
     """At most one scenario at a time; state is what the page polls."""
 
-    def __init__(self, root: Path, sim: dict, flow: Flow | None = None, slurm=None, daemon=None, trace=None):
+    def __init__(self, root: Path, sim: dict, flow: Flow | None = None, slurm=None, daemon=None, trace=None, clock=time.monotonic, wall=time.time):
         self.root, self.sim, self.flow, self.slurm, self.daemon, self.trace = root, sim, flow, slurm, daemon, trace
+        self.clock, self.wall, self.t0 = clock, wall, 0.0  # t0: the clock at Play; step and expectation times are seconds after it
         self.lock = threading.Lock()
         self.stop_flag = threading.Event()
         self.state: dict = {"running": False}
+
+    def since(self) -> float:
+        return round(self.clock() - self.t0, 1)
+
+    def snapshot(self) -> dict:
+        """What the page polls: the state, with `elapsed` (seconds since Play) counted now while the run plays."""
+        return {**self.state, "elapsed": self.since()} if self.state.get("running") else dict(self.state)
 
     def start(self, name: str, speed: float, trace: bool = False) -> dict:
         try:
@@ -127,9 +135,12 @@ class Runs:
                 raise HTTPException(409, f"{self.state['name']} is already running")
             steps = scenario.plan(sc)
             self.stop_flag.clear()
-            self.state = {"running": True, "name": name, "speed": speed, "stopped": False, "ok": None,
-                          "steps": [{"at": s.at, "target": s.target, "do": s.do, "status": "pending", "detail": ""}
-                                    for s in steps], "expects": [], "trace": [] if trace else None}
+            self.t0 = self.clock()  # each row: where it lands on the diagram (ids, its step number n) and, once applied, when (t), ADR 0086
+            plan_expects = [{"e": x["e"], "label": x["label"], "ids": x["ids"], "page": x["page"]} for x in scenario.preview(sc, self.sim)["expects"]]
+            self.state = {"running": True, "name": name, "speed": speed, "stopped": False, "ok": None, "started": round(self.wall(), 3), "elapsed": 0.0,
+                          "steps": [{"at": s.at, "target": s.target, "do": s.do, "n": s.n, "page": not scenario.page_support(s), "status": "pending",
+                                     "detail": "", "t": None, **scenario.touch_fields(s, self.sim)} for s in steps],
+                          "expects": [], "plan_expects": plan_expects, "trace": [] if trace else None}
             threading.Thread(target=self._play, args=(sc, steps, speed, trace), daemon=True).start()
             return {"started": name}
 
@@ -138,13 +149,16 @@ class Runs:
 
         def on_step(step, outcome) -> None:
             row = self.state["steps"][done[0]]
-            row.update(status=outcome.status, detail=outcome.detail)
+            row.update(status=outcome.status, detail=outcome.detail, t=self.since())
             if self.flow and outcome.status == "ok":
                 self.flow.note(step.target, outcome.label, step.do.get("nodes") or step.do.get("drain") or step.do.get("resume"))
             done[0] += 1
 
+        ids = {x["label"]: (x["e"], x["ids"]) for x in self.state["plan_expects"]}
+
         def on_expect(outcome) -> None:
-            self.state["expects"].append({"label": outcome.label, "status": outcome.status, "detail": outcome.detail})
+            e, where = ids.get(outcome.label, (0, []))
+            self.state["expects"].append({"label": outcome.label, "status": outcome.status, "detail": outcome.detail, "t": self.since(), "e": e, "ids": where})
 
         tracer = slurmtrace.Deferred(slurmtrace.nodes_of(sc), self.trace, self.state["trace"].append) if trace else None
         try:
@@ -155,7 +169,7 @@ class Runs:
                 tracer.finish()
             self.state.update(ok=rep.ok, stopped=rep.stopped)
         finally:
-            self.state["running"] = False
+            self.state.update(elapsed=self.since(), running=False)
 
     def stop(self) -> dict:
         self.stop_flag.set()
@@ -670,10 +684,10 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             sc = scenario.load(request.path_params["name"], scenarios, sim)
         except scenario.ScenarioError as e:
             raise HTTPException(404, str(e)) from e
-        return JSONResponse(scenario.preview(sc))
+        return JSONResponse(scenario.preview(sc, sim))
 
     async def run_state(request: Request):
-        return JSONResponse(runs.state)
+        return JSONResponse(runs.snapshot())
 
     async def stop(request: Request):
         return JSONResponse(runs.stop())

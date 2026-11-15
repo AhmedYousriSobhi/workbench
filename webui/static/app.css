@@ -510,3 +510,30 @@
 #tab-traffic[data-tl=requests] > .panel > :not(.tan):not(.zback) { display:none; }
 
   .budget { margin-top:var(--sp3); } .budget summary { cursor:pointer; min-height:40px; display:flex; align-items:center; font-weight:600; } .budgettab th, .budgettab td { padding:2px var(--sp2); text-align:right; font-variant-numeric:tabular-nums; } .budgettab thead th:first-child, .budgettab tbody th { text-align:left; font-weight:400; }
+
+/* The step rail (inspector, Run tab) and the phone sheet of the run layer (ADR 0086, js/runlayer.js). Every state is a glyph and a word. */
+.runpane .rh { margin:0 0 var(--sp2); } .runpane .rh:focus { outline:none; } .runpane .rh:focus-visible { outline:var(--ring-w) solid var(--focus); }
+.runrail { list-style:none; margin:var(--sp2) 0 0; padding:0; display:flex; flex-direction:column; gap:6px; } .runrail:empty { display:none; }
+.rrbtn { display:grid; grid-template-columns:auto minmax(0,1fr); gap:var(--sp1) var(--sp3); align-items:start; width:100%; min-height:44px; padding:8px 10px; text-align:left;
+  border:1px solid var(--line); border-radius:10px; background:var(--panel); color:var(--fg); font:inherit; font-size:0.875rem; cursor:pointer; }
+.rrbtn:hover { background:var(--hover); } .rrbtn[aria-pressed=true] { border-color:var(--accent); background:var(--select-bg); box-shadow:0 0 0 var(--ring-w) var(--select-ring) inset; }
+.rr.cur .rrbtn { border-color:var(--accent); }
+.rtx { display:flex; flex-direction:column; gap:2px; min-width:0; overflow-wrap:anywhere; } .rword { font-size:0.8125rem; font-weight:600; color:var(--fg-2); } .roff { color:var(--warn-text); }
+.rb { display:inline-flex; align-items:center; justify-content:center; min-width:3.2em; padding:1px 8px; border-radius:999px; border:2px solid var(--dim); background:var(--panel);
+  color:var(--fg); font-weight:700; font-size:0.875rem; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.rb.k-done { background:var(--accent-fill); border-color:var(--accent-fill); color:var(--on-accent); } .rb.k-now, .rb.k-active { border-color:var(--accent); color:var(--accent-text); }
+.rb.k-next, .rb.k-notrun { border-style:dashed; color:var(--dim); } .rb.k-cli, .rb.k-skipped { border-color:var(--warn); color:var(--warn-text); } .rb.k-failed { border-color:var(--bad); color:var(--bad); }
+.runkey { display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center; margin:var(--sp3) 0 0; } .runkey .rb { min-width:2em; padding:0 6px; font-size:0.75rem; }
+.ipane#ipane-run[data-run][hidden] { display:block; }  /* narrow: no inspector tabs, so the rail shows under the list while a run is shown */
+@media (min-width:1100px) { .ipane#ipane-run[data-run][hidden] { display:none; } }
+.runsheet { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:var(--sp2) var(--sp3); align-items:center; margin:var(--sp2) 0 0; padding:var(--sp2) var(--sp3);
+  background:var(--raised); border:1px solid var(--line); border-radius:12px; }  /* over the diagram: the chosen step in words, with Previous and Next */
+.runsheet[hidden], #main:not([data-tab=nodes]) .runsheet { display:none; }
+.rs-h { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:var(--sp3); align-items:center; } .rs-txt b { overflow-wrap:anywhere; } .rs-txt p { margin:2px 0 0; }
+.rs-btns { display:flex; gap:var(--sp2); } .runsheet .btn { min-height:40px; min-width:40px; }
+@media (max-width:640px) {  /* a phone: a bottom sheet; the diagram scrolls to the step's parts, the sheet carries the words */
+  .runsheet { position:fixed; left:0; right:0; bottom:0; z-index:40; grid-template-columns:minmax(0,1fr); margin:0; padding:var(--sp3) var(--sp4) calc(var(--sp3) + env(safe-area-inset-bottom));
+    background:var(--panel); border:0; border-top:1px solid var(--line); border-radius:16px 16px 0 0; box-shadow:0 -6px 18px var(--shade-25); }
+  .rs-btns { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); } .runsheet .btn { min-height:44px; }
+  #main[data-tab=nodes]:has(.runsheet:not([hidden])) { padding-bottom:170px; }  /* the sheet never hides the end of the page */
+}

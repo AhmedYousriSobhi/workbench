@@ -80,6 +80,23 @@ node --test "webui/tests/js/poollayout.test.mjs"   # paging, filters, KPIs, stat
 
 The page's width must not depend on the view: never size `.cols` or `#nodeswrap` from a view's content. `ui_shots.py` does not catch a width jump, so look at Fleet, Cluster and Pool at two window widths after a layout change.
 
+## The run layer (a scenario on the diagram)
+
+`runlayermodel.js` (pure, `node --test`) turns the run state (`GET /api/scenarios/run`) into the scenario's steps, grouped by their YAML number, one badge per part, the expectation pins and the words for the rail and the strip. `runlayer.js` draws it into `#flow` as `#runlayer`, again after every rebuild of the Circuit view (ADR 0086).
+
+**Where a step lands:**
+1. `scenario.touches(step)` in `benchctl/scenario.py` gives the ids: node names, service ids, and the parts `slurmctld`, `slurmdbd`, `slurmrestd`, `login` and `teleport`.
+2. The page looks for a node's square (`data-names`), then `data-part`, then `data-ent`. A greyed part counts as not drawn, and the rail says so.
+3. For a new target kind, map it in `touches`. If it truly lands nowhere, add it to `UNMAPPED` in `tests/test_scenario_touches.py` with the reason. That list only shrinks.
+
+Badges come from the run state, never from flow events. Each badge has a number and a glyph, and says its state in words in its `aria-label`. Nothing in the layer animates. Colours are tokens only: `--accent`, `--warn`, `--bad`.
+
+```bash
+node --test webui/tests/js/runlayermodel.test.mjs        # grouping, one badge per part, glyphs and words, Tab order, pins, the strip's words
+.venv/bin/python -m pytest tests/test_scenario_touches.py  # every shipped step lands on a part, or is listed with its reason
+.venv/bin/python scripts/ui_shots.py                       # a sample run, no cluster: badges, order, rail, strip, phone sheet, reduced motion
+```
+
 ## Traffic analysis
 
 `trafficanalysis.js` (pure, `node --test`) computes rates, river bands, probe readings, periods and findings from `/api/traffic`; `analysis.js` draws them and

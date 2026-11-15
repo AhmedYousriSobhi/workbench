@@ -18,6 +18,7 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+from benchctl import scenario as _scn
 from webui import blast, graph
 from webui.app import login_url
 
@@ -31,6 +32,18 @@ SYNTH_GRAPH = graph.build(
 SYNTH_CLUSTER = SYNTH_CLUSTER.replace("actions: [", "graph: " + json.dumps(SYNTH_GRAPH) + ", blast: " + json.dumps(blast.payload()) + ", actions: [", 1)
 TEST_HOOK = "window.__WB_TEST = true; try { sessionStorage.setItem('workbench-circuit', '0'); sessionStorage.getItem('workbench-tab') || sessionStorage.setItem('workbench-tab', 'nodes'); } catch (e) {}"  # (the classic diagram: the circuit is the default and has its own checks) main.js then exposes its modules as globals (webui/static/js/testhook.js) so the checks below can call them by name
 VIEWPORTS = {"desktop": (1280, 900), "phone": (390, 800)}
+
+
+def sample_run(applied: int = 3) -> dict:
+    """A run state as GET /api/scenarios/run reports it (ADR 0086): node-down with its first `applied` steps done. Sample data: no
+    scenario runs, the page's poll is answered by the test."""
+    import yaml
+    sim = yaml.safe_load((ROOT / "sim.yaml").read_text())
+    pv = _scn.preview(_scn.load("node-down", ROOT / "scenarios", sim), sim)
+    return {"running": True, "name": "node-down", "speed": 1.0, "stopped": False, "ok": None, "trace": None, "started": 1763200000.0, "elapsed": 7.0,
+            "plan_expects": [{k: x[k] for k in ("e", "label", "ids", "page")} for x in pv["expects"]], "expects": [],
+            "steps": [{**{k: x[k] for k in ("at", "target", "do", "n", "ids", "no_part", "page")}, "status": "ok" if i < applied else "pending", "detail": "",
+                       "t": x["at"] if i < applied else None} for i, x in enumerate(pv["steps"])]}
 
 
 WIRE_PROBE = """async () => {
@@ -140,6 +153,76 @@ def check_zoom(page) -> list[str]:
     only("fleet", "the FLEET stop")
     page.click(".fl-card .fl-head")
     only("cluster", "opening a card")
+    return bad
+
+
+RUN_PROBE = """() => { const q = s => [...document.querySelectorAll(s)], badges = q('#runlayer .rl-badge');
+  return { badges: badges.map(b => ({ n: +b.dataset.n, label: b.getAttribute('aria-label') || '', text: b.textContent, role: b.getAttribute('role'), tab: b.getAttribute('tabindex') })),
+           pins: q('#runlayer .rl-pin').map(p => p.getAttribute('aria-label') || ''), rail: q('#runrail li').map(l => l.textContent.replace(/\\s+/g, ' ').trim()),
+           ring: q('#flow [data-runring]').length, head: document.getElementById('run-head').textContent, sheet: !document.getElementById('runsheet').hidden,
+           sheetText: document.getElementById('rs-title').textContent, moving: document.getAnimations().filter(a => a.effect && a.effect.target && a.effect.target.closest && a.effect.target.closest('#runlayer, #runsheet, #ipane-run')).length,
+           wide: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1 } }"""
+
+
+def check_runlayer(page, shot: str, vp: str) -> list[str]:
+    """The run layer (ADR 0086, webui/static/js/runlayer.js) with a sample run, no cluster: numbered badges with a glyph and words on the
+    parts each step touched, in step order for Tab; the step rail; the strip over the diagram (a bottom sheet on a phone) with Previous and
+    Next; the blast radius still drawn; nothing moving under reduced motion. Leaves the page on the classic view with no run shown."""
+    bad, state = [], sample_run()
+    page.evaluate(SYNTH_CLUSTER)
+    page.route("**/api/scenarios/run", lambda r: r.fulfill(json=state))
+    try:
+        page.evaluate("poll()")
+        page.wait_for_function("trLast && trLast.name === 'node-down'", timeout=5000)
+        page.evaluate("watchRun()")
+        page.wait_for_selector("#runlayer .rl-badge", timeout=5000)
+        r = page.evaluate(RUN_PROBE)
+        ns = [b["n"] for b in r["badges"]]
+        if len(r["badges"]) < 3 or ns != sorted(ns):
+            bad.append(f"badges missing or not in step order (Tab must follow the scenario): {ns}")
+        for b in r["badges"]:
+            if not b["label"].startswith("Step ") or b["role"] != "button" or b["tab"] != "0" or not any(g in b["text"] for g in "✓●○↷✗◐"):
+                bad.append(f"a badge without a number, glyph and spoken words: {b}")
+        if not any(", now: " in b["label"] for b in r["badges"]) or not any(", done: " in b["label"] for b in r["badges"]):
+            bad.append("the badges do not say done and now in words")
+        if len(r["rail"]) != 6 or "Step 3: now" not in " ".join(r["rail"]) or "Step 4: next" not in " ".join(r["rail"]):
+            bad.append(f"the step rail does not list every step with its state in words: {r['rail'][:3]}")
+        if not r["pins"] or not r["pins"][0].startswith("Expectation E1, CLI only"):
+            bad.append(f"the expectation pin is missing or says nothing: {r['pins']}")
+        if r["ring"] < 2 or "step 3 of 6" not in r["head"]:
+            bad.append(f"the current step's parts are not ringed, or the heading is wrong: {r['ring']} / {r['head']!r}")
+        if not r["sheet"] or not r["sheetText"].startswith("Step 3:"):
+            bad.append(f"the step strip over the diagram is missing: {r['sheetText']!r}")
+        if r["wide"]:
+            bad.append("the run layer makes the page scroll sideways")
+        box = page.locator("#runsheet").bounding_box()
+        if vp == "phone" and (box is None or box["y"] + box["height"] > page.viewport_size["height"] + 1 or page.evaluate("getComputedStyle(document.getElementById('runsheet')).position") != "fixed"):
+            bad.append(f"on a phone the step sheet is not fixed to the bottom of the screen: {box}")
+        small = page.evaluate("[...document.querySelectorAll('#runsheet button')].filter(b => b.getBoundingClientRect().height < 40).map(b => b.id)")
+        if small:
+            bad.append(f"step sheet buttons under 40 px: {small}")
+        page.click("#rs-next")
+        if not page.locator("#rs-title").text_content().startswith("Step 4:") or page.get_attribute("#runrail [data-n='4']", "aria-pressed") != "true":
+            bad.append("Next did not move the strip and the rail to step 4")
+        page.locator("#runlayer .rl-badge").first.dispatch_event("click")
+        if page.get_attribute("#runrail [data-n='1']", "aria-pressed") != "true":
+            bad.append("a badge did not select its step in the rail")
+        page.evaluate("setBlast(blastFor({to: 'bmc-farm', label: 'power-off on cn002', nodes: ['cn002']}))")
+        dash = page.evaluate("(() => { const b = document.querySelector('#flow [data-blast] > .cv-box'); return b ? getComputedStyle(b).strokeDasharray : null; })()")
+        if not dash or dash == "none":
+            bad.append(f"the blast radius lost its dashes under the run layer: {dash}")
+        page.screenshot(path=shot, full_page=False)
+        page.evaluate("setBlast(null)")
+        page.emulate_media(reduced_motion="reduce")
+        page.evaluate("paintRunLayer(true)")
+        if page.evaluate(RUN_PROBE)["moving"]:
+            bad.append("something in the run layer animates under reduced motion")
+        page.emulate_media(reduced_motion="no-preference")
+    except PlaywrightError as e:
+        bad.append(f"the run layer did not draw a sample run: {str(e).splitlines()[0]}")
+    finally:
+        page.unroute("**/api/scenarios/run")
+        page.evaluate("trLast = {running: false}; runSel = null; paintRun(); setCircuit(false); lastCluster = ''; loadCluster()")  # back to the page's own cluster answer
     return bad
 
 
@@ -429,6 +512,10 @@ def capture(out: Path) -> dict:
                         result["a11y"].append("theme toggle did not switch to dark")
                     for problem in check_circuit(page):
                         result["a11y"].append(f"circuit {vp} {scheme}: {problem}")
+                    rpath = out / f"runlayer-{vp}-{scheme}.png"
+                    for problem in check_runlayer(page, str(rpath), vp):
+                        result["a11y"].append(f"run layer {vp} {scheme}: {problem}")
+                    result["shots"].append(str(rpath))
                     for problem in check_home(page):
                         result["a11y"].append(f"overview {vp} {scheme}: {problem}")
                     hpath = out / f"overview-{vp}-{scheme}.png"

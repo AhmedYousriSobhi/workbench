@@ -12,6 +12,7 @@ import { STATE_ICON } from './cluster.js';
 import { fitKey, flowSig, loginAddr, loginRuns, MODE_TEXT, KIND_NAME, loginKind, stackUp } from './geometry.js';
 import { trView } from './traffic.js';
 import { zoomTo } from './zoom.js';
+import { paintRunLayer } from './runlayer.js';
 import { LAYERS, LAYER_OF, LAYER_TEXT, POOLS, CV_W, CV_H, circuitSpec, circuitFacts, layerParts, rackSquares } from './circuitlayout.js';
 
 const CLIENT_CHIPS = ['Monitoring app', 'Prometheus', 'curl · scripts', 'You: ssh · tsh'];
@@ -134,7 +135,7 @@ export function buildCircuit() {
     const el = p.role === 'rack' ? rackEl(p, f) : boxEl(p, f);
     el.dataset.present = p.present; el.dataset.part = p.id; g.append(el);
   }
-  paintCircuit(); applyLayer();
+  paintCircuit(); applyLayer(); paintRunLayer(true);
 }
 function midpoint(d) { const n = d.match(/-?\d+/g).map(Number), pts = []; for (let i = 0; i < n.length; i += 2) pts.push({ x: n[i], y: n[i + 1] }); const a = pts[Math.floor((pts.length - 1) / 2)], b = pts[Math.ceil((pts.length - 1) / 2)]; return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
 

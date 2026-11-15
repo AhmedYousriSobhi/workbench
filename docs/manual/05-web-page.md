@@ -38,7 +38,7 @@ By hand: `.venv/bin/python -m webui [port]` serves the page on `127.0.0.1:8088` 
 The **stage** on Infrastructure has three areas that fill the window:
 - **Left:** the **Infrastructure architecture**. Clients are across the top, the access layer under them, the cluster nodes below that and the services in a column at the right.
 - **Top right:** the **node list** (Compute, GPU and Services).
-- **Bottom right:** **Connections**, which shows how to reach each part (address and a Copy button). Click a part and it shows that part instead. A **Timeline** tab lists recent traffic and faults.
+- **Bottom right:** **Connections**, which shows how to reach each part (address and a Copy button). Click a part and it shows that part instead. A **Timeline** tab lists recent traffic and faults. A **Run** tab lists the steps of a scenario run ([a scenario run on the diagram](#a-scenario-run-on-the-diagram)).
 
 **Topology** in the left rail gives the whole right column to Connections. The choice is remembered.
 
@@ -283,6 +283,23 @@ Each move takes about 0.7 s (none under reduced motion). The old level is gone a
 
 ![The Fleet level: a card per cluster](img/web-fleet-light.png)
 
+### A scenario run on the diagram
+
+![The Circuit view during node-down at step 3: numbered badges on BMC farm, BCM, the controller and node cn002, an E1 pin, and the step strip over the diagram](img/web-run-layer-light.png)
+
+Press **Watch on the diagram** in Test run, during or after a run. The Topology tab opens on the Circuit view with the run drawn on it. Pressing **Play** keeps you in Test run.
+
+- **Badges.** Each part a step acted on gets a badge: the step number and a glyph. ✓ done, ● now, ◐ in progress, ○ next, ↷ CLI only or skipped, ✗ failed.
+- **+N.** A part that several steps touch shows the newest step and **+N** for the others.
+- **The ring.** The current step's parts (or the step you picked) get an outline. The blast radius keeps its red dashes.
+- **Pins.** An expectation gets a pin such as **E1 ↷** on the part it checks.
+- **The strip** over the diagram says the step in words, with **◀ Previous**, **Steps** and **Next ▶**. On a phone it is a sheet at the bottom of the screen, and the diagram scrolls to the step's parts.
+- **The Run tab** in the inspector lists every step in order: its time, its parts and its state in words. A step that lands on no part says why.
+- **Keyboard.** Tab goes through the badges in step order. Enter or Space picks that step.
+- **Take off the diagram** removes a finished run's badges. The run itself lives until the page restarts.
+
+Badges are drawn on the Circuit view only; the 2.5D view keeps its diamonds. A run started with `benchctl scenario run` is not drawn yet.
+
 ### Traffic & Communication
 
 This workspace lists the documented links: protocol, port, real or simulated, observed or configured, and the measured probe latency.
@@ -521,7 +538,7 @@ See [choose the workbench](../guides/choose-workbench.md).
    2. Pick a speed. It applies to all.
    3. Tick **Slurm trace** if you want what the jobs and Slurm's logs did around each step ([Slurm resilience](../guides/slurm-resilience.md)).
    4. Press **▶ Play**.
-3. **Watch.** The steps, a progress bar, **Stop**, the expectations (pending, then passed or failed) and **Client's eye** update live.
+3. **Watch.** The steps, a progress bar, **Stop**, the expectations (pending, then passed or failed) and **Client's eye** update live. **Watch on the diagram** shows the same run on the Infrastructure architecture ([a scenario run on the diagram](#a-scenario-run-on-the-diagram)).
 4. **Read Client's eye.** For each service it shows the calls the mock counted during the run, and the errors where the mock counts them.
 5. **Export.** When the run ends, **Markdown** or **JSON** downloads a report built in the browser.
 

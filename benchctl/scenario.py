@@ -68,6 +68,7 @@ class Step:
     at: float
     target: str
     do: dict
+    n: int = 0  # the step's number in the scenario file (1-based); fault-model and ramp expansions keep their step's number
 
 
 @dataclass
@@ -123,14 +124,15 @@ def page_support(step: Step) -> str:
     return ""
 
 
-def preview(sc: dict) -> dict:
+def preview(sc: dict, sim: dict | None = None) -> dict:
     """What the Test run page shows before Play (issue 509): the timeline as the run will play it, each step and expectation marked
-    with whether the page can do it, and the command that runs all of it."""
-    steps = [{"at": s.at, "target": s.target, "do": s.do, "page": not (why := page_support(s)), "why": why} for s in plan(sc)]
+    with whether the page can do it, and the command that runs all of it. Each step also says where it lands on the diagram (`n`,
+    its step number in the file; `ids`; `no_part`, why it lands nowhere) and each expectation which part it asserts on (ADR 0086)."""
+    steps = [{"at": s.at, "target": s.target, "do": s.do, "page": not (why := page_support(s)), "why": why, "n": s.n, **touch_fields(s, sim)} for s in plan(sc)]
     expects = []
-    for exp in sc.get("expect") or []:
+    for e, exp in enumerate(sc.get("expect") or [], 1):
         label, holds, _ = expectation(exp, host=False)
-        expects.append({"label": label, "page": holds is not None})
+        expects.append({"label": label, "page": holds is not None, "e": e, "ids": expect_touches(exp)})
     return {"name": sc["name"], "ref": sc.get("ref", ""), "description": sc.get("description", ""),
             "length": max((s["at"] for s in steps), default=0), "steps": steps, "expects": expects,
             "cli": f"./scripts/benchctl scenario run {sc['name']}",
@@ -150,19 +152,91 @@ def _resolved_or_raw(sc: dict, sim: dict) -> dict:
 
 
 def plan(sc: dict) -> list[Step]:
-    """Steps in time order; a `ramp: {to, over}` step becomes temperature steps every RAMP_STEP_S."""
+    """Steps in time order; a `ramp: {to, over}` step becomes temperature steps every RAMP_STEP_S. Each keeps `n`, its step's number
+    in the scenario file, so a page can group the expansions under the step that made them (ADR 0086)."""
     out: list[Step] = []
-    for s in fault_steps(sc.get("steps", [])):
-        at, target, do = parse_duration(s["at"]), s["target"], dict(s.get("do") or {})
-        ramp = do.pop("ramp", None)
-        if ramp:
-            over, goal = parse_duration(ramp["over"]), float(str(ramp["to"]).rstrip("C"))
-            n = max(1, int(over // RAMP_STEP_S))
-            for i in range(1, n + 1):
-                out.append(Step(at + over * i / n, target, {**do, "temp": round(RAMP_START_C + (goal - RAMP_START_C) * i / n, 1)}))
-        if not ramp or set(do) - {"nodes"}:  # a ramp's own step carries nothing but the node list
-            out.append(Step(at, target, do))
+    for num, raw in enumerate(sc.get("steps", []), 1):
+        for s in fault_steps([raw]):
+            at, target, do = parse_duration(s["at"]), s["target"], dict(s.get("do") or {})
+            ramp = do.pop("ramp", None)
+            if ramp:
+                over, goal = parse_duration(ramp["over"]), float(str(ramp["to"]).rstrip("C"))
+                k = max(1, int(over // RAMP_STEP_S))
+                for i in range(1, k + 1):
+                    out.append(Step(at + over * i / k, target, {**do, "temp": round(RAMP_START_C + (goal - RAMP_START_C) * i / k, 1)}, num))
+            if not ramp or set(do) - {"nodes"}:  # a ramp's own step carries nothing but the node list
+                out.append(Step(at, target, do, num))
     return sorted(out, key=lambda s: s.at)
+
+
+# ---- Which parts of the Infrastructure architecture a step acts on (ADR 0086) ----
+# Ids are the Circuit view's: node names and service ids as in webui/graph.py, and the part ids of the parts the graph does not model
+# (slurmctld, slurmdbd, slurmrestd, login, teleport). The page finds a part by data-ent, then data-part; a node in a large pool by its group square.
+TARGET_PART = {"bmc-farm": "bmc-farm", "bcm-mock": "bcm-mock", "gpu-exporter": "gpu-exporter", "jira": "jira-mock", "jira-real": "jira-real",
+               "dcgm": "dcgm-exporter", "k8s": "k8s-api", "slurm": "slurmctld", "switch": "slurmctld"}
+NODE_KEYS = ("nodes", "drain", "down", "resume", "power_off", "power_on", "slurmd_stop", "slurmd_start", "slurmd_restart", "power_down",
+             "power_up", "reboot", "up", "cordon", "uncordon", "munge_wrong_key", "munge_restore")
+AUTH_PART = {"slurm_token_ttl": "slurmrestd", "teleport_cert_ttl": "teleport", "teleport_cert_restore": "teleport", "munge_wrong_key": "slurmctld",
+             "munge_restore": "slurmctld", "bmc_tls_expired": "bmc-farm", "k8s_cert_expired": "k8s-api"}
+UPGRADE_PART = {"slurmdbd": "slurmdbd", "slurmctld": "slurmctld", "slurmrestd": "slurmrestd", "login": "login"}
+
+
+def _step_nodes(do: dict) -> list[str]:
+    """Node names a step's `do` names, under any of its keys, in order, once each."""
+    names = [n for key in NODE_KEYS if isinstance(do.get(key), list) for n in do[key] if isinstance(n, str)]
+    for key in ("submit", "drain", "pod"):  # {submit: {node}}, k8s {drain: {node}}, k8s {pod: {node}}
+        if isinstance(do.get(key), dict) and isinstance(do[key].get("node"), str):
+            names.append(do[key]["node"])
+    return list(dict.fromkeys(names))
+
+
+def touches(step: Step, sim: dict | None = None) -> dict:
+    """{"ids": [...], "why": ""}: the diagram parts one planned step acts on. With no part, `why` says in words why not; never a guess."""
+    do, t = step.do or {}, step.target
+    nodes = _step_nodes(do)
+    if t == "switch":
+        if sim is None:
+            return {"ids": ["slurmctld"], "why": ""}
+        try:
+            nodes = topology.nodes_under(sim, do["leaf"])
+        except (KeyError, TypeError, ValueError):
+            nodes = []
+    if t == "auth":
+        ids = list(dict.fromkeys(AUTH_PART[k] for k in do if k in AUTH_PART))
+    elif t == "slurm-upgrade":
+        ids = [UPGRADE_PART[d] for d in do.get("daemons") or [] if d in UPGRADE_PART]
+        nodes = [d for d in do.get("daemons") or [] if d not in UPGRADE_PART]
+    elif t == "ssh":
+        ids = [] if "node_sshd" in do else ["login"]  # node_sshd stops one node's sshd; the rest act on the login node
+    elif t == "netem":
+        ids = []
+        if not nodes:
+            return {"ids": [], "why": "it clears the network delay on every node at once, not on one part"}
+    elif t in TARGET_PART:
+        ids = [TARGET_PART[t]]
+    else:
+        return {"ids": [], "why": f"the {t} target has no part on the diagram"}
+    ids = list(dict.fromkeys(ids + nodes))
+    return {"ids": ids, "why": "" if ids else "it names no part of the diagram"}
+
+
+def expect_touches(exp: dict) -> list[str]:
+    """The parts an expectation asserts on: its node, the API server for a pod, or the Jira it searches."""
+    (kind, args), = exp.items()
+    args = args if isinstance(args, dict) else {}
+    if kind.startswith("jira."):
+        return ["jira-real" if args.get("target") == "real" else "jira-mock"]
+    if kind == "k8s.pod_status":
+        return ["k8s-api"]
+    if kind == "storage.mount":
+        return ["gpu-exporter", str(args.get("node", "cn001"))]
+    return [str(args["node"])] if isinstance(args.get("node"), str) else []
+
+
+def touch_fields(step: Step, sim: dict | None = None) -> dict:
+    """`ids` and `no_part` for a preview or run-state row: where the step lands on the diagram, or why it lands nowhere."""
+    hit = touches(step, sim)
+    return {"ids": hit["ids"], "no_part": hit["why"]}
 
 
 def fault_steps(steps: list[dict]) -> list[dict]:

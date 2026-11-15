@@ -1,6 +1,6 @@
 # ADR 0086: Scenario runs on the architecture diagram: a storyboard on the map
 
-Status: **Proposed** (2026-11-15), awaiting the owner's decision. Issue 806. Design only: no code changed. Current state, sources and all mockups (light and dark) are in the research note [Scenario runs on the architecture diagram](../research/scenario-on-the-diagram.md). Builds on [ADR 0006](0006-scenario-engine-runs-in-the-host-cli.md), [ADR 0009](0009-traffic-dots-from-request-counters.md), [ADR 0039](0039-redesign-cluster-level-circuit.md) and [ADR 0069](0069-one-colour-system-from-one-palette-file.md).
+Status: **Accepted** (2026-11-15). Issue 806 (design), issue 808 (phase 1). The owner delegated the five open questions this once; the answers are in [Decisions](#decisions). Current state, sources and all mockups (light and dark) are in the research note [Scenario runs on the architecture diagram](../research/scenario-on-the-diagram.md). Builds on [ADR 0006](0006-scenario-engine-runs-in-the-host-cli.md), [ADR 0009](0009-traffic-dots-from-request-counters.md), [ADR 0039](0039-redesign-cluster-level-circuit.md) and [ADR 0069](0069-one-colour-system-from-one-palette-file.md).
 
 ## Context
 
@@ -58,7 +58,7 @@ Light theme below; the dark twins are `img/0086-option-*-dark.png`, and all of t
 
 ![Option D on a phone](img/0086-option-phone-light.png)
 
-## Decision (proposed)
+## Decision
 
 **D, the storyboard on the map, as the spine.** B is its state before Play and A is its replay control; C is not used on the map (the current step's text goes in the rail and the phone sheet).
 
@@ -89,20 +89,20 @@ Why D:
 | Run layer: badges, current-step ring, a third inspector tab "Run" (the rail), keyboard order, phone bottom sheet; the Topology tab polls the run state while a run is shown | new `webui/static/js/runlayermodel.js`, `runlayer.js`; `index.html`, `canvas.css`, `scenarios.js`, `main.js` | M |
 | Tests and docs: Node tests of the model; `ui_shots.py` checks (badges labelled, no overflow, phone sheet, reduced motion); `doc_shots.py` sample run; manual and canvas guide | `webui/tests/js/`, `scripts/ui_shots.py`, `scripts/doc_shots.py`, `docs/manual/`, `docs/guides/web-ui-canvas.md` | S |
 
-### Phase 2: before Play
+### Phase 2: before Play ([issue 809](https://github.com/AhmedYousriSobhi/workbench/issues/809))
 
 - Ghost badges and expectation pins when a scenario is selected (option B); a "Show on the diagram" button in the Test run tab.
 - A declared blast entry for every target kind, not only the node buttons (`webui/blast.py`).
 
-### Phase 3: after the run
+### Phase 3: after the run ([issue 810](https://github.com/AhmedYousriSobhi/workbench/issues/810))
 
 - Replay: the player strip (option A) as a WAI-ARIA slider over the recorded steps.
-- The last run's journal kept in memory, and in `compose/generated` if the owner wants it to survive a restart.
+- The last run's journal kept in memory only (decision 4: it does not survive a page restart).
 - Markdown and JSON export gain the step times.
 
-### Phase 4, needs an owner decision
+### Phase 4: CLI runs on the page ([issue 811](https://github.com/AhmedYousriSobhi/workbench/issues/811))
 
-- **CLI runs on the page.** `benchctl scenario run` posts its step events to the page with the page token, when the page answers; best effort, never blocking the run.
+- `benchctl scenario run` posts its step events to the page with the page token, when the page answers; best effort, never blocking the run (decision 3).
 
 ## Testing
 
@@ -125,13 +125,27 @@ Why D:
 - **A alone.** One step at a time hides the order of the whole run.
 - **Moving the diagram into the Test run tab.** Two copies of the diagram to keep in step; the Topology tab already has focus, lens and blast.
 
-## Open questions for the owner
+## Decisions
 
-1. "The diagram in Actions": is it the Infrastructure architecture of the Topology tab (where the node Actions are)? This ADR assumes so.
-2. Circuit view only, or the 2.5D classic view too?
-3. Should CLI runs appear on the page (phase 4)?
-4. Should the last run survive a page restart (a file in `compose/generated`)?
-5. On Play, should the page switch to the Topology tab, or stay where the user is?
+The owner delegated the five open questions to the implementer, this once (issue 808). Each answer picks the simplest choice that keeps the page accessible and light (SPEC W-1) and fits the D spine.
+
+1. **"The diagram in Actions" is the Infrastructure architecture of the Topology tab.** The node Actions already live in its inspector; a second copy of the diagram was rejected above. The run layer is drawn there, and the rail is a third inspector tab, "Run".
+2. **Circuit view only.** The Circuit view is the default and keeps stable part ids (`data-part`, `data-ent`). The 2.5D classic view keeps its diamonds and gets no badges until it is rebuilt (ADR 0039). In the classic view the Run tab still lists the steps and says that badges are drawn on the Circuit view.
+3. **CLI runs: yes, in phase 4, best effort.** About half the planned steps need the host CLI, so without this they never reach the diagram. The CLI posts step events with the page token when the page answers, and never waits for it or fails because of it.
+4. **The last run does not survive a page restart.** It stays in the page process's memory only, as the run state does today. No new file in `compose/generated`: nothing to clean up, and nothing stale after a restart. The Markdown and JSON export is the durable record.
+5. **On Play the page stays where the user is.** Moving the view on Play is an unexpected change of context (WCAG 3.2.2). The run panel offers **Watch on the diagram**, which opens the Topology tab on the Circuit view with the Run tab shown. The run chip keeps opening Test run.
+
+### Step ids (phase 1)
+
+`scenario.touches(step)` names parts by the ids the Circuit view draws: node names, service ids (`bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira-mock`, `jira-real`, `k8s-api`, `dcgm-exporter`), and the part ids `slurmctld`, `slurmdbd`, `slurmrestd`, `login` and `teleport`. The page finds a part by `data-ent`, then by `data-part`; a node in a large pool falls back to its group square.
+
+A step that names no part carries a reason in words. `tests/test_scenario_touches.py` keeps a list of such steps that may only shrink.
+
+### As built (phase 1, issue 808)
+
+- **The rail sits under the diagram.** The Circuit view gives the diagram the full width and puts the inspector below it. So a strip over the diagram carries the chosen step in words, with Previous, Steps and Next. On a phone the same strip is the bottom sheet.
+- **One more state.** A step whose expansions are only partly applied (a temperature ramp running beside later steps) is ◐ "in progress".
+- **Take off the diagram** hides a finished run's badges; the run stays in the page's memory (decision 4).
 
 ## References
 

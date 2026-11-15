@@ -5,6 +5,7 @@ import { $, H, esc, announce } from './util.js';
 import { ICON } from './governor.js';
 import { ENT_NAME } from './focus.js';
 import { buildReport, eyeRows, runVerdict, timelineRows } from './testrunmodel.js';
+import { watchRun } from './runlayer.js';
 
 const ON_RUN = () => !$('tab-run').hidden;
 const same = s => !!(s && S.trPrev && s.name === S.trPrev.name);
@@ -31,6 +32,7 @@ export function paintPreview(s) {
   const word = { running: `Running · step ${done}/${rows.length}`, stopped: 'Stopped', passed: 'Passed', failed: 'Failed', 'passed with skips': 'Passed, with skipped steps' };
   $('runresult').innerHTML = verdict ? `<span class="result ${verdict === 'passed with skips' ? 'passed' : verdict}">${word[verdict]}</span>` : '<span class="result">Not run yet</span>';
   $('runctl').innerHTML = on && s.running ? '<button class="btn stop" id="stopbtn">■ Stop</button>' : '';
+  $('run-watch').hidden = !on;  // decision 5 (ADR 0086): Play stays here; one click shows the run on the diagram
   $('bar').style.width = (rows.length && on ? (done / rows.length) * 100 : 0) + '%';
   const cli = p.cli_only, failed = rows.filter(x => x.status === 'failed').length;
   $('runcli').hidden = !cli || (on && s.running);
@@ -70,4 +72,5 @@ export function exportRun(kind) {
 
 export function init() {
   $('run-md').onclick = () => exportRun('md'); $('run-json').onclick = () => exportRun('json');
+  $('run-watch').onclick = watchRun;
 }

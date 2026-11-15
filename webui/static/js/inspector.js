@@ -38,7 +38,7 @@ export async function paintReach() {  // the Connections table in short, for whe
   const rows = await connections(); if (!rows.length) return;
   $('reach').innerHTML = rows.map(e => `<li><b>${esc(e.name)}</b><code>${esc(e.address)}</code><button class="btn small copy" data-copy="${esc(e.command)}" aria-label="Copy the command for ${esc(e.name)}">Copy</button></li>`).join(''); bindCopy();
 }
-export function showPane(which) { for (const [k, id] of [['conn', 'ipane-conn'], ['time', 'dock']]) { $(id).hidden = k !== which; $('it-' + k).setAttribute('aria-pressed', k === which); } }
+export function showPane(which) { for (const [k, id] of [['conn', 'ipane-conn'], ['time', 'dock'], ['run', 'ipane-run']]) { $(id).hidden = k !== which; $('it-' + k).setAttribute('aria-pressed', k === which); } }
 export const paintInspector = () => {
   const sel = !$('pop').hidden || !$('nodepane').hidden;
   $('inspect-empty').hidden = sel || !!S.focusId || !!S.blastNow || S.lens === 'client'; $('nodeswrap').classList.toggle('detail', sel); if (sel) showPane('conn');

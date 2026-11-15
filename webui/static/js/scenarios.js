@@ -4,6 +4,7 @@ import { selectTab } from './shell.js';
 import { setChip } from './governor.js';
 import { eyeBase } from './testrunmodel.js';
 import { paintRunEye, paintPreview } from './testrun.js';
+import { paintRun } from './runlayer.js';
 
 export function scnOpen(on) { if (on) selectTab('run'); }  // the Scenarios drawer became the Test run workspace (issue 509)
 export async function runChip() {
@@ -12,6 +13,7 @@ export async function runChip() {
     const s = await (await fetch('/api/scenarios/run')).json(), c = $('c-run');
     c.hidden = !s.running;
     if (s.running) { const done = s.steps.filter(x => x.status !== 'pending').length; setChip('c-run', 'warn', '▶', `${s.name} running ${done}/${s.steps.length}`); c.onclick = () => scnOpen(true); }
+    if (s.running && !(S.trLast && S.trLast.running)) poll();  // a run started in another tab: follow it every second (Test run and the run layer)
   } catch (e) { /* offline: the connection chip already says so */ }
   S.chipTimer = setTimeout(runChip, document.hidden ? 15000 : 3000);
 }
@@ -59,6 +61,7 @@ export async function poll() {
   S.trLast = s;
   paintPreview(s);
   paintRunEye();
+  paintRun();
   if (s.running) S.pollTimer = setTimeout(poll, 1000);
 }
 
