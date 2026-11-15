@@ -194,6 +194,19 @@ def test_the_run_state_says_where_each_step_lands_and_when_it_ran(ui):
     assert [(x["e"], x["ids"], x["status"]) for x in state["expects"]] == [(1, ["cn001"], "skipped")] and state["expects"][0]["t"] >= 0
 
 
+def test_the_preview_and_the_run_state_say_whose_clients_may_see_a_change(ui):
+    """ADR 0086 phase 2: each step carries its declared blast (webui/blast.py TARGETS), before Play and in the run state."""
+    pv = json.loads(req(ui, "/api/scenarios/quick")[1])
+    assert [s["blast"] for s in pv["steps"]] == [["slurmrestd", "login"], ["dcgm-exporter"]]
+    assert all(s["blast_caption"].endswith(".") for s in pv["steps"])
+    assert req(ui, "/api/scenarios/quick/run", "POST", headers={"X-Requested-With": "workbench"})[0] == 200
+    state = json.loads(req(ui, "/api/scenarios/run")[1])
+    assert [s["blast"] for s in state["steps"]] == [["slurmrestd", "login"], ["dcgm-exporter"]]
+    deadline = time.time() + 5
+    while json.loads(req(ui, "/api/scenarios/run")[1])["running"] and time.time() < deadline:
+        time.sleep(0.05)
+
+
 def test_stop_ends_a_running_scenario_and_unknown_is_404(ui):
     h = {"X-Requested-With": "workbench"}
     assert req(ui, "/api/scenarios/nope/run", "POST", headers=h)[0] == 404
