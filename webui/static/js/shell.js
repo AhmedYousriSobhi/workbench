@@ -40,7 +40,7 @@ export function setView(iso, remember) {  // 2.5D game style or the flat baselin
 export function setCircuit(on) {  // the Cluster level of the zoom (redesign step 3) or the diagram that was here before it
   if (S.circuit === on) return; S.circuit = on;
   if (on) { S.treeWas = !$('nodeswrap').classList.contains('treeoff'); setTree(false, false); } else if (S.treeWas) setTree(true, false);  // the circuit wants the width the node list uses
-  try { localStorage.setItem('workbench-circuit', on ? '1' : '0'); } catch (e) { /* not remembered */ }
+  try { sessionStorage.setItem('workbench-circuit', on ? '1' : '0'); } catch (e) { /* not remembered */ }  // the classic diagram lasts for this visit only (#730)
   $('nodeswrap').classList.toggle('circuit', on);
   if (curLevel() !== 'overview') buildFlow(); paintViewSeg();
 }
@@ -96,7 +96,8 @@ export function init2() {
   $('vw-cv').onclick = () => { setCircuit(true); toDiagram(); };
   let viewPref = null; try { viewPref = localStorage.getItem('workbench-view'); } catch (e) { /* default */ }
   setView(viewPref === 'iso', false);  // flat is the default everywhere (#525); only a remembered choice of 2.5D changes it
-  try { S.circuit = localStorage.getItem('workbench-circuit') !== '0'; } catch (e) { S.circuit = true; }  // the circuit is the way in; the classic diagram is a choice
+  try { localStorage.removeItem('workbench-circuit'); } catch (e) { /* nothing to clear */ }  // an older version remembered the classic diagram for good (#730)
+  try { S.circuit = sessionStorage.getItem('workbench-circuit') !== '0'; } catch (e) { S.circuit = true; }  // the circuit is the default: it has the zoom levels the classic diagram lacks; the classic diagram is a choice for this visit
   $('nodeswrap').classList.toggle('circuit', S.circuit);
   paintLevelUi();
   let treePref = null; try { treePref = localStorage.getItem('workbench-tree'); } catch (e) { /* default */ }

@@ -99,7 +99,7 @@ expect:
   `delete_pod: {namespace, name}`, `scale: {namespace, deploy, replicas}`, `apply` and `remove: [path under k8s/]`, and `drain: {node, timeout}` (eviction through the API, so a disruption budget can block it). Expectations: `k8s.node_ready: {node, ready, within}`,
   `k8s.pod_status: {namespace, name, reason, within}` (the pod's phase or a container's waiting or terminated reason) and `k8s.pods_on_node: {node, namespace, selector, min, within}`. `gpu-exporter` steps also take `storage: {mount, used_pct, inodes_used_pct, stale, user, used_gb, reset}`; expectation `storage.mount: {node, mount, min_used_pct, min_inodes_used_pct, quota_exceeded, stale, within}`.
 - `expect`: assertions checked after the steps. Anything that needs the app under test (such as `jira.issue_created`) only
-  holds when the app does its part.
+  holds when the app does its part. Every scenario carries an `expect`, or is listed with its reason in `NO_EXPECT` in `tests/test_scenario.py` (the test fails otherwise).
 
 Always run `--dry-run` first: it rejects unknown targets and unknown nodes. Design: [ADR 0006](../adr/0006-scenario-engine-runs-in-the-host-cli.md).
 
