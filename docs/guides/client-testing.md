@@ -276,6 +276,8 @@ benchctl set ticket-bot --ignore 0.5 --reopen 0.3    # half stay unassigned, 30%
 benchctl get ticket-bot                              # what is in force
 ```
 
+**From the page:** Menu, then **Ticket bot**. The sheet shows the values last set, takes the same four numbers and sends them through the governor (the page has no Docker), so the governor must run with `--workdir` (the normal `benchctl start`). Empty boxes stay as they are.
+
 Ranges: `--every` 10 to 3600 s, `--resolve` 10 to 86400 s, `--ignore` and `--reopen` 0 to 1. Only the values you give change. A value out of range is refused; a damaged settings file keeps the last good values. `benchctl load off` stops the bot, and the next `load on --tickets` starts from its own options again.
 
 A job pinned to a node that is down stays pending (*ReqNodeNotAvail*) until the node is back or you `scancel` it.

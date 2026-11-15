@@ -569,6 +569,27 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             return JSONResponse({"error": "since must be a number"}, status_code=400)
         return JSONResponse(await asyncio.to_thread(traffic.collect, since))
 
+    async def ticket_bot(request: Request):
+        """GET: the settings the running ticket bot was last given. POST: change them (the governor runs `benchctl set ticket-bot`, issue 728)."""
+        body = {}
+        if request.method == "POST":
+            try:
+                body = await request.json()
+            except ValueError as e:
+                raise HTTPException(422, "send a JSON object") from e
+            if not isinstance(body, dict):
+                raise HTTPException(422, "send a JSON object")
+        req = {"cmd": "ticket-bot-set", **{k: body[k] for k in ("every", "resolve", "ignore", "reopen") if k in body}} if request.method == "POST" else {"cmd": "ticket-bot-get"}
+        try:
+            res = await asyncio.to_thread(checks.governor_request, req, socket)
+        except (OSError, ValueError) as e:
+            raise HTTPException(503, "the governor is not reachable: start it with ./scripts/benchctl start") from e
+        if not res.get("ok"):
+            raise HTTPException(409, res.get("error", "the governor refused"))
+        if res.get("dry_run"):
+            return JSONResponse({"started": False, "message": "The governor is in dry-run mode, so nothing was changed. Run: ./scripts/benchctl set ticket-bot ..."})
+        return JSONResponse(res if request.method == "GET" else {"started": True, "message": "Sent: the bot applies it within one cycle."})
+
     async def capture_call(req: dict) -> JSONResponse:
         """One wire's messages, on demand and only through the governor (issue 505): it starts, reads and stops the capture; this page never touches Docker."""
         try:
@@ -708,6 +729,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/help/files/{rel:path}", protected(help_file)),
             Route("/help/{slug:path}", protected(help_page)),
             Route("/api/traffic", protected(traffic_record)),
+            Route("/api/ticket-bot", protected(ticket_bot)),
+            Route("/api/ticket-bot", protected(ticket_bot, write=True), methods=["POST"]),
             Route("/api/capture/start", protected(capture_start, write=True), methods=["POST"]),
             Route("/api/capture/read", protected(capture_read)),
             Route("/api/capture/stop", protected(capture_stop, write=True), methods=["POST"]),
