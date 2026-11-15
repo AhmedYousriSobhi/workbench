@@ -599,6 +599,7 @@ NO_EXPECT = {
     "k8s-queue-inactive": "no expect form for a Kueue queue's status",
     "login-node-down": "no expect form for the login node's ssh state",
     "login-node-hung": "no expect form for the login node's ssh state",
+    "netem-slow-link": "no expect form for link latency or packet loss; slurmctld may or may not log a delayed reply",
     "preempt-burst": "owner to say what a client observes: squeue pending state for a requeued job is not evident",
     "reboot-asap": "owner to say which sinfo state a powered-down node shows",
     "ssh-host-key-changed": "no expect form for the login node's host key",

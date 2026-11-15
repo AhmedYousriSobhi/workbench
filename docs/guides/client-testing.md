@@ -118,6 +118,20 @@ That covers a node Slurm drained by the health check or by hand, and a node that
 
 With a `topology:` in `sim.yaml` ([topology](topology.md)), `scontrol show topology` lists the switches. `benchctl scenario run switch-leaf-down` (SC-35) drains one leaf's nodes for 90 s and resumes them. Check that the client shows the switch tree and the reason `switch leaf1 down`.
 
+### Slow or lossy links inside the cluster
+
+`benchctl scenario run netem-slow-link` (SC-46) slows one compute node's own network with `tc netem`.
+- The first compute node gets 200 ms of delay and 5 % loss for 60 s.
+- slurmctld, and a client polling `sinfo`, see slow or lost replies.
+- The TTL ends the fault, and the scenario clears it at 90 s as well.
+
+Check before you run it:
+- The optional root governor service must run (`sudo ./scripts/install-governor.sh`).
+- Memory must be at level L0-L1.
+- It is for the CLI and scenarios only, never the page.
+
+More: [network faults](network-faults.md).
+
 ## Test login, expiry and authentication paths
 
 These faults give the client real errors from the real components, for its "login needed", "certificate expired" and "unauthorised" paths. They need the host CLI; the page cannot play them.
