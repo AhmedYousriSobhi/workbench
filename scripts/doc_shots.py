@@ -1,18 +1,18 @@
 """Documentation images with sample data: the page's own cluster, flow and connection calls are answered locally, so no
 cluster is needed. Writes the manual's screenshots (the wiki and the in-page help use the same files) and the README's
-animated GIF into docs/manual/img.
+two animated tours into docs/manual/img (a pointer, clicks and slides over the real page: scripts/demo_tour.py).
 
     .venv/bin/python scripts/doc_shots.py          # needs `pip install -e '.[browser]'` and `playwright install chromium`
 
-Every image comes as a pair, `NAME-light.png` and `NAME-dark.png` (the GIF as `architecture-demo-light.gif` and `-dark.gif`): pages
+Every image comes as a pair, `NAME-light.png` and `NAME-dark.png` (the GIFs as `architecture-demo-light.gif`, `circuit-zoom-light.gif` and their `-dark` twins): pages
 use the light one (GitHub's default), the README shows both in a `<picture>`. Dark is the page's default theme (Midnight). With no
 argument it runs both schemes in turn; `doc_shots.py light` or `dark` runs one. Re-run it after a change to the page's look, then
 commit the images."""
-import io
 import subprocess
 import sys
 from pathlib import Path
 
+from demo_tour import readme_tour, zoom_tour  # scripts/, next to this file
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent; OUT = ROOT / "docs/manual/img"
@@ -110,45 +110,8 @@ try:
         pg.screenshot(path=str(OUT / f"web-cluster-architecture-{SCHEME}.png"))
         pg.locator("#pl-logins").scroll_into_view_if_needed(); pg.wait_for_timeout(300)
         pg.screenshot(path=str(OUT / f"web-login-nodes-{SCHEME}.png"))
-        # the README's animation: every capability in turn, each with a caption (#337). Sample data, no cluster.
         from PIL import Image
-        pg.goto(login_url(base_url, ui_token)); pg.wait_for_selector("#flow rect.blk"); pg.wait_for_timeout(1200)
-        pg.evaluate(f"setTheme('{SCHEMES[SCHEME]}')"); pg.evaluate("setView(true, false)"); pg.evaluate("setTree(false)"); pg.evaluate(FLOW); pg.wait_for_timeout(500)
-        # the diagram and the side panel (focus, blast radius, client's eye), side by side as on the real page; the caption has its own strip below
-        def union():
-            a, c = pg.locator("#trafficpanel").bounding_box(), pg.locator("#inspector").bounding_box()
-            x, y = min(a["x"], c["x"]), min(a["y"], c["y"]); return {"x": x, "y": y, "width": max(a["x"] + a["width"], c["x"] + c["width"]) - x, "height": max(a["y"] + a["height"], c["y"] + c["height"]) - y}
-        pg.click("#lens [data-lens=client]"); pg.wait_for_timeout(400); box = union(); pg.click("#lens [data-lens=all]"); pg.wait_for_timeout(300)
-        strip = 46
-        clip = {**box, "height": box["height"] + strip}; frames = []
-        pg.evaluate("""([top, left, w, light]) => { const [bg, fg, bd] = light ? ['#f4f7ff', '#14213d', '#2f55d4'] : ['#0b1020', '#e8eefc', '#5b7cff']; const c = document.createElement('div'); c.id = 'democap'; c.setAttribute('aria-hidden', 'true');
-            c.style.cssText = `position:absolute;left:${left}px;top:${top}px;width:${w}px;box-sizing:border-box;padding:8px 14px;border-radius:8px;font:600 18px system-ui,sans-serif;background:${bg};color:${fg};border:1px solid ${bd};pointer-events:none;z-index:99`;
-            document.body.appendChild(c); }""", [box["y"] + box["height"] + 6, box["x"], box["width"], SCHEME == "light"])
-        def traffic(to, n, err=None):
-            e = f", err: {err}" if err is not None else ""
-            pg.evaluate(f"onFlow({{level: 0, cursor: {len(frames) + 300}, events: [{{from: 'clients', to: '{to}', n: {n}, label: 'requests', nodes: []{e}}}], totals: flowSnap.totals, errors: flowSnap.errors, reachable: flowSnap.reachable}})")
-        def fault():
-            pg.evaluate(f"onFlow({{level: 0, cursor: {len(frames) + 300}, events: [{{from: 'injector', to: 'bmc-farm', n: 1, label: 'overheat on cn003', nodes: ['cn003']}}], totals: flowSnap.totals, errors: flowSnap.errors, reachable: flowSnap.reachable}})")
-        def scene(caption, count, act=None, at=None):
-            pg.evaluate("t => { document.getElementById('democap').textContent = t }", caption)
-            for i in range(count):
-                if act and i in (at or {0}): act()
-                frames.append(Image.open(io.BytesIO(pg.screenshot(clip=clip, full_page=True))).convert("RGB")); pg.wait_for_timeout(70)
-        scene("Clients reach every part; dots are real requests", 12, lambda: traffic("teleport", 2), {1, 5, 9})
-        scene("Error answers are triangles (counted by the mocks)", 10, lambda: traffic("bmc-farm", 3, 2), {1, 5})
-        scene("A fault: dashed parts are affected (declared, not measured)", 14, fault, {1})
-        pg.evaluate("setBlast(null)")
-        pg.click("#lens [data-lens=management]"); scene("Lens: one plane at a time, nothing moves", 8)
-        pg.click("#lens [data-lens=client]"); scene("Client's eye: what a client should call and what it got", 10)
-        pg.click("#lens [data-lens=all]")
-        pg.evaluate("focusOn('teleport')"); scene("Focus: a part and its direct neighbours", 8)
-        pg.evaluate("focusOn(null)")
-        pg.evaluate("setView(false, false)"); scene("Flat view: the same diagram, calm", 7)
-        pg.evaluate("setView(true, false)")
-        pg.evaluate("setLevel('overview', false)"); scene("Global view: one card per cluster, double-click to dive in", 10)
-        pg.evaluate("setLevel('full', false)")
-        w = 820; frames = [f.resize((w, round(f.height * w / f.width)), Image.LANCZOS).quantize(64) for f in frames]
-        frames[0].save(OUT / f"architecture-demo-{SCHEME}.gif", save_all=True, append_images=frames[1:], duration=150, loop=0, optimize=True)
+
         # the rest of the manual's web screenshots: the phone layout, the node panel, a running scenario, the stopped stack and the help
         from benchctl import scenario as scn
         def sample_page(width, height, cl=None, flow=True):
@@ -180,30 +143,17 @@ try:
         pg4 = sample_page(1280, 700, down, flow=False); pg4.wait_for_timeout(800); pg4.screenshot(path=str(OUT / f"web-stack-down-{SCHEME}.png")); pg4.close()
         pg5 = b.new_page(viewport={"width": 1180, "height": 760}, color_scheme=SCHEME); pg5.goto(login_url(base_url, ui_token)); pg5.goto(base_url + "/help/manual/11-which-command"); pg5.wait_for_timeout(500)
         pg5.screenshot(path=str(OUT / f"web-help-{SCHEME}.png")); pg5.close()
-        # the circuit's zoom and layers, as an animation for the README: Fleet, then in to the Cluster, one layer at a time, then a Pool
-        zp = sample_page(1280, 900); zp.evaluate("zoomTo('fleet')"); zp.wait_for_timeout(900)
-        zp.evaluate("document.querySelector('header.top').style.setProperty('position', 'static', 'important')")
-        zp.evaluate("zoomTo('cluster')"); zp.wait_for_timeout(900)
-        zb = zp.locator("#trafficpanel").bounding_box(); zclip = {**zb, "height": zb["height"] + 46}; zframes = []
-        zp.evaluate("""([top, left, w, light]) => { const [bg, fg, bd] = light ? ['#f4f7ff', '#14213d', '#2f55d4'] : ['#0b1020', '#e8eefc', '#5b7cff']; const c = document.createElement('div'); c.id = 'zoomcap'; c.setAttribute('aria-hidden', 'true');
-            c.style.cssText = `position:absolute;left:${left}px;top:${top}px;width:${w}px;box-sizing:border-box;padding:8px 14px;border-radius:8px;font:600 18px system-ui,sans-serif;background:${bg};color:${fg};border:1px solid ${bd};pointer-events:none;z-index:99`;
-            document.body.appendChild(c); }""", [zb["y"] + zb["height"] + 6, zb["x"], zb["width"], SCHEME == "light"])
-        def zscene(caption, count, act=None, settle=0):
-            zp.evaluate("t => { document.getElementById('zoomcap').textContent = t }", caption)
-            if act: act()
-            zp.wait_for_timeout(settle)  # a scene that should show the arrival, not the move
-            for _ in range(count):
-                zframes.append(Image.open(io.BytesIO(zp.screenshot(clip=zclip, full_page=True))).convert("RGB")); zp.wait_for_timeout(80)
-        zscene("Zoom out: the Fleet, one card per cluster", 9, lambda: zp.evaluate("zoomTo('fleet')"), settle=1000)
-        zscene("Zoom in: the Cluster, every part and wire", 10, lambda: zp.evaluate("zoomTo('cluster')"))
-        for layer, word in (("access", "Access"), ("management", "Management"), ("monitoring", "Monitoring")):
-            zscene(f"Layers: only {word} stays lit, the rest fades", 7, lambda layer=layer: zp.click(f"#cvstack button[data-layer={layer}]"))
-        zscene("Layers: back to all of them", 5, lambda: zp.click("#cvstack button[data-layer=all]"))
-        zscene("Zoom in again: a Pool, one card per node", 11, lambda: zp.evaluate("zoomTo('pool', {pool: 'sg'})"))
-        zscene("Zoom back out to the Cluster", 9, lambda: zp.evaluate("zoomTo('cluster')"))
-        zw = 820; zframes = [f.resize((zw, round(f.height * zw / f.width)), Image.LANCZOS).quantize(64) for f in zframes]
-        zframes[0].save(OUT / f"circuit-zoom-{SCHEME}.gif", save_all=True, append_images=zframes[1:], duration=150, loop=0, optimize=True)
-        zp.close()
+        # the README's two tours (#799): a pointer clicks through the real page, sample data, no cluster (scripts/demo_tour.py)
+        now = {"cluster": cluster}
+        cn003_off = {**cluster, "nodes": [{**n, "state": "down", "label": "Powered off", "power": "Off", "temp": 18, "bcm": "DOWN"} if n["name"] == "cn003" else n for n in cluster["nodes"]]}
+        def node_api(r):  # a node's details and tickets; a button's action answers "done" and changes nothing
+            if r.request.method != "GET":
+                return r.fulfill(json={"results": [{"target": "bmc", "status": "ok", "detail": ""}]})
+            r.fulfill(json={"tickets": []} if r.request.url.endswith("/tickets") else {"ip": "10.141.0.3", "bmc_ip": "10.148.0.3", "text": "cn003: powered on, BMC reports UP"})
+        tp = sample_page(1280, 800)
+        tp.route("**/api/cluster", lambda r: r.fulfill(json=now["cluster"])); tp.route("**/api/nodes/**", node_api); tp.route("**/api/traffic*", traffic_route())
+        readme_tour(tp, OUT / f"architecture-demo-{SCHEME}.gif", lambda: now.update(cluster=cluster), lambda: now.update(cluster=cn003_off)); tp.close()
+        zp = sample_page(1280, 980); zoom_tour(zp, OUT / f"circuit-zoom-{SCHEME}.gif"); zp.close()
         b.close()
 finally:
     proc.terminate()

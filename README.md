@@ -41,17 +41,17 @@ outside the cluster keeps your laptop usable. No sudo and no data centre: about 
 
 <p align="center"><picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/manual/img/architecture-demo-dark.gif">
-  <img src="docs/manual/img/architecture-demo-light.gif" alt="The Infrastructure architecture in turn: traffic and error dots, a fault with its blast radius, lenses and the client's eye, focus, the flat view and the global view" width="820">
+  <img src="docs/manual/img/architecture-demo-light.gif" alt="A pointer tours the web page in six numbered steps: wires pulse with live requests, the Client's eye lens and the 2.5D view, a click on node cn003 shows how to reach it, Power off and its blast radius, zoom out to the Fleet and back in, then a slide to Traffic and Communication" width="820">
 </picture></p>
 
-*The page's Infrastructure architecture (sample data). Dots are requests, triangles are error answers, diamonds are faults; a fault outlines what a client would notice.*
+*A tour of the web page (sample data): every step is a real click. Wires pulse with requests, red dashes are errors, and a fault outlines what a client would notice.*
 
 <p align="center"><picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/manual/img/circuit-zoom-dark.gif">
-  <img src="docs/manual/img/circuit-zoom-light.gif" alt="Zoom out to the Fleet, in to the Cluster, the Access, Management and Monitoring layers one at a time, in to a Pool and back out" width="820">
+  <img src="docs/manual/img/circuit-zoom-light.gif" alt="A pointer zooms out to the Fleet, clicks the cluster to zoom in, picks the Access, Management and Monitoring layers one at a time, opens a pool and zooms back out" width="820">
 </picture></p>
 
-*Zoom and layers: Fleet, Cluster, one layer at a time, then a Pool (sample data).*
+*Zoom and layers, clicked through: Fleet, Cluster, one layer at a time, then a Pool (sample data).*
 
 ## Quick start: three commands, no sudo
 
