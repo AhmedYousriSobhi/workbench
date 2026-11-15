@@ -1,7 +1,8 @@
 name: fan-failure
 ref: SC-05
-description: Fans fail on a GPU node and it runs hot; the BMC event log shows critical entries
+description: "Fans fail on a GPU node and it runs hot (fault model fan-failure: failed fans, then a rising temperature); the BMC event log shows critical entries and a ticket is filed"
 steps:
-  - {at: 0s,  target: bmc-farm, do: {nodes: [gpu002], fan_fail: 3}}
-  - {at: 10s, target: bmc-farm, do: {nodes: [gpu002], ramp: {to: 88, over: 60s}}}
-  - {at: 90s, target: bmc-farm, do: {nodes: [gpu002], clear: true}}
+  - {at: 0s,  target: fault, do: {inject: fan-failure, nodes: [second gpu node]}}
+  - {at: 90s, target: fault, do: {clear: fan-failure, nodes: [second gpu node]}}
+expect:
+  - jira.issue_created: {labels: [fault-fan, "node-{second gpu node}"], within: 30s}

@@ -243,7 +243,7 @@ def test_the_real_scheduler_allocates_a_dra_claim_to_a_device_whose_uuid_is_a_dc
 
 def _play(name: str, *, stop_at: float | None = None) -> None:
     """Run a scenario's k8s steps in order against the live cluster, without waiting for their `at` times."""
-    sc = scenario.load(name)
+    sc = scenario.load(name, sim=k8s.current_sim())
     for st in scenario.plan(sc):
         if stop_at is None or st.at <= stop_at:
             out = scenario.execute(st)

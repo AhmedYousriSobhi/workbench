@@ -114,7 +114,7 @@ class Runs:
 
     def start(self, name: str, speed: float, trace: bool = False) -> dict:
         try:
-            sc = scenario.load(name, self.root)
+            sc = scenario.load(name, self.root, self.sim)
         except scenario.ScenarioError as e:
             raise HTTPException(404, str(e)) from e
         problems = scenario.validate(sc, self.sim)
@@ -667,7 +667,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
     async def scenario_preview(request: Request):
         try:
-            sc = scenario.load(request.path_params["name"], scenarios)
+            sc = scenario.load(request.path_params["name"], scenarios, sim)
         except scenario.ScenarioError as e:
             raise HTTPException(404, str(e)) from e
         return JSONResponse(scenario.preview(sc))

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import yaml
 
-from . import authfaults, checks, dcgm, k8s, slurmupgrade, topology
+from . import authfaults, checks, dcgm, faultmodel, k8s, selectors, slurmupgrade, topology
 from .nodes import node_names
 
 ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "http://127.0.0.1:8000/sim/inject",
@@ -79,7 +79,13 @@ class Report:
         return all(o.status != "failed" for o in self.steps + self.expects)
 
 
-def load(name: str, root: Path = SCENARIOS) -> dict:
+def load(name: str, root: Path = SCENARIOS, sim: dict | None = None) -> dict:
+    """The scenario file; with `sim`, node selectors (`first gpu node`, benchctl/selectors.py) are replaced by that cluster's names."""
+    sc = _load(name, root)
+    return selectors.resolve_scenario(sc, sim) if sim is not None else sc
+
+
+def _load(name: str, root: Path) -> dict:
     path = root / f"{name}.yaml"
     if not path.is_file():  # a reference number works too: SC-02 or sc-2
         m = re.fullmatch(r"(?i)sc-?0*(\d+)", name.strip())
@@ -121,14 +127,22 @@ def preview(sc: dict) -> dict:
             "cli_only": sum(1 for s in steps if not s["page"]) + sum(1 for e in expects if not e["page"])}
 
 
-def list_all(root: Path = SCENARIOS) -> list[dict]:
-    return sorted((yaml.safe_load(p.read_text()) for p in root.glob("*.yaml")), key=lambda s: s["name"])
+def list_all(root: Path = SCENARIOS, sim: dict | None = None) -> list[dict]:
+    found = sorted((yaml.safe_load(p.read_text()) for p in root.glob("*.yaml")), key=lambda s: s["name"])
+    return [_resolved_or_raw(sc, sim) for sc in found] if sim is not None else found
+
+
+def _resolved_or_raw(sc: dict, sim: dict) -> dict:
+    try:
+        return selectors.resolve_scenario(sc, sim)
+    except ScenarioError:  # this cluster lacks the kind of node it names (no Kubernetes nodes): listed, but a run says why it cannot play
+        return sc
 
 
 def plan(sc: dict) -> list[Step]:
     """Steps in time order; a `ramp: {to, over}` step becomes temperature steps every RAMP_STEP_S."""
     out: list[Step] = []
-    for s in sc.get("steps", []):
+    for s in fault_steps(sc.get("steps", [])):
         at, target, do = parse_duration(s["at"]), s["target"], dict(s.get("do") or {})
         ramp = do.pop("ramp", None)
         if ramp:
@@ -139,6 +153,17 @@ def plan(sc: dict) -> list[Step]:
         if not ramp or set(do) - {"nodes"}:  # a ramp's own step carries nothing but the node list
             out.append(Step(at, target, do))
     return sorted(out, key=lambda s: s.at)
+
+
+def fault_steps(steps: list[dict]) -> list[dict]:
+    """The steps with each `fault` step (benchctl/faultmodel.py) replaced by its physical effects."""
+    out = []
+    for s in steps:
+        if s.get("target") != "fault":
+            out.append(s)
+            continue
+        out += [{"at": parse_duration(s["at"]) + delay, "target": target, "do": do} for delay, target, do in faultmodel.effects(s["do"])]
+    return out
 
 
 def validate(sc: dict, sim: dict) -> list[str]:
@@ -156,6 +181,11 @@ def validate(sc: dict, sim: dict) -> list[str]:
             continue
         if t == "switch":
             problems += [f"step {i}: {m}" for m in topology.switch_problems(s.get("do") or {}, sim)]
+            continue
+        if t == "fault":
+            bad = faultmodel.problems(s.get("do") or {})
+            problems += [f"step {i}: {m}" for m in bad]
+            problems += [f"step {i}: unknown node {n!r}" for n in (s.get("do") or {}).get("nodes") or [] if n not in nodes] if not bad else []
             continue
         if t not in ENDPOINTS and t not in HOST_TARGETS:
             problems.append(f"step {i}: unknown target {t!r}")

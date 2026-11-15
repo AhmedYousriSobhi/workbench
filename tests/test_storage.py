@@ -233,7 +233,7 @@ def test_the_exporter_serves_the_view_for_any_node_name_including_a_login_node()
 
 def test_the_storage_scenarios_validate_and_their_expectations_read_the_view(monkeypatch):
     for name in ("disk-full", "quota-exceeded", "stale-mount"):
-        assert not scenario.validate(scenario.load(name), SIM), name
+        assert not scenario.validate(scenario.load(name, sim=SIM), SIM), name
     st = state()
     st.inject({"node": "cn001", "storage": {"mount": "/scratch", "used_pct": 99, "inodes_used_pct": 90, "user": "alice", "used_gb": 20500}})
     st.inject({"node": "cn002", "storage": {"mount": "/scratch", "stale": True}})
