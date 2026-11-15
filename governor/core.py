@@ -25,6 +25,7 @@ STAGE_PREFIX = "@stage "  # the line `benchctl up` prints for each stage change 
 EVENTS_EVERY = 5.0  # seconds between memory.events reads (one small file per container)
 
 ADMIT_FLOOR = int(1.0 * 1024**3)  # MemAvailable that must remain after a start (matches benchctl preflight)
+LAB_VALIDATE_MB = 250  # a lab validation one-shot set (P5, ADR 0050: the replay and validation estimate)
 CHANGE_MAX_LEVEL = 1  # scale/set-profile fork docker; GV-8 forbids that under pressure (L2+)
 
 
@@ -34,9 +35,10 @@ class Governor:
                  watch_interval: float = 15.0, annotator: Annotator | None = None,
                  inventory: Callable[[], tuple[list[Group], dict]] | None = None,
                  refresh_interval: float = 30.0, effector: Effector | None = None, tracer: Callable | None = None, statser: Callable | None = None, capturer: Callable | None = None,
-                 streamer: Streamer | None = None, admit_floor: int = ADMIT_FLOOR):
+                 streamer: Streamer | None = None, admit_floor: int = ADMIT_FLOOR, lab_exists: Callable[[str], bool] | None = None):
         self.sampler, self.ladder, self.groups = sampler, ladder, groups
         self.admit_floor = admit_floor
+        self.lab_exists = lab_exists  # issue 552: does compose/generated/lab/NAME exist in the workdir
         self.executor, self.dry_run = executor, dry_run
         self.signals: Signals | None = None
         self.audit: list[str] = []
@@ -245,6 +247,12 @@ class Governor:
         threading.Thread(target=run, daemon=True, name="change").start()
         return {"ok": True, "started": True, "job": job}
 
+    def _lab_missing(self, req: dict) -> dict | None:
+        """Shared by every lab verb: the named lab must exist on disk (the name pattern was checked by control.lab_args_error)."""
+        if self.lab_exists is None or not self.lab_exists(req["name"]):
+            return {"ok": False, "error": f"no lab {req['name']} on disk: import it first (benchctl import lab {req['name']} --from DIR)"}
+        return None
+
     def _change_view(self) -> dict | None:
         """The latest change for `status`: job id, state and stages (name, state, seconds); no timestamps of its own beyond start and end."""
         c = self.change
@@ -341,6 +349,19 @@ class Governor:
                 return self._change(f"submit-job={req['node']}:{req['gpus']}gpu", args)
             if cmd == "refresh-jira-licence":  # the page's button: restart the real Jira, whose test licence counts from its start
                 return self._change("refresh-jira-licence", ["refresh", "jira-real-licence"])
+            if cmd == "lab-validate":  # issue 552: P5 one-shots (throwaway slurmctld and slurmdbd, promtool, kubectl), one at a time, L0-L1 only
+                if (err := self._lab_missing(req)):
+                    return err
+                if req.get("side", "baseline") != "baseline":
+                    return {"ok": False, "error": "the candidate side is not available yet (issue 553)"}
+                if self.change and self.change.get("state") == "running":
+                    return {"ok": False, "error": "a change is already running: wait for it, one lab run at a time"}
+                if self.ladder.level > CHANGE_MAX_LEVEL:
+                    return {"ok": False, "error": f"refused at L{self.ladder.level}: lab runs are paused (GV-8)"}
+                adm = self._admit(LAB_VALIDATE_MB)
+                if not adm.get("ok"):
+                    return adm
+                return self._change(f"lab-validate={req['name']}", ["validate", "lab", req["name"], "--run-here"])
             if cmd == "slurm-step":
                 what = req["name"]
                 args = (["set", "slurmd", req["node"], what.removeprefix("slurmd-")] if what.startswith("slurmd-")

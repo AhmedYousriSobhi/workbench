@@ -120,6 +120,11 @@ def _range(names: list[str]) -> str:
     return f"{prefix}[{nums[0]}-{nums[-1]}]"
 
 
+# The config lab's validation (issue 552) loads sacctmgr data into a scratch database `lab_validate_<id>` of this MariaDB; the slurm user
+# may only create and drop databases of that name. The data directory is a tmpfs, so this runs at every container creation.
+LAB_GRANT_SQL = "GRANT ALL PRIVILEGES ON `lab\\_validate\\_%`.* TO 'slurm'@'%';\n"
+
+
 def slurmdbd_conf(password: str) -> str:
     return "\n".join([
         "# GENERATED; contains a secret, never commit", "AuthType=auth/munge", "DbdHost=slurmdbd",
@@ -159,6 +164,7 @@ def write(sim: dict, out_dir: Path, compute_override: int | None = None,
         (out_dir / "topology.conf").unlink(missing_ok=True)  # an earlier run's switches must not outlive the `topology:` key
     if accounting:
         files["accounting.sh"] = accounting_script(sim)
+        files["lab-grant.sql"] = LAB_GRANT_SQL
     for name, text in files.items():
         (out_dir / name).write_text(text)
     if accounting:

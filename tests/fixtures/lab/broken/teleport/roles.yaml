@@ -1,0 +1,6 @@
+kind: role
+version: v7
+metadata: {name: typo-role}
+spec:
+  allow: {lgoins: ['root'], node_labels: {'*': '*'}}
+  options: {max_session_tll: 12h}

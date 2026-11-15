@@ -179,7 +179,8 @@ def main(argv: list[str] | None = None) -> None:
                    annotator, discover_docker, args.refresh_interval,
                    effector if args.workdir else None, tracer=tracer if args.workdir else None,
                    statser=statser if args.workdir else None, capturer=capturer if args.workdir else None,
-                   streamer=streamer if args.workdir else None, admit_floor=int(floor * GB))
+                   streamer=streamer if args.workdir else None, admit_floor=int(floor * GB),
+                   lab_exists=(lambda n: (Path(args.workdir) / 'compose/generated/lab' / n / 'manifest.json').is_file()) if args.workdir else None)
     srv = control.serve(args.socket, gov.handle, gov.group_names, gid=args.socket_gid) \
         if args.socket else None
     msrv = None
