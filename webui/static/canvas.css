@@ -174,3 +174,20 @@
 @media (min-width:1100px) { #nodeswrap.circuit #trafficpanel #flow[data-cv] { min-width:0; } }  /* the 1100 px floor made it scroll sideways inside a 960 px panel */
 #nodeswrap.circuit #trafficpanel #flow[data-cv] { width:100%; max-width:100%; max-height:max(520px, calc(100vh - 250px)); }
 .cvlayer { flex:1 1 118px; gap:8px; padding:6px 8px; } .cvlayer .plate { width:30px; height:18px; }
+
+/* ---- The run layer (ADR 0086, js/runlayer.js): a scenario's steps as numbered badges on the parts they touched, expectations as E pins.
+   The state is the glyph and the words in every badge's name; the colour only helps. Nothing here animates, so reduced motion needs no rule. ---- */
+#flow[data-cv] .runlayer [role=button] { cursor:pointer; outline:none; }
+#flow[data-cv] .runlayer rect { fill:var(--cv-surface); stroke:var(--cv-text-muted); stroke-width:2; }
+#flow[data-cv] .runlayer text { font:700 21px var(--cv-font-ui); fill:var(--cv-text); pointer-events:none; }
+#flow[data-cv] .runlayer .rl-more { font-size:17px; font-weight:600; fill:var(--cv-text-2); }
+#flow[data-cv] .runlayer .k-done rect { fill:var(--accent-fill); stroke:var(--accent-fill); } #flow[data-cv] .runlayer .k-done text { fill:var(--on-accent); }
+#flow[data-cv] .runlayer :is(.k-now, .k-active) rect { stroke:var(--accent); stroke-width:3; } #flow[data-cv] .runlayer :is(.k-now, .k-active) .rl-t { fill:var(--accent-text); }
+#flow[data-cv] .runlayer :is(.k-next, .k-notrun) rect { stroke-dasharray:5 4; } #flow[data-cv] .runlayer :is(.k-next, .k-notrun) .rl-t { fill:var(--cv-text-2); }
+#flow[data-cv] .runlayer :is(.k-cli, .k-skipped) rect { fill:var(--cv-badge-bg); stroke:var(--warn); } #flow[data-cv] .runlayer :is(.k-cli, .k-skipped) .rl-t { fill:var(--warn-text); }
+#flow[data-cv] .runlayer .k-failed rect { stroke:var(--bad); stroke-width:3; } #flow[data-cv] .runlayer .k-failed .rl-t { fill:var(--bad); }
+#flow[data-cv] .runlayer .sel rect, #flow[data-cv] .runlayer [role=button]:hover rect { stroke-width:4; }
+#flow[data-cv] .runlayer [role=button]:focus-visible rect { stroke:var(--focus); stroke-width:4; }
+/* the chosen step's parts (the current one while the run plays): an accent outline. The declared blast radius keeps its red dashes. */
+#flow[data-cv] [data-runring]:not([data-blast]) > .cv-box { stroke:var(--accent); stroke-width:4; }
+#flow[data-cv] .cv-sq[data-runring]:not([data-blast]) rect { stroke:var(--accent); stroke-width:3.5; }

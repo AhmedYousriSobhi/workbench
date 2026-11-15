@@ -75,4 +75,7 @@ export const S = {
   trPlane: 'all',
   trZoom: 1,
   slurmAt: 0,
+  runSel: null,       // Run layer (ADR 0086): the step chosen in the rail, a badge or the phone sheet; null follows the run
+  runHidden: '',      // a finished run taken off the diagram ('name@started')
+  runSheetOff: '',    // the phone sheet hidden for this run ('name@started')
 };

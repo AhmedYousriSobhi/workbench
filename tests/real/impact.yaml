@@ -87,7 +87,7 @@
   paths: ["benchctl/real_gpu.py"]
   tests: [test_real_gpu_real]
 - name: web page
-  paths: ["webui/static/**"]
+  paths: ["webui/static/**", "scripts/ui_shots.py"]
   tests: [test_webui_browser, test_traffic_live_browser, test_nhc_browser, test_flow_real]
 - name: web server
   paths: ["webui/*.py"]
