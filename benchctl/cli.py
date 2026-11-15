@@ -39,6 +39,7 @@ from . import (
     netemfaults,
     nhc,
     nodes,
+    pagefeed,
     ready,
     scenario,
     situation,
@@ -825,7 +826,7 @@ def get_alerts(output: str = OUTPUT, json_: bool = JSON, selector: list[str] = S
 @get_app.command("scenario-status")
 def get_scenario_status(output: str = OUTPUT, json_: bool = JSON) -> None:
     """The web page's scenario run: running or not, which one, each step's status and the `expect` verdicts so far (read-only, issue 635).
-    A scenario started with `scenario run` is not shown: that command blocks and prints its own report. Exit 1 when the page is not running."""
+    A `scenario run` shows here too while the page answers (ADR 0086 phase 4); that command blocks and prints its own report. Exit 1 when the page is not running."""
     try:
         data = agentverbs.scenario_status(_page_run_state())
     except (OSError, ValueError) as e:
@@ -1714,11 +1715,19 @@ def scenario_run(name: str = typer.Argument(..., autocompletion=completion.scena
     if scenario.disruptive(sc) and not stack.governor_admits(0, say):  # GV-9: nothing starts at L2 and above
         typer.echo("not run: the governor admits no new work at this memory level (see `benchctl status`)", err=True)
         raise typer.Exit(1)
-    hooks = {}
-    if trace:
-        tracer = slurmtrace.Tracer(slurmtrace.nodes_of(sc), say=say)
-        hooks["on_step"] = tracer.step
-    report = scenario.run(sc, speed=speed, dilation=float(sim.get("time_dilation", 1.0)), say=say, **hooks)
+    tracer = slurmtrace.Tracer(slurmtrace.nodes_of(sc), say=say) if trace else None
+    feed = pagefeed.Feed(sc, speed, say)  # the web page shows the run when it answers; never waits for it (ADR 0086 phase 4)
+
+    def on_step(step, outcome) -> None:
+        feed.step(step, outcome)
+        if tracer:
+            tracer.step(step, outcome)
+    try:
+        report = scenario.run(sc, speed=speed, dilation=float(sim.get("time_dilation", 1.0)), say=say, on_step=on_step, on_expect=feed.expect)
+    except KeyboardInterrupt:
+        feed.close(None, True)
+        raise
+    feed.close(report.ok, report.stopped)
     say("scenario " + ("passed" if report.ok else "FAILED"))
     if as_json:
         def row(o) -> dict:

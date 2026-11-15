@@ -4,6 +4,8 @@
 // and the words for the step rail and the phone sheet. Every state is a glyph and a word, never a colour alone.
 // Phase 2: the same model draws a scenario before Play (previewRun): every step "planned" (or "CLI only"), ghost badges and pins.
 // Phase 3: replay walks a finished run's recorded steps (replayStops, replayGroups, replayPins); node states on the diagram stay live.
+// Phase 4: a run from the CLI (`source: 'cli'`, posted by `benchctl scenario run`) is drawn the same way and said in words; its steps the
+// page cannot run show their real result, and a skip there is a plain skip, never "CLI only".
 import { describe, expectWords } from './testrunmodel.js';
 
 export const RUN_GLYPH = { done: '✓', now: '●', active: '◐', next: '○', cli: '↷', skipped: '↷', failed: '✗', notrun: '○', planned: '○' };
@@ -20,6 +22,16 @@ export function previewRun(p) {
 // The key that says which run (or preview) is shown, for "take it off the diagram".
 export const runKey = r => !r || !r.name ? '' : r.preview ? `preview:${r.name}` : `${r.name}@${r.started}`;
 const CLI = /host CLI|need the host/;
+export const fromCli = r => !!(r && r.source === 'cli');
+// The words that mark a run from the CLI, or '' for a page run.
+export const sourceWords = r => fromCli(r) ? 'run from the CLI' : '';
+// The Run tab's line under the heading for a run from the CLI: where it runs, how to stop it, and why it ended when the CLI went quiet.
+export function cliNote(r) {
+  if (!fromCli(r)) return '';
+  if (r.lost) return 'Run from the CLI: it sent nothing for 30 s (stopped with Ctrl+C, or it lost the page), so the page shows the steps it heard of.';
+  return r.running ? 'Run from the CLI with benchctl scenario run: the page shows its results as they come; stop it with Ctrl+C in its terminal.'
+    : 'Run from the CLI with benchctl scenario run: its steps ran on the host, so steps the page cannot run show their real result.';
+}
 
 // The parts the engine names that are not nodes (benchctl/scenario.py touches, webui/blast.py TARGETS), in words; a node keeps its name.
 // tests/test_step_words.py fails when the engine can name a part that has no words here.
@@ -29,10 +41,10 @@ export const PART_WORDS = { login: 'the login node', slurmctld: 'slurmctld (the 
 export const partWords = (id, nameOf = x => x) => PART_WORDS[id] || nameOf(id);
 const names = (ids, nameOf) => ids.map(id => partWords(id, nameOf)).join(', ');
 
-function rowState(r) {
+function rowState(r, cli) {
   if (r.status === 'failed') return 'failed';
   if (r.status === 'ok') return 'done';
-  if (r.status === 'skipped') return r.page === false || CLI.test(r.detail || '') ? 'cli' : 'skipped';
+  if (r.status === 'skipped') return !cli && (r.page === false || CLI.test(r.detail || '')) ? 'cli' : 'skipped';
   return 'pending';
 }
 
@@ -48,7 +60,7 @@ export function runGroups(run) {
     const n = r.n || i + 1;
     if (!by.has(n)) by.set(n, { n, at: r.at, t: null, ids: [], noPart: '', text: describe(r), target: r.target, rows: [], blast: [], blastWhy: '' });
     const g = by.get(n);
-    g.rows.push({ ...r, state: rowState(r) });
+    g.rows.push({ ...r, state: rowState(r, fromCli(run)) });
     for (const id of r.ids || []) if (!g.ids.includes(id)) g.ids.push(id);
     for (const id of r.blast || []) if (!g.blast.includes(id)) g.blast.push(id);
     if (!g.blastWhy && r.blast_caption) g.blastWhy = r.blast_caption;
@@ -90,9 +102,10 @@ export function partBadges(groups, has = () => true) {
 
 // The expectations: E1, E2 ... from the planned list, each with its result once it is known.
 export function expectPins(run) {
-  const plan = (run && run.plan_expects) || [], got = new Map(((run && run.expects) || []).map(x => [x.label, x]));
+  const plan = (run && run.plan_expects) || [], got = new Map(((run && run.expects) || []).map(x => [x.label, x])), cli = fromCli(run);
   return plan.map((p, i) => {
-    const r = got.get(p.label), state = r ? { ok: 'done', failed: 'failed', skipped: 'cli' }[r.status] || 'skipped' : p.page === false ? 'cli' : run.preview ? 'planned' : run.running ? 'next' : 'notrun';
+    const r = got.get(p.label), state = r ? { ok: 'done', failed: 'failed', skipped: cli ? 'skipped' : 'cli' }[r.status] || 'skipped'
+      : p.page === false && !cli ? 'cli' : run.preview ? 'planned' : run.running ? 'next' : 'notrun';
     const word = { done: 'held', failed: 'did not hold', cli: 'CLI only', next: 'waiting', notrun: 'not checked', planned: 'planned' }[state] || wordOf(state);
     const label = expectWords(p.label);
     return { e: p.e || i + 1, label, ids: p.ids || [], state, glyph: glyphOf(state), word, t: r && r.t != null ? r.t : null,
@@ -145,9 +158,10 @@ export function previewSummary(groups, pins, has = () => true) {
 export function runHeading(run, groups) {
   if (!run || !run.name) return '';
   const cur = groups.find(g => g.current), done = groups.filter(reached).length;
-  const word = run.preview ? 'Preview: nothing has run yet' : run.running ? `Running · step ${cur ? cur.n : 0} of ${groups.length}` : run.stopped ? `Stopped after step ${done} of ${groups.length}`
+  const word = run.preview ? 'Preview: nothing has run yet' : run.running ? `Running · step ${cur ? cur.n : 0} of ${groups.length}`
+    : run.lost ? `No word from the CLI after step ${done} of ${groups.length}` : run.stopped ? `Stopped after step ${done} of ${groups.length}`
     : run.ok === false ? 'Failed' : groups.some(g => g.state === 'cli' || g.state === 'skipped') ? 'Passed, with skipped steps' : 'Passed';
-  return `${run.name} · ${word}`;
+  return [run.name, sourceWords(run), word].filter(Boolean).join(' · ');
 }
 
 // The step the phone sheet and the ring show: the chosen one if it still exists, else the current one, else the last reached, else the first.
@@ -166,7 +180,7 @@ export function sheetFor(groups, g, nameOf = id => id) {
 // A key that changes when anything the layer draws changes, so a poll that brings nothing new redraws nothing.
 export function runSig(run) {
   if (!run || !run.name) return '';
-  return JSON.stringify([run.name, run.preview ? 'preview' : run.started, run.running, run.stopped, run.ok, (run.steps || []).map(s => s.status), (run.expects || []).map(x => x.status)]);
+  return JSON.stringify([run.name, run.preview ? 'preview' : run.started, run.source || '', run.running, run.stopped, run.ok, (run.steps || []).map(s => s.status), (run.expects || []).map(x => x.status)]);
 }
 
 // ---- Replay (phase 3) ----
@@ -206,7 +220,7 @@ export function replayText(groups, stops, at) {
 }
 export function replayHeading(run, groups, stops, at) {
   const s = stops[at];
-  return run && s ? `${run.name} · Replay: step ${s.n}, ${at + 1} of ${stops.length} recorded` : '';
+  return run && s ? [run.name, sourceWords(run), `Replay: step ${s.n}, ${at + 1} of ${stops.length} recorded`].filter(Boolean).join(' · ') : '';
 }
 // The strip's caption: what replay walks, and what it does not.
 export function replayCaption(groups, stops) {

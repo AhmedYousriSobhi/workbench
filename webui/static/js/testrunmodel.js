@@ -232,6 +232,7 @@ export function buildReport({ preview, run, startedAt, finishedAt, speed, eye })
   const t0 = run && typeof run.started === 'number' ? run.started : null, ended = run && !run.running && run.elapsed != null;
   const data = {
     scenario: preview ? preview.name : run && run.name, ref: preview ? preview.ref : '', speed: speed || (run && run.speed) || 1, verdict,
+    ran_from: run && run.source === 'cli' ? 'cli' : 'page',  // ADR 0086 phase 4: `benchctl scenario run` posted it to the page
     started: t0 != null ? iso(t0) : startedAt || null, finished: t0 != null && ended ? iso(t0 + run.elapsed) : finishedAt || null,
     duration_s: run && run.elapsed != null ? run.elapsed : null,
     steps: rows.map(r => ({ at: r.at, t: r.t, target: r.target, action: r.text, status: r.status, page_could_run: r.page, note: r.note || r.why })),
@@ -239,7 +240,7 @@ export function buildReport({ preview, run, startedAt, finishedAt, speed, eye })
     clients_eye: eye.map(e => ({ service: e.key, calls_during_run: e.during, errors_during_run: e.errors, verdict: e.verdict })),
   };
   const md = [`# Test run: ${data.scenario}${data.ref ? ` (${data.ref})` : ''}`, '',
-    `- Result: **${verdict}**`, `- Speed: ${data.speed}×`, `- Started: ${data.started || 'not captured (the run began before this page was opened)'}`, `- Finished: ${data.finished || 'n/a'}`,
+    `- Result: **${verdict}**`, `- Ran from: ${data.ran_from === 'cli' ? 'the CLI (benchctl scenario run)' : 'the web page'}`, `- Speed: ${data.speed}×`, `- Started: ${data.started || 'not captured (the run began before this page was opened)'}`, `- Finished: ${data.finished || 'n/a'}`,
     `- Took: ${data.duration_s == null ? 'n/a' : `${data.duration_s} s`}`, '',
     '## What was injected', '', 'At: planned, seconds into the scenario. Ran at: seconds after Play, at this speed.', '',
     '| At | Ran at | Target | Action | Result |', '|---|---|---|---|---|',
@@ -247,6 +248,7 @@ export function buildReport({ preview, run, startedAt, finishedAt, speed, eye })
     '## Expectations', '', ...(data.expectations.length ? data.expectations.map(x => `- ${x.status}${x.t != null ? ` at ${x.t} s` : ''}: ${x.words}${x.detail ? ` (${x.detail})` : ''}`) : ['- none declared']), '',
     '## What the client called (mock counters during the run)', '', '| Service | Calls | Errors | Verdict |', '|---|---|---|---|',
     ...data.clients_eye.map(e => `| ${e.service} | ${cell(e.calls_during_run)} | ${cell(e.errors_during_run)} | ${e.verdict} |`), '',
-    'Skipped steps were not run by the page (they need the host CLI); they are not passes. n/a means the mock keeps no counter for it.', ''];
+    data.ran_from === 'cli' ? 'Skipped steps were skipped by the CLI; they are not passes. n/a means the mock keeps no counter for it.'
+      : 'Skipped steps were not run by the page (they need the host CLI); they are not passes. n/a means the mock keeps no counter for it.', ''];
   return { data, markdown: md.join('\n') };
 }

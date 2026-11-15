@@ -70,6 +70,9 @@ class CSPMiddleware:
 
 _STATIC_TYPES = {".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2"}
 COOKIE = "workbench_ui"
+CLI_EVENT_MAX = 2048  # bytes in one event from `benchctl scenario run` (ADR 0086 phase 4); a step result is a few hundred
+CLI_DETAIL_MAX = 300  # characters of a step's detail kept from the CLI
+CLI_QUIET_S = 30.0  # a run from the CLI that posts nothing for this long has ended (the CLI posts at least every 10 s)
 DOCS = Path(__file__).resolve().parent.parent / "docs"
 
 
@@ -114,12 +117,15 @@ class Runs:
         self.lock = threading.Lock()
         self.stop_flag = threading.Event()
         self.state: dict = {"running": False}
+        self.cli: dict | None = None  # the run from the CLI shown now: {"id": its run id, "seen": the clock at its last post}
 
     def since(self) -> float:
         return round(self.clock() - self.t0, 1)
 
     def snapshot(self) -> dict:
         """What the page polls: the state, with `elapsed` (seconds since Play) counted now while the run plays."""
+        with self.lock:
+            self._expire()
         return {**self.state, "elapsed": self.since()} if self.state.get("running") else dict(self.state)
 
     def start(self, name: str, speed: float, trace: bool = False) -> dict:
@@ -133,18 +139,100 @@ class Runs:
         if trace and not self.trace:
             raise HTTPException(409, "the trace is read by the governor, which is not reachable or has no --workdir")
         with self.lock:
-            if self.state.get("running"):
-                raise HTTPException(409, f"{self.state['name']} is already running")
+            self._busy()
             steps = scenario.plan(sc)
             self.stop_flag.clear()
-            self.t0 = self.clock()  # each row: where it lands on the diagram (ids, its step number n) and, once applied, when (t), ADR 0086
-            plan_expects = [{"e": x["e"], "label": x["label"], "ids": x["ids"], "page": x["page"]} for x in scenario.preview(sc, self.sim)["expects"]]
-            self.state = {"running": True, "name": name, "speed": speed, "stopped": False, "ok": None, "started": round(self.wall(), 3), "elapsed": 0.0,
-                          "steps": [{"at": s.at, "target": s.target, "do": s.do, "n": s.n, "page": not scenario.page_support(s), "status": "pending",
-                                     "detail": "", "t": None, **scenario.touch_fields(s, self.sim), **step_blast(s)} for s in steps],
-                          "expects": [], "plan_expects": plan_expects, "trace": [] if trace else None}
+            self._fresh(sc, name, speed, steps, "page", trace)
             threading.Thread(target=self._play, args=(sc, steps, speed, trace), daemon=True).start()
             return {"started": name}
+
+    def _busy(self) -> None:
+        """One run at a time (ADR 0086 decision 3): refuse while one plays, here or from the CLI. Call with the lock held."""
+        self._expire()
+        if self.state.get("running"):
+            where = "from the CLI" if self.state.get("source") == "cli" else "on the page"
+            raise HTTPException(409, f"{self.state['name']} is already running {where}")
+
+    def _fresh(self, sc: dict, name: str, speed: float, steps: list, source: str, trace: bool = False) -> None:
+        """A new run state: each row says where it lands on the diagram (ids, its step number n) and, once applied, when (t), ADR 0086."""
+        self.t0 = self.clock()
+        plan_expects = [{"e": x["e"], "label": x["label"], "ids": x["ids"], "page": x["page"]} for x in scenario.preview(sc, self.sim)["expects"]]
+        self.state = {"running": True, "name": name, "speed": speed, "stopped": False, "ok": None, "started": round(self.wall(), 3), "elapsed": 0.0,
+                      "source": source, "steps": [{"at": s.at, "target": s.target, "do": s.do, "n": s.n, "page": not scenario.page_support(s), "status": "pending",
+                                                   "detail": "", "t": None, **scenario.touch_fields(s, self.sim), **step_blast(s)} for s in steps],
+                      "expects": [], "plan_expects": plan_expects, "trace": [] if trace else None}
+
+    # ---- a run from the CLI (ADR 0086 phase 4): `benchctl scenario run` posts its steps here, best effort ----
+    # The page builds the plan from its own scenario file and keeps only results from the CLI: a status, a short detail and a time per
+    # step or expectation, never a part id or a command. Memory only (decision 4); a CLI that stops posting is dropped after CLI_QUIET_S.
+    def _expire(self) -> None:
+        if self.cli and self.clock() - self.cli["seen"] > CLI_QUIET_S:
+            self.state.update(running=False, stopped=True, lost=True, elapsed=self.since())
+            self.cli = None
+
+    def cli_event(self, ev: dict) -> dict:
+        kind = ev.get("event")
+        with self.lock:
+            if kind == "start":
+                return self._cli_start(ev)
+            if not self.cli or not isinstance(ev.get("run"), str) or not hmac.compare_digest(ev["run"].encode(), self.cli["id"].encode()):
+                self._expire()
+                raise HTTPException(409, "no such run from the CLI on the page (it ended, was dropped, or another run took its place)")
+            self.cli["seen"] = self.clock()
+            if kind == "step":
+                self._cli_step(ev)
+            elif kind == "expect":
+                self._cli_expect(ev)
+            elif kind == "end":
+                ok = ev.get("ok")
+                self.state.update(ok=ok if isinstance(ok, bool) else None, stopped=ev.get("stopped") is True, running=False, elapsed=self.since())
+                self.cli = None
+            elif kind != "beat":
+                raise HTTPException(422, "event must be start, step, expect, beat or end")
+            return {"ok": True}
+
+    def _cli_start(self, ev: dict) -> dict:
+        name, speed, key = ev.get("name"), ev.get("speed"), ev.get("key")
+        if not (isinstance(name, str) and 0 < len(name) <= 100 and isinstance(key, str) and len(key) <= 64
+                and isinstance(speed, (int, float)) and not isinstance(speed, bool) and 0 < speed <= 1000):
+            raise HTTPException(422, "start needs name, speed (0 to 1000) and key")
+        self._busy()
+        try:
+            sc = scenario.load(name, self.root, self.sim)
+        except scenario.ScenarioError as e:
+            raise HTTPException(404, str(e)) from e
+        steps = scenario.plan(sc)
+        if scenario.plan_key(steps) != key:
+            raise HTTPException(409, "the page reads another copy of this scenario or another cluster (restart the page after changing either)")
+        self._fresh(sc, sc["name"], float(speed), steps, "cli")
+        self.cli = {"id": secrets.token_urlsafe(12), "seen": self.clock()}
+        return {"run": self.cli["id"]}
+
+    def _result(self, ev: dict) -> tuple[str, str, float]:
+        status, detail, t = ev.get("status"), ev.get("detail", ""), ev.get("t")
+        if status not in ("ok", "failed", "skipped") or not isinstance(detail, str) or not isinstance(t, (int, float)) or isinstance(t, bool) or not 0 <= t <= 1e6:
+            raise HTTPException(422, "a result needs status (ok, failed or skipped), detail (text) and t (seconds)")
+        return status, detail[:CLI_DETAIL_MAX], round(float(t), 1)
+
+    def _cli_step(self, ev: dict) -> None:
+        i, rows = ev.get("i"), self.state["steps"]
+        if not isinstance(i, int) or isinstance(i, bool) or not 0 <= i < len(rows):
+            raise HTTPException(422, f"i must be a step index from 0 to {len(rows) - 1}")
+        status, detail, t = self._result(ev)
+        row = rows[i]
+        row.update(status=status, detail=detail, t=t)
+        if self.flow and status == "ok":  # the same traffic mark a page run makes, from the page's own copy of the step
+            do = row["do"]
+            self.flow.note(row["target"], f"{row['target']} {json.dumps(do, sort_keys=True)}", do.get("nodes") or do.get("drain") or do.get("resume"))
+
+    def _cli_expect(self, ev: dict) -> None:
+        plan = {x["label"]: x for x in self.state["plan_expects"]}
+        if ev.get("label") not in plan:
+            raise HTTPException(422, "label must be one of the scenario's expectations")
+        status, detail, t = self._result(ev)
+        p = plan[ev["label"]]
+        self.state["expects"] = [x for x in self.state["expects"] if x["label"] != p["label"]]
+        self.state["expects"].append({"label": p["label"], "status": status, "detail": detail, "t": t, "e": p["e"], "ids": p["ids"]})
 
     def _play(self, sc: dict, steps: list, speed: float, trace: bool = False) -> None:
         done = [0]
@@ -174,6 +262,8 @@ class Runs:
             self.state.update(elapsed=self.since(), running=False)
 
     def stop(self) -> dict:
+        if self.state.get("source") == "cli" and self.state.get("running"):
+            return {"stopping": False, "why": "a run from the CLI stops with Ctrl+C in its terminal"}
         self.stop_flag.set()
         return {"stopping": bool(self.state.get("running"))}
 
@@ -694,6 +784,21 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
     async def stop(request: Request):
         return JSONResponse(runs.stop())
 
+    async def cli_event(request: Request):
+        """One event of a run from the CLI (ADR 0086 phase 4): JSON, at most CLI_EVENT_MAX bytes, read in pieces so a larger body is never held."""
+        body = b""
+        async for chunk in request.stream():
+            body += chunk
+            if len(body) > CLI_EVENT_MAX:
+                raise HTTPException(413, f"an event is at most {CLI_EVENT_MAX} bytes")
+        try:
+            ev = json.loads(body)
+        except ValueError as e:
+            raise HTTPException(422, "the body must be JSON") from e
+        if not isinstance(ev, dict):
+            raise HTTPException(422, "the body must be a JSON object")
+        return JSONResponse(runs.cli_event(ev))
+
     async def run(request: Request):
         try:
             speed = float(request.query_params.get("speed", "1"))
@@ -772,6 +877,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/scenarios/run", protected(run_state)),
             Route("/api/scenarios/{name}", protected(scenario_preview)),
             Route("/api/scenarios/stop", protected(stop, write=True), methods=["POST"]),
+            Route("/api/scenarios/cli", protected(cli_event, write=True), methods=["POST"]),
             Route("/api/scenarios/{name}/run", protected(run, write=True), methods=["POST"]),
         ],
         exception_handlers={HTTPException: http_error},

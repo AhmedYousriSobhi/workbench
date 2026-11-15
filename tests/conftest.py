@@ -111,3 +111,15 @@ def _no_docker_state_in_plans(request, monkeypatch):
         return
     from benchctl import workbench
     monkeypatch.setattr(workbench, "running_services", lambda: set())
+
+
+@pytest.fixture(autouse=True)
+def _no_web_page_from_this_machine(request, monkeypatch, tmp_path_factory):
+    """`benchctl scenario run` posts its steps to the web page when one answers (benchctl/pagefeed.py, ADR 0086 phase 4). A developer's
+    own page must never receive a unit test's run: the feed finds no token, so it stays off. Tests of the feed pass their own token file.
+    Not applied under tests/real, whose page test checks the real path."""
+    if "real" in request.node.path.parts:
+        return
+    from benchctl import pagefeed
+
+    monkeypatch.setattr(pagefeed, "TOKEN", tmp_path_factory.mktemp("nopage") / "ui_token")

@@ -114,3 +114,11 @@ test('every expectation kind reads as a sentence; an unknown one keeps its label
   assert.equal(said('jira.issue_count', { jql: 'labels = stress', count: 12, target: 'real' }), '12 real Jira tickets match “labels = stress”');
   assert.equal(expectWords('weird.kind {"a": 1}'), 'weird.kind {"a": 1}');
 });
+
+test('the report says where the run came from (ADR 0086 phase 4)', () => {
+  const run = { name: 'x', running: false, ok: true, stopped: false, source: 'cli', started: 1000, elapsed: 3, steps: [{ at: 0, target: 'ssh', do: { state: 'down' }, page: false, status: 'ok', detail: '', t: 0.1 }], expects: [] };
+  const cli = buildReport({ preview: null, run, eye: [] }), page = buildReport({ preview: null, run: { ...run, source: 'page' }, eye: [] });
+  assert.equal(cli.data.ran_from, 'cli'); assert.equal(page.data.ran_from, 'page');
+  assert.match(cli.markdown, /- Ran from: the CLI \(benchctl scenario run\)/); assert.match(cli.markdown, /skipped by the CLI/);
+  assert.match(page.markdown, /- Ran from: the web page/);
+});

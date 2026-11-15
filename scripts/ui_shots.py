@@ -305,6 +305,37 @@ def check_replay(page, shot: str, vp: str) -> list[str]:
     return bad
 
 
+def check_cli_run(page, shot: str) -> list[str]:
+    """ADR 0086 phase 4: a run from the CLI (`benchctl scenario run` posted it to the page) is drawn like a page run and said in words, in
+    the Run tab's heading, the strip over the diagram and the layer's label; its CLI-only steps show their real result, never ↷ CLI only."""
+    bad, name = [], "slurm-upgrade-mid-job"
+    run = sample_run(99, name)
+    run.update(running=False, ok=True, source="cli", elapsed=14.0, expects=[{**x, "status": "ok", "detail": "", "t": 10.0} for x in run["plan_expects"]])
+    page.unroute("**/api/scenarios/run")
+    page.route("**/api/scenarios/run", lambda r: r.fulfill(json=run))
+    page.evaluate("trPrev = null; runHidden = ''; runSel = null; replay = null; poll()")
+    page.wait_for_function(f"trLast && trLast.name === '{name}'", timeout=5000)
+    page.evaluate("watchRun()")
+    page.wait_for_selector("#runlayer .rl-badge", timeout=5000)
+    r = page.evaluate(RUN_PROBE)
+    extra = page.evaluate("({ layer: document.getElementById('runlayer').getAttribute('aria-label'), line: document.getElementById('rs-line').textContent, "
+                          "sum: document.getElementById('run-sum').hidden ? '' : document.getElementById('run-sum').textContent })")
+    if "run from the CLI" not in r["head"] or "run from the CLI" not in extra["layer"] or not extra["line"].startswith("Run from the CLI"):
+        bad.append(f"a run from the CLI is not said in words: {r['head']!r} / {extra['line']!r}")
+    if "Ctrl+C" in extra["sum"] or "ran on the host" not in extra["sum"]:
+        bad.append(f"the Run tab does not say where a finished CLI run ran: {extra['sum']!r}")
+    if not r["badges"] or any("↷" in b["text"] or "CLI only" in b["label"] for b in r["badges"]):
+        bad.append(f"a CLI run's badges show ↷ CLI only instead of their real result: {[b['text'] for b in r['badges']]}")
+    if any("CLI only" in p for p in r["pins"]) or not all(", held: " in p for p in r["pins"]):
+        bad.append(f"a CLI run's expectation pins do not show their result: {r['pins']}")
+    if r["wide"]:
+        bad.append("a CLI run makes the page scroll sideways")
+    bad += mark_problems(page, name)
+    page.screenshot(path=shot.replace(".png", "-cli.png"), full_page=False)
+    page.locator("#ipane-run").screenshot(path=shot.replace(".png", "-cli-rail.png"))  # the Run tab: heading and the line under it
+    return bad
+
+
 def check_runlayer(page, shot: str, vp: str) -> list[str]:
     """The run layer (ADR 0086, webui/static/js/runlayer.js) with a sample run, no cluster: numbered badges with a glyph and words on the
     parts each step touched, in step order for Tab; the step rail; the strip over the diagram (a bottom sheet on a phone) with Previous and
@@ -372,6 +403,7 @@ def check_runlayer(page, shot: str, vp: str) -> list[str]:
             bad.append("client-stress: fewer than 6 badges on a run that touches every node")
         bad += mark_problems(page, "client-stress")
         page.screenshot(path=shot.replace(".png", "-dense.png"), full_page=False)
+        bad += check_cli_run(page, shot)
         bad += check_replay(page, shot, vp)
     except PlaywrightError as e:
         bad.append(f"the run layer did not draw a sample run: {str(e).splitlines()[0]}")

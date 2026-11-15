@@ -7,6 +7,7 @@
 // Phase 3, after the run: the strip over the diagram becomes a player, a WAI-ARIA slider over the recorded steps (arrows, Home, End).
 // It moves the badges, the ring, the pins and the rail back in time; node states stay live. The run it walks is the page process's run
 // state (decision 4: memory only). After Stop the diagram is plain, and the Run tab offers Replay the last run.
+// Phase 4: a run from the CLI (`benchctl scenario run`, posted to the page) is drawn the same way, and said: "run from the CLI".
 //
 // Nothing moves: states change in place, so reduced motion needs nothing special beyond an instant scroll. Badges come from the run
 // state the page polls (GET /api/scenarios/run), never from flow events: a mark only where the engine says a step acted.
@@ -18,8 +19,8 @@ import { showPane } from './inspector.js';
 import { ENT_NAME } from './focus.js';
 import { selectTab, setCircuit } from './shell.js';
 import { zoomTo } from './zoom.js';
-import { RUN_WORD, blastMarks, expectPins, focusStep, ghostParts, partBadges, partWords, previewRun, previewSummary, railRow, replayCaption, replayClamp,
-  replayGroups, replayHeading, replayKey, replayPins, replayStops, replayText, replayable, runGroups, runHeading, runKey, runSig, sheetFor } from './runlayermodel.js';
+import { RUN_WORD, blastMarks, cliNote, expectPins, focusStep, fromCli, ghostParts, partBadges, partWords, previewRun, previewSummary, railRow, replayCaption, replayClamp,
+  replayGroups, replayHeading, replayKey, replayPins, replayStops, replayText, replayable, runGroups, runHeading, runKey, runSig, sheetFor, sourceWords } from './runlayermodel.js';
 import { runVerdict } from './testrunmodel.js';
 
 // Sizes are set in screen pixels and turned into drawing units with the drawing's scale (the Circuit view is 1700 units wide and drawn at
@@ -109,7 +110,7 @@ export function paintRunLayer(force) {
   f.querySelector('#runlayer')?.remove();
   if (!sig) { ringStep(); return; }
   const layer = sv('g', { id: 'runlayer', class: `runlayer${run.preview ? ' preview' : ''}`, role: 'group',
-    'aria-label': `Scenario ${run.name}: ${run.preview ? 'preview, nothing has run yet; planned' : ''} step badges, in step order` }), taken = [];
+    'aria-label': `Scenario ${run.name}${fromCli(run) ? `, ${sourceWords(run)}` : ''}: ${run.preview ? 'preview, nothing has run yet; planned' : ''} step badges, in step order` }), taken = [];
   size = markSize(f); layer.style.setProperty('--rl-fs', `${size.font}px`);
   f.append(layer);
   for (const b of partBadges(groups, has)) {  // in step order, so Tab follows the scenario
@@ -156,7 +157,8 @@ function paintRunRail(run) {
   $('run-none').hidden = true; $('run-tools').hidden = !!run.running;
   $('run-replay').hidden = !replayable(run); $('run-replay').textContent = S.replay ? 'End replay' : 'Replay the run';
   $('run-head').textContent = S.replay ? replayHeading(run, groups, stops, S.replay.at) : runHeading(run, groups);
-  $('run-sum').hidden = !run.preview; $('run-sum').textContent = run.preview ? `${previewSummary(groups, pins, has)}. Dashed badges: the steps that will act on a part; ◎: its clients may see a change (declared, not measured).` : '';
+  $('run-sum').hidden = !run.preview && !fromCli(run);
+  $('run-sum').textContent = run.preview ? `${previewSummary(groups, pins, has)}. Dashed badges: the steps that will act on a part; ◎: its clients may see a change (declared, not measured).` : cliNote(run);
   $('run-clear').textContent = run.preview ? 'Take the preview off the diagram' : 'Take off the diagram';
   $('run-cvnote').hidden = !!S.circuit;
   const chosen = focusStep(groups, S.runSel);
@@ -182,7 +184,7 @@ function paintRunSheet(run) {
   sh.hidden = !s || (S.runSheetOff === runKey(run) && !S.replay);
   if (!s) return;
   $('rs-badge').className = `rb k-${g.state}`; $('rs-badge').textContent = `${s.n} ${s.glyph}`;
-  $('rs-title').textContent = s.title; $('rs-line').textContent = s.line;
+  $('rs-title').textContent = s.title; $('rs-line').textContent = fromCli(run) ? `Run from the CLI · ${s.line}` : s.line;
   $('rs-prev').disabled = s.prev == null; $('rs-prev').textContent = s.prev == null ? '◀' : `◀ ${s.prev}`; $('rs-prev').setAttribute('aria-label', s.prev == null ? 'No previous step' : `Previous step, ${s.prev}`);
   $('rs-next').disabled = s.next == null; $('rs-next').textContent = s.next == null ? '▶' : `${s.next} ▶`; $('rs-next').setAttribute('aria-label', s.next == null ? 'No next step' : `Next step, ${s.next}`);
   $('rs-steps').textContent = `Steps ${s.total}`;
