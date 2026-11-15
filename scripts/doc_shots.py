@@ -148,6 +148,11 @@ try:
         pg6 = sample_page(1280, 900, off); pg6.route("**/api/scenarios/run", lambda r: r.fulfill(json=at3)); pg6.evaluate("poll()"); pg6.wait_for_timeout(600); pg6.evaluate("watchRun()")
         pg6.evaluate("document.querySelector('header.top').style.setProperty('position', 'static', 'important'); scrollTo(0, 0)"); pg6.wait_for_selector("#runlayer .rl-badge"); pg6.wait_for_timeout(600)
         pg6.locator("#trafficpanel").screenshot(path=str(OUT / f"web-run-layer-{SCHEME}.png")); save(OUT / f"web-run-layer-{SCHEME}.png"); pg6.close()
+        fin = {**run_state(6), "running": False, "ok": True, "elapsed": 48.0}  # after the run (ADR 0086 phase 3): replay at the third recorded step
+        pg8 = sample_page(1280, 900, off); pg8.route("**/api/scenarios/run", lambda r: r.fulfill(json=fin)); pg8.evaluate("poll()"); pg8.wait_for_timeout(600)
+        pg8.evaluate("startReplay(); replay.at = 2; paintRun(); document.activeElement.blur(); document.querySelector('header.top').style.setProperty('position', 'static', 'important'); scrollTo(0, 0)")
+        pg8.wait_for_selector("#runlayer .rl-badge.cur"); pg8.wait_for_timeout(600)
+        pg8.locator("#trafficpanel").screenshot(path=str(OUT / f"web-run-replay-{SCHEME}.png")); save(OUT / f"web-run-replay-{SCHEME}.png"); pg8.close()
         idle = {"running": False}  # before Play (ADR 0086 phase 2): node-down picked in Test run, Show on the diagram; nothing has run
         pg7 = sample_page(1280, 900); pg7.route("**/api/scenarios/run", lambda r: r.fulfill(json=idle)); pg7.evaluate("pv => { trPrev = pv; }", pv); pg7.evaluate("poll()"); pg7.wait_for_timeout(600); pg7.evaluate("watchRun()")
         pg7.evaluate("document.querySelector('header.top').style.setProperty('position', 'static', 'important'); scrollTo(0, 0)"); pg7.wait_for_selector("#runlayer.preview .rl-badge"); pg7.wait_for_timeout(600)

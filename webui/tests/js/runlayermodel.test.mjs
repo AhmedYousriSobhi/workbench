@@ -3,7 +3,7 @@
 import './setup.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { RUN_GLYPH, RUN_WORD, blastLine, blastMarks, expectPins, focusStep, ghostParts, offDiagram, partBadges, previewRun, previewSummary, railRow, runGroups, runHeading, runKey, runSig, sheetFor } from '../../static/js/runlayermodel.js';
+import { PART_WORDS, RUN_GLYPH, RUN_WORD, blastLine, partWords, replayCaption, replayClamp, replayGroups, replayHeading, replayKey, replayPins, replayStops, replayText, replayable, blastMarks, expectPins, focusStep, ghostParts, offDiagram, partBadges, previewRun, previewSummary, railRow, runGroups, runHeading, runKey, runSig, sheetFor } from '../../static/js/runlayermodel.js';
 
 const row = (n, at, target, ids, status = 'pending', extra = {}) => ({ n, at, target, ids, status, detail: '', page: true, t: status === 'pending' ? null : at, do: { nodes: ['cn002'], power: 'Off' }, ...extra });
 // node-down at step 3 of 6, as the page polls it
@@ -76,7 +76,7 @@ test('a part the diagram does not draw gets no badge, and the rail says why in w
   const drawn = id => id !== 'cn002';
   assert.ok(!partBadges(g, drawn).some(x => x.id === 'cn002'));
   assert.equal(offDiagram(g[0], drawn), '');
-  assert.equal(offDiagram(g[0], () => false), 'bmc-farm, cn002 are not in this cluster');
+  assert.equal(offDiagram(g[0], () => false), 'the BMC farm, cn002 are not in this cluster');
   const none = runGroups({ name: 'x', running: false, steps: [{ n: 1, at: 0, target: 'netem', ids: [], no_part: 'it clears the network delay on every node at once, not on one part', do: { clear: true }, status: 'skipped', detail: 'netem steps need the host CLI' }] });
   assert.equal(railRow(none[0]).off, 'Not on the diagram: it clears the network delay on every node at once, not on one part.');
   assert.equal(railRow(none[0]).word, 'CLI only');
@@ -84,8 +84,8 @@ test('a part the diagram does not draw gets no badge, and the rail says why in w
 
 test('rail rows carry the planned time, when it ran, and the parts', () => {
   const r = railRow(runGroups(nodeDown(['ok', 'ok', 'ok']))[2]);
-  assert.deepEqual([r.n, r.glyph, r.word, r.at, r.ran, r.where, r.off], [3, '●', 'now', 'at 5 s', 'ran at 5 s', 'on slurmctld, cn002', '']);
-  assert.equal(railRow(runGroups(nodeDown(['ok']))[0], () => true, id => ({ 'bmc-farm': 'BMC farm' })[id] || id).where, 'on BMC farm, cn002');
+  assert.deepEqual([r.n, r.glyph, r.word, r.at, r.ran, r.where, r.off], [3, '●', 'now', 'at 5 s', 'ran at 5 s', 'on slurmctld (the Slurm controller), cn002', '']);
+  assert.equal(railRow(runGroups(nodeDown(['ok']))[0], () => true, id => ({ cn002: 'node cn002' })[id] || id).where, 'on the BMC farm, node cn002');
 });
 
 test('expectation pins: E numbers, CLI only before Play, the result once known', () => {
@@ -96,15 +96,15 @@ test('expectation pins: E numbers, CLI only before Play, the result once known',
   run.expects = [{ label: run.plan_expects[0].label, status: 'ok', t: 12 }];
   assert.deepEqual([expectPins(run)[0].glyph, expectPins(run)[0].word, expectPins(run)[0].t], ['✓', 'held', 12]);
   run.expects[0].status = 'failed';
-  assert.match(expectPins(run)[0].aria, /^Expectation E1, did not hold: slurm\.node_state/);
+  assert.equal(expectPins(run)[0].aria, 'Expectation E1, did not hold: Slurm shows cn002 as drained');
 });
 
 test('the phone sheet: the chosen step, else the current one, with Previous and Next', () => {
   const g = runGroups(nodeDown(['ok', 'ok', 'ok']));
   const s = sheetFor(g, focusStep(g, null));
   assert.deepEqual([s.n, s.glyph, s.title, s.prev, s.next, s.total], [3, '●', 'Step 3: Drain cn002 in Slurm (node down)', 2, 4, 6]);
-  assert.equal(s.line, 'ran at 5 s · on slurmctld, cn002 · now');
-  assert.equal(sheetFor(g, g[3]).line, 'at 40 s · on bmc-farm, cn002 · next');
+  assert.equal(s.line, 'ran at 5 s · on slurmctld (the Slurm controller), cn002 · now');
+  assert.equal(sheetFor(g, g[3]).line, 'at 40 s · on the BMC farm, cn002 · next');
   assert.equal(focusStep(g, 6).n, 6);
   assert.equal(sheetFor(g, g[0]).prev, null); assert.equal(sheetFor(g, g[5]).next, null);
   assert.equal(focusStep(g, 99).n, 3);  // a choice that no longer exists falls back to the current step
@@ -158,13 +158,14 @@ test('before Play the expectation pin says planned, or CLI only with ↷', () =>
   p.expects[0].page = true;
   const pin = expectPins(previewRun(p))[0];
   assert.deepEqual([pin.state, pin.glyph, pin.word], ['planned', '○', 'planned']);
-  assert.equal(pin.aria, 'Expectation E1, planned: slurm.node_state {"node": "cn002", "state": "drain"}');
+  assert.equal(pin.aria, 'Expectation E1, planned: Slurm shows cn002 as drained');
 });
 
 test('the declared blast: whose clients may see a change, per step in words and once per part on the diagram', () => {
   const g = runGroups(previewRun(preview()));
-  assert.equal(blastLine(g[0], id => id.toUpperCase()), 'Clients may see a change on BMC-FARM: bmc-farm changes.');
-  assert.equal(railRow(g[2]).blast, 'Clients may see a change on slurmrestd, login: slurm changes.');
+  assert.equal(blastLine({ blast: ['cn002'], blastWhy: 'x.' }, id => id.toUpperCase()), 'Clients may see a change on CN002: x.');
+  assert.equal(blastLine(g[0]), 'Clients may see a change on the BMC farm: bmc-farm changes.');
+  assert.equal(railRow(g[2]).blast, 'Clients may see a change on slurmrestd (the Slurm REST API), the login node: slurm changes.');
   const marks = blastMarks(g, id => id !== 'login');
   assert.deepEqual(marks.map(m => [m.id, m.steps]), [['bmc-farm', [1, 4]], ['bcm-mock', [2, 5]], ['slurmrestd', [3, 6]]]);
   assert.match(marks[0].label, /steps 1, 4 \(declared, not measured\)/);
@@ -182,5 +183,58 @@ test('the preview line: steps, parts, expectations and what only the CLI can run
 
 test('the phone sheet reads a preview step as planned', () => {
   const g = runGroups(previewRun(preview()));
-  assert.equal(sheetFor(g, g[0]).line, 'at 0 s · on bmc-farm, cn002 · planned');
+  assert.equal(sheetFor(g, g[0]).line, 'at 0 s · on the BMC farm, cn002 · planned');
+});
+
+// ---- phase 3: replay over the recorded steps, and part ids in words ----
+const ended = (statuses, extra = {}) => ({ ...nodeDown(statuses, false), ...extra });
+
+test('replay walks the recorded steps only, in the order they ran', () => {
+  assert.equal(replayable(nodeDown(['ok', 'ok'])), false, 'not while it runs');
+  assert.equal(replayable(previewRun(preview())), false, 'not a preview');
+  assert.equal(replayable(ended([])), false, 'nothing recorded');
+  const stopped = ended(['ok', 'ok', 'ok'], { stopped: true }), g = runGroups(stopped), stops = replayStops(g);
+  assert.ok(replayable(stopped));
+  assert.deepEqual(stops.map(s => s.n), [1, 2, 3], 'steps 4 to 6 never ran: not stops');
+  assert.equal(replayCaption(g, stops), 'Replay walks the 3 recorded steps only (3 never ran). Node states on the diagram stay live.');
+  const late = ended(['ok', 'ok']); late.steps[0].t = 9;  // step 1 ran after step 2: the order is the time order
+  assert.deepEqual(replayStops(runGroups(late)).map(s => s.n), [2, 1]);
+});
+
+test('at a stop: earlier steps keep their result, this one is now, later ones are next with no time', () => {
+  const run = ended(['ok', 'ok', 'failed', 'ok', 'ok', 'ok']), g = runGroups(run), stops = replayStops(g);
+  const at1 = replayGroups(g, stops, 1);
+  assert.deepEqual(at1.map(x => x.state), ['done', 'now', 'next', 'next', 'next', 'next']);
+  assert.deepEqual(at1.map(x => x.current), [false, true, false, false, false, false]);
+  assert.deepEqual(at1.map(x => x.t), [0, 0, null, null, null, null]);
+  assert.equal(replayGroups(g, stops, 2)[2].state, 'failed', 'a failure stays a failure, also as the current step');
+  assert.deepEqual(replayGroups(g, stops, 5).map(x => x.state), ['done', 'done', 'failed', 'done', 'done', 'now']);
+  assert.deepEqual(g.map(x => x.state), ['done', 'done', 'failed', 'done', 'done', 'done'], 'the recorded groups are not changed');
+  const badges = partBadges(at1);
+  assert.equal(badges.find(b => b.id === 'bcm-mock').state, 'now');
+  assert.equal(badges.find(b => b.id === 'slurmctld').state, 'next');
+});
+
+test('the slider: keys of the WAI-ARIA pattern, clamped; aria-valuetext names the step and its result', () => {
+  assert.deepEqual(['ArrowRight', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'Home', 'End'].map(k => replayKey(k, 2, 6)), [3, 3, 1, 1, 0, 5]);
+  assert.equal(replayKey('ArrowRight', 5, 6), 5); assert.equal(replayKey('ArrowLeft', 0, 6), 0); assert.equal(replayKey('Enter', 2, 6), null);
+  assert.equal(replayClamp(9, [1, 2, 3]), 2); assert.equal(replayClamp(-1, [1, 2, 3]), 0);
+  const run = ended(['ok', 'ok', 'ok', 'ok', 'ok', 'ok']), g = runGroups(run), stops = replayStops(g);
+  assert.equal(replayText(g, stops, 2), 'Step 3, 3 of 6 recorded: Drain cn002 in Slurm (node down), done, ran at 5 s');
+  assert.equal(replayHeading(run, g, stops, 2), 'node-down · Replay: step 3, 3 of 6 recorded');
+  assert.equal(replayText(g, [], 0), '');
+});
+
+test('in replay a pin shows its result only once it was known', () => {
+  const run = ended(['ok', 'ok', 'ok', 'ok', 'ok', 'ok']); run.plan_expects[0].page = true;
+  run.expects = [{ label: run.plan_expects[0].label, status: 'ok', t: 20 }];
+  const g = runGroups(run), stops = replayStops(g), pins = expectPins(run);
+  assert.deepEqual([replayPins(pins, stops, 2)[0].word, replayPins(pins, stops, 2)[0].glyph], ['waiting', '○'], 'step 3 ran at 5 s: not known yet');
+  assert.equal(replayPins(pins, stops, 5)[0].word, 'held', 'the last stop shows every result');
+});
+
+test('every part id the engine names reads as words, a node keeps its name', () => {
+  for (const id of ['login', 'slurmctld', 'slurmdbd', 'slurmrestd', 'teleport', 'k8s-api', 'jira-mock']) assert.notEqual(partWords(id), id, id);
+  assert.equal(partWords('cn002'), 'cn002'); assert.equal(partWords('cn002', id => `node ${id}`), 'node cn002');
+  assert.ok(Object.values(PART_WORDS).every(w => !/[{}"]/.test(w)));
 });

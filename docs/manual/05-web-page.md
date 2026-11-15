@@ -296,8 +296,8 @@ Press **Watch on the diagram** in Test run, during or after a run. The Topology 
 - **The strip** over the diagram says the step in words, with **◀ Previous**, **Steps** and **Next ▶**. On a phone it is a sheet at the bottom of the screen, and the diagram scrolls to the step's parts.
 - **The Run tab** in the inspector lists every step in order: what it does in one sentence (for example *Freeze the login node (SSH hangs)* or *Add 200 ms delay and 5% packet loss on cn001 for 60 s*), its time, its parts and its state in words. A step that lands on no part says why.
 - **Keyboard.** Tab goes through the badges in step order. Enter or Space picks that step.
-- **Take off the diagram** removes a finished run's badges. The run itself lives until the page restarts.
-- **Stop.** Pressing **■ Stop** in Test run ends the run and leaves the plain diagram. **Watch on the diagram** brings the stopped run back.
+- **Take off the diagram** removes a finished run's badges. The run itself lives in the page's memory until the next Play or a page restart.
+- **Stop.** Pressing **■ Stop** in Test run ends the run and leaves the plain diagram. The Run tab then offers **Replay the last run** ([replay](#after-the-run-replay)); **Watch on the diagram** brings the stopped run back as it ended.
 
 Badges are drawn on the Circuit view only; the 2.5D view keeps its diamonds. A run started with `benchctl scenario run` is not drawn yet.
 
@@ -313,6 +313,19 @@ Pick a scenario in Test run and press **Show on the diagram**. The Topology tab 
 - **◎** marks a part whose clients may see a change during the scenario. This is the declared blast radius, not a measurement.
 - **The strip and the Run tab** walk the steps with **◀ Previous** and **Next ▶**. The step you pick gets a solid ring, and the parts its clients read get the blast radius's red dashes. The Run tab says, for each step, *Clients may see a change on ...* and why.
 - **Play** turns the dashed badges into the live badges on the same parts, with no jump. **Take the preview off the diagram** leaves the plain diagram.
+
+#### After the run: replay
+
+![The Circuit view replaying node-down at step 3: steps 1 and 2 done, step 3 now on the controller and cn002, the later steps next, and the player strip with its slider over the diagram](img/web-run-replay-light.png)
+
+When a run has ended (passed, failed or stopped), press **Replay the run** in the Run tab. After **■ Stop** the diagram is plain, and the Run tab offers **Replay the last run**. The strip over the diagram becomes a player.
+
+- **The slider** has one tick per recorded step, in the order they ran. Drag it, click a tick, or use the keys: ← → (or ↑ ↓) one step, Home the first, End the last. A screen reader hears the step, its result and when it ran.
+- **What moves.** The badges, the ring, the pins and the Run tab's selection go back to that step. Earlier steps keep their result, this step is ● now, later ones are ○ next. Picking a recorded step in the Run tab moves the slider too.
+- **What does not.** Replay walks the recorded steps only, and the strip says so. Node states on the diagram stay live. Steps a stopped run never reached are not on the slider.
+- **▶ Play** moves one step every 1.2 s; **⏸ Pause** stops it. With reduced motion there is no Play: each step changes in place.
+- **End replay**, or ✕, shows the run as it ended. On a phone the player is the sheet at the bottom of the screen.
+- **Memory only.** The last run lives in the page's process until the next Play or a page restart. Export the report to keep it.
 
 ### Traffic & Communication
 
@@ -554,7 +567,7 @@ See [choose the workbench](../guides/choose-workbench.md).
    4. Press **▶ Play**.
 3. **Watch.** The steps, a progress bar, **Stop**, the expectations (pending, then passed or failed) and **Client's eye** update live. **Watch on the diagram** shows the same run on the Infrastructure architecture ([a scenario run on the diagram](#a-scenario-run-on-the-diagram)).
 4. **Read Client's eye.** For each service it shows the calls the mock counted during the run, and the errors where the mock counts them.
-5. **Export.** When the run ends, **Markdown** or **JSON** downloads a report built in the browser.
+5. **Export.** When the run ends, **Markdown** or **JSON** downloads a report built in the browser. It has the run's start, end and length, and for each step its planned time and when it ran (seconds after Play). Each expectation has its result, its time and its words.
 
 **Steps the page cannot run**
 - They are marked **↷ CLI only**, with the reason. A notice gives the command that runs everything: `./scripts/benchctl scenario run NAME` (**Copy** puts it on the clipboard).

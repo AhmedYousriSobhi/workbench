@@ -86,6 +86,10 @@
     <section id="runsheet" class="runsheet" aria-label="Scenario step on the diagram" hidden>
   <div class="rs-h"><span class="rb" id="rs-badge" aria-hidden="true"></span><div class="rs-txt"><b id="rs-title"></b><p class="small dim" id="rs-line"></p></div><button class="btn small" id="rs-x" type="button" aria-label="Hide the step sheet">✕</button></div>
   <div class="rs-btns"><button class="btn small" id="rs-prev" type="button">◀</button><button class="btn small" id="rs-steps" type="button">Steps</button><button class="btn small" id="rs-next" type="button">▶</button></div>
+  <div class="rs-replay" id="rs-replay" hidden><p class="small dim" id="rs-rcap"></p>
+    <div class="rs-rrow"><button class="btn small" id="rs-play" type="button">▶ Play</button>
+      <div class="rs-slider" id="rs-slider" role="slider" tabindex="0" aria-label="Replay, recorded step" aria-describedby="rs-rcap" aria-valuemin="1" aria-valuemax="1" aria-valuenow="1"><span class="rs-ticks" id="rs-ticks" aria-hidden="true"></span></div>
+      <button class="btn small" id="rs-end" type="button">End replay</button></div></div>
 </section>
     <div class="flowscroll"><svg id="flow" viewBox="0 0 1120 470" role="img" aria-label="Infrastructure architecture: clients and users, the access layer (login nodes, each direct SSH, Teleport or both, and the Teleport proxy when on), the services, and the nodes. Each part opens its details."></svg></div><div class="canvas fleetview" id="fleetview" aria-label="Fleet: every cluster" hidden inert></div><div class="canvas poolview" id="poolview" aria-label="Pool" hidden inert></div><div class="cvstack" id="cvstack" role="group" aria-label="Traffic layers" hidden></div><p class="cvcap" id="cvcap" hidden></p>
     <div class="ovprev" id="ovprev" role="tooltip" hidden></div><div class="srtable" id="ovtable"></div>
@@ -134,12 +138,13 @@
     <div id="ipane-run" class="ipane runpane" role="region" aria-labelledby="run-head" hidden>
       <h3 class="rh" id="run-head" tabindex="-1">No scenario run to show</h3>
       <p class="small dim" id="run-none">Pick a scenario in Test run and press <b>Show on the diagram</b> to see where it will act, or play it and press <b>Watch on the diagram</b>. Each step gets a numbered badge on the part it acts on, and is listed here in order. <button class="btn small" id="run-open" type="button">Open Test run</button></p>
+      <div id="run-last" hidden><p class="small dim">The last run is off the diagram. It stays in the page's memory until the next Play or a page restart.</p><button class="btn small" id="run-lastbtn" type="button">Replay the last run</button></div>
       <p class="small dim" id="run-sum" hidden></p>
       <p class="small dim" id="run-cvnote" hidden>Badges are drawn on the Circuit view only. <button class="btn small" id="run-tocv" type="button">Show the Circuit view</button></p>
       <ol class="runrail" id="runrail" aria-label="Scenario steps, in order"></ol>
       <ul class="runrail" id="runpins" aria-label="Expectations"></ul>
       <p class="small dim runkey"><span class="rb k-done" aria-hidden="true">✓</span> done <span class="rb k-now" aria-hidden="true">●</span> now <span class="rb k-active" aria-hidden="true">◐</span> in progress <span class="rb k-next" aria-hidden="true">○</span> next <span class="rb k-cli" aria-hidden="true">↷</span> CLI only or skipped <span class="rb k-failed" aria-hidden="true">✗</span> failed <span class="rb k-planned" aria-hidden="true">○</span> planned (before Play) <span class="rb k-blast" aria-hidden="true">◎</span> clients may see a change</p>
-      <div class="row" id="run-tools" hidden><button class="btn small" id="run-clear" type="button">Take off the diagram</button></div>
+      <div class="row" id="run-tools" hidden><button class="btn small" id="run-replay" type="button" hidden>Replay the run</button><button class="btn small" id="run-clear" type="button">Take off the diagram</button></div>
     </div>
   </section>
   <div class="nodesmain" id="nodesmain">

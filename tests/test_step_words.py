@@ -1,4 +1,4 @@
-"""Every scenario step reads as words on the page (issue 813, ADR 0086).
+"""Every scenario step, expectation and part reads as words on the page (issue 813, ADR 0086).
 
 `describe()` in webui/static/js/testrunmodel.js gives the Test run tab, the Run rail, the phone sheet and the badge labels one sentence
 per step. Raw JSON is its last resort. Two checks keep it that way:
@@ -7,6 +7,9 @@ per step. Raw JSON is its last resort. Two checks keep it that way:
   it may only shrink);
 - every step key the engine accepts (derived from its own constants, so a new key fails here until it has words) has a sample that
   reads as words.
+
+The same for expectations (`expectWords()`, EXPECT_RAW_OK only shrinks) and for the part ids the engine names (`partWords()` in
+webui/static/js/runlayermodel.js): the Run tab says "the login node", never "login" (ADR 0086 phase 3).
 """
 import json
 import re
@@ -18,14 +21,18 @@ import pytest
 import yaml
 
 from benchctl import authfaults, faultmodel, k8s, netemfaults, scenario
+from webui import blast
 
 ROOT = Path(__file__).resolve().parent.parent
 MODEL = ROOT / "webui/static/js/testrunmodel.js"
+RUNMODEL = ROOT / "webui/static/js/runlayermodel.js"
 SIM = yaml.safe_load((ROOT / "sim.yaml").read_text())
 WITH_TOPOLOGY = {**SIM, "topology": {"plugin": "tree", "spines": 1, "leaves_per_spine": 2}}
 
 # (scenario, YAML step number) -> why that step still shows JSON. Only shrinks: give the step words, then remove its entry.
 RAW_OK: dict[tuple[str, int], str] = {}
+# (scenario, expectation number E) -> why that expectation still shows JSON. Only shrinks.
+EXPECT_RAW_OK: dict[tuple[str, int], str] = {}
 
 # Words that mean a sentence was built from a missing value, or not built at all.
 BAD = re.compile(r"^\{|\bundefined\b|\bnull\b|\bNaN\b|\[object|  | (on|to|of|for|in)$|^\s|\s$")
@@ -72,15 +79,19 @@ SAMPLES = [  # (target, do): one per key the engine or a mock's /sim/inject acce
 ]
 
 
-def words(steps: list[dict]) -> list[str]:
+def _js(module: Path, fn: str, items: list) -> list[str]:
     node = shutil.which("node")
     if not node:
         pytest.skip("node is not installed")
-    js = (f"import {{ describe }} from {json.dumps(MODEL.as_uri())}; let s = ''; process.stdin.on('data', c => s += c)"
-          ".on('end', () => process.stdout.write(JSON.stringify(JSON.parse(s).map(describe))));")
-    r = subprocess.run([node, "--input-type=module", "-e", js], input=json.dumps(steps), capture_output=True, text=True, check=False)
+    js = (f"import {{ {fn} }} from {json.dumps(module.as_uri())}; let s = ''; process.stdin.on('data', c => s += c)"
+          f".on('end', () => process.stdout.write(JSON.stringify(JSON.parse(s).map(x => {fn}(x)))));")
+    r = subprocess.run([node, "--input-type=module", "-e", js], input=json.dumps(items), capture_output=True, text=True, check=False)
     assert r.returncode == 0, r.stderr[-600:]
     return json.loads(r.stdout)
+
+
+def words(steps: list[dict]) -> list[str]:
+    return _js(MODEL, "describe", steps)
 
 
 def test_every_shipped_step_reads_as_words():
@@ -114,3 +125,37 @@ def test_every_step_key_the_engine_accepts_has_words():
     bad = [(s, w) for s, w in zip(steps + planned, words(steps + planned), strict=True) if BAD.search(w)]
     assert not bad, f"no words for: {bad}"
     assert len(set(words(steps))) > len(steps) * 0.9, "different steps should read differently"
+
+
+def test_every_shipped_expectation_reads_as_words():
+    labels, where = [], []
+    for sc in scenario.list_all(ROOT / "scenarios", sim=WITH_TOPOLOGY):
+        for x in scenario.preview(sc, WITH_TOPOLOGY)["expects"]:
+            labels.append(x["label"])
+            where.append((sc["name"], x["e"]))
+    assert len(labels) > 30
+    raw = {k: f"{label} -> {text!r}" for k, label, text in zip(where, labels, _js(MODEL, "expectWords", labels), strict=True)
+           if BAD.search(text) or '{"' in text}
+    new = {k: v for k, v in raw.items() if k not in EXPECT_RAW_OK}
+    gone = sorted(k for k in EXPECT_RAW_OK if k not in raw)
+    assert not new, f"expectations that show JSON (give the kind a sentence in expectWords(), testrunmodel.js): {new}"
+    assert not gone, f"these expectations read as words now: remove them from EXPECT_RAW_OK: {gone}"
+
+
+def test_every_expectation_kind_the_engine_knows_has_words():
+    kinds = set(re.findall(r'kind == "([a-z0-9_.]+)"', (ROOT / "benchctl/scenario.py").read_text()))
+    assert len(kinds) >= 10
+    got = _js(MODEL, "expectWords", [f'{k} {{"node": "cn001", "state": "drain", "labels": ["a"], "jql": "x", "status": "Done", "count": 2, '
+                                     f'"namespace": "ns", "name": "p", "reason": "Running", "selector": "app=x", "mount": "/scratch", "min_used_pct": 90}}' for k in sorted(kinds)])
+    bad = [(k, w) for k, w in zip(sorted(kinds), got, strict=True) if BAD.search(w) or "{" in w]
+    assert not bad, f"expectation kinds with no words in expectWords(): {bad}"
+
+
+def test_every_part_the_engine_names_reads_as_words():
+    ids = {*scenario.TARGET_PART.values(), *scenario.AUTH_PART.values(), *scenario.UPGRADE_PART.values(),
+           *(p for t in blast.TARGETS.values() for p in t["parts"]), *(p for ps in blast.AUTH_PARTS.values() for p in ps)}
+    ids |= {p for kind in ("jira.issue_count", "k8s.pod_status", "storage.mount") for p in scenario.expect_touches({kind: {"target": "real", "node": "cn001"}})} - {"cn001"}
+    ids.add("jira-mock")
+    ids = sorted(ids)
+    raw = [i for i, w in zip(ids, _js(RUNMODEL, "partWords", ids), strict=True) if w == i]
+    assert not raw, f"part ids the Run tab would show raw (add them to PART_WORDS in runlayermodel.js): {raw}"

@@ -1,7 +1,7 @@
 import './setup.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { describe, buildReport, eyeBase, eyeRows, runVerdict, timelineRows } from '../../static/js/testrunmodel.js';
+import { describe, buildReport, expectWords, eyeBase, eyeRows, runVerdict, timelineRows } from '../../static/js/testrunmodel.js';
 
 const prev = { name: 'sc', ref: 'SC-09', steps: [
   { at: 0, target: 'slurm', do: { drain: ['cn001'] }, page: true, why: '' },
@@ -80,4 +80,37 @@ test('every step kind reads as a sentence, not JSON (issue 813)', () => {
   assert.equal(said('dcgm', { nodes: ['gpu001'], restart: true }), 'Restart the real DCGM exporter on gpu001');
   assert.equal(said('jira', { failure: { mode: 'slow', count: 2, delay: 3 } }), 'Make Jira answer 3 s late for the next 2 calls');
   assert.equal(said('nothing-known', { weird: 1 }), '{"weird":1}');  // the last resort, which tests/test_step_words.py keeps off every shipped step
+});
+
+test('the report carries the run\'s start, each step\'s and each expectation\'s time (ADR 0086 phase 3)', () => {
+  const run = { name: 'sc', ok: true, running: false, speed: 5, started: 1763200000, elapsed: 42.5,
+    steps: [{ status: 'ok', t: 0.2 }, { status: 'skipped', detail: 'k8s steps need the host CLI', t: 1.1 }],
+    expects: [{ label: 'slurm.node_state {"node": "cn001", "state": "drain"}', status: 'ok', detail: '', t: 12.3 }] };
+  const { data, markdown } = buildReport({ preview: prev, run, startedAt: '2026-01-01T00:00:00Z', finishedAt: null, speed: 5, eye: [] });
+  assert.equal(data.started, '2025-11-15T09:46:40Z', 'the page process\'s clock at Play wins over the browser\'s');
+  assert.equal(data.finished, '2025-11-15T09:47:22Z'); assert.equal(data.duration_s, 42.5);
+  assert.deepEqual(data.steps.map(x => [x.at, x.t]), [[0, 0.2], [5, 1.1]]);
+  assert.deepEqual([data.expectations[0].t, data.expectations[0].words], [12.3, 'Slurm shows cn001 as drained']);
+  assert.match(data.expectations[0].label, /^slurm\.node_state /, 'the engine\'s label stays, as the key');
+  assert.match(markdown, /\| 0 s \| 0\.2 s \| slurm \| Drain cn001 in Slurm/); assert.match(markdown, /- Took: 42\.5 s/);
+  assert.match(markdown, /- ok at 12\.3 s: Slurm shows cn001 as drained/); assert.doesNotMatch(markdown.split('## Expectations')[1], /\{"/);
+  const stopped = buildReport({ preview: prev, run: { ...run, stopped: true, steps: [{ status: 'ok', t: 0.2 }, { status: 'pending', t: null }], expects: [] }, eye: [] });
+  assert.equal(stopped.data.steps[1].t, null); assert.match(stopped.markdown, /\| 5 s \| did not run \|/);
+  const old = buildReport({ preview: prev, run: { name: 'sc', running: false, ok: true, steps: [], expects: [] }, startedAt: '2026-01-01T00:00:00Z', eye: [] });
+  assert.equal(old.data.started, '2026-01-01T00:00:00Z', 'without the run state\'s start, the browser\'s');
+});
+
+test('every expectation kind reads as a sentence; an unknown one keeps its label', () => {
+  const said = (kind, a) => expectWords(`${kind} ${JSON.stringify(a)}`);
+  assert.equal(said('slurm.job_state', { node: 'cn001', state: 'RUNNING' }), 'A job on cn001 is running in Slurm');
+  assert.equal(said('slurm.stepd', { node: 'cn001', alive: false }), 'No slurmstepd runs on cn001');
+  assert.equal(said('k8s.node_ready', { node: 'kgpu001', ready: false }), 'Kubernetes node kgpu001 is NotReady');
+  assert.equal(said('k8s.pod_status', { namespace: 'team-b', name: 'oom-demo', reason: 'OOMKilled' }), 'Pod team-b/oom-demo shows OOMKilled');
+  assert.equal(said('k8s.pods_on_node', { node: 'kgpu001', namespace: 'team-a', selector: 'app=inference', min: 1 }), 'At least 1 Running pod (app=inference, team-a) on Kubernetes node kgpu001');
+  assert.equal(said('storage.mount', { node: 'cn001', mount: '/scratch', min_used_pct: 99, min_inodes_used_pct: 90 }), '/scratch on cn001: at least 99% used, at least 90% of its inodes used');
+  assert.equal(said('storage.mount', { node: 'cn002', mount: '/scratch', quota_exceeded: 'alice' }), '/scratch on cn002: alice over quota');
+  assert.equal(said('jira.issue_created', { labels: ['fault-fan', 'node-gpu002'] }), 'A Jira ticket is filed with the labels fault-fan, node-gpu002');
+  assert.equal(said('jira.issue_status', { jql: 'labels = lifecycle', status: 'Closed' }), 'The Jira tickets matching “labels = lifecycle” are Closed');
+  assert.equal(said('jira.issue_count', { jql: 'labels = stress', count: 12, target: 'real' }), '12 real Jira tickets match “labels = stress”');
+  assert.equal(expectWords('weird.kind {"a": 1}'), 'weird.kind {"a": 1}');
 });
