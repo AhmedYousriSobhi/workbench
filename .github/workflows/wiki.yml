@@ -2,7 +2,7 @@ name: Publish the wiki
 
 on:
   push:
-    branches: [dev]
+    branches: [main]  # the release merge; a run by hand (workflow_dispatch) publishes the branch it is started on, so run it on dev to preview
     paths:
       - "docs/**"
       - "scripts/sync_wiki.py"

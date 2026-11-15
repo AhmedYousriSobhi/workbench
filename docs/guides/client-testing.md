@@ -217,6 +217,15 @@ Run it with the client open and measure the client at the same time. Use a `--ma
 ./scripts/benchctl measure app --match NAME --duration 330 --save
 ```
 
+To see the five minutes before you play them, add `--dry-run`. The first steps start jobs on every node, then the GPU, fan and heat faults follow:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/snapshots/scenario-client-stress-dark.svg">
+  <img src="../assets/snapshots/scenario-client-stress-light.svg" alt="Terminal: ./scripts/benchctl scenario run client-stress --dry-run (prints: SC-01 client-stress: 24 steps, 270 s, targets bcm-mock, bmc-farm, gpu-exporter, jira, slurm)">
+</picture>
+
+*client-stress: the first steps of five minutes*
+
 **With the real window, step by step:**
 
 1. Bring the workbench up with the real Jira: `benchctl start --with jira-real`, then `benchctl setup jira-real` once (`benchctl status` shows the licence end).

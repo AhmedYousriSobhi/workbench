@@ -90,12 +90,23 @@ def test_art_is_copied_and_img_and_picture_paths_are_rewritten(tmp_path):
 def test_home_is_a_landing_page_with_tiles_and_the_chapter_table(tmp_path):
     sw.generate(ROOT / "docs", tmp_path, BLOB)
     home = (tmp_path / "Home.md").read_text()
-    assert home.startswith('<p align="center"><img src="images/art-readme-hero.svg" alt="')
-    assert home.index("## Start here") < home.index("art-tile-install.svg") < home.index("## All chapters") < home.index("| # | Chapter")
+    assert home.startswith('<p align="center"><picture>\n<source media="(prefers-color-scheme: dark)" srcset="images/art-home-hero-dark.svg">'
+                           '\n<img src="images/art-home-hero-light.svg" alt="')
+    assert (tmp_path / "images/art-home-hero-light.svg").is_file() and (tmp_path / "images/art-home-hero-dark.svg").is_file()
+    assert home.index("## Start here") < home.index("art-tile-install-light.svg") < home.index("## All chapters") < home.index("| # | Chapter")
     for icon, title, link, _ in sw.TILES:
-        assert f"images/art-{icon}.svg" in home and f"**[{title}]({sw.page_name('manual/' + link[:-3])})**" in home
-        assert (tmp_path / f"images/art-{icon}.svg").is_file()
-    assert "![" in home and "![]" not in home  # every image has alt text
+        assert (f'srcset="images/art-{icon}-dark.svg"><img src="images/art-{icon}-light.svg" alt="{title}" width="64"' in home
+                and f"**[{title}]({sw.page_name('manual/' + link[:-3])})**" in home)
+        assert (tmp_path / f"images/art-{icon}-light.svg").is_file() and (tmp_path / f"images/art-{icon}-dark.svg").is_file()
+    assert 'alt=""' not in home.split("## All chapters")[0]  # every image above the chapter table has alt text
+
+
+def test_snapshots_are_copied_and_their_paths_rewritten(tmp_path):
+    sw.generate(ROOT / "docs", tmp_path, BLOB)
+    assert sw.image_name("assets/snapshots/plan-dark.svg") == "images/snap-plan-dark.svg"
+    page = (tmp_path / "Manual-06-scenarios.md").read_text()
+    assert 'srcset="images/snap-scenario-node-down-dark.svg"' in page and 'src="images/snap-scenario-node-down-light.svg"' in page
+    assert (tmp_path / "images/snap-scenario-node-down-dark.svg").is_file() and not list(tmp_path.glob("images/*.txt"))
 
 
 def test_sidebar_groups_have_an_icon_and_text_and_every_page_links_to_its_source(tmp_path):

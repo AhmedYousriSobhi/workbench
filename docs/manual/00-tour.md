@@ -36,7 +36,7 @@ Open the link `start` printed. The circuit is the default view: every way into t
 
 Zoom out to the Fleet (one card per cluster), in to the Cluster, in to a Pool (one card per node). Layers show one plane at a time: Access, Management or Monitoring.
 
-![Animation: zoom out to the Fleet, in to the Cluster, the Access, Management and Monitoring layers one at a time, in to a Pool and back out](img/circuit-zoom-light.gif)
+![Animation: a pointer zooms out to the Fleet, clicks the cluster to zoom in, picks the Access, Management and Monitoring layers one at a time, opens a pool and zooms back out](img/circuit-zoom-light.gif)
 
 *Deeper: [The web page](05-web-page.md).*
 

@@ -1,0 +1,7 @@
+SC-17 node-down: 6 steps, 40 s, targets bcm-mock, bmc-farm, slurm
+[   0.0s] bmc-farm {'nodes': ['cn002'], 'power': 'Off'}
+[   0.0s] bcm-mock {'nodes': ['cn002'], 'state': 'DOWN'}
+[   5.0s] slurm {'drain': ['cn002'], 'reason': 'node down'}
+[  40.0s] bmc-farm {'nodes': ['cn002'], 'clear': True}
+[  40.0s] bcm-mock {'nodes': ['cn002'], 'state': 'UP'}
+[  40.0s] slurm {'resume': ['cn002']}

@@ -1,0 +1,33 @@
+SC-01 client-stress: 24 steps, 270 s, targets bcm-mock, bmc-farm, gpu-exporter, jira, slurm
+[   0.0s] slurm {'submit': {'node': 'cn001', 'duration': 120}}
+[   0.0s] slurm {'submit': {'node': 'cn002', 'duration': 120}}
+[   0.0s] slurm {'submit': {'node': 'cn003', 'duration': 120}}
+[   0.0s] slurm {'submit': {'node': 'gpu001', 'duration': 150}}
+[   0.0s] slurm {'submit': {'node': 'gpu002', 'duration': 150}}
+[  10.0s] jira {'tickets': {'action': 'create', 'project': 'OPS', 'count': 12, 'summary': 'Stress {n}: job failed on cn002', 'labels': ['workbench', 'stress', 'cn002'], 'priority': 'Medium'}}
+[  20.0s] gpu-exporter {'nodes': ['gpu001', 'gpu002'], 'xid': 79}
+[  30.0s] bmc-farm {'nodes': ['gpu001', 'gpu002'], 'fan_fail': 2}
+[  50.0s] bmc-farm {'nodes': ['gpu001'], 'temp': 54.7}
+[  60.0s] bmc-farm {'nodes': ['gpu001'], 'temp': 59.3}
+[  60.0s] slurm {'drain': ['gpu001'], 'reason': 'stress xid 79'}
+[  70.0s] bmc-farm {'nodes': ['gpu001'], 'temp': 64.0}
+[  70.0s] bmc-farm {'nodes': ['cn004'], 'power': 'Off'}
+[  70.0s] bcm-mock {'nodes': ['cn004'], 'state': 'DOWN'}
+[  75.0s] slurm {'drain': ['cn004'], 'reason': 'stress node down'}
+[  80.0s] bmc-farm {'nodes': ['gpu001'], 'temp': 68.7}
+[  90.0s] bmc-farm {'nodes': ['gpu001'], 'temp': 73.3}
+[ 100.0s] bmc-farm {'nodes': ['gpu001'], 'temp': 78.0}
+[ 100.0s] jira {'failure': {'mode': '429', 'count': 6}}
+[ 110.0s] bmc-farm {'nodes': ['gpu001'], 'temp': 82.7}
+[ 120.0s] bmc-farm {'nodes': ['gpu001'], 'temp': 87.3}
+[ 130.0s] bmc-farm {'nodes': ['gpu001'], 'temp': 92.0}
+[ 130.0s] jira {'failure': {'mode': 'slow', 'count': 8, 'delay': 3}}
+[ 160.0s] jira {'failure': {'mode': '503', 'count': 6}}
+[ 190.0s] jira {'failure': {'mode': None}}
+[ 190.0s] jira {'tickets': {'action': 'transition', 'jql': 'labels = stress', 'to': 'In Progress'}}
+[ 220.0s] slurm {'submit': {'node': 'cn001', 'duration': 60}}
+[ 220.0s] slurm {'submit': {'node': 'cn002', 'duration': 60}}
+[ 270.0s] gpu-exporter {'nodes': ['gpu001', 'gpu002'], 'clear': True}
+[ 270.0s] bmc-farm {'nodes': ['gpu001', 'gpu002', 'cn004'], 'clear': True}
+[ 270.0s] bcm-mock {'nodes': ['cn004'], 'state': 'UP'}
+[ 270.0s] slurm {'resume': ['gpu001', 'cn004']}

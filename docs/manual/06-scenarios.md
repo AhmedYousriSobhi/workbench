@@ -26,6 +26,15 @@ Scenarios live in `scenarios/*.yaml`.
 
 The command exits 1 when a step errors or an `expect` line does not hold.
 
+`--dry-run` shows what a scenario will do before it does it. For `node-down`, a node is powered off, marked down and drained, then everything is put back at 40 s:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/snapshots/scenario-node-down-dark.svg">
+  <img src="../assets/snapshots/scenario-node-down-light.svg" alt="Terminal: ./scripts/benchctl scenario run node-down --dry-run (prints: SC-17 node-down: 6 steps, 40 s, targets bcm-mock, bmc-farm, slurm)">
+</picture>
+
+*A scenario's timeline, without running it*
+
 - Steps the caller cannot run are reported as **skipped**, not failed.
 - From the web page ([chapter 5](05-web-page.md)) the `slurm` steps go through the governor.
 - Tick **Slurm trace** there for the same trace (see the [resilience guide](../guides/slurm-resilience.md)).

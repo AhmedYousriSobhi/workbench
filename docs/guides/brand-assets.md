@@ -43,6 +43,7 @@ from elsewhere.
 Rules every file follows (`tests/test_doc_art.py` checks them):
 
 - one file works on light and dark GitHub and in the page's help: it carries its own `prefers-color-scheme` styles;
+- except the fixed twins in `FIXED` (`NAME-light.svg`, `NAME-dark.svg`): each carries one theme, for a `<picture>` block;
 - at most 60 KB, a `<title>` and a `<desc>` that say what the picture shows;
 - real text in a system font stack; every text colour is paired with its ground in `TEXT_PAIRS` and reaches 4.5:1 in both themes;
 - status is never colour alone (a node has a tick, pause bars or a cross as well);
@@ -50,6 +51,66 @@ Rules every file follows (`tests/test_doc_art.py` checks them):
 
 Shared primitives (`node`, `rack`, `wire`, `cloud`, `governor`, `bubble`, `label`, `arrow`) live in the script; plane
 colours follow [the web page canvas](web-ui-canvas.md). Add a picture as one function and one entry in `ART`.
+
+### Light and dark twins
+
+An SVG's own `prefers-color-scheme` follows the operating system, not GitHub's theme. On a dark desktop with GitHub in
+light mode, a self-theming picture turns dark on a white page. So the README art, the Wiki Home hero and the Home tiles
+are also written as fixed twins and shown in a `<picture>` block, which GitHub chooses by its own theme:
+
+```html
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/art/readme-hero-dark.svg">
+  <img src="docs/assets/art/readme-hero-light.svg" alt="what the picture shows" width="820">
+</picture>
+```
+
+Add a picture to `FIXED` in the script to get its twins. The page's help shows the same block, and picks the same theme
+as the help page itself.
+
+### The Home emblem
+
+The Wiki Home hero is a screen watching six nodes: a heartbeat line over five healthy nodes and one held back by the
+governor (the logo's dashed amber square). It is `home_emblem` in the script, drawn with the logo's teal, ink and amber,
+and readable from 64 px up.
+
+## README tours
+
+The README's two animations are tours of the real page with sample data: a pointer moves to a control, the click
+shows as a ripple, and the page answers. `architecture-demo` takes six steps in about 20 s (live wires, lenses and the
+2.5D view, a node's connection details, a power-off and its blast radius, the Fleet and back, a slide to Traffic and
+Communication); `circuit-zoom` takes five (Fleet, Cluster, layers, a pool, back out). Each step has a numbered caption.
+
+```bash
+pip install -e '.[browser]' && .venv/bin/python -m playwright install chromium    # once
+.venv/bin/python scripts/doc_shots.py          # every manual screenshot and both tours, light and dark (no cluster needed)
+```
+
+- The storyboard is `readme_tour` and `zoom_tour` in `scripts/demo_tour.py`; captions are `STEPS` and `ZOOM_STEPS`.
+- The pointer, the ripple and the caption are added to the page only while it is captured, and take their colours from
+  the page's tokens (`--fg`, `--panel`, `--accent`, `--sel`). Nothing is added to the shipped page.
+- A smooth scroll is drawn frame by frame. A slide (the content pushed sideways, as a swipe would) is put together from
+  two screenshots; the header, side bar and caption stay put.
+- `tests/test_docs.py` checks both twins: at least 12 frames a second, 10 to 25 s, looping, at most 3 MB, no hex colour
+  in the scripts. All frames share one palette, so each frame stores only what changed; a scroll or a slide changes the
+  whole frame, so add those sparingly.
+
+## Code snapshots
+
+A code snapshot is a terminal card: one real command, its real output, and a caption. It shows a reader what a command
+prints before they run it. `scripts/make_snapshots.py` builds them; the output is never typed by hand.
+
+```bash
+.venv/bin/python scripts/make_snapshots.py --capture         # run the commands, save the masked output (docs/assets/snapshots/NAME.txt)
+.venv/bin/python scripts/make_snapshots.py                   # render NAME-light.svg and NAME-dark.svg from the saved output
+.venv/bin/python scripts/make_snapshots.py --check           # exit 1 if a card is stale (validate.sh runs it)
+.venv/bin/python scripts/make_snapshots.py --markdown plan docs/guides   # the block to paste into a page in that folder
+```
+
+- `--capture` masks the home directory, the user and the host name. The commands are read-only and need no cluster.
+- Each card is real SVG text, with colours from the palette as attributes and no stylesheet, so it renders under the help's strict CSP.
+- The alt text names the command and the key output line. A test fails when a page's alt text no longer matches the saved output: paste the `--markdown` block again.
+- Add a snapshot as one entry in `SNAPSHOTS` (command, title, key line, the lines to keep, the pages that show it). Use them where a page teaches a command, not everywhere.
 
 ## Colours
 

@@ -1,0 +1,30 @@
+Workbench:   workbench
+Nodes:       2 cpu, 4 gpu x 8 GPUs
+Login nodes: login (ssh)
+Parts:       accounting, bcm, bmc, jira (always: slurm, Prometheus, Grafana)
+
+Memory, MB: expected use (measured + 15%, memory.py) and the cap the container may reach
+                     expected      cap
+    6 nodes                 90     1128
+  accounting-init          30       30
+  bcm-mock                 14      100
+  bmc-cn001                 4       16
+  bmc-cn002                 4       16
+  bmc-farm                 17      100
+  bmc-gpu001                4       16
+  bmc-gpu002                4       16
+  bmc-gpu003                4       16
+  bmc-gpu004                4       16
+  jira-mock                23      100
+  login                    12       40
+  mariadb                 235      250
+  slurmctld                48      200
+  slurmdbd                  9       80
+  slurmrestd                9       60
+  observability           134      764
+  total                   645     2948
+  docker overhead           0   (not measured: run `benchctl measure overhead --save` with the stack up; the containerd-shims `docker stats` does not count)
+  app under test         1024   (assumed, not measured)
+  needs                  1669   (admitted against this)
+
+fits: needs 1669 MB (645 MB expected + 1024 MB for the app (assumed, not measured)), 5691 MB free, 4022 MB would remain (floor 1024 MB)

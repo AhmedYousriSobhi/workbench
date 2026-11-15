@@ -60,6 +60,8 @@ def image_name(rel: str) -> str:
     """`manual/img/web-overview.png` -> `images/manual-web-overview.png`"""
     if rel.startswith("assets/art/"):
         return f"images/art-{rel.rsplit('/', 1)[1]}"
+    if rel.startswith("assets/snapshots/"):    # the code snapshots (scripts/make_snapshots.py)
+        return f"images/snap-{rel.rsplit('/', 1)[1]}"
     if rel.startswith("assets/palette/"):      # the colour guide's swatches (scripts/make_palette.py)
         return f"images/palette-{rel.rsplit('/', 1)[1]}"
     group, _, name = rel.split("/", 2)
@@ -113,10 +115,14 @@ def rewrite(text: str, page: str, docs: Path, blob: str) -> str:
 
 
 def tile_grid() -> str:
-    """Six illustrated links in a table: an image row, then a link row (not nested: the link rewrite reads one link per bracket pair)."""
+    """Six illustrated links in a table: an image row, then a link row (not nested: the link rewrite reads one link per bracket pair).
+    Each icon is a light and dark <picture> pair, chosen by GitHub's theme like the hero (issue 797)."""
+    def pic(icon: str, title: str) -> str:
+        return (f'<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/art/{icon}-dark.svg">'
+                f'<img src="../assets/art/{icon}-light.svg" alt="{title}" width="64" height="64"></picture>')
     rows = []
     for chunk in (TILES[:3], TILES[3:]):
-        rows += ["| " + " | ".join(f"![{t}](../assets/art/{i}.svg)" for i, t, link, _ in chunk) + " |",
+        rows += ["| " + " | ".join(pic(i, t) for i, t, link, _ in chunk) + " |",
                  "|:---:|:---:|:---:|" if not rows else None,
                  "| " + " | ".join(f"**[{t}]({link})**<br>{line}" for _, t, link, line in chunk) + " |"]
     return "\n".join(r for r in rows if r) + "\n"
@@ -126,8 +132,11 @@ def home_page(text: str) -> str:
     """The manual's README as a landing page: hero art, Start here, the tile grid, then the chapter table."""
     cut = text.find("| # | Chapter")
     cut = len(text) if cut < 0 else cut
-    hero = ('<p align="center"><img src="../assets/art/readme-hero.svg" alt="The workbench cluster: a login node, the Slurm '
-            'controller and compute nodes, fake services around them, and the memory governor guarding the door" width="820"></p>\n\n')
+    # a fixed light and dark pair: the wiki picks the <source> by GitHub's theme (an SVG's own media query follows the OS)
+    hero = ('<p align="center"><picture>\n<source media="(prefers-color-scheme: dark)" srcset="../assets/art/home-hero-dark.svg">\n'
+            '<img src="../assets/art/home-hero-light.svg" alt="workbench: a screen watching six cluster nodes, one held back by the '
+            'governor, beside the name and the parts it simulates: Slurm, Redfish BMCs, GPU metrics, Grafana, Jira and Kubernetes" '
+            'width="820">\n</picture></p>\n\n')
     return hero + text[:cut] + START + "\n" + tile_grid() + "\n## All chapters\n\n" + text[cut:]
 
 
@@ -158,6 +167,8 @@ def generate(docs: Path, out: Path, blob: str) -> list[str]:
     for img in (docs / "assets" / "art").glob("*"):  # the generated illustrations (scripts/make_doc_art.py)
         if img.suffix in IMAGES:
             shutil.copyfile(img, out / image_name(f"assets/art/{img.name}"))
+    for img in (docs / "assets" / "snapshots").glob("*.svg"):
+        shutil.copyfile(img, out / image_name(f"assets/snapshots/{img.name}"))
     for img in (docs / "assets" / "palette").glob("*.svg"):
         shutil.copyfile(img, out / image_name(f"assets/palette/{img.name}"))
     (out / "_Sidebar.md").write_text("\n".join(side), encoding="utf-8")

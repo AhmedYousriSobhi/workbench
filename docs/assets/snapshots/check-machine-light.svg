@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 755 424" width="755" height="424" role="img" aria-labelledby="t d" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,&#x27;DejaVu Sans Mono&#x27;,&#x27;Liberation Mono&#x27;,monospace" font-size="13">
+<title id="t">check-machine on a machine that qualifies</title><desc id="d">Terminal: ./scripts/check-machine.sh (prints: READY: this machine can build and run workbench (0 warning(s)))</desc>
+<rect x="0.5" y="0.5" width="754" height="423" rx="10" fill="#ffffff" stroke="#afb2b1"/>
+<path d="M0.5 34V10.5a10 10 0 0 1 10-10H744.5a10 10 0 0 1 10 10V34Z" fill="#eef1f0" stroke="#afb2b1"/>
+<circle cx="18" cy="17.0" r="5" fill="none" stroke="#afb2b1" stroke-width="1.5"/><circle cx="34" cy="17.0" r="5" fill="none" stroke="#afb2b1" stroke-width="1.5"/><circle cx="50" cy="17.0" r="5" fill="none" stroke="#afb2b1" stroke-width="1.5"/>
+<text x="66" y="21.5" fill="#4f5b59" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,&#x27;DejaVu Sans Mono&#x27;,&#x27;Liberation Mono&#x27;,monospace" font-size="12">check-machine on a machine that qualifies</text>
+<text x="18" y="60" font-weight="700" xml:space="preserve"><tspan fill="#006b5f">$ </tspan><tspan fill="#1c2927">./scripts/check-machine.sh</tspan></text>
+<text x="18" y="80" fill="#364341" xml:space="preserve">[ok  ] os: Ubuntu 26.04.1 LTS</text>
+<text x="18" y="100" fill="#364341" xml:space="preserve">[ok  ] cpu: 16 cores</text>
+<text x="18" y="120" fill="#364341" xml:space="preserve">[ok  ] ram: 14.8 GB total</text>
+<text x="18" y="140" fill="#364341" xml:space="preserve">[ok  ] disk: 197 GB free</text>
+<text x="18" y="160" fill="#364341" xml:space="preserve">[ok  ] python: python 3.14</text>
+<text x="18" y="180" fill="#364341" xml:space="preserve">[ok  ] cgroup v2: unified hierarchy</text>
+<text x="18" y="200" fill="#364341" xml:space="preserve">[ok  ] docker: installed</text>
+<text x="18" y="220" fill="#364341" xml:space="preserve">[ok  ] docker daemon: running, server 29.9.2</text>
+<text x="18" y="240" fill="#364341" xml:space="preserve">[ok  ] docker compose: v5.7.0</text>
+<text x="18" y="260" fill="#364341" xml:space="preserve">[ok  ] ports: all free on 127.0.0.1</text>
+<text x="18" y="280" fill="#364341" xml:space="preserve">[ok  ] kvm: /dev/kvm present</text>
+<text x="18" y="300" fill="#364341" xml:space="preserve">[ok  ] virsh: found</text>
+<text x="18" y="320" fill="#364341" xml:space="preserve">[ok  ] profiles: 5.6 GB available now; fits: mac-agent, min, std, full, jira-real (largest:</text>
+<text x="18" y="340" fill="#364341" xml:space="preserve">  jira-real, budget 4.2 GB)</text>
+<text x="18" y="360" fill="#364341" xml:space="preserve"></text>
+<text x="18" y="380" fill="#1c2927" font-weight="700" xml:space="preserve">READY: this machine can build and run workbench (0 warning(s)). Next: python3 -m venv .venv</text>
+<text x="18" y="400" fill="#1c2927" font-weight="700" xml:space="preserve">  &amp;&amp; . .venv/bin/activate &amp;&amp; pip install -e &#x27;.[dev]&#x27;</text>
+</svg>
