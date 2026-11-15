@@ -289,7 +289,7 @@ def test_grant_gives_only_what_slurmdbd_needs_and_nothing_global():
     from benchctl import slurmconf
 
     sql = slurmconf.LAB_GRANT_SQL
-    assert sql.startswith("GRANT CREATE, DROP, ALTER, INDEX, SELECT, INSERT, UPDATE, DELETE, LOCK TABLES, CREATE TEMPORARY TABLES ON ")
+    assert sql.startswith("GRANT CREATE, DROP, ALTER, INDEX, SELECT, INSERT, UPDATE, DELETE, LOCK TABLES, CREATE TEMPORARY TABLES, CREATE ROUTINE, ALTER ROUTINE, EXECUTE ON ")  # slurmdbd makes a stored procedure (#778)
     assert "ON `lab\\_validate\\_%`.* TO 'slurm'@'%'" in sql
     assert "GRANT OPTION" not in sql.upper() and "*.*" not in sql and "ALL" not in sql.split("ON")[0].upper().split()
 
