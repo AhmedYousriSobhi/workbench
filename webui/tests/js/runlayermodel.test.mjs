@@ -3,7 +3,7 @@
 import './setup.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { RUN_GLYPH, RUN_WORD, expectPins, focusStep, offDiagram, partBadges, railRow, runGroups, runHeading, runSig, sheetFor } from '../../static/js/runlayermodel.js';
+import { RUN_GLYPH, RUN_WORD, blastLine, blastMarks, expectPins, focusStep, ghostParts, offDiagram, partBadges, previewRun, previewSummary, railRow, runGroups, runHeading, runKey, runSig, sheetFor } from '../../static/js/runlayermodel.js';
 
 const row = (n, at, target, ids, status = 'pending', extra = {}) => ({ n, at, target, ids, status, detail: '', page: true, t: status === 'pending' ? null : at, do: { nodes: ['cn002'], power: 'Off' }, ...extra });
 // node-down at step 3 of 6, as the page polls it
@@ -116,4 +116,71 @@ test('the redraw key changes only when something drawn changes', () => {
   assert.equal(runSig(a), runSig(b));
   assert.notEqual(runSig(a), runSig(nodeDown(['ok', 'ok'])));
   assert.equal(runSig(null), ''); assert.deepEqual(runGroups(null), []);
+});
+
+// ---- Phase 2: before Play (ADR 0086, issue 809) ----
+// node-down's preview as GET /api/scenarios/node-down answers it: the run state's steps, nothing applied, plus each step's declared blast
+const preview = () => {
+  const r = nodeDown([]);
+  return { name: 'node-down', ref: 'SC-17', steps: r.steps.map(({ status, t, detail, ...x }) => ({ ...x, blast: x.target === 'slurm' ? ['slurmrestd', 'login'] : [x.target],
+    blast_caption: `${x.target} changes.` })), expects: r.plan_expects };
+};
+
+test('a preview is a run that has not started: every step planned, a CLI-only step marked, nothing reached', () => {
+  const p = preview(); p.steps[2].page = false;
+  const run = previewRun(p), g = runGroups(run);
+  assert.equal(run.preview, true); assert.equal(runKey(run), 'preview:node-down'); assert.equal(runKey({ name: 'x', started: 5 }), 'x@5');
+  assert.deepEqual(g.map(x => x.state), ['planned', 'planned', 'cli', 'planned', 'planned', 'planned']);
+  assert.ok(g.every(x => !x.current && x.t == null));
+  assert.equal(runHeading(run, g), 'node-down · Preview: nothing has run yet');
+  assert.equal(focusStep(g, null).n, 1, 'nothing is reached before Play, not even a CLI-only step');
+  assert.equal(previewRun(null), null); assert.equal(previewRun({ name: 'x' }), null);
+});
+
+test('ghost badges: one per part, the first step that will act there, the word "planned" in every label', () => {
+  const g = runGroups(previewRun(preview())), b = partBadges(g), by = Object.fromEntries(b.map(x => [x.id, x]));
+  assert.ok(b.every(x => x.ghost && x.glyph === '○' && /, planned: /.test(x.label)));
+  assert.equal(by['bmc-farm'].n, 1); assert.equal(by['bmc-farm'].more, 1);
+  assert.match(by['bmc-farm'].label, /^Step 1 of 6, planned: Power Off cn002\. Also step 4 on this part\.$/);
+  assert.deepEqual(b.map(x => x.n), [...b.map(x => x.n)].sort((x, y) => x - y), 'Tab follows the scenario');
+});
+
+test('Play turns ghost badges into live ones on the same parts, in the same order (no jump)', () => {
+  const ghost = partBadges(runGroups(previewRun(preview()))), live = partBadges(runGroups(nodeDown(['ok'])));
+  assert.deepEqual(live.map(x => x.id), ghost.map(x => x.id));
+  assert.ok(live.every(x => !x.ghost));
+  assert.notEqual(runSig(previewRun(preview())), runSig(nodeDown([])), 'the layer redraws when the run takes over');
+});
+
+test('before Play the expectation pin says planned, or CLI only with ↷', () => {
+  const p = preview(), cli = expectPins(previewRun(p));
+  assert.deepEqual([cli[0].state, cli[0].glyph, cli[0].word], ['cli', '↷', 'CLI only']);
+  p.expects[0].page = true;
+  const pin = expectPins(previewRun(p))[0];
+  assert.deepEqual([pin.state, pin.glyph, pin.word], ['planned', '○', 'planned']);
+  assert.equal(pin.aria, 'Expectation E1, planned: slurm.node_state {"node": "cn002", "state": "drain"}');
+});
+
+test('the declared blast: whose clients may see a change, per step in words and once per part on the diagram', () => {
+  const g = runGroups(previewRun(preview()));
+  assert.equal(blastLine(g[0], id => id.toUpperCase()), 'Clients may see a change on BMC-FARM: bmc-farm changes.');
+  assert.equal(railRow(g[2]).blast, 'Clients may see a change on slurmrestd, login: slurm changes.');
+  const marks = blastMarks(g, id => id !== 'login');
+  assert.deepEqual(marks.map(m => [m.id, m.steps]), [['bmc-farm', [1, 4]], ['bcm-mock', [2, 5]], ['slurmrestd', [3, 6]]]);
+  assert.match(marks[0].label, /steps 1, 4 \(declared, not measured\)/);
+  assert.equal(blastLine({ blast: [] }), '');
+});
+
+test('the preview line: steps, parts, expectations and what only the CLI can run', () => {
+  const p = preview(); p.steps[2].page = false;
+  const run = previewRun(p), g = runGroups(run), pins = expectPins(run);
+  assert.deepEqual(ghostParts(g), ['bmc-farm', 'cn002', 'bcm-mock', 'slurmctld']);
+  assert.equal(previewSummary(g, pins), '6 steps touch 4 parts · 1 expectation · 2 items need the host CLI (marked ↷)');
+  p.steps[2].page = true; p.expects[0].page = true;
+  assert.equal(previewSummary(runGroups(previewRun(p)), expectPins(previewRun(p)), id => id !== 'cn002'), '6 steps touch 3 parts · 1 expectation · the page can run every item');
+});
+
+test('the phone sheet reads a preview step as planned', () => {
+  const g = runGroups(previewRun(preview()));
+  assert.equal(sheetFor(g, g[0]).line, 'at 0 s · on bmc-farm, cn002 · planned');
 });

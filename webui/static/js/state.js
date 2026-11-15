@@ -76,6 +76,7 @@ export const S = {
   trZoom: 1,
   slurmAt: 0,
   runSel: null,       // Run layer (ADR 0086): the step chosen in the rail, a badge or the phone sheet; null follows the run
-  runHidden: '',      // a finished run taken off the diagram ('name@started')
-  runSheetOff: '',    // the phone sheet hidden for this run ('name@started')
+  runHidden: '',      // a finished run or a preview taken off the diagram (runKey: 'name@started', 'preview:name')
+  runSheetOff: '',    // the phone sheet hidden for this run (runKey)
+  runStopHide: '',    // Stop was pressed on this page for this run: once it stops, the diagram goes back to plain (ADR 0086 phase 2)
 };

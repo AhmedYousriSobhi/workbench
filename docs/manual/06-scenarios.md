@@ -39,6 +39,7 @@ The command exits 1 when a step errors or an `expect` line does not hold.
 - From the web page ([chapter 5](05-web-page.md)) the `slurm` steps go through the governor.
 - Tick **Slurm trace** there for the same trace (see the [resilience guide](../guides/slurm-resilience.md)).
 - On the page, **Watch on the diagram** puts each step's number on the parts it touches ([a scenario run on the diagram](05-web-page.md#a-scenario-run-on-the-diagram)).
+- Before Play, **Show on the diagram** draws where each step will act and whose clients may see a change ([before Play](05-web-page.md#before-play-where-a-scenario-will-act)).
 
 ## The scenarios shipped
 

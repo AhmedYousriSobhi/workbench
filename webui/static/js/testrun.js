@@ -33,6 +33,7 @@ export function paintPreview(s) {
   $('runresult').innerHTML = verdict ? `<span class="result ${verdict === 'passed with skips' ? 'passed' : verdict}">${word[verdict]}</span>` : '<span class="result">Not run yet</span>';
   $('runctl').innerHTML = on && s.running ? '<button class="btn stop" id="stopbtn">■ Stop</button>' : '';
   $('run-watch').hidden = !on;  // decision 5 (ADR 0086): Play stays here; one click shows the run on the diagram
+  $('run-show').hidden = on;    // before it has run: one click shows where it will act (phase 2: ghost badges, the declared blast)
   $('bar').style.width = (rows.length && on ? (done / rows.length) * 100 : 0) + '%';
   const cli = p.cli_only, failed = rows.filter(x => x.status === 'failed').length;
   $('runcli').hidden = !cli || (on && s.running);
@@ -55,7 +56,7 @@ export function paintPreview(s) {
     || `<p class="dim small">${s.running ? 'The first entry appears when the next step starts.' : 'Nothing to show.'}</p>`) : '';
   const finished = on && !s.running && s.steps && s.steps.length;
   $('run-export').hidden = !finished;
-  if ($('stopbtn')) $('stopbtn').onclick = () => fetch('/api/scenarios/stop', { method: 'POST', headers: H });
+  if ($('stopbtn')) $('stopbtn').onclick = () => { S.runStopHide = s.name; fetch('/api/scenarios/stop', { method: 'POST', headers: H }); };  // the diagram goes back to plain
   if ($('runcopy')) $('runcopy').onclick = async () => { try { await navigator.clipboard.writeText(p.cli); announce('Command copied'); } catch (e) { announce('Select the command and copy it by hand'); } };
 }
 
@@ -72,5 +73,5 @@ export function exportRun(kind) {
 
 export function init() {
   $('run-md').onclick = () => exportRun('md'); $('run-json').onclick = () => exportRun('json');
-  $('run-watch').onclick = watchRun;
+  $('run-watch').onclick = watchRun; $('run-show').onclick = watchRun;
 }

@@ -148,6 +148,13 @@ A step that names no part carries a reason in words. `tests/test_scenario_touche
 - **Take off the diagram** hides a finished run's badges; the run stays in the page's memory (decision 4).
 - **Follow-up (issue 813).** Every step kind reads as one sentence (no JSON in the rail; `tests/test_step_words.py`). Badges are sized in screen pixels from the drawing's scale: text at least 14 px, a 40 px tap target, no overlap on a dense pool.
 
+### As built (phase 2, issue 809): done
+
+- **What is shown.** A live run always; else the scenario picked in Test run, as a preview until it has run (then its last run); else the last run. Picking a scenario keeps the user in Test run (decision 5); **Show on the diagram** is the one click to the map, the same as **Watch on the diagram** after Play.
+- **Ghosts.** The preview uses the run layer's own model with every step "planned" (○) or "CLI only" (↷): dashed badges on the same parts and in the same order as the live ones, a dotted ring on every touched part, the expectation pins. Play swaps them for the live badges in one redraw; the badges keep their place.
+- **Blast for every target kind.** `webui/blast.py` `TARGETS` declares, for every target kind the engine accepts, the parts a client reads that the step changes and one sentence; a step's blast also takes in what it implies (`scenario.side_effects`). Before Play each such part wears ◎ (declared, not measured), the chosen step's blast parts get the blast radius's red dashes, and the Run tab says it in words per step.
+- **Stop and clear.** Stop pressed on the page, or **Take the preview off the diagram**, leaves the plain diagram. A run that ends by itself keeps its badges, as in phase 1.
+
 ## References
 
 - Research note and mockups: [Scenario runs on the architecture diagram](../research/scenario-on-the-diagram.md), [mockup page](../research/scenario-on-the-diagram-mockups.html).

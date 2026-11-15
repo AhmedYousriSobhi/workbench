@@ -135,11 +135,11 @@ try:
         pg2 = sample_page(1280, 900, off); pg2.evaluate("showNode('cn002')"); pg2.wait_for_selector("#nodepane:not([hidden])"); pg2.wait_for_timeout(600)
         pg2.screenshot(path=str(OUT / f"web-node-powered-off-{SCHEME}.png"))
         pg2.locator("#nodeacts-fault").locator("xpath=ancestor::div[contains(@class,'np-card')]").screenshot(path=str(OUT / f"web-fault-actions-{SCHEME}.png")); pg2.close()
-        pv = scn.preview(scn.load("node-down", ROOT / "scenarios", SIM), SIM)
+        pv = blast.preview(scn.load("node-down", ROOT / "scenarios", SIM), SIM)  # with each step's declared blast, as the page's endpoint answers
         def run_state(applied):  # the run state GET /api/scenarios/run reports, `applied` steps in (ADR 0086: step numbers, diagram ids, times)
             return {"running": True, "name": "node-down", "speed": 1.0, "stopped": False, "ok": None, "trace": None, "expects": [], "started": 1763200000.0, "elapsed": 7.0,
                     "plan_expects": [{k: x[k] for k in ("e", "label", "ids", "page")} for x in pv["expects"]],
-                    "steps": [{**{k: x[k] for k in ("at", "target", "do", "n", "ids", "no_part", "page")}, "status": "ok" if i < applied else "pending", "detail": "",
+                    "steps": [{**{k: x[k] for k in ("at", "target", "do", "n", "ids", "no_part", "page", "blast", "blast_caption")}, "status": "ok" if i < applied else "pending", "detail": "",
                                "t": x["at"] if i < applied else None} for i, x in enumerate(pv["steps"])]}
         state = run_state(2)
         pg3 = sample_page(1280, 900); pg3.route("**/api/scenarios/run", lambda r: r.fulfill(json=state)); pg3.click("#tb-run"); pg3.evaluate("poll()"); pg3.wait_for_selector("#timeline li"); pg3.wait_for_timeout(1500)
@@ -148,6 +148,10 @@ try:
         pg6 = sample_page(1280, 900, off); pg6.route("**/api/scenarios/run", lambda r: r.fulfill(json=at3)); pg6.evaluate("poll()"); pg6.wait_for_timeout(600); pg6.evaluate("watchRun()")
         pg6.evaluate("document.querySelector('header.top').style.setProperty('position', 'static', 'important'); scrollTo(0, 0)"); pg6.wait_for_selector("#runlayer .rl-badge"); pg6.wait_for_timeout(600)
         pg6.locator("#trafficpanel").screenshot(path=str(OUT / f"web-run-layer-{SCHEME}.png")); save(OUT / f"web-run-layer-{SCHEME}.png"); pg6.close()
+        idle = {"running": False}  # before Play (ADR 0086 phase 2): node-down picked in Test run, Show on the diagram; nothing has run
+        pg7 = sample_page(1280, 900); pg7.route("**/api/scenarios/run", lambda r: r.fulfill(json=idle)); pg7.evaluate("pv => { trPrev = pv; }", pv); pg7.evaluate("poll()"); pg7.wait_for_timeout(600); pg7.evaluate("watchRun()")
+        pg7.evaluate("document.querySelector('header.top').style.setProperty('position', 'static', 'important'); scrollTo(0, 0)"); pg7.wait_for_selector("#runlayer.preview .rl-badge"); pg7.wait_for_timeout(600)
+        pg7.locator("#trafficpanel").screenshot(path=str(OUT / f"web-run-preview-{SCHEME}.png")); save(OUT / f"web-run-preview-{SCHEME}.png"); pg7.close()
         down = {**cluster, "nodes": [], "services": {k: False for k in cluster["services"]}}
         pg4 = sample_page(1280, 700, down, flow=False); pg4.wait_for_timeout(800); pg4.screenshot(path=str(OUT / f"web-stack-down-{SCHEME}.png")); pg4.close()
         pg5 = b.new_page(viewport={"width": 1180, "height": 760}, color_scheme=SCHEME); pg5.goto(login_url(base_url, ui_token)); pg5.goto(base_url + "/help/manual/11-which-command"); pg5.wait_for_timeout(500)

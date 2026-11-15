@@ -1,6 +1,9 @@
 // The run layer (ADR 0086, phase 1): a scenario run drawn on the Circuit view. runlayermodel.js decides what to show; this file draws
 // it: numbered badges on the parts each step touched (a number and a glyph, never colour alone), a ring on the chosen step's parts,
 // expectation pins, the step rail in the inspector's Run tab, and on a phone a bottom sheet with Previous and Next.
+// Phase 2, before Play: the scenario picked in Test run is drawn the same way as ghosts: dashed badges ("planned"), a dotted ring on
+// every part it will touch, the pins, and ◎ on each part whose clients may see a change (the declared blast, webui/blast.py). Play
+// replaces the ghosts with the live badges in one redraw; Stop, or Take off the diagram, leaves the plain diagram.
 //
 // Nothing moves: states change in place, so reduced motion needs nothing special beyond an instant scroll. Badges come from the run
 // state the page polls (GET /api/scenarios/run), never from flow events: a mark only where the engine says a step acted.
@@ -12,7 +15,7 @@ import { showPane } from './inspector.js';
 import { ENT_NAME } from './focus.js';
 import { selectTab, setCircuit } from './shell.js';
 import { zoomTo } from './zoom.js';
-import { RUN_WORD, expectPins, focusStep, partBadges, railRow, runGroups, runHeading, runSig, sheetFor } from './runlayermodel.js';
+import { RUN_WORD, blastMarks, expectPins, focusStep, ghostParts, partBadges, previewRun, previewSummary, railRow, runGroups, runHeading, runKey, runSig, sheetFor } from './runlayermodel.js';
 
 // Sizes are set in screen pixels and turned into drawing units with the drawing's scale (the Circuit view is 1700 units wide and drawn at
 // about 0.55 of that on a laptop or a phone), so the text stays readable however small the drawing is shown (issue 813).
@@ -22,8 +25,15 @@ let drawnSig = '', lastCur = null, groups = [], pins = [];
 const attr = s => String(s).replace(/["\\]/g, '\\$&');
 const phone = () => matchMedia('(max-width:640px)').matches;
 
-// The run the layer shows: the last one the page polled, unless the user cleared it from the diagram.
-export function shownRun() { const r = S.trLast; return r && r.name && S.runHidden !== `${r.name}@${r.started}` ? r : null; }
+// What the layer shows, unless the user took it off the diagram: a live run always; else the scenario picked in Test run, as a preview
+// until it has run (its last run once it has); else the last run polled.
+let pvFrom = null, pvRun = null;
+const asPreview = p => p === pvFrom ? pvRun : (pvFrom = p, pvRun = previewRun(p));
+export function shownRun() {
+  const r = S.trLast && S.trLast.name ? S.trLast : null, p = S.trPrev && S.trPrev.name ? S.trPrev : null;
+  const run = r && r.running ? r : p && !(r && r.name === p.name) ? asPreview(p) : r;
+  return run && S.runHidden !== runKey(run) ? run : null;
+}
 
 // The drawn part for a run id: a node's square (its own, or its group's in a large pool), else the part, else the graph entity.
 // A part the cluster lacks (greyed, data-present=false) counts as not drawn.
@@ -41,13 +51,28 @@ function placeMark(el, w, h, kind, taken) {  // where a badge or pin goes: on a 
   let x = sq ? b.x + b.width / 2 - w / 2 : kind === 'pin' || left ? b.x + 14 : b.x + b.width - w - 14;
   const y = kind === 'pin' ? (rack ? rack.y + rack.height - 10 : b.y + b.height - 10) : (rack ? rack.y - h + 8 : b.y - h + 10);
   for (const r of taken) if (Math.abs(r.y - y) < h && x < r.x + r.w + 4 && x + w > r.x - 4) x = r.x + r.w + 6;  // never cover another badge
-  taken.push({ x, y, w });
+  taken.push({ x, y, w, h });
   return { x, y };
+}
+
+// ◎ sits over a part's top-left corner, else its top-right, else its bottom-left one; where both are covered it is left out (the rail says it in words).
+function placeBlast(el, d, taken) {
+  const b = el.getBBox(), free = (x, y) => !taken.some(r => x < r.x + r.w + 4 && x + d > r.x - 4 && y < r.y + r.h + 4 && y + d > r.y - 4);
+  for (const [x, y] of [[b.x - d * 0.6, b.y - d * 0.6], [b.x + b.width - d * 0.4, b.y - d * 0.6], [b.x - d * 0.6, b.y + b.height - d * 0.4]]) if (free(x, y)) { taken.push({ x, y, w: d, h: d }); return { x, y }; }  // over the corner, clear of the title
+  return null;
 }
 
 function markSize(f) {  // the badge size in drawing units for the scale the drawing is shown at now
   const k = f.getScreenCTM?.()?.a || 0.6, font = Math.round(Math.min(MAX_FONT, Math.max(MIN_FONT, TEXT_PX / k)));
   return { font, bh: Math.round(font * 1.7), hit: Math.ceil(HIT_PX / k) };
+}
+
+function blastEl(el, label, taken) {  // ◎: clients of this part may see a change (declared, not measured). Information only, so not a tab stop
+  const d = Math.round(size.bh * 0.9), at = placeBlast(el, d, taken); if (!at) return null;
+  const g = sv('g', { class: 'rl-blast', role: 'img', 'aria-label': label });
+  g.append(sv('title', {}, label), sv('circle', { class: 'rl-pill', cx: at.x + d / 2, cy: at.y + d / 2, r: d / 2 }),
+    sv('text', { class: 'rl-t', x: at.x + d / 2, y: at.y + d / 2 + size.font * 0.36, 'text-anchor': 'middle' }, '◎'));
+  return g;
 }
 
 function markEl(cls, text, more, aria, n, onAct) {
@@ -63,7 +88,7 @@ function fitMark(g, el, kind, taken) {  // size the pill to its text, then place
   const [t, m] = [g.querySelector('.rl-t'), g.querySelector('.rl-more')], tw = t.getComputedTextLength(), mw = m ? m.getComputedTextLength() + gap : 0, w = Math.ceil(tw + mw + 2 * pad);
   const { x, y } = placeMark(el, w, bh, kind, taken), r = g.querySelector('.rl-pill'), h = g.querySelector('.rl-hit'), hw = Math.max(w, hit), hh = Math.max(bh, hit);
   r.setAttribute('x', x); r.setAttribute('y', y); r.setAttribute('width', w);
-  h.setAttribute('x', x - (hw - w) / 2); h.setAttribute('y', y - (hh - bh) / 2); h.setAttribute('width', hw);
+  if (h) { h.setAttribute('x', x - (hw - w) / 2); h.setAttribute('y', y - (hh - bh) / 2); h.setAttribute('width', hw); }
   const base = y + bh / 2 + font * 0.36;  // the text's baseline: centred in the pill
   t.setAttribute('x', x + pad); t.setAttribute('y', base);
   if (m) { m.setAttribute('x', x + pad + tw + gap); m.setAttribute('y', base); }
@@ -78,27 +103,35 @@ export function paintRunLayer(force) {
   const keep = document.activeElement && document.activeElement.closest?.('#runlayer') ? document.activeElement.getAttribute('data-key') : null;
   f.querySelector('#runlayer')?.remove();
   if (!sig) { ringStep(); return; }
-  const layer = sv('g', { id: 'runlayer', class: 'runlayer', role: 'group', 'aria-label': `Scenario ${run.name}: step badges, in step order` }), taken = [];
+  const layer = sv('g', { id: 'runlayer', class: `runlayer${run.preview ? ' preview' : ''}`, role: 'group',
+    'aria-label': `Scenario ${run.name}: ${run.preview ? 'preview, nothing has run yet; planned' : ''} step badges, in step order` }), taken = [];
   size = markSize(f); layer.style.setProperty('--rl-fs', `${size.font}px`);
   f.append(layer);
   for (const b of partBadges(groups, has)) {  // in step order, so Tab follows the scenario
-    const el = runPartEl(b.id), g = markEl(`rl-badge k-${b.state}${b.current ? ' cur' : ''}`, `${b.n} ${b.glyph}`, b.more ? `+${b.more}` : '', b.label, b.n, () => chooseStep(b.n, true));
+    const el = runPartEl(b.id), g = markEl(`rl-badge k-${b.state}${b.current ? ' cur' : ''}${b.ghost ? ' ghost' : ''}`, `${b.n} ${b.glyph}`, b.more ? `+${b.more}` : '', b.label, b.n, () => chooseStep(b.n, true));
     g.setAttribute('data-key', 'b:' + b.id); g.setAttribute('data-id', b.id); layer.append(g); fitMark(g, el, 'badge', taken);
   }
   for (const p of pins) {
     const el = p.ids.map(runPartEl).find(Boolean); if (!el) continue;
-    const g = markEl(`rl-pin k-${p.state}`, `E${p.e} ${p.glyph}`, '', p.aria, '', () => { showPane('run'); $('ipane-run')?.querySelector(`[data-e="${p.e}"]`)?.focus(); });
+    const g = markEl(`rl-pin k-${p.state}${run.preview ? ' ghost' : ''}`, `E${p.e} ${p.glyph}`, '', p.aria, '', () => { showPane('run'); $('ipane-run')?.querySelector(`[data-e="${p.e}"]`)?.focus(); });
     g.setAttribute('data-key', 'e:' + p.e); layer.append(g); fitMark(g, el, 'pin', taken);
+  }
+  if (run.preview) for (const m of blastMarks(groups, has)) {  // before Play: whose clients may see a change (declared, not measured)
+    const g = blastEl(runPartEl(m.id), m.label, taken); if (g) { g.setAttribute('data-key', 'x:' + m.id); g.setAttribute('data-id', m.id); layer.append(g); }
   }
   if (keep) layer.querySelector(`[data-key="${attr(keep)}"]`)?.focus();
   ringStep();
 }
 
 // The ring: the chosen step's parts (or the current step's) get an accent outline. The blast radius keeps its own red dashes.
+// Before Play every part the scenario will touch also gets a dotted ring (the ghost outline).
 function ringStep() {
   const f = $('flow'); if (!f) return;
-  f.querySelectorAll('[data-runring]').forEach(e => e.removeAttribute('data-runring'));
-  const g = shownRun() && f.dataset.cv ? focusStep(groups, S.runSel) : null;
+  f.querySelectorAll('[data-runring], [data-runghost], [data-runblast]').forEach(e => { for (const a of ['data-runring', 'data-runghost', 'data-runblast']) e.removeAttribute(a); });
+  const run = f.dataset.cv ? shownRun() : null;
+  if (run && run.preview) for (const id of ghostParts(groups, has)) runPartEl(id)?.setAttribute('data-runghost', '1');
+  const g = run ? focusStep(groups, S.runSel) : null;
+  if (g && run.preview) for (const id of g.blast || []) runPartEl(id)?.setAttribute('data-runblast', '1');  // what this step may affect: the blast radius's red dashes
   if (g) for (const id of g.ids) runPartEl(id)?.setAttribute('data-runring', '1');
   f.querySelectorAll('#runlayer .rl-badge').forEach(b => b.classList.toggle('sel', !!g && +b.dataset.n === g.n));
 }
@@ -110,10 +143,12 @@ function paintRunRail(run) {
   $('it-run').textContent = run && run.running ? 'Run ●' : 'Run';
   if (!run) {
     $('run-head').textContent = 'No scenario run to show';
-    $('run-none').hidden = false; $('runrail').innerHTML = ''; $('runpins').innerHTML = ''; $('run-tools').hidden = true; $('run-cvnote').hidden = true; return;
+    $('run-none').hidden = false; $('runrail').innerHTML = ''; $('runpins').innerHTML = ''; $('run-tools').hidden = true; $('run-cvnote').hidden = true; $('run-sum').hidden = true; return;
   }
   $('run-none').hidden = true; $('run-tools').hidden = !!run.running;
   $('run-head').textContent = runHeading(run, groups);
+  $('run-sum').hidden = !run.preview; $('run-sum').textContent = run.preview ? `${previewSummary(groups, pins, has)}. Dashed badges: the steps that will act on a part; ◎: its clients may see a change (declared, not measured).` : '';
+  $('run-clear').textContent = run.preview ? 'Take the preview off the diagram' : 'Take off the diagram';
   $('run-cvnote').hidden = !!S.circuit;
   const chosen = focusStep(groups, S.runSel);
   $('runrail').innerHTML = groups.map(g => {
@@ -121,7 +156,7 @@ function paintRunRail(run) {
     return `<li class="rr k-${r.state}${r.current ? ' cur' : ''}"><button type="button" class="rrbtn" data-n="${r.n}" aria-pressed="${sel}"${r.current ? ' aria-current="step"' : ''}>
       <span class="rb k-${r.state}" aria-hidden="true">${r.n} ${r.glyph}</span><span class="rtx"><span class="rtop"><b>${esc(r.text)}</b></span>
       <span class="small dim">${esc([r.ran || r.at, r.where, r.extra].filter(Boolean).join(' · '))}</span>
-      <span class="rword">Step ${r.n}: ${esc(r.word)}</span>${r.detail && r.state !== 'done' && r.state !== 'now' ? `<span class="small dim">${esc(r.detail)}</span>` : ''}${r.off ? `<span class="small roff">${esc(r.off)}</span>` : ''}</span></button></li>`;
+      <span class="rword">Step ${r.n}: ${esc(r.word)}</span>${r.detail && r.state !== 'done' && r.state !== 'now' ? `<span class="small dim">${esc(r.detail)}</span>` : ''}${run.preview && r.blast ? `<span class="small dim"><span aria-hidden="true">◎</span> ${esc(r.blast)}</span>` : ''}${r.off ? `<span class="small roff">${esc(r.off)}</span>` : ''}</span></button></li>`;
   }).join('');
   $('runrail').querySelectorAll('.rrbtn').forEach(b => { b.onclick = () => chooseStep(+b.dataset.n, false); });
   $('runpins').innerHTML = pins.length ? pins.map(p => `<li><button type="button" class="rrbtn rpin" data-e="${p.e}"><span class="rb k-${p.state}" aria-hidden="true">E${p.e} ${p.glyph}</span><span class="rtx"><b>${esc(p.label)}</b><span class="rword">Expectation E${p.e}: ${esc(p.word)}${p.t != null ? ` at ${Math.round(p.t)} s` : ''}</span>${p.ids.some(has) ? '' : `<span class="small roff">Not on the diagram: ${esc(p.ids.join(', ') || 'no part')}${p.ids.length ? ' not in this cluster' : ''}.</span>`}</span></button></li>`).join('') : '';
@@ -135,7 +170,7 @@ function flashPart(id) {  // show a part the rail points at: scroll it into view
 function paintRunSheet(run) {
   const sh = $('runsheet'); if (!sh) return;
   const g = run ? focusStep(groups, S.runSel) : null, s = sheetFor(groups, g, ENT_NAME);
-  sh.hidden = !s || S.runSheetOff === `${run.name}@${run.started}`;
+  sh.hidden = !s || S.runSheetOff === runKey(run);
   if (!s) return;
   $('rs-badge').className = `rb k-${g.state}`; $('rs-badge').textContent = `${s.n} ${s.glyph}`;
   $('rs-title').textContent = s.title; $('rs-line').textContent = s.line;
@@ -153,7 +188,10 @@ export function chooseStep(n, fromBadge) {
 }
 
 // Everything, from the run state the page just polled (scenarios.js) or after the drawing was rebuilt (circuit.js).
-export function paintRun(run = shownRun()) {
+export function paintRun() {
+  const r = S.trLast;  // Stop pressed on this page: once the run says it stopped, the diagram goes back to plain (Watch on the diagram brings it back)
+  if (S.runStopHide && r && r.name === S.runStopHide && !r.running) { S.runHidden = runKey(r); S.runStopHide = ''; S.runSel = null; }
+  const run = shownRun();
   groups = runGroups(run); pins = run ? expectPins(run) : [];
   if (S.runSel != null && !groups.some(g => g.n === S.runSel)) S.runSel = null;
   const cur = groups.find(g => g.current) || null;
@@ -166,7 +204,9 @@ export function paintRun(run = shownRun()) {
 }
 
 // "Watch on the diagram" (decision 5: Play keeps the user where they are; this is the one click to the map).
+// "Show on the diagram" before Play is the same click: the picked scenario's preview (phase 2).
 export function watchRun() {
+  S.runHidden = '';  // asked for: show it again even if it was taken off
   if (!S.circuit) setCircuit(true);
   zoomTo('cluster'); selectTab('nodes');
   S.runSheetOff = null; showPane('run'); paintRun(); paintRunLayer(true);
@@ -175,9 +215,9 @@ export function watchRun() {
   const g = focusStep(groups, S.runSel); if (g) flashPart(g.ids.find(has));
 }
 
-export function clearRun() {  // take a finished run off the diagram; the Test run tab and the report keep it
-  const r = S.trLast; if (r && r.name) S.runHidden = `${r.name}@${r.started}`;
-  S.runSel = null; paintRun(); announce('The run was taken off the diagram');
+export function clearRun() {  // take a finished run (or a preview) off the diagram; the Test run tab and the report keep it
+  const r = shownRun(); if (r) S.runHidden = runKey(r);
+  S.runSel = null; paintRun(); announce(r && r.preview ? 'The preview was taken off the diagram' : 'The run was taken off the diagram');
 }
 
 export function init() {
@@ -188,7 +228,7 @@ export function init() {
   $('rs-prev').onclick = () => { const s = sheetFor(groups, focusStep(groups, S.runSel)); if (s && s.prev != null) chooseStep(s.prev, false); };
   $('rs-next').onclick = () => { const s = sheetFor(groups, focusStep(groups, S.runSel)); if (s && s.next != null) chooseStep(s.next, false); };
   $('rs-steps').onclick = () => { showPane('run'); $('ipane-run').scrollIntoView({ block: 'start', behavior: reduced.matches ? 'auto' : 'smooth' }); $('runrail').querySelector('[aria-pressed=true]')?.focus({ preventScroll: true }); };
-  $('rs-x').onclick = () => { const r = shownRun(); if (r) S.runSheetOff = `${r.name}@${r.started}`; paintRunSheet(r); };
+  $('rs-x').onclick = () => { const r = shownRun(); if (r) S.runSheetOff = runKey(r); paintRunSheet(r); };
   matchMedia('(max-width:640px)').addEventListener('change', () => paintRunSheet(shownRun()));
 }
 

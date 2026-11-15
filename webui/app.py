@@ -35,6 +35,8 @@ from benchctl import checks, nhc, scenario, slurmtrace
 
 from . import monitoring, traffic
 from .blast import payload as blast_payload
+from .blast import preview as blast_preview
+from .blast import step_blast
 from .cluster import ActionError, Cluster
 from .flow import PAUSE_LEVEL, Flow
 from .graph import attach as attach_graph
@@ -139,7 +141,7 @@ class Runs:
             plan_expects = [{"e": x["e"], "label": x["label"], "ids": x["ids"], "page": x["page"]} for x in scenario.preview(sc, self.sim)["expects"]]
             self.state = {"running": True, "name": name, "speed": speed, "stopped": False, "ok": None, "started": round(self.wall(), 3), "elapsed": 0.0,
                           "steps": [{"at": s.at, "target": s.target, "do": s.do, "n": s.n, "page": not scenario.page_support(s), "status": "pending",
-                                     "detail": "", "t": None, **scenario.touch_fields(s, self.sim)} for s in steps],
+                                     "detail": "", "t": None, **scenario.touch_fields(s, self.sim), **step_blast(s)} for s in steps],
                           "expects": [], "plan_expects": plan_expects, "trace": [] if trace else None}
             threading.Thread(target=self._play, args=(sc, steps, speed, trace), daemon=True).start()
             return {"started": name}
@@ -684,7 +686,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             sc = scenario.load(request.path_params["name"], scenarios, sim)
         except scenario.ScenarioError as e:
             raise HTTPException(404, str(e)) from e
-        return JSONResponse(scenario.preview(sc, sim))
+        return JSONResponse(blast_preview(sc, sim))  # with each step's declared blast (ADR 0086 phase 2)
 
     async def run_state(request: Request):
         return JSONResponse(runs.snapshot())
