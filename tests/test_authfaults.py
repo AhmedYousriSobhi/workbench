@@ -47,7 +47,7 @@ def test_problems_name_the_bad_key_user_node_and_ttl():
 def test_shipped_auth_scenarios_validate_and_use_the_auth_target():
     names = ("auth-slurm-token-expiry", "auth-teleport-cert-expiry", "auth-munge-wrong-key", "bmc-tls-expired", "k8s-cert-expired")
     for n in names:
-        sc = scenario.load(n)
+        sc = scenario.load(n, sim=SIM)
         assert scenario.validate(sc, SIM) == [] and {s["target"] for s in sc["steps"]} == {"auth"}
     assert scenario.validate({"steps": [{"at": "0s", "target": "auth", "do": {"munge_wrong_key": ["zz9"]}}]}, SIM)
 

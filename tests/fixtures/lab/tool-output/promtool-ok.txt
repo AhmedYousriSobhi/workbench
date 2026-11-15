@@ -1,0 +1,3 @@
+SYNTHETIC (not captured from a real tool)
+Checking /rules/alerts.yml
+  SUCCESS: 1 rules found

@@ -11,12 +11,15 @@ from pathlib import Path
 log = logging.getLogger("governor.control")
 
 ALLOWED = {"status", "scale", "freeze", "thaw", "stop", "start", "set-profile", "admit", "apply-plan", "node-state", "submit-job", "slurm-step", "slurm-trace", "slurm-stats", "capture-start", "capture-read", "capture-stop", "refresh-jira-licence", "ticket-bot-set", "ticket-bot-get"}
+LAB_VERBS = {"lab-validate"}  # the config lab verbs (ADR 0049); issue 553 adds lab-apply and lab-restore here
+ALLOWED |= LAB_VERBS
 MAX_REQUEST = 4096
 TARGETED = {"freeze", "thaw", "stop", "start"}  # require a known group name
 
 Handler = Callable[[str, dict], dict]
 
 
+LAB_NAME_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,40}")  # mirrors benchctl.lab.NAME
 NODE_RE = re.compile(r"[a-z]{2,8}[0-9]{3}")  # sim.yaml node names: cn001, gpu002
 SLURM_STEPS = ("slurmd-restart", "slurmd-stop", "slurmd-start", "slurmctld-restart", "cancel-jobs")  # resilience scenarios (#220)
 NODE_STEPS = ("slurmd-restart", "slurmd-stop", "slurmd-start")
@@ -26,6 +29,14 @@ LOGIN_MODES = {"ssh", "teleport", "both"}  # mirrors benchctl.logins.MODES
 BMC_GROUPS = {"slurm-cpu", "slurm-gpu", "k8s-cpu", "k8s-gpu"}  # mirrors benchctl.nodes.GROUPS
 LOGIN_KINDS = {"slurm", "k8s", "both"}  # mirrors benchctl.logins.KINDS; an entry is MODE or MODE:KIND
 PLAN_PARTS = {"jira", "jira-real", "bmc", "bcm", "accounting", "teleport", "k8s", "jump", "dcgm", "real-gpu", "objectstore"}  # mirrors benchctl.workbench.PARTS
+
+
+def lab_args_error(cmd: str, req: dict) -> str | None:
+    """Shared argument check of every lab verb: a lab name that matches the pattern and an optional side (baseline or candidate)."""
+    name = req.get("name")
+    if not (isinstance(name, str) and LAB_NAME_RE.fullmatch(name) and req.get("side", "baseline") in ("baseline", "candidate")):
+        return f"{cmd} needs name:NAME (lowercase letters, digits, -) and an optional side: baseline"
+    return None
 
 
 def plan_error(req: dict) -> str | None:
@@ -110,6 +121,8 @@ def dispatch(line: bytes, handle: Handler, groups: Callable[[], set[str]]) -> di
             return {"ok": False, "error": "capture-start needs node:NAME (cn001)"}
         if cmd == "capture-read" and not (isinstance(req.get("since", 0), int) and not isinstance(req.get("since", 0), bool) and req.get("since", 0) >= 0):
             return {"ok": False, "error": "capture-read takes an optional since:int>=0"}
+        if cmd in LAB_VERBS and (err := lab_args_error(cmd, req)):
+            return {"ok": False, "error": err}
         if cmd == "admit" and not (isinstance(req.get("budget_mb"), int) and not isinstance(req["budget_mb"], bool)
                                    and req["budget_mb"] >= 0):
             return {"ok": False, "error": "admit needs budget_mb:int>=0"}

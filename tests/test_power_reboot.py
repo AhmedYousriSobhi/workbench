@@ -98,7 +98,7 @@ def test_scenario_steps_ask_slurmctld_for_power_and_reboot():
 
 
 def test_reboot_asap_scenario_is_valid_and_needs_the_host_cli():
-    sc = scenario.load("reboot-asap")
+    sc = scenario.load("reboot-asap", sim=SIM)
     assert scenario.validate(sc, SIM) == []
     assert scenario.validate({"steps": [{"at": "0s", "target": "slurm", "do": {"reboot": ["cn999"]}}]}, SIM)  # unknown node
     step = scenario.Step(0, "slurm", {"power_down": ["cn001"]})

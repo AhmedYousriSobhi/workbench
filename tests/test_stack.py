@@ -498,6 +498,8 @@ def test_adding_accounting_to_a_running_stack_restarts_slurmctld(tmp_path, monke
     assert stack.up(s2, "workbench", runner=runner, say=said.append, available=8 * 1024**3, wait=1, prof=prof)
     assert any("accounting setup" in m for m in said)
     assert any("--force-recreate" in c and "slurmctld" in c for c in calls)
+    grants = [c for c in calls if "mariadb" in c and "exec" in c and any("GRANT" in a for a in c)]  # the config lab's grant, at this `up` (issue 552)
+    assert len(grants) == 1
 
 
 def test_a_one_shot_job_that_exited_zero_counts_as_started():
@@ -563,3 +565,15 @@ def test_stage_lines_print_only_when_the_governor_asks(monkeypatch, capsys):
     monkeypatch.setenv(stack.STAGE_ENV, "1")
     stack.stage_lines({"plan": ["A"]})
     assert capsys.readouterr().out == '@stage {"plan": ["A"]}\n'
+
+
+def test_grant_lab_databases_runs_in_the_container_and_never_shows_a_password(tmp_path):
+    from benchctl import slurmconf
+    calls = []
+    ok = stack.grant_lab_databases(lambda c: calls.append(c) or cp(), tmp_path / "c.yml", lambda m: None)
+    argv = calls[0]
+    assert ok and argv[argv.index("exec"):][:3] == ["exec", "-T", "mariadb"] and slurmconf.LAB_GRANT_SQL in argv
+    assert '"$MARIADB_ROOT_PASSWORD"' in " ".join(argv)  # read inside the container, not by us
+    said = []
+    bad = stack.grant_lab_databases(lambda c: cp(rc=1, err="ERROR 1045 Access denied"), tmp_path / "c.yml", said.append)
+    assert not bad and said[0].startswith("WARN") and "Access denied" in said[0]

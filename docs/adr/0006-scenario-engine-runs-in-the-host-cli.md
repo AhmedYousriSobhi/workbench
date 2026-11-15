@@ -41,3 +41,18 @@ Steps need something only a long-running service can do (schedules, concurrent s
 ## Addendum: user simulation scope (issue 683)
 Decided 2026-11-14: personas, failure behaviour and a daily rhythm run in the existing simulator process (no new
 container, same concurrency cap), tracked in issue 680. The ticket bot is a separate issue, 681. Neither is built yet.
+
+## Addendum: node selectors, a fault model, expect coverage (issue 470)
+Decided 2026-11-14. Three changes to the scenario language, all inside `benchctl/scenario.py` and two small modules, no new process:
+- **Selectors** (`benchctl/selectors.py`): a scenario names nodes as `first gpu node`, `second cpu node`, `any 2 gpu nodes`, `all gpu nodes` (`gpu`, `cpu`,
+  `k8s gpu`, `k8s cpu`), alone in a list or in braces inside a text. They are resolved against `sim.yaml` when the CLI or the page loads the scenario
+  (`scenario.load(name, sim=...)`); "any N" is the first N, so runs repeat. Too few nodes of a kind is an `invalid:` error from `--dry-run`. A test fails
+  when a shipped scenario writes a node name in `steps` or `expect`; free text such as `description` may.
+- **Fault model** (`benchctl/faultmodel.py`): a `fault` step (`inject: NAME` or `clear: NAME`, `nodes`) expands in `plan()` into the physical effects of one
+  fault (exporter and DCGM, Redfish event log, BMC), so a scenario injects the root cause and asserts what the cluster does (NHC drains, `node_watch` and the
+  engine's fault side effects file the ticket) instead of scripting the reaction. The expansion yields ordinary steps, so the timeline, the page preview and
+  the side effects need no change. Shipped: `gpu-fell-off-bus`, `fan-failure`, `ib-port-down`, `nic-flap`. `gpu-xid-storm` now injects only the cause and asserts
+  both drains and the ticket. The BCM mock has no health-check state, so no fault writes there.
+- **Expect coverage**: `fan-failure` and `gpu-xid-storm` assert the ticket the fault files (and the drains, for the GPU fault). Scenarios with no `expect` stay listed in
+  `tests/test_scenario.py` (`NO_EXPECT`, with a reason each, a list that can only shrink), among them faults felt by the client only (Jira and SSH faults, expired
+  certificates and tokens) and `preempt-burst` and `reboot-asap`, whose observable state the owner has not yet named (issue 732).

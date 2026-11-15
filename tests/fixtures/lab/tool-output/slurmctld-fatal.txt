@@ -1,0 +1,4 @@
+SYNTHETIC (not captured from a real tool; the owner is to replace it with a capture)
+slurmctld: error: Couldn't find the specified plugin name for select/doesnotexist looking at all files
+slurmctld: error: cannot find select plugin for select/doesnotexist
+slurmctld: fatal: Can not recover select/doesnotexist plugin

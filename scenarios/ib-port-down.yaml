@@ -1,9 +1,11 @@
 name: ib-port-down
 ref: SC-07
-description: An InfiniBand port goes down on a GPU node and its NIC flaps; the health check drains the node and a ticket opens, then it recovers
+description: An InfiniBand port goes down on a GPU node and the NIC of another flaps (fault model ib-port-down, nic-flap); the health check drains the node and a ticket opens, then both recover
 steps:
-  - {at: 0s,  target: gpu-exporter, do: {nodes: [gpu001], ib_down: 1}}
-  - {at: 45s, target: gpu-exporter, do: {nodes: [gpu002], nic_flap: true}}
-  - {at: 2m,  target: gpu-exporter, do: {nodes: [gpu001, gpu002], clear: true}}
+  - {at: 0s,  target: fault, do: {inject: ib-port-down, nodes: [first gpu node]}}
+  - {at: 45s, target: fault, do: {inject: nic-flap, nodes: [second gpu node]}}
+  - {at: 2m,  target: fault, do: {clear: ib-port-down, nodes: [first gpu node]}}
+  - {at: 2m,  target: fault, do: {clear: nic-flap, nodes: [second gpu node]}}
 expect:
-  - slurm.node_state: {node: gpu001, state: drain, within: 90s}
+  - slurm.node_state: {node: first gpu node, state: drain, within: 90s}
+  - jira.issue_created: {labels: [fault-ib, "node-{first gpu node}"], within: 30s}
