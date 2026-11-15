@@ -803,6 +803,14 @@ def test_flat_is_the_default_view_everywhere():
     assert "max-width: 640px)').matches, false)" not in src
 
 
+def test_the_circuit_is_the_default_and_the_classic_diagram_lasts_one_visit():
+    """#730: a new visit opens the circuit; choosing the classic diagram is kept in sessionStorage, never localStorage."""
+    src = page_source()
+    assert "S.circuit = sessionStorage.getItem('workbench-circuit') !== '0'" in src
+    assert "sessionStorage.setItem('workbench-circuit'" in src and "localStorage.setItem('workbench-circuit'" not in src
+    assert "localStorage.removeItem('workbench-circuit')" in src  # an older saved choice is cleared
+
+
 def test_node_tickets_search_the_mock_by_node_label():
     import yaml
 

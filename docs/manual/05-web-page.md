@@ -186,7 +186,7 @@ workbench (`benchctl start --login ssh,teleport,both`, or the Login nodes rows o
 
 ![The Circuit view: Slurm lane with its racks, the Kubernetes lane faded because this cluster has none, the services under the HTTP bus and the layer row](img/web-circuit-light.png)
 
-**Circuit** (the default view; **2.5D (classic)** is the other choice in the view switch, and the Flat style and the Clusters button are gone: the circuit and the zoom below replace them) draws the same cluster as a live circuit: a Slurm lane (login, slurmctld or the
+**Circuit** (the default view; **2.5D (classic)** is the other choice in the view switch (it lasts for that visit; the next one opens the circuit again), and the Flat style and the Clusters button are gone: the circuit and the zoom below replace them) draws the same cluster as a live circuit: a Slurm lane (login, slurmctld or the
 controller, slurmdbd, CPU and GPU racks) and a Kubernetes lane (kubectl, kube-apiserver, etcd, KWOK, racks), and the services under an HTTP bus. One
 square in a rack is one node (one per 8 nodes above 64); a square that needs attention carries a ▲ and the rack says why in words.
 
