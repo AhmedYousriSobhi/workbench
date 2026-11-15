@@ -78,6 +78,10 @@ def test_promtool_passes_every_rule_case_and_the_config_files_are_valid():
 def live():
     sim = yaml.safe_load((ROOT / "sim.yaml").read_text())
     bring_up(sim)
+    # An earlier module (agent_recipes) leaves OPEN `GpuXidCritical` tickets (nobody closes an alert ticket for the engineer, by design).
+    # While one is open the mock COMMENTS on it when the same alert fires again and opens nothing, so this module would wait for a
+    # ticket that never comes (issue 779). Resolve them first; they stay out of this module's count.
+    post(f"{JIRA}/sim/tickets", {"action": "transition", "jql": f"labels = {LABEL}", "to": "Resolved"})
     BEFORE.update(t["key"] for t in all_tickets())
     assert wait_for(exporter_up, timeout=60)
     assert wait_for(lambda: ready(f"{AM}/-/ready"), timeout=60)
