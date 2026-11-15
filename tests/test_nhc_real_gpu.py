@@ -74,3 +74,17 @@ def test_the_validator_accepts_the_template_as_a_check(tmp_path):
     nhc.add("real-gpu", template="real-gpu-health", src=src)
     assert nhc.problems(src) == []
     assert "real-gpu-health" in [t["name"] for t in nhc.templates(src)]
+
+
+def test_a_card_that_vanished_completely_drains_on_a_node_with_its_own_exporter(tmp_path, monkeypatch):
+    """#709: the exporter publishes no series at all; with NHC_METRICS_URL set the runner still runs the checks."""
+    monkeypatch.setenv("NHC_METRICS_URL", "http://127.0.0.1:9/metrics")
+    r, calls = run(tmp_path, "", smi="none")
+    assert r.returncode == 1 and "reason=NHC: real GPU missing" in calls
+    assert run(tmp_path / "b", "")[1] == ""  # card present, no series: still healthy
+
+
+def test_empty_metrics_on_a_simulated_node_are_still_not_judged(tmp_path, monkeypatch):
+    monkeypatch.delenv("NHC_METRICS_URL", raising=False)
+    r, calls = run(tmp_path, "", smi="none")
+    assert r.returncode == 0 and calls == ""
