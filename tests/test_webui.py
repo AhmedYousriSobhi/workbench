@@ -225,6 +225,8 @@ def test_stop_ends_a_running_scenario_and_unknown_is_404(ui):
         time.sleep(0.05)
     assert state["stopped"] is True and state["steps"][1]["status"] == "pending"
     assert state["steps"][0]["t"] is not None and state["steps"][1]["t"] is None  # a step that never ran has no time
+    time.sleep(0.1)  # the journal replay walks (ADR 0086 phase 3): the stopped run stays in the page process's memory, unchanged, until the next Play
+    assert json.loads(req(ui, "/api/scenarios/run")[1]) == state
     assert req(ui, "/api/scenarios/slow/run?speed=0", "POST", headers=h)[0] == 422
 
 

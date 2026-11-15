@@ -157,6 +157,30 @@ export function describe(s) {
   const d = s.do || {}, by = BY_TARGET[s.target], words = by ? by(d) : keyed(d, list(d.nodes), s.target);
   return words.length ? words.join('; ') : JSON.stringify(d);
 }
+// One sentence per expectation. The engine's label ('slurm.node_state {"node": "cn001", ...}', benchctl/scenario.py expectation()) stays
+// the key that joins plan and result; the page shows these words. tests/test_step_words.py fails when a shipped expectation shows JSON.
+const SLURM_STATE = { drain: 'drained', down: 'down', idle: 'idle', alloc: 'allocated', mix: 'mixed', resv: 'reserved' };
+const jiraOf = a => a.target === 'real' ? 'real Jira' : 'Jira';
+const pctUsed = (v, what) => `at least ${pct(v)} ${what}`;
+const EXPECT = {
+  'slurm.node_state': a => `Slurm shows ${a.node} as ${SLURM_STATE[String(a.state).toLowerCase()] || a.state}`,
+  'slurm.job_state': a => `A job on ${a.node} is ${String(a.state).toLowerCase()} in Slurm`,
+  'slurm.stepd': a => a.alive === false ? `No slurmstepd runs on ${a.node}` : `A slurmstepd runs on ${a.node}`,
+  'k8s.node_ready': a => `Kubernetes node ${a.node} is ${a.ready === false ? 'NotReady' : 'Ready'}`,
+  'k8s.pod_status': a => `Pod ${a.namespace}/${a.name} shows ${a.reason}`,
+  'k8s.pods_on_node': a => `At least ${count(a.min ?? 1, 'Running pod')} (${a.selector}, ${a.namespace}) on Kubernetes node ${a.node}`,
+  'storage.mount': a => `${a.mount} on ${a.node || 'cn001'}: ${[a.min_used_pct != null ? pctUsed(a.min_used_pct, 'used') : '', a.min_inodes_used_pct != null ? pctUsed(a.min_inodes_used_pct, 'of its inodes used') : '',
+    a.quota_exceeded ? `${a.quota_exceeded} over quota` : '', a.stale != null ? (a.stale ? 'stale' : 'not stale') : ''].filter(Boolean).join(', ') || 'mounted'}`,
+  'jira.issue_created': a => `A ${jiraOf(a)} ticket is filed with the labels ${list(a.labels)}`,
+  'jira.issue_status': a => `${a.count != null ? count(a.count, `${jiraOf(a)} ticket`) : `The ${jiraOf(a)} tickets`} matching “${a.jql}” ${+a.count === 1 ? 'is' : 'are'} ${a.status}`,
+  'jira.issue_count': a => `${count(a.count, `${jiraOf(a)} ticket`)} ${+a.count === 1 ? 'matches' : 'match'} “${a.jql}”`,
+};
+export function expectWords(label) {
+  const m = String(label || '').match(/^(\S+) (\{.*\})$/s);
+  if (!m || !EXPECT[m[1]]) return String(label || '');
+  try { return EXPECT[m[1]](JSON.parse(m[2])); } catch (e) { return String(label); }
+}
+
 export function plain(x) {
   if (!x.detail) return '';
   if (/unreachable/.test(x.detail)) return `can't reach ${x.target}: is the stack running?`;
@@ -171,7 +195,7 @@ export function timelineRows(preview, run) {
   return steps.map((p, i) => {
     const r = live && live[i], page = p.page !== false;
     return { at: p.at, text: describe(p), target: p.target, page, why: page ? '' : (p.why || 'needs the host CLI'),
-      status: r ? r.status : 'pending', note: r && r.detail ? plain(r) : '' };
+      status: r ? r.status : 'pending', note: r && r.detail ? plain(r) : '', t: r && r.t != null ? r.t : null };
   });
 }
 
@@ -198,21 +222,29 @@ export function eyeRows(snap, base, nameOf = k => k) {
 export const eyeBase = snap => snap && snap.totals ? { totals: { ...snap.totals }, errors: { ...(snap.errors || {}) } } : null;
 
 const cell = v => v == null ? 'n/a' : String(v);
+const iso = secs => new Date(secs * 1000).toISOString().replace(/\.\d+Z$/, 'Z');
+const ranAt = t => t == null ? 'did not run' : `${t} s`;
 // The exportable report (what was injected, what the client called, what passed): plain data and Markdown, no hostnames, tokens or paths.
+// Times (ADR 0086 phase 3): `started` is the page process's clock at Play (the run state's `started`, else the browser's); each step's and
+// each expectation's `t` is seconds after Play (null: it did not run), `duration_s` the run's `elapsed`.
 export function buildReport({ preview, run, startedAt, finishedAt, speed, eye }) {
   const rows = timelineRows(preview, run), expects = (run && run.expects) || [], verdict = runVerdict(run) || 'not run';
+  const t0 = run && typeof run.started === 'number' ? run.started : null, ended = run && !run.running && run.elapsed != null;
   const data = {
     scenario: preview ? preview.name : run && run.name, ref: preview ? preview.ref : '', speed: speed || (run && run.speed) || 1, verdict,
-    started: startedAt || null, finished: finishedAt || null,
-    steps: rows.map(r => ({ at: r.at, target: r.target, action: r.text, status: r.status, page_could_run: r.page, note: r.note || r.why })),
-    expectations: expects.map(x => ({ label: x.label, status: x.status, detail: x.detail || '' })),
+    started: t0 != null ? iso(t0) : startedAt || null, finished: t0 != null && ended ? iso(t0 + run.elapsed) : finishedAt || null,
+    duration_s: run && run.elapsed != null ? run.elapsed : null,
+    steps: rows.map(r => ({ at: r.at, t: r.t, target: r.target, action: r.text, status: r.status, page_could_run: r.page, note: r.note || r.why })),
+    expectations: expects.map(x => ({ label: x.label, words: expectWords(x.label), status: x.status, t: x.t != null ? x.t : null, detail: x.detail || '' })),
     clients_eye: eye.map(e => ({ service: e.key, calls_during_run: e.during, errors_during_run: e.errors, verdict: e.verdict })),
   };
   const md = [`# Test run: ${data.scenario}${data.ref ? ` (${data.ref})` : ''}`, '',
-    `- Result: **${verdict}**`, `- Speed: ${data.speed}×`, `- Started: ${data.started || 'not captured (the run began before this page was opened)'}`, `- Finished: ${data.finished || 'n/a'}`, '',
-    '## What was injected', '', '| At | Target | Action | Result |', '|---|---|---|---|',
-    ...data.steps.map(s => `| ${s.at.toFixed(0)} s | ${s.target} | ${s.action.replace(/\|/g, '/')} | ${s.status}${s.note ? `: ${s.note.replace(/\|/g, '/')}` : ''} |`), '',
-    '## Expectations', '', ...(data.expectations.length ? data.expectations.map(x => `- ${x.status}: ${x.label}${x.detail ? ` (${x.detail})` : ''}`) : ['- none declared']), '',
+    `- Result: **${verdict}**`, `- Speed: ${data.speed}×`, `- Started: ${data.started || 'not captured (the run began before this page was opened)'}`, `- Finished: ${data.finished || 'n/a'}`,
+    `- Took: ${data.duration_s == null ? 'n/a' : `${data.duration_s} s`}`, '',
+    '## What was injected', '', 'At: planned, seconds into the scenario. Ran at: seconds after Play, at this speed.', '',
+    '| At | Ran at | Target | Action | Result |', '|---|---|---|---|---|',
+    ...data.steps.map(s => `| ${s.at.toFixed(0)} s | ${ranAt(s.t)} | ${s.target} | ${s.action.replace(/\|/g, '/')} | ${s.status}${s.note ? `: ${s.note.replace(/\|/g, '/')}` : ''} |`), '',
+    '## Expectations', '', ...(data.expectations.length ? data.expectations.map(x => `- ${x.status}${x.t != null ? ` at ${x.t} s` : ''}: ${x.words}${x.detail ? ` (${x.detail})` : ''}`) : ['- none declared']), '',
     '## What the client called (mock counters during the run)', '', '| Service | Calls | Errors | Verdict |', '|---|---|---|---|',
     ...data.clients_eye.map(e => `| ${e.service} | ${cell(e.calls_during_run)} | ${cell(e.errors_during_run)} | ${e.verdict} |`), '',
     'Skipped steps were not run by the page (they need the host CLI); they are not passes. n/a means the mock keeps no counter for it.', ''];

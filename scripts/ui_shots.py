@@ -236,6 +236,75 @@ def check_preview(page, shot: str, state: dict) -> list[str]:
     return bad
 
 
+REPLAY_PROBE = """() => { const sl = document.getElementById('rs-slider'), q = s => [...document.querySelectorAll(s)], sh = document.getElementById('runsheet').getBoundingClientRect();
+  return { role: sl.getAttribute('role'), min: sl.getAttribute('aria-valuemin'), max: sl.getAttribute('aria-valuemax'), now: sl.getAttribute('aria-valuenow'),
+           text: sl.getAttribute('aria-valuetext') || '', label: sl.getAttribute('aria-label') || '', tab: sl.getAttribute('tabindex'), active: document.activeElement.id,
+           shown: !document.getElementById('rs-replay').hidden && !document.getElementById('runsheet').hidden, cap: document.getElementById('rs-rcap').textContent,
+           play: !document.getElementById('rs-play').hidden, sel: (document.querySelector('#runrail [aria-pressed=true]') || { dataset: {} }).dataset.n,
+           nowBadges: q('#runlayer .rl-badge').filter(b => (b.getAttribute('aria-label') || '').includes(', now: ')).map(b => +b.dataset.n),
+           badges: q('#runlayer .rl-badge').length, ring: q('#flow [data-runring]').length, head: document.getElementById('run-head').textContent,
+           h: sl.getBoundingClientRect().height, top: sh.top, bottom: sh.bottom, fixed: getComputedStyle(document.getElementById('runsheet')).position === 'fixed',
+           last: !document.getElementById('run-last').hidden, again: !document.getElementById('run-replay').hidden && document.getElementById('run-replay').textContent,
+           moving: document.getAnimations().filter(a => a.effect && a.effect.target && a.effect.target.closest && a.effect.target.closest('#runlayer, #runsheet')).length,
+           wide: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1 } }"""
+
+
+def check_replay(page, shot: str, vp: str) -> list[str]:
+    """ADR 0086 phase 3, after the run: Stop leaves the plain diagram and the Run tab offers Replay the last run; the strip becomes a
+    WAI-ARIA slider over the recorded steps only (role, value, aria-valuetext naming the step), driven end to end by the keyboard; it moves
+    the current-step badge, the ring and the rail selection; the strip fits a phone; no playback and nothing moving under reduced motion."""
+    bad = []
+    stopped = sample_run(3)
+    stopped.update(running=False, stopped=True, ok=True, elapsed=9.0)
+    page.unroute("**/api/scenarios/run")
+    page.route("**/api/scenarios/run", lambda r: r.fulfill(json=stopped))
+    page.evaluate("trPrev = null; runHidden = ''; runStopHide = 'node-down'; poll()")  # Stop pressed on this page: the plain diagram comes back
+    page.wait_for_function("trLast && trLast.stopped", timeout=5000)
+    page.evaluate("showPane('run'); paintRun()")
+    r = page.evaluate(REPLAY_PROBE)
+    if r["badges"] or not r["last"]:
+        bad.append(f"after Stop the diagram is not plain, or the Run tab offers no Replay the last run: {r['badges']} badges, offered {r['last']}")
+    page.focus("#run-lastbtn")
+    page.keyboard.press("Enter")
+    r = page.evaluate(REPLAY_PROBE)
+    if (r["role"], r["min"], r["max"], r["now"], r["tab"]) != ("slider", "1", "3", "1", "0") or not r["label"]:
+        bad.append(f"the replay slider's ARIA attributes are wrong (3 recorded steps): {r}")
+    if r["active"] != "rs-slider" or not r["shown"]:
+        bad.append(f"Replay the last run did not show the strip and focus the slider: {r['active']}")
+    if not r["text"].startswith("Step 1, 1 of 3 recorded: ") or "never ran" not in r["cap"] or "stay live" not in r["cap"]:
+        bad.append(f"aria-valuetext does not name the step, or the strip does not say it walks recorded steps only: {r['text']!r} / {r['cap']!r}")
+    for key, want in (("End", "3"), ("Home", "1"), ("ArrowRight", "2")):
+        page.keyboard.press(key)
+        r = page.evaluate(REPLAY_PROBE)
+        if r["now"] != want or r["sel"] != want or set(r["nowBadges"]) != {int(want)} or not r["ring"] or f"Replay: step {want}" not in r["head"]:
+            bad.append(f"{key} did not move the slider, the rail selection, the current badge and the ring to step {want}: {r}")
+    page.keyboard.press("Tab")
+    if page.evaluate("document.activeElement.id") != "rs-end":
+        bad.append("Tab from the slider does not reach End replay")
+    page.keyboard.press("Shift+Tab")
+    r = page.evaluate(REPLAY_PROBE)
+    if r["h"] < 40 or r["wide"]:
+        bad.append(f"the slider is under 40 px tall or the page scrolls sideways: {r['h']}")
+    if vp == "phone" and (not r["fixed"] or r["bottom"] > page.viewport_size["height"] + 1 or r["top"] < page.viewport_size["height"] * 0.4):
+        bad.append(f"on a phone the replay strip is not a bottom sheet that leaves the diagram room: {r['top']}..{r['bottom']}")
+    small = page.evaluate("[...document.querySelectorAll('#rs-replay button')].filter(b => !b.hidden && b.getBoundingClientRect().height < 40).map(b => b.id)")
+    if small:
+        bad.append(f"replay buttons under 40 px: {small}")
+    page.screenshot(path=shot.replace(".png", "-replay.png"), full_page=False)
+    page.emulate_media(reduced_motion="reduce")
+    page.keyboard.press("ArrowRight")
+    r = page.evaluate(REPLAY_PROBE)
+    if r["play"] or r["moving"] or r["now"] != "3":
+        bad.append(f"under reduced motion the replay offers playback, animates, or does not change in place: play {r['play']}, moving {r['moving']}, at {r['now']}")
+    page.emulate_media(reduced_motion="no-preference")
+    page.focus("#rs-end")
+    page.keyboard.press("Enter")
+    r = page.evaluate(REPLAY_PROBE)
+    if r["shown"] or "Replay" in r["head"] or r["again"] != "Replay the run":
+        bad.append(f"End replay did not return to the run as it ended, with Replay the run offered: {r['head']!r} / {r['again']!r}")
+    return bad
+
+
 def check_runlayer(page, shot: str, vp: str) -> list[str]:
     """The run layer (ADR 0086, webui/static/js/runlayer.js) with a sample run, no cluster: numbered badges with a glyph and words on the
     parts each step touched, in step order for Tab; the step rail; the strip over the diagram (a bottom sheet on a phone) with Previous and
@@ -273,7 +342,7 @@ def check_runlayer(page, shot: str, vp: str) -> list[str]:
         box = page.locator("#runsheet").bounding_box()
         if vp == "phone" and (box is None or box["y"] + box["height"] > page.viewport_size["height"] + 1 or page.evaluate("getComputedStyle(document.getElementById('runsheet')).position") != "fixed"):
             bad.append(f"on a phone the step sheet is not fixed to the bottom of the screen: {box}")
-        small = page.evaluate("[...document.querySelectorAll('#runsheet button')].filter(b => b.getBoundingClientRect().height < 40).map(b => b.id)")
+        small = page.evaluate("[...document.querySelectorAll('#runsheet button')].filter(b => b.getClientRects().length && b.getBoundingClientRect().height < 40).map(b => b.id)")
         if small:
             bad.append(f"step sheet buttons under 40 px: {small}")
         page.click("#rs-next")
@@ -303,11 +372,12 @@ def check_runlayer(page, shot: str, vp: str) -> list[str]:
             bad.append("client-stress: fewer than 6 badges on a run that touches every node")
         bad += mark_problems(page, "client-stress")
         page.screenshot(path=shot.replace(".png", "-dense.png"), full_page=False)
+        bad += check_replay(page, shot, vp)
     except PlaywrightError as e:
         bad.append(f"the run layer did not draw a sample run: {str(e).splitlines()[0]}")
     finally:
         page.unroute("**/api/scenarios/run")
-        page.evaluate("trLast = {running: false}; trPrev = null; runHidden = ''; runStopHide = ''; runSel = null; paintRun(); setCircuit(false); lastCluster = ''; loadCluster()")  # back to the page's own cluster answer
+        page.evaluate("trLast = {running: false}; trPrev = null; runHidden = ''; runStopHide = ''; runSel = null; replay = null; paintRun(); setCircuit(false); lastCluster = ''; loadCluster()")  # back to the page's own cluster answer
     return bad
 
 

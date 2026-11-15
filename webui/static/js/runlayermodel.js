@@ -3,7 +3,8 @@
 // so fault-model and ramp expansions sit under the step that made them), one badge per diagram part, one pin per expectation,
 // and the words for the step rail and the phone sheet. Every state is a glyph and a word, never a colour alone.
 // Phase 2: the same model draws a scenario before Play (previewRun): every step "planned" (or "CLI only"), ghost badges and pins.
-import { describe } from './testrunmodel.js';
+// Phase 3: replay walks a finished run's recorded steps (replayStops, replayGroups, replayPins); node states on the diagram stay live.
+import { describe, expectWords } from './testrunmodel.js';
 
 export const RUN_GLYPH = { done: '✓', now: '●', active: '◐', next: '○', cli: '↷', skipped: '↷', failed: '✗', notrun: '○', planned: '○' };
 export const RUN_WORD = { done: 'done', now: 'now', active: 'in progress', next: 'next', cli: 'CLI only', skipped: 'skipped', failed: 'failed', notrun: 'not run', planned: 'planned' };
@@ -19,6 +20,14 @@ export function previewRun(p) {
 // The key that says which run (or preview) is shown, for "take it off the diagram".
 export const runKey = r => !r || !r.name ? '' : r.preview ? `preview:${r.name}` : `${r.name}@${r.started}`;
 const CLI = /host CLI|need the host/;
+
+// The parts the engine names that are not nodes (benchctl/scenario.py touches, webui/blast.py TARGETS), in words; a node keeps its name.
+// tests/test_step_words.py fails when the engine can name a part that has no words here.
+export const PART_WORDS = { login: 'the login node', slurmctld: 'slurmctld (the Slurm controller)', slurmdbd: 'slurmdbd (Slurm accounting)',
+  slurmrestd: 'slurmrestd (the Slurm REST API)', teleport: 'the Teleport proxy', 'bmc-farm': 'the BMC farm', 'bcm-mock': 'the BCM',
+  'gpu-exporter': 'the GPU exporter', 'jira-mock': 'Jira', 'jira-real': 'the real Jira', 'k8s-api': 'the Kubernetes API', 'dcgm-exporter': 'the real DCGM exporter' };
+export const partWords = (id, nameOf = x => x) => PART_WORDS[id] || nameOf(id);
+const names = (ids, nameOf) => ids.map(id => partWords(id, nameOf)).join(', ');
 
 function rowState(r) {
   if (r.status === 'failed') return 'failed';
@@ -85,23 +94,24 @@ export function expectPins(run) {
   return plan.map((p, i) => {
     const r = got.get(p.label), state = r ? { ok: 'done', failed: 'failed', skipped: 'cli' }[r.status] || 'skipped' : p.page === false ? 'cli' : run.preview ? 'planned' : run.running ? 'next' : 'notrun';
     const word = { done: 'held', failed: 'did not hold', cli: 'CLI only', next: 'waiting', notrun: 'not checked', planned: 'planned' }[state] || wordOf(state);
-    return { e: p.e || i + 1, label: p.label, ids: p.ids || [], state, glyph: glyphOf(state), word, t: r && r.t != null ? r.t : null,
-      aria: `Expectation E${p.e || i + 1}, ${word}: ${p.label}` };
+    const label = expectWords(p.label);
+    return { e: p.e || i + 1, label, ids: p.ids || [], state, glyph: glyphOf(state), word, t: r && r.t != null ? r.t : null,
+      aria: `Expectation E${p.e || i + 1}, ${word}: ${label}` };
   });
 }
 
 // Why a step has no badge: the engine's reason, or the parts it names are not drawn in this cluster. '' when it has a badge.
-export function offDiagram(g, has = () => true) {
+export function offDiagram(g, has = () => true, nameOf = id => id) {
   if (!g.ids.length) return g.noPart || 'it names no part of the diagram';
   const shown = g.ids.filter(has);
-  return shown.length ? '' : `${g.ids.join(', ')} ${g.ids.length === 1 ? 'is' : 'are'} not in this cluster`;
+  return shown.length ? '' : `${names(g.ids, nameOf)} ${g.ids.length === 1 ? 'is' : 'are'} not in this cluster`;
 }
 
 const secs = v => v == null ? '' : `${Math.round(v)} s`;
-const onParts = (g, nameOf) => g.ids.length ? `on ${g.ids.map(nameOf).join(', ')}` : '';
+const onParts = (g, nameOf) => g.ids.length ? `on ${names(g.ids, nameOf)}` : '';
 // One rail row: the number and glyph, the time it is planned at (and when it ran), the words, the parts it touched, and the state.
 export function railRow(g, has = () => true, nameOf = id => id) {
-  const off = offDiagram(g, has), extra = g.rows.length > 1 ? `${g.rows.length} actions` : '';
+  const off = offDiagram(g, has, nameOf), extra = g.rows.length > 1 ? `${g.rows.length} actions` : '';
   return { n: g.n, state: g.state, glyph: glyphOf(g.state), word: wordOf(g.state), current: g.current, at: `at ${secs(g.at)}`, ran: g.t == null ? '' : `ran at ${secs(g.t)}`,
     text: g.text, where: onParts(g, nameOf), extra, off: off ? `Not on the diagram: ${off}.` : '',
     detail: g.rows.map(r => r.detail).filter(Boolean)[0] || '', blast: blastLine(g, nameOf) };
@@ -109,7 +119,7 @@ export function railRow(g, has = () => true, nameOf = id => id) {
 
 // Whose clients may see a change, in words (the declared blast entry, webui/blast.py; ADR 0086 phase 2). '' when none is declared.
 export function blastLine(g, nameOf = id => id) {
-  return g.blast && g.blast.length ? `Clients may see a change on ${g.blast.map(nameOf).join(', ')}${g.blastWhy ? `: ${g.blastWhy.replace(/\.$/, '')}` : ''}.` : '';
+  return g.blast && g.blast.length ? `Clients may see a change on ${names(g.blast, nameOf)}${g.blastWhy ? `: ${g.blastWhy.replace(/\.$/, '')}` : ''}.` : '';
 }
 
 // The parts whose clients may see a change (◎ on the diagram before Play): each once, with the steps that may change it, in step order.
@@ -157,4 +167,54 @@ export function sheetFor(groups, g, nameOf = id => id) {
 export function runSig(run) {
   if (!run || !run.name) return '';
   return JSON.stringify([run.name, run.preview ? 'preview' : run.started, run.running, run.stopped, run.ok, (run.steps || []).map(s => s.status), (run.expects || []).map(x => x.status)]);
+}
+
+// ---- Replay (phase 3) ----
+// A run that has ended (passed, failed or stopped) can be walked again step by step. The stops are the steps it recorded, in the order
+// they ran; a step it never reached is not one (replay walks what was recorded, never a guess). Only the badges, the ring, the pins and
+// the rail go back in time: node states on the diagram stay live.
+export const replayable = run => !!(run && run.name && !run.preview && !run.running && Array.isArray(run.steps) && run.steps.some(s => s.status && s.status !== 'pending'));
+export function replayStops(groups) {
+  return groups.filter(g => !g.preview && reachedState(g.state)).map(g => ({ n: g.n, t: g.t }))
+    .sort((a, b) => (a.t ?? Infinity) - (b.t ?? Infinity) || a.n - b.n);
+}
+export const replayClamp = (at, stops) => Math.max(0, Math.min(stops.length - 1, at | 0));
+
+// The groups as they stood at stop `at`: earlier stops keep their recorded state, this one is "now" (unless it failed or was skipped),
+// later ones are "next" with no time yet, and steps the run never reached stay "not run".
+export function replayGroups(groups, stops, at) {
+  const order = new Map(stops.map((s, i) => [s.n, i]));
+  return groups.map(g => {
+    const i = order.has(g.n) ? order.get(g.n) : null;
+    if (i == null) return { ...g, current: false };
+    const state = i < at ? g.state : i > at ? 'next' : g.state === 'done' || g.state === 'active' ? 'now' : g.state;
+    return { ...g, state, current: i === at, t: i > at ? null : g.t };
+  });
+}
+
+// The pins at stop `at`: a result recorded after that step's time is not known yet ("waiting"); at the last stop every result shows.
+export function replayPins(pins, stops, at) {
+  const until = at >= stops.length - 1 ? Infinity : stops[at] && stops[at].t != null ? stops[at].t : Infinity;
+  return pins.map(p => p.t != null && p.t > until ? { ...p, state: 'next', glyph: glyphOf('next'), word: 'waiting', t: null, aria: `Expectation E${p.e}, waiting: ${p.label}` } : p);
+}
+
+// The slider's aria-valuetext: the step, where it is in the replay, what it did, its recorded result and when it ran.
+export function replayText(groups, stops, at) {
+  const s = stops[at], g = s && groups.find(x => x.n === s.n);
+  if (!g) return '';
+  return `Step ${g.n}, ${at + 1} of ${stops.length} recorded: ${g.text}, ${wordOf(g.state)}${g.t != null ? `, ran at ${secs(g.t)}` : ''}`;
+}
+export function replayHeading(run, groups, stops, at) {
+  const s = stops[at];
+  return run && s ? `${run.name} · Replay: step ${s.n}, ${at + 1} of ${stops.length} recorded` : '';
+}
+// The strip's caption: what replay walks, and what it does not.
+export function replayCaption(groups, stops) {
+  const left = groups.length - stops.length;
+  return `Replay walks the ${stops.length} recorded step${stops.length === 1 ? '' : 's'} only${left ? ` (${left} never ran)` : ''}. Node states on the diagram stay live.`;
+}
+// Keys of the WAI-ARIA slider pattern: the stop to go to, or null for a key the slider does not take.
+export function replayKey(key, at, count) {
+  const to = { ArrowRight: at + 1, ArrowUp: at + 1, ArrowLeft: at - 1, ArrowDown: at - 1, Home: 0, End: count - 1 }[key];
+  return to == null ? null : Math.max(0, Math.min(count - 1, to));
 }

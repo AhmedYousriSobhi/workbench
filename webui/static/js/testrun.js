@@ -4,7 +4,7 @@ import { S } from './state.js';
 import { $, H, esc, announce } from './util.js';
 import { ICON } from './governor.js';
 import { ENT_NAME } from './focus.js';
-import { buildReport, eyeRows, runVerdict, timelineRows } from './testrunmodel.js';
+import { buildReport, expectWords, eyeRows, runVerdict, timelineRows } from './testrunmodel.js';
 import { watchRun } from './runlayer.js';
 
 const ON_RUN = () => !$('tab-run').hidden;
@@ -48,7 +48,7 @@ export function paintPreview(s) {
   const got = new Map((on ? s.expects || [] : []).map(x => [x.label, x]));
   $('expects').innerHTML = p.expects.length ? '<h3 class="rh">Expectations</h3>' + p.expects.map(x => {
     const r = got.get(x.label), st = r ? r.status : !x.page ? 'skipped' : 'pending';
-    return `<p class="st st-${st}"><span aria-hidden="true">${ICON[st]}</span> ${st}${!x.page && !r ? ' (CLI only)' : ''}: ${esc(x.label)} <span class="dim">${esc(r ? r.detail : '')}</span></p>`;
+    return `<p class="st st-${st}"><span aria-hidden="true">${ICON[st]}</span> ${st}${!x.page && !r ? ' (CLI only)' : ''}: ${esc(expectWords(x.label))} <span class="dim">${esc(r ? r.detail : '')}</span></p>`;
   }).join('') : '';
   $('trace-out').innerHTML = on && s.trace ? '<h3 class="rh">Slurm trace</h3>' + (s.trace.map(e =>
     `<details class="small"><summary>${esc(e.label)}</summary><pre class="wrap">${esc([e.before && 'before: ' + e.before, ...e.logs.map(r => `log ${r.source} ${r.where}: ${r.line}`),

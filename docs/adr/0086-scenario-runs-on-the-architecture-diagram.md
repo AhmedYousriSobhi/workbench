@@ -155,6 +155,17 @@ A step that names no part carries a reason in words. `tests/test_scenario_touche
 - **Blast for every target kind.** `webui/blast.py` `TARGETS` declares, for every target kind the engine accepts, the parts a client reads that the step changes and one sentence; a step's blast also takes in what it implies (`scenario.side_effects`). Before Play each such part wears ◎ (declared, not measured), the chosen step's blast parts get the blast radius's red dashes, and the Run tab says it in words per step.
 - **Stop and clear.** Stop pressed on the page, or **Take the preview off the diagram**, leaves the plain diagram. A run that ends by itself keeps its badges, as in phase 1.
 
+### As built (phase 3, issue 810)
+
+- **The player is the strip.** Option A lives in the strip over the diagram (the phone sheet): a WAI-ARIA slider with one tick per recorded step, in time order, plus **Play** and **End replay**. `aria-valuetext` names the step, its result and when it ran.
+- **One value moves everything.** The slider sets `S.replay.at`; the badges, the ring, the pins and the Run tab's selection are drawn from it. A recorded step picked in the rail moves the slider.
+- **Recorded only, and said.** Steps a stopped run never reached are not on the slider. A result recorded after the step's time shows as waiting. The strip says node states stay live.
+- **Stop and replay.** Stop still leaves the plain diagram (phase 2): a user who stops wants the map back. The run stays in the page's memory, and the Run tab offers **Replay the last run**. Replay is chosen, never automatic.
+- **Reduced motion.** No Play button and no timer; each key or click changes the states in place. With motion, Play is a 1.2 s step timer, not an animation.
+- **The journal is the run state** that `Runs` already keeps (decision 4). No backend change was needed.
+- **Report times.** `started` and `finished` come from the page process's clock; each step and expectation has `t`, seconds after Play; `duration_s` is `elapsed`.
+- **Words.** Expectations and part ids read as sentences; `tests/test_step_words.py` fails on raw JSON or a part id with no words.
+
 ## References
 
 - Research note and mockups: [Scenario runs on the architecture diagram](../research/scenario-on-the-diagram.md), [mockup page](../research/scenario-on-the-diagram-mockups.html).
