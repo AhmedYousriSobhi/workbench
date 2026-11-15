@@ -44,3 +44,11 @@ check must never reach the nodes.
   `git diff` is the review and `git checkout images/node-base/nhc.d` the reset.
 - A custom check runs inside the node container with the container's limits and no extra privilege (the containers
   stay unprivileged); the smoke run executes it on the host once, as the user, like any local script you add.
+
+## Addendum: a vanished real card (issue 709)
+The runner skipped every check when the exporter had no series for the node ("never drain on a guess"), so a real card that
+disappeared completely (no series for `rgpu001`) was never checked. Now a node whose environment sets `NHC_METRICS_URL`
+(its own exporter, ADR 0037) runs its checks even with an empty series set, so `real-gpu-health` sees the missing
+`nvidia-smi` card and drains. Unchanged: an unreachable exporter still skips everything, and a simulated node (no
+`NHC_METRICS_URL`) with no series is still not judged. The simulated checks on such a node see an empty series set and
+`expected` 0, so they report nothing.

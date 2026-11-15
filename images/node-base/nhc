@@ -16,6 +16,7 @@ node=${NHC_NODE:-$(hostname -s)}
 expected=${NHC_EXPECTED_GPUS:-${WORKBENCH_GPUS:-0}}
 expected_ib=${NHC_EXPECTED_IB:-${WORKBENCH_IB:-0}}
 scontrol=${NHC_SCONTROL:-scontrol}
+own_exporter=${NHC_METRICS_URL:+1}                      # a node with its own exporter (the real card, ADR 0037) is judged even when it has no series (#709)
 url=${NHC_METRICS_URL:-http://gpu-exporter-farm:9400/metrics}
 state=${NHC_STATE_DIR:-/var/tmp}/nhc-state-$node   # a check keeps what it must remember between runs in "$state-<check name>"
 # Which checks run: the directory the host mounts (live edits), else the one baked into the image, else the source tree.
@@ -34,13 +35,14 @@ mine=$(printf '%s\n' "$metrics" | grep -e "Hostname=\"$node\"" -e "node=\"$node\
 fail=""
 add() { fail="${fail:+$fail; }$1"; }
 # Each enabled check in checks.conf runs on its own (a subshell with a timeout), so a broken check cannot stop the others
-# or this script; it prints one line per problem. No series at all for the node means it is off: not a health matter.
+# or this script; it prints one line per problem. No series at all for the node means it is off, not a health matter, unless the node has its own exporter (NHC_METRICS_URL): a card that
+# vanished completely publishes nothing, so its checks still run (an unreachable exporter still skips them: fetch above).
 run_check() {
   local file=$1; shift
   env "$@" mine="$mine" node="$node" expected="$expected" expected_ib="$expected_ib" state="$state-$(basename "$file" .sh)" NHC_FILE="$file" \
     timeout 10 bash -c 'add() { printf "%s\n" "$1"; }; . "$NHC_FILE"' </dev/null 2>/dev/null
 }
-if [ -n "$mine" ] && [ -r "$dir/checks.conf" ]; then
+if { [ -n "$mine" ] || [ -n "$own_exporter" ]; } && [ -r "$dir/checks.conf" ]; then
   while read -r name on rest; do
     case $name in ''|'#'*) continue ;; esac
     [ "$on" = on ] && [ -r "$dir/$name.sh" ] || continue
