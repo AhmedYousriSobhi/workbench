@@ -3,7 +3,7 @@
 import './setup.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PART_WORDS, RUN_GLYPH, RUN_WORD, blastLine, partWords, replayCaption, replayClamp, replayGroups, replayHeading, replayKey, replayPins, replayStops, replayText, replayable, blastMarks, expectPins, focusStep, ghostParts, offDiagram, partBadges, previewRun, previewSummary, railRow, runGroups, runHeading, runKey, runSig, sheetFor } from '../../static/js/runlayermodel.js';
+import { PART_WORDS, RUN_GLYPH, RUN_WORD, blastLine, cliNote, fromCli, sourceWords, partWords, replayCaption, replayClamp, replayGroups, replayHeading, replayKey, replayPins, replayStops, replayText, replayable, blastMarks, expectPins, focusStep, ghostParts, offDiagram, partBadges, previewRun, previewSummary, railRow, runGroups, runHeading, runKey, runSig, sheetFor } from '../../static/js/runlayermodel.js';
 
 const row = (n, at, target, ids, status = 'pending', extra = {}) => ({ n, at, target, ids, status, detail: '', page: true, t: status === 'pending' ? null : at, do: { nodes: ['cn002'], power: 'Off' }, ...extra });
 // node-down at step 3 of 6, as the page polls it
@@ -237,4 +237,37 @@ test('every part id the engine names reads as words, a node keeps its name', () 
   for (const id of ['login', 'slurmctld', 'slurmdbd', 'slurmrestd', 'teleport', 'k8s-api', 'jira-mock']) assert.notEqual(partWords(id), id, id);
   assert.equal(partWords('cn002'), 'cn002'); assert.equal(partWords('cn002', id => `node ${id}`), 'node cn002');
   assert.ok(Object.values(PART_WORDS).every(w => !/[{}"]/.test(w)));
+});
+
+// Phase 4: a run from the CLI. Its steps the page cannot run (page: false) ran on the host: they show their real result, never "CLI only".
+const fromHost = (statuses, extra = {}) => {
+  const r = nodeDown(statuses, extra.running ?? false);
+  r.steps = r.steps.map(s => s.n === 3 || s.n === 6 ? { ...s, page: false } : s);
+  return { ...r, source: 'cli', ok: true, ...extra };
+};
+
+test('a run from the CLI is said in words, and its CLI-only steps show their real result', () => {
+  const run = fromHost(['ok', 'ok', 'ok', 'ok', 'ok', 'skipped']), g = runGroups(run);
+  assert.ok(fromCli(run) && !fromCli(nodeDown([])) && sourceWords(run) === 'run from the CLI' && sourceWords(nodeDown([])) === '');
+  assert.deepEqual(g.map(x => x.state), ['done', 'done', 'done', 'done', 'done', 'skipped']);  // a page run would say 'cli' for step 6
+  assert.ok(partBadges(g).every(b => b.glyph !== '↷' || b.state === 'skipped') && !partBadges(g).some(b => b.label.includes('CLI only')));
+  assert.equal(runHeading(run, g), 'node-down · run from the CLI · Passed, with skipped steps');
+  assert.equal(runGroups({ ...run, source: undefined })[5].state, 'cli');
+});
+
+test('a CLI run\'s expectations show their result; one not checked yet waits instead of saying CLI only', () => {
+  const live = fromHost(['ok'], { running: true, ok: null });
+  assert.deepEqual(expectPins(live).map(p => [p.state, p.word]), [['next', 'waiting']]);
+  const held = { ...fromHost(['ok', 'ok', 'ok', 'ok', 'ok', 'ok']), expects: [{ label: live.plan_expects[0].label, status: 'ok', t: 6 }] };
+  assert.deepEqual(expectPins(held).map(p => [p.state, p.glyph, p.word]), [['done', '✓', 'held']]);
+  assert.match(cliNote(live), /stop it with Ctrl\+C in its terminal/);
+  assert.equal(cliNote(nodeDown([])), '');
+});
+
+test('a CLI run that went quiet says so, and its replay is marked too', () => {
+  const lost = fromHost(['ok', 'ok'], { stopped: true, lost: true }), g = runGroups(lost), stops = replayStops(g);
+  assert.equal(runHeading(lost, g), 'node-down · run from the CLI · No word from the CLI after step 2 of 6');
+  assert.match(cliNote(lost), /sent nothing for 30 s/);
+  assert.equal(replayHeading(lost, g, stops, 0), 'node-down · run from the CLI · Replay: step 1, 1 of 2 recorded');
+  assert.notEqual(runSig(lost), runSig({ ...lost, source: 'page' }));
 });

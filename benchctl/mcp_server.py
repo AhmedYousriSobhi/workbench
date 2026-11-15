@@ -97,7 +97,7 @@ def build(run: Callable[..., dict] = run_cli) -> MCPServer:
         return run(["get", "alerts", "--json"])
 
     @s.tool(description="The state of the web page's scenario run: running or not, which one, each step's status and the expect verdicts so far. "
-                        "A scenario started with scenario_run is not shown (that call blocks and returns its own report). Needs the web page.", annotations=READ)
+                        "A scenario_run shows here too while the page answers (source cli); that call blocks and returns its own report. Needs the web page.", annotations=READ)
     def scenario_status() -> dict:
         return run(["get", "scenario-status", "--json"])
 

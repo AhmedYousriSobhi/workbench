@@ -299,7 +299,7 @@ Press **Watch on the diagram** in Test run, during or after a run. The Topology 
 - **Take off the diagram** removes a finished run's badges. The run itself lives in the page's memory until the next Play or a page restart.
 - **Stop.** Pressing **■ Stop** in Test run ends the run and leaves the plain diagram. The Run tab then offers **Replay the last run** ([replay](#after-the-run-replay)); **Watch on the diagram** brings the stopped run back as it ended.
 
-Badges are drawn on the Circuit view only; the 2.5D view keeps its diamonds. A run started with `benchctl scenario run` is not drawn yet.
+Badges are drawn on the Circuit view only; the 2.5D view keeps its diamonds. A run started with `benchctl scenario run` is drawn too ([a run from the CLI](#a-run-from-the-cli)).
 
 #### Before Play: where a scenario will act
 
@@ -326,6 +326,16 @@ When a run has ended (passed, failed or stopped), press **Replay the run** in th
 - **▶ Play** moves one step every 1.2 s; **⏸ Pause** stops it. With reduced motion there is no Play: each step changes in place.
 - **End replay**, or ✕, shows the run as it ended. On a phone the player is the sheet at the bottom of the screen.
 - **Memory only.** The last run lives in the page's process until the next Play or a page restart. Export the report to keep it.
+
+#### A run from the CLI
+
+`./scripts/benchctl scenario run NAME` sends each step's result to the page while the page runs. The page draws it like its own runs: badges, strip, Run tab, Test run and replay. Each of them says **run from the CLI**.
+
+- **Real results.** The CLI runs every step on the host. A step the page marks ↷ CLI only shows its real result: ✓ done, ✗ failed or ↷ skipped.
+- **One run at a time.** While the page plays a scenario, it refuses the CLI's run. The CLI says so once and plays on.
+- **Stop** it with Ctrl+C in its terminal; the page has no Stop for it. A CLI run that sends nothing for 30 s ends on the page as *No word from the CLI*.
+- **Best effort.** With no page running, the command does and prints exactly what it did before. A page that does not answer within 1 s gets one notice, and the rest of the run is not shown there.
+- **Nothing on disk.** The page keeps the run in memory, like its own runs. The post carries step results only; the page token goes in a header.
 
 ### Traffic & Communication
 

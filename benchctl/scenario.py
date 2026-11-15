@@ -5,6 +5,7 @@ mock's /sim/inject (or a `scontrol` call in slurmctld). `ramp` steps expand into
 Targets the caller cannot run (the page has no Docker) are reported as skipped, not failed.
 """
 import base64
+import hashlib
 import json
 import re
 import time
@@ -168,6 +169,13 @@ def plan(sc: dict) -> list[Step]:
                 out.append(Step(at, target, do, num))
     return sorted(out, key=lambda s: s.at)
 
+
+
+def plan_key(steps: list[Step]) -> str:
+    """A short fingerprint of a plan: the CLI and the web page compare it before the page shows a CLI run (ADR 0086 phase 4), so
+    a page reading another copy of the scenario or another cluster never puts the CLI's step results on the wrong parts."""
+    rows = [[s.at, s.target, s.do, s.n] for s in steps]
+    return hashlib.sha256(json.dumps(rows, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 # ---- Which parts of the Infrastructure architecture a step acts on (ADR 0086) ----
 # Ids are the Circuit view's: node names and service ids as in webui/graph.py, and the part ids of the parts the graph does not model

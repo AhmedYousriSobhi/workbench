@@ -40,6 +40,7 @@ The command exits 1 when a step errors or an `expect` line does not hold.
 - Tick **Slurm trace** there for the same trace (see the [resilience guide](../guides/slurm-resilience.md)).
 - On the page, **Watch on the diagram** puts each step's number on the parts it touches ([a scenario run on the diagram](05-web-page.md#a-scenario-run-on-the-diagram)).
 - Before Play, **Show on the diagram** draws where each step will act and whose clients may see a change ([before Play](05-web-page.md#before-play-where-a-scenario-will-act)).
+- While the web page runs, `scenario run` also shows its steps there, marked *run from the CLI* ([a run from the CLI](05-web-page.md#a-run-from-the-cli)). With no page it does exactly what it did before.
 
 ## The scenarios shipped
 
@@ -231,6 +232,7 @@ Source: `benchctl/scenario.py`, `scenarios/*.yaml`, `webui/cluster.py`, ADR 0006
 | You see | Why | Do this |
 |---|---|---|
 | a step is skipped | the caller cannot run that target (for example `k8s` from the page) | run it with `benchctl scenario run` |
+| `web page: this run is not shown there: ...` | the page plays its own run, has another token, or reads another copy of the scenario (the reason follows) | nothing: the run goes on in the terminal; restart the page after changing the cluster |
 | an `expect` line fails | the app under test must do its part for some assertions, or the step did not take effect | read the step's detail, then re-run with `--trace` |
 
 ## Learn more

@@ -6,6 +6,7 @@ import { ICON } from './governor.js';
 import { ENT_NAME } from './focus.js';
 import { buildReport, expectWords, eyeRows, runVerdict, timelineRows } from './testrunmodel.js';
 import { watchRun } from './runlayer.js';
+import { fromCli, sourceWords } from './runlayermodel.js';
 
 const ON_RUN = () => !$('tab-run').hidden;
 const same = s => !!(s && S.trPrev && s.name === S.trPrev.name);
@@ -27,28 +28,29 @@ export function paintPreview(s) {
   $('run-empty').hidden = !!p || !!s.name; $('runpanel').hidden = !p && !s.name;
   if (!p) return;
   const rows = timelineRows(p, on ? s : null), done = rows.filter(x => x.status !== 'pending').length, verdict = on ? runVerdict(s) : null;
-  $('runtitle').textContent = `${p.name}${p.ref ? ` · ${p.ref}` : ''}${on && s.running ? ` (${s.speed}×)` : ''}`;
+  const cli = on && fromCli(s);  // a run from the CLI (ADR 0086 phase 4): said in words; the page cannot stop it
+  $('runtitle').textContent = `${p.name}${p.ref ? ` · ${p.ref}` : ''}${on && s.running ? ` (${s.speed}×)` : ''}${cli ? ` · ${sourceWords(s)}` : ''}`;
   $('rundesc').textContent = `${p.description.replace(/[.\s]+$/, '')}. Takes about ${Math.round(p.length)} s at 1×.`;
   const word = { running: `Running · step ${done}/${rows.length}`, stopped: 'Stopped', passed: 'Passed', failed: 'Failed', 'passed with skips': 'Passed, with skipped steps' };
   $('runresult').innerHTML = verdict ? `<span class="result ${verdict === 'passed with skips' ? 'passed' : verdict}">${word[verdict]}</span>` : '<span class="result">Not run yet</span>';
-  $('runctl').innerHTML = on && s.running ? '<button class="btn stop" id="stopbtn">■ Stop</button>' : '';
+  $('runctl').innerHTML = on && s.running ? (cli ? '<span class="small dim">Stop it with Ctrl+C in its terminal.</span>' : '<button class="btn stop" id="stopbtn">■ Stop</button>') : '';
   $('run-watch').hidden = !on;  // decision 5 (ADR 0086): Play stays here; one click shows the run on the diagram
   $('run-show').hidden = on;    // before it has run: one click shows where it will act (phase 2: ghost badges, the declared blast)
   $('bar').style.width = (rows.length && on ? (done / rows.length) * 100 : 0) + '%';
-  const cli = p.cli_only, failed = rows.filter(x => x.status === 'failed').length;
-  $('runcli').hidden = !cli || (on && s.running);
-  $('runcli').innerHTML = cli ? `<span aria-hidden="true">↷</span> <b>${cli} of ${rows.length + p.expects.length} items need the host CLI.</b> The page marks them “CLI only” and skips them; a skip is not a pass. To run everything: <code id="runcmd">${esc(p.cli)}</code> <button class="btn small" id="runcopy" type="button">Copy</button>` : '';
+  const only = p.cli_only, failed = rows.filter(x => x.status === 'failed').length;
+  $('runcli').hidden = !only || (on && s.running) || cli;
+  $('runcli').innerHTML = only ? `<span aria-hidden="true">↷</span> <b>${only} of ${rows.length + p.expects.length} items need the host CLI.</b> The page marks them “CLI only” and skips them; a skip is not a pass. To run everything: <code id="runcmd">${esc(p.cli)}</code> <button class="btn small" id="runcopy" type="button">Copy</button>` : '';
   $('runnote').innerHTML = on && !s.running && failed ? `<div class="notice">${failed} of ${rows.length} steps failed. If the messages say a service is unreachable, the stack is probably not running: <code>./scripts/benchctl up --profile min</code></div>` : '';
   const cur = on && s.running ? rows.findIndex(x => x.status === 'pending') : -1;
   $('timeline').innerHTML = rows.map((x, i) => {
-    const flag = !x.page ? '<span class="clitag"><span aria-hidden="true">↷</span> CLI only</span>' : '';
+    const flag = !x.page && !cli ? '<span class="clitag"><span aria-hidden="true">↷</span> CLI only</span>' : '';
     return `<li${i === cur ? ' class="cur"' : ''}><span class="stt st-${x.status}"><span aria-hidden="true">${ICON[x.status]}</span> ${x.status}</span>
-     <div>${x.at.toFixed(0)} s · ${esc(x.text)} ${flag}${x.note || (!x.page && x.status === 'pending') ? `<div class="small dim">${esc(x.note || x.why)}</div>` : ''}</div></li>`;
+     <div>${x.at.toFixed(0)} s · ${esc(x.text)} ${flag}${x.note || (!x.page && !cli && x.status === 'pending') ? `<div class="small dim">${esc(x.note || x.why)}</div>` : ''}</div></li>`;
   }).join('');
   const got = new Map((on ? s.expects || [] : []).map(x => [x.label, x]));
   $('expects').innerHTML = p.expects.length ? '<h3 class="rh">Expectations</h3>' + p.expects.map(x => {
-    const r = got.get(x.label), st = r ? r.status : !x.page ? 'skipped' : 'pending';
-    return `<p class="st st-${st}"><span aria-hidden="true">${ICON[st]}</span> ${st}${!x.page && !r ? ' (CLI only)' : ''}: ${esc(expectWords(x.label))} <span class="dim">${esc(r ? r.detail : '')}</span></p>`;
+    const r = got.get(x.label), st = r ? r.status : !x.page && !cli ? 'skipped' : 'pending';
+    return `<p class="st st-${st}"><span aria-hidden="true">${ICON[st]}</span> ${st}${!x.page && !r && !cli ? ' (CLI only)' : ''}: ${esc(expectWords(x.label))} <span class="dim">${esc(r ? r.detail : '')}</span></p>`;
   }).join('') : '';
   $('trace-out').innerHTML = on && s.trace ? '<h3 class="rh">Slurm trace</h3>' + (s.trace.map(e =>
     `<details class="small"><summary>${esc(e.label)}</summary><pre class="wrap">${esc([e.before && 'before: ' + e.before, ...e.logs.map(r => `log ${r.source} ${r.where}: ${r.line}`),

@@ -166,6 +166,14 @@ A step that names no part carries a reason in words. `tests/test_scenario_touche
 - **Report times.** `started` and `finished` come from the page process's clock; each step and expectation has `t`, seconds after Play; `duration_s` is `elapsed`.
 - **Words.** Expectations and part ids read as sentences; `tests/test_step_words.py` fails on raw JSON or a part id with no words.
 
+### As built (phase 4, issue 811)
+
+- **The page builds the plan.** `benchctl/pagefeed.py` posts `start` with the scenario's name, speed and `scenario.plan_key` (a fingerprint of the plan). The page loads its own copy and refuses another key, so part ids never come from the CLI.
+- **Results only.** Each `step` or `expect` post carries an index or label, a status, a detail (cut to 300 characters) and `t`. One event is at most 2 KB. The token goes in a header, as for every other write.
+- **Best effort.** A background thread posts with a 1 s timeout; the run's own clock never waits. No token file or nothing listening: no output. A refusal or a timeout: one notice, then the run goes on. The end waits at most 1 s.
+- **One run at a time.** `Runs` holds a page run or a CLI run (`source`), never both. A run from the CLI ends with `end`; one quiet for 30 s ends as `lost` (the CLI beats every 10 s). The page cannot stop it: Ctrl+C can.
+- **Words.** The heading, the strip, the layer's label and Test run say *run from the CLI*. Its skipped steps and expectations stay skipped; nothing says ↷ CLI only. The report says where it ran.
+
 ## References
 
 - Research note and mockups: [Scenario runs on the architecture diagram](../research/scenario-on-the-diagram.md), [mockup page](../research/scenario-on-the-diagram-mockups.html).
