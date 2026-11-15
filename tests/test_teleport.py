@@ -367,6 +367,7 @@ def test_config_has_a_kubernetes_service_only_when_the_k8s_part_is_selected():
     assert "kubernetes_service" not in off
     ks = on.pop("kubernetes_service")
     assert ks["enabled"] and ks["kubeconfig_file"] == f"{teleport.CONTAINER_SECRETS}/{teleport.KUBECONFIG}"
+    assert ks["listen_addr"] == f"0.0.0.0:{teleport.KUBE_PORT}"  # Teleport 18 exits without it (found live)
     assert on == off  # nothing else changes: same version, same single web port, no kube_listen_addr, no new port
     assert "kube_listen_addr" not in on["proxy_service"] and on["auth_service"]["proxy_listener_mode"] == "multiplex"
 

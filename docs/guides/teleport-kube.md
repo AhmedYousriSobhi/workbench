@@ -3,8 +3,7 @@
 With both the `teleport` and the `k8s` part on, Teleport's Kubernetes Service (inside the existing Teleport container) registers the simulated
 cluster, so `tsh kube` and `kubectl` through the Teleport proxy work. Same port as everything else (3080); nothing new to publish (ADR 0083, issue 383).
 
-Status: written and unit-tested; the commands below follow Teleport's documentation and are to be proven by `./scripts/verify.sh --unit teleport_kube`.
-Where a step was not yet proven live it says so.
+Status: proven live (`./scripts/verify.sh --unit teleport_kube`, 5 passed): the cluster registers, a viewer reads the nodes, a write is refused, and a user without a Kubernetes group is denied.
 
 ## Start it
 
@@ -21,13 +20,14 @@ The proxy certificate is self-signed, so every `tsh` call carries `--insecure`. 
 ```bash
 export TELEPORT_HOME=$(mktemp -d)           # keeps your own ~/.tsh untouched
 export KUBECONFIG=$TELEPORT_HOME/kubeconfig
-ID=compose/generated/secrets/teleport/identity/alice
-tsh --proxy=10.141.255.30:3080 --insecure -i $ID kube ls
-tsh --proxy=10.141.255.30:3080 --insecure -i $ID kube login workbench-k8s
+export TELEPORT_IDENTITY_FILE=compose/generated/secrets/teleport/identity/alice
+export TELEPORT_PROXY=10.141.255.30:3080
+tsh --insecure kube ls
+tsh --insecure kube login workbench-k8s
 kubectl get nodes
 ```
 
-(The cluster is named after the kubeconfig context, `workbench-k8s`; `tsh kube login` with an identity file is not yet proven live.)
+The cluster is named after the kubeconfig context, `workbench-k8s`. kubectl calls `tsh kube credentials` for each request, so `TELEPORT_IDENTITY_FILE` and `TELEPORT_PROXY` must be set in the shell where you run kubectl; without them kubectl fails with "no SSH auth methods loaded".
 
 ## What a user may do
 

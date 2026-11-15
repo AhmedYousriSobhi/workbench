@@ -26,6 +26,7 @@ IMAGE = "public.ecr.aws/gravitational/teleport-distroless"
 DEFAULT_VERSION = "18.11.8"   # a Community Edition tag; licence note in ADR 0020. Teleport supports a tsh one major behind it.
 DEFAULT_TTL = "12h"
 CLUSTER = "workbench"
+KUBE_PORT = 3027               # the Kubernetes service listens here inside the container (not published; clients use the web port)
 DIAG_PORT = 3434               # diagnostics (/healthz, /metrics), published on 127.0.0.1 only; the page reads it for status and traffic dots
 PROXY_PORT = 3080              # web UI, the API and (single-port mode, config v3) the SSH proxy
 DNS_NAME = "teleport.workbench.test"  # a container alias on the cluster network; `.test` is reserved (RFC 6761), so it never clashes with a real name
@@ -101,7 +102,10 @@ def config(sim: dict, kube: bool = False) -> str:
             "proxy_service": {"enabled": True, "web_listen_addr": f"0.0.0.0:{PROXY_PORT}",
                               "public_addr": [proxy_addr(sim), f"{DNS_NAME}:{PROXY_PORT}"]}}  # the address and the name clients use, in the certificate and in links
     if kube:
-        conf["kubernetes_service"] = {"enabled": True, "kubeconfig_file": f"{CONTAINER_SECRETS}/{KUBECONFIG}",
+        # Teleport 18 refuses a kubernetes_service in this process without `listen_addr` or a proxy to dial out to (found live: "set
+        # kubernetes_service.listen_addr if this process can be reached from a teleport proxy"). The listener stays inside the container:
+        # nothing publishes 3027, so clients still use only the web port.
+        conf["kubernetes_service"] = {"enabled": True, "listen_addr": f"0.0.0.0:{KUBE_PORT}", "kubeconfig_file": f"{CONTAINER_SECRETS}/{KUBECONFIG}",
                                       "labels": {"env": "workbench"}}
     return yaml.safe_dump(conf, sort_keys=False)
 

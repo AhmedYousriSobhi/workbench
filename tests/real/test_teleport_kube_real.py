@@ -36,7 +36,9 @@ def kubectl(home: Path, user: str, *args: str) -> subprocess.CompletedProcess:
     login = tsh(home, "kube", "login", CLUSTER, user=user, extra_env={"KUBECONFIG": str(kc)})
     if login.returncode != 0:
         return login
-    env = {**os.environ, "TELEPORT_HOME": str(home), "KUBECONFIG": str(kc)}
+    # kubectl runs `tsh kube credentials` as an exec plugin: it needs the same identity file (found live: "no SSH auth methods loaded")
+    env = {**os.environ, "TELEPORT_HOME": str(home), "KUBECONFIG": str(kc),
+           "TELEPORT_IDENTITY_FILE": str(ROOT / teleport.SECRETS_DIR / "identity" / user), "TELEPORT_PROXY": PROXY}
     return subprocess.run(["kubectl", *args], capture_output=True, text=True, timeout=60, check=False, env=env)
 
 
@@ -78,7 +80,7 @@ def test_the_kubernetes_service_registers_the_cluster_on_the_same_port(tele):
     assert wait_for(lambda: CLUSTER in {c["kube_cluster_name"] for c in json.loads(tsh(tele, "kube", "ls", "--format=json").stdout or "[]")}, timeout=60), \
         tsh(tele, "kube", "ls").stderr
     ports = subprocess.run(["docker", "port", "workbench-teleport-1"], capture_output=True, text=True, timeout=30, check=False).stdout
-    assert sorted({line.split("/")[0] for line in ports.splitlines()}) == [str(teleport.DIAG_PORT), str(teleport.PROXY_PORT)]  # no new port
+    assert sorted({line.split("/")[0] for line in ports.splitlines()}) == sorted([str(teleport.DIAG_PORT), str(teleport.PROXY_PORT)])  # no new port
 
 
 def test_a_viewer_reads_the_kwok_nodes_through_teleport(tele):
@@ -96,7 +98,8 @@ def test_a_write_is_refused_by_kubernetes_rbac_for_that_user(tele):
 def test_a_user_without_a_kubernetes_group_is_denied(tele):
     r = kubectl(tele, OUTSIDER, "get", "nodes", "-o", "name")
     assert r.returncode != 0 and "node/" not in r.stdout, r.stdout
-    assert "forbidden" in r.stderr.lower() or "access denied" in r.stderr.lower() or "not found" in r.stderr.lower(), r.stderr
+    # found live: Teleport answers "(NotFound) ... Your user's Teleport role does not allow Kubernetes access ... kubernetes_groups"
+    assert "does not allow kubernetes access" in r.stderr.lower() or "forbidden" in r.stderr.lower() or "access denied" in r.stderr.lower(), r.stderr
 
 
 def test_the_teleport_container_stays_within_its_memory_limit(tele):
