@@ -1,0 +1,9 @@
+rule_files: [bad.yml]
+tests:
+  - interval: 1m
+    input_series:
+      - {series: 'up{instance="a"}', values: '0 0 0 0'}
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: Unbalanced
+        exp_alerts: []
