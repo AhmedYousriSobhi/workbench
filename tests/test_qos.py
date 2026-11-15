@@ -88,4 +88,4 @@ def test_scenario_submit_passes_the_qos_and_preempt_burst_is_valid():
     sub = {"node": "gpu001", "user": "bob", "gpus": 8, "duration": 600, "qos": "scavenger"}
     assert scenario.daemon_problems({"submit": sub}) == []
     assert "--qos=scavenger" in scenario.submit_command(sub, sim_with(qos=QOS))[-1]
-    assert scenario.validate(scenario.load("preempt-burst"), SIM) == []
+    assert scenario.validate(scenario.load("preempt-burst", sim=SIM), SIM) == []

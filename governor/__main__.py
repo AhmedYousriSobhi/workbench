@@ -186,11 +186,21 @@ def main(argv: list[str] | None = None) -> None:
             cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]
         return subprocess.Popen(cmd, cwd=args.workdir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
+    def lab_status() -> dict | None:
+        """Config lab (issue 553): the marker's status block (a plain file read; the governor imports nothing of benchctl)."""
+        try:
+            m = json.loads((Path(args.workdir) / "compose/generated/lab/active.json").read_text())
+            return {"name": m["name"], "side": m.get("side"), "time_scale": m.get("time_scale", 1.0), "state": "applied"}
+        except (OSError, ValueError, KeyError):
+            return None
+
     gov = Governor(sampler, ladder, groups, executor, args.dry_run, watchdog, args.watch_interval,
                    annotator, discover_docker, args.refresh_interval,
                    effector if args.workdir else None, tracer=tracer if args.workdir else None,
                    statser=statser if args.workdir else None, capturer=capturer if args.workdir else None, reader=reader if args.workdir else None,
-                   streamer=streamer if args.workdir else None, admit_floor=int(floor * GB))
+                   streamer=streamer if args.workdir else None, admit_floor=int(floor * GB),
+                   lab_exists=(lambda n: (Path(args.workdir) / 'compose/generated/lab' / n / 'manifest.json').is_file()) if args.workdir else None,
+                   lab_status=lab_status if args.workdir else None)
     srv = control.serve(args.socket, gov.handle, gov.group_names, gid=args.socket_gid) \
         if args.socket else None
     msrv = None

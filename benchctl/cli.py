@@ -28,6 +28,10 @@ from . import (
     inventory,
     jira_real,
     lab,
+    lab_apply,
+    lab_candidate,
+    lab_diff,
+    lab_validate,
     logins,
     machine,
     measure,
@@ -413,13 +417,27 @@ def up(profile: str = typer.Option(None, "--profile", autocompletion=completion.
 
 
 @app.command()
-def apply(file: str = typer.Option(..., "-f", "--file", help="workbench file to build"), name: str = NAME,
+def apply(resource: str = typer.Argument(None, help="`lab NAME` puts a config lab on the running cluster through the governor (see `benchctl diff lab`)"),
+          lab_name: str = typer.Argument(None, help="the lab to apply (with `lab`)"),
+          file: str = typer.Option(None, "-f", "--file", help="workbench file to build"), name: str = NAME,
           cpu_nodes: int = CPU, gpu_nodes: int = GPU, gpus_per_node: int = GPUS, with_: list[str] = WITH,
           without: list[str] = WITHOUT, k8s_nodes: int = K8S, k8s_cpu_nodes: int = K8S_CPU, bmc_nodes: str = BMC_NODES, bmc_groups: str = BMC_GROUPS, bcm_k8s: bool = BCM_K8S, controller: bool = CONTROLLER, dcgm_nodes: int = DCGM_NODES, slurm_version: str = SLURM_VERSION,
           workload: list[str] = WORKLOAD, accounting: list[str] = ACCOUNTING, monitoring: list[str] = MONITORING,
           ticketing: list[str] = TICKETING, hardware: list[str] = HARDWARE, access: list[str] = ACCESS,
-          addons: bool = ADDONS, login: list[str] = LOGIN, app_mb: int = APP_MB_OPT) -> None:
-    """Build the workbench a file describes (the same as `up -f FILE`)."""
+          addons: bool = ADDONS, login: list[str] = LOGIN, app_mb: int = APP_MB_OPT,
+          side: str = typer.Option("baseline", "--side", help="with `lab`: baseline (as imported) or candidate (your edits)"),
+          execute: bool = typer.Option(False, "--execute", hidden=True, help="with `lab`: run here, not through the governor (the governor's own child)")) -> None:
+    """Build the workbench a file describes (the same as `up -f FILE`), or `apply lab NAME [--side baseline|candidate]`: put one side of a config lab
+    on the running cluster through the governor (L0-L1): QOS and accounts, Kubernetes, Prometheus rules, Teleport roles, slurm.conf keys, then
+    reconfigure or restart; verifies `scontrol show config`. `benchctl remove lab NAME` undoes it."""
+    if resource is not None:
+        if resource != "lab" or not lab_name:
+            typer.echo("usage: benchctl apply lab NAME [--side baseline|candidate]   (or: benchctl apply -f FILE)", err=True)
+            raise typer.Exit(2)
+        _lab_run("apply", lab_name, side, execute)
+    if file is None:
+        typer.echo("Missing option '-f' / '--file' (or use: benchctl apply lab NAME)", err=True)
+        raise typer.Exit(2)
     with_ = _with_parts(with_, workload, accounting, monitoring, ticketing, hardware, access, addons, login)
     _build(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes, login, bmc_groups, bcm_k8s, controller, dcgm_nodes, slurm_version)
 
@@ -897,7 +915,7 @@ add_app = typer.Typer(cls=SuggestingGroup, help="Add something: a health check, 
 app.add_typer(add_app, name="add")
 remove_app = typer.Typer(cls=SuggestingGroup, help="Remove something: a health check, the simulated users' jobs")
 app.add_typer(remove_app, name="remove")
-validate_app = typer.Typer(cls=SuggestingGroup, help="Check files without changing anything: the health checks")
+validate_app = typer.Typer(cls=SuggestingGroup, help="Check files without changing anything: the health checks, a config lab")
 app.add_typer(validate_app, name="validate")
 reload_app = typer.Typer(cls=SuggestingGroup, help="Push edited files to the running nodes: the health checks")
 app.add_typer(reload_app, name="reload")
@@ -1093,6 +1111,58 @@ def validate_checks() -> None:
         typer.echo("\n".join(errs), err=True)
         raise typer.Exit(1)
     typer.echo(f"ok: {len(nhc.load())} checks valid")
+
+
+def _lab_wait(sock: str, job: int, timeout: float = 600) -> str | None:
+    """Wait for the governor's lab-validate change to end; None when it ended, else why not."""
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        time.sleep(1)
+        try:
+            ch = checks.governor_request({"cmd": "status"}, sock).get("change")
+        except OSError as e:
+            return f"the governor stopped answering: {e}"
+        if ch and ch.get("job") == job and ch.get("state") != "running":
+            return None
+    return f"the validation did not finish within {int(timeout)} s"
+
+
+@validate_app.command("lab")
+def validate_lab(name: str = typer.Argument(..., help="a lab made with `benchctl import lab`"),
+                 side: str = typer.Option("baseline", "--side", help="baseline (the imported configuration); candidate comes with issue 553"),
+                 run_here: bool = typer.Option(False, "--run-here", hidden=True, help="run the checks in this process (the governor uses it)"),
+                 output: str = OUTPUT) -> None:
+    """Check the lab's imported configuration with the real tools (a throwaway slurmctld, sacctmgr load, promtool, kubectl dry-run, Teleport roles, secret scan, versions). Runs through the governor at L0-L1. Exit 0 passed (skips are listed), 1 failed, 3 not available."""
+    if side not in lab_validate.SIDES:
+        typer.echo(f"--side must be baseline or candidate, not {side!r}", err=True)
+        raise typer.Exit(1)
+    if side == "candidate":
+        typer.echo("the candidate side is not available yet: it comes with issue 553 (diff and apply); `--side baseline` checks the imported configuration")
+        raise typer.Exit(lab_validate.NOT_AVAILABLE)
+    try:
+        if not lab.exists(name):
+            raise lab.LabError(f"no lab {name}: import it first (benchctl import lab {name} --from DIR)")
+        if run_here:
+            report = lab_validate.run(name, _base_sim(), side)
+        else:
+            sock = os.environ.get("WORKBENCH_GOV_SOCKET", checks.GOV_SOCKET)
+            try:
+                r = checks.governor_request({"cmd": "lab-validate", "name": name, "side": side}, sock)
+            except OSError as e:
+                raise lab.LabError(f"the governor is not reachable at {sock} ({e}); start it: ./scripts/benchctl start") from e
+            if not r.get("ok"):
+                raise lab.LabError(str(r.get("error")))
+            if r.get("dry_run"):
+                typer.echo("governor in dry-run: nothing was run")
+                raise typer.Exit(0)
+            if (why := _lab_wait(sock, r.get("job"))):
+                raise lab.LabError(why)
+            report = json.loads((lab.path(name) / "validate.json").read_text())
+    except lab.LabError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    typer.echo(json.dumps(report, indent=2) if output == "json" else lab_validate.text(report))
+    raise typer.Exit(1 if report["summary"].startswith("failed") else 0)
 
 
 @reload_app.command("checks")
@@ -1337,7 +1407,7 @@ def describe_workbench(output: str = OUTPUT, json_: bool = JSON) -> None:
              "governor_level": gov["level"] if gov else None, "mem_available_mb": checks.mem_available() // (1024 * 1024)}
     info = situation.gather(
         state=state, spec=spec.to_dict() if spec else None, sim=sim, k8s_nodes=sim.get("kubernetes", {}).get("nodes", []) if cluster.k8s_built() else [],
-        entities=conn.entities(sim), faults=_fault_rows(), scenarios=scenario.list_all(), plan=scenario.plan,
+        entities=conn.entities(sim), faults=_fault_rows(), scenarios=scenario.list_all(sim=sim), plan=scenario.plan,
         fault_targets=[*cluster.ACTIONS, *sorted(scenario.HOST_TARGETS), *sorted(k for k in scenario.ENDPOINTS if not k.startswith("jira-"))])
     if contract.wanted(output, json_) == "json":
         typer.echo(contract.dumps(info, compact=True))
@@ -1416,6 +1486,58 @@ def import_lab(name: str = typer.Argument(..., help="lab name: lowercase letters
         typer.echo(str(e), err=True)
         raise typer.Exit(1) from e
     typer.echo(lab.summary(m))
+
+
+diff_app = typer.Typer(cls=SuggestingGroup, help="Compare: a config lab's candidate against its baseline")
+app.add_typer(diff_app, name="diff")
+@add_app.command("candidate")
+def add_candidate(name: str = typer.Argument(..., help="a lab made with `benchctl import lab`"),
+                  replace: bool = typer.Option(False, "--replace", help="start again from the baseline, dropping your edits")) -> None:
+    """Copy the lab's baseline into compose/generated/lab/NAME/candidate/ for editing; `diff lab` and `apply lab --side candidate` read it."""
+    try:
+        files = lab_candidate.init(name, replace=replace)
+    except lab.LabError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    typer.echo(f"candidate of lab {name}: {len(files)} file(s) in compose/generated/lab/{name}/candidate; edit them, then `benchctl diff lab {name}`")
+
+
+@diff_app.command("lab")
+def diff_lab(name: str = typer.Argument(..., help="a lab made with `benchctl import lab`"), output: str = OUTPUT) -> None:
+    """The candidate against the baseline, one note per change (live, restart, not applied, not tested), and whether apply restarts slurmctld."""
+    try:
+        entries = lab_diff.diff(name)
+    except lab.LabError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    typer.echo(json.dumps({"name": name, "changes": entries, "restart_keys": lab_diff.restart_keys(entries)}, indent=2) if output == "json" else lab_diff.text(name, entries))
+
+
+def _lab_env() -> lab_apply.Env:
+    return lab_apply.Env(sim=_base_sim(), running=lambda s: s in workbench.running_services(), say=typer.echo)
+
+
+def _lab_run(op: str, name: str, side: str, execute: bool) -> None:
+    if execute:  # the governor's child process
+        raise typer.Exit(0 if lab_apply.execute(op, name, side, _lab_env()) else 1)
+    try:
+        lab.valid_name(name)
+        lab_candidate.check_side(side)
+    except lab.LabError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    req = {"cmd": "lab-apply", "name": name, "side": side} if op == "apply" else {"cmd": "lab-restore", "name": name}
+    ok, lines = lab_apply.ask_governor(req, name, lambda r: checks.governor_request(r, checks.GOV_SOCKET, timeout=10))
+    for ln in lines:
+        typer.echo(ln, err=not ok)
+    raise typer.Exit(0 if ok else 1)
+
+
+@remove_app.command("lab")
+def remove_lab(name: str = typer.Argument(..., help="the lab that is applied"),
+               execute: bool = typer.Option(False, "--execute", hidden=True, help="run here, not through the governor (the governor's own child)")) -> None:
+    """Return to the plain sim.yaml cluster through the governor: restores the pre-lab accounting, deletes what the lab made, puts slurm.conf back. The imported lab stays on disk."""
+    _lab_run("remove", name, "baseline", execute)
 
 
 export_app = typer.Typer(cls=SuggestingGroup, help="Write the workbench in a form another tool can import")
@@ -1537,6 +1659,11 @@ def scenario_run(name: str = typer.Argument(..., autocompletion=completion.scena
         sc = scenario.load(name)
     except scenario.ScenarioError as e:
         typer.echo(errors.render("WB-UNKNOWN-SCENARIO", completion.explain(name, completion.scenarios(""), "scenario")) if completion.scenarios("") else str(e), err=True)
+        raise typer.Exit(1) from e
+    try:
+        sc = scenario.selectors.resolve_scenario(sc, sim)  # `first gpu node` becomes this cluster's node name
+    except scenario.ScenarioError as e:
+        typer.echo(f"invalid: {e}", err=True)
         raise typer.Exit(1) from e
     problems = scenario.validate(sc, sim)
     for p in problems:

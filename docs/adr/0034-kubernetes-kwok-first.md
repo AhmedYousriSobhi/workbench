@@ -78,7 +78,7 @@ Real clusters are mixed, so the Kubernetes part must not assume "one cluster = S
   kubeconfig on a `k-login`, and leaves the existing login unchanged.
 - **One controller.** As in a DGX system, one head node (bcm-mock, the BCM head node) is the control point for the whole
   cluster; the other nodes are changed by Ansible playbooks. bcm-mock lists the Kubernetes nodes and their category in
-  `device; list` and `category; list` (C-4). An Ansible control path is a later issue; nothing here blocks it.
+  `device; list` and `category; list` (C-4). An Ansible control path is decided in ADR 0082 (it runs on the controller node) and still to be built (issue 389).
 - **Portal UI and Horovod.** A portal UI and Horovod (MPI jobs) sit on top of Kubernetes and Slurm. They are later issues.
   Phase 1 keeps the API, the node labels and the namespaces they need (Kubeflow-style `MPIJob` CRD, a portal namespace)
   possible, and does not build them.

@@ -1,7 +1,7 @@
 import './setup.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { attentionItems, homeNodeCard, homeServices, homeSummary } from '../../static/js/homemodel.js';
+import { attentionItems, labChipText, homeNodeCard, homeServices, homeSummary } from '../../static/js/homemodel.js';
 
 const LV = ['Normal', 'Watching', 'Throttling', 'Freezing', 'Stopping', 'Emergency'];
 const cl = (nodes, services) => ({ nodes, services });
@@ -43,4 +43,11 @@ test('the summary line', () => {
   assert.match(homeSummary(null), /Waiting/);
   assert.match(homeSummary(cl([n('a', 'ok'), n('b', 'warn')], { x: true })), /1 of 2 nodes healthy · 1 of 1 services answering/);
   assert.match(homeSummary(cl([], { x: false })), /not running/);
+});
+
+test('an applied config lab is named in the chip and in attention (issue 553)', () => {
+  assert.equal(labChipText(null), null); assert.equal(labChipText({}), null);
+  assert.equal(labChipText({ name: 'prod-a', side: 'candidate' }), 'Lab prod-a applied (candidate)');
+  const items = attentionItems({ level: 0, lab: { name: 'prod-a', side: 'baseline' } }, null, LV);
+  assert.equal(items.length, 1); assert.equal(items[0].kind, 'warn'); assert.match(items[0].text, /benchctl remove lab prod-a/);
 });

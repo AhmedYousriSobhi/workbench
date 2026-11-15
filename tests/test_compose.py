@@ -183,7 +183,7 @@ def test_prometheus_loads_the_default_alert_rules():
     """Issue 633: the rule file is mounted, listed in rule_files, and every rule has a name, an expression and a severity."""
     root = Path(__file__).resolve().parent.parent
     prom = yaml.safe_load((root / "observability/prometheus.yml").read_text())
-    assert prom["rule_files"] == ["/etc/prometheus/rules.yml"]
+    assert prom["rule_files"] == ["/etc/prometheus/rules.yml", "/etc/prometheus/generated/rules/lab/*.yml"]  # the second: config lab rules (#553)
     mounts = yaml.safe_load((root / "compose/observability.yml").read_text())["services"]["prometheus"]["volumes"]
     assert "../observability/rules.yml:/etc/prometheus/rules.yml:ro" in mounts
     rules = [r for g in yaml.safe_load((root / "observability/rules.yml").read_text())["groups"] for r in g["rules"]]

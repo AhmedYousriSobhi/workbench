@@ -1,0 +1,19 @@
+SYNTHETIC (not captured from a real tool)
+@@QOS
+ Adding QOS(s)
+  high
+@@LOAD
+ Adding Account(s)
+  physics
+@@LOAD_RC=0
+@@AFTER
+Cluster - 'prodsim':Fairshare=1:QOS='normal'
+Parent - 'root'
+User - 'root':DefaultAccount='root':AdminLevel='Administrator':Fairshare=1
+Account - 'physics':Description='physics':Organization='sci':Fairshare=10:QOS='normal,high'
+Account - 'ml':Description='ml':Organization='sci':Fairshare=20:QOS='normal,high'
+Parent - 'physics'
+User - 'u1':DefaultAccount='physics':Fairshare=1
+Parent - 'ml'
+User - 'u2':DefaultAccount='ml':Fairshare=1
+@@END

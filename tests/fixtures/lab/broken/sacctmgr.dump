@@ -1,0 +1,9 @@
+Cluster - 'prodsim':Fairshare=1:QOS='normal'
+Parent - 'root'
+User - 'root':DefaultAccount='root':AdminLevel='Administrator':Fairshare=1
+Account - 'physics':Description='physics':Organization='sci':Fairshare=10:QOS='normal,high'
+Account - 'ml':Description='ml':Organization='sci':Fairshare=20:QOS='normal,high'
+Parent - 'physics'
+User - 'u1':DefaultAccount='physics':Fairshare=1
+Parent - 'ml'
+User - 'u2':DefaultAccount='ml':Fairshare=1

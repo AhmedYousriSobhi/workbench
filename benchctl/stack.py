@@ -22,6 +22,7 @@ from . import (
     errors,
     jira_real,
     k8s,
+    lab_apply,
     logins,
     memory,
     objectstore,
@@ -190,6 +191,17 @@ def admit(profile: str, available: int | None = None) -> tuple[bool, str]:
     return checks.preflight(profile, {n: b + app for n, b in checks.load_profiles().items()}, avail)
 
 
+def grant_lab_databases(runner: Runner, file: Path, say: Callable[[str], None]) -> bool:
+    """Apply slurmconf.LAB_GRANT_SQL as MariaDB's root (issue 552). A GRANT is idempotent, so it runs at every `up`; the init directory
+    alone only covers a fresh database. The root password is read inside the container from its environment: never printed or logged."""
+    script = 'exec mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" -e "$0"'
+    r = runner(dc("exec", "-T", "mariadb", "sh", "-c", script, slurmconf.LAB_GRANT_SQL, file=file))
+    if r.returncode != 0:
+        say("WARN the config lab's database grant was not applied (the lab's `sacctmgr load` check will report it): "
+            + (r.stderr.strip().splitlines() or ["no message"])[-1][:120])
+    return r.returncode == 0
+
+
 ONESHOT = {"accounting-init"}  # run once and exit; success is exit code 0, not "running"
 
 
@@ -275,6 +287,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         return (conf.read_text() if conf.is_file() else None, topo.read_text() if topo.is_file() else None)
     old_conf = conf_text() if conf.is_file() else None
     path = compose.write(data, sim=sim, compute_nodes=prof.get("compute_nodes"))
+    lab_apply.note_active(say, conf.parent.parent / "lab")  # the writer re-applied the active lab's settings (issue 553)
     conf_changed = old_conf is not None and conf.is_file() and conf_text() != old_conf
     skip = unbuildable(data["services"], path.parent)
     todo = {n: v for n, v in data["services"].items() if n not in skip}
@@ -432,6 +445,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         if (late := _answering(svcs, runner, path, wait)):
             say(f"FAILED {label}: running but not answering: {', '.join(late)}")
             return False
+        if "mariadb" in svcs:
+            grant_lab_databases(runner, path, say)  # an existing database gets the config lab's grant without a restart (issue 552)
         if label == "teleport" and not teleport.bootstrap(sim, ips, runner, dc, say):  # before the nodes read their certificates
             return False
         if label == "teleport" and controller.enabled(sim):  # slurmctld started in an earlier stage, before its host certificate existed
@@ -525,6 +540,7 @@ def scale(sim: dict, profile: str, n: int, runner: Runner = _run,
     prof = compose.load_profile(profile)
     data = compose.generate(sim, {**prof, "compute_nodes": n})
     path = compose.write(data, sim=sim, compute_nodes=n)
+    lab_apply.note_active(say, COMPOSE_FILE.parent / "lab")
     want = [s for s in data["services"] if re.fullmatch(r"cn\d+", s)]
     now = running_nodes(runner)
     grow = [s for s in want if s not in now]
