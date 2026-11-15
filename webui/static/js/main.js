@@ -6,6 +6,7 @@ import { init as init_scenarios, init2 as init2_scenarios } from './scenarios.js
 import { init as init_testrun } from './testrun.js';
 import { init as init_shell, init2 as init2_shell, init3 as init3_shell } from './shell.js';
 import { init as init_nhc } from './nhc.js';
+import { init as init_ticketbot } from './ticketbot.js';
 import { init as init_exportdlg } from './exportdlg.js';
 import { init as init_node } from './node.js';
 import { init as init_inspector } from './inspector.js';
@@ -30,6 +31,7 @@ init_scenarios();
 init2_plan();
 init_shell();
 init_nhc();
+init_ticketbot();
 init_exportdlg();
 init3_plan();
 init_node();

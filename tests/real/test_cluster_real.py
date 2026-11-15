@@ -97,7 +97,7 @@ def test_screenshot_of_a_faulted_cluster(ui, tmp_path):
         for vp, size in (("desktop", (1280, 900)), ("phone", (390, 800))):
             page = browser.new_page(viewport={"width": size[0], "height": size[1]}, bypass_csp=True)
             page.add_init_script("localStorage.setItem('workbench-tree', 'open')")  # the list is folded by default at 1100-1500 px (#192)
-            page.add_init_script("try { localStorage.setItem('workbench-circuit', '0'); sessionStorage.getItem('workbench-tab') || sessionStorage.setItem('workbench-tab', 'nodes'); } catch (e) {}")  # the classic diagram and list: the circuit is the default view
+            page.add_init_script("try { sessionStorage.setItem('workbench-circuit', '0'); sessionStorage.getItem('workbench-tab') || sessionStorage.setItem('workbench-tab', 'nodes'); } catch (e) {}")  # the classic diagram and list: the circuit is the default view
             page.goto(login_url(base, token))
             page.wait_for_selector(".node.fault")
             assert page.locator(".node.down").count() == 1 and page.locator(".node.warn").count() == 1

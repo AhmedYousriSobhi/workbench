@@ -29,7 +29,7 @@ SYNTH_GRAPH = graph.build(
     [{"name": n, "kind": "compute"} for n in ("cn001", "cn002", "cn003", "cn004")] + [{"name": n, "kind": "gpu"} for n in ("gpu001", "gpu002")],
     [{"name": "login", "mode": "both"}, {"name": "login2", "mode": "teleport"}])
 SYNTH_CLUSTER = SYNTH_CLUSTER.replace("actions: [", "graph: " + json.dumps(SYNTH_GRAPH) + ", blast: " + json.dumps(blast.payload()) + ", actions: [", 1)
-TEST_HOOK = "window.__WB_TEST = true; try { localStorage.setItem('workbench-circuit', '0'); sessionStorage.getItem('workbench-tab') || sessionStorage.setItem('workbench-tab', 'nodes'); } catch (e) {}"  # (the classic diagram: the circuit is the default and has its own checks) main.js then exposes its modules as globals (webui/static/js/testhook.js) so the checks below can call them by name
+TEST_HOOK = "window.__WB_TEST = true; try { sessionStorage.setItem('workbench-circuit', '0'); sessionStorage.getItem('workbench-tab') || sessionStorage.setItem('workbench-tab', 'nodes'); } catch (e) {}"  # (the classic diagram: the circuit is the default and has its own checks) main.js then exposes its modules as globals (webui/static/js/testhook.js) so the checks below can call them by name
 VIEWPORTS = {"desktop": (1280, 900), "phone": (390, 800)}
 
 
@@ -355,7 +355,7 @@ def capture(out: Path) -> dict:
                 fp.close()
             for theme in ("light", "dark"):      # the Circuit view draws with the canvas tokens on hosts that are not .canvas elements (issue 648)
                 cp = browser.new_page(viewport={"width": 1280, "height": 900}, bypass_csp=True)
-                cp.add_init_script(TEST_HOOK.replace("localStorage.setItem('workbench-circuit', '0');", "localStorage.setItem('workbench-circuit', '1');"))
+                cp.add_init_script(TEST_HOOK.replace("sessionStorage.setItem('workbench-circuit', '0');", "sessionStorage.setItem('workbench-circuit', '1');"))
                 cp.add_init_script(f"localStorage.setItem('workbench-theme','{theme}')")
                 cp.goto(login_url(base_url, ui_token))
                 cp.wait_for_timeout(1500)
