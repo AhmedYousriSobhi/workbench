@@ -522,7 +522,7 @@
 .rb { display:inline-flex; align-items:center; justify-content:center; min-width:3.2em; padding:1px 8px; border-radius:999px; border:2px solid var(--dim); background:var(--panel);
   color:var(--fg); font-weight:700; font-size:0.875rem; white-space:nowrap; font-variant-numeric:tabular-nums; }
 .rb.k-done { background:var(--accent-fill); border-color:var(--accent-fill); color:var(--on-accent); } .rb.k-now, .rb.k-active { border-color:var(--accent); color:var(--accent-text); }
-.rb.k-next, .rb.k-notrun { border-style:dashed; color:var(--dim); } .rb.k-cli, .rb.k-skipped { border-color:var(--warn); color:var(--warn-text); } .rb.k-failed { border-color:var(--bad); color:var(--bad); }
+.rb.k-next, .rb.k-notrun { border-style:dashed; color:var(--dim); } .rb.k-planned { border-style:dashed; border-color:var(--accent); color:var(--accent-text); } .rb.k-blast { border-style:dotted; border-color:var(--bad); } .rb.k-cli, .rb.k-skipped { border-color:var(--warn); color:var(--warn-text); } .rb.k-failed { border-color:var(--bad); color:var(--bad); }
 .runkey { display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center; margin:var(--sp3) 0 0; } .runkey .rb { min-width:2em; padding:0 6px; font-size:0.75rem; }
 .ipane#ipane-run[data-run][hidden] { display:block; }  /* narrow: no inspector tabs, so the rail shows under the list while a run is shown */
 @media (min-width:1100px) { .ipane#ipane-run[data-run][hidden] { display:none; } }

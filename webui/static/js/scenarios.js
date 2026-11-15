@@ -37,6 +37,7 @@ export async function selectScenario(name) {  // what the scenario will do, and 
   const r = await fetch(`/api/scenarios/${encodeURIComponent(name)}`);
   if (!r.ok) { $('runpanel').hidden = false; $('runnote').innerHTML = `<div class="notice">${esc((await r.json()).detail)}</div>`; return; }
   S.trPrev = await r.json();
+  if (S.runHidden === `preview:${name}`) S.runHidden = '';  // picked again: its preview is back on the diagram
   poll();
 }
 export async function play(name) {

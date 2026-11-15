@@ -297,8 +297,22 @@ Press **Watch on the diagram** in Test run, during or after a run. The Topology 
 - **The Run tab** in the inspector lists every step in order: what it does in one sentence (for example *Freeze the login node (SSH hangs)* or *Add 200 ms delay and 5% packet loss on cn001 for 60 s*), its time, its parts and its state in words. A step that lands on no part says why.
 - **Keyboard.** Tab goes through the badges in step order. Enter or Space picks that step.
 - **Take off the diagram** removes a finished run's badges. The run itself lives until the page restarts.
+- **Stop.** Pressing **■ Stop** in Test run ends the run and leaves the plain diagram. **Watch on the diagram** brings the stopped run back.
 
 Badges are drawn on the Circuit view only; the 2.5D view keeps its diamonds. A run started with `benchctl scenario run` is not drawn yet.
+
+#### Before Play: where a scenario will act
+
+![The Circuit view before node-down runs: dashed badges 1, 2 and 3 on BMC farm, BCM, the controller and node cn002, dotted rings on those parts, an E1 ↷ pin, ◎ on the services whose clients may see a change, and step 1's blast radius in red dashes](img/web-run-preview-light.png)
+
+Pick a scenario in Test run and press **Show on the diagram**. The Topology tab opens on the Circuit view with the scenario drawn as a preview. Nothing has run yet. Picking a scenario alone keeps you in Test run.
+
+- **Dashed badges** (○, said as *planned*) sit on every part a step will act on: the first step there, and **+N** for the others. A part that only CLI steps reach shows **↷**.
+- **Dotted rings** outline every part the scenario will touch.
+- **Pins** such as **E1 ↷** mark the expectations; ↷ means only `benchctl scenario run` can check it.
+- **◎** marks a part whose clients may see a change during the scenario. This is the declared blast radius, not a measurement.
+- **The strip and the Run tab** walk the steps with **◀ Previous** and **Next ▶**. The step you pick gets a solid ring, and the parts its clients read get the blast radius's red dashes. The Run tab says, for each step, *Clients may see a change on ...* and why.
+- **Play** turns the dashed badges into the live badges on the same parts, with no jump. **Take the preview off the diagram** leaves the plain diagram.
 
 ### Traffic & Communication
 
@@ -532,7 +546,7 @@ See [choose the workbench](../guides/choose-workbench.md).
 
 **▶ Test run** opens one workspace for a whole test, with the library on the left and the chosen scenario on the right. Open it from the left nav, the **▶ Scenarios** chip in the top strip, or **Open Test run** on Overview.
 
-1. **Pick.** Click a scenario's name. You see its description, its length and every step as it will play, **before anything starts**.
+1. **Pick.** Click a scenario's name. You see its description, its length and every step as it will play, **before anything starts**. **Show on the diagram** shows where each step will act ([before Play](#before-play-where-a-scenario-will-act)).
 2. **Play.**
    1. Type in *Filter scenarios*.
    2. Pick a speed. It applies to all.

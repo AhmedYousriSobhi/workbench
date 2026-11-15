@@ -93,12 +93,17 @@ Badges come from the run state, never from flow events. Each badge has a number 
 
 **Badge size.** `runlayer.js` sets sizes in screen pixels and turns them into drawing units with the drawing's scale (`getScreenCTM()`): text 15 px (never under 14 px; the Circuit view is drawn at about 0.55 of its 1700 units on a laptop or a phone), a pill about 1.7 times the text, and a transparent `.rl-hit` rectangle of at least 40 px round it for touch. `ui_shots.py` fails on smaller text, a smaller tap target, or two overlapping pills, for `node-down` and for the dense `client-stress` (every node badged).
 
+**Before Play (phase 2).** `previewRun(p)` turns the preview (`GET /api/scenarios/{name}`) into a run that has not started: every step `planned` (or `cli`), nothing reached. `shownRun()` picks what the layer draws: a live run always; else the scenario picked in Test run, as a preview until it has run; else the last run. The ghosts are the same badges with the class `ghost` (dashed), `data-runghost` gives every touched part a dotted ring, `data-runblast` gives the chosen step's blast parts the red dashes, and `.rl-blast` draws ◎ (role `img`, not a tab stop). Play swaps the preview for the run state of the same name in one redraw; badges keep their parts and order (`ui_shots.py` checks they do not move). Stop pressed on the page sets `runStopHide`; once the run says it stopped, the layer is taken off.
+
+**Blast for every target.** `webui/blast.py` `TARGETS` declares, per target kind, the parts a client reads that a step changes, with one sentence; `step_blast(step)` adds the entries of what the step implies (`scenario.side_effects`). `blast.preview()` and the run state carry `blast` and `blast_caption` per step. `tests/test_blast_targets.py` fails on a target kind the engine accepts with no entry, or a part the Circuit view does not draw.
+
 **Step words.** `describe()` in `testrunmodel.js` gives every step one sentence for the rail, the strip, the badge labels and the Test run tab. A new step key in the engine fails `tests/test_step_words.py` until it has a sample there and words in `describe()`; a shipped step that falls back to JSON fails it too (`RAW_OK` only shrinks).
 
 ```bash
 node --test webui/tests/js/runlayermodel.test.mjs        # grouping, one badge per part, glyphs and words, Tab order, pins, the strip's words
 .venv/bin/python -m pytest tests/test_scenario_touches.py  # every shipped step lands on a part, or is listed with its reason
 .venv/bin/python -m pytest tests/test_step_words.py       # every shipped step and every engine step key reads as a sentence, not JSON
+.venv/bin/python -m pytest tests/test_blast_targets.py    # a declared blast entry for every target kind, parts the Circuit view draws
 .venv/bin/python scripts/ui_shots.py                       # a sample run, no cluster: badges, order, rail, strip, phone sheet, reduced motion
 ```
 

@@ -192,3 +192,10 @@
 /* the chosen step's parts (the current one while the run plays): an accent outline. The declared blast radius keeps its red dashes. */
 #flow[data-cv] [data-runring]:not([data-blast]) > .cv-box { stroke:var(--accent); stroke-width:4; }
 #flow[data-cv] .cv-sq[data-runring]:not([data-blast]) rect { stroke:var(--accent); stroke-width:3.5; }
+/* before Play (phase 2): ghosts. Dashed badges and pins, a dotted ring on every part the scenario will touch, ◎ where clients may see a change */
+#flow[data-cv] .runlayer .ghost .rl-pill { fill:var(--cv-surface); stroke-dasharray:6 4; }
+#flow[data-cv] .runlayer .k-planned .rl-pill { stroke:var(--accent); } #flow[data-cv] .runlayer .k-planned .rl-t { fill:var(--accent-text); }
+#flow[data-cv] .runlayer .rl-blast .rl-pill { fill:var(--cv-surface); stroke:var(--cv-error); stroke-width:2; } #flow[data-cv] .runlayer .rl-blast .rl-t { fill:var(--cv-text); font-weight:400; }
+#flow[data-cv] [data-runblast]:not([data-runring]) > .cv-box { stroke:var(--cv-error); stroke-dasharray:7 4; stroke-width:3.5; }  /* the chosen step's declared blast, as the blast radius draws it */
+#flow[data-cv] [data-runghost]:not([data-runring]):not([data-blast]) > .cv-box { stroke:var(--accent); stroke-width:3; stroke-dasharray:3 5; }
+#flow[data-cv] .cv-sq[data-runghost]:not([data-runring]):not([data-blast]) rect { stroke:var(--accent); stroke-width:3; stroke-dasharray:3 4; }
