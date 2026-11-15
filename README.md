@@ -1,4 +1,7 @@
-<p align="center"><img src="docs/assets/art/readme-hero.svg" alt="The workbench cluster: a login node, the Slurm controller and compute nodes, fake services around them, and the memory governor guarding the door" width="820"></p>
+<p align="center"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/art/readme-hero-dark.svg">
+  <img src="docs/assets/art/readme-hero-light.svg" alt="The workbench cluster: a login node, the Slurm controller and compute nodes, fake services around them, and the memory governor guarding the door" width="820">
+</picture></p>
 
 # workbench
 
@@ -13,11 +16,26 @@
   <img alt="Memory-governed, 16 GB laptop" src="https://img.shields.io/badge/RAM-16%20GB%20laptop-success">
 </p>
 
-**A pretend HPC cluster for a 16 GB laptop, with a bouncer that keeps it from eating all your RAM.**
+**A simulated HPC and AI cluster on one 16 GB laptop, built for testing monitoring software.**
 
-Real clusters cost a lot and break at 3 a.m. This one costs about 0.5 to 1.5 GB (the real Jira, optional, adds 2.4 GB; [what it uses](docs/guides/memory.md)), breaks when you ask, and fakes everything an
-HPC monitoring app talks to: Slurm, GPUs, Grafana, Jira, BMCs. Built to test a desktop monitoring client, handy for
-anyone who wants a cluster to poke without a data centre.
+Point your monitoring client at it, then power off a node, drain it, expire a certificate or make Jira refuse, and check
+that the client notices. Slurm is real; the BMCs, BCM, Jira and GPU metrics are faithful stand-ins; a memory governor
+outside the cluster keeps your laptop usable. No sudo and no data centre: about 0.5 to 1.5 GB of RAM ([what it uses](docs/guides/memory.md)).
+
+## What you get
+
+<table>
+<tr>
+<td width="33%" valign="top"><b>Real Slurm</b><br>Daemons built from source, real jobs, a shell on any node, accounting and REST.</td>
+<td width="33%" valign="top"><b>Faithful stand-ins</b><br>Redfish BMCs, BCM, Jira and GPU metrics, beside a real Prometheus and Grafana; Kubernetes as an option.</td>
+<td width="33%" valign="top"><b>Faults on demand</b><br>Over 40 named scenarios: a node down, GPUs off the bus, an expired token. One command clears them.</td>
+</tr>
+<tr>
+<td valign="top"><b>A live web page</b><br>The cluster's architecture with its traffic, node actions, scenarios, and the manual as help.</td>
+<td valign="top"><b>A memory governor</b><br>Pauses, then stops, low-priority containers before your RAM runs out.</td>
+<td valign="top"><b>Ready for agents</b><br><code>--json</code> on the read verbs, <a href="AGENTS.md">AGENTS.md</a> and an MCP server.</td>
+</tr>
+</table>
 
 ## See it in 20 seconds
 
@@ -35,63 +53,55 @@ anyone who wants a cluster to poke without a data centre.
 
 *Zoom and layers: Fleet, Cluster, one layer at a time, then a Pool (sample data).*
 
-## Why you might want it
-
-<table>
-<tr>
-<td width="33%" valign="top"><h3>🔌 Test a monitoring client</h3>Every service it talks to is there, with named faults to trigger on demand.</td>
-<td width="33%" valign="top"><h3>🎓 Learn HPC safely</h3>Real Slurm, real jobs, a shell on a node, and nothing that can hurt a real cluster.</td>
-<td width="33%" valign="top"><h3>💥 Break things on purpose</h3>Power a node off, fail a service, expire a token, then clear it all with one command.</td>
-</tr>
-</table>
-
-## Start in 60 seconds (no sudo)
+## Quick start: three commands, no sudo
 
 ```bash
-./scripts/benchctl start          # checks your machine, builds, starts, prints a link
+./scripts/benchctl start                    # check, build once, start, print the page link
+./scripts/benchctl scenario run node-down   # break a node, watch it react
+./scripts/benchctl stop                     # stop what it started, nothing else
 ```
 
-The first run builds images, so go and get a coffee. Open the link it prints. You are looking at six nodes, four fake
-services and one very watchful memory governor.
+The first start builds the images, so it takes a while; then open the link it prints. Not sure what a scenario does?
+Add `--dry-run`: it prints the timeline and changes nothing.
 
-### Poke it
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/snapshots/scenario-node-down-dark.svg">
+  <img src="docs/assets/snapshots/scenario-node-down-light.svg" alt="Terminal: ./scripts/benchctl scenario run node-down --dry-run (prints: SC-17 node-down: 6 steps, 40 s, targets bcm-mock, bmc-farm, slurm)">
+</picture>
 
-```bash
-./scripts/benchctl get nodes                     # who is alive
-./scripts/benchctl describe node gpu001          # everything about one node
-./scripts/benchctl exec gpu001 -u alice          # a shell on it, tab completion included
-./scripts/benchctl scenario run node-down        # now break something, politely
-```
+*Real output, captured by `scripts/make_snapshots.py`.*
 
-In the web page click a node, press **Power off** under *Actions*, and watch the node turn grey and the Infrastructure architecture react. **Clear faults** makes it all better.
+## Build the cluster you need
 
-### Build your own cluster
-
-Want 2 CPU nodes, 4 GPU nodes and Jira? Ask what it costs first, then build only if it fits:
+Ask what a cluster costs before you build it; `up` builds it only if it fits:
 
 ```bash
 ./scripts/benchctl plan --cpu-nodes 2 --gpu-nodes 4 --with jira
 ./scripts/benchctl up   --cpu-nodes 2 --gpu-nodes 4 --with jira
 ```
 
-### Point your app at it
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/snapshots/plan-dark.svg">
+  <img src="docs/assets/snapshots/plan-light.svg" alt="Terminal: ./scripts/benchctl plan --cpu-nodes 2 --gpu-nodes 4 --with jira (prints: fits: needs 1669 MB (645 MB expected + 1024 MB for the app (assumed, not measured)), 5691 MB free, 4022 MB would remain (floor 1024 MB))">
+</picture>
+
+*Real output, shortened; the free memory is the capturing machine's.*
+
+## Point your client at it
 
 ```bash
-./scripts/benchctl export profile      # writes a file your monitoring client can import
+./scripts/benchctl export profile      # one file your monitoring client can import
 ./scripts/benchctl ssh-key install     # puts the login key where the client looks
 ```
 
-Then follow [client setup](docs/guides/client-setup-by-component.md), one component at a time.
+Then follow [testing a client against workbench](docs/guides/client-testing.md), or [client setup](docs/guides/client-setup-by-component.md) one component at a time.
 
-### Put it back
+## How it works
 
-```bash
-./scripts/benchctl stop                # everything you started, and nothing else
-```
-
-## What's inside
-
-<p align="center"><img src="docs/assets/art/readme-how-it-works.svg" alt="Four panels: workbench fakes the APIs, runs real Slurm in small containers, keeps a governor outside everything, and plays faults as named scenarios" width="820"></p>
+<p align="center"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/art/readme-how-it-works-dark.svg">
+  <img src="docs/assets/art/readme-how-it-works-light.svg" alt="Four panels: workbench fakes the APIs, runs real Slurm in small containers, keeps a governor outside everything, and plays faults as named scenarios" width="820">
+</picture></p>
 
 | Part | Real or simulated | Notes |
 |---|---|---|
@@ -102,13 +112,8 @@ Then follow [client setup](docs/guides/client-setup-by-component.md), one compon
 | Prometheus and Grafana | Real | Pre-wired dashboards |
 | The governor | Real, runs on the host | Pauses, then stops, low-priority containers before RAM runs out |
 
-Details: [architecture](docs/architecture/README.md).
-
-## Will it fit my laptop?
-
-<p align="center"><img src="docs/assets/art/readme-memory.svg" alt="A laptop RAM bar split into the system, your apps, the cluster profiles and a safety floor, with the governor's levels above it" width="820"></p>
-
-The `min`, `std` and `full` profiles and what each part measured are in [the memory guide](docs/guides/memory.md). `./scripts/benchctl plan` tells you before anything starts.
+Details: [architecture](docs/architecture/README.md). Will it fit your laptop? The `min`, `std` and `full` profiles are
+in [the memory guide](docs/guides/memory.md), and `./scripts/benchctl plan` tells you before anything starts.
 
 ## When it sulks
 
@@ -117,24 +122,7 @@ The `min`, `std` and `full` profiles and what each part measured are in [the mem
 | Start refuses with `REFUSED` | Your RAM is busy (browsers, IDE). Close a few, run it again. The governor is protecting you |
 | Not sure your machine qualifies | `./scripts/check-machine.sh` |
 | Something odd | `./scripts/benchctl diag` writes one masked file to attach to a bug report |
-| Forgot a command | `./scripts/benchctl --help`, or press Tab (`./scripts/benchctl completion install` once): it completes verbs, nodes, profiles and more |
-
-Every command is explained, with its limits, in [the verbs guide](docs/guides/benchctl-verbs.md).
-
-<details>
-<summary><b>FAQ</b></summary>
-
-**Is it a real Slurm?** Yes: real daemons built from source; jobs, GPUs and cgroups are simulated.
-
-**Do I need sudo?** No. The governor runs as you; a root service is an optional upgrade.
-
-**Does it need a GPU?** No. GPU metrics are simulated; a real card is an opt-in part.
-
-**Can I add Kubernetes?** Yes: `./scripts/benchctl up --with k8s` ([how](docs/manual/04-nodes-and-shells.md#kubernetes-optional-part)).
-
-**Where are the docs?** The [user manual](docs/manual/README.md) and the [guides](docs/guides/getting-started.md); the GitHub Wiki has the same pages.
-
-</details>
+| Forgot a command | `./scripts/benchctl --help`, or press Tab (`./scripts/benchctl completion install` once) |
 
 ## Using it from an AI agent
 
@@ -150,7 +138,8 @@ Read [AGENTS.md](AGENTS.md) first (under 2,000 tokens); recipes are in [docs/age
 | I want | Go to |
 |---|---|
 | A 10 minute walk-through | [Getting started](docs/guides/getting-started.md) |
-| Everything, in order | [User manual](docs/manual/README.md) |
+| Everything, in order | [User manual](docs/manual/README.md), also on the [wiki](https://github.com/AhmedYousriSobhi/workbench/wiki) and in the web page's **? Help** |
+| Every command and its limits | [The verbs guide](docs/guides/benchctl-verbs.md) |
 | What works today | [Progress](docs/PROGRESS.md) |
 | The rules it must obey | [SPEC.md](SPEC.md) |
 | To contribute | [CLAUDE.md](CLAUDE.md): work by issue and branch, PR into `dev` |

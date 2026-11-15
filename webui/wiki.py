@@ -2,7 +2,7 @@
 
 A small renderer for the subset those files use (headings, paragraphs, lists, tables, fenced code, quotes, images,
 links, inline code/bold/italic) plus the constructs of the illustrated page template: GitHub alerts (`> [!TIP]`, and the
-project kinds `HOOD` and `DIDYOUKNOW`), `<details>`/`<summary>`, `<p align="center">`, `<picture>` (the help shows its `<img>`),
+project kinds `HOOD` and `DIDYOUKNOW`), `<details>`/`<summary>`, `<p align="center">`, `<picture>` (its `<img>` and a `prefers-color-scheme: dark` `<source>`),
 `<img>`, `<kbd>`, and an italic line after an image as its caption. Only those tags pass; any other tag is escaped. Pages are read and rendered per request, so nothing is held in memory while idle
 (SPEC W-1). A link to another markdown file under docs/ becomes a wiki link; any other repo-relative link (SPEC.md,
 sim.yaml, source files) is shown as plain code, since the page cannot open files outside docs/.
@@ -42,7 +42,7 @@ class Wiki:
         if not path.is_relative_to(self.docs) or path.suffix != suffix or not path.is_file():
             raise WikiError(rel)
         parts = path.relative_to(self.docs).parts
-        if parts[0] in SKIP and not (parts[0] == "assets" and len(parts) > 2 and parts[1] == "art"):  # the generated art only
+        if parts[0] in SKIP and not (parts[0] == "assets" and len(parts) > 2 and parts[1] in ("art", "snapshots")):  # generated images only
             raise WikiError(rel)
         return path
 
@@ -151,6 +151,16 @@ class Wiki:
         text = re.sub(r"(?<![\w*])\*([^*\s][^*]*)\*(?![\w*])", r"<em>\1</em>", text)
         return re.sub(r"\x00(\d+)\x00", lambda m: codes[int(m.group(1))], text)
 
+    def picture(self, block: list[str], page: str) -> str:
+        """`<picture>` lines -> the `<img>`, plus the dark `<source>` when it resolves inside docs/. The help follows the
+        viewer's scheme like the page's tokens do, so the media query picks the same theme as the page (issue 797)."""
+        img = next((self.inline(ln.strip(), page) for ln in block if ln.strip().startswith("<img")), "")
+        if not img.startswith("<img"):
+            return img
+        dark = next((m.group(1) for ln in block if (m := re.search(r'<source media="\(prefers-color-scheme: dark\)" srcset="([^"]+)"', ln))), "")
+        url = self.link(dark, page) if dark else None
+        return f'<picture><source media="(prefers-color-scheme: dark)" srcset="{esc(url)}">{img}</picture>' if url else img
+
     def render(self, slug: str) -> tuple[str, str]:
         """(title, body html) for one page."""
         path = self.page_path(slug)
@@ -190,8 +200,16 @@ class Wiki:
                     code.append(lines[i])
                     i += 1
                 out.append(f'<pre class="code"><code data-lang="{esc(lang)}">{esc(chr(10).join(code))}</code></pre>')
-            elif re.fullmatch(r"\s*</?picture>\s*|\s*<source\b[^>]*>\s*", line):
-                flush()  # <picture>: the help shows the <img> fallback (the page's own theme decides, not media queries)
+            elif re.fullmatch(r"\s*<picture>\s*", line):
+                flush()
+                block = []
+                while i + 1 < len(lines) and not re.fullmatch(r"\s*</picture>\s*", lines[i + 1]):
+                    i += 1
+                    block.append(lines[i])
+                i += 1
+                body = self.picture(block, page)
+                if body:
+                    out.append(f'<p class="img">{body}</p>' if body.startswith(("<img", "<picture")) else f"<p>{body}</p>")
             elif m := re.fullmatch(r'\s*<p align="center">(.*)</p>\s*', line):
                 flush()
                 inner = self.inline(m.group(1).strip(), page)

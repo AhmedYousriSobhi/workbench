@@ -26,6 +26,19 @@ To pick your own mix (for example 2 CPU and 4 GPU nodes with Jira) and see what 
 `benchctl up --cpu-nodes ...` ([choose the workbench](choose-workbench.md); what each part uses and what to have free:
 [memory](memory.md)).
 
+```bash
+./scripts/benchctl plan --cpu-nodes 2 --gpu-nodes 4 --with jira    # what it costs; exit 1 if it would not fit
+```
+
+It lists the nodes and parts, the memory each one takes, and ends with the verdict (real output, shortened):
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/snapshots/plan-dark.svg">
+  <img src="../assets/snapshots/plan-light.svg" alt="Terminal: ./scripts/benchctl plan --cpu-nodes 2 --gpu-nodes 4 --with jira (prints: fits: needs 1669 MB (645 MB expected + 1024 MB for the app (assumed, not measured)), 5691 MB free, 4022 MB would remain (floor 1024 MB))">
+</picture>
+
+*plan: the cost before the build*
+
 ### How commands look
 
 Every command has the same shape, like `kubectl`: `benchctl VERB [RESOURCE] [NAME]`.

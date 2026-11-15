@@ -10,6 +10,7 @@ it animates, a `prefers-reduced-motion` rule that stops the motion (the still fr
 from PALETTE; every text colour is paired with the ground it sits on in TEXT_PAIRS so a test can check the 4.5:1
 contrast in both themes. Status is never colour alone: a node carries a mark (check, pause, cross) as well.
 """
+import re
 import sys
 from pathlib import Path
 
@@ -37,12 +38,24 @@ MONO = "ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace"
 MAX_BYTES = 60 * 1024
 
 
-def _style(animated: bool) -> str:
+THEMES = ("light", "dark")
+_THEME = ["auto"]   # "auto" follows the viewer's scheme; "light" or "dark" fixes one (the <picture> pairs, see FIXED)
+
+
+# icon strokes (issue 797): ink outlines, a teal accent stroke, a framed surface; added only to files that use them
+ICON_CSS = (".st{fill:none;stroke:var(--ink);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}"
+            ".sb{fill:none;stroke:var(--teal);stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round}"
+            ".fr{fill:var(--surface2);stroke:var(--ink);stroke-width:2.5}")
+
+
+def _style(animated: bool, extra: str = "") -> str:
     def block(i: int) -> str:
         v = ";".join(f"--{k}:{c[i]}" for k, c in PALETTE.items())
         return v
-    css = [f":root{{{block(0)}}}",
-           f"@media (prefers-color-scheme:dark){{:root{{{block(1)}}}}}",
+    theme = _THEME[0]
+    roots = ([f":root{{{block(0)}}}", f"@media (prefers-color-scheme:dark){{:root{{{block(1)}}}}}"] if theme == "auto"
+             else [f":root{{{block(THEMES.index(theme))}}}"])
+    css = [*roots,
            f"text{{font-family:{SANS};font-size:14px}}.mono{{font-family:{MONO}}}.b{{font-weight:700}}.h{{font-size:22px}}.s{{font-size:12px}}.c{{text-anchor:middle}}",
            ".bg{fill:var(--surface)}.p2{fill:var(--surface2);stroke:var(--line)}.ln{stroke:var(--line);fill:none;stroke-width:2}",
            ".tx{fill:var(--ink)}.tm{fill:var(--muted)}.tx2{fill:var(--ink)}.tm2{fill:var(--muted)}",
@@ -57,12 +70,14 @@ def _style(animated: bool) -> str:
     if animated:
         css.append("@keyframes flow{to{stroke-dashoffset:-48}}.pulse{animation:flow 2.4s linear infinite}"
                    "@media (prefers-reduced-motion:reduce){.pulse{animation:none}}")
-    return "<style>" + "".join(css) + "</style>"
+    return "<style>" + "".join(css) + extra + "</style>"
 
 
-def svg(w: int, h: int, title: str, desc: str, body: str, animated: bool = False) -> str:
-    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" role="img" aria-labelledby="t d">\n'
-            f'<title id="t">{title}</title><desc id="d">{desc}</desc>\n{_style(animated)}\n'
+def svg(w: int, h: int, title: str, desc: str, body: str, animated: bool = False, sized: bool = False) -> str:
+    size = f' width="{w}" height="{h}"' if sized else ""   # an icon keeps its size where the markup gives none (the wiki tiles)
+    extra = ICON_CSS if re.search(r'class="(st|sb|fr)"', body) else ""
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}"{size} role="img" aria-labelledby="t d">\n'
+            f'<title id="t">{title}</title><desc id="d">{desc}</desc>\n{_style(animated, extra)}\n'
             f'<rect class="bg" width="{w}" height="{h}" rx="16"/>\n{body}\n</svg>\n')
 
 
@@ -177,7 +192,7 @@ def readme_how_it_works() -> str:
             b.append(bubble(x + 20, y + 76, 120, "gpu-xid-storm", True))
             b.append(arrow(cx, y + 110, cx, y + 130))
             b.append(rack(x + 24, y + 128, 3, ("ok", "down", "ok"), 22))
-            b.append(label(cx, y + 178, "a node down, then healed", "tm2", "s", anchor=True))
+            b.append(label(cx, y + 178, "down, then healed", "tm2", "s", anchor=True))
     b.append(wire("M24 240H696", "access", True))
     return svg(720, 258, "How workbench works, in four panels",
                "Four panels: mocks fake the APIs your app calls, real Slurm runs in small containers, the governor sits "
@@ -235,36 +250,83 @@ def tour_hero() -> str:
 # ---- small icons: the Wiki Home tiles and the sidebar groups (issue 591) ----------------------------------------------
 
 def icon(title: str, desc: str, body: str, animated: bool = False) -> str:
-    return svg(64, 64, title, desc, body, animated)
+    return svg(64, 64, title, desc, body, animated, sized=True)
 
 
 def _bars(*ys: int) -> str:
     return "".join(f'<path class="ln" d="M14 {y}h36"/>' for y in ys)
 
 
+def _screen(x: float, y: float, w: float, h: float) -> str:
+    """A monitor: a framed screen on a short stand (the page, Grafana, the client)."""
+    return (f'<rect class="fr" x="{x}" y="{y}" width="{w}" height="{h}" rx="{min(w, h) * 0.14:.1f}"/>'
+            f'<path class="st" d="M{x + w / 2} {y + h}v{h * 0.14:.1f}M{x + w * 0.32:.1f} {y + h * 1.14:.1f}h{w * 0.36:.1f}"/>')
+
+
+def _pulse(x: float, y: float, w: float, amp: float, cls: str = "sb") -> str:
+    """A heartbeat line: flat, one spike, flat (the monitoring motif)."""
+    u = w / 10
+    return (f'<path class="{cls}" d="M{x} {y}h{3 * u:.1f}l{u:.1f} {-amp:.1f}l{u:.1f} {2 * amp:.1f}l{u:.1f} {-1.6 * amp:.1f}'
+            f'l{0.6 * u:.1f} {0.6 * amp:.1f}h{3.4 * u:.1f}"/>')
+
+
 ICONS = {
-    "tile-install.svg": lambda: icon("Install", "A node box with an arrow dropping into it.",
-                                     '<path class="ln" d="M32 6v18M24 17l8 8l8-8"/>' + node(19, 32, "ok", 26)),
+    "tile-install.svg": lambda: icon("Install", "An arrow dropping into a tray that holds a healthy node.",
+                                     '<path class="st" d="M32 5v17M24 15l8 8l8-8M10 34v20h44V34"/>' + node(21, 30, "ok", 22)),
     "tile-use.svg": lambda: icon("Use", "A terminal window with a prompt.",
-                                 '<rect class="p2" x="8" y="12" width="48" height="40" rx="8"/>' + label(16, 38, "&gt;_", "tx2", "b", True)),
-    "tile-break.svg": lambda: icon("Break things", "A node with a cross: it is down.", node(19, 19, "down", 26)),
-    "tile-watch.svg": lambda: icon("Watch it", "A wire with a moving pulse.",
-                                   wire("M8 40C20 16 44 16 56 40", "monitoring"), True),
+                                 '<rect class="fr" x="7" y="11" width="50" height="42" rx="8"/><path class="st" d="M7 21h50"/>'
+                                 '<path class="sb" d="M16 31l7 6l-7 6M28 45h12"/>'),
+    "tile-break.svg": lambda: icon("Break things", "Two healthy nodes and one down, marked with a cross.",
+                                   node(4, 21, "ok", 17) + node(23.5, 19, "down", 21) + node(47, 21, "ok", 17)
+                                   + '<path class="st" style="stroke:var(--red)" d="M34 4l-4 8h6l-4 7"/>'),
+    "tile-watch.svg": lambda: icon("Watch it", "A screen showing a heartbeat line: the cluster under watch.",
+                                   _screen(7, 10, 50, 34) + _pulse(13, 28, 38, 9)),
     "tile-configure.svg": lambda: icon("Configure", "Three sliders.",
-                                       _bars(18, 32, 46) + '<circle class="ok" cx="24" cy="18" r="5"/><circle class="ok" cx="40" cy="32" r="5"/>'
-                                       '<circle class="ok" cx="30" cy="46" r="5"/>'),
+                                       '<path class="st" d="M12 18h40M12 32h40M12 46h40"/>'
+                                       '<circle class="ok" cx="24" cy="18" r="6"/><circle class="ok" cx="42" cy="32" r="6"/>'
+                                       '<circle class="ok" cx="30" cy="46" r="6"/>'),
     "tile-fix.svg": lambda: icon("Fix it", "A healthy node inside a circular arrow: it healed.",
-                                  '<path class="ln" d="M10 32a22 22 0 0 1 40-13M54 32a22 22 0 0 1-40 13M44 12l7 8l-10 2"/>' + node(19, 19, "ok", 26)),
+                                 '<path class="st" d="M9 32a23 23 0 0 1 41-14M55 32a23 23 0 0 1-41 14M44 9l7 9l-11 2M20 55l-7-9l11-2"/>'
+                                 + node(21, 21, "ok", 22)),
     "group-manual.svg": lambda: icon("Manual", "An open book.",
-                                     '<rect class="p2" x="8" y="14" width="23" height="36" rx="4"/><rect class="p2" x="33" y="14" width="23" height="36" rx="4"/>'),
-    "group-guides.svg": lambda: icon("Guides", "A list of steps.", _bars(18, 32, 46)),
+                                     '<path class="fr" d="M32 16c-6-4-14-5-24-4v38c10-1 18 0 24 4c6-4 14-5 24-4V12c-10-1-18 0-24 4z"/>'
+                                     '<path class="st" d="M32 16v38"/>'),
+    "group-guides.svg": lambda: icon("Guides", "A list of steps.",
+                                     '<path class="st" d="M24 18h28M24 32h28M24 46h28"/><circle class="ok" cx="13" cy="18" r="4.5"/>'
+                                     '<circle class="ok" cx="13" cy="32" r="4.5"/><circle class="ok" cx="13" cy="46" r="4.5"/>'),
     "group-architecture.svg": lambda: icon("Architecture", "A rack of nodes.", rack(5, 18, 2, (), 14)),
     "group-adr.svg": lambda: icon("Decisions", "A note with a tick.",
-                                  '<rect class="p2" x="14" y="8" width="36" height="48" rx="6"/><path class="ln" d="M24 32l6 6l11-12"/>'),
+                                  '<rect class="fr" x="14" y="8" width="36" height="48" rx="6"/><path class="sb" d="M23 32l6 6l12-13"/>'),
     "group-agents.svg": lambda: icon("For AI agents", "A terminal window with a prompt and two small nodes beside it.",
-                                     '<rect class="p2" x="6" y="14" width="34" height="36" rx="6"/>' + label(12, 38, "&gt;_", "tx2", "b", True)
-                                     + node(43, 14, "ok", 14) + node(43, 34, "ok", 14)),
+                                     '<rect class="fr" x="5" y="14" width="36" height="36" rx="6"/><path class="sb" d="M12 26l6 5l-6 5M22 40h10"/>'
+                                     + node(45, 14, "ok", 14) + node(45, 34, "ok", 14)),
 }
+
+
+def home_emblem(x: float, y: float, s: float = 1.0) -> str:
+    """The Home emblem (issue 797): a screen watching a small cluster. A heartbeat line runs over six nodes, one of them
+    held back by the governor (the logo's dashed amber square), so it reads as 'a cluster under watch' at any size."""
+    nodes = "".join(node(26 + c * 34, 66 + r * 34, "held" if (r, c) == (0, 2) else "ok", 26) for r in range(2) for c in range(3))
+    body = ('<rect class="fr" x="8" y="8" width="128" height="128" rx="22"/>' + _pulse(20, 40, 104, 14) + nodes)
+    return f'<g transform="translate({x} {y}) scale({s})">{body}</g>'
+
+
+def home_hero() -> str:
+    chips = ("Slurm", "Redfish BMCs", "GPU metrics", "Grafana", "Jira", "Kubernetes")
+    b = [home_emblem(28, 30, 1.0),
+         label(200, 66, "workbench", "tx", "h b"),
+         label(200, 94, "A simulated HPC and AI cluster for testing monitoring software.", "tx"),
+         label(200, 116, "Real Slurm, faithful stand-ins, faults on demand, on one 16 GB machine.", "tm")]
+    x = 200
+    for c in chips:
+        w = 14 + 7.4 * len(c)
+        b.append(bubble(x, 136, w, c))
+        x += w + 8
+    return svg(720, 196, "workbench: a cluster under watch",
+               "The workbench emblem, a screen with a heartbeat line over six nodes, one held back by the governor, beside the "
+               "name, one line on what it is for, and the parts it simulates: Slurm, Redfish BMCs, GPU metrics, Grafana, Jira "
+               "and Kubernetes.", "".join(b))
+
 
 # ---- chapter heroes (issue 596): a small scene per manual chapter, 720 by 150 -----------------------------------------
 
@@ -683,6 +745,23 @@ ART = {"readme-hero.svg": readme_hero, "readme-how-it-works.svg": readme_how_it_
        "arch-10-references-hero.svg": arch_10_references,
        "arch-11-governor-as-built-hero.svg": arch_11_governor_as_built,
        "arch-README-hero.svg": arch_README}
+
+
+# Fixed-theme twins for <picture> (issue 797): GitHub picks the <source> by its own theme, while an SVG's media query
+# follows the operating system, so a dark desktop made the README's art dark on GitHub's light theme.
+FIXED = {"readme-hero": readme_hero, "readme-how-it-works": readme_how_it_works, "home-hero": home_hero,
+         **{n[:-4]: fn for n, fn in ICONS.items() if n.startswith("tile-")}}
+for _stem, _fn in FIXED.items():
+    for _t in THEMES:
+        ART[f"{_stem}-{_t}.svg"] = (lambda fn=_fn, t=_t: _themed(fn, t))
+
+
+def _themed(fn, theme: str) -> str:
+    _THEME[0] = theme
+    try:
+        return fn()
+    finally:
+        _THEME[0] = "auto"
 
 
 def outputs() -> dict[Path, str]:

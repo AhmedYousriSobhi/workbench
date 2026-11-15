@@ -174,7 +174,9 @@ def test_details_kbd_picture_and_figure_caption(art_wiki):
     assert "<summary>Second</summary>" in body
     assert ('<figure class="img center"><img src="/help/files/assets/art/hero.svg" alt="the hero&#x27;s picture" width="720" '
             'loading="lazy"><figcaption>A caption under the hero.</figcaption></figure>') in body
-    assert "<picture" not in body and "<source" not in body  # the <img> inside is what the help shows
+    # the dark <source> is kept (the help follows the viewer's scheme, issue 797)
+    assert ('<picture><source media="(prefers-color-scheme: dark)" srcset="/help/files/assets/art/hero.svg"><img '
+            'src="/help/files/assets/art/hero.svg" alt="in a picture" loading="lazy"></picture>') in body
     assert 'alt="in a picture"' in body and '<div class="center">' in body and body.count("<div") == body.count("</div>")
 
 
@@ -185,6 +187,39 @@ def test_other_tags_are_escaped_and_art_is_the_only_asset_served(art_wiki):
     assert art_wiki.file_path("assets/art/hero.svg").name == "hero.svg"
     with pytest.raises(WikiError):
         art_wiki.file_path("assets/secret.png")
+
+
+def test_picture_keeps_only_a_dark_source_inside_docs_and_snapshots_are_served(tmp_path):
+    d = tmp_path / "docs"
+    (d / "manual").mkdir(parents=True)
+    (d / "assets" / "snapshots").mkdir(parents=True)
+    for n in ("s-light.svg", "s-dark.svg"):
+        (d / "assets" / "snapshots" / n).write_text("<svg/>")
+    (d / "assets" / "snapshots" / "s.txt").write_text("raw output")
+    (d / "manual" / "03-x.md").write_text(
+        '<picture>\n  <source media="(prefers-color-scheme: dark)" srcset="../assets/snapshots/s-dark.svg">\n'
+        '  <img src="../assets/snapshots/s-light.svg" alt="Terminal: ls">\n</picture>\n\n*The caption*\n\n'
+        '<picture>\n  <source media="(prefers-color-scheme: dark)" srcset="../../outside.svg">\n'
+        '  <img src="../assets/snapshots/s-light.svg" alt="no dark">\n</picture>\n\n'
+        '<picture>\n  <source media="print" srcset="../assets/snapshots/s-dark.svg">\n</picture>\n')
+    w = Wiki(d)
+    _, body = w.render("manual/03-x")
+    assert ('<figure class="img"><picture><source media="(prefers-color-scheme: dark)" srcset="/help/files/assets/snapshots/'
+            's-dark.svg"><img src="/help/files/assets/snapshots/s-light.svg" alt="Terminal: ls" loading="lazy"></picture>'
+            '<figcaption>The caption</figcaption></figure>') in body
+    assert '<p class="img"><img src="/help/files/assets/snapshots/s-light.svg" alt="no dark" loading="lazy"></p>' in body
+    assert body.count("<source") == 1 and "outside" not in body and "print" not in body
+    assert w.file_path("assets/snapshots/s-dark.svg").name == "s-dark.svg"
+    with pytest.raises(WikiError):
+        w.file_path("assets/snapshots/s.txt")   # the captured text is not an image
+
+
+def test_the_real_snapshot_pages_render_their_cards():
+    real = Wiki(ROOT / "docs")
+    for slug in ("manual/02-install-and-start", "manual/06-scenarios", "guides/getting-started", "guides/client-testing"):
+        _, body = real.render(slug)
+        assert re.search(r'<picture><source media="\(prefers-color-scheme: dark\)" srcset="/help/files/assets/snapshots/[\w-]+-dark\.svg">'
+                         r'<img src="/help/files/assets/snapshots/[\w-]+-light\.svg" alt="Terminal: ', body), slug
 
 
 def test_alert_styles_exist_for_every_kind_and_both_themes():

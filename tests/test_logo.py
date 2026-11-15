@@ -39,8 +39,9 @@ def test_png_sizes():
 
 def test_readme_shows_the_logo_with_alt_text_and_stays_short():
     text = (ROOT / "README.md").read_text()
-    # the hero art carries the logo mark (docs/assets/art/readme-hero.svg, issue 589)
-    assert re.search(r'<img src="docs/assets/(logo|art/readme-hero)\.svg" alt="[^"]{8,}"', text)
+    # the hero art carries the logo mark (docs/assets/art/readme-hero.svg, issue 589), as a light and dark pair (issue 797)
+    assert re.search(r'<img src="docs/assets/(logo|art/readme-hero-light)\.svg" alt="[^"]{8,}"', text)
+    assert 'srcset="docs/assets/art/readme-hero-dark.svg"' in text
     assert len(text.splitlines()) <= 160
 
 
