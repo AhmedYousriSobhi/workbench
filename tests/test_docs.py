@@ -132,7 +132,7 @@ def test_manual_images_are_all_used_and_have_alt_text():
 
 
 def test_screenshots_come_in_light_and_dark_pairs_within_budget():
-    """doc_shots.py writes every screenshot and the demo GIF as NAME-light and NAME-dark; each PNG is at most 300 KB, each GIF 3 MB."""
+    """doc_shots.py writes every screenshot and the two README tours as NAME-light and NAME-dark; each PNG is at most 300 KB, each GIF 3 MB."""
     img = MANUAL / "img"
     for ext in ("png", "gif"):
         light = {p.name[: -len(f"-light.{ext}")] for p in img.glob(f"*-light.{ext}")}
@@ -143,6 +143,60 @@ def test_screenshots_come_in_light_and_dark_pairs_within_budget():
         assert p.stat().st_size <= 300 * 1024, f"{p.name} is over 300 KB"
     for p in img.glob("*.gif"):
         assert p.stat().st_size <= 3 * 1024 * 1024, f"{p.name} is over 3 MB"
+
+
+def gif_frames(data):
+    """(delay in 1/100 s, encoded bytes) for every image of a GIF, and whether it loops for ever; no Pillow (CI has none)."""
+    assert data[:6] in (b"GIF87a", b"GIF89a")
+    flags = data[10]
+    i = 13 + (3 * 2 ** ((flags & 7) + 1) if flags & 0x80 else 0)
+    frames, delay, forever = [], 0, False
+    while data[i] != 0x3B:
+        if data[i] == 0x21:  # an extension: graphic control (the delay) or the NETSCAPE loop block
+            label, j = data[i + 1], i + 2
+            if label == 0xF9:
+                delay = int.from_bytes(data[j + 2:j + 4], "little")
+            if label == 0xFF and data[j + 1:j + 12] == b"NETSCAPE2.0":
+                forever = data[j + 14:j + 16] == b"\x00\x00"
+            while data[j]:
+                j += data[j] + 1
+            i = j + 1
+        else:  # an image: descriptor, local colour table, LZW data
+            assert data[i] == 0x2C, hex(data[i])
+            start, f = i, data[i + 9]
+            i += 11 + (3 * 2 ** ((f & 7) + 1) if f & 0x80 else 0)
+            while data[i]:
+                i += data[i] + 1
+            i += 1
+            frames.append((delay, i - start))
+    return frames, forever
+
+
+def test_readme_tours_are_smooth_short_loops():
+    """The README's two tours (#799, scripts/demo_tour.py): at least 12 frames a second, 10 to 25 s, looping for ever."""
+    for name in ("architecture-demo", "circuit-zoom"):
+        for scheme in ("light", "dark"):
+            frames, forever = gif_frames((MANUAL / f"img/{name}-{scheme}.gif").read_bytes())
+            seconds = sum(d for d, _ in frames) / 100
+            assert forever, f"{name}-{scheme} does not loop"
+            assert 10 <= seconds <= 25, f"{name}-{scheme} lasts {seconds} s"
+            assert len(frames) / seconds >= 12, f"{name}-{scheme}: {len(frames) / seconds:.1f} frames a second"
+
+
+def test_tour_captions_and_colours():
+    """One short caption per step, and the pointer, ripple and caption use the page's tokens, never a hex value (ADR 0069)."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("demo_tour", ROOT / "scripts/demo_tour.py")
+    tour = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tour)  # stdlib only at import time: Pillow and Playwright load inside the capture
+    assert len(tour.STEPS) == 6 and len(tour.ZOOM_STEPS) == 5
+    assert all(len(c) <= 58 for c in tour.STEPS + tour.ZOOM_STEPS)
+    assert tour.ease(0) == 0 and tour.ease(1) == 1 and abs(tour.glide(0.5) - 0.5) < 1e-9
+    for f in ("scripts/demo_tour.py", "scripts/doc_shots.py"):
+        hexes = re.findall(r"#(?=[0-9a-fA-F]*[a-fA-F])[0-9a-fA-F]{3,8}\b|['\"]#\d{3,8}['\"]", (ROOT / f).read_text())  # not issue numbers
+        assert not hexes, f"{f}: hex colours {hexes}; use a token"
+    assert "var(--fg)" in tour.OVERLAY and "var(--accent)" in tour.OVERLAY
 
 
 def test_screenshots_are_not_tall_strips():

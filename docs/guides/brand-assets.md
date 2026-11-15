@@ -74,6 +74,27 @@ The Wiki Home hero is a screen watching six nodes: a heartbeat line over five he
 governor (the logo's dashed amber square). It is `home_emblem` in the script, drawn with the logo's teal, ink and amber,
 and readable from 64 px up.
 
+## README tours
+
+The README's two animations are tours of the real page with sample data: a pointer moves to a control, the click
+shows as a ripple, and the page answers. `architecture-demo` takes six steps in about 20 s (live wires, lenses and the
+2.5D view, a node's connection details, a power-off and its blast radius, the Fleet and back, a slide to Traffic and
+Communication); `circuit-zoom` takes five (Fleet, Cluster, layers, a pool, back out). Each step has a numbered caption.
+
+```bash
+pip install -e '.[browser]' && .venv/bin/python -m playwright install chromium    # once
+.venv/bin/python scripts/doc_shots.py          # every manual screenshot and both tours, light and dark (no cluster needed)
+```
+
+- The storyboard is `readme_tour` and `zoom_tour` in `scripts/demo_tour.py`; captions are `STEPS` and `ZOOM_STEPS`.
+- The pointer, the ripple and the caption are added to the page only while it is captured, and take their colours from
+  the page's tokens (`--fg`, `--panel`, `--accent`, `--sel`). Nothing is added to the shipped page.
+- A smooth scroll is drawn frame by frame. A slide (the content pushed sideways, as a swipe would) is put together from
+  two screenshots; the header, side bar and caption stay put.
+- `tests/test_docs.py` checks both twins: at least 12 frames a second, 10 to 25 s, looping, at most 3 MB, no hex colour
+  in the scripts. All frames share one palette, so each frame stores only what changed; a scroll or a slide changes the
+  whole frame, so add those sparingly.
+
 ## Code snapshots
 
 A code snapshot is a terminal card: one real command, its real output, and a caption. It shows a reader what a command

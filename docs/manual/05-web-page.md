@@ -263,7 +263,7 @@ Other ways to move:
 
 Each move takes about 0.7 s (none under reduced motion). The old level is gone afterwards.
 
-![Animation: zoom out to the Fleet, in to the Cluster, the Access, Management and Monitoring layers one at a time, in to a Pool and back out](img/circuit-zoom-light.gif)
+![Animation: a pointer zooms out to the Fleet, clicks the cluster to zoom in, picks the Access, Management and Monitoring layers one at a time, opens a pool and zooms back out](img/circuit-zoom-light.gif)
 
 *The zoom and the layers in turn (sample data).*
 
