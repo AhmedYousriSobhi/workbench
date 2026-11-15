@@ -39,8 +39,13 @@ When the root service is running it wins. Details and the reasons: [ADR 0010](..
 | L4 stop | full-stall pressure over 5% or under 1.0 GB available | stop P6, then P5, P4, P3 |
 | L5 emergency | still degrading after L4 | stop everything except P0 and P1 |
 
-It escalates at once and de-escalates one level at a time after 60 s calm (minimum 10 s per level). Pausing frees no RAM;
-it only stops growth. Relief comes from stopping. Thresholds can be overridden with `--thresholds` (JSON). The memory thresholds default from `host.reserve_gb` and `safety_floor_gb` in `sim.yaml`; a sustained swap-out storm (`swap_pages_s`, `swap_sustain_s`) adds one level up to L3; the governor wakes on a kernel PSI stall trigger where the kernel allows it (`--no-psi-trigger` to poll only). See ADR 0059.
+- It escalates at once. It de-escalates one level at a time, after 60 s calm (minimum 10 s per level).
+- Pausing frees no RAM. It only stops growth. Relief comes from stopping.
+- Override thresholds with `--thresholds` (JSON). The memory thresholds default from `host.reserve_gb` and `safety_floor_gb` in `sim.yaml`.
+- A sustained swap-out storm (`swap_pages_s`, `swap_sustain_s`) adds one level, up to L3.
+- The governor wakes on a kernel PSI stall trigger where the kernel allows it. Use `--no-psi-trigger` to poll only.
+
+See ADR 0059.
 
 ## Look at it
 

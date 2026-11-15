@@ -11,11 +11,21 @@
 ./scripts/benchctl validate checks       # check everything, change nothing
 ```
 
-Every node runs a health check (`nhc`) every 30 s, before each job and after it. It drains the node with the reason
-`NHC: ...` when a check finds a problem ([client testing](client-testing.md#node-health-check-what-drains-a-node) lists the
-five checks that ship, the real-GPU one only acts on a node with a real card). You can change that list three ways. All three use the same files and the same validation.
+Every node runs a health check (`nhc`) every 30 s, before each job and after it.
+When a check finds a problem, the node is drained with the reason `NHC: ...`.
+[Client testing](client-testing.md#node-health-check-what-drains-a-node) lists the five checks that ship. The real-GPU one only acts on a node with a real card.
 
-**The files** are in `images/node-base/nhc.d/`:
+You can change the list three ways. All three use the same files and the same validation.
+
+| Way | Use it to |
+|---|---|
+| [Command line](#1-from-the-command-line) | add from a template or a script, set parameters, reorder, remove |
+| [Files](#2-by-editing-the-files) | edit `checks.conf` or a check by hand |
+| [Web page](#3-in-the-web-page) | reorder, switch on or off, edit parameters, add from a template |
+
+## The check files
+
+They are in `images/node-base/nhc.d/`:
 
 | File | Is |
 |---|---|
@@ -23,10 +33,13 @@ five checks that ship, the real-GPU one only acts on a node with a real card). Y
 | `NAME.sh` | one check: a shell snippet that prints **one line per problem**, nothing when the node is healthy |
 | `templates/*.sh` | checks to add from a template (`metric-above`, `metric-below` take parameters; `real-gpu-health` takes none) |
 
-A change is refused, with the reason and nothing changed, when a name or parameter is malformed, a file has a syntax error,
-a parameter is missing, the check calls `scontrol` or `sudo` (the runner drains, not the check), or it reports a problem on
-**healthy sample metrics** or takes 10 s or longer (it would drain every healthy node). Running nodes pick up a change at
-their next health check, within 30 s, with no rebuild or restart.
+A change is refused, with the reason and nothing changed, when:
+- a name or parameter is malformed, or a parameter is missing;
+- a file has a syntax error;
+- the check calls `scontrol` or `sudo` (the runner drains, not the check);
+- the check reports a problem on **healthy sample metrics**, or takes 10 s or longer (it would drain every healthy node).
+
+Running nodes pick up a change at their next health check, within 30 s. No rebuild or restart.
 
 ## 1. From the command line
 
@@ -40,7 +53,9 @@ their next health check, within 30 s, with no rebuild or restart.
 ./scripts/benchctl validate checks                  # check everything, change nothing
 ```
 
-Your own check, from a file (`--position N` also works here):
+### Your own check, from a file
+
+`--position N` works here too.
 
 ```bash
 cat > /tmp/my-check.sh <<'SH'
@@ -52,50 +67,87 @@ SH
 ./scripts/benchctl add check few-temps --script /tmp/my-check.sh
 ```
 
-Inside a check you have `$node`, `$mine` (this node's exporter lines), `$expected` (GPUs), `$expected_ib` (IB ports), `$state`
-(a scratch file path for remembering a value between runs), the parameters as `$P_<name>`, and `add "reason"` to report a
-problem. Declare parameters with a `# params: name other` comment line so they are required and checked.
+Inside a check you can use:
+
+| Name | Holds |
+|---|---|
+| `$node` | the node name |
+| `$mine` | this node's exporter lines |
+| `$expected` | the number of GPUs |
+| `$expected_ib` | the number of IB ports |
+| `$state` | a scratch file path, to remember a value between runs |
+| `$P_<name>` | a parameter |
+| `add "reason"` | reports a problem |
+
+Declare parameters with a `# params: name other` comment line. They are then required and checked.
 
 ## 2. By editing the files
 
-Edit `images/node-base/nhc.d/checks.conf` (reorder lines, change `on`/`off`, add `key=value`) or any `NAME.sh`, then:
+1. Edit `images/node-base/nhc.d/checks.conf`: reorder lines, change `on` or `off`, add `key=value`. Or edit any `NAME.sh`.
+2. Deliver the change:
 
-```bash
-./scripts/benchctl reload checks
-```
+   ```bash
+   ./scripts/benchctl reload checks
+   ```
 
-It validates everything first and delivers only a valid set. A new file must also be listed in `checks.conf`
-(`NAME on`), otherwise `validate` tells you. `benchctl up` delivers the files too, and warns instead of delivering when
-they are invalid.
+Everything is validated first, and only a valid set is delivered.
+
+**Good to know**
+- A new file must also be listed in `checks.conf` (`NAME on`). Otherwise `validate` tells you.
+- `benchctl up` delivers the files too. It warns instead of delivering when they are invalid.
 
 ## 3. In the web page
 
-Open **☰ Menu → ✚ Health checks** in the top strip. Drag a block by its handle to reorder (or use the ↑ ↓ buttons, which work with
-the keyboard), tick a block to switch the check on or off, edit a parameter and leave the field to save it, and ✕ removes a
-check. To add one, drag a template from the bottom of the sheet into the list (or press it), name it and fill in its
-parameters. A refused change shows one line saying why and the list goes back to what was saved. The page adds checks
-from templates only; for a script of your own use the command line or a file. Changes made at the same moment (two tabs, or the page and
-`benchctl set check`) are applied one after the other, so none is lost.
+Open **☰ Menu → ✚ Health checks** in the top strip. Then:
+- **Reorder:** drag a block by its handle, or use the ↑ ↓ buttons (they work with the keyboard).
+- **Switch a check on or off:** tick its block.
+- **Edit a parameter:** change the value and leave the field. It saves automatically.
+- **Remove a check:** press ✕.
+- **Add a check:**
+  1. Drag a template from the bottom of the sheet into the list, or press it.
+  2. Name it.
+  3. Fill in its parameters.
+
+**If a change is refused,** one line says why, and the list goes back to what was saved.
+
+**Good to know**
+- The page adds checks from templates only. For your own script, use the command line or a file.
+- Changes made at the same moment (two tabs, or the page and `benchctl set check`) are applied one after the other, so none is lost.
 
 ## The real card (`rgpu001`)
 
-`gpu-count` and `gpu-xid` skip the real-gpu node (it has no simulated GPUs). The `real-gpu-health` template checks the real card
-instead: it drains the node (`NHC: real GPU missing`, `real GPU XID <n>`, `real GPU <t>C over its slowdown <s>C`) when
-`nvidia-smi -L` lists no card, the exporter reports a non-zero XID, or the temperature is over the card's own slowdown threshold
-(read from `nvidia-smi -q`). It is on by default (`real-gpu-health on` in `checks.conf`) and inert on every node without `nvidia-smi`. If you removed it, add it back from its template:
+`gpu-count` and `gpu-xid` skip the real-GPU node, which has no simulated GPUs.
+The `real-gpu-health` template checks the real card instead.
+It is on by default (`real-gpu-health on` in `checks.conf`) and does nothing on a node without `nvidia-smi`.
+
+It drains the node when:
+
+| Reason shown | Cause |
+|---|---|
+| `NHC: real GPU missing` | `nvidia-smi -L` lists no card |
+| `real GPU XID <n>` | the exporter reports a non-zero XID |
+| `real GPU <t>C over its slowdown <s>C` | the temperature is over the card's own slowdown threshold (read from `nvidia-smi -q`) |
+
+If you removed it, add it back:
 
 ```bash
 ./scripts/benchctl add check real-gpu-health --template real-gpu-health
 ```
 
-Only a node with `nvidia-smi` (the real card's device) runs it; every simulated node skips it. That node's health check reads the real exporter
-(`real-gpu:9400`), not the farm. If the card disappears so completely that the exporter publishes nothing, the runner sees no
-series for the node and skips every check (the node is never drained on a guess); the `nvidia-smi` test fires while the exporter still answers.
+**Good to know**
+- That node reads the real exporter (`real-gpu:9400`), not the farm.
+- If the card vanishes so completely that the exporter publishes nothing, the runner sees no series and skips every check. The node is never drained on a guess.
+- The `nvidia-smi` test fires while the exporter still answers.
 
 ## Undo
 
-The files are tracked: `git diff images/node-base/nhc.d` shows what changed and `git checkout images/node-base/nhc.d`
-followed by `./scripts/benchctl reload checks` restores the shipped checks.
+The files are tracked.
+- See what changed: `git diff images/node-base/nhc.d`
+- Restore the shipped checks:
+  ```bash
+  git checkout images/node-base/nhc.d
+  ./scripts/benchctl reload checks
+  ```
 
 ## Under the hood
 

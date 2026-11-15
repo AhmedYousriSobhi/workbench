@@ -61,9 +61,11 @@ Generated secrets (database password, the governor's Grafana token, the web page
 ## Under the hood
 
 > [!HOOD]
-> `benchctl compose` reads `sim.yaml` plus `profiles/NAME.yaml`, builds the compose model from a component catalogue (`CATALOG`) and writes `compose/generated/docker-compose.yml` with a "GENERATED, do not edit" header. A copy of the `sim.yaml` it used is written beside it, because `scale` and a saved workbench selection change the counts, so the repository file is the default and not the running truth.
-> Every component gets a memory limit and a priority class label (`workbench.class: P0` to `P6`) from that catalogue, which is how the governor knows what to pause first.
-> `scale` changes only the node count of a running stack; for any other `sim.yaml` change, bring the stack down and up again so every container sees the same values.
+> `benchctl compose` reads `sim.yaml` plus `profiles/NAME.yaml`. It builds the compose model from a component catalogue (`CATALOG`) and writes `compose/generated/docker-compose.yml` with a "GENERATED, do not edit" header.
+>
+> - A copy of the `sim.yaml` it used is written beside it. `scale` and a saved workbench selection change the counts, so the repository file is the default, not the running truth.
+> - Every component gets a memory limit and a priority class label (`workbench.class: P0` to `P6`) from the catalogue. That is how the governor knows what to pause first.
+> - `scale` changes only the node count of a running stack. For any other `sim.yaml` change, bring the stack down and up again, so every container sees the same values.
 
 Source: `benchctl/compose.py` (`CATALOG`, `write`), `benchctl/stack.py` (`scale`), SPEC section 3
 

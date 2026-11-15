@@ -26,11 +26,16 @@ It prints the nodes and parts, the memory by item (expected use and the cap), th
 - `does not fit: ... short by 273 MB ... Try: drop jira-real (2 GB); drop accounting (360 MB); 5 fewer node(s)`: exit code 1,
   and it says what to remove. When the workbench alone fits and only the app's reserve does not, it names the largest reserve that does (`--app-mb 700 if the app needs less than 1024 MB`); start the app after the workbench.
 
-**Expected** is what each part was measured to use plus 15 percent (never above its cap); **cap** is the container limit the
-governor enforces. Admission compares the expected use plus the app's reserve with free memory, so a start that fits is no longer
-refused because caps are generous. Services of the workbench that already run are left out of what the plan needs, for the same reason (the free figure no longer contains them). If the app under test already runs, its memory is already out of the free figure too: add
-`--app-mb 0` (to `plan`, `up`, `apply` or `start`) or set `WORKBENCH_APP_MB=0`. The numbers and how to re-measure them:
-[memory contract](../architecture/04-memory-and-profiles.md); the per-part table is in [how much memory it uses](memory.md).
+- **Expected** is what each part was measured to use, plus 15 percent (never above its cap).
+- **Cap** is the container limit the governor enforces.
+
+Admission compares the expected use plus the app's reserve with free memory. A start that fits is therefore not refused because caps are generous.
+
+Services of the workbench that already run are left out of what the plan needs, for the same reason: the free figure no longer contains them.
+
+If the app under test already runs, its memory is already out of the free figure too. Add `--app-mb 0` (to `plan`, `up`, `apply` or `start`), or set `WORKBENCH_APP_MB=0`.
+
+The numbers and how to re-measure them: [memory contract](../architecture/04-memory-and-profiles.md). The per-part table is in [how much memory it uses](memory.md).
 
 ## 2. Build
 
@@ -83,7 +88,11 @@ Name the parts by what they are for. Values are comma separated or repeated, `al
 ./scripts/benchctl start --addons --without teleport              # everything except one
 ```
 
-Category flags add to the default parts (`jira`, `bmc`, `bcm`, `accounting`); `--without` removes. A typo gets a hint: `unknown ticketing item 'jirra'. Did you mean 'jira'?`. A plain `benchctl start` with no flags is the `min` preset, which has none of the optional parts. `start` never reuses the workbench you last built: its first line names what it starts and, if one was saved, what it replaces (`Starting the min size preset. This replaces the workbench last built (2 compute + 3 GPU nodes, parts ...)`). `benchctl start --profile min` is the plain default, spelled out, and `start` with parts builds the default workbench plus those parts.
+- Category flags add to the default parts (`jira`, `bmc`, `bcm`, `accounting`). `--without` removes.
+- A typo gets a hint: `unknown ticketing item 'jirra'. Did you mean 'jira'?`.
+- A plain `benchctl start` with no flags is the `min` preset, which has none of the optional parts. `benchctl start --profile min` spells out the same default.
+- `start` with parts builds the default workbench plus those parts.
+- `start` never reuses the workbench you last built. Its first line names what it starts and, if one was saved, what it replaces: `Starting the min size preset. This replaces the workbench last built (2 compute + 3 GPU nodes, parts ...)`.
 
 ## A workbench file
 
@@ -158,8 +167,12 @@ when it restarts. The node counts stay as they are because a selection takes the
 <p align="center"><img src="../assets/art/guide-choose-workbench-diagram.svg" alt="A selection becomes an effective sim, then a plan, then governor admission, then a start" width="720"></p>
 
 > [!HOOD]
-> A selection (flags or a workbench file) becomes an effective `sim` and a profile (`benchctl/workbench.py`); the estimate is the sum of the generated container limits plus the always-on observability stack, which is the figure the governor admits against. `compose.write` writes the effective `sim` to `compose/generated/sim.yaml`, and `slurm.conf`, the BMC farm, the BCM mock and the GPU exporter all come from that one copy, so they cannot disagree.
-> `plan` changes nothing and exits 1 when the estimate does not fit. From the page, **Apply** asks the governor to rebuild to the plan through `apply-plan`, only at L0 and L1 (ADR 0017).
+> A selection (flags or a workbench file) becomes an effective `sim` and a profile (`benchctl/workbench.py`).
+>
+> - The estimate is the sum of the generated container limits plus the always-on observability stack. It is the figure the governor admits against.
+> - `compose.write` writes the effective `sim` to `compose/generated/sim.yaml`. `slurm.conf`, the BMC farm, the BCM mock and the GPU exporter all come from that one copy, so they cannot disagree.
+> - `plan` changes nothing and exits 1 when the estimate does not fit.
+> - From the page, **Apply** asks the governor to rebuild to the plan through `apply-plan`, only at L0 and L1 (ADR 0017).
 
 Source: `benchctl/workbench.py` (`effective`, `estimate`, `verdict`), [ADR 0016](../adr/0016-workbench-selection-and-effective-sim.md), [ADR 0017](../adr/0017-apply-a-plan-through-the-governor.md), [ADR 0021](../adr/0021-parts-by-category.md), SPEC W-13 and W-15
 

@@ -3,8 +3,10 @@
     python scripts/check_wiki_shape.py            check (exit 1 on a finding); run by validate.sh
     python scripts/check_wiki_shape.py --table    print the ranked audit table
 
-Rules (docs/guides/github-wiki.md): no paragraph over MAX_PARA words, no section over MAX_RUN lines without a subheading.
-A page left on purpose goes in ALLOW below, with the reason. Stdlib only.
+Rules (docs/guides/github-wiki.md): no paragraph over MAX_PARA words, no section over MAX_RUN lines without a subheading,
+and no paragraph or list item of a manual, guide or agent page over MAX_STEP words (a how-to is one action per line).
+A page left on purpose goes in ALLOW below, with the reason; a page not yet rewritten goes in STEP_TODO, a list that only shrinks
+(the test fails when a listed page already passes). Stdlib only.
 """
 import re
 import sys
@@ -14,6 +16,24 @@ ROOT = Path(__file__).resolve().parent.parent
 GROUPS = ("manual", "guides", "architecture", "adr", "agents")
 MAX_PARA = 150
 MAX_RUN = 120
+# One paragraph or list item in a how-to page: about four sentences of 17 words. The second pass (docs/wiki-second-pass) left
+# 19 items above it in 11 pages and none above 110; 70 is the strictest round figure those pages and the rewritten ones can meet.
+MAX_STEP = 70
+STEP_GROUPS = ("manual", "guides", "agents")  # how-to pages; architecture explains and ADRs record, so they keep MAX_PARA only
+STEP_SKIP = {"docs/agents/CHANGELOG.md": "a changelog entry is a record, not a procedure"}
+# Not yet rewritten into one action per line. Remove a page when it passes; never add one (tests/test_wiki_shape.py).
+STEP_TODO = (
+    "docs/guides/brand-assets.md",
+    "docs/guides/client-test-report-real-jira.md",
+    "docs/guides/client-testing.md",
+    "docs/guides/jira-tickets.md",
+    "docs/guides/memory.md",
+    "docs/guides/power-and-reboot.md",
+    "docs/guides/slurm-resilience.md",
+    "docs/guides/slurm-version.md",
+    "docs/guides/web-ui-canvas.md",
+    "docs/manual/01-what-it-is.md",
+)
 # page -> reason it is left as it is
 ADR = "an ADR is a record of a decision; its wording is left as decided"
 ALLOW: dict[str, str] = {
@@ -92,6 +112,40 @@ def measure(text: str) -> dict:
             "imgs": imgs, "bullets": longest_bullets}
 
 
+def long_steps(text: str) -> list[tuple[int, int]]:
+    """(line, words) of every paragraph or list item over MAX_STEP words, outside code, tables, quotes and Source lines."""
+    out: list[tuple[int, int]] = []
+    cur: list[str] = []
+    start = 0
+    in_code = False
+
+    def flush():
+        nonlocal cur
+        if cur and not cur[0].startswith("Source:") and len(" ".join(cur).split()) > MAX_STEP:
+            out.append((start, len(" ".join(cur).split())))
+        cur = []
+
+    for i, ln in enumerate(text.splitlines(), 1):
+        if ln.lstrip().startswith("```"):
+            in_code = not in_code
+            flush()
+            continue
+        s = ln.strip()
+        if in_code or ln.startswith(">") or not s or s.startswith(("|", "<", "![")) or re.match(r"^#{1,6} ", s):
+            flush()
+            continue
+        m = re.match(r"^(?:[-*]|\d+\.) (.*)", s)
+        if m:
+            flush()
+            start, cur = i, [m.group(1)]
+        else:
+            if not cur:
+                start = i
+            cur.append(s)
+    flush()
+    return out
+
+
 def pages() -> list[Path]:
     return sorted(p for g in GROUPS for p in (ROOT / "docs" / g).glob("*.md"))
 
@@ -117,6 +171,13 @@ def main() -> int:
             bad += 1
         if m["run"] > MAX_RUN:
             print(f"{rel}:{m['run_at']}: {m['run']} lines without a subheading (max {MAX_RUN}): add short headings")
+            bad += 1
+    for p in pages():
+        rel = p.relative_to(ROOT).as_posix()
+        if p.parent.name not in STEP_GROUPS or rel in STEP_SKIP or rel in STEP_TODO or rel in ALLOW:
+            continue
+        for line, words in long_steps(p.read_text(encoding="utf-8")):
+            print(f"{rel}:{line}: paragraph or list item of {words} words (max {MAX_STEP}): one action per line, numbered steps or bullets")
             bad += 1
     if bad:
         print(f"{bad} wiki-shape finding(s); fix the page or add it to ALLOW in scripts/check_wiki_shape.py with a reason")

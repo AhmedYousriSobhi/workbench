@@ -46,11 +46,14 @@ node --test "webui/tests/js/*.test.mjs"            # the wire's decisions, the t
 
 ## The Cluster level (the Circuit view)
 
-`webui/static/js/circuitlayout.js` says where every part and wire of one cluster goes (pure data, tested without a browser); `circuit.js` draws it into
-`#flow` and keeps it current. To add a part or a wire, add it to `circuitSpec` (same coordinates for every cluster: a part the cluster lacks is
-greyed through `present: false`, never left out) and name the documented link a wire stands for (`link: ['from', 'to']`, a pair in `webui/comms.py`),
-or `link: null` for wiring the model does not know, which is then drawn as "declared". Give each part `data-ent` (its id in the declared graph) so
-focus, blast radius and the lens work on it. Do not draw a pulse for a link nothing counts.
+`webui/static/js/circuitlayout.js` says where every part and wire of one cluster goes. It is pure data, tested without a browser. `circuit.js` draws it into `#flow` and keeps it current.
+
+**To add a part or a wire:**
+1. Add it to `circuitSpec`. The coordinates are the same for every cluster. A part the cluster lacks is greyed through `present: false`, never left out.
+2. Name the documented link a wire stands for: `link: ['from', 'to']`, a pair in `webui/comms.py`. For wiring the model does not know, use `link: null`. It is drawn as "declared".
+3. Give each part `data-ent` (its id in the declared graph), so focus, blast radius and the lens work on it.
+
+Do not draw a pulse for a link nothing counts.
 
 ```bash
 node --test "webui/tests/js/circuitlayout.test.mjs"   # same template for every cluster, greyed parts, controller variants, racks, layers
@@ -59,10 +62,16 @@ node --test "webui/tests/js/circuitlayout.test.mjs"   # same template for every 
 
 ## The zoom: Fleet, Cluster and Pool
 
-`zoom.js` owns the level (`levelNow()`: `fleet`, `cluster`, `pool`, `traffic`; `infraLevel()` is the same without Traffic) and the move between levels (`zoomTo(level, {origin, pool, cluster})`, ADR 0040). Fleet
-is `fleet.js` + `fleetlayout.js`, Pool is `pool.js` + `poollayout.js` (the pure parts are tested with `node --test`). To show a new fact on a card or
-tile add it to the pure module first and say "not measured" where the page has no data; never default a missing number to 0. After any move exactly one
-layer is visible and the others are `hidden` and `inert`; `syncZoom()` is the one place that decides that, so call it (not `hidden = ...`) after a state change.
+`zoom.js` owns the level and the move between levels.
+- `levelNow()` returns `fleet`, `cluster`, `pool` or `traffic`. `infraLevel()` is the same without Traffic.
+- `zoomTo(level, {origin, pool, cluster})` moves between levels (ADR 0040).
+- Fleet is `fleet.js` + `fleetlayout.js`. Pool is `pool.js` + `poollayout.js`. The pure parts are tested with `node --test`.
+
+**To show a new fact on a card or tile:**
+1. Add it to the pure module first.
+2. Say "not measured" where the page has no data. Never default a missing number to 0.
+
+After any move, exactly one layer is visible and the others are `hidden` and `inert`. `syncZoom()` is the one place that decides that. After a state change, call it, not `hidden = ...`.
 
 ```bash
 node --test "webui/tests/js/poollayout.test.mjs"   # paging, filters, KPIs, state bar, GPU bars, card health and structure

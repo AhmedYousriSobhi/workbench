@@ -59,7 +59,17 @@ benchctl up --with accounting --slurm-version 25.11.9
 benchctl scenario run slurm-upgrade-mid-job --trace
 ```
 
-A real job starts on `cn001`; then each part is upgraded to 26.05.5 in SchedMD's order: `slurmdbd`, `slurmctld` and `slurmrestd`, every `slurmd`, last the login node. For each one the step copies that release's `/opt/slurm` out of its image into the running container and restarts only that daemon (the container is never recreated; `slurmdbd` and `slurmctld` are the container's main process, so their container restarts and keeps its disk, a node's `slurmd` is restarted by the node's supervisor). The job and its `slurmstepd` must stay running through every stage. Each step prints `upgraded NAME: old -> new`.
+A real job starts on `cn001`. Then each part is upgraded to 26.05.5 in SchedMD's order:
+1. `slurmdbd`, `slurmctld` and `slurmrestd`
+2. every `slurmd`
+3. the login node
+
+For each one, the step copies that release's `/opt/slurm` out of its image into the running container and restarts only that daemon.
+- The container is never recreated.
+- `slurmdbd` and `slurmctld` are the container's main process, so their container restarts and keeps its disk.
+- A node's `slurmd` is restarted by the node's supervisor.
+
+The job and its `slurmstepd` must stay running through every stage. Each step prints `upgraded NAME: old -> new`.
 
 - The release to upgrade to is the `to:` in `scenarios/slurm-upgrade-mid-job.yaml`; copy the file and change it (and the node list) for another pair. Both releases must be in the table, and the older one is the release the cluster was started with. SchedMD supports upgrading from the previous three major releases.
 - The first run builds the target release's image if it is missing (a few minutes, kept afterwards). Building competes for memory with the cluster: run it on a quiet machine.
