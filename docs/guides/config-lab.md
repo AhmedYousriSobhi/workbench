@@ -53,8 +53,8 @@ Question it answers: does production's configuration run in the lab, and which k
 
 | Line | What runs | PASS means |
 |---|---|---|
-| `slurm.conf` | a throwaway slurmctld on the rendered files (no network, empty state, its own munge key) | it reported that it started within 20 s. The first `fatal:` line fails and is shown; `error:` lines are warnings (unresolvable node names and an unreachable slurmdbd are expected) |
-| `sacctmgr load` | a throwaway slurmdbd on a scratch database of the running MariaDB; QOS added, the dump loaded, read back and compared | everything loaded; a changed option is a warning |
+| `slurm.conf` | a throwaway slurmctld on the rendered files (its own `--internal` network with no route to the live stack or the internet, removed after the run; empty state, its own munge key) | it logged `Running as primary controller` within 20 s, which it does only after it has checked the nodes, partitions and plugins. The first `fatal:` line fails and is shown; `error:` lines are warnings (unresolvable node names and an unreachable slurmdbd are expected). A partition `QOS=` is not checked here (the one-shot has no accounting); `sacctmgr load` covers the QOS |
+| `sacctmgr load` | a throwaway slurmdbd on a scratch database of the running MariaDB; QOS added (a `GraceTime` in seconds, the `gres/` and `license/` TRES they use declared through a short-lived slurmctld), the dump loaded, read back and compared | everything loaded; a changed option is a warning. `SKIP` when the database user lacks the rights slurmdbd needs (see below) |
 | `promtool check rules`, `promtool test rules` | promtool from the pinned Prometheus image | rules parse; the `*.test.yml` cases pass |
 | `kubectl dry-run` | `kubectl apply --dry-run=server` against the lab's API server | the API server accepts every kept object |
 | `teleport role` | structure check (kind, version, allow/deny, misspelled keys); with Teleport running also a temporary role created and deleted | "structure only" or "accepted by Teleport" |

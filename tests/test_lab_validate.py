@@ -96,30 +96,59 @@ def test_result_shape_and_summary_words():
 # ---- slurmctld
 def test_parse_slurmctld_started_with_errors_is_a_pass_with_warnings():
     started, fatal, warn = lab_validate.parse_slurmctld(out("slurmctld-ok.txt"))
-    assert started and not fatal and len(warn) == 4
+    assert started and not fatal and len(warn) == 10 and "HealthCheckTimeout" in warn[0]  # capped at 10 (captured output)
 
 
 def test_parse_slurmctld_fatal_fails_and_is_shown():
     started, fatal, _ = lab_validate.parse_slurmctld(out("slurmctld-fatal.txt"))
-    assert not started and fatal == ["slurmctld: fatal: Can not recover select/doesnotexist plugin"]
+    assert not started and len(fatal) == 1 and "fatal: failed to initialize node selection plugin" in fatal[0]
 
 
 def test_slurm_one_shot_is_isolated(tmp_path):
     ex = Fake([("slurmctld -D", (0, out("slurmctld-ok.txt")))])
     r = lab_validate.check_slurm(tmp_path, "ctl-lab", ["PreemptType"], ex)
-    argv = ex.calls[0][0]
+    argv = next(c[0] for c in ex.calls if c[0][:2] == ["docker", "run"])
     text = " ".join(argv)
-    assert r["status"] == "passed" and r["restart_required"] and len(r["warnings"]) == 4
-    assert argv[argv.index("--network") + 1] == "none" and "--rm" in argv and "--memory" in argv and "--hostname" in argv
+    net = argv[argv.index("--network") + 1]
+    assert r["status"] == "passed" and r["restart_required"] and len(r["warnings"]) == 11 and "partition QOS" in r["warnings"][0]
+    assert net.startswith("workbench-lab-validate-") and net != lab_validate.NETWORK and "--rm" in argv and "--memory" in argv and "--hostname" in argv
     assert "workbench.class" not in text and "/var/spool/slurmctld:" not in text  # never the live state, never a governed label
     assert text.count("-v ") == 1 and f"{tmp_path.resolve()}:/render:ro" in text  # only the rendered config, read-only
     assert "munged" in argv[-1] and "urandom" in argv[-1] and "munge.key" in argv[-1]  # its own munge key, started inside
     assert "StateSaveLocation" not in argv[-1]
 
 
+def test_slurm_network_is_internal_per_run_and_removed_even_on_error(tmp_path):
+    ex = Fake([("slurmctld -D", (0, out("slurmctld-ok.txt")))])
+    lab_validate.check_slurm(tmp_path, "ctl-lab", [], ex)
+    cmds = [c[0] for c in ex.calls]
+    create = next(c for c in cmds if c[:3] == ["docker", "network", "create"])
+    assert "--internal" in create and create[-1].startswith("workbench-lab-validate-") and create[-1] != lab_validate.NETWORK
+    assert cmds[-1] == ["docker", "network", "rm", create[-1]] and cmds[-2][:2] == ["docker", "run"]
+    boom = Fake()
+    real = boom.__call__
+
+    def exploding(argv, stdin=None, timeout=60):
+        if argv[:2] == ["docker", "run"]:
+            raise RuntimeError("docker died")
+        return real(argv, stdin, timeout)
+
+    with pytest.raises(RuntimeError):
+        lab_validate.check_slurm(tmp_path, "ctl-lab", [], exploding)
+    assert any(c[0][:3] == ["docker", "network", "rm"] for c in boom.calls)
+    refused = Fake([("network create", (1, "no pool\n"))])
+    r = lab_validate.check_slurm(tmp_path, "ctl-lab", [], refused)
+    assert r["status"] == "failed" and "throwaway network" in r["messages"][0]
+
+
+def test_slurmctld_started_line_before_a_late_fatal_is_a_failure():
+    started, fatal, _ = lab_validate.parse_slurmctld(out("slurmctld-fatal.txt"))  # captured: "started on cluster" comes first
+    assert "started on cluster" in out("slurmctld-fatal.txt") and not started and fatal and "node selection plugin" in fatal[0]
+
+
 def test_slurm_fatal_fails_with_the_fatal_line(tmp_path):
     r = lab_validate.check_slurm(tmp_path, "ctl-lab", [], Fake([("slurmctld -D", (0, out("slurmctld-fatal.txt")))]))
-    assert r["status"] == "failed" and "fatal: Can not recover" in r["messages"][0] and r["restart_required"] is False
+    assert r["status"] == "failed" and "fatal: failed to initialize" in r["messages"][0] and r["restart_required"] is False
     r = lab_validate.check_slurm(tmp_path, "ctl-lab", [], Fake([("slurmctld -D", (0, "slurmctld: error: nothing useful\n"))]))
     assert r["status"] == "failed" and "within 20 s" in r["messages"][0]
     assert lab_validate.check_slurm(tmp_path, "bad host;", [], Fake())["status"] == "failed"
@@ -171,6 +200,33 @@ def test_accounting_load_failure_and_missing_account_fail(tmp_path):
     assert r["status"] == "passed" and any("Fairshare 10 -> 7" in w for w in r["warnings"])
     r, _ = accounting(tmp_path, Fake(sacct_routes(run=(0, "@@DBD_FAILED\nslurmdbd: fatal: no\n"))))
     assert r["status"] == "failed" and "did not come up" in r["messages"][0]
+
+
+def test_accounting_without_routine_privileges_is_skipped_honestly(tmp_path):
+    r, _ = accounting(tmp_path, Fake(sacct_routes(run=(0, out("sacctmgr-run-no-routine-grant.txt")))))  # captured
+    assert r["status"] == "skipped" and "CREATE ROUTINE and ALTER ROUTINE" in r["messages"][0]
+    assert lab_validate.summarise([r]) == "passed with 1 skipped"
+
+
+def test_a_real_dump_lists_qos_first_and_sorts_the_account_qos_list(tmp_path):
+    real = out("sacctmgr-run-ok.txt").split("@@AFTER\n")[1].split("@@END")[0]
+    assert "QOS - 'normal'" in real and "QOS='high,normal'" in real  # captured shapes
+    assert lab_validate.diff_dump(li_text(), real) == ([], [])  # QOS 'normal,high' vs 'high,normal' is no change
+
+
+def li_text() -> str:
+    return (FIX / "full" / "sacctmgr.dump").read_text()
+
+
+def test_grace_time_goes_to_sacctmgr_in_seconds_and_gres_tres_are_declared():
+    q = lab_validate.qos_script([{"Name": "high", "GraceTime": "00:00:30"}, {"Name": "n", "GraceTime": "1-00:01:00"}, {"Name": "m", "GraceTime": "90"}])
+    assert "GraceTime=30" in q and "GraceTime=86460" in q and "GraceTime=90" in q and "00:00:30" not in q
+    assert lab_validate.tres_names("MaxTRESPU=gres/gpu=4 GrpTRES=gres/gpu:h100=8,cpu=4 license/matlab=2") == ["gres/gpu", "gres/gpu:h100", "license/matlab"]
+    plain = lab_validate.accounting_script("lab_validate_x", "prodsim")
+    assert "slurmctld -D" not in plain and "SlurmctldHost=localhost" in plain  # sacctmgr needs one (captured)
+    with_tres = lab_validate.accounting_script("lab_validate_x", "prodsim", ["gres/gpu"])
+    assert "AccountingStorageTRES=gres/gpu" in with_tres and "slurmctld -D" in with_tres and "ClusterName=prodsim" in with_tres
+    assert with_tres.index("slurmctld -D") < with_tres.index("sh /lab/qos.sh")
 
 
 def test_accounting_drops_the_database_even_when_the_one_shot_raises(tmp_path):

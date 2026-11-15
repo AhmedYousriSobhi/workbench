@@ -1,0 +1,16 @@
+CAPTURED from slurmdbd and sacctmgr 26.05.5 (MariaDB 11.8) in the throwaway one-shot, with the grant of the ten privileges (issue 778)
+@@DBD_FAILED
+[2026-11-15T09:37:50.134] accounting_storage/as_mysql: _check_mysql_concat_is_sane: MySQL server version is: 11.8.9-MariaDB-ubu2404
+[2026-11-15T09:37:50.134] error: innodb_snapshot_isolation is enabled, which is not supported by Slurm and will cause slurmdbd to fatal when a write conflicts with a concurrent transaction.  Set innodb_snapshot_isolation=OFF.
+[2026-11-15T09:37:50.134] error: Database settings not recommended values: innodb_buffer_pool_size innodb_log_file_size innodb_lock_wait_timeout
+[2026-11-15T09:37:50.140] error: mysql_query failed: 1370 alter routine command denied to user 'slurm'@'%' for routine 'lab_validate_0cce6a4f.get_lineage'
+drop procedure if exists get_lineage;
+[2026-11-15T09:37:50.140] error: issue making get_lineage procedure
+[2026-11-15T09:37:50.140] fatal: as_mysql_user_create_user_coords_list: pthread_rwlock_wrlock(): Resource deadlock avoided
+[2026-11-15T09:37:50.134] accounting_storage/as_mysql: _check_mysql_concat_is_sane: MySQL server version is: 11.8.9-MariaDB-ubu2404
+[2026-11-15T09:37:50.134] error: innodb_snapshot_isolation is enabled, which is not supported by Slurm and will cause slurmdbd to fatal when a write conflicts with a concurrent transaction.  Set innodb_snapshot_isolation=OFF.
+[2026-11-15T09:37:50.134] error: Database settings not recommended values: innodb_buffer_pool_size innodb_log_file_size innodb_lock_wait_timeout
+[2026-11-15T09:37:50.140] error: mysql_query failed: 1370 alter routine command denied to user 'slurm'@'%' for routine 'lab_validate_0cce6a4f.get_lineage'
+drop procedure if exists get_lineage;
+[2026-11-15T09:37:50.140] error: issue making get_lineage procedure
+[2026-11-15T09:37:50.140] fatal: as_mysql_user_create_user_coords_list: pthread_rwlock_wrlock(): Resource deadlock avoided

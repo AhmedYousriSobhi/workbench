@@ -139,6 +139,8 @@ def parse_sacctmgr_dump(text: str) -> dict[str, Any]:
         opts = {k: v.strip("'") for k, v in re.findall(r":([A-Za-z]+)=('[^']*'|[^:]*)", rest)}
         if kind == "Cluster":
             out["cluster"] = name
+        elif kind == "QOS":
+            continue  # a real `sacctmgr dump` lists the QOS first (captured, issue 778); the lab takes them from `sacctmgr show qos`
         elif kind == "Parent":
             parent = name
         elif kind == "Account":
