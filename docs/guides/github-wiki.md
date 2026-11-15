@@ -58,11 +58,14 @@ fixed subset). Use only these; anything else is escaped in the help.
 | `> [!HOOD]` (under the hood), `> [!DIDYOUKNOW]` | the same kind of box | rewritten to a quote headed by `**🔧 Under the hood**` or `**💡 Did you know?**` |
 | `<details><summary>Title</summary>` ... `</details>` | collapsible block | same |
 | `<p align="center"><img src="..." alt="..." width="720"></p>` | centred image | image path rewritten to `images/` |
-| `<picture>` with `<source media srcset>` and an `<img>` | shows the `<img>` | `srcset` and `src` rewritten |
+| `<picture>` with `<source media srcset>` and an `<img>` | the `<img>`, and the `prefers-color-scheme: dark` source when it is inside `docs/` | `srcset` and `src` rewritten |
 | an image, then an italic line (`*caption*`) | `<figure>` with a caption | plain image and italic line |
 | `<kbd>Ctrl</kbd>` | key cap | same |
 
 Illustrations come from `docs/assets/art/` ([brand and art](brand-assets.md)); the wiki copies them to `images/art-NAME.svg`.
+
+Code snapshots come from `docs/assets/snapshots/` (same guide); the wiki copies them to `images/snap-NAME.svg`.
+
 A project callout kind that GitHub does not know would show as a plain quote in the repository view, which is acceptable.
 Check in a wiki preview that the five GitHub kinds render as alerts in the Wiki; if they do not, rewrite them as the two project kinds are.
 

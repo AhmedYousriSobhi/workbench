@@ -1,0 +1,15 @@
+[ok  ] os: Ubuntu 26.04.1 LTS
+[ok  ] cpu: 16 cores
+[ok  ] ram: 14.8 GB total
+[ok  ] disk: 197 GB free
+[ok  ] python: python 3.14
+[ok  ] cgroup v2: unified hierarchy
+[ok  ] docker: installed
+[ok  ] docker daemon: running, server 29.9.2
+[ok  ] docker compose: v5.7.0
+[ok  ] ports: all free on 127.0.0.1
+[ok  ] kvm: /dev/kvm present
+[ok  ] virsh: found
+[ok  ] profiles: 5.6 GB available now; fits: mac-agent, min, std, full, jira-real (largest: jira-real, budget 4.2 GB)
+
+READY: this machine can build and run workbench (0 warning(s)). Next: python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'

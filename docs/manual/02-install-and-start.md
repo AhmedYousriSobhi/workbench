@@ -25,6 +25,15 @@ Check all of this before building anything:
 ./scripts/check-machine.sh      # needs only system python3; ends READY or NOT READY with a fix line per problem
 ```
 
+On a machine that qualifies it prints one line per check and ends with READY (real output, captured by `scripts/make_snapshots.py`):
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/snapshots/check-machine-dark.svg">
+  <img src="../assets/snapshots/check-machine-light.svg" alt="Terminal: ./scripts/check-machine.sh (prints: READY: this machine can build and run workbench (0 warning(s)))">
+</picture>
+
+*check-machine on a machine that qualifies*
+
 ## Start, check and stop
 
 ```bash

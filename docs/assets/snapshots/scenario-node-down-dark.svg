@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 550 224" width="550" height="224" role="img" aria-labelledby="t d" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,&#x27;DejaVu Sans Mono&#x27;,&#x27;Liberation Mono&#x27;,monospace" font-size="13">
+<title id="t">A scenario&#x27;s timeline, without running it</title><desc id="d">Terminal: ./scripts/benchctl scenario run node-down --dry-run (prints: SC-17 node-down: 6 steps, 40 s, targets bcm-mock, bmc-farm, slurm)</desc>
+<rect x="0.5" y="0.5" width="549" height="223" rx="10" fill="#0e1b19" stroke="#4f5b59"/>
+<path d="M0.5 34V10.5a10 10 0 0 1 10-10H539.5a10 10 0 0 1 10 10V34Z" fill="#1c2927" stroke="#4f5b59"/>
+<circle cx="18" cy="17.0" r="5" fill="none" stroke="#4f5b59" stroke-width="1.5"/><circle cx="34" cy="17.0" r="5" fill="none" stroke="#4f5b59" stroke-width="1.5"/><circle cx="50" cy="17.0" r="5" fill="none" stroke="#4f5b59" stroke-width="1.5"/>
+<text x="66" y="21.5" fill="#afb2b1" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,&#x27;DejaVu Sans Mono&#x27;,&#x27;Liberation Mono&#x27;,monospace" font-size="12">A scenario&#x27;s timeline, without running it</text>
+<text x="18" y="60" font-weight="700" xml:space="preserve"><tspan fill="#2fc4b2">$ </tspan><tspan fill="#f5f7f7">./scripts/benchctl scenario run node-down --dry-run</tspan></text>
+<text x="18" y="80" fill="#f5f7f7" font-weight="700" xml:space="preserve">SC-17 node-down: 6 steps, 40 s, targets bcm-mock, bmc-farm, slurm</text>
+<text x="18" y="100" fill="#cccece" xml:space="preserve">[   0.0s] bmc-farm {&#x27;nodes&#x27;: [&#x27;cn002&#x27;], &#x27;power&#x27;: &#x27;Off&#x27;}</text>
+<text x="18" y="120" fill="#cccece" xml:space="preserve">[   0.0s] bcm-mock {&#x27;nodes&#x27;: [&#x27;cn002&#x27;], &#x27;state&#x27;: &#x27;DOWN&#x27;}</text>
+<text x="18" y="140" fill="#cccece" xml:space="preserve">[   5.0s] slurm {&#x27;drain&#x27;: [&#x27;cn002&#x27;], &#x27;reason&#x27;: &#x27;node down&#x27;}</text>
+<text x="18" y="160" fill="#cccece" xml:space="preserve">[  40.0s] bmc-farm {&#x27;nodes&#x27;: [&#x27;cn002&#x27;], &#x27;clear&#x27;: True}</text>
+<text x="18" y="180" fill="#cccece" xml:space="preserve">[  40.0s] bcm-mock {&#x27;nodes&#x27;: [&#x27;cn002&#x27;], &#x27;state&#x27;: &#x27;UP&#x27;}</text>
+<text x="18" y="200" fill="#cccece" xml:space="preserve">[  40.0s] slurm {&#x27;resume&#x27;: [&#x27;cn002&#x27;]}</text>
+</svg>

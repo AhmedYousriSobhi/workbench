@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 763 264" width="763" height="264" role="img" aria-labelledby="t d" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,&#x27;DejaVu Sans Mono&#x27;,&#x27;Liberation Mono&#x27;,monospace" font-size="13">
+<title id="t">plan: the cost before the build</title><desc id="d">Terminal: ./scripts/benchctl plan --cpu-nodes 2 --gpu-nodes 4 --with jira (prints: fits: needs 1669 MB (645 MB expected + 1024 MB for the app (assumed, not measured)), 5691 MB free, 4022 MB would remain (floor 1024 MB))</desc>
+<rect x="0.5" y="0.5" width="762" height="263" rx="10" fill="#ffffff" stroke="#afb2b1"/>
+<path d="M0.5 34V10.5a10 10 0 0 1 10-10H752.5a10 10 0 0 1 10 10V34Z" fill="#eef1f0" stroke="#afb2b1"/>
+<circle cx="18" cy="17.0" r="5" fill="none" stroke="#afb2b1" stroke-width="1.5"/><circle cx="34" cy="17.0" r="5" fill="none" stroke="#afb2b1" stroke-width="1.5"/><circle cx="50" cy="17.0" r="5" fill="none" stroke="#afb2b1" stroke-width="1.5"/>
+<text x="66" y="21.5" fill="#4f5b59" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,&#x27;DejaVu Sans Mono&#x27;,&#x27;Liberation Mono&#x27;,monospace" font-size="12">plan: the cost before the build</text>
+<text x="18" y="60" font-weight="700" xml:space="preserve"><tspan fill="#006b5f">$ </tspan><tspan fill="#1c2927">./scripts/benchctl plan --cpu-nodes 2 --gpu-nodes 4 --with jira</tspan></text>
+<text x="18" y="80" fill="#364341" xml:space="preserve">Workbench:   workbench</text>
+<text x="18" y="100" fill="#364341" xml:space="preserve">Nodes:       2 cpu, 4 gpu x 8 GPUs</text>
+<text x="18" y="120" fill="#364341" xml:space="preserve">Login nodes: login (ssh)</text>
+<text x="18" y="140" fill="#364341" xml:space="preserve">Parts:       accounting, bcm, bmc, jira (always: slurm, Prometheus, Grafana)</text>
+<text x="18" y="160" fill="#4f5b59" font-style="italic" xml:space="preserve">... (23 lines left out)</text>
+<text x="18" y="180" fill="#364341" xml:space="preserve">  needs                  1669   (admitted against this)</text>
+<text x="18" y="200" fill="#364341" xml:space="preserve"></text>
+<text x="18" y="220" fill="#1c2927" font-weight="700" xml:space="preserve">fits: needs 1669 MB (645 MB expected + 1024 MB for the app (assumed, not measured)), 5691 MB</text>
+<text x="18" y="240" fill="#1c2927" font-weight="700" xml:space="preserve">  free, 4022 MB would remain (floor 1024 MB)</text>
+</svg>
