@@ -179,15 +179,16 @@
    The state is the glyph and the words in every badge's name; the colour only helps. Nothing here animates, so reduced motion needs no rule. ---- */
 #flow[data-cv] .runlayer [role=button] { cursor:pointer; outline:none; }
 #flow[data-cv] .runlayer rect { fill:var(--cv-surface); stroke:var(--cv-text-muted); stroke-width:2; }
-#flow[data-cv] .runlayer text { font:700 21px var(--cv-font-ui); fill:var(--cv-text); pointer-events:none; }
-#flow[data-cv] .runlayer .rl-more { font-size:17px; font-weight:600; fill:var(--cv-text-2); }
-#flow[data-cv] .runlayer .k-done rect { fill:var(--accent-fill); stroke:var(--accent-fill); } #flow[data-cv] .runlayer .k-done text { fill:var(--on-accent); }
-#flow[data-cv] .runlayer :is(.k-now, .k-active) rect { stroke:var(--accent); stroke-width:3; } #flow[data-cv] .runlayer :is(.k-now, .k-active) .rl-t { fill:var(--accent-text); }
-#flow[data-cv] .runlayer :is(.k-next, .k-notrun) rect { stroke-dasharray:5 4; } #flow[data-cv] .runlayer :is(.k-next, .k-notrun) .rl-t { fill:var(--cv-text-2); }
-#flow[data-cv] .runlayer :is(.k-cli, .k-skipped) rect { fill:var(--cv-badge-bg); stroke:var(--warn); } #flow[data-cv] .runlayer :is(.k-cli, .k-skipped) .rl-t { fill:var(--warn-text); }
-#flow[data-cv] .runlayer .k-failed rect { stroke:var(--bad); stroke-width:3; } #flow[data-cv] .runlayer .k-failed .rl-t { fill:var(--bad); }
-#flow[data-cv] .runlayer .sel rect, #flow[data-cv] .runlayer [role=button]:hover rect { stroke-width:4; }
-#flow[data-cv] .runlayer [role=button]:focus-visible rect { stroke:var(--focus); stroke-width:4; }
+#flow[data-cv] .runlayer rect.rl-hit { fill:transparent; stroke:none; }  /* the 40 px tap target round a smaller pill; draws nothing */
+#flow[data-cv] .runlayer text { font:700 var(--rl-fs, 21px) var(--cv-font-ui); fill:var(--cv-text); pointer-events:none; }  /* --rl-fs: set by runlayer.js so the text is >= 14 px on screen */
+#flow[data-cv] .runlayer .rl-more { font-size:calc(var(--rl-fs, 21px) * 0.82); font-weight:600; fill:var(--cv-text-2); }
+#flow[data-cv] .runlayer .k-done .rl-pill { fill:var(--accent-fill); stroke:var(--accent-fill); } #flow[data-cv] .runlayer .k-done text { fill:var(--on-accent); }
+#flow[data-cv] .runlayer :is(.k-now, .k-active) .rl-pill { stroke:var(--accent); stroke-width:3; } #flow[data-cv] .runlayer :is(.k-now, .k-active) .rl-t { fill:var(--accent-text); }
+#flow[data-cv] .runlayer :is(.k-next, .k-notrun) .rl-pill { stroke-dasharray:5 4; } #flow[data-cv] .runlayer :is(.k-next, .k-notrun) .rl-t { fill:var(--cv-text-2); }
+#flow[data-cv] .runlayer :is(.k-cli, .k-skipped) .rl-pill { fill:var(--cv-badge-bg); stroke:var(--warn); } #flow[data-cv] .runlayer :is(.k-cli, .k-skipped) .rl-t { fill:var(--warn-text); }
+#flow[data-cv] .runlayer .k-failed .rl-pill { stroke:var(--bad); stroke-width:3; } #flow[data-cv] .runlayer .k-failed .rl-t { fill:var(--bad); }
+#flow[data-cv] .runlayer .sel .rl-pill, #flow[data-cv] .runlayer [role=button]:hover .rl-pill { stroke-width:4; }
+#flow[data-cv] .runlayer [role=button]:focus-visible .rl-pill { stroke:var(--focus); stroke-width:4; }
 /* the chosen step's parts (the current one while the run plays): an accent outline. The declared blast radius keeps its red dashes. */
 #flow[data-cv] [data-runring]:not([data-blast]) > .cv-box { stroke:var(--accent); stroke-width:4; }
 #flow[data-cv] .cv-sq[data-runring]:not([data-blast]) rect { stroke:var(--accent); stroke-width:3.5; }

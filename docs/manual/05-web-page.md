@@ -289,12 +289,12 @@ Each move takes about 0.7 s (none under reduced motion). The old level is gone a
 
 Press **Watch on the diagram** in Test run, during or after a run. The Topology tab opens on the Circuit view with the run drawn on it. Pressing **Play** keeps you in Test run.
 
-- **Badges.** Each part a step acted on gets a badge: the step number and a glyph. ✓ done, ● now, ◐ in progress, ○ next, ↷ CLI only or skipped, ✗ failed.
+- **Badges.** Each part a step acted on gets a badge: the step number and a glyph. ✓ done, ● now, ◐ in progress, ○ next, ↷ CLI only or skipped, ✗ failed. Badge text stays at least 14 px on screen however small the diagram is drawn, and each badge is a 40 px tap target.
 - **+N.** A part that several steps touch shows the newest step and **+N** for the others.
 - **The ring.** The current step's parts (or the step you picked) get an outline. The blast radius keeps its red dashes.
 - **Pins.** An expectation gets a pin such as **E1 ↷** on the part it checks.
 - **The strip** over the diagram says the step in words, with **◀ Previous**, **Steps** and **Next ▶**. On a phone it is a sheet at the bottom of the screen, and the diagram scrolls to the step's parts.
-- **The Run tab** in the inspector lists every step in order: its time, its parts and its state in words. A step that lands on no part says why.
+- **The Run tab** in the inspector lists every step in order: what it does in one sentence (for example *Freeze the login node (SSH hangs)* or *Add 200 ms delay and 5% packet loss on cn001 for 60 s*), its time, its parts and its state in words. A step that lands on no part says why.
 - **Keyboard.** Tab goes through the badges in step order. Enter or Space picks that step.
 - **Take off the diagram** removes a finished run's badges. The run itself lives until the page restarts.
 
