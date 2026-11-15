@@ -89,6 +89,18 @@ def test_unprivileged_and_memory_limited(login):
     assert r[0] == "false" and int(r[1]) > 0 and r[2] == "[]"
 
 
+def test_the_watchdog_finds_nothing_wrong_in_the_real_containers(login):
+    """The accepted SYS_PTRACE on Slurm nodes (ADR 0074) must pass the watchdog on real `docker inspect` output, which spells it
+    CAP_SYS_PTRACE (#790: the unit tests used the unprefixed name, so every node was flagged on the page)."""
+    import json
+
+    from governor.watchdog import container_violations
+
+    names = subprocess.run(["docker", "ps", "-q", "--filter", "name=workbench-"], capture_output=True, text=True, check=True).stdout.split()
+    inspected = json.loads(subprocess.run(["docker", "inspect", *names], capture_output=True, text=True, check=True).stdout)
+    assert inspected and container_violations(inspected) == []
+
+
 def test_shell_is_bash_on_login_and_nodes(login):
     """A terminal session is a real bash: the account's login shell, not dash (#154)."""
     assert ssh("getent", "passwd", "alice").stdout.strip().endswith(":/bin/bash")

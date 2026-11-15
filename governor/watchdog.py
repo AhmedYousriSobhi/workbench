@@ -22,8 +22,13 @@ ACCEPTED_SLURMRESTD = frozenset({"disable_unshare_sysv", "disable_unshare_files"
 NODE_CAPS = frozenset({"SYS_PTRACE"})
 
 
+def _cap_name(cap: str) -> str:
+    """`docker inspect` reports capabilities as `CAP_SYS_PTRACE`; compose and the docs say `SYS_PTRACE`: compare without the prefix."""
+    return str(cap).upper().removeprefix("CAP_")
+
+
 def _node_caps_ok(c: dict, caps: list[str]) -> bool:
-    return bool((c.get("Config") or {}).get("Labels", {}).get("workbench.node")) and set(caps) <= NODE_CAPS
+    return bool((c.get("Config") or {}).get("Labels", {}).get("workbench.node")) and {_cap_name(x) for x in caps} <= NODE_CAPS
 
 
 def _slurmrestd_options(c: dict) -> set[str]:
