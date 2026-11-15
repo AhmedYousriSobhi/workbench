@@ -30,7 +30,9 @@ then every node; Type, Hostname, MAC, Category, IP, Network and `[   UP   ]`-sty
 (`Error: this cmsh is read-only`, exit 1); the interactive console accepts the same read-only subset. The head node is the login container itself.
 
 ## Addendum: the events log (issue 714)
-The events-log tail is no longer out of scope. bcm-mock records every node state change (a scenario, the web page, a power call or `/sim/inject`; a repeat of the same state is not an event) and serves them as `cmevents.getEvents` (`args: [since_seq]`, answer `{seq, events: [{seq, time, severity, host, text}]}`, at most 1000 kept). `images/login/events_log.py` runs on the head node (the login container, or the controller when there is one) and appends each event to `/var/spool/cmd/events.log` (mode 644, rewritten when the process starts, polled every 3 s; a bcm-mock restart makes the counter go back and the feed start over). A line looks like
+The events-log tail is no longer out of scope. bcm-mock records every node state change (a scenario, the web page, a power call or `/sim/inject`; a repeat of the same state is not an event) and serves them as `cmevents.getEvents` (`args: [since_seq]`, answer `{seq, events: [{seq, time, severity, host, text}]}`, at most 1000 kept). `images/login/events_log.py` runs on the head node (the login container, or the controller when there is one) and appends each event to `/var/spool/cmd/events.log` (mode 644, rewritten when the process starts, polled every 3 s; a bcm-mock restart makes the counter go back and the feed start over).
+
+The poll carries `X-Workbench-Probe` (`cmsh.call(..., probe=True)`): it is the head node's own work, so bcm-mock does not count it as client traffic and the page's flow feed draws no dots for it (issue 780). A user's `cmsh` does not send it, so a user's commands stay visible. A line looks like
 
     Tue Oct  6 12:00:00 2026 [alert] cn001: Device status changed from UP to DOWN
 

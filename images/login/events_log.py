@@ -31,6 +31,12 @@ def load_cmsh():
     raise FileNotFoundError("cmsh")
 
 
+def fetch(cmsh, since: int) -> dict:
+    """The poll itself. It is the head node's own daemon, not a client of the BCM: marked as the workbench's own request (X-Workbench-Probe),
+    so bcm-mock does not count it and the flow feed draws no dots for it (every 3 s, issue 780)."""
+    return cmsh.call("cmevents", "getEvents", [since], probe=True)
+
+
 def line(ev: dict) -> str:
     """One log line: `%a %b %e %H:%M:%S %Y` (day of month padded with a space, as ctime and CMDaemon print it)."""
     stamp = time.strftime("%a %b %e %H:%M:%S %Y", time.localtime(ev["time"]))
@@ -60,7 +66,7 @@ def main() -> None:
     since = 0
     while True:
         with contextlib.suppress(cmsh.Unreachable, OSError, KeyError):  # the mock is down or not started yet: try again
-            since = step(lambda s: cmsh.call("cmevents", "getEvents", [s]), LOG, since)
+            since = step(lambda s: fetch(cmsh, s), LOG, since)
         time.sleep(3)
 
 
