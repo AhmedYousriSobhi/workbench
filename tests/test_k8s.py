@@ -293,7 +293,7 @@ def test_a_metrics_user_reads_only_metrics_and_an_older_cluster_gets_one(tmp_pat
     lines = [ln for ln in (d / "tokens.csv").read_text().splitlines() if ln.split(",")[1] != "metrics"]
     (d / "tokens.csv").write_text("\n".join(lines) + "\n")
     k8s.prepare(SIM, ips, d, tmp_path / "st")
-    assert k8s.metrics_token(d) and len((d / "tokens.csv").read_text().splitlines()) == 3
+    assert k8s.metrics_token(d) and len((d / "tokens.csv").read_text().splitlines()) == 4
 
 
 def test_api_requests_sums_the_counter_and_is_none_when_unreadable(monkeypatch):

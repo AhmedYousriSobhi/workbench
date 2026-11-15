@@ -46,10 +46,10 @@ STAGES = [  # (label, service-name pattern); later stages depend on earlier ones
     ("slurm services", r"slurmrestd|accounting-init"),
     ("mocks", r"bmc-farm|bcm-mock|jira-mock"),
     ("jira real", r"jira-db|jira-real"),
-    ("teleport", r"teleport"),
     ("object store", r"objectstore"),
     ("kubernetes", r"k8s-etcd|k8s-apiserver|k8s-controller-manager|k8s-scheduler"),
     ("kubernetes nodes", r"kwok-controller"),  # starts only once the stages exist: with none it exits
+    ("teleport", r"teleport"),  # after the API server: its Kubernetes Service registers that cluster at start (ADR 0083); before the nodes, which read its host certificates
     ("bmc addresses", r"bmc-(cn|gpu)\d+"),
     ("nodes", r"(cn|gpu|rgpu)\d+"),
     ("login node", r"login\d*"),
@@ -399,12 +399,6 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     if first is not None or wanted:
         stage({"stage": "Build images", "state": "done"})
     ips = addressing.plan(sim, prof.get("compute_nodes"))
-    if "teleport" in todo:
-        try:
-            teleport.prepare(sim, ips)
-        except (OSError, teleport.TeleportError) as e:
-            say(f"FAILED teleport setup: {e}")
-            return False
     if objectstore.SERVICE in todo:
         try:
             objectstore.prepare(COMPOSE_FILE.parent)
@@ -427,13 +421,21 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
         except (OSError, k8s.K8sError) as e:
             say(f"FAILED kubernetes setup: {e}")
             return False
+    tele_changed = False
+    if "teleport" in todo:  # after k8s.prepare: the Kubernetes Service's kubeconfig is made from its credentials
+        try:
+            tele_changed = teleport.prepare(sim, ips, kube=k8s.API in todo)
+        except (OSError, teleport.TeleportError, k8s.K8sError) as e:
+            say(f"FAILED teleport setup: {e}")
+            return False
     if promtargets.prepare(sim, set(todo), prof.get("compute_nodes"), COMPOSE_FILE.parent):  # the jobs of the selected parts (ADR 0073)
         runner(["docker", "kill", "-s", "HUP", f"{PROJECT}-prometheus-1"])  # a running Prometheus re-reads them; one that is not running reads them at its start
     for label, svcs in stage_services(names):
         say(f"starting {label}: {', '.join(svcs)}")
         stage({"stage": label.capitalize(), "state": "running"})
         stage_began = time.monotonic()
-        r = runner(dc("up", "-d", "--no-deps", *svcs, file=path))
+        recreate = ["--force-recreate"] if label == "teleport" and tele_changed and "teleport" in before else []  # config read only at start
+        r = runner(dc("up", "-d", "--no-deps", *recreate, *svcs, file=path))
         if r.returncode != 0:
             say(f"FAILED {label}: {r.stderr.strip()[-300:]}")
             return False
@@ -484,6 +486,8 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
     if "slurmctld" in todo and controller.enabled(sim) and "teleport" in todo:
         say(f"controller: through Teleport too: tsh --proxy={teleport.proxy_addr(sim)} --insecure -i {teleport.SECRETS_DIR}/identity/<user> ssh <user>@{controller.ALIAS} "
             "(only the whitelisted users get a shell)")
+    if "teleport" in todo and k8s.API in todo:
+        say(f"kubernetes through Teleport: tsh --proxy={teleport.proxy_addr(sim)} --insecure -i {teleport.SECRETS_DIR}/identity/<user> kube login {k8s.CONTEXT}; then kubectl get nodes (docs/guides/teleport-kube.md)")
     if "teleport" in todo and (warn := teleport.tsh_problem(sim)):
         say(f"WARN {warn}")
     if "teleport" in todo:
