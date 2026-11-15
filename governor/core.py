@@ -34,9 +34,11 @@ class Governor:
                  watch_interval: float = 15.0, annotator: Annotator | None = None,
                  inventory: Callable[[], tuple[list[Group], dict]] | None = None,
                  refresh_interval: float = 30.0, effector: Effector | None = None, tracer: Callable | None = None, statser: Callable | None = None, capturer: Callable | None = None,
-                 streamer: Streamer | None = None, admit_floor: int = ADMIT_FLOOR):
+                 streamer: Streamer | None = None, admit_floor: int = ADMIT_FLOOR,
+                 labs: Callable[[str | None], dict | None] | None = None):
         self.sampler, self.ladder, self.groups = sampler, ladder, groups
         self.admit_floor = admit_floor
+        self.labs = labs  # config lab (issue 553): labs(None) is the active lab's status block, labs(NAME) says whether NAME exists on disk
         self.executor, self.dry_run = executor, dry_run
         self.signals: Signals | None = None
         self.audit: list[str] = []
@@ -323,7 +325,8 @@ class Governor:
                         "services": sorted({g.service for g in self.groups if g.service}),  # as of the last inventory refresh
                         "violations": sorted(self.violations),
                         "audit": self.audit[-60:],
-                        "change": self._change_view()}
+                        "change": self._change_view(),
+                        "lab": self.labs(None) if self.labs else None}
             if cmd == "admit":
                 return self._admit(req["budget_mb"])
             if cmd == "scale":
@@ -346,6 +349,14 @@ class Governor:
                 args = (["set", "slurmd", req["node"], what.removeprefix("slurmd-")] if what.startswith("slurmd-")
                         else ["set", "slurmctld", "restart"] if what == "slurmctld-restart" else ["remove", "jobs"])
                 return self._change(f"slurm-step={what}" + (f":{req['node']}" if req.get("node") else ""), args)
+            if cmd in ("lab-apply", "lab-restore"):  # config lab: only at L0-L1 (in _change), one change at a time, audit-logged there
+                if not self.labs:
+                    return {"ok": False, "error": f"no {cmd} without --workdir (the governor runs `benchctl apply lab`)"}
+                if not (self.labs(req["name"]) or {}).get("exists"):
+                    return {"ok": False, "error": f"no lab {req['name']}: import it first (benchctl import lab {req['name']} --from DIR)"}
+                if cmd == "lab-apply":
+                    return self._change(f"lab-apply={req['name']}:{req['side']}", ["apply", "lab", req["name"], "--side", req["side"], "--execute"])
+                return self._change(f"lab-restore={req['name']}", ["remove", "lab", req["name"], "--execute"])
             if cmd == "apply-plan":
                 args = ["up", "--cpu-nodes", str(req["cpu_nodes"]), "--gpu-nodes", str(req["gpu_nodes"]),
                         "--gpus-per-node", str(req["gpus_per_node"]), "--app-mb", "0"]  # the page is used while the app runs

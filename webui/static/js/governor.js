@@ -1,6 +1,6 @@
 import { S } from './state.js';
 import { $, esc, setHTML, setText } from './util.js';
-import { attentionItems } from './homemodel.js';
+import { attentionItems, labChipText } from './homemodel.js';
 import { paintHome } from './home.js';
 
 export const LEVELS = ['Normal', 'Watching', 'Throttling', 'Freezing', 'Stopping', 'Emergency'];
@@ -47,7 +47,7 @@ export function render(st) {
   if (!st.ok) {
     banner.style.setProperty('--lv', 'var(--bad)'); banner.className = 'banner';
     setHTML(banner, '<i class="orb" aria-hidden="true"></i><div><b>Governor not reachable</b><span class="m">Start it with <code>./scripts/benchctl start</code> (no sudo). Optional boot service: <code>sudo ./scripts/install-governor.sh</code>.</span></div>');
-    S.lastGov = null; setChip('c-level', 'bad', '✗', 'Governor offline'); paintAttention();
+    S.lastGov = null; $('c-lab').hidden = true; setChip('c-level', 'bad', '✗', 'Governor offline'); paintAttention();
     return;
   }
   const l = Math.min(st.level, 5);
@@ -62,6 +62,7 @@ export function render(st) {
   spark('sp-mem', mem, lo - pad, hi + pad);
   $('mem-lo').textContent = (lo - pad).toFixed(1) + ' GB'; $('mem-hi').textContent = (hi + pad).toFixed(1) + ' GB';
   const phi = Math.max(10, ...psi); spark('sp-psi', psi, 0, phi); $('psi-hi').textContent = phi.toFixed(0) + ' %';
+  const lt = labChipText(st.lab), lc = $('c-lab'); lc.hidden = !lt; if (lt) setChip('c-lab', 'warn', '▲', lt);  // not the plain cluster: say so (issue 553)
   S.lastLog = st.audit; S.change = st.change || null; renderLog();
 }
 

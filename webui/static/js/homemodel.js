@@ -4,11 +4,16 @@
 const STATE_TEXT = { ok: '✓', warn: '▲', fault: '✗', down: '⏻', unknown: '?' };
 
 // governor status (or null), cluster snapshot (or null), the governor's level names -> [{kind: bad|warn, icon, text, node?}]
+/** The config lab on the cluster (governor status `lab`), as the strip chip's text, or null when the cluster is plain (issue 553). */
+export function labChipText(lab) {
+  return lab && lab.name ? `Lab ${lab.name} applied${lab.side ? ` (${lab.side})` : ''}` : null;
+}
 export function attentionItems(gov, cl, levelNames) {
   const items = [];
   if (!gov) items.push({ kind: 'bad', icon: '✗', text: 'The governor is not reachable, so memory is not being protected.' });
   else {
     if (gov.level >= 2) { const l = Math.min(gov.level, 5); items.push({ kind: 'bad', icon: '✗', text: `Memory pressure is at level L${l}: ${levelNames[l].toLowerCase()}.` }); }
+    if (labChipText(gov.lab)) items.push({ kind: 'warn', icon: '▲', text: `${labChipText(gov.lab)}: this is not the plain cluster, its settings are the lab's. Undo with: benchctl remove lab ${gov.lab.name}` });
     (gov.violations || []).slice(0, 5).forEach(v => items.push({ kind: 'warn', icon: '▲', text: 'Security finding: ' + (typeof v === 'string' ? v : JSON.stringify(v)) }));
   }
   if (cl) {

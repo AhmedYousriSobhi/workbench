@@ -11,6 +11,9 @@ from pathlib import Path
 log = logging.getLogger("governor.control")
 
 ALLOWED = {"status", "scale", "freeze", "thaw", "stop", "start", "set-profile", "admit", "apply-plan", "node-state", "submit-job", "slurm-step", "slurm-trace", "slurm-stats", "capture-start", "capture-read", "capture-stop", "refresh-jira-licence"}
+ALLOWED |= {"lab-apply", "lab-restore"}  # config lab (issue 553, ADR 0049): apply a side of a lab, return to the plain cluster
+LAB_NAME_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,40}")  # mirrors benchctl.lab.NAME
+LAB_SIDES = ("baseline", "candidate")  # mirrors benchctl.lab_candidate.SIDES
 MAX_REQUEST = 4096
 TARGETED = {"freeze", "thaw", "stop", "start"}  # require a known group name
 
@@ -107,6 +110,9 @@ def dispatch(line: bytes, handle: Handler, groups: Callable[[], set[str]]) -> di
         if cmd == "admit" and not (isinstance(req.get("budget_mb"), int) and not isinstance(req["budget_mb"], bool)
                                    and req["budget_mb"] >= 0):
             return {"ok": False, "error": "admit needs budget_mb:int>=0"}
+        if cmd in ("lab-apply", "lab-restore") and not (isinstance(req.get("name"), str) and LAB_NAME_RE.fullmatch(req["name"])
+                                                        and (cmd == "lab-restore" or req.get("side") in LAB_SIDES)):
+            return {"ok": False, "error": f"{cmd} needs name:NAME (lowercase letters, digits, -; at most 41)" + (" and side: baseline|candidate" if cmd == "lab-apply" else "")}
         return handle(cmd, req)
     except (ValueError, UnicodeDecodeError) as e:
         return {"ok": False, "error": f"bad json: {e}"}

@@ -161,6 +161,11 @@ def write(sim: dict, out_dir: Path, compute_override: int | None = None,
         files["accounting.sh"] = accounting_script(sim)
     for name, text in files.items():
         (out_dir / name).write_text(text)
+    from . import (
+        lab_apply,  # an active config lab's settings go back on top of the regenerated file (issue 553)
+    )
+
+    lab_apply.reapply(out_dir)
     if accounting:
         _write_secrets(sim, out_dir.parent / "secrets", out_dir)
     return [out_dir / n for n in files]
