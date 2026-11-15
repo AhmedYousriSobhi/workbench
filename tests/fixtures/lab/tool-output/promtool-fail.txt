@@ -1,0 +1,4 @@
+SYNTHETIC (not captured from a real tool)
+Checking /rules/bad.yml
+  FAILED:
+/rules/bad.yml: 5:15: group "broken", rule 1, "Unbalanced": could not parse expression: 1:41: parse error: unclosed left parenthesis
