@@ -12,7 +12,7 @@
 ./scripts/benchctl scenario run node-down
 ```
 
-A scenario is a named, repeatable timeline of faults. They live in `scenarios/*.yaml`.
+Scenarios live in `scenarios/*.yaml`.
 
 ## Run one
 
@@ -24,7 +24,11 @@ A scenario is a named, repeatable timeline of faults. They live in `scenarios/*.
 ./scripts/benchctl scenario run SC-02 --dry-run          # the reference works instead of the name
 ```
 
-The command exits 1 when a step errors or an `expect` line does not hold. Steps the caller cannot run are reported as **skipped**, not failed. From the web page ([chapter 5](05-web-page.md)) the `slurm` steps go through the governor; tick **Slurm trace** there for the same trace (see the [resilience guide](../guides/slurm-resilience.md)).
+The command exits 1 when a step errors or an `expect` line does not hold.
+
+- Steps the caller cannot run are reported as **skipped**, not failed.
+- From the web page ([chapter 5](05-web-page.md)) the `slurm` steps go through the governor.
+- Tick **Slurm trace** there for the same trace (see the [resilience guide](../guides/slurm-resilience.md)).
 
 ## The scenarios shipped
 
@@ -43,6 +47,7 @@ The command exits 1 when a step errors or an `expect` line does not hold. Steps 
 | SC-11 | `jira-real-429` | the real Jira's own rate limiting (3 requests, refill 1 per second) turns on, so bursts get a real 429 with `X-RateLimit-*` headers, then off at 120 s; each change shows up to a minute late |
 | SC-28 | `jira-real-slow-503` | the real Jira answers slowly (8 s), then 503, then 429 with `Retry-After: 30`, through the fault proxy: **point the client at `127.0.0.1:8084`** |
 | SC-29 | `jira-real-token-revoked` | alice's personal access token is revoked (a real 401 for a client using it), then a new one is written to `jira-real.env` at 90 s |
+| SC-46 | `netem-slow-link` | the first compute node's network gets 200 ms delay and 5 % loss for 60 s (`tc netem`, **root governor service only**, L0-L1; CLI and scenarios only, the page skips it; [guide](../guides/network-faults.md)) |
 | SC-37 | `preempt-burst` | a scavenger job fills the GPUs of the first GPU node; at 20 s an `urgent` job asks for them and Slurm requeues the scavenger job; needs the accounting part and `qos:` in `sim.yaml` ([guide](../guides/qos-and-preemption.md)) |
 | SC-36 | `reboot-asap` | Slurm reboots the second compute node (`scontrol reboot ASAP`): BMC `Reset ForceOff` then `Reset On`, slurmd restarts, the node resumes; then the third compute node is powered down through Slurm (`POWERED_DOWN`, BMC Off) and up at 90 s ([guide](../guides/power-and-reboot.md)) |
 | SC-35 | `switch-leaf-down` | one leaf switch goes down: exactly its nodes drain (`switch leaf1 down`), and only those resume at 90 s; needs `topology:` in `sim.yaml` ([guide](../guides/topology.md)) |
@@ -89,9 +94,25 @@ expect:
   - slurm.node_state: {node: second cpu node, state: drain, within: 20s}
 ```
 
-**Name nodes by selector, never by hand.** `second cpu node` is a selector: it becomes `cn002` on this `sim.yaml` and whatever the second compute node is called on yours, so a scenario runs on any cluster. The words are `first|second|third|fourth|last|any|all [N] gpu|cpu|k8s gpu|k8s cpu node(s)`: `first gpu node`, `first 2 cpu nodes`, `any 2 gpu nodes` (the first two, so a run is repeatable), `all gpu nodes`. `gpu` and `cpu` are the Slurm nodes, `k8s gpu` and `k8s cpu` the Kubernetes ones. Inside a longer text put it in braces: `summary: "xid on {first gpu node}"`. A cluster that has too few nodes of that kind is told so by `--dry-run` (`invalid: ... sim.yaml has only 2`). A test fails when a shipped scenario writes `cn001` or `gpu001` in its steps or `expect`.
+### Name nodes by selector, never by hand
 
-**Inject the cause, assert the reaction.** A `fault` step stands for every physical effect of one fault, applied together, so you do not script what the cluster does about it:
+`second cpu node` is a selector. It becomes `cn002` on this `sim.yaml`, and whatever the second compute node is called on yours. A scenario then runs on any cluster.
+
+The form is `first|second|third|fourth|last|any|all [N] gpu|cpu|k8s gpu|k8s cpu node(s)`:
+- `first gpu node`
+- `first 2 cpu nodes`
+- `any 2 gpu nodes` (the first two, so a run is repeatable)
+- `all gpu nodes`
+
+`gpu` and `cpu` are the Slurm nodes. `k8s gpu` and `k8s cpu` are the Kubernetes ones. Inside a longer text, put the selector in braces: `summary: "xid on {first gpu node}"`.
+
+**Good to know**
+- `--dry-run` tells you when the cluster has too few nodes of that kind (`invalid: ... sim.yaml has only 2`).
+- A test fails when a shipped scenario writes `cn001` or `gpu001` in its steps or `expect`.
+
+### Inject the cause, assert the reaction
+
+A `fault` step stands for every physical effect of one fault, applied together. You do not script what the cluster does about it.
 
 ```yaml
 steps:
@@ -108,30 +129,70 @@ expect:
 | `ib-port-down` | InfiniBand ports down on the exporter | `ports` (1) |
 | `nic-flap` | the Ethernet link flaps | none |
 
-`clear` undoes them. `--dry-run` prints the effects as steps. The BCM mock only has a device state (UP, DOWN), so no fault writes a BCM health check. New faults go in `benchctl/faultmodel.py`.
+- `clear` undoes the effects.
+- `--dry-run` prints the effects as steps.
+- The BCM mock only has a device state (UP, DOWN), so no fault writes a BCM health check.
+- New faults go in `benchctl/faultmodel.py`.
 
-- `at`: when the step runs, as `10s`, `2m`. `--speed` and `time_dilation` in `sim.yaml` compress it.
-- `target`: `fault` (the fault model, below), `bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira`, `slurm`, `ssh`, `k8s`.
-- `do`: the body for that target. `nodes: [...]` fans out one request per node and must name nodes by selector (below) or from `sim.yaml`. `slurm`
-  takes `drain` and `resume` (node lists) and the job and daemon steps of the [resilience guide](../guides/slurm-resilience.md) (`submit: {node, gpus, duration}`, `cancel`, `slurmd_restart`, `slurmd_stop`, `slurmd_start`, `slurmctld_restart`); `jira` takes `failure: {mode: "429"|"503"|null, count: N}`; `bmc-farm` takes `power`,
-  `temp`, `fan_fail`, `ramp: {to, over}`, `clear`; `ssh` (the login node) takes `state: down|hung|up` (stop, freeze, restore),
-  `rotate_host_key: true`, `max_sessions: N` (OpenSSH MaxSessions) and `reset: true` (original key, default limit, node up).
-- `k8s` (needs the part and Docker; the page skips it) takes `down: [node]` (the node reports NotReady, `KubeletNotReady`) and `up: [node]` (Ready again), `cordon` and `uncordon` (node lists), `pod: {namespace, name, fault: crashloop|oom|imagepull|jobfail, gpus: N, priority_class, node}`,
-  `delete_pod: {namespace, name}`, `scale: {namespace, deploy, replicas}`, `apply` and `remove: [path under k8s/]`, and `drain: {node, timeout}` (eviction through the API, so a disruption budget can block it). Expectations: `k8s.node_ready: {node, ready, within}`,
-  `k8s.pod_status: {namespace, name, reason, within}` (the pod's phase or a container's waiting or terminated reason) and `k8s.pods_on_node: {node, namespace, selector, min, within}`. `gpu-exporter` steps also take `storage: {mount, used_pct, inodes_used_pct, stale, user, used_gb, reset}`; expectation `storage.mount: {node, mount, min_used_pct, min_inodes_used_pct, quota_exceeded, stale, within}`.
-- `expect`: assertions checked after the steps. Anything that needs the app under test (such as `jira.issue_created`) only
-  holds when the app does its part. Every scenario carries an `expect`, or is listed with its reason in `NO_EXPECT` in `tests/test_scenario.py` (the test fails otherwise).
+### The fields of a step
 
-Always run `--dry-run` first: it rejects unknown targets and unknown nodes. Design: [ADR 0006](../adr/0006-scenario-engine-runs-in-the-host-cli.md).
+| Field | Meaning |
+|---|---|
+| `at` | when the step runs, as `10s` or `2m`; `--speed` and `time_dilation` in `sim.yaml` compress it |
+| `target` | `fault` (the fault model, above), `bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira`, `slurm`, `ssh`, `k8s` |
+| `do` | the body for that target (see below); `nodes: [...]` fans out one request per node and must name nodes by selector or from `sim.yaml` |
+| `expect` | assertions checked after the steps |
+
+`expect` lines that need the app under test (such as `jira.issue_created`) hold only when the app does its part.
+Every scenario carries an `expect`, or is listed with its reason in `NO_EXPECT` in `tests/test_scenario.py`. The test fails otherwise.
+
+### What `do` takes, by target
+
+| Target | Keys |
+|---|---|
+| `slurm` | `drain` and `resume` (node lists); the job and daemon steps of the [resilience guide](../guides/slurm-resilience.md): `submit: {node, gpus, duration}`, `cancel`, `slurmd_restart`, `slurmd_stop`, `slurmd_start`, `slurmctld_restart` |
+| `jira` | `failure: {mode: "429"\|"503"\|null, count: N}` |
+| `bmc-farm` | `power`, `temp`, `fan_fail`, `ramp: {to, over}`, `clear` |
+| `ssh` (the login node) | `state: down\|hung\|up` (stop, freeze, restore), `rotate_host_key: true`, `max_sessions: N` (OpenSSH MaxSessions), `reset: true` (original key, default limit, node up) |
+| `gpu-exporter` | `storage: {mount, used_pct, inodes_used_pct, stale, user, used_gb, reset}` |
+| `k8s` | see below |
+
+`k8s` needs the part and Docker, so the page skips it. It takes:
+- `down: [node]` (the node reports NotReady, `KubeletNotReady`) and `up: [node]` (Ready again)
+- `cordon` and `uncordon` (node lists)
+- `pod: {namespace, name, fault: crashloop|oom|imagepull|jobfail, gpus: N, priority_class, node}`
+- `delete_pod: {namespace, name}`
+- `scale: {namespace, deploy, replicas}`
+- `apply` and `remove: [path under k8s/]`
+- `drain: {node, timeout}` (eviction through the API, so a disruption budget can block it)
+
+### Expectations by target
+
+| Expectation | Holds when |
+|---|---|
+| `slurm.node_state: {node, state, within}` | the node reaches that Slurm state in time |
+| `k8s.node_ready: {node, ready, within}` | the node's Ready condition matches |
+| `k8s.pod_status: {namespace, name, reason, within}` | the pod's phase, or a container's waiting or terminated reason, matches |
+| `k8s.pods_on_node: {node, namespace, selector, min, within}` | enough matching pods run on the node |
+| `storage.mount: {node, mount, min_used_pct, min_inodes_used_pct, quota_exceeded, stale, within}` | the mount shows that storage state |
+
+Run `--dry-run` first: it rejects unknown targets and unknown nodes. Design: [ADR 0006](../adr/0006-scenario-engine-runs-in-the-host-cli.md).
 
 ## Faults reach the whole cluster
 
-A `bmc-farm` step with `power: "Off"` is a power loss for the node: besides the BMC it sets the BCM state `DOWN`, makes the GPU
-exporter stop publishing the node and freezes the node's container, so `slurmctld` marks it `down*` (Not responding) by
-itself after about 30-40 s. `power: "On"` and `clear: true` undo all of that. You write one step; the BCM, exporter and
-Slurm steps are no longer needed (they are harmless if present). Played from the page, the Slurm part (`drain`, `down`,
-`resume`, `power_off`, `power_on`) goes through the governor, at calm levels only (L0-L1); when it is refused the step still
-runs and says why in its detail. `ssh` steps still need `benchctl scenario run`.
+A `bmc-farm` step with `power: "Off"` is a power loss for the node. Besides the BMC, it:
+1. sets the BCM state `DOWN`;
+2. makes the GPU exporter stop publishing the node;
+3. freezes the node's container.
+
+`slurmctld` then marks the node `down*` (Not responding) by itself after about 30-40 s.
+
+`power: "On"` and `clear: true` undo all of that. You write one step. Separate BCM, exporter and Slurm steps are not needed (they are harmless if present).
+
+**Played from the page**
+- The Slurm part (`drain`, `down`, `resume`, `power_off`, `power_on`) goes through the governor, at calm levels only (L0-L1).
+- When the governor refuses, the step still runs and says why in its detail.
+- `ssh` steps still need `benchctl scenario run`.
 
 ## What you will see
 

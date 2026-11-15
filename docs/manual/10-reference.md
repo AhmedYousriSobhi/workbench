@@ -6,9 +6,18 @@
 
 ## The command: `benchctl`
 
-One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [flags]`**. Run it as `./scripts/benchctl`
-(no activation needed), or as `benchctl` once the venv is active. Tab completion for verbs, resources, node and service names, profiles, scenarios, users, parts, `-o` formats and `-l`/`--sort-by` keys:
-`benchctl completion install` (once, no sudo, then open a new terminal; `benchctl start` offers it too; `completion remove` undoes it; `completion bash|zsh|fish` prints the script). A wrong profile, node or scenario gets one message with `Did you mean` and the valid values. What each verb does not do, exit codes, and what to use in a script: [the verbs guide](../guides/benchctl-verbs.md).
+One command, one grammar, like `kubectl`: **`benchctl VERB [RESOURCE] [NAME] [flags]`**.
+
+Run it as `./scripts/benchctl` (no activation needed), or as `benchctl` once the venv is active.
+
+**Tab completion** covers verbs, resources, node and service names, profiles, scenarios, users, parts, `-o` formats and `-l`/`--sort-by` keys.
+- Install it once, with no sudo: `benchctl completion install`. Then open a new terminal. `benchctl start` offers it too.
+- Undo it: `benchctl completion remove`.
+- Print the script: `benchctl completion bash|zsh|fish`.
+
+A wrong profile, node or scenario gets one message with `Did you mean` and the valid values.
+
+What each verb does not do, exit codes, and what to use in a script: [the verbs guide](../guides/benchctl-verbs.md).
 
 | Verb | Does |
 |---|---|

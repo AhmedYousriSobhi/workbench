@@ -10,8 +10,20 @@ instead; `benchctl export profile` writes one that matches what the workbench co
 ./scripts/benchctl export profile                # writes bench-profile.json in the current folder
 ```
 
-The file describes the cluster **running now** (read from Docker): a part or node that is stopped is left out. With nothing running it lists the configured cluster and says so; `--configured` forces that. Add `--bmc` for one BMC target per node that has a BMC (each with its own address `10.148.x.y:443`; `--bmc-via name` writes `bmc-<node>` instead), `--user bob` for another SSH user, `--name lab` for another cluster name,
-`-o -` to print instead of write, `--profile std` to export a profile other than the one running. With a workbench built ([choose the workbench](choose-workbench.md)) the file lists exactly its nodes and parts.
+The file describes the cluster **running now** (read from Docker). A part or node that is stopped is left out.
+- With nothing running, it lists the configured cluster and says so. `--configured` forces that.
+- With a workbench built ([choose the workbench](choose-workbench.md)), the file lists exactly its nodes and parts.
+
+Flags:
+
+| Flag | Effect |
+|---|---|
+| `--bmc` | one BMC target per node that has a BMC, each with its own address `10.148.x.y:443` |
+| `--bmc-via name` | write `bmc-<node>` instead of the address |
+| `--user bob` | another SSH user |
+| `--name lab` | another cluster name |
+| `-o -` | print instead of write |
+| `--profile std` | export a profile other than the one running |
 
 Then in the client: **import a profile**, choose `bench-profile.json`. The cluster appears with SSH, Slurm, Grafana,
 Jira and storage already filled in. A file never holds secrets, so set these three by hand (the command prints them):
@@ -68,4 +80,8 @@ the client once and copy the first two fields of its file.
 
 ## Jump host entries
 
-With the jump part on (`benchctl up --access jump`), the file has one extra entry per key-login node, named `<cluster>-<login>-jump`, for example `workbench-login-jump`. It connects to the login node's private address on port 22 through a `jumpHost` block: the jump host's address and port, the user and `private-key`. The file holds no key path and no secret, so after importing, set the same private key file (`compose/generated/secrets/ssh/id_ed25519`) on the entry and on its jump host. Teleport entries get none. With `--loopback` the jump host is `127.0.0.1:2220`.
+With the jump part on (`benchctl up --access jump`), the file has one extra entry per key-login node, named `<cluster>-<login>-jump`, for example `workbench-login-jump`.
+- It connects to the login node's private address on port 22 through a `jumpHost` block: the jump host's address and port, the user and `private-key`.
+- The file holds no key path and no secret. After importing, set the same private key file (`compose/generated/secrets/ssh/id_ed25519`) on the entry and on its jump host.
+- Teleport entries get none.
+- With `--loopback`, the jump host is `127.0.0.1:2220`.

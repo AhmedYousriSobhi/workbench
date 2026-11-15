@@ -43,11 +43,14 @@ goes through the governor: the job and daemon steps (`slurm-step`, `submit-job`)
 (`slurm-trace`, which runs `benchctl get trace`). The governor must have been started with `--workdir` (`benchctl start`
 does that); without it the steps show **skipped** and the Slurm trace box is refused with that reason.
 
-The page's trace has one entry per step, shown under the timeline. Because the governor does the step in the
-background, entry *i* covers everything between running step *i* and running step *i+1* (the last one ends with the run),
-so the first entry appears when the second step starts. The text is the same as in the terminal. Use
-`./scripts/benchctl get trace --node cn001 --since 60` for the raw JSON at any time, and `benchctl set slurmd cn001
-restart|stop|start`, `benchctl set slurmctld restart` and `benchctl remove jobs` to do one step by hand.
+The page's trace has one entry per step, shown under the timeline. The text is the same as in the terminal.
+
+The governor does each step in the background. Entry *i* therefore covers everything between running step *i* and running step *i+1* (the last one ends with the run). The first entry appears when the second step starts.
+
+| Need | Command |
+|---|---|
+| the raw JSON at any time | `./scripts/benchctl get trace --node cn001 --since 60` |
+| one step by hand | `benchctl set slurmd cn001 restart\|stop\|start`, `benchctl set slurmctld restart`, `benchctl remove jobs` |
 
 ## Reading the trace
 

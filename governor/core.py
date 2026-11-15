@@ -11,6 +11,7 @@ from .capture import Capture
 from .control import PLAN_PARTS
 from .executors import UserExecutor
 from .ladder import Ladder
+from .netem import USER_MODE_MSG, Netem
 from .planner import Action, Group, plan, reversible_first, undo
 from .signals import Sampler, Signals, parse_memory_events
 from .watchdog import Watchdog
@@ -36,7 +37,7 @@ class Governor:
                  inventory: Callable[[], tuple[list[Group], dict]] | None = None,
                  refresh_interval: float = 30.0, effector: Effector | None = None, tracer: Callable | None = None, statser: Callable | None = None, capturer: Callable | None = None, reader: Callable | None = None,
                  streamer: Streamer | None = None, admit_floor: int = ADMIT_FLOOR, lab_exists: Callable[[str], bool] | None = None,
-                 lab_status: Callable[[], dict | None] | None = None):
+                 lab_status: Callable[[], dict | None] | None = None, netemer: Callable | None = None):
         self.sampler, self.ladder, self.groups = sampler, ladder, groups
         self.admit_floor = admit_floor
         self.lab_status = lab_status  # issue 553: the active lab's status block from compose/generated/lab/active.json, or None
@@ -62,6 +63,7 @@ class Governor:
         self.tracer = tracer
         self.capture = Capture(capturer, lambda: self.ladder.level, self._record) if capturer else None  # on-demand wire capture, one at a time (issue 505)
         self.statser = statser
+        self.netem = Netem(netemer, lambda: self.ladder.level, self._record) if netemer else None  # root service only (issue 478, ADR 0056)
         self.reader = reader  # `benchctl get ...` as text, for read-only verbs
         self.inventory, self.refresh_interval = inventory, refresh_interval
         self._next_refresh = refresh_interval
@@ -325,6 +327,13 @@ class Governor:
                 return {"ok": False, "error": "dry run: no capture"}
             return (self.capture.start(req["node"]) if cmd == "capture-start" else self.capture.read(int(req.get("since", 0))) if cmd == "capture-read"
                     else self.capture.stop("stopped by the page"))
+        if cmd in ("netem-set", "netem-clear"):  # root service only, bounded, TTL, L0-L1 to set (clear is always allowed); never from the page (W-3)
+            if not self.netem:
+                return {"ok": False, "error": USER_MODE_MSG}
+            if self.dry_run:
+                return {"ok": False, "error": "dry run: no netem"}
+            return (self.netem.set(req["node"], req.get("delay_ms"), req.get("loss_pct"), req.get("ttl_s")) if cmd == "netem-set"
+                    else self.netem.clear(req.get("node")))
         if cmd in ("freeze", "thaw", "stop", "start"):  # slow, so not under the lock: it would hold `status` up like a plan does
             self._act(Action(cmd, req["target"], self.ladder.level))
             return {"ok": True}
@@ -345,7 +354,8 @@ class Governor:
                         "violations": sorted(self.violations),
                         "audit": self.audit[-60:],
                         "change": self._change_view(),
-                        "lab": self.lab_status() if self.lab_status else None}
+                        "lab": self.lab_status() if self.lab_status else None,
+                        "netem": self.netem.status() if self.netem else None}  # None: the user-mode governor offers no netem
             if cmd == "admit":
                 return self._admit(req["budget_mb"])
             if cmd == "scale":

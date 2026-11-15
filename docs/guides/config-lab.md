@@ -36,7 +36,11 @@ It prints what was stored, what was scrubbed, dropped or ignored, the versions a
 
 Changes nothing. It shows:
 
-- **Nodes.** `lab.max_nodes` (default 24, at most 64; set it in `sim.yaml`, the commented `lab:` block, or per call with `--max-nodes`). Every (partition x node shape x topology leaf) group keeps at least one node and the rest is split in proportion to the production counts. If there are more groups than the budget the command says so and how many nodes it needs; above 64 groups, drop a partition, shape or switch from the export. Production node names are kept as the Slurm `NodeName` and hostname; the compose services are `lab-node-001`, `lab-node-002`, ... A ratio above 100 production nodes per lab node marks the results indicative.
+- **Nodes.** `lab.max_nodes` (default 24, at most 64). Set it in `sim.yaml` (the commented `lab:` block), or per call with `--max-nodes`.
+  - Every (partition x node shape x topology leaf) group keeps at least one node. The rest is split in proportion to the production counts.
+  - If there are more groups than the budget, the command says so and how many nodes it needs. Above 64 groups, drop a partition, shape or switch from the export.
+  - Production node names are kept as the Slurm `NodeName` and hostname. The compose services are `lab-node-001`, `lab-node-002`, ...
+  - A ratio above 100 production nodes per lab node marks the results indicative.
 - **Jobs.** The trace is sampled at the same ratio (a lab node's share of the production nodes), per (account, QOS, partition) stratum, at least one job per stratum, the same jobs every time. Users become `lab-u001`, `lab-u002`, ... unless `--keep-users`. If the sampled trace would run more than `lab.max_running_jobs` (default 50) at once, a smaller node count is proposed instead of throttling submissions, so both runs see the same load.
 - **Time.** The dilation factor is the trace length divided by `--target-hours` (default `lab.target_hours`, 2; 0.5 to 6), never below 1. Every time-based scheduling parameter (listed, with before and after) is divided by it, and so are partition time limits and job runtimes, the same in both runs.
 - **Key classes.** `slurm.conf` keys are `policy` (applied live), `time-scaled`, `restart` (applied, slurmctld restarts), `lab-owned` (hosts, paths, auth, privileged plugins: the base value stays, reported "not tested") or `unknown` (applied and flagged, restarts slurmctld). A key ending in `Type` also restarts.
@@ -62,7 +66,19 @@ Question it answers: does production's configuration run in the lab, and which k
 
 A tool whose part is not running (accounting, Kubernetes, Teleport) is a `SKIP` line with the command to start it, and the summary says `passed with N skipped`, never just `passed`. Exit codes: 0 passed, 1 failed or refused, 3 `--side candidate` (comes with issue 553; one line, not a failure). A line marked `[restart required]` means applying that configuration restarts slurmctld.
 
-It runs through the governor (`lab-validate`) only when the memory level is L0 or L1, one run at a time; otherwise one message says why (`refused at L2: ...`). The one-shots are class P5, have no `workbench.class` label, are removed afterwards and the scratch database is dropped. Accounting: `benchctl up` gives the database user `slurm` the rights slurmdbd needs (create, drop, alter, index, select, insert, update, delete, lock tables, create temporary tables, and create routine, alter routine and execute for the stored procedure slurmdbd makes) on databases named `lab_validate_*` only, never on the real accounting database and without grant option, every time it runs, so an existing stack needs no restart. Each run first drops any `lab_validate_*` database an interrupted run left.
+It runs through the governor (`lab-validate`), one run at a time, and only when the memory level is L0 or L1. Otherwise one message says why (`refused at L2: ...`).
+
+- The one-shots are class P5 and have no `workbench.class` label.
+- They are removed afterwards, and the scratch database is dropped.
+- Each run first drops any `lab_validate_*` database an interrupted run left.
+
+**Accounting rights.** Every time it runs, `benchctl up` gives the database user `slurm` the rights slurmdbd needs:
+- Tables: create, drop, alter, index, select, insert, update, delete, lock tables, create temporary tables.
+- Routines: create routine, alter routine and execute. slurmdbd creates a stored function (`get_lineage`) when it builds its tables, and fails without them.
+- The rights are on databases named `lab_validate_*` only, never on the real accounting database.
+- They come without grant option.
+- An existing stack needs no restart.
+- Without the routine rights the accounting check reports `skipped: slurmdbd needs CREATE ROUTINE and ALTER ROUTINE` instead of failing.
 
 ## What is read
 
@@ -107,11 +123,27 @@ Not applied: keys in no class (listed as `not applied: unknown`), lab-owned keys
 
 An object that already exists without the lab's label (for example a PriorityClass of the fixtures, or a Teleport role of the same name) makes apply refuse with one message naming it, before anything changes.
 
-**The marker.** `compose/generated/lab/active.json` says which lab is on the cluster (name, side, applied keys, `time_scale`, what it created). The governor `status` carries it as `lab`, and the page shows "Lab NAME applied" in the top strip, so nobody tests the plain cluster by mistake. `benchctl up` and `scale` regenerate `slurm.conf` and put the lab's keys back (one line: `lab NAME is active: its settings were re-applied`); `benchctl down` keeps the marker, so a restarted cluster still has the lab. Only `benchctl remove lab NAME` ends it. If accounting, Kubernetes or Teleport is not running when you remove a lab that made objects there, remove refuses with one message and the lab stays active: start that part and run it again. Rows `sacctmgr` refuses to delete are listed.
+**The marker.** `compose/generated/lab/active.json` says which lab is on the cluster: name, side, applied keys, `time_scale`, what it created.
+- The governor `status` carries it as `lab`.
+- The page shows "Lab NAME applied" in the top strip, so nobody tests the plain cluster by mistake.
+- `benchctl up` and `scale` regenerate `slurm.conf` and put the lab's keys back, with one line: `lab NAME is active: its settings were re-applied`.
+- `benchctl down` keeps the marker, so a restarted cluster still has the lab.
+- Only `benchctl remove lab NAME` ends it.
+
+**If remove refuses.** A lab that made objects in accounting, Kubernetes or Teleport needs that part running when you remove it. Otherwise remove refuses with one message and the lab stays active. Start that part and run it again.
+
+Rows `sacctmgr` refuses to delete are listed.
 
 ## Secrets
 
-The values of `StoragePass`, `AccountingStoragePass`, `JwtKey`, `AuthInfo`, `AuthAltParameters` (the key path), any key whose name holds Pass, Password, Secret or Token, and any munge key reference in `slurm.conf` become `<scrubbed>`. After that a scan looks for what is left: the token and key patterns of `scripts/check-privacy.sh` and any `password`, `secret`, `token` or `api_key` assignment with a real value. If one is found, **nothing is stored** and one message names `file:line [rule]` (never the value). Remove it from the exported file and import again.
+These become `<scrubbed>`:
+- the values of `StoragePass`, `AccountingStoragePass`, `JwtKey`, `AuthInfo` and `AuthAltParameters` (the key path);
+- any key whose name holds Pass, Password, Secret or Token;
+- any munge key reference in `slurm.conf`.
+
+A scan then looks for what is left: the token and key patterns of `scripts/check-privacy.sh`, and any `password`, `secret`, `token` or `api_key` assignment with a real value.
+
+If one is found, **nothing is stored**. One message names `file:line [rule]`, never the value. Remove it from the exported file and import again.
 
 Imported files stay local: `compose/generated/` is gitignored and `scripts/check-privacy.sh` refuses a commit that stages it.
 

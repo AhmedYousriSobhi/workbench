@@ -75,7 +75,14 @@ Run it while the client is connected and compare what the client shows (node sta
 
 ### Take a node down so Slurm notices
 
-**Power off** on the page (or `benchctl set node cn001 off`, which does the same) sets the BMC, BCM and GPU metrics to off and freezes the node's container. Its `slurmd` stops answering and `slurmctld` marks it `down*` (Not responding) by itself after about 30 s. The BMC reports it off and its GPU metrics disappear, as on a real dead node. A client shows it on its next poll: 60 s with the Slurm section open and the window focused, 5 min otherwise.
+**Power off** on the page (or `benchctl set node cn001 off`, which does the same):
+- sets the BMC, BCM and GPU metrics to off;
+- freezes the node's container, so its `slurmd` stops answering.
+
+Then:
+- `slurmctld` marks the node `down*` (Not responding) by itself after about 30 s.
+- The BMC reports it off, and its GPU metrics disappear, as on a real dead node.
+- A client shows it on its next poll: 60 s with the Slurm section open and the window focused, 5 min otherwise.
 
 **Power on** (`set node cn001 on`, or the page's button) reverses all of that and thaws the container; Slurm returns the node after its next answer. Use `set node NAME down` only to set the state by hand. Scenarios behave the same: one `bmc-farm` step with `power: "Off"` takes the node down on the BMC, BCM, GPU metrics and in Slurm, also when the scenario is played from the page.
 
@@ -101,11 +108,29 @@ The list of checks is not fixed: add your own, switch one off or reorder them fr
 - A node that publishes nothing (powered off) and an unreachable exporter are not drained.
 - A cluster built before the health check needs `benchctl up` once: it rebuilds the node image (the prolog and epilog scripts are in it) and restarts `slurmctld`. Without the rebuilt image a job start fails on a missing prolog and drains the node.
 
-**Tickets for what Slurm does.** `slurmctld` also runs a watcher (`images/slurm-ctl/node_watch.py`) that polls `sinfo` every 10 s. A node that turns DOWN or drained files a ticket (kind `slurm`, or a comment on the node's open ticket, so a Power off stays one ticket), and one that comes back is resolved. That covers a node Slurm drained by the health check or by hand, and a node that went down by not answering, which no page button or scenario step reports.
+**Tickets for what Slurm does.** `slurmctld` also runs a watcher (`images/slurm-ctl/node_watch.py`) that polls `sinfo` every 10 s.
+- A node that turns DOWN or drained files a ticket: kind `slurm`, or a comment on the node's open ticket, so a Power off stays one ticket.
+- A node that comes back is resolved.
+
+That covers a node Slurm drained by the health check or by hand, and a node that went down by not answering, which no page button or scenario step reports.
 
 ### Switch topology
 
 With a `topology:` in `sim.yaml` ([topology](topology.md)), `scontrol show topology` lists the switches. `benchctl scenario run switch-leaf-down` (SC-35) drains one leaf's nodes for 90 s and resumes them. Check that the client shows the switch tree and the reason `switch leaf1 down`.
+
+### Slow or lossy links inside the cluster
+
+`benchctl scenario run netem-slow-link` (SC-46) slows one compute node's own network with `tc netem`.
+- The first compute node gets 200 ms of delay and 5 % loss for 60 s.
+- slurmctld, and a client polling `sinfo`, see slow or lost replies.
+- The TTL ends the fault, and the scenario clears it at 90 s as well.
+
+Check before you run it:
+- The optional root governor service must run (`sudo ./scripts/install-governor.sh`).
+- Memory must be at level L0-L1.
+- It is for the CLI and scenarios only, never the page.
+
+More: [network faults](network-faults.md).
 
 ## Test login, expiry and authentication paths
 
@@ -132,7 +157,15 @@ For a more lifelike queue add two opt-in switches (same simulator, same 20-pendi
 benchctl load on --personas --day 600
 ```
 
-`--personas` gives each user the job mix of the `persona:` in `sim.yaml`: `alice` (ml-trainer) submits mostly 1 to 4 GPU jobs, long, with 4 or 8 CPUs per task; `bob` (mpi-researcher) submits mostly cpu jobs. About 10% of jobs fail (they end early with exit code 1, so `squeue -t all` and `sacct` show FAILED) and 5 to 10% are cancelled by their owner a few seconds after starting (CANCELLED). `--day 600` squeezes a simulated day into 600 real seconds: arrivals follow a curve (busiest at 14:00, quiet at night; the ml-trainer peaks at 22:00), so the queue grows and drains within minutes. Add `--seed N` for repeatable arrivals.
+`--personas` gives each user the job mix of the `persona:` in `sim.yaml`:
+- `alice` (ml-trainer) submits mostly 1 to 4 GPU jobs, long, with 4 or 8 CPUs per task.
+- `bob` (mpi-researcher) submits mostly cpu jobs.
+- About 10% of jobs fail. They end early with exit code 1, so `squeue -t all` and `sacct` show FAILED.
+- 5 to 10% are cancelled by their owner a few seconds after starting (CANCELLED).
+
+`--day 600` squeezes a simulated day into 600 real seconds. Arrivals follow a curve: busiest at 14:00, quiet at night, and the ml-trainer peaks at 22:00. The queue grows and drains within minutes.
+
+Add `--seed N` for repeatable arrivals.
 
 ### Add engineers working tickets
 
@@ -168,7 +201,14 @@ Ranges: `--every` 10 to 3600 s, `--resolve` 10 to 86400 s, `--ignore` and `--reo
 - powers off and drains `cn004`, files 12 tickets;
 - makes the Jira mock answer 429, slow and 503, then clears everything.
 
-With the client connected to the real Jira (`jira-real`), run `client-stress-real` instead: same nodes, GPUs, heat and jobs, but with Jira's own rate limit (429, about 75 to 180 s), a CAPTCHA lock for one user (use a personal access token for the client's own account, or it is locked out too) and a 30 s hang. It files its 12 tickets on the real Jira; only tickets made in the last 10 minutes are counted, so a repeat run does not add up. `client-stress` hits `jira-mock` (8080); `client-stress-real` hits `jira-real`.
+With the client connected to the real Jira (`jira-real`), run `client-stress-real` instead. It has the same nodes, GPUs, heat and jobs, but adds:
+- Jira's own rate limit (429, about 75 to 180 s);
+- a CAPTCHA lock for one user (use a personal access token for the client's own account, or it is locked out too);
+- a 30 s hang.
+
+It files its 12 tickets on the real Jira. Only tickets made in the last 10 minutes are counted, so a repeat run does not add up.
+
+`client-stress` hits `jira-mock` (8080). `client-stress-real` hits `jira-real`.
 
 Run it with the client open and measure the client at the same time. Use a `--match` that names only the client's own processes, such as its install path; a loose word such as `name` matches unrelated programs. The tool prints `matched: <program> xN (MB)` before it samples and warns when more than 4 different programs match. Read that line before `--save`.
 
@@ -187,7 +227,15 @@ Run it with the client open and measure the client at the same time. Use a `--ma
 6. Measure idle (`measure app --duration 40`), then run the scenario, the measurement and a loop that opens every view (Grafana, Slurm with its Jobs, Nodes, Partitions and GPUs tabs, Storage, Tickets and docs, Notes) together.
 7. Stop the client, remove the throwaway config and the installed key.
 
-Measured once this way (a desktop Electron client, one cluster, a terminal, the real Jira, every view opened in turn): 469 MB idle, 664 MB peak and 555 MB typical during the scenario, 8 processes. The machine reserve was set to 800 MB. A first attempt whose clicks missed (the client only polled) peaked at 539 MB, which is why the views must be opened. One session and one cluster is a floor for several clusters or terminals, not a limit.
+Measured once this way (a desktop Electron client, one cluster, a terminal, the real Jira, every view opened in turn):
+- 469 MB idle;
+- 664 MB peak and 555 MB typical during the scenario;
+- 8 processes;
+- the machine reserve set to 800 MB.
+
+A first attempt whose clicks missed (the client only polled) peaked at 539 MB, which is why the views must be opened.
+
+One session and one cluster is a floor for several clusters or terminals, not a limit.
 
 ## See which surfaces the client used
 

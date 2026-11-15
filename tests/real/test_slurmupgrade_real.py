@@ -10,6 +10,7 @@ import yaml
 from helpers import wait_for
 
 from benchctl import scenario, slurmver, stack, workbench
+from benchctl.nodes import node_names
 
 ROOT = Path(__file__).resolve().parents[2]
 FROM, TO = "25.11.9", slurmver.DEFAULT
@@ -64,5 +65,7 @@ def test_every_stage_upgrades_only_its_daemon_and_the_job_survives(cluster):
 
 
 def test_the_scenario_file_names_the_same_order():
-    sc = yaml.safe_load((ROOT / "scenarios/slurm-upgrade-mid-job.yaml").read_text())
-    assert [s["do"]["daemons"][0] for s in sc["steps"] if s["target"] == "slurm-upgrade"] == ["slurmdbd", "slurmctld", "cn001", "login"]
+    sim = yaml.safe_load((ROOT / "sim.yaml").read_text())
+    sc = scenario.load("slurm-upgrade-mid-job", sim=sim)  # `first cpu node` is this cluster's name for it (the selectors, issue 470)
+    first_cpu = next(n for n, k in node_names(sim) if k == "compute")
+    assert [s["do"]["daemons"][0] for s in sc["steps"] if s["target"] == "slurm-upgrade"] == ["slurmdbd", "slurmctld", first_cpu, "login"]

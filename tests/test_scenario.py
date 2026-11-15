@@ -599,6 +599,7 @@ NO_EXPECT = {
     "k8s-queue-inactive": "no expect form for a Kueue queue's status",
     "login-node-down": "no expect form for the login node's ssh state",
     "login-node-hung": "no expect form for the login node's ssh state",
+    "netem-slow-link": "no expect form for link latency or packet loss; slurmctld may or may not log a delayed reply",
     "preempt-burst": "owner to say what a client observes: squeue pending state for a requeued job is not evident",
     "reboot-asap": "owner to say which sinfo state a powered-down node shows",
     "ssh-host-key-changed": "no expect form for the login node's host key",
@@ -687,3 +688,33 @@ def test_gpu_xid_storm_injects_only_the_cause_and_asserts_the_reaction():
     kinds = [next(iter(e)) for e in sc["expect"]]
     assert kinds.count("slurm.node_state") == 2 and "jira.issue_created" in kinds
     assert scenario.preview(sc)["steps"] and scenario.validate(sc, SIM) == []
+
+
+# A selector phrase left in a string reaches the target literally (ticket-wave sent `labels = second cpu node` to Jira as JQL, 400). It is
+# resolved only as a whole value or in braces, so after resolution no phrase may remain anywhere, in any step or expect.
+def _strings(v):
+    if isinstance(v, dict):
+        for k, x in v.items():
+            yield str(k)
+            yield from _strings(x)
+    elif isinstance(v, list):
+        for x in v:
+            yield from _strings(x)
+    elif isinstance(v, str):
+        yield v
+
+
+def test_no_selector_phrase_survives_resolution_in_any_shipped_scenario():
+    import re
+
+    from benchctl.selectors import _BODY
+    phrase = re.compile(_BODY, re.IGNORECASE)
+    variants = {"default": SIM, "two cpu nodes": {**SIM, "compute": {**SIM["compute"], "count": 2}}, "no gpu nodes": {**SIM, "gpu": {**SIM["gpu"], "nodes": 0}}}
+    for label, sim in variants.items():
+        for sc in scenario.list_all():
+            try:
+                done = scenario.load(sc["name"], sim=sim)
+            except scenario.ScenarioError:
+                continue  # the cluster lacks a node the scenario names: a clear error, not a literal phrase
+            for s in _strings({"steps": done["steps"], "expect": done.get("expect", [])}):
+                assert not phrase.search(s), f"{sc['name']} on {label}: selector phrase left in {s!r}; write it in braces inside a longer text"
