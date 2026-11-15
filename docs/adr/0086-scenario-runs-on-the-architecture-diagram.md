@@ -146,6 +146,7 @@ A step that names no part carries a reason in words. `tests/test_scenario_touche
 - **The rail sits under the diagram.** The Circuit view gives the diagram the full width and puts the inspector below it. So a strip over the diagram carries the chosen step in words, with Previous, Steps and Next. On a phone the same strip is the bottom sheet.
 - **One more state.** A step whose expansions are only partly applied (a temperature ramp running beside later steps) is ◐ "in progress".
 - **Take off the diagram** hides a finished run's badges; the run stays in the page's memory (decision 4).
+- **Follow-up (issue 813).** Every step kind reads as one sentence (no JSON in the rail; `tests/test_step_words.py`). Badges are sized in screen pixels from the drawing's scale: text at least 14 px, a 40 px tap target, no overlap on a dense pool.
 
 ## References
 

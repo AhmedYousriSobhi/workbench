@@ -323,9 +323,11 @@ def jira_ticket_problems(tk, actions=JIRA_ACTIONS) -> list[str]:
     return [f"jira tickets {tk['action']} needs {k}" for k in need if not tk.get(k)]
 
 
+SSH_KEYS = ("state", "rotate_host_key", "max_sessions", "reset", "reject_auth", "node_sshd", "nodes")
+
+
 def ssh_problems(do: dict) -> list[str]:
-    known = {"state", "rotate_host_key", "max_sessions", "reset", "reject_auth", "node_sshd", "nodes"}
-    out = [f"unknown ssh key {k!r}" for k in do if k not in known]
+    out = [f"unknown ssh key {k!r}" for k in do if k not in SSH_KEYS]
     if "node_sshd" in do:
         if do["node_sshd"] not in NODE_SSHD_STATES:
             out.append(f"ssh node_sshd must be one of {', '.join(NODE_SSHD_STATES)}")

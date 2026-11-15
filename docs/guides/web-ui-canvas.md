@@ -91,9 +91,14 @@ The page's width must not depend on the view: never size `.cols` or `#nodeswrap`
 
 Badges come from the run state, never from flow events. Each badge has a number and a glyph, and says its state in words in its `aria-label`. Nothing in the layer animates. Colours are tokens only: `--accent`, `--warn`, `--bad`.
 
+**Badge size.** `runlayer.js` sets sizes in screen pixels and turns them into drawing units with the drawing's scale (`getScreenCTM()`): text 15 px (never under 14 px; the Circuit view is drawn at about 0.55 of its 1700 units on a laptop or a phone), a pill about 1.7 times the text, and a transparent `.rl-hit` rectangle of at least 40 px round it for touch. `ui_shots.py` fails on smaller text, a smaller tap target, or two overlapping pills, for `node-down` and for the dense `client-stress` (every node badged).
+
+**Step words.** `describe()` in `testrunmodel.js` gives every step one sentence for the rail, the strip, the badge labels and the Test run tab. A new step key in the engine fails `tests/test_step_words.py` until it has a sample there and words in `describe()`; a shipped step that falls back to JSON fails it too (`RAW_OK` only shrinks).
+
 ```bash
 node --test webui/tests/js/runlayermodel.test.mjs        # grouping, one badge per part, glyphs and words, Tab order, pins, the strip's words
 .venv/bin/python -m pytest tests/test_scenario_touches.py  # every shipped step lands on a part, or is listed with its reason
+.venv/bin/python -m pytest tests/test_step_words.py       # every shipped step and every engine step key reads as a sentence, not JSON
 .venv/bin/python scripts/ui_shots.py                       # a sample run, no cluster: badges, order, rail, strip, phone sheet, reduced motion
 ```
 

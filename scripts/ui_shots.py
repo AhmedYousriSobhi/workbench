@@ -34,13 +34,13 @@ TEST_HOOK = "window.__WB_TEST = true; try { sessionStorage.setItem('workbench-ci
 VIEWPORTS = {"desktop": (1280, 900), "phone": (390, 800)}
 
 
-def sample_run(applied: int = 3) -> dict:
-    """A run state as GET /api/scenarios/run reports it (ADR 0086): node-down with its first `applied` steps done. Sample data: no
+def sample_run(applied: int = 3, name: str = "node-down") -> dict:
+    """A run state as GET /api/scenarios/run reports it (ADR 0086): `name` with its first `applied` steps done. Sample data: no
     scenario runs, the page's poll is answered by the test."""
     import yaml
     sim = yaml.safe_load((ROOT / "sim.yaml").read_text())
-    pv = _scn.preview(_scn.load("node-down", ROOT / "scenarios", sim), sim)
-    return {"running": True, "name": "node-down", "speed": 1.0, "stopped": False, "ok": None, "trace": None, "started": 1763200000.0, "elapsed": 7.0,
+    pv = _scn.preview(_scn.load(name, ROOT / "scenarios", sim), sim)
+    return {"running": True, "name": name, "speed": 1.0, "stopped": False, "ok": None, "trace": None, "started": 1763200000.0, "elapsed": 7.0,
             "plan_expects": [{k: x[k] for k in ("e", "label", "ids", "page")} for x in pv["expects"]], "expects": [],
             "steps": [{**{k: x[k] for k in ("at", "target", "do", "n", "ids", "no_part", "page")}, "status": "ok" if i < applied else "pending", "detail": "",
                        "t": x["at"] if i < applied else None} for i, x in enumerate(pv["steps"])]}
@@ -164,6 +164,24 @@ RUN_PROBE = """() => { const q = s => [...document.querySelectorAll(s)], badges 
            wide: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1 } }"""
 
 
+# The badges' size on screen and whether any two overlap (issue 813): text >= 14 px, a tap target >= 40 px, no pill over another.
+MARK_PROBE = """() => { const f = document.getElementById('flow'), k = f.getScreenCTM().a, marks = [...document.querySelectorAll('#runlayer [role=button]')];
+  const box = el => el.getBoundingClientRect(), pills = marks.map(m => box(m.querySelector('.rl-pill'))), out = { n: marks.length, small: [], tiny: [], overlap: [] };
+  marks.forEach((m, i) => { const fs = parseFloat(getComputedStyle(m.querySelector('.rl-t')).fontSize) * k, hit = box(m);
+    if (fs < 14) out.small.push(`${m.dataset.key}: ${fs.toFixed(1)} px`);
+    if (hit.width < 40 || hit.height < 40) out.tiny.push(`${m.dataset.key}: ${Math.round(hit.width)}x${Math.round(hit.height)}`);
+    for (let j = 0; j < i; j++) { const a = pills[i], b = pills[j];
+      if (a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5) out.overlap.push(`${m.dataset.key} / ${marks[j].dataset.key}`); } });
+  return out; }"""
+
+
+def mark_problems(page, what: str) -> list[str]:
+    m = page.evaluate(MARK_PROBE)
+    return ([f"{what}: badge text under 14 px on screen: {m['small'][:3]}"] if m["small"] else []) + \
+        ([f"{what}: badge tap targets under 40 px: {m['tiny'][:3]}"] if m["tiny"] else []) + \
+        ([f"{what}: badges overlap: {m['overlap'][:3]}"] if m["overlap"] else [])
+
+
 def check_runlayer(page, shot: str, vp: str) -> list[str]:
     """The run layer (ADR 0086, webui/static/js/runlayer.js) with a sample run, no cluster: numbered badges with a glyph and words on the
     parts each step touched, in step order for Tab; the step rail; the strip over the diagram (a bottom sheet on a phone) with Previous and
@@ -195,6 +213,7 @@ def check_runlayer(page, shot: str, vp: str) -> list[str]:
             bad.append(f"the step strip over the diagram is missing: {r['sheetText']!r}")
         if r["wide"]:
             bad.append("the run layer makes the page scroll sideways")
+        bad += mark_problems(page, "node-down")
         box = page.locator("#runsheet").bounding_box()
         if vp == "phone" and (box is None or box["y"] + box["height"] > page.viewport_size["height"] + 1 or page.evaluate("getComputedStyle(document.getElementById('runsheet')).position") != "fixed"):
             bad.append(f"on a phone the step sheet is not fixed to the bottom of the screen: {box}")
@@ -218,6 +237,16 @@ def check_runlayer(page, shot: str, vp: str) -> list[str]:
         if page.evaluate(RUN_PROBE)["moving"]:
             bad.append("something in the run layer animates under reduced motion")
         page.emulate_media(reduced_motion="no-preference")
+        dense = sample_run(99, "client-stress")  # a dense pool: every node of both racks has a badge, several steps per part
+        page.unroute("**/api/scenarios/run")
+        page.route("**/api/scenarios/run", lambda r: r.fulfill(json=dense))
+        page.evaluate("poll()")
+        page.wait_for_function("trLast && trLast.name === 'client-stress'", timeout=5000)
+        page.evaluate("paintRun(); paintRunLayer(true)")
+        if page.evaluate("document.querySelectorAll('#runlayer .rl-badge').length") < 6:
+            bad.append("client-stress: fewer than 6 badges on a run that touches every node")
+        bad += mark_problems(page, "client-stress")
+        page.screenshot(path=shot.replace(".png", "-dense.png"), full_page=False)
     except PlaywrightError as e:
         bad.append(f"the run layer did not draw a sample run: {str(e).splitlines()[0]}")
     finally:

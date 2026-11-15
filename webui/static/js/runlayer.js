@@ -14,7 +14,10 @@ import { selectTab, setCircuit } from './shell.js';
 import { zoomTo } from './zoom.js';
 import { RUN_WORD, expectPins, focusStep, partBadges, railRow, runGroups, runHeading, runSig, sheetFor } from './runlayermodel.js';
 
-const BH = 36;  // badge height in drawing units (the Circuit view is 1700 wide)
+// Sizes are set in screen pixels and turned into drawing units with the drawing's scale (the Circuit view is 1700 units wide and drawn at
+// about 0.55 of that on a laptop or a phone), so the text stays readable however small the drawing is shown (issue 813).
+const TEXT_PX = 15, HIT_PX = 40, MIN_FONT = 21, MAX_FONT = 40;  // badge text >= 14 px on screen; a 40 px tap target round every badge
+let size = { font: MIN_FONT, bh: 36, hit: 40 };
 let drawnSig = '', lastCur = null, groups = [], pins = [];
 const attr = s => String(s).replace(/["\\]/g, '\\$&');
 const phone = () => matchMedia('(max-width:640px)').matches;
@@ -42,20 +45,28 @@ function placeMark(el, w, h, kind, taken) {  // where a badge or pin goes: on a 
   return { x, y };
 }
 
+function markSize(f) {  // the badge size in drawing units for the scale the drawing is shown at now
+  const k = f.getScreenCTM?.()?.a || 0.6, font = Math.round(Math.min(MAX_FONT, Math.max(MIN_FONT, TEXT_PX / k)));
+  return { font, bh: Math.round(font * 1.7), hit: Math.ceil(HIT_PX / k) };
+}
+
 function markEl(cls, text, more, aria, n, onAct) {
   const g = sv('g', { class: cls, role: 'button', tabindex: '0', 'aria-label': aria, 'data-n': n });
-  g.append(sv('title', {}, aria), sv('rect', { height: BH, rx: BH / 2 }), sv('text', { class: 'rl-t' }, text));
+  g.append(sv('title', {}, aria), sv('rect', { class: 'rl-hit', height: Math.max(size.bh, size.hit) }), sv('rect', { class: 'rl-pill', height: size.bh, rx: size.bh / 2 }), sv('text', { class: 'rl-t' }, text));
   if (more) g.append(sv('text', { class: 'rl-more' }, more));
   g.addEventListener('click', e => { e.stopPropagation(); onAct(); });
   g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAct(); } });
   return g;
 }
-function fitMark(g, el, kind, taken) {  // size the pill to its text, then place it
-  const [t, m] = [g.querySelector('.rl-t'), g.querySelector('.rl-more')], tw = t.getComputedTextLength(), mw = m ? m.getComputedTextLength() + 8 : 0, w = Math.ceil(tw + mw + 26);
-  const { x, y } = placeMark(el, w, BH, kind, taken), r = g.querySelector('rect');
+function fitMark(g, el, kind, taken) {  // size the pill to its text, then place it; the hit area round it is at least 40 px on screen
+  const { font, bh, hit } = size, pad = Math.round(font * 0.62), gap = Math.round(font * 0.38);
+  const [t, m] = [g.querySelector('.rl-t'), g.querySelector('.rl-more')], tw = t.getComputedTextLength(), mw = m ? m.getComputedTextLength() + gap : 0, w = Math.ceil(tw + mw + 2 * pad);
+  const { x, y } = placeMark(el, w, bh, kind, taken), r = g.querySelector('.rl-pill'), h = g.querySelector('.rl-hit'), hw = Math.max(w, hit), hh = Math.max(bh, hit);
   r.setAttribute('x', x); r.setAttribute('y', y); r.setAttribute('width', w);
-  t.setAttribute('x', x + 13); t.setAttribute('y', y + 25);
-  if (m) { m.setAttribute('x', x + 13 + tw + 8); m.setAttribute('y', y + 24); }
+  h.setAttribute('x', x - (hw - w) / 2); h.setAttribute('y', y - (hh - bh) / 2); h.setAttribute('width', hw);
+  const base = y + bh / 2 + font * 0.36;  // the text's baseline: centred in the pill
+  t.setAttribute('x', x + pad); t.setAttribute('y', base);
+  if (m) { m.setAttribute('x', x + pad + tw + gap); m.setAttribute('y', base); }
 }
 
 export function paintRunLayer(force) {
@@ -68,6 +79,7 @@ export function paintRunLayer(force) {
   f.querySelector('#runlayer')?.remove();
   if (!sig) { ringStep(); return; }
   const layer = sv('g', { id: 'runlayer', class: 'runlayer', role: 'group', 'aria-label': `Scenario ${run.name}: step badges, in step order` }), taken = [];
+  size = markSize(f); layer.style.setProperty('--rl-fs', `${size.font}px`);
   f.append(layer);
   for (const b of partBadges(groups, has)) {  // in step order, so Tab follows the scenario
     const el = runPartEl(b.id), g = markEl(`rl-badge k-${b.state}${b.current ? ' cur' : ''}`, `${b.n} ${b.glyph}`, b.more ? `+${b.more}` : '', b.label, b.n, () => chooseStep(b.n, true));
