@@ -13,6 +13,14 @@ ROOT = Path(__file__).resolve().parent.parent
 SIM = yaml.safe_load((ROOT / "sim.yaml").read_text())
 
 
+@pytest.fixture(autouse=True)
+def plenty_of_memory(monkeypatch):
+    """`benchctl plan` refuses when the host is short of memory; these tests are about flags, not the host (#746)."""
+    from benchctl import checks
+
+    monkeypatch.setattr(checks, "mem_available", lambda *a, **k: 16 * 1024**3)
+
+
 def load(name, rel):
     spec = importlib.util.spec_from_file_location(name, ROOT / rel)
     mod = importlib.util.module_from_spec(spec)

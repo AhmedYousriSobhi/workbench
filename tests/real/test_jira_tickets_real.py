@@ -9,6 +9,7 @@ import pytest
 import yaml
 from helpers import bring_up, release, wait_for
 
+from benchctl import k8s as _k8s
 from benchctl import scenario
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -40,7 +41,7 @@ def live():
 
 
 def play(name: str, sim: dict, speed: float = 20):
-    sc = scenario.load(name)
+    sc = scenario.load(name, sim=_k8s.current_sim())
     assert scenario.validate(sc, sim) == []
     report = scenario.run(sc, speed=speed, dilation=float(sim.get("time_dilation", 1.0)), say=lambda m: None)
     assert report.ok, [o for o in report.steps + report.expects if o.status == "failed"]
