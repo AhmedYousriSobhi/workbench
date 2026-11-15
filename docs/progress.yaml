@@ -28,7 +28,7 @@ phases:
       - {name: Priority planner, status: done, pr: 14, where: governor/planner.py,
          how: "P0-P6 classes; lowest priority first, reversible actions before destructive ones; undo on de-escalation."}
       - {name: Executors, status: done, pr: 20, where: governor/executors.py,
-         how: "freeze, throttle (memory.high), reclaim, stop (cgroup.kill then docker stop), managedsave for VMs, via cgroup files opened in advance."}
+         how: "freeze, throttle (memory.high), reclaim, stop (cgroup.kill then docker stop), managedsave for VMs, via cgroup files opened in advance. In rootless mode throttle and reclaim are skipped and each skip is an audit-log entry (SKIPPED ...), the page and Grafana annotation (issue 453)."}
       - {name: mlockall and pre-allocated mitigation path, status: done, pr: 19, where: governor/memlock.py,
          how: "Locks its own pages and pre-opens handles and buffers so L3/L4 performs no allocation (SPEC GV-8)."}
       - {name: Control socket, status: done, pr: 19, where: governor/control.py,
