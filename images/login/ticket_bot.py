@@ -20,6 +20,8 @@ import urllib.request
 UA = "workbench-ticket-bot/1.0"
 JIRA = "http://jira-mock:8080"
 PAUSED = "/run/workbench-flags/arrivals.paused"  # the governor's L1 flag, as for the user simulator
+SETTINGS = "/tmp/ticketbot.json"  # `benchctl set ticket-bot` writes it; read again every cycle (issue 728)
+RANGES = {"every": (10, 3600), "resolve_after": (10, 86400), "ignore": (0, 1), "reopen": (0, 1)}
 RHYTHM_FLOOR = 0.1
 ENGINEERS = ("bob", "carol", "dave", "erin")
 COMMENTS = ("Looking into this now.", "Checked the node, nothing obvious yet.", "Restarted the service, watching it.",
@@ -36,6 +38,22 @@ def rhythm(hour: float, peak: float = 14, floor: float = RHYTHM_FLOOR) -> float:
 
 def sim_hour(elapsed: float, day_s: float, start: float = 8) -> float:
     return (start + elapsed / day_s * 24) % 24 if day_s > 0 else start
+
+
+def load_settings(current: dict, path: str = SETTINGS) -> dict:
+    """The settings in force: `current` with the valid numbers of the file laid over it. A missing, unreadable or out-of-range
+    entry keeps the last good value, so a bad edit never stops the bot."""
+    try:
+        with open(path) as f:
+            wanted = json.load(f)
+    except (OSError, ValueError):
+        return current
+    new = dict(current)
+    for k, (lo, hi) in RANGES.items():
+        v = wanted.get(k) if isinstance(wanted, dict) else None
+        if isinstance(v, (int, float)) and not isinstance(v, bool) and lo <= v <= hi:
+            new[k] = v
+    return new
 
 
 class Bot:
@@ -128,9 +146,12 @@ def main() -> int:
     a = ap.parse_args()
     rng, client, start = random.Random(a.seed), Client(), time.monotonic()
     bot = Bot(rng, a.resolve_after, a.ignore, a.reopen)
+    cfg = {"every": a.every, "resolve_after": a.resolve_after, "ignore": a.ignore, "reopen": a.reopen}
     while True:
+        cfg = load_settings(cfg)
+        bot.resolve_after, bot.ignore, bot.reopen_share = cfg["resolve_after"], cfg["ignore"], cfg["reopen"]
         hour = sim_hour(time.monotonic() - start, a.day) if a.day > 0 else None
-        time.sleep(rng.expovariate((rhythm(hour) if hour is not None else 1) / a.every))
+        time.sleep(rng.expovariate((rhythm(hour) if hour is not None else 1) / cfg["every"]))
         if os.path.exists(PAUSED):
             continue
         action = bot.step(client.tickets(), time.monotonic())

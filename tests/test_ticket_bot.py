@@ -135,3 +135,33 @@ def test_load_on_starts_the_bot_only_with_tickets(monkeypatch):
     r = runner.invoke(cli.app, ["load", "on", "--tickets", "--ticket-every", "30"])
     assert r.exit_code == 0 and "ticket bot" in r.output and any(workload.TICKET_PATH in " ".join(c) for c in ran)
     assert runner.invoke(cli.app, ["load", "on", "--tickets", "--ticket-every", "1"]).exit_code == 1
+
+
+def test_settings_file_overrides_only_valid_numbers(tmp_path):
+    f = tmp_path / "s.json"
+    cur = {"every": 120, "resolve_after": 600, "ignore": 0.15, "reopen": 0.1}
+    assert bot_mod.load_settings(cur, str(f)) == cur                      # no file
+    f.write_text('{"every": 10, "ignore": 5, "reopen": true, "resolve_after": "x"}')
+    assert bot_mod.load_settings(cur, str(f)) == {**cur, "every": 10}     # only the valid one
+    f.write_text("not json")
+    assert bot_mod.load_settings(cur, str(f)) == cur
+    f.write_text("[1]")
+    assert bot_mod.load_settings(cur, str(f)) == cur
+
+
+def test_set_and_get_ticket_bot_commands(monkeypatch):
+    import subprocess
+
+    from typer.testing import CliRunner
+
+    from benchctl import cli, stack, workload
+    seen = []
+    monkeypatch.setattr(stack, "_run", lambda cmd: seen.append(cmd) or subprocess.CompletedProcess(cmd, 0, '{"every": 10}\n', ""))
+    r = CliRunner().invoke(cli.app, ["set", "ticket-bot", "--every", "10"])
+    assert r.exit_code == 0 and "ticket bot settings" in r.output and '"every": 10' in seen[0][-1]
+    assert CliRunner().invoke(cli.app, ["set", "ticket-bot", "--every", "5"]).exit_code == 2   # out of range
+    assert CliRunner().invoke(cli.app, ["set", "ticket-bot"]).exit_code == 2                   # nothing given
+    assert CliRunner().invoke(cli.app, ["get", "ticket-bot"]).exit_code == 0
+    assert workload.ticket_settings_get()[-1].startswith("cat /tmp/ticketbot.json")
+    monkeypatch.setattr(stack, "_run", lambda cmd: subprocess.CompletedProcess(cmd, 1, "", ""))
+    assert CliRunner().invoke(cli.app, ["set", "ticket-bot", "--every", "10"]).exit_code == 1
