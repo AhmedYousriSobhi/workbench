@@ -80,8 +80,11 @@ class Governor:
         if not self.dry_run:
             try:
                 with self._exec_lock:  # slow (docker stop is up to 20 s); `status` needs only `_lock`
-                    self.executor(a)
+                    note = self.executor(a)
                 with self._lock:
+                    if isinstance(note, str):  # a verb the executor cannot do (rootless mode): say so, GV-6
+                        self.counts["actions_skipped"] = self.counts.get("actions_skipped", 0) + 1
+                        self._record(f"SKIPPED {a}: {note}")
                     if a.verb in ("stop", "save"):
                         self.stopped.add(a.target)
                     elif a.verb == "start":

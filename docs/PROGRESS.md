@@ -115,7 +115,7 @@ _A root service that keeps the host alive by escalating through a ladder._
 |---|---|---|---|---|
 | Signals and escalation ladder | ✅ Done | MemAvailable, PSI and swap rate feed levels L0-L5. Escalates at once, steps down one level per 60 s calm with a 10 s dwell. L4 from a PSI stall needs 5 s (ADR 0032, issue 286); low MemAvailable is immediate. | `governor/signals.py`, `governor/ladder.py` | #14 |
 | Priority planner | ✅ Done | P0-P6 classes; lowest priority first, reversible actions before destructive ones; undo on de-escalation. | `governor/planner.py` | #14 |
-| Executors | ✅ Done | freeze, throttle (memory.high), reclaim, stop (cgroup.kill then docker stop), managedsave for VMs, via cgroup files opened in advance. | `governor/executors.py` | #20 |
+| Executors | ✅ Done | freeze, throttle (memory.high), reclaim, stop (cgroup.kill then docker stop), managedsave for VMs, via cgroup files opened in advance. In rootless mode throttle and reclaim are skipped and each skip is an audit-log entry (SKIPPED ...), the page and Grafana annotation (issue 453). | `governor/executors.py` | #20 |
 | mlockall and pre-allocated mitigation path | ✅ Done | Locks its own pages and pre-opens handles and buffers so L3/L4 performs no allocation (SPEC GV-8). | `governor/memlock.py` | #19 |
 | Control socket | ✅ Done | JSON lines on /run/workbench/gov.sock with a fixed allow-list; unknown commands are rejected. | `governor/control.py` | #19 |
 | NF-1 memory-hog test | ✅ Done | A real container hog is throttled, frozen then stopped in order; no host OOM. Runs as root via scripts/real-test-root.sh. | `tests/real/test_root.py` | #24 |

@@ -153,7 +153,8 @@ class UserExecutor(Executor):
     """Rootless governor (no sudo): the Docker API replaces the cgroup files only root can write.
 
     freeze/thaw -> docker pause/unpause, stop -> docker kill then stop (Engine API, no fork). throttle (memory.high) and reclaim need root and are
-    skipped with one log line each: the ladder still runs, it just has fewer rungs. See ADR 0010.
+    skipped: the ladder still runs, it just has fewer rungs. The first one per verb logs a line; every one returns a note that the governor
+    puts in the audit log and the page, so "L3 reclaim" is never shown as relief that did not happen (GV-6). See ADR 0010.
     """
 
     def __init__(self, *args, **kw):
@@ -163,7 +164,8 @@ class UserExecutor(Executor):
     def prealloc(self) -> None:  # nothing to pre-open: no cgroup files are used
         pass
 
-    def __call__(self, a: Action) -> None:
+    def __call__(self, a: Action) -> str | None:
+        """Run the action; return a note when it was skipped (needs root), None when it ran."""
         verb, target = a.verb.split("=")[0], a.target
         if verb == "freeze":
             self._docker(a, "pause", target, tolerate="already paused")
@@ -178,5 +180,6 @@ class UserExecutor(Executor):
             if verb not in self._warned:
                 self._warned.add(verb)
                 log.info("rootless mode: %s needs root, skipped (install the system service for it)", verb)
+            return f"skipped in rootless mode: {verb} needs root, nothing was done (install the system service for it)"
         else:
             super().__call__(a)
