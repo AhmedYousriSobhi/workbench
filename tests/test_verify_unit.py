@@ -19,7 +19,7 @@ def test_dry_run_shows_the_steps_and_runs_nothing():
     r = verify("--unit", "teleport", "--clean", "--dry-run")
     assert r.returncode == 0 and r.stdout.splitlines() == [
         "would run: ./scripts/benchctl down --yes", "would run: scripts/verify.d/teleport.sh",
-        "would run: pytest tests/test_teleport.py", "would run: WORKBENCH_REAL=1 pytest tests/real/test_teleport_real.py"]
+        "would run: pytest tests/test_teleport.py", "would run: WORKBENCH_REAL=1 pytest tests/real/test_teleport_kube_real.py tests/real/test_teleport_real.py"]
 
 
 def test_without_clean_there_is_no_down_and_no_hook():

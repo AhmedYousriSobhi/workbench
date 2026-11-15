@@ -35,6 +35,8 @@ API = "k8s-apiserver"
 ENTRYPOINT = {"k8s-etcd": "etcd", "k8s-apiserver": "kube-apiserver", "k8s-controller-manager": "kube-controller-manager",
               "k8s-scheduler": "kube-scheduler", "kwok-controller": "kwok"}
 API_PORT = 6443
+TELEPORT_USER = "teleport"  # Teleport's Kubernetes Service registers the cluster with this token user; it may impersonate, nothing else (k8s/fixtures/47-rbac-teleport.yaml, ADR 0083)
+CONTEXT = "workbench-k8s"  # the kubeconfig context name: Teleport names the registered cluster after it (`tsh kube ls`)
 METRICS_USER = "metrics"  # reads /metrics only (k8s/fixtures/45-rbac-metrics.yaml); the page uses it for request counts
 # limits in MB (upper bounds for the planning estimate; measured idle 275 MiB, 310 MiB with 50 nodes and the fixtures)
 LIMITS = {"k8s-etcd": 256, "k8s-apiserver": 384, "k8s-controller-manager": 128, "k8s-scheduler": 64, "kwok-controller": 64}
@@ -171,7 +173,7 @@ rules:
 
 def kubeconfig(server: str, user: dict, ca_b64: str | None = None, ca_file: str | None = None, namespace: str | None = None) -> str:
     cluster = {"server": server, **({"certificate-authority-data": ca_b64} if ca_b64 else {"certificate-authority": ca_file})}
-    ctx = {"cluster": "workbench-k8s", "user": user["name"], **({"namespace": namespace} if namespace else {})}
+    ctx = {"cluster": CONTEXT, "user": user["name"], **({"namespace": namespace} if namespace else {})}
     return yaml.safe_dump({"apiVersion": "v1", "kind": "Config", "current-context": "workbench-k8s",
                            "clusters": [{"name": "workbench-k8s", "cluster": cluster}],
                            "users": [{"name": user["name"], "user": user["auth"]}],
@@ -213,9 +215,10 @@ def prepare(sim: dict, ips: dict, secrets_dir: Path | None = None, state_dir: Pa
         ips_stamp.write_text(api_ip(ips))
         for f in d.iterdir():
             f.chmod(0o600)
-    if metrics_token(d) is None:  # a cluster made before this user existed gets it without a new PKI (the API server reads it on its next start)
-        with (d / "tokens.csv").open("a") as f:
-            f.write(f"{secrets.token_hex(24)},{METRICS_USER},{METRICS_USER}-uid\n")
+    for extra in (METRICS_USER, TELEPORT_USER):
+        if _token(extra, d) is None:  # a cluster made before this user existed gets it without a new PKI (the API server reads it on its next start)
+            with (d / "tokens.csv").open("a") as f:
+                f.write(f"{secrets.token_hex(24)},{extra},{extra}-uid\n")
     (d / "audit-policy.yaml").write_text(AUDIT_POLICY)  # always rewritten: a cluster made before this existed gets it on its next start
     (d / "audit-policy.yaml").chmod(0o600)
     (st / "nodes.yaml").write_text(nodes_yaml(sim, gpu_override))
@@ -315,6 +318,16 @@ def _token(user: str, d: Path | None = None) -> str | None:
     except OSError:
         pass
     return None
+
+
+def teleport_kubeconfig(ips: dict, d: Path | None = None) -> str:
+    """The static kubeconfig Teleport's Kubernetes Service reads: the `teleport` token user (impersonation only) against the API server's
+    fixed address, the CA embedded, so it holds no host path. Written by `teleport.prepare` into the Teleport secrets folder."""
+    d = d or SECRETS_DIR
+    tok = _token(TELEPORT_USER, d)
+    if tok is None:
+        raise K8sError("no token for the teleport user: run `benchctl up` with the k8s part so the credentials are made")
+    return kubeconfig(f"https://{api_ip(ips)}:{API_PORT}", {"name": TELEPORT_USER, "auth": {"token": tok}}, ca_b64=_b64(d / "ca.crt"))
 
 
 def viewer_token() -> str | None:

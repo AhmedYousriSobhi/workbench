@@ -39,7 +39,8 @@ installation, agentless OpenSSH, upgrade overview).
   old `tsh`; `benchctl doctor` warns when the local `tsh` major is newer than the configured server.
 - **Licence:** Community Edition images from 16 on are under Teleport's Community Edition licence (individuals and
   companies under 100 employees and 10 million USD revenue; no resale or embedding). The repository only names the
-  image tag and never redistributes the binary. Teleport's source stays AGPLv3.
+  image tag and never redistributes the binary. Teleport's source stays AGPLv3. Per Teleport's 2024 announcement the free tiers are
+  personal use and companies under 100 employees and 10 million USD revenue; the thresholds are unconfirmed for 2026 (ADR 0083 addendum).
 
 - **Diagnostics port:** `teleport.diag_addr` on 3434, published on 127.0.0.1 only (ADR 0022): `/healthz` is the page's
   status probe and `/metrics` carries `teleport_connect_to_node_attempts_total`, the counter behind the diagram's dots.

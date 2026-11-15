@@ -1,0 +1,23 @@
+# Teleport's Kubernetes Service (ADR 0083, issue 383). `teleport` is the token user in its static kubeconfig: it may impersonate users, groups
+# and service accounts and nothing else (the rules of Teleport's own get-kubeconfig.sh); Teleport turns each user's role into the
+# impersonated groups. `workbench-k8s-viewers` is the group the Teleport role `workbench-user` grants: it gets the same read-only role
+# as the `viewer` user. A Teleport user whose role has no kubernetes_groups impersonates no group and is refused.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: workbench-teleport}
+rules:
+- {apiGroups: [""], resources: [users, groups, serviceaccounts], verbs: [impersonate]}
+- {apiGroups: [""], resources: [pods], verbs: [get]}
+- {apiGroups: [authorization.k8s.io], resources: [selfsubjectaccessreviews, selfsubjectrulesreviews], verbs: [create]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: workbench-teleport}
+subjects: [{kind: User, name: teleport}]
+roleRef: {kind: ClusterRole, name: workbench-teleport, apiGroup: rbac.authorization.k8s.io}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: workbench-teleport-viewers}
+subjects: [{kind: Group, name: workbench-k8s-viewers, apiGroup: rbac.authorization.k8s.io}]
+roleRef: {kind: ClusterRole, name: workbench-viewer, apiGroup: rbac.authorization.k8s.io}
