@@ -44,7 +44,7 @@ def test_a_step_names_a_listed_release_and_known_daemons():
 
 
 def test_the_scenario_validates_and_counts_as_disruptive():
-    sc = scenario.load("slurm-upgrade-mid-job")
+    sc = scenario.load("slurm-upgrade-mid-job", sim=SIM)
     assert scenario.validate(sc, SIM) == [] and scenario.disruptive(sc)
 
 

@@ -1407,7 +1407,7 @@ def describe_workbench(output: str = OUTPUT, json_: bool = JSON) -> None:
              "governor_level": gov["level"] if gov else None, "mem_available_mb": checks.mem_available() // (1024 * 1024)}
     info = situation.gather(
         state=state, spec=spec.to_dict() if spec else None, sim=sim, k8s_nodes=sim.get("kubernetes", {}).get("nodes", []) if cluster.k8s_built() else [],
-        entities=conn.entities(sim), faults=_fault_rows(), scenarios=scenario.list_all(), plan=scenario.plan,
+        entities=conn.entities(sim), faults=_fault_rows(), scenarios=scenario.list_all(sim=sim), plan=scenario.plan,
         fault_targets=[*cluster.ACTIONS, *sorted(scenario.HOST_TARGETS), *sorted(k for k in scenario.ENDPOINTS if not k.startswith("jira-"))])
     if contract.wanted(output, json_) == "json":
         typer.echo(contract.dumps(info, compact=True))
@@ -1659,6 +1659,11 @@ def scenario_run(name: str = typer.Argument(..., autocompletion=completion.scena
         sc = scenario.load(name)
     except scenario.ScenarioError as e:
         typer.echo(errors.render("WB-UNKNOWN-SCENARIO", completion.explain(name, completion.scenarios(""), "scenario")) if completion.scenarios("") else str(e), err=True)
+        raise typer.Exit(1) from e
+    try:
+        sc = scenario.selectors.resolve_scenario(sc, sim)  # `first gpu node` becomes this cluster's node name
+    except scenario.ScenarioError as e:
+        typer.echo(f"invalid: {e}", err=True)
         raise typer.Exit(1) from e
     problems = scenario.validate(sc, sim)
     for p in problems:

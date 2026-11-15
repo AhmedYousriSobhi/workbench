@@ -2,7 +2,7 @@ name: ticket-lifecycle
 ref: SC-26
 description: One ticket goes Open, In Progress, gets a note, is Resolved and Closed; the client should show each move
 steps:
-  - {at: 0s,  target: jira, do: {tickets: {action: create, project: OPS, summary: "Scenario: slow login on cn001", labels: [workbench, cn001, lifecycle], priority: High, description: "Users report slow logins on cn001. Opened by the ticket-lifecycle scenario."}}}
+  - {at: 0s,  target: jira, do: {tickets: {action: create, project: OPS, summary: "Scenario: slow login on {first cpu node}", labels: [workbench, first cpu node, lifecycle], priority: High, description: "Users report slow logins on {first cpu node}. Opened by the ticket-lifecycle scenario."}}}
   - {at: 15s, target: jira, do: {tickets: {action: transition, jql: 'labels = lifecycle AND statusCategory != Done', to: In Progress}}}
   - {at: 30s, target: jira, do: {tickets: {action: comment, jql: 'labels = lifecycle AND statusCategory != Done', body: "Checked sshd and the node: load is normal, watching."}}}
   - {at: 45s, target: jira, do: {tickets: {action: transition, jql: 'labels = lifecycle AND statusCategory != Done', to: Resolved, resolution: Done}}}
