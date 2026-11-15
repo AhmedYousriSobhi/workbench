@@ -73,3 +73,20 @@ def test_events_log_follows_a_scenario_fault(head_node):
     assert wait_for(lambda: "cn003: Device status changed from DOWN to UP" in ssh("cat /var/spool/cmd/events.log").stdout, timeout=30)
     lines = ssh("cat /var/spool/cmd/events.log").stdout.splitlines()
     assert any(re.match(r"^\w{3} \w{3} [ \d]\d \d\d:\d\d:\d\d \d{4} \[alert\] cn003: Device status changed from UP to DOWN$", x) for x in lines)
+
+
+def test_the_events_log_daemons_polls_are_not_client_traffic(head_node):
+    """Issue 780: the daemon asks bcm-mock for events every 3 s; that is the head node's own work, not a client, so the mock's request
+    counter (and the page's flow feed) must not move while it runs. Three or more polls fit in the window."""
+    import json
+    import time
+    import urllib.request
+
+    def requests() -> int:
+        with urllib.request.urlopen("http://127.0.0.1:8081/sim/stats", timeout=5) as r:
+            return json.loads(r.read())["requests"]
+
+    assert ssh("pgrep -f events-log").returncode == 0, "the daemon is running on the head node"
+    before = requests()
+    time.sleep(10)
+    assert requests() == before

@@ -27,9 +27,11 @@ class Unreachable(Exception):
     pass
 
 
-def call(service: str, name: str, args: list | None = None):
+def call(service: str, name: str, args: list | None = None, probe: bool = False):
+    """One CMDaemon-style call. `probe=True` marks the request as the workbench's own (X-Workbench-Probe): the mock does not count it
+    as client traffic. The events-log daemon sets it; a user's cmsh does not, so a user's commands stay visible."""
     req = urllib.request.Request(BCM_URL, data=json.dumps({"service": service, "call": name, "args": args or []}).encode(),
-                                 method="POST")
+                                 method="POST", headers={"X-Workbench-Probe": "1"} if probe else {})
     try:
         with urllib.request.urlopen(req, timeout=5) as r:
             body = json.loads(r.read())

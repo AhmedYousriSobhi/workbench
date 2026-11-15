@@ -37,3 +37,17 @@ def test_restarted_mock_starts_over(tmp_path):
     fetch = lambda since: {"seq": 1, "events": [e for e in [EV] if e["seq"] > since]}
     assert events_log.step(fetch, str(log), 5) == 1
     assert len(log.read_text().splitlines()) == 1
+
+
+def test_the_daemons_poll_is_marked_as_the_workbenchs_own():
+    """Issue 780: the head node's own events-log poll (every 3 s) was counted by bcm-mock as client traffic and drawn as dots."""
+    seen = []
+
+    class C:
+        @staticmethod
+        def call(service, name, args=None, probe=False):
+            seen.append((service, name, args, probe))
+            return {"seq": 0, "events": []}
+
+    events_log.fetch(C, 4)
+    assert seen == [("cmevents", "getEvents", [4], True)]
