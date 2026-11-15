@@ -75,7 +75,13 @@ A page is for someone doing a task, not for reading top to bottom. Lead with wha
 - A paragraph is about 4 lines; split it, or make it a list.
 - Rarely needed background goes in a short **Details** section at the end, or links to the ADR instead of repeating it.
 
-`python scripts/check_wiki_shape.py` (run by `validate.sh` and `tests/test_wiki_shape.py`) fails on a published page with a
-paragraph over 150 words, or more than 120 lines under one heading without a subheading. `--table` prints the ranked audit
-of every page (lines, words, longest paragraph, longest run, headings, tables, code blocks, images, longest list). A page left
-as it is on purpose goes in `ALLOW` in the script, with the reason (today: ADRs, which record a decision as taken).
+`python scripts/check_wiki_shape.py` (run by `validate.sh` and `tests/test_wiki_shape.py`) fails on a published page with:
+- a paragraph over 150 words;
+- more than 120 lines under one heading without a subheading;
+- in a manual, guide or agent page, a paragraph or list item over 70 words (a how-to is one action per line).
+
+`--table` prints the ranked audit of every page: lines, words, longest paragraph, longest run, headings, tables, code blocks, images, longest list.
+
+Two lists in the script hold the exceptions:
+- `ALLOW`: a page left as it is on purpose, with the reason (today: ADRs, which record a decision as taken).
+- `STEP_TODO`: pages not yet rewritten for the 70-word rule. It only shrinks: remove a page when it passes, never add one. The test fails when a listed page already passes.

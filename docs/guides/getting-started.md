@@ -60,10 +60,18 @@ The numbered sections below are the same steps one at a time, for when you want 
 ./scripts/check-machine.sh
 ```
 
-Needs only the system `python3`. It checks the OS, CPU cores, RAM, free disk, cgroup v2, Docker (daemon and
-compose), free ports, optional tools (KVM, k3d, kubectl) and says which profiles fit in the memory available
-right now. It ends with `READY` or `NOT READY` and a fix line for each problem. Do not build until it says
-`READY`. The same check runs as `./scripts/benchctl check` once the venv exists.
+It needs only the system `python3`. It checks:
+- the OS, CPU cores, RAM and free disk;
+- cgroup v2;
+- Docker (daemon and compose);
+- free ports;
+- optional tools (KVM, k3d, kubectl).
+
+It also says which profiles fit in the memory available right now.
+
+It ends with `READY` or `NOT READY`, and a fix line for each problem. Do not build until it says `READY`.
+
+The same check runs as `./scripts/benchctl check` once the venv exists.
 
 ## 0b. Install the tools (once)
 
@@ -73,8 +81,11 @@ Ubuntu has `python3`, not `python`, and `benchctl` needs a few packages. Use a v
 python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'
 ```
 
-The venv is per shell: activate it again in every new terminal (`. .venv/bin/activate`), or skip activation with `./scripts/benchctl <command>`, which uses `.venv` directly (`./scripts/benchctl status`). With the venv active you can type just `benchctl ...` instead of `./scripts/benchctl ...`; every command below works both ways. The
-governor service needs no packages; it runs on the system `python3`.
+The venv is per shell. You have two choices:
+- Activate it again in every new terminal: `. .venv/bin/activate`. Then type `benchctl ...`.
+- Skip activation: `./scripts/benchctl <command>` uses `.venv` directly, for example `./scripts/benchctl status`.
+
+Every command below works both ways. The governor service needs no packages. It runs on the system `python3`.
 
 ## 1. Check the setup (doctor)
 
@@ -83,21 +94,23 @@ governor service needs no packages; it runs on the system `python3`.
 ./scripts/benchctl preflight --profile min    # would this profile fit in free memory right now?
 ```
 
-Doctor then prints one block per host setting that is not as recommended (zram swap, `vm.swappiness`, THP `madvise`).
-Each block has:
+Doctor then prints one block per host setting that is not as recommended (zram swap, `vm.swappiness`, THP `madvise`). Each block has:
 
 - the temporary command (lost at reboot), what it changes and the undo;
 - a `persist:` form that survives reboot, with its undo (a sysctl.d drop-in, a zram-generator config, the
   `transparent_hugepage=madvise` kernel option).
 
-It only prints: it never runs `sudo` or changes the host, so copy a block into your own shell if you want it. Scripts
-read the same data from `doctor --json` (`tuning`).
+Doctor only prints. It never runs `sudo` or changes the host, so copy a block into your own shell if you want it.
 
-A `WARN` for `virsh`, `vagrant` or `tc` is fine: only optional parts need them (Kubernetes needs no host tool). Fix any `FAIL` first.
+Scripts read the same data from `doctor --json` (`tuning`).
+
+- A `WARN` for `virsh`, `vagrant` or `tc` is fine. Only optional parts need them (Kubernetes needs no host tool).
+- Fix any `FAIL` first.
 
 If `tsh` is installed, doctor also says whether it is newer than the Teleport server (`teleport.version` in `sim.yaml`).
-Teleport supports a `tsh` of the same or one older major version; a newer one is refused with an unclear error.
-`benchctl up` prints the same one-line warning when Teleport is on.
+- Teleport supports a `tsh` of the same or one older major version.
+- A newer one is refused with an unclear error.
+- `benchctl up` prints the same one-line warning when Teleport is on.
 
 ## 2. Start the governor (outside monitoring and control)
 
@@ -124,10 +137,14 @@ sudo ./scripts/install-governor.sh --uninstall
 ./scripts/benchctl down                 # stops only the workbench project; your other containers are untouched
 ```
 
-`up` builds every image once, then starts the stack in stages. A stage starts only when the services before it answer (the controller to `scontrol ping`, the mocks to `/healthz`), not merely when their containers are running, so a node never starts before the controller is ready. If one does not answer in time the message names it. `up` ends with the total and the seconds per stage (`stack is up in 6 s (observability 0, slurm core 0, ...)`).
+`up` builds every image once, then starts the stack in stages.
+- A stage starts only when the services before it answer: the controller to `scontrol ping`, the mocks to `/healthz`. A running container is not enough. A node therefore never starts before the controller is ready.
+- If a service does not answer in time, the message names it.
+- `up` ends with the total and the seconds per stage (`stack is up in 6 s (observability 0, slurm core 0, ...)`).
 
-Profiles are in `profiles/` (`min`, `std`, `full`); `up` refuses a profile that does not fit and names one
-that does. Components not built yet are skipped with a note.
+Profiles are in `profiles/` (`min`, `std`, `full`).
+- `up` refuses a profile that does not fit, and names one that does.
+- Components not built yet are skipped with a note.
 
 ## 4. What to look at
 
@@ -203,8 +220,13 @@ docker exec -u alice workbench-login-1 sbatch -p real-gpu --gres=gpu:1 --wrap="n
 srun -p real-gpu --gres=gpu:1 nvidia-smi -L        # interactively, on the login node
 ```
 
-Always name the partition: `srun` defaults to `cpu`, and `--nodelist rgpu001` alone answers "Requested node configuration
-is not available". With the BMC farm and BCM mock on (`--with bmc --with bcm`) the node is listed there too: a Redfish system whose `Oem.GpuModel` is the card's model, and a BCM device in category `gpu` with 1 GPU. About 480 MB; never in `all`. SPEC C-23, ADR 0037.
+Always name the partition. `srun` defaults to `cpu`, and `--nodelist rgpu001` alone answers "Requested node configuration is not available".
+
+With the BMC farm and BCM mock on (`--with bmc --with bcm`), the node is listed there too:
+- a Redfish system whose `Oem.GpuModel` is the card's model;
+- a BCM device in category `gpu` with 1 GPU.
+
+It costs about 480 MB and is never in `all`. SPEC C-23, ADR 0037.
 
 ## 4a. Get a shell on a node
 
@@ -236,7 +258,9 @@ ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2222 al
 ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2222 alice@127.0.0.1 ssh cn001 hostname   # a hop to a node
 ```
 
-A client that only accepts keys under `~/.ssh` can use `./scripts/benchctl ssh-key install` (copies the key to `~/.ssh/workbench_ed25519`) and `./scripts/benchctl ssh-key remove` afterwards.
+A client that only accepts keys under `~/.ssh`:
+- `./scripts/benchctl ssh-key install` copies the key to `~/.ssh/workbench_ed25519`.
+- `./scripts/benchctl ssh-key remove` removes it afterwards.
 
 Next:
 
@@ -245,7 +269,9 @@ Next:
 - The other machine with a real `sshd` is the optional fidelity VM (`cd fidelity-vm && ./bin/up.sh`, then `vagrant ssh fidelity`).
 - Teleport access (`./scripts/benchctl up --with teleport`, then `tsh ... ls`) is in [Nodes and shells](../manual/04-nodes-and-shells.md#teleport-tsh-to-the-login-node-and-the-nodes).
 
-A controller node (where slurmctld runs; whitelisted admins only, and the BCM head node) and a jump host (a bare bastion in front of the login nodes) are optional:
+Two optional nodes:
+- A **controller node** is where slurmctld runs. Only whitelisted admins get in, and it is the BCM head node.
+- A **jump host** is a bare bastion in front of the login nodes.
 
 ```bash
 ./scripts/benchctl up --controller --access jump           # 24 MB each; add --access teleport for Teleport to the controller too
@@ -276,14 +302,16 @@ Everything is on one screen:
 | **Infrastructure architecture** | login nodes, the Teleport proxy, the services and every node, one labelled line per way in (*direct SSH*, *Teleport*, *jump host*). A round dot travels from *Clients* to a service for each real request; a diamond travels from *Faults* to the node it hits |
 | **Entity list** | one card per node and per service with its status and quick facts; click a node to open its panel in place of the list |
 
-- Hover a part of the diagram for a tip, click it for a pop-up with its address and command. **Hide node list** gives the diagram the whole width.
-- *Pause animation* stops the dots; they stop by themselves at governor L3 or for reduced motion.
-- Teleport, when on (`./scripts/benchctl start --access teleport`, or tick it under **Access** in **▦ Cluster architecture**), is a box in the diagram and a card in the list.
-- A node's panel: **Actions** to power it off, overheat it, fail its fans or inject a GPU error (then *Recover*), and **Info** for how to reach it.
-- **▶ Scenarios** opens the scenario list: pick a speed, press Play, watch each step turn ok/skipped/failed, press Stop to abort.
-- **▦ Cluster architecture** changes the number of nodes and applies it.
-- Slurm steps are skipped on this page (it has no Docker access by design); use `./scripts/benchctl scenario run` for those.
-- On a phone the panels stack under each other.
+What you can do on it:
+- **Diagram:** hover a part for a tip, click it for a pop-up with its address and command. **Hide node list** gives the diagram the whole width.
+- **Dots:** *Pause animation* stops them. They stop by themselves at governor L3 or for reduced motion.
+- **Teleport:** when on, it is a box in the diagram and a card in the list. Turn it on with `./scripts/benchctl start --access teleport`, or tick it under **Access** in **▦ Cluster architecture**.
+- **A node's panel:** **Actions** power it off, overheat it, fail its fans or inject a GPU error (then *Recover*). **Info** shows how to reach it.
+- **▶ Scenarios:** pick a speed, press Play, and watch each step turn ok, skipped or failed. Press Stop to abort.
+- **▦ Cluster architecture:** change the number of nodes and apply it.
+- **Phone:** the panels stack under each other.
+
+The page skips steps that need Docker (`ssh` and `k8s` steps), because it has no Docker access by design. Use `./scripts/benchctl scenario run` for those. The [web page chapter](../manual/05-web-page.md) has the details.
 
 ## 5. When something is wrong
 

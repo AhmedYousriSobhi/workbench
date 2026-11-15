@@ -11,10 +11,14 @@
 ./scripts/benchctl setup jira-real
 ```
 
-`jira-mock` is the default and answers on `http://127.0.0.1:8080`. When you need Atlassian's own code (to see how a
-client behaves against real validation, JQL and workflows), start the **real Jira Data Center** next to it. It is a
-session tool: the test licence lasts **3 hours** from each start of Jira, then the server is read-only; `benchctl refresh jira-real-licence` (or the button) renews it. About 2.4 GB of memory (2.1 GB for Jira, the smallest limit that worked, plus Postgres)
-(ADR 0026, SPEC C-19). It is Data Center, not Cloud.
+`jira-mock` is the default and answers on `http://127.0.0.1:8080`.
+
+Start the **real Jira Data Center** next to it when you need Atlassian's own code, to see how a client behaves against real validation, JQL and workflows. It is Data Center, not Cloud (ADR 0026, SPEC C-19).
+
+It is a session tool:
+- The test licence lasts **3 hours** from each start of Jira. Then the server is read-only.
+- `benchctl refresh jira-real-licence` (or the button) renews it.
+- It needs about 2.4 GB of memory: 2.1 GB for Jira (the smallest limit that worked) plus Postgres.
 
 ## Once: get the test licence
 
@@ -61,21 +65,26 @@ stack with the same procedure each time (setup wizard, seeding, 20 ticket change
 | 768 MB | `JVM_ARGS` | 2304 MB | passed | 2043 MiB |
 | 768 MB | `JVM_ARGS` | **2176 MB** | **passed twice** | **2039 and 2045 MiB** |
 
-`JVM_ARGS` is `-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss512k -XX:CICompilerCount=1` (one collector thread, C1-only compilation,
-smaller thread stacks, one compiler thread): it takes about 320 MiB off the peak. Capping metaspace does not work: Jira's 273
-plugins need it. The peak stays near 2040 MiB whatever the limit, so the limit is that peak plus about 6 percent. The constants
-are `HEAP_MIN_MB`, `HEAP_MAX_MB`, `CODE_CACHE_MB`, `LIMIT_MB`, `JVM_ARGS` in `benchctl/jira_real.py`; change one only after repeating
-the trial and the numbers in [memory](memory.md). The cost of C1-only compilation is a slower Jira under heavy load, which a
-simulation does not generate.
+`JVM_ARGS` is `-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss512k -XX:CICompilerCount=1`: one collector thread, C1-only compilation, smaller thread stacks, one compiler thread. It takes about 320 MiB off the peak.
+
+- Capping metaspace does not work: Jira's 273 plugins need it.
+- The peak stays near 2040 MiB whatever the limit, so the limit is that peak plus about 6 percent.
+- The constants are `HEAP_MIN_MB`, `HEAP_MAX_MB`, `CODE_CACHE_MB`, `LIMIT_MB` and `JVM_ARGS` in `benchctl/jira_real.py`. Change one only after repeating the trial and the numbers in [memory](memory.md).
+- The cost of C1-only compilation is a slower Jira under heavy load, which a simulation does not generate.
 
 ### Switching plugins off does not help (measured, issue 289)
 
-The image ships 273 plugins, 239 of them bundled. I switched groups off through the plugin manager API, one group at a time,
-restarted Jira and measured: all plugins on, 1.80 to 1.92 GiB after the restart; 44 language packs off, 1.80 GiB; 18 extras
-(onboarding, credits, help tips, feedback, quick search, ...) off, 1.86 GiB. Analytics and the integrations (DVCS, streams,
-importers, automation, mobile) cannot go: with either group off, Jira's own REST, project and issue-navigator plugins did not
-start (`/status` says `ERROR`; the way back is `delete from pluginstate` in the Postgres container). So there is no plugin set that
-saves memory, and the part does not offer one.
+The image ships 273 plugins, 239 of them bundled. Switching groups off through the plugin manager API, one group at a time, with a Jira restart and a measurement each time, gave:
+
+| Plugins | Memory after restart |
+|---|---|
+| all on | 1.80 to 1.92 GiB |
+| 44 language packs off | 1.80 GiB |
+| 18 extras off (onboarding, credits, help tips, feedback, quick search, ...) | 1.86 GiB |
+
+Analytics and the integrations (DVCS, streams, importers, automation, mobile) cannot go. With either group off, Jira's own REST, project and issue-navigator plugins did not start (`/status` says `ERROR`). The way back is `delete from pluginstate` in the Postgres container.
+
+So no plugin set saves memory, and the part does not offer one.
 
 ## On the page
 
@@ -105,12 +114,13 @@ governor (the page has no Docker access) and needs calm memory (L0-L1); the prog
 unreachable for about a minute while it starts. Do it before the 3 hours end (Jira warns when under 24 hours are left) or after: it
 works either way.
 
-**Automatic.** While the web page runs (`benchctl start`), it reads the licence end once a minute (over HTTP, no Docker) and shows it
-in the Connections row (`licence: valid until 17:42 (in 2 h 55 min)`); `benchctl status` prints the same line. When less than
-**15 minutes** are left, or the licence has already ended, it asks the governor for the same refresh, at most once per 15 minutes,
-and the row says `licence: renewing now`. Change the threshold with `WORKBENCH_JIRA_AUTO_REFRESH=MINUTES` (0 turns it off) in the
-environment of `benchctl start`. It needs the governor at calm levels (L0-L1); otherwise it waits and asks again. Jira restarts
-once about every 2 h 45 min, so a client talking to it sees about a minute of downtime then; turn it off if that matters.
+**Automatic.** While the web page runs (`benchctl start`), it reads the licence end once a minute, over HTTP with no Docker.
+- The Connections row shows it: `licence: valid until 17:42 (in 2 h 55 min)`. `benchctl status` prints the same line.
+- When less than **15 minutes** are left, or the licence has ended, the page asks the governor for the same refresh. It asks at most once per 15 minutes, and the row says `licence: renewing now`.
+- Change the threshold with `WORKBENCH_JIRA_AUTO_REFRESH=MINUTES` in the environment of `benchctl start`. `0` turns it off.
+- It needs the governor at calm levels (L0-L1). Otherwise it waits and asks again.
+
+**Good to know.** Jira restarts about every 2 h 45 min, so a client talking to it sees about a minute of downtime then. Turn the refresh off if that matters.
 
 If the refresh says the licence is still not valid, the key file itself has a fixed end date: save a fresh published key in
 `compose/generated/secrets/jira.license`, then start from nothing (this deletes users, tickets and tokens; the mock is untouched):
@@ -145,7 +155,12 @@ The scenario target `jira-real` makes the real Jira fail in the ways integration
 
 Run `benchctl scenario run jira-real-outage`, `jira-real-429`, `jira-real-captcha`, `jira-real-token-revoked` or `jira-real-slow-503` (needs `jira-real` up). A client should send authenticated requests (Basic or session): rate limiting counts per user.
 
-**Fault proxy (issue 305).** Jira has no setting for a slow answer or a 503, so a scenario with a `proxy_*` step starts a small standard-library proxy on the host, `127.0.0.1:8084`, in front of Jira (`benchctl/jira_proxy.py`, a few MB, up when the run starts and gone when it ends). **Point the client at `http://127.0.0.1:8084`** for those scenarios (`:8083` never meets the proxy faults). Only `/rest/` calls are failed; `/status` and everything else pass through, and after `count` calls it passes everything again. If port 8084 is taken the run says so and the `proxy_*` steps fail.
+**Fault proxy.** Jira has no setting for a slow answer or a 503. A scenario with a `proxy_*` step therefore starts a small standard-library proxy on the host, `127.0.0.1:8084`, in front of Jira (`benchctl/jira_proxy.py`, a few MB). It is up when the run starts and gone when it ends.
+
+- **Point the client at `http://127.0.0.1:8084`** for those scenarios. `:8083` never meets the proxy faults.
+- Only `/rest/` calls are failed. `/status` and everything else pass through.
+- After `count` calls, it passes everything again.
+- If port 8084 is taken, the run says so and the `proxy_*` steps fail.
 
 **Tickets in scenarios (issue 306).** A `jira-real` step can carry `tickets: {action: create|transition|comment, ...}` (same body as the mock's, `create` takes `count`, `summary` with `{n}`, `labels`, `priority`; `transition` and `comment` take a `jql`), done through the standard REST API with admin's token. The expectation `jira.issue_count` / `jira.issue_status` takes `target: real` to ask the real Jira. `client-stress-real` (SC-02) uses both for its 12-ticket wave.
 

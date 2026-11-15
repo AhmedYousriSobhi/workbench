@@ -54,7 +54,13 @@ Largest working set seen (MB), the cap the container may reach, and what the pla
 | **Jira (real), Data Center** | **2045** | **2176** | **2176** |
 | Postgres for the real Jira | 130 | 256 | 150 |
 
-The real Jira is more than 90 percent of what the whole stack uses. Its cap of 2176 MB (heap 768 MB, a trimmed JVM: Serial GC, C1-only compilation, 512 KB thread stacks) passed the setup and a ticket run twice with a peak of about 2040 MiB; without the JVM flags the smallest working cap was 2560 MB. A Java application keeps its heap, code cache, plugin system and thread stacks, so it cannot go much lower. All trials: [real Jira](jira-real.md#why-21-gb-measured-issues-287-and-289).
+The real Jira is more than 90 percent of what the whole stack uses.
+- Its cap is 2176 MB, with a heap of 768 MB and a trimmed JVM (Serial GC, C1-only compilation, 512 KB thread stacks).
+- That cap passed the setup and a ticket run twice, with a peak of about 2040 MiB.
+- Without the JVM flags, the smallest working cap was 2560 MB.
+- A Java application keeps its heap, code cache, plugin system and thread stacks, so it cannot go much lower.
+
+All trials: [real Jira](jira-real.md#why-21-gb-measured-issues-287-and-289).
 
 Switching Jira's plugins off was tried and does not save memory (the safe groups change nothing, the others stop Jira starting): [measured](jira-real.md#switching-plugins-off-does-not-help-measured-issue-289).
 
@@ -88,7 +94,12 @@ The numbers above are sizes. A start can also be stopped by the governor on a sh
 ./scripts/benchctl plan                    # now has a "docker overhead" line
 ```
 
-Until you run it the plan adds 0 and says "not measured" on that line; it never invents a figure. Root-owned shims hide their exact (proportional) size from a normal user, so the command uses their private memory (anonymous plus shared-memory pages) and says so; on the first live run that gave 4 MB per shim, the same as the exact figure from `sudo ./scripts/benchctl measure overhead` (do not `--save` with sudo). Plain VmRSS was tried first and gave 11 MB, because it counts the shared libraries in every shim. `benchctl measure run` records the same numbers and `measure report` prints them under the table.
+Until you run it, the plan adds 0 and says "not measured" on that line. It never invents a figure.
+
+- Root-owned shims hide their exact (proportional) size from a normal user. The command therefore uses their private memory (anonymous plus shared-memory pages) and says so.
+- On the first live run that gave 4 MB per shim, the same as the exact figure from `sudo ./scripts/benchctl measure overhead`. Do not `--save` with sudo.
+- Plain VmRSS gave 11 MB, because it counts the shared libraries in every shim.
+- `benchctl measure run` records the same numbers, and `measure report` prints them under the table.
 
 Every part that is multiplied by the node count declares its cost per node in `PER_NODE_MB` (`benchctl/memory.py`): slurmd 188 MB (60 MB for slurmd plus 128 MB room for jobs), each node's BMC address 16 MB, and the optional per-node DCGM exporter 150 MB. `tests/test_overhead.py` generates two cluster sizes, finds what was added per node, and fails when a part is missing from the table or its cap or measurement is above the declared cost.
 
@@ -139,7 +150,12 @@ Source: `benchctl/memory.py` (`TOLERANCE`, `expected_mb`, `app_reserve`), [the m
 
 ## Room for jobs on a node (`job_memory_mb`)
 
-A job really runs inside its node's container, so the container limit is what a job can allocate: **60 MB for slurmd plus `job_memory_mb`** (default 128 MB). The limit is a cap, not a reservation: the plan counts what the nodes use (measured), and a node that runs no job stays at about 13 MB. A job that goes over the limit is killed by the kernel (exit 137, `oom_kill` in the node's `memory.events`). Raise it to the largest job you will submit, per group, in `sim.yaml`:
+A job really runs inside its node's container, so the container limit is what a job can allocate: **60 MB for slurmd plus `job_memory_mb`** (default 128 MB).
+
+- The limit is a cap, not a reservation. The plan counts what the nodes use (measured). A node that runs no job stays at about 13 MB.
+- A job that goes over the limit is killed by the kernel: exit 137, and `oom_kill` in the node's `memory.events`.
+
+Raise `job_memory_mb` to the largest job you will submit, per group, in `sim.yaml`:
 
 ```yaml
 compute:
