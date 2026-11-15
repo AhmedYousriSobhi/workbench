@@ -6,6 +6,6 @@ steps:
   - {at: 0s,  target: jira, do: {tickets: {action: create, project: OPS, count: 3, summary: "Wave {n}: GPU xid on {first gpu node}", labels: [workbench, first gpu node, wave, gpu], priority: High, status: In Progress}}}
   - {at: 0s,  target: jira, do: {tickets: {action: create, project: OPS, count: 3, summary: "Wave {n}: fan alarm on {fourth cpu node}", labels: [workbench, fourth cpu node, wave], priority: Low, status: Resolved, resolution: Done}}}
   - {at: 0s,  target: jira, do: {tickets: {action: create, project: OPS, count: 2, summary: "Wave {n}: quota request", labels: [workbench, wave, request], priority: Low, status: Closed}}}
-  - {at: 30s, target: jira, do: {tickets: {action: transition, jql: 'labels = second cpu node AND labels = wave AND text ~ "Wave 1:"', to: In Progress}}}
+  - {at: 30s, target: jira, do: {tickets: {action: transition, jql: 'labels = {second cpu node} AND labels = wave AND text ~ "Wave 1:"', to: In Progress}}}
 expect:
   - jira.issue_count: {jql: 'labels = wave', count: 12, within: 10s}
