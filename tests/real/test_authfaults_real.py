@@ -73,9 +73,14 @@ def test_a_wrong_munge_key_is_rejected_by_the_controller_and_the_node_recovers(s
     assert wait_for(lambda: not accepted(), timeout=15)
     bad = sh("docker", "exec", "-i", "workbench-slurmctld-1", "unmunge", stdin=sh("docker", "exec", "workbench-cn001-1", "munge", "-n").stdout)
     assert "Invalid credential" in bad.stderr
+
+    def flagged() -> bool:  # sinfo marks a node the controller cannot reach with a trailing *
+        return sh("docker", "exec", "workbench-slurmctld-1", "sinfo", "-h", "-N", "-n", "cn001", "-o", "%T").stdout.strip().endswith("*")
+    assert wait_for(flagged, timeout=100)  # not responding; it flaps and never reaches down (issue 827)
     step(munge_wrong_key=["cn001"])  # a second one must not lose the original key
     step(munge_restore=["cn001"])
     assert wait_for(accepted, timeout=15)
+    assert wait_for(lambda: not flagged(), timeout=60)
 
 
 def test_a_slurm_token_step_issues_a_token_that_ends_when_asked(stack_up):

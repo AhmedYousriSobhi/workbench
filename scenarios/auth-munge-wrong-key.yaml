@@ -1,9 +1,9 @@
 name: auth-munge-wrong-key
 ref: SC-32
-description: "cn001 gets a different munge key, so slurmctld rejects its messages with 'Invalid credential' and the node goes down after SlurmdTimeout; at 120 s its own key is put back"
+description: "cn001 gets a different munge key: slurmctld rejects its messages with 'Invalid credential' and shows the node as not responding (idle*, flapping with idle), never DOWN; at 120 s its own key is put back"
 steps:
   - {at: 0s,   target: auth, do: {munge_wrong_key: [first cpu node]}}
   - {at: 120s, target: auth, do: {munge_restore: [first cpu node]}}
 
 expect:
-  - slurm.node_state: {node: first cpu node, state: down, within: 110s}  # slurmctld rejects its messages; DOWN* after about 2 x SlurmdTimeout
+  - slurm.node_state: {node: first cpu node, state: "idle*", within: 100s}  # not responding: slurmd answers every ping with an authentication error, which counts as a sign of life, so the flag flaps and DOWN never comes
