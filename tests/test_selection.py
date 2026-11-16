@@ -34,4 +34,6 @@ def test_nothing_saved_means_nothing_restored_and_the_tests_files_are_removed(tm
 def test_verify_sh_saves_first_and_restores_on_exit():
     text = (LIB.parent / "verify.sh").read_text()
     assert text.index("selection_save") < text.index('step "validate.sh"')
-    assert any("trap" in ln and "selection_restore" in ln and "EXIT" in ln for ln in text.splitlines())
+    # restored on every exit: verify_cleanup is the EXIT cleanup of lib-interrupt.sh (issue 819)
+    cleanup = text[text.index("verify_cleanup() {"):text.index("ir_trap verify_cleanup")]
+    assert "selection_restore" in cleanup

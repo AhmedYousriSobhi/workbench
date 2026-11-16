@@ -3,7 +3,7 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-01. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**92% built** (40 done, 129 in review, 10 partial, 4 to do, 183 items).
+**92% built** (40 done, 130 in review, 10 partial, 4 to do, 184 items).
 
 ## Roadmap
 
@@ -293,6 +293,7 @@ _What keeps every change safe and debuggable._
 |---|---|---|---|---|
 | validate.sh gate | ✅ Done | Secrets scan, compile, ruff, shellcheck, YAML/JSON, systemd verify, pytest and a governor smoke run before every commit. | `scripts/validate.sh` | #18 |
 | verify.sh clean start and paused-container check | ✅ Done | verify.sh --full stops the cluster and clears the saved selection before the real tests (restored on exit); an autouse fixture fails the test or module that leaves a workbench container paused and thaws it; test_real runs isolated; the scenario test unpauses cn004. Issues 530, 532, 534. | `scripts/verify.sh`, `tests/real/conftest.py`, `tests/real/test_scenario_real.py` | [#535](https://github.com/AhmedYousriSobhi/workbench/pull/535) |
+| Ctrl+C stops the whole verify run | 🔍 In review | Each step of verify.sh, real-test.sh and real-test-root.sh runs in its own session with a default SIGINT (a background job of a script used to ignore it, so pytest outlived Ctrl+C). Ctrl+C, SIGTERM or SIGHUP sends pytest one SIGINT and waits up to 45 s (IR_GRACE) for its teardown, then SIGTERM and SIGKILL; a second Ctrl+C kills at once. Then a stack the run started is stopped, the selection put back, one STOPPED line printed, exit 130. Hermetic tests; not tried on a real --full run. Issue 819. | `scripts/lib-interrupt.sh`, `scripts/verify.sh`, `scripts/real-test.sh`, `scripts/real-test-root.sh`, `tests/test_interrupt.py` | - |
 | Public-repo privacy guard and git hooks | 🔍 In review | check-privacy.sh blocks home paths, the local username, personal emails, tokens and keys, local-only paths (.claude/, graphify-out/) and symlinks that leave the repo, and prints only file:line and the rule. Tracked hooks: pre-commit (no commits on main/dev, privacy, validate.sh), commit-msg (issue reference), pre-push (no push to main/dev, full scan); installed by install-hooks.sh. validate.sh runs the scan too. Issue 54. | `scripts/check-privacy.sh`, `.githooks/`, `scripts/install-hooks.sh`, `SECURITY.md` | #105 |
 | Unit-test coverage gate | ✅ Done | validate.sh runs the unit tests under coverage and fails below 90% (override COV_FLOOR). 226 tests, 98% of benchctl, governor, webui and components. Not covered by unit tests, by design: code that needs root, a live Docker stack or a browser (tests/real). | `tests/`, `scripts/validate.sh` | #81 |
 | Real-host tests | ✅ Done | User-level tests with cgroups, Docker, libvirt and a live governor; a sudo suite for root-only paths. | `scripts/real-test.sh`, `scripts/real-test-root.sh` | #20, #22 |
@@ -367,7 +368,7 @@ _What keeps every change safe and debuggable._
 | Verification helpers | ✅ Done | verify.sh runs validate.sh plus real tests (--full adds the live stack lifecycle); tests/real/helpers.py starts a live governor and talks to its socket. `--unit NAME [--clean]` verifies one component (tests/test_NAME*.py then tests/real/test_NAME*.py, optional reset hook scripts/verify.d/NAME.sh; --list-units, -n). Issue 180. Issue 237: seconds per step and a TIME line; validate.sh writes a pass stamp (scripts/lib-stamp.sh, keyed by HEAD, tracked diff, untracked files and COV_FLOOR) so verify.sh skips a second run on the same tree (`--revalidate` forces it); pytest markers `live` and `browser`, `--skip-browser`. Issue 236: WORKBENCH_TEST_TIMERS=1 (opt-in, read by the slurm.conf generator) shortens SlurmdTimeout and HealthCheckInterval for the slow live modules via the test_timers fixture; the default timings stay checked in test_stack_real. Issue 576 (ADR 0057, 0058): `--changed` picks live modules from tests/real/impact.yaml (scripts/impact.py, unmatched path = everything), validate.sh runs beside the live tests (`--serial`, `--trust-ci`), fail-fast for --changed, per-module timing (compose/generated/verify-times.json, SLOW line), real Jira only with `--with-jira`, stack keys with STACK_REUSE, image build stamps (WORKBENCH_FORCE_BUILD), `--install-nightly` user timer. | `scripts/verify.sh`, `scripts/impact.py`, `tests/real/impact.yaml`, `tests/real/stack_reuse.py`, `docs/adr/0057-two-verification-gates-and-impact-selected-live-tests.md` | #48 |
 | Progress tracker | ✅ Done | This page, generated from docs/progress.yaml (issue 19). | `benchctl/progress.py` | #42 |
 
-10/75 done
+10/76 done
 
 ## Next up
 
