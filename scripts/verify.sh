@@ -120,6 +120,8 @@ if [ "$dry" = 1 ] && [ "$unit_given" = 0 ]; then
 fi
 . scripts/lib-selection.sh
 . scripts/lib-interrupt.sh
+. scripts/lib-skips.sh
+skipall=()  # steps where every test was skipped (issue 818)
 log=$(mktemp)
 selection_save  # the real tests build and forget their own selections: keep yours, so the next `up` is your cluster, not std
 vlog=$(mktemp) vpid="" stack_ours=0
@@ -161,18 +163,22 @@ progress() {  # progress NAME T0 PID: one live status line while PID runs (in pl
   [ -t 1 ] && printf '\r\033[K'
 }
 step() {  # step NAME CMD...: run with a live status line, record, keep the output only if it failed; every line says how long it took
-  local name="$1" t0 secs pid rc; shift; t0=$SECONDS
+  local name="$1" t0 secs pid rc word; shift; t0=$SECONDS
   echo "START $name"
   ir_bg "$@" >"$log" 2>&1; pid=$IR_PID  # its own session, so Ctrl+C stops the whole tree (lib-interrupt.sh)
   progress "$name" "$t0" "$pid"
   rc=0; ir_wait "$pid" || rc=$?
   secs=$((SECONDS - t0))
-  if [ $rc = 0 ]; then echo "PASS  $name  [${secs}s]  ($(tail -1 "$log"))"; else
+  if [ $rc = 0 ]; then
+    word=$(skip_word "$log"); [ "$word" = SKIP-ALL ] && skipall+=("$name")
+    echo "$word  $name  [${secs}s]  ($(tail -1 "$log"))"
+  else
     echo "FAIL  $name  [${secs}s]"; tail -40 "$log"; status=1
     mkdir -p compose/generated; keep="compose/generated/verify-fail-${name%% *}-$(date +%H%M%S).log"; cp "$log" "$keep"
     echo "      full output of this step: $keep  (attach it; nothing needs re-running with -vv)"; fi
   awk '/slowest .*durations/{f=1} f&&/^=+ .* in [0-9.]+s/{f=0} f' "$log" | sed 's/^/      /'  # where the time went (pytest --durations)
   grep '^SKIPPED' "$log" | sed 's/^/      /'  # a skipped test names its file, line and reason (issue 639), so a pass with skips is never anonymous
+  [ $rc = 0 ] && skip_note "$log" "$name"
   grep '^SLOW ' "$log" | sed 's/^/      /'  # per-module seconds from tests/real/verify_times.py (issue 576)
   timings+=("${secs}s $name")
 }
@@ -231,6 +237,7 @@ fi
 case "$selection_kept" in *workbench.yaml*)
   echo "NOTE  your workbench selection was kept; the tests stopped the cluster, so bring it back with ./scripts/benchctl up (or start)" ;;
 esac
+[ ${#skipall[@]} -gt 0 ] && echo "WARN  every test was skipped in: ${skipall[*]}; nothing there was exercised (start a governor: ./scripts/benchctl start)"
 echo "TIME  total ${SECONDS}s: ${timings[*]:-no steps}"
 echo "NOTE  root-only checks: sudo ./scripts/real-test-root.sh (when governor cgroup/systemd code changed)"
 exit $status

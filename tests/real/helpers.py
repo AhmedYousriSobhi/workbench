@@ -17,6 +17,13 @@ STACK_KEY: str | None = None  # key of the running stack (stack_reuse.stack_key)
 STACK_STARTED = False  # set by bring_up; conftest brings the shared stack down once, at the end of the session (issue 234)
 
 
+def skip_no_governor(detail: str = "") -> None:
+    """Skip a live test that needs a governor, naming both ways to get one (issue 818)."""
+    import pytest
+    pytest.skip("no governor answers; start one with `./scripts/benchctl start` (no sudo, a user-mode governor is enough) "
+                "or install the optional root service `sudo ./scripts/install-governor.sh`" + (f": {detail}" if detail else ""))
+
+
 def wait_for(pred, timeout: float = 15) -> bool:
     end = time.time() + timeout
     while time.time() < end:

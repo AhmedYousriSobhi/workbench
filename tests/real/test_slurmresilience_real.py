@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import bring_up, exporter_up, release, wait_for
+from helpers import bring_up, exporter_up, release, skip_no_governor, wait_for
 
 from benchctl import k8s as _k8s
 from benchctl import scenario
@@ -144,7 +144,7 @@ def test_the_governor_runs_the_steps_and_serves_the_trace_for_the_page(cluster):
     try:
         res = checks.governor_request({"cmd": "slurm-trace", "nodes": [NODE], "since": 30}, sock)
     except OSError as e:
-        pytest.skip(f"test_the_governor_runs_the_steps_and_serves_the_trace_for_the_page: no governor answers at {sock} (start one with `benchctl start`): {e}")
+        skip_no_governor(f"nothing at {sock}: {e}")
     assert res.get("ok"), res
     data = res["trace"]
     assert NODE in data["nodes"] and "jobs" in data and "workbench-slurmctld-1" in data["logs"]

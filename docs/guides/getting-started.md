@@ -373,6 +373,7 @@ Before asking for a merge:
 
 - Plain `--full` leaves out the real Jira (about 7 minutes) and says so; see CLAUDE.md.
 - Every step prints its seconds and a `TIME` line closes the run.
+- A step where every test was skipped shows `SKIP-ALL` and a `WARN` line, not `PASS`: nothing was exercised. Start a governor with `./scripts/benchctl start` and run it again.
 - `validate.sh` is skipped when it already passed for this exact tree (the commit hook ran it); `--revalidate` forces it, `--skip-browser` leaves out the Chromium tests.
 - The full run stops your cluster and sets aside your saved selection first, then puts the selection back; run `./scripts/benchctl up` afterwards.
 - Ctrl+C stops the run cleanly: the tests get up to 45 seconds to tear down, a stack the run started is stopped, your selection is put back and one `STOPPED` line says what was done. Press Ctrl+C again to stop at once.

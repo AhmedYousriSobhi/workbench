@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import bring_up, release, wait_for
+from helpers import bring_up, release, skip_no_governor, wait_for
 
 from benchctl import checks
 
@@ -25,7 +25,7 @@ def free_port() -> int:
 @pytest.fixture(scope="module")
 def ui():
     if not Path(checks.GOV_SOCKET).exists():
-        pytest.skip("no standing governor (sudo ./scripts/install-governor.sh)")
+        skip_no_governor()
     os.chdir(ROOT)
     sim = yaml.safe_load((ROOT / "sim.yaml").read_text())
     bring_up(sim)
