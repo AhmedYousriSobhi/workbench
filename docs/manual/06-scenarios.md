@@ -65,7 +65,7 @@ The command exits 1 when a step errors or an `expect` line does not hold.
 | SC-35 | `switch-leaf-down` | one leaf switch goes down: exactly its nodes drain (`switch leaf1 down`), and only those resume at 90 s; needs `topology:` in `sim.yaml` ([guide](../guides/topology.md)) |
 | SC-30 | `auth-slurm-token-expiry` | a Slurm REST token for alice that lives 60 s is saved to `compose/generated/secrets/slurm_token`; after that slurmrestd answers 401 |
 | SC-31 | `auth-teleport-cert-expiry` | alice's Teleport identity file lives 60 s, then the login node refuses it as expired; signed again at 180 s (`--with teleport`) |
-| SC-32 | `auth-munge-wrong-key` | `cn001` gets another munge key (slurmctld: `Invalid credential`, node goes down), its own key is back at 120 s |
+| SC-32 | `auth-munge-wrong-key` | `cn001` gets another munge key (slurmctld: `Invalid credential`; the node shows `idle*`, not `down`), its own key is back at 120 s |
 | SC-33 | `bmc-tls-expired` | the BMC farm presents a certificate that ended yesterday for 60 s: `certificate has expired` on 8443, 443 and each node's BMC address |
 | SC-34 | `k8s-cert-expired` | the API server serves a certificate that ended yesterday for 90 s (`--with k8s`): `certificate has expired` from kubectl |
 | SC-12 | `jira-real-captcha` | six wrong-password logins make the real Jira answer 401 then 403 `CAPTCHA_CHALLENGE` (what an integration meets after a bad password), cleared after 60 s |
