@@ -6,5 +6,5 @@ steps:
   - {at: 15s, target: slurm, do: {drain: [first cpu node], reason: "scenario drain-mid-job"}}
   - {at: 70s, target: slurm, do: {resume: [first cpu node]}}
 expect:
-  - slurm.node_state: {node: first cpu node, state: drain, within: 20s}      # also matches draining: the job still runs
+  - slurm.node_state: {node: first cpu node, state: draining, exact: true, within: 20s}  # the drain is pending while the job still runs
   - slurm.node_state: {node: first cpu node, state: drained, within: 70s}    # the job ended (40 s) and the drain completed; seen at about 55 s
