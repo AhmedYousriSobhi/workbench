@@ -204,7 +204,7 @@ def test_steps_become_kubectl_calls_and_a_pod_step_writes_its_manifest(tmp_path)
     assert k8s.step_args({"up": ["kgpu001"]}) == [["label", "node", "kgpu001", "workbench_fault-"]]
     assert k8s.step_args({"cordon": ["kcn001"], "uncordon": ["kcn002"]}) == [["cordon", "kcn001"], ["uncordon", "kcn002"]]
     assert k8s.step_args({"scale": {"namespace": "team-a", "deploy": "web", "replicas": 0}}) == [["-n", "team-a", "scale", "deployment/web", "--replicas=0"]]
-    assert k8s.step_args({"delete_pod": {"namespace": "team-b", "name": "oom"}})[0][-3:] == ["pod", "oom", "--wait=false"]
+    assert k8s.step_args({"delete_pod": {"namespace": "team-b", "name": "oom"}})[0][-4:] == ["pod", "oom", "--wait=false", "--ignore-not-found"]  # #835: a preempted pod is already gone
     assert k8s.step_args({"apply": ["fixtures/10-workloads.yaml"]}) == [["apply", "--server-side", "--force-conflicts", "-f", "/k8s/fixtures/10-workloads.yaml"]]
     do = {"pod": {"namespace": "team-b", "name": "demo", "fault": "oom", "gpus": 2}}
     assert k8s.step_args(do) == [["apply", "-f", "/state/scenario-pod.yaml"]]
