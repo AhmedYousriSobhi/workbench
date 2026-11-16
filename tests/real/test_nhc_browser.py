@@ -61,7 +61,9 @@ def test_the_sheet_changes_the_files_through_drag_and_buttons(tmp_path):
                 page.wait_for_function("document.querySelector('.nhcrow').dataset.name === 'nic-flap'")
                 assert order()[0] == "nic-flap"
                 page.click('[aria-label="Move gpu-xid down"]')
-                page.wait_for_function("document.activeElement && document.activeElement.getAttribute('aria-label') === 'Move gpu-xid up'")  # focus follows the row
+                page.wait_for_function("[...document.querySelectorAll('.nhcrow')].findIndex(r => r.dataset.name === 'gpu-xid') === 3")  # the list was redrawn with the row moved
+                # focus stays on the same arrow, so the key can be pressed again; at the end of the list it falls back to the other one
+                assert page.evaluate("document.activeElement.getAttribute('aria-label')") == "Move gpu-xid down"
                 assert order().index("gpu-xid") == 3
                 page.locator('.nhcrow[data-name="ib-ports"] .tog').click()
                 page.wait_for_function("document.querySelector('[data-name=ib-ports]').classList.contains('off')")
