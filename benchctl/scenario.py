@@ -35,6 +35,7 @@ ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "ht
              "jira-tickets": "http://127.0.0.1:8080/sim/tickets", "jira-activity": "http://127.0.0.1:8080/sim/activity"}
 JIRA_ACTIONS = ("create", "transition", "comment", "fault", "reset")
 SLURMCTLD = "workbench-slurmctld-1"
+JIRA_PAGE = 500  # tickets per request when a scenario reads the mock
 LOGIN = "workbench-login-1"
 JIRA_REAL = "workbench-jira-real-1"
 JIRA_DB = "workbench-jira-db-1"
@@ -262,6 +263,8 @@ def validate(sc: dict, sim: dict) -> list[str]:
     """Problems found without touching the stack: unknown targets, nodes or durations."""
     problems = []
     nodes = {n for n, _ in node_names(sim)}
+    for e, exp in enumerate(sc.get("expect") or [], 1):
+        problems += [f"expect {e}: {m}" for m in expect_problems(exp)]
     for i, s in enumerate(sc.get("steps", []), 1):
         try:
             parse_duration(s["at"])
@@ -748,12 +751,20 @@ def jira_real_rate_limit(step: Step, label: str, runner) -> Outcome:
 
 
 def jira_search(jql: str) -> list[dict]:
-    url = "http://127.0.0.1:8080/rest/api/2/search?fields=status,summary&jql=" + urllib.parse.quote(jql)
-    try:
-        with urllib.request.urlopen(url, timeout=5) as r:
-            return json.loads(r.read())["issues"]
-    except (OSError, ValueError, KeyError):
-        return []
+    """Every match of `jql` in the mock, all pages (the run's start snapshot must not stop at a page: a stale ticket on a later one would count as new)."""
+    out: list[dict] = []
+    while True:
+        url = (f"http://127.0.0.1:8080/rest/api/2/search?maxResults={JIRA_PAGE}&startAt={len(out)}&fields=status,summary,created&jql="
+               + urllib.parse.quote(jql))
+        try:
+            with urllib.request.urlopen(url, timeout=5) as r:
+                page = json.loads(r.read())
+            issues, total = page["issues"], int(page.get("total", 0))
+        except (OSError, ValueError, KeyError):
+            return []
+        out += issues
+        if not issues or len(out) >= total:
+            return out
 
 
 def storage_mount(node: str, mount: str) -> dict | None:
@@ -780,8 +791,11 @@ def storage_holds(args: dict) -> bool:
     return bool(m["stale"]) == bool(args.get("stale", False))
 
 
-def jira_labels(labels: list[str]) -> bool:
+def jira_labels(labels: list[str], search=None) -> bool:
+    """A ticket with all of `labels` exists (through `search` when given, as the run's expectations do, else a count straight from the mock)."""
     jql = "labels = " + " AND labels = ".join(labels)
+    if search is not None:
+        return bool(search(jql))
     url = "http://127.0.0.1:8080/rest/api/2/search?jql=" + urllib.parse.quote(jql)
     try:
         with urllib.request.urlopen(url, timeout=5) as r:
@@ -793,9 +807,28 @@ def jira_labels(labels: list[str]) -> bool:
 def real_search(jql: str) -> list[dict]:
     """The same search on the real Jira (an expectation with `target: real`); an expectation that cannot ask does not hold."""
     try:
-        return real_driver().search(jql)
+        return real_driver().search(jql, fields=("summary", "status", "labels", "updated", "created"))
     except Exception:  # noqa: BLE001  JiraError, OSError, a missing setup: the expectation just does not hold
         return []
+
+
+def jira_target(args: dict) -> str:
+    return "real" if args.get("target") == "real" else "mock"
+
+
+def ticket_id(issue: dict) -> tuple:
+    """A ticket's identity for "was it there when the run started": key and `created`. The key alone is not enough: a mock reset
+    (`tickets: {action: reset}`) restarts the numbering, so a new OPS-1 must not be taken for the old one."""
+    return issue.get("key"), (issue.get("fields") or {}).get("created")
+
+
+def jira_snapshot(exps: list[dict]) -> dict[str, frozenset]:
+    """The tickets that exist now, per Jira (`mock`, `real`) an expectation of the scenario asks. A Jira that cannot be read gives an
+    empty set, so every ticket it later shows counts. Taken from the tickets themselves, never from clocks: the mock stamps `created`
+    with its own clock to the second, and its JQL `created >=` has minute resolution, so a time cut would let a stale ticket through
+    or hide a new one."""
+    asked = {jira_target(a) for e in exps for k, a in e.items() if k.startswith("jira.") and isinstance(a, dict)}
+    return {t: frozenset(ticket_id(i) for i in (real_search if t == "real" else jira_search)("")) for t in sorted(asked)}
 
 
 def jira_status(jql: str, status: str, count: int | None = None, search=None) -> bool:
@@ -813,13 +846,14 @@ def stepd_alive(node: str, runner=checks.run) -> bool:
     return runner(["docker", "exec", f"workbench-{node}-1", "pgrep", "-x", "slurmstepd"]).returncode == 0
 
 
-def expectation(exp: dict, runner=checks.run, host: bool = True):
-    """(label, holds(), within seconds) for one assertion; holds is None when it cannot be evaluated here."""
+def expectation(exp: dict, runner=checks.run, host: bool = True, seen: dict | None = None):
+    """(label, holds(), within seconds) for one assertion; holds is None when it cannot be evaluated here. `seen` is the run's
+    `jira_snapshot`: the Jira expectations leave out those tickets (a stale ticket of an earlier run never counts)."""
     (kind, args), = exp.items()
     label = f"{kind} {json.dumps({k: v for k, v in args.items() if k != 'within'}, sort_keys=True)}"
     within = parse_duration(args.get("within", "0s"))
-    if kind == "slurm.node_state" and host:
-        return label, lambda: args["state"] in node_state(args["node"], runner), within
+    if kind == "slurm.node_state" and host:  # a substring of the state (`drain` also matches draining, drained), or the whole of it with `exact: true`
+        return label, lambda: (args["state"] == node_state(args["node"], runner) if args.get("exact") else args["state"] in node_state(args["node"], runner)), within
     if kind == "slurm.job_state" and host:  # a job on `node` is in `state` (RUNNING, PENDING, ...)
         return label, lambda: args["state"] in job_states(args["node"], runner), within
     if kind == "slurm.stepd" and host:  # a slurmstepd runs on `node` (alive: true) or none does (alive: false)
@@ -832,14 +866,45 @@ def expectation(exp: dict, runner=checks.run, host: bool = True):
         return label, lambda: (k8s.pods_on_node(args["node"], args["namespace"], args["selector"], runner) or 0) >= int(args.get("min", 1)), within
     if kind == "storage.mount" and host:  # the declared mount is as full, stale or over quota as the scenario made it
         return label, lambda: storage_holds(args), within
+    target = jira_target(args)
+    old = (seen or {}).get(target, frozenset())
+    raw = (lambda q: real_search(q)) if target == "real" else (lambda q: jira_search(q))  # `target: real` asks the real Jira
+    search = lambda q: [i for i in raw(q) if ticket_id(i) not in old]
     if kind == "jira.issue_created":
-        return label, lambda: jira_labels(args["labels"]), within
-    search = (lambda q: real_search(q)) if args.get("target") == "real" else (lambda q: jira_search(q))  # `target: real` asks the real Jira
+        return label, lambda: jira_labels(args["labels"], search), within
     if kind == "jira.issue_status":
         return label, lambda: jira_status(args["jql"], args["status"], args.get("count"), search), within
     if kind == "jira.issue_count":
         return label, lambda: len(search(args["jql"])) == int(args["count"]), within
     return label, None, within
+
+
+def expect_window(exp: dict) -> tuple[float, bool]:
+    """(after seconds, at_end): when an expectation starts to be watched. From the start by default; `after: 20s` waits until then;
+    `at_end: true` waits until every step has been applied. Its `within` counts from that moment."""
+    (_, args), = exp.items()
+    return parse_duration(args.get("after", "0s")), bool(args.get("at_end"))
+
+
+def expect_problems(exp) -> list[str]:
+    """What is wrong with one `expect` entry, or []: a mapping of one assertion to its arguments, `after`, `within` read as durations,
+    `at_end` and `exact` as booleans, `after` and `at_end` not together, `exact` only on `slurm.node_state`."""
+    if not isinstance(exp, dict) or len(exp) != 1 or not isinstance(next(iter(exp.values())), dict):
+        return ["each expect is one assertion with its arguments, such as `slurm.node_state: {node: ..., state: ...}`"]
+    (kind, args), = exp.items()
+    out = []
+    for key in ("after", "within"):
+        if key in args:
+            try:
+                parse_duration(args[key])
+            except (ScenarioError, ValueError, TypeError):
+                out.append(f"{kind}: {key} {args[key]!r} is not a duration such as 20s or 2m")
+    out += [f"{kind}: {key} is true or false" for key in ("at_end", "exact") if key in args and not isinstance(args[key], bool)]
+    if "after" in args and args.get("at_end"):
+        out.append(f"{kind}: use after or at_end, not both")
+    if "exact" in args and kind != "slurm.node_state":
+        out.append(f"{kind}: exact only applies to slurm.node_state")
+    return out
 
 
 def check_expect(exp: dict, factor: float, sleep=time.sleep, clock=time.monotonic, runner=checks.run) -> Outcome:
@@ -861,8 +926,10 @@ def run(sc: dict, speed: float = 1.0, dilation: float = 1.0, say=print, sleep=ti
         on_before=lambda step: None) -> Report:
     """Play the scenario: wait for each step's time (divided by speed x time_dilation) and apply it.
 
-    Every expectation is watched from the start: it passes the moment it holds (even if a later step undoes it) and
-    fails if its `within` (from the start) runs out first.
+    Every expectation is watched from the start unless it says `after: T` (watched from T) or `at_end: true` (from the moment every
+    step has been applied): it passes the moment it holds (even if a later step undoes it) and fails if its `within` (from the
+    moment it starts to be watched) runs out first. A resilience check ("the job survived the fault") must say `after`, or it holds
+    before the fault. The Jira expectations count only tickets made since the run started.
     """
     factor = max(speed * dilation, 1e-6)
     report = Report(sc["name"])
@@ -873,18 +940,26 @@ def run(sc: dict, speed: float = 1.0, dilation: float = 1.0, say=print, sleep=ti
         except OSError as e:
             say(f"fault proxy could not start: {e}")
     start = clock()
-    pending = []
-    for exp in sc.get("expect") or []:
-        label, holds, within = expectation(exp, runner, host)
+    exps = sc.get("expect") or []
+    seen = jira_snapshot(exps)  # before the first step: what was already in Jira is not this run's
+    pending = []  # [label, holds, begin (None until the last step, for at_end), within seconds, deadline once begun]
+    for exp in exps:
+        label, holds, within = expectation(exp, runner, host, seen)
         if holds is None:
             report.expects.append(Outcome(label, "skipped", "cannot be evaluated here"))
             on_expect(report.expects[-1])
         else:
-            pending.append((label, holds, start + within / factor))
+            after, at_end = expect_window(exp)
+            pending.append([label, holds, None if at_end else start + after / factor, within, None])
 
     def watch() -> None:
+        now = clock()
         for item in list(pending):
-            label, holds, deadline = item
+            label, holds, begin, within, deadline = item
+            if begin is None or now < begin:
+                continue
+            if deadline is None:
+                deadline = item[4] = begin + within / factor
             if holds():
                 outcome = Outcome(label, "ok")
             elif clock() >= deadline:
@@ -912,6 +987,8 @@ def run(sc: dict, speed: float = 1.0, dilation: float = 1.0, say=print, sleep=ti
         on_step(step, outcome)
         say(f"[{step.at:6.1f}s] {outcome.status:7} {outcome.label}" + (f"  ({outcome.detail})" if outcome.detail else ""))
         watch()
+    for item in pending:
+        item[2] = item[2] if item[2] is not None else clock()  # at_end: every step is applied, start watching
     while pending and not should_stop():
         sleep(1.0)
         watch()

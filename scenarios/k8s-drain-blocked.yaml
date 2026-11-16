@@ -5,4 +5,4 @@ steps:
   - {at: 0s,   target: k8s, do: {drain: {node: first k8s gpu node, timeout: 30}}}
   - {at: 100s, target: k8s, do: {uncordon: [first k8s gpu node]}}
 expect:
-  - k8s.pods_on_node: {node: first k8s gpu node, namespace: team-a, selector: app=inference, min: 1, within: 20s}
+  - k8s.pods_on_node: {node: first k8s gpu node, namespace: team-a, selector: app=inference, min: 1, after: 35s, within: 20s}   # the drain (30 s timeout) gave up and the pod is still there
