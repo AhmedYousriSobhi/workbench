@@ -434,7 +434,7 @@ def daemon_commands(do: dict, sim: dict | None = None) -> list[list[str]]:
     if do.get("cancel"):
         sim = sim or yaml.safe_load(Path("sim.yaml").read_text())
         users = [u["name"] for u in sim.get("users") or []] or ["alice"]
-        cmds.append(["docker", "exec", SLURMCTLD, "scancel", "--quiet", "-u", ",".join(users)])
+        cmds += [["docker", "exec", SLURMCTLD, "scancel", "--quiet", "-u", user] for user in users]  # scancel -u takes one user, not a list (#849)
     return cmds
 
 
