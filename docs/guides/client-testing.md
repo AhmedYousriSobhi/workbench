@@ -138,7 +138,7 @@ These faults give the client real errors from the real components, for its "logi
 
 | Scenario | What the client meets | Put right by |
 |---|---|---|
-| `auth-slurm-token-expiry` (SC-30) | slurmrestd 401 after the token's 60 s; the token is in `compose/generated/secrets/slurm_token` (`cat` it, it is not printed) | ask for a new one: `docker exec workbench-slurmctld-1 scontrol token username=alice` |
+| `auth-slurm-token-expiry` (SC-30) | slurmrestd refuses the token after its 60 s (HTTP 511, as for any bad token; only a request with no token gets 401); the token is in `compose/generated/secrets/slurm_token` (`cat` it, it is not printed) | ask for a new one: `docker exec workbench-slurmctld-1 scontrol token username=alice` |
 | `auth-teleport-cert-expiry` (SC-31) | the identity file `compose/generated/secrets/teleport/identity/alice` lives 60 s, then the login node refuses it | the scenario signs it again at 180 s |
 | `auth-munge-wrong-key` (SC-32) | `cn001` is rejected by slurmctld (`Invalid credential`); `sinfo` shows it as `idle*` (not responding), flapping with `idle`, never `down` (slurmd still answers each ping, with an authentication error) | the scenario puts the node's own key back at 120 s (`munge_restore`) |
 | `bmc-tls-expired` (SC-33) | `certificate has expired` on the BMC TLS ports (8443, 443, each node's address); same key and name, so a client that pins by key still connects | back at 60 s |

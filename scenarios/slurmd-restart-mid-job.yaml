@@ -6,5 +6,6 @@ steps:
   - {at: 15s, target: slurm, do: {slurmd_restart: [first cpu node]}}
   - {at: 60s, target: slurm, do: {cancel: true}}
 expect:
-  - slurm.job_state: {node: first cpu node, state: RUNNING, within: 14s}
-  - slurm.stepd: {node: first cpu node, alive: true, within: 14s}
+  - slurm.job_state: {node: first cpu node, state: RUNNING, within: 14s}            # before the fault: the job is up
+  - slurm.job_state: {node: first cpu node, state: RUNNING, after: 30s, within: 15s}  # 15 s after the restart: still running
+  - slurm.stepd: {node: first cpu node, alive: true, after: 30s, within: 15s}

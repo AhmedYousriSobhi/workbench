@@ -56,3 +56,18 @@ Decided 2026-11-14. Three changes to the scenario language, all inside `benchctl
 - **Expect coverage**: `fan-failure` and `gpu-xid-storm` assert the ticket the fault files (and the drains, for the GPU fault). Scenarios with no `expect` stay listed in
   `tests/test_scenario.py` (`NO_EXPECT`, with a reason each, a list that can only shrink), among them faults felt by the client only (Jira and SSH faults, expired
   certificates and tokens) and `preempt-burst` and `reboot-asap`, whose observable state the owner has not yet named (issue 732).
+
+## Addendum: expectations are relative to the run (issues 833, 836, 839)
+Decided 2026-11-16. `run()` used to watch every `expect` from the start and pass it the first moment it held, so a check that something survived a fault
+passed before the fault, and a Jira check passed on tickets left by an earlier run.
+- **Window**: `after: T` starts watching at T, `at_end: true` once every step has been applied; `within` counts from that moment (backward compatible: both
+  default to the start). `after` alone is one look. `validate` checks the arguments (`expect_problems`); it did not look at `expect` before.
+- **Exact state**: `exact: true` on `slurm.node_state` compares the whole `sinfo %T` state; the default stays a substring, so the shipped scenarios that
+  say `drain` are unchanged.
+- **Jira, tickets of this run only**: before the first step the engine lists the tickets of each Jira an expectation asks (mock or `target: real`) and the
+  Jira expectations skip those. Chosen over a reset step (the mock has `tickets: {action: reset}`, the real Jira does not, and a reset would delete what the
+  client under test already holds) and over a run-start timestamp (the mock stamps `created` to the second and its JQL `created >=` has minute resolution,
+  and the host and the mock are two clocks). Identity is key plus `created`, because a reset restarts the keys. A Jira that cannot be read at the start gives
+  an empty snapshot.
+- **Survive scenarios**: SC-19, SC-21, SC-44 and SC-39 assert after the fault. SC-20 asserts what happens (`down*` after `SlurmdTimeout`, job requeued), not
+  that the job survives.

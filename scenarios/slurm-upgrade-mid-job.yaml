@@ -9,5 +9,6 @@ steps:
   - {at: 105s, target: slurm-upgrade, do: {to: 26.05.5, daemons: [login]}}
   - {at: 120s, target: slurm, do: {cancel: true}}
 expect:
-  - slurm.job_state: {node: first cpu node, state: RUNNING, within: 110s}
-  - slurm.stepd: {node: first cpu node, alive: true, within: 110s}
+  - slurm.job_state: {node: first cpu node, state: RUNNING, within: 14s}             # before the first upgrade: the job is up
+  - slurm.job_state: {node: first cpu node, state: RUNNING, after: 110s, within: 8s} # after the last upgrade (login at 105 s), before the cancel at 120 s
+  - slurm.stepd: {node: first cpu node, alive: true, after: 110s, within: 8s}

@@ -63,10 +63,10 @@ The command exits 1 when a step errors or an `expect` line does not hold.
 | SC-37 | `preempt-burst` | a scavenger job fills the GPUs of the first GPU node; at 20 s an `urgent` job asks for them and Slurm requeues the scavenger job; needs the accounting part and `qos:` in `sim.yaml` ([guide](../guides/qos-and-preemption.md)) |
 | SC-36 | `reboot-asap` | Slurm reboots the second compute node (`scontrol reboot ASAP`): BMC `Reset ForceOff` then `Reset On`, slurmd restarts, the node resumes; then the third compute node is powered down through Slurm (`POWERED_DOWN`, BMC Off) and up at 90 s ([guide](../guides/power-and-reboot.md)) |
 | SC-35 | `switch-leaf-down` | one leaf switch goes down: exactly its nodes drain (`switch leaf1 down`), and only those resume at 90 s; needs `topology:` in `sim.yaml` ([guide](../guides/topology.md)) |
-| SC-30 | `auth-slurm-token-expiry` | a Slurm REST token for alice that lives 60 s is saved to `compose/generated/secrets/slurm_token`; after that slurmrestd answers 401 |
+| SC-30 | `auth-slurm-token-expiry` | a Slurm REST token for alice that lives 60 s is saved to `compose/generated/secrets/slurm_token`; after that slurmrestd refuses it (HTTP 511; a request with no token gets 401) |
 | SC-31 | `auth-teleport-cert-expiry` | alice's Teleport identity file lives 60 s, then the login node refuses it as expired; signed again at 180 s (`--with teleport`) |
 | SC-32 | `auth-munge-wrong-key` | `cn001` gets another munge key (slurmctld: `Invalid credential`; the node shows `idle*`, not `down`), its own key is back at 120 s |
-| SC-33 | `bmc-tls-expired` | the BMC farm presents a certificate that ended yesterday for 60 s: `certificate has expired` on 8443, 443 and each node's BMC address |
+| SC-33 | `bmc-tls-expired` | the BMC farm presents an expired certificate (it ended a day before the image was built) for 60 s: `certificate has expired` on 8443, 443 and each node's BMC address |
 | SC-34 | `k8s-cert-expired` | the API server serves a certificate that ended yesterday for 90 s (`--with k8s`): `certificate has expired` from kubectl |
 | SC-12 | `jira-real-captcha` | six wrong-password logins make the real Jira answer 401 then 403 `CAPTCHA_CHALLENGE` (what an integration meets after a bad password), cleared after 60 s |
 | SC-26 | `ticket-lifecycle` | one ticket: Open, In Progress, a note, Resolved, Closed |
@@ -156,6 +156,38 @@ expect:
 | `expect` | assertions checked after the steps |
 
 `expect` lines that need the app under test (such as `jira.issue_created`) hold only when the app does its part.
+
+### When an `expect` is looked at
+
+An `expect` is one assertion with arguments. Each is polled until it holds (it passes the first time it does) or its `within` runs out (it fails). By default it is watched from the start of the run, which is too early for a check that something *survived* a fault: it holds before the fault is injected.
+
+| Argument | Meaning |
+|---|---|
+| `within` | how long it may take to hold, from the moment it starts to be watched (default `0s`: one look) |
+| `after: 30s` | not looked at before then; `within` counts from then. `after: 30s` alone is one look at 30 s |
+| `at_end: true` | not looked at until every step has been applied; `within` counts from then. Not with `after` |
+| `exact: true` | `slurm.node_state` only: the state must equal the one given (`draining`, `drained`, `down*`). Without it the state is a substring, so `drain` also matches `draining` and `drained` |
+
+```yaml
+steps:
+  - {at: 0s,  target: slurm, do: {submit: {node: first cpu node, duration: 600}}}
+  - {at: 15s, target: slurm, do: {slurmd_restart: [first cpu node]}}
+  - {at: 60s, target: slurm, do: {cancel: true}}
+expect:
+  - slurm.job_state: {node: first cpu node, state: RUNNING, within: 14s}   # before the fault: the job is up
+  - slurm.job_state: {node: first cpu node, state: RUNNING, after: 30s}    # after it: still running
+```
+
+- Put `after` after the fault has settled and before a later step undoes the state (here the cancel at 60 s). `after` and `within` are scaled by `--speed` like step times.
+- `benchctl scenario run NAME` (also with `--dry-run`) and the page reject a bad duration, `at_end` or `exact` that is not true or false, `after` with `at_end`, and `exact` on another assertion.
+- A look at one moment cannot tell a job that kept running from one that was requeued and started again.
+
+**Jira expectations count only this run's tickets.** Nothing to write in the scenario.
+- `jira.issue_count`, `jira.issue_status` and `jira.issue_created` ignore every ticket that existed when the run started.
+- The mock keeps its tickets until reset, so a second run of `ticket-wave` still sees 12, not 24.
+- A Resolved ticket of the first run does not satisfy `ticket-lifecycle`.
+- The run lists the tickets before its first step. A Jira that cannot be read then counts every ticket it shows later.
+- A ticket is recognised by its key and creation time, not by a clock. A skewed clock, or the minute resolution of a JQL `created >= -10m`, cannot let an old ticket through.
 Every scenario carries an `expect`, or is listed with its reason in `NO_EXPECT` in `tests/test_scenario.py`. The test fails otherwise.
 
 ### What `do` takes, by target
