@@ -581,9 +581,9 @@ See [choose the workbench](../guides/choose-workbench.md).
    - It has the run's start, end and length.
    - For each step it has the planned time and when it ran (seconds after Play).
    - Each expectation has its result, its time and its words.
-   - The same report is on the command line after the run, with no browser: `./scripts/benchctl export test-report last` (Markdown, or `--json`).
+   - A similar report is on the command line after the run, with no browser: `./scripts/benchctl export test-report last` (Markdown, or `--json`).
    - The command adds the node states, faults and alerts as at export ([guide](../guides/client-testing.md#attach-a-test-report-to-a-bug-report)).
-   - The page keeps the mocks' counters from Play to the end itself, so the numbers do not depend on the tab being open.
+   - The page's own buttons count the calls from the tab's reading at Play; the command uses the counters the page process keeps from Play to the end, so it does not depend on a tab being open.
 
 **Steps the page cannot run**
 - They are marked **↷ CLI only**, with the reason. A notice gives the command that runs everything: `./scripts/benchctl scenario run NAME` (**Copy** puts it on the clipboard).
