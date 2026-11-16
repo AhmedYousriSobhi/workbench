@@ -142,6 +142,8 @@ sudo ./scripts/install-governor.sh        # optional; benchctl start then uses i
 sudo ./scripts/install-governor.sh --uninstall
 ```
 
+The service runs the checkout's own `.venv` for the commands it starts (scale, plan apply, trace). After you pull changes under `governor/`, restart it: `sudo systemctl restart workbench-governor`.
+
 ## 3. Start, scale and stop the cluster
 
 ```bash

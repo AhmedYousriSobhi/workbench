@@ -186,3 +186,19 @@ def test_streamer_hands_each_line_over_and_asks_for_stage_lines(host, monkeypatc
     lines = []
     assert captured["streamer"](["up"], lines.append) == 3
     assert lines == ['@stage {"plan": []}', "plain"] and seen["env"]["WORKBENCH_STAGE_LINES"] == "1" and seen["cmd"][-2:] == ["benchctl.cli", "up"]
+
+
+def test_spawned_benchctl_uses_the_checkouts_venv_python_when_it_has_one(tmp_path):
+    """#825: the root service runs under the system python, which lacks typer; the spawned commands must use the .venv."""
+    import sys
+
+    from governor.__main__ import workdir_python
+
+    assert workdir_python(None) == sys.executable
+    assert workdir_python(str(tmp_path)) == sys.executable  # no .venv: fall back
+    py = tmp_path / ".venv" / "bin" / "python"
+    py.parent.mkdir(parents=True)
+    py.write_text("#!/bin/sh\n")
+    assert workdir_python(str(tmp_path)) == sys.executable  # present but not executable: fall back
+    py.chmod(0o755)
+    assert workdir_python(str(tmp_path)) == str(py)  # the link is kept, not resolved
