@@ -7,5 +7,7 @@ steps:
   - {at: 15s, target: slurm, do: {slurmctld_restart: true}}
   - {at: 75s, target: slurm, do: {cancel: true}}
 expect:
-  - slurm.stepd: {node: first cpu node, alive: true, within: 14s}
+  - slurm.stepd: {node: first cpu node, alive: true, within: 14s}                    # before the fault: the jobs are up
   - slurm.job_state: {node: first gpu node, state: RUNNING, within: 14s}
+  - slurm.stepd: {node: first cpu node, alive: true, after: 40s, within: 20s}        # after slurmctld came back (restart at 15 s, cancel at 75 s)
+  - slurm.job_state: {node: first gpu node, state: RUNNING, after: 40s, within: 20s}
