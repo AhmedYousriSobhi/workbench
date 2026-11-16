@@ -131,9 +131,9 @@ def test_drain_under_a_running_job_lets_it_finish():
 
 def test_the_shipped_scenarios_run_and_trace(cluster):
     lines: list[str] = []
-    for name in ("slurmd-restart-mid-job", "drain-mid-job"):
+    for name, speed in (("slurmd-restart-mid-job", 3), ("drain-mid-job", 1)):  # the 40 s job runs in real time: drain-mid-job needs speed 1
         sc = scenario.load(name, sim=_k8s.current_sim())
-        report = scenario.run(sc, speed=3, say=lines.append)
+        report = scenario.run(sc, speed=speed, say=lines.append)
         assert report.ok, "\n".join(lines)
 
 

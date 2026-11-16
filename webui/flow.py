@@ -75,11 +75,12 @@ class Flow:
         self.fails.pop(svc, None)
         self.retry_at.pop(svc, None)
 
-    def poll(self) -> None:
-        """Read every mock's request counter; a rise becomes events. Rate-limited, so many tabs cost one pass."""
+    def poll(self, force: bool = False) -> None:
+        """Read every mock's request counter; a rise becomes events. Rate-limited, so many tabs cost one pass (`force`: a run's start
+        and end read the counters now, issue 739)."""
         with self.lock:
             now = self.clock()
-            if now - self.polled < self.min_interval:
+            if now - self.polled < self.min_interval and not force:
                 return
             self.polled = now
             for svc, url in {**STATS, **COUNTERS}.items():
@@ -142,6 +143,11 @@ class Flow:
                     self.reachable[svc] = False
                     self.latency.pop(svc, None)
                     self._down(svc, now)
+
+    def counters(self) -> dict:
+        """The running totals per service, with which ones answer (a scenario run keeps this at Play and at its end, issue 739)."""
+        with self.lock:
+            return {"totals": dict(self.totals), "errors": dict(self.errors), "reachable": dict(self.reachable)}
 
     def since(self, after: int) -> dict:
         with self.lock:

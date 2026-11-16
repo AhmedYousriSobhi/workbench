@@ -11,6 +11,7 @@ import pytest
 import yaml
 from helpers import bring_up, release, wait_for
 
+from benchctl import checks
 from webui.app import login_url
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -47,6 +48,18 @@ def ui():
     release()
 
 
+def governor_idle(timeout: float = 60) -> bool:
+    """The page's power and clear actions reach the node through the governor, in the background (#845): wait until its last change
+    is done, or the next test can see the node powered back on by a step that was still queued."""
+    def idle() -> bool:
+        try:
+            change = checks.governor_request({"cmd": "status"}, checks.default_socket()).get("change")
+        except (OSError, ValueError):
+            return True  # no governor: nothing in the background
+        return not change or change.get("state") != "running"
+    return wait_for(idle, timeout=timeout)
+
+
 def api(base, h, path, method="GET"):
     r = urllib.request.Request(base + path, headers=h, method=method, data=b"" if method == "POST" else None)
     with urllib.request.urlopen(r, timeout=10) as resp:
@@ -68,6 +81,7 @@ def test_healthy_stack_shows_six_ok_nodes_and_all_services_up(ui):
 def test_each_action_changes_what_the_real_mocks_report(ui):
     base, h, _ = ui
     api(base, h, "/api/nodes/cn002/power-off", "POST")
+    assert governor_idle()
     n = node(base, h, "cn002")
     assert (n["state"], n["power"], n["bcm"]) == ("down", "Off", "DOWN")
     api(base, h, "/api/nodes/cn003/fan-fail", "POST")
@@ -78,10 +92,13 @@ def test_each_action_changes_what_the_real_mocks_report(ui):
     assert node(base, h, "gpu001")["xid"] == 79 and node(base, h, "gpu001")["state"] == "fault"
     for name in ("cn002", "cn003", "cn004", "gpu001"):
         api(base, h, f"/api/nodes/{name}/clear", "POST")
+    assert governor_idle()
     assert all(n["state"] == "ok" for n in api(base, h, "/api/cluster")["nodes"])  # clear restores everything
     api(base, h, "/api/nodes/cn002/power-off", "POST")
+    assert governor_idle()
     api(base, h, "/api/nodes/cn002/power-on", "POST")
-    assert node(base, h, "cn002")["state"] == "ok"
+    assert wait_for(lambda: node(base, h, "cn002")["state"] == "ok", timeout=30)  # the power-on takes a moment
+    assert governor_idle()
 
 
 def test_screenshot_of_a_faulted_cluster(ui, tmp_path):
@@ -112,3 +129,8 @@ def test_screenshot_of_a_faulted_cluster(ui, tmp_path):
         browser.close()
     for name in ("cn002", "cn003", "gpu001", "gpu002"):
         api(base, h, f"/api/nodes/{name}/clear", "POST")
+    assert governor_idle()
+    assert wait_for(lambda: node(base, h, "cn002")["state"] == "ok", timeout=30)
+    # the page asks the governor, which thaws the node in the background (#845): the next module must not start with it paused
+    assert wait_for(lambda: "workbench-cn002-1" not in subprocess.run(
+        ["docker", "ps", "--filter", "status=paused", "--format", "{{.Names}}"], capture_output=True, text=True, check=False).stdout, timeout=30)

@@ -147,7 +147,7 @@ def test_every_schema_is_valid_draft_2020_12_and_has_a_verb():
         jsonschema.Draft202012Validator.check_schema(schema(name))
         assert schema(name)["$schema"] == "https://json-schema.org/draft/2020-12/schema"
         assert "contract_version" in schema(name)["required"]
-    assert files == {v[0] for v in VERBS} | {"wait"}, "a schema without a test, or a verb without a schema"
+    assert files == {v[0] for v in VERBS} | {"wait", "export-test-report"}, "a schema without a test, or a verb without a schema"
 
 
 def test_the_changelog_names_the_current_version():

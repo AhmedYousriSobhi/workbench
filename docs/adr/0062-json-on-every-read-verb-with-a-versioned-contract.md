@@ -1,6 +1,6 @@
 # ADR 0062: `--json` on every read verb, with a versioned schema
 
-Status: accepted by the owner on 2026-11-13 (issue 603, decisions in issue 613). Built, except `export lab-report` (issue 614) and `export test-report` (issue 739; issues 616 to 628, 633 to 639). Decision A-3, A-9 of the agent interface.
+Status: accepted by the owner on 2026-11-13 (issue 603, decisions in issue 613). Built, except `export lab-report` (issue 614; issues 616 to 628, 633 to 639, 739). Decision A-3, A-9 of the agent interface.
 
 ## Context
 Several read verbs already take `-o json` (for example `get nodes` and `describe node`), but there is no promise about the shape, no schema and no version, so a script or an agent can break silently when output changes.
@@ -13,7 +13,7 @@ Several read verbs already take `-o json` (for example `get nodes` and `describe
 ## Consequences
 - Output shapes are now a public interface and cost a changelog line to change.
 - The schemas are also what the MCP tools (ADR 0064) and the recipes (ADR 0063) rely on.
-- Exists today: `get nodes|scenarios|checks|capture`, `describe node`, `get workbench`, `status`, `plan`, `doctor`, `export profile`. New: `get endpoints|traffic|faults`, `describe workbench`; planned: `export lab-report` (issue 614) and `export test-report` (issue 739).
+- Exists today: `get nodes|scenarios|checks|capture`, `describe node`, `get workbench`, `status`, `plan`, `doctor`, `export profile`. New: `get endpoints|traffic|faults`, `describe workbench`; `export test-report` (issue 739; `-o` is a file there, so it has `--json` only and no `-o json`); planned: `export lab-report` (issue 614).
 - Decided: the tests use `jsonschema`, a pinned, test-only dev-extra (never shipped). Schemas are written in JSON Schema draft 2020-12.
 - No JSON output ever contains a secret value, only a pointer to one (for example a file path or the command that prints it); the privacy test enforces it.
 

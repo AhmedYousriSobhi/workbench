@@ -28,3 +28,7 @@ Seen on a live stack, not assumed:
 - The node's own requests (`REQUEST_NODE_INFO`) are rejected: `Munge decode failed: Invalid credential`.
 
 SC-32 now expects `idle*` within 100 s. For a node that really goes down use the slurmd-down or power-off scenarios.
+
+## Addendum (issue 830): an expired Slurm token gets 511, not 401
+
+Seen on a live stack: slurmrestd passes the token through to slurmctld, which refuses it once its `exp` has passed, so the REST call answers HTTP 511 (and `/ping` answers 200 with `responding: false`). Only a request with no token at all gets 401 (ADR 0003, ADR 0025). SC-30's description, the manual and the client-testing guide now say so. A client that treats only 401 as "token expired" misses this case.

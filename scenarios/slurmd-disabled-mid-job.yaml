@@ -1,10 +1,11 @@
 name: slurmd-disabled-mid-job
 ref: SC-20
-description: slurmd stays down for 45 s under a running job (slurmctld marks the node not responding), then is started again; see what the job does (run with --trace)
+description: slurmd stays down for 45 s under a running job; slurmctld marks the node not responding and, after about twice SlurmdTimeout, down* and requeues the job (a 45 s outage does not keep it, and the orphaned slurmstepd is gone when slurmd comes back); slurmd is started again and the node returns to service (run with --trace)
 steps:
   - {at: 0s,  target: slurm, do: {submit: {node: first cpu node, duration: 600}}}
   - {at: 15s, target: slurm, do: {slurmd_stop: [first cpu node]}}
   - {at: 60s, target: slurm, do: {slurmd_start: [first cpu node]}}
   - {at: 100s, target: slurm, do: {cancel: true}}
 expect:
-  - slurm.job_state: {node: first cpu node, state: RUNNING, within: 14s}
+  - slurm.job_state: {node: first cpu node, state: RUNNING, within: 14s}            # before the fault: the job is up
+  - slurm.node_state: {node: first cpu node, state: down, after: 35s, within: 24s}  # SlurmdTimeout passed with slurmd stopped (down*), before slurmd starts at 60 s

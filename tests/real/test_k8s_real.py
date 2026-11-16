@@ -242,11 +242,11 @@ def test_the_real_scheduler_allocates_a_dra_claim_to_a_device_whose_uuid_is_a_dc
     assert f'UUID="{uuid}"' in text, f"no DCGM series carries {uuid}"
 
 
-def _play(name: str, *, stop_at: float | None = None) -> None:
+def _play(name: str, *, stop_at: float | None = None, after: float | None = None) -> None:
     """Run a scenario's k8s steps in order against the live cluster, without waiting for their `at` times."""
     sc = scenario.load(name, sim=k8s.current_sim())
     for st in scenario.plan(sc):
-        if stop_at is None or st.at <= stop_at:
+        if (stop_at is None or st.at <= stop_at) and (after is None or st.at > after):
             out = scenario.execute(st)
             assert out.status == "ok", (name, st, out)
 
@@ -261,6 +261,7 @@ def test_the_real_scheduler_preempts_best_effort_pods_for_an_inference_pod(clust
             k8s.kubectl(cluster, "-n", "team-b", "describe", "pod", "urgent").stdout[-1200:]
         ev = k8s.kubectl(cluster, "get", "events", "-A", "--field-selector", "reason=Preempted", "-o", "json")
         assert json.loads(ev.stdout)["items"], "no Preempted event: the node had room, so nothing was preempted"
+        _play("k8s-preempt", after=20)  # #835: the 3 min cleanup deletes pods the scheduler already removed; every step must still pass
     finally:
         for p in ("urgent", "fill-a", "fill-b"):
             k8s.kubectl(cluster, "-n", "team-b", "delete", "pod", p, "--ignore-not-found", "--wait=false")

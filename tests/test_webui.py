@@ -494,6 +494,10 @@ def test_power_off_asks_the_governor_to_freeze_the_node_so_slurm_notices_by_itse
         assert asked[-1]["state"] == "on" and res[-1]["status"] == "skipped" and "refused at L3" in res[-1]["detail"]
         res = json.loads(req(base, "/api/nodes/cn002/overheat", "POST", headers=h)[1])["results"]
         assert not any(r["target"] == "slurm" for r in res)
+        answer.update(ok=True, error=None)
+        asked.clear()
+        json.loads(req(base, "/api/nodes/cn002/clear", "POST", headers=h)[1])
+        assert [a["state"] for a in asked] == ["on", "resume"]  # clear thaws a powered-off node, then resumes it (#845)
     finally:
         server.should_exit = True
         gov.shutdown()

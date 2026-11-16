@@ -24,7 +24,7 @@ node and then break something under it, and `--trace` prints what Slurm logged a
 | Scenario | What it does | What to learn |
 |---|---|---|
 | `slurmd-restart-mid-job` | kills `slurmd` on `cn001`, the supervisor starts it again, under a running `sleep` job | does `slurmstepd` survive and the job stay RUNNING |
-| `slurmd-disabled-mid-job` | keeps `slurmd` down for 45 s, then starts it | the node turns not-responding (`down*`), then returns; what happens to the job |
+| `slurmd-disabled-mid-job` | keeps `slurmd` down for 45 s, then starts it | the node turns not-responding, then `down*` after about twice `SlurmdTimeout`, and the job is requeued (a 45 s outage does not keep it; the orphaned `slurmstepd` is gone when `slurmd` returns); the node then returns |
 | `slurmctld-restart-mid-job` | restarts the `slurmctld` container with a real job on `cn001` and a simulated GPU job on `gpu001` | the nodes keep the work; slurmctld recovers state from `StateSaveLocation` |
 | `drain-mid-job` | drains `cn001` under a 40 s job | the job finishes; the node shows `draining`, then `drained` |
 

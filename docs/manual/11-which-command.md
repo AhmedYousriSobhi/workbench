@@ -31,6 +31,7 @@ for, and why. Every command runs from the repository root.
 | turn on Tab completion | `./scripts/benchctl completion install` | one line in your rc file, no sudo; `completion remove` undoes it |
 | give a client that only reads `~/.ssh` the login key | `./scripts/benchctl ssh-key install` (and `remove` after) | copies the key to `~/.ssh/workbench_ed25519`, mode 600 |
 | import the cluster into the client in one step | `./scripts/benchctl export profile` | writes a profile file of the running cluster (or press **⇩ Export** on the page); only the key and token are set by hand ([guide](../guides/export-profile.md)) |
+| attach what a scenario did, and what the client called, to a bug report | `./scripts/benchctl export test-report last -o test-report.md` | the page's last scenario run as Markdown (or `--json`), made with the page up ([guide](../guides/client-testing.md#attach-a-test-report-to-a-bug-report)) |
 | report a problem | `./scripts/benchctl diag` | one masked tarball to attach |
 
 ## `start` or `up`?
