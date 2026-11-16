@@ -7,4 +7,6 @@ cd "$(dirname "$0")/.."
 # Explicit module files (verify.sh --changed) replace the whole folder; anything else is added to it.
 targets=(tests/real)
 for a in "$@"; do case "$a" in tests/real/test_*.py) targets=() ;; esac; done
-WORKBENCH_REAL=1 exec python3 -m pytest -v -rfEs --durations=25 "${targets[@]}" "$@"
+. scripts/lib-interrupt.sh  # Ctrl+C, SIGTERM, SIGHUP: one SIGINT to pytest so its teardown stops the stacks it started (issue 819)
+export WORKBENCH_REAL=1
+ir_run python3 -m pytest -v -rfEs --durations=25 "${targets[@]}" "$@"
