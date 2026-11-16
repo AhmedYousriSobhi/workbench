@@ -66,6 +66,19 @@ def open_docker() -> DockerAPI | None:
     return api
 
 
+def workdir_python(workdir: str | None) -> str:
+    """The interpreter for the `benchctl` commands the governor spawns: the checkout's own .venv when it has one.
+
+    The root service runs under /usr/bin/python3, which lacks benchctl's dependencies (typer, pyyaml), so a bare
+    sys.executable fails there (#825). The user-mode governor already runs from the .venv, so it falls through to it.
+    """
+    if workdir:
+        venv = Path(workdir) / ".venv" / "bin" / "python"
+        if os.access(venv, os.X_OK):  # not resolved: a venv's python is a link, and the link is what selects the venv
+            return str(venv)
+    return sys.executable
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="governor")
     ap.add_argument("--dry-run", action="store_true")
@@ -120,8 +133,10 @@ def main(argv: list[str] | None = None) -> None:
     annotator = Annotator(args.grafana_url, token) if args.grafana_url and token else None
     if args.grafana_url and not token:
         log.warning("--grafana-url given but WORKBENCH_GRAFANA_TOKEN is empty: annotations disabled")
+    py = workdir_python(args.workdir)
+
     def effector(a: list[str]) -> int:
-        cmd = [sys.executable, "-m", "benchctl.cli", *a]
+        cmd = [py, "-m", "benchctl.cli", *a]
         owner = Path(args.workdir).stat().st_uid
         if os.geteuid() == 0 and owner != 0:  # run as the checkout's owner so generated files stay theirs
             cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]
@@ -129,7 +144,7 @@ def main(argv: list[str] | None = None) -> None:
 
     def streamer(a: list[str], on_line: Callable[[str], None]) -> int:
         """Like the effector, but hands each output line over as it appears so the governor can report stages (issue 519)."""
-        cmd = [sys.executable, "-m", "benchctl.cli", *a]
+        cmd = [py, "-m", "benchctl.cli", *a]
         owner = Path(args.workdir).stat().st_uid
         if os.geteuid() == 0 and owner != 0:
             cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]
@@ -147,7 +162,7 @@ def main(argv: list[str] | None = None) -> None:
                 proc.kill()
 
     def tracer(nodes: list[str], since: float) -> dict:
-        cmd = [sys.executable, "-m", "benchctl.cli", "get", "trace", "--since", str(max(1.0, time.time() - since)),
+        cmd = [py, "-m", "benchctl.cli", "get", "trace", "--since", str(max(1.0, time.time() - since)),
                *[a for n in nodes for a in ("--node", n)]]
         owner = Path(args.workdir).stat().st_uid
         if os.geteuid() == 0 and owner != 0:
@@ -158,7 +173,7 @@ def main(argv: list[str] | None = None) -> None:
         return json.loads(r.stdout)
 
     def statser() -> dict:
-        cmd = [sys.executable, "-m", "benchctl.cli", "get", "slurm-stats"]
+        cmd = [py, "-m", "benchctl.cli", "get", "slurm-stats"]
         owner = Path(args.workdir).stat().st_uid
         if os.geteuid() == 0 and owner != 0:
             cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]
@@ -169,7 +184,7 @@ def main(argv: list[str] | None = None) -> None:
 
     def reader(argv: list[str]) -> str:
         """`benchctl ARGV` as the repository's owner, its stdout as text (read-only verbs only, chosen by the governor, never by the page)."""
-        cmd = [sys.executable, "-m", "benchctl.cli", *argv]
+        cmd = [py, "-m", "benchctl.cli", *argv]
         owner = Path(args.workdir).stat().st_uid
         if os.geteuid() == 0 and owner != 0:
             cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]
@@ -180,7 +195,7 @@ def main(argv: list[str] | None = None) -> None:
 
     def capturer(node: str, seconds: int):
         """`benchctl get capture NODE` as the repository's owner, its JSON lines on stdout (issue 505)."""
-        cmd = [sys.executable, "-m", "benchctl.cli", "get", "capture", node, "--seconds", str(seconds)]
+        cmd = [py, "-m", "benchctl.cli", "get", "capture", node, "--seconds", str(seconds)]
         owner = Path(args.workdir).stat().st_uid
         if os.geteuid() == 0 and owner != 0:
             cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]
