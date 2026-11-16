@@ -83,6 +83,14 @@
     <span class="grow"></span><button class="btn small" id="keybtn" aria-expanded="false" aria-controls="ckey">Key</button><button class="btn small" id="flowpause" aria-pressed="false" aria-label="Pause animation">Pause</button></div>
     <div class="row viewrow"><div class="seg" id="viewseg" role="group" aria-label="View of the architecture"><button class="btn small" id="vw-cv" aria-pressed="true">Circuit</button><button class="btn small" id="vw-iso" aria-pressed="false">2.5D (classic)</button></div>
       <div class="lensrow"><span class="lensl" id="lens-l">Lens</span><div class="lenschips" id="lens" role="group" aria-labelledby="lens-l"></div></div></div>
+    <section id="runsheet" class="runsheet" aria-label="Scenario step on the diagram" hidden>
+  <div class="rs-h"><span class="rb" id="rs-badge" aria-hidden="true"></span><div class="rs-txt"><b id="rs-title"></b><p class="small dim" id="rs-line"></p></div><button class="btn small" id="rs-x" type="button" aria-label="Hide the step sheet">✕</button></div>
+  <div class="rs-btns"><button class="btn small" id="rs-prev" type="button">◀</button><button class="btn small" id="rs-steps" type="button">Steps</button><button class="btn small" id="rs-next" type="button">▶</button></div>
+  <div class="rs-replay" id="rs-replay" hidden><p class="small dim" id="rs-rcap"></p>
+    <div class="rs-rrow"><button class="btn small" id="rs-play" type="button">▶ Play</button>
+      <div class="rs-slider" id="rs-slider" role="slider" tabindex="0" aria-label="Replay, recorded step" aria-describedby="rs-rcap" aria-valuemin="1" aria-valuemax="1" aria-valuenow="1"><span class="rs-ticks" id="rs-ticks" aria-hidden="true"></span></div>
+      <button class="btn small" id="rs-end" type="button">End replay</button></div></div>
+</section>
     <div class="flowscroll"><svg id="flow" viewBox="0 0 1120 470" role="img" aria-label="Infrastructure architecture: clients and users, the access layer (login nodes, each direct SSH, Teleport or both, and the Teleport proxy when on), the services, and the nodes. Each part opens its details."></svg></div><div class="canvas fleetview" id="fleetview" aria-label="Fleet: every cluster" hidden inert></div><div class="canvas poolview" id="poolview" aria-label="Pool" hidden inert></div><div class="cvstack" id="cvstack" role="group" aria-label="Traffic layers" hidden></div><p class="cvcap" id="cvcap" hidden></p>
     <div class="ovprev" id="ovprev" role="tooltip" hidden></div><div class="srtable" id="ovtable"></div>
     <div class="ckey" id="ckey" role="group" aria-label="Key to the diagram" hidden>
@@ -104,7 +112,7 @@
     <nav id="crumb" class="crumb" aria-label="Breadcrumb" hidden><button class="linkbtn" id="crumb-all">All clusters</button><span id="crumb-sep1" aria-hidden="true"> › </span><button class="linkbtn" id="crumb-name">workbench</button><span id="crumb-sep2" aria-hidden="true" hidden> › </span><span id="crumb-sep3" aria-hidden="true" hidden> › </span><span id="crumb-pool" hidden></span><span aria-current="page" id="crumb-focus"></span></nav>
     <p id="flowstate" class="dim small u-mb0" role="status"></p></section>
   <section class="inspector" id="inspector" aria-label="Connections and details">
-    <div class="itabs" role="group" aria-label="Show"><button class="btn small" id="it-conn" aria-pressed="true">Connections</button><button class="btn small" id="it-time" aria-pressed="false">Timeline</button></div>
+    <div class="itabs" role="group" aria-label="Show"><button class="btn small" id="it-conn" aria-pressed="true">Connections</button><button class="btn small" id="it-time" aria-pressed="false">Timeline</button><button class="btn small" id="it-run" aria-pressed="false">Run</button></div>
     <div id="ipane-conn" class="ipane">
     <div class="inspect-empty" id="inspect-empty"><b>How to reach each part</b><p class="small dim">Click a part of the diagram or a node for its details and actions. Credentials are never shown, only the file that holds them.</p><ul class="reach" id="reach"></ul></div>
     <div class="focuspane" id="focuspane" hidden></div>
@@ -127,6 +135,17 @@
     </div>
     <div id="dock" class="ipane dock" hidden><p class="dim small" id="dock-empty">Requests to the services and faults you apply appear here, newest first.</p>
       <ul class="tl" id="timeline-feed" aria-label="Recent traffic and faults, newest first"></ul></div>
+    <div id="ipane-run" class="ipane runpane" role="region" aria-labelledby="run-head" hidden>
+      <h3 class="rh" id="run-head" tabindex="-1">No scenario run to show</h3>
+      <p class="small dim" id="run-none">Pick a scenario in Test run and press <b>Show on the diagram</b> to see where it will act, or play it and press <b>Watch on the diagram</b>. Each step gets a numbered badge on the part it acts on, and is listed here in order. A run started with <code>benchctl scenario run</code> shows here too. <button class="btn small" id="run-open" type="button">Open Test run</button></p>
+      <div id="run-last" hidden><p class="small dim">The last run is off the diagram. It stays in the page's memory until the next Play or a page restart.</p><button class="btn small" id="run-lastbtn" type="button">Replay the last run</button></div>
+      <p class="small dim" id="run-sum" hidden></p>
+      <p class="small dim" id="run-cvnote" hidden>Badges are drawn on the Circuit view only. <button class="btn small" id="run-tocv" type="button">Show the Circuit view</button></p>
+      <ol class="runrail" id="runrail" aria-label="Scenario steps, in order"></ol>
+      <ul class="runrail" id="runpins" aria-label="Expectations"></ul>
+      <p class="small dim runkey"><span class="rb k-done" aria-hidden="true">✓</span> done <span class="rb k-now" aria-hidden="true">●</span> now <span class="rb k-active" aria-hidden="true">◐</span> in progress <span class="rb k-next" aria-hidden="true">○</span> next <span class="rb k-cli" aria-hidden="true">↷</span> CLI only or skipped <span class="rb k-failed" aria-hidden="true">✗</span> failed <span class="rb k-planned" aria-hidden="true">○</span> planned (before Play) <span class="rb k-blast" aria-hidden="true">◎</span> clients may see a change</p>
+      <div class="row" id="run-tools" hidden><button class="btn small" id="run-replay" type="button" hidden>Replay the run</button><button class="btn small" id="run-clear" type="button">Take off the diagram</button></div>
+    </div>
   </section>
   <div class="nodesmain" id="nodesmain">
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
@@ -170,7 +189,7 @@
     <section class="trun-main" aria-label="Test run" aria-live="polite">
       <div class="panel" id="run-empty"><h2>Run a test</h2><p class="dim">Pick a scenario on the left. You will see what it does, step by step, and which steps this page cannot run, before anything starts. Then play it, watch what your client calls, and export a report for the bug.</p></div>
       <div class="panel runbox" id="runpanel" hidden>
-        <div class="rhead"><h2 class="rh" id="runtitle">Run</h2><div id="runctl"></div></div>
+        <div class="rhead"><h2 class="rh" id="runtitle">Run</h2><div class="row"><button class="btn small" id="run-show" type="button" hidden>Show on the diagram</button><button class="btn small" id="run-watch" type="button" hidden>Watch on the diagram</button><div id="runctl"></div></div></div>
         <p class="dim small" id="rundesc"></p>
         <div class="row"><div id="runresult"></div><div id="run-export" class="runexp" hidden><span class="small dim">Export report</span> <button class="btn small" id="run-md" type="button">Markdown</button> <button class="btn small" id="run-json" type="button">JSON</button></div></div>
         <div class="progress" aria-hidden="true"><div class="u-w0" id="bar"></div></div>

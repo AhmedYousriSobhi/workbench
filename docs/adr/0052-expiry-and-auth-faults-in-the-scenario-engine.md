@@ -18,3 +18,13 @@ One scenario target, `auth` (`benchctl/authfaults.py`), makes the real component
 ## Consequences
 
 A scenario that stops half-way leaves the fault in place; every fault has a restore step. The other control-plane components also reject the expired certificate until restore. Unit tests cover the commands and, with real openssl, the dates; the live test covers the BMC farm, munge and the token; the Teleport, Kubernetes and slurmrestd 401 paths need `--with teleport`, `--with k8s` and the accounting group.
+
+## Addendum (issue 827): a wrong munge key does not take a node down
+
+Seen on a live stack, not assumed:
+- slurmd on the node rejects each controller ping with an authentication error (`REQUEST_PING ... Invalid authentication credential`).
+- The controller counts that reply as a sign of life: `Node cn001 now responding` about every 10 s.
+- `sinfo` therefore flaps between `idle*` (NOT_RESPONDING) and `idle`; SlurmdTimeout never runs out, so the node is never DOWN.
+- The node's own requests (`REQUEST_NODE_INFO`) are rejected: `Munge decode failed: Invalid credential`.
+
+SC-32 now expects `idle*` within 100 s. For a node that really goes down use the slurmd-down or power-off scenarios.

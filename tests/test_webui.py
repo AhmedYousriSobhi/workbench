@@ -44,7 +44,7 @@ def ui(tmp_path):
     scen.mkdir()
     (scen / "quick.yaml").write_text(
         "name: quick\ndescription: d\nsteps:\n  - {at: 0s, target: slurm, do: {drain: [cn001]}}\n"
-        "  - {at: 0s, target: dcgm, do: {stop: true}}\n")
+        "  - {at: 0s, target: dcgm, do: {stop: true}}\nexpect:\n  - slurm.node_state: {node: cn001, state: drain, within: 5s}\n")
     (scen / "slow.yaml").write_text("name: slow\ndescription: d\nsteps:\n  - {at: 0s, target: dcgm, do: {stop: true}}\n"
                                     "  - {at: 1h, target: dcgm, do: {start: true}}\n")
     port = free_port()
@@ -174,6 +174,39 @@ def test_scenario_list_and_run_sends_slurm_steps_through_the_governor(ui):
     assert "host CLI" in state["steps"][1]["detail"]
 
 
+def test_the_run_state_says_where_each_step_lands_and_when_it_ran(ui):
+    """ADR 0086: per step its YAML number, the diagram ids and the time it ran; the run's start and length; each expectation's part."""
+    pv = json.loads(req(ui, "/api/scenarios/quick")[1])
+    assert [(s["n"], s["ids"]) for s in pv["steps"]] == [(1, ["slurmctld", "cn001"]), (2, ["dcgm-exporter"])]
+    before = time.time()
+    assert req(ui, "/api/scenarios/quick/run", "POST", headers={"X-Requested-With": "workbench"})[0] == 200
+    deadline, state = time.time() + 5, {}
+    while time.time() < deadline:
+        state = json.loads(req(ui, "/api/scenarios/run")[1])
+        if not state["running"]:
+            break
+        time.sleep(0.05)
+    assert before - 1 <= state["started"] <= time.time() and state["elapsed"] >= 0
+    assert [(s["n"], s["ids"], s["page"]) for s in state["steps"]] == [(1, ["slurmctld", "cn001"], True), (2, ["dcgm-exporter"], False)]
+    assert all(isinstance(s["t"], float) and 0 <= s["t"] <= state["elapsed"] for s in state["steps"])
+    label = 'slurm.node_state {"node": "cn001", "state": "drain"}'
+    assert state["plan_expects"] == [{"e": 1, "label": label, "ids": ["cn001"], "page": False}]
+    assert [(x["e"], x["ids"], x["status"]) for x in state["expects"]] == [(1, ["cn001"], "skipped")] and state["expects"][0]["t"] >= 0
+
+
+def test_the_preview_and_the_run_state_say_whose_clients_may_see_a_change(ui):
+    """ADR 0086 phase 2: each step carries its declared blast (webui/blast.py TARGETS), before Play and in the run state."""
+    pv = json.loads(req(ui, "/api/scenarios/quick")[1])
+    assert [s["blast"] for s in pv["steps"]] == [["slurmrestd", "login"], ["dcgm-exporter"]]
+    assert all(s["blast_caption"].endswith(".") for s in pv["steps"])
+    assert req(ui, "/api/scenarios/quick/run", "POST", headers={"X-Requested-With": "workbench"})[0] == 200
+    state = json.loads(req(ui, "/api/scenarios/run")[1])
+    assert [s["blast"] for s in state["steps"]] == [["slurmrestd", "login"], ["dcgm-exporter"]]
+    deadline = time.time() + 5
+    while json.loads(req(ui, "/api/scenarios/run")[1])["running"] and time.time() < deadline:
+        time.sleep(0.05)
+
+
 def test_stop_ends_a_running_scenario_and_unknown_is_404(ui):
     h = {"X-Requested-With": "workbench"}
     assert req(ui, "/api/scenarios/nope/run", "POST", headers=h)[0] == 404
@@ -191,6 +224,9 @@ def test_stop_ends_a_running_scenario_and_unknown_is_404(ui):
             break
         time.sleep(0.05)
     assert state["stopped"] is True and state["steps"][1]["status"] == "pending"
+    assert state["steps"][0]["t"] is not None and state["steps"][1]["t"] is None  # a step that never ran has no time
+    time.sleep(0.1)  # the journal replay walks (ADR 0086 phase 3): the stopped run stays in the page process's memory, unchanged, until the next Play
+    assert json.loads(req(ui, "/api/scenarios/run")[1]) == state
     assert req(ui, "/api/scenarios/slow/run?speed=0", "POST", headers=h)[0] == 422
 
 

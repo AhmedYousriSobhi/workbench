@@ -38,6 +38,9 @@ The command exits 1 when a step errors or an `expect` line does not hold.
 - Steps the caller cannot run are reported as **skipped**, not failed.
 - From the web page ([chapter 5](05-web-page.md)) the `slurm` steps go through the governor.
 - Tick **Slurm trace** there for the same trace (see the [resilience guide](../guides/slurm-resilience.md)).
+- On the page, **Watch on the diagram** puts each step's number on the parts it touches ([a scenario run on the diagram](05-web-page.md#a-scenario-run-on-the-diagram)).
+- Before Play, **Show on the diagram** draws where each step will act and whose clients may see a change ([before Play](05-web-page.md#before-play-where-a-scenario-will-act)).
+- While the web page runs, `scenario run` also shows its steps there, marked *run from the CLI* ([a run from the CLI](05-web-page.md#a-run-from-the-cli)). With no page it does exactly what it did before.
 
 ## The scenarios shipped
 
@@ -62,7 +65,7 @@ The command exits 1 when a step errors or an `expect` line does not hold.
 | SC-35 | `switch-leaf-down` | one leaf switch goes down: exactly its nodes drain (`switch leaf1 down`), and only those resume at 90 s; needs `topology:` in `sim.yaml` ([guide](../guides/topology.md)) |
 | SC-30 | `auth-slurm-token-expiry` | a Slurm REST token for alice that lives 60 s is saved to `compose/generated/secrets/slurm_token`; after that slurmrestd answers 401 |
 | SC-31 | `auth-teleport-cert-expiry` | alice's Teleport identity file lives 60 s, then the login node refuses it as expired; signed again at 180 s (`--with teleport`) |
-| SC-32 | `auth-munge-wrong-key` | `cn001` gets another munge key (slurmctld: `Invalid credential`, node goes down), its own key is back at 120 s |
+| SC-32 | `auth-munge-wrong-key` | `cn001` gets another munge key (slurmctld: `Invalid credential`; the node shows `idle*`, not `down`), its own key is back at 120 s |
 | SC-33 | `bmc-tls-expired` | the BMC farm presents a certificate that ended yesterday for 60 s: `certificate has expired` on 8443, 443 and each node's BMC address |
 | SC-34 | `k8s-cert-expired` | the API server serves a certificate that ended yesterday for 90 s (`--with k8s`): `certificate has expired` from kubectl |
 | SC-12 | `jira-real-captcha` | six wrong-password logins make the real Jira answer 401 then 403 `CAPTCHA_CHALLENGE` (what an integration meets after a bad password), cleared after 60 s |
@@ -229,6 +232,7 @@ Source: `benchctl/scenario.py`, `scenarios/*.yaml`, `webui/cluster.py`, ADR 0006
 | You see | Why | Do this |
 |---|---|---|
 | a step is skipped | the caller cannot run that target (for example `k8s` from the page) | run it with `benchctl scenario run` |
+| `web page: this run is not shown there: ...` | the page plays its own run, has another token, or reads another copy of the scenario (the reason follows) | nothing: the run goes on in the terminal; restart the page after changing the cluster |
 | an `expect` line fails | the app under test must do its part for some assertions, or the step did not take effect | read the step's detail, then re-run with `--trace` |
 
 ## Learn more

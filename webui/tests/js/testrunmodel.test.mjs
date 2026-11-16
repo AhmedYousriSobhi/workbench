@@ -1,7 +1,7 @@
 import './setup.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { describe, buildReport, eyeBase, eyeRows, runVerdict, timelineRows } from '../../static/js/testrunmodel.js';
+import { describe, buildReport, expectWords, eyeBase, eyeRows, runVerdict, timelineRows } from '../../static/js/testrunmodel.js';
 
 const prev = { name: 'sc', ref: 'SC-09', steps: [
   { at: 0, target: 'slurm', do: { drain: ['cn001'] }, page: true, why: '' },
@@ -47,10 +47,78 @@ test('the report lists skipped steps as skipped and keeps n/a as n/a', () => {
 test('a ticket step reads as words, not JSON', async () => {
   const { describe } = await import('../../static/js/testrunmodel.js');
   assert.equal(describe({ do: { tickets: { action: 'create', count: 4, summary: 'Wave' } } }), 'Create 4 Jira tickets: Wave');
-  assert.equal(describe({ do: { tickets: { action: 'transition', to: 'In Progress' } } }), 'Move Jira ticket to In Progress');
+  assert.equal(describe({ do: { tickets: { action: 'transition', to: 'In Progress' } } }), 'Move the matching Jira tickets to In Progress');
 });
 
 test('a Kubernetes drain step (an object, not a list) is described, not a crash', () => {
   assert.match(describe({ do: { drain: { node: 'kgpu001', timeout: 30 } } }), /Kubernetes node kgpu001/);
   assert.match(describe({ do: { drain: ['cn001'], reason: 'x' } }), /Drain cn001 in Slurm/);
+});
+
+test('every step kind reads as a sentence, not JSON (issue 813)', () => {
+  const said = (target, d) => describe({ target, do: d });
+  assert.equal(said('ssh', { state: 'down' }), 'Stop the login node (SSH to it fails)');
+  assert.equal(said('ssh', { state: 'hung' }), 'Freeze the login node (SSH hangs)');
+  assert.equal(said('ssh', { node_sshd: 'down', nodes: ['cn001'] }), 'Stop sshd on cn001 (the node stays up)');
+  assert.equal(said('ssh', { max_sessions: 1 }), 'Allow 1 SSH session per connection on the login node');
+  assert.equal(said('auth', { teleport_cert_ttl: { user: 'alice', ttl: '5m' } }), "Make alice's Teleport identity expire after 5 min");
+  assert.equal(said('auth', { munge_wrong_key: ['cn001'] }), 'Give cn001 a wrong munge key');
+  assert.equal(said('auth', { k8s_cert_expired: false }), "Give the Kubernetes API server its valid certificate again");
+  assert.equal(said('netem', { nodes: ['cn003'], delay: '200ms', loss: '5%', ttl: '60s' }), 'Add 200 ms delay and 5% packet loss on cn003 for 60 s');
+  assert.equal(said('netem', { clear: true }), 'Remove the network delay and loss from every node');
+  assert.equal(said('switch', { leaf: 'leaf1', state: 'down' }), 'Take leaf switch leaf1 down (its nodes drop out)');
+  assert.equal(said('k8s', { down: ['kgpu001'] }), 'Take Kubernetes node kgpu001 down (NotReady)');
+  assert.equal(said('k8s', { pod: { namespace: 'team-b', name: 'p', fault: 'crashloop' } }), 'Start pod team-b/p that crash-loops');
+  assert.equal(said('k8s', { queue: { name: 'q', active: false, pending: 2 } }), 'Stop queue q admitting work (2 workloads pending)');
+  assert.equal(said('jira-real', { fault: 'proxy_503', count: 1 }), "Make the real Jira's proxy answer 503 for the next call (Retry-After 30 s)");
+  assert.equal(said('jira-real', { tickets: { action: 'create', count: 2, summary: 'x' } }), 'Create 2 real Jira tickets: x');
+  assert.equal(said('slurm-upgrade', { to: '26.05.5', daemons: ['login'] }), 'Upgrade the login node to Slurm 26.05.5');
+  assert.equal(said('slurm', { reboot: ['cn002'] }), 'Reboot cn002 through Slurm (scontrol reboot ASAP)');
+  assert.equal(said('gpu-exporter', { nodes: ['cn001'], storage: { mount: '/scratch', stale: true } }), 'Make /scratch stale on cn001');
+  assert.equal(said('gpu-exporter', { nodes: ['gpu001'], ib_down: 0 }), 'Bring the InfiniBand ports back up on gpu001');
+  assert.equal(said('bmc-farm', { nodes: ['gpu001'], event: 'Fell off the bus', severity: 'Critical' }), 'BMC event on gpu001 (Critical): Fell off the bus');
+  assert.equal(said('dcgm', { nodes: ['gpu001'], restart: true }), 'Restart the real DCGM exporter on gpu001');
+  assert.equal(said('jira', { failure: { mode: 'slow', count: 2, delay: 3 } }), 'Make Jira answer 3 s late for the next 2 calls');
+  assert.equal(said('nothing-known', { weird: 1 }), '{"weird":1}');  // the last resort, which tests/test_step_words.py keeps off every shipped step
+});
+
+test('the report carries the run\'s start, each step\'s and each expectation\'s time (ADR 0086 phase 3)', () => {
+  const run = { name: 'sc', ok: true, running: false, speed: 5, started: 1763200000, elapsed: 42.5,
+    steps: [{ status: 'ok', t: 0.2 }, { status: 'skipped', detail: 'k8s steps need the host CLI', t: 1.1 }],
+    expects: [{ label: 'slurm.node_state {"node": "cn001", "state": "drain"}', status: 'ok', detail: '', t: 12.3 }] };
+  const { data, markdown } = buildReport({ preview: prev, run, startedAt: '2026-01-01T00:00:00Z', finishedAt: null, speed: 5, eye: [] });
+  assert.equal(data.started, '2025-11-15T09:46:40Z', 'the page process\'s clock at Play wins over the browser\'s');
+  assert.equal(data.finished, '2025-11-15T09:47:22Z'); assert.equal(data.duration_s, 42.5);
+  assert.deepEqual(data.steps.map(x => [x.at, x.t]), [[0, 0.2], [5, 1.1]]);
+  assert.deepEqual([data.expectations[0].t, data.expectations[0].words], [12.3, 'Slurm shows cn001 as drained']);
+  assert.match(data.expectations[0].label, /^slurm\.node_state /, 'the engine\'s label stays, as the key');
+  assert.match(markdown, /\| 0 s \| 0\.2 s \| slurm \| Drain cn001 in Slurm/); assert.match(markdown, /- Took: 42\.5 s/);
+  assert.match(markdown, /- ok at 12\.3 s: Slurm shows cn001 as drained/); assert.doesNotMatch(markdown.split('## Expectations')[1], /\{"/);
+  const stopped = buildReport({ preview: prev, run: { ...run, stopped: true, steps: [{ status: 'ok', t: 0.2 }, { status: 'pending', t: null }], expects: [] }, eye: [] });
+  assert.equal(stopped.data.steps[1].t, null); assert.match(stopped.markdown, /\| 5 s \| did not run \|/);
+  const old = buildReport({ preview: prev, run: { name: 'sc', running: false, ok: true, steps: [], expects: [] }, startedAt: '2026-01-01T00:00:00Z', eye: [] });
+  assert.equal(old.data.started, '2026-01-01T00:00:00Z', 'without the run state\'s start, the browser\'s');
+});
+
+test('every expectation kind reads as a sentence; an unknown one keeps its label', () => {
+  const said = (kind, a) => expectWords(`${kind} ${JSON.stringify(a)}`);
+  assert.equal(said('slurm.job_state', { node: 'cn001', state: 'RUNNING' }), 'A job on cn001 is running in Slurm');
+  assert.equal(said('slurm.stepd', { node: 'cn001', alive: false }), 'No slurmstepd runs on cn001');
+  assert.equal(said('k8s.node_ready', { node: 'kgpu001', ready: false }), 'Kubernetes node kgpu001 is NotReady');
+  assert.equal(said('k8s.pod_status', { namespace: 'team-b', name: 'oom-demo', reason: 'OOMKilled' }), 'Pod team-b/oom-demo shows OOMKilled');
+  assert.equal(said('k8s.pods_on_node', { node: 'kgpu001', namespace: 'team-a', selector: 'app=inference', min: 1 }), 'At least 1 Running pod (app=inference, team-a) on Kubernetes node kgpu001');
+  assert.equal(said('storage.mount', { node: 'cn001', mount: '/scratch', min_used_pct: 99, min_inodes_used_pct: 90 }), '/scratch on cn001: at least 99% used, at least 90% of its inodes used');
+  assert.equal(said('storage.mount', { node: 'cn002', mount: '/scratch', quota_exceeded: 'alice' }), '/scratch on cn002: alice over quota');
+  assert.equal(said('jira.issue_created', { labels: ['fault-fan', 'node-gpu002'] }), 'A Jira ticket is filed with the labels fault-fan, node-gpu002');
+  assert.equal(said('jira.issue_status', { jql: 'labels = lifecycle', status: 'Closed' }), 'The Jira tickets matching “labels = lifecycle” are Closed');
+  assert.equal(said('jira.issue_count', { jql: 'labels = stress', count: 12, target: 'real' }), '12 real Jira tickets match “labels = stress”');
+  assert.equal(expectWords('weird.kind {"a": 1}'), 'weird.kind {"a": 1}');
+});
+
+test('the report says where the run came from (ADR 0086 phase 4)', () => {
+  const run = { name: 'x', running: false, ok: true, stopped: false, source: 'cli', started: 1000, elapsed: 3, steps: [{ at: 0, target: 'ssh', do: { state: 'down' }, page: false, status: 'ok', detail: '', t: 0.1 }], expects: [] };
+  const cli = buildReport({ preview: null, run, eye: [] }), page = buildReport({ preview: null, run: { ...run, source: 'page' }, eye: [] });
+  assert.equal(cli.data.ran_from, 'cli'); assert.equal(page.data.ran_from, 'page');
+  assert.match(cli.markdown, /- Ran from: the CLI \(benchctl scenario run\)/); assert.match(cli.markdown, /skipped by the CLI/);
+  assert.match(page.markdown, /- Ran from: the web page/);
 });

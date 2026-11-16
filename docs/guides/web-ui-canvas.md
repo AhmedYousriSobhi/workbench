@@ -80,6 +80,41 @@ node --test "webui/tests/js/poollayout.test.mjs"   # paging, filters, KPIs, stat
 
 The page's width must not depend on the view: never size `.cols` or `#nodeswrap` from a view's content. `ui_shots.py` does not catch a width jump, so look at Fleet, Cluster and Pool at two window widths after a layout change.
 
+## The run layer (a scenario on the diagram)
+
+`runlayermodel.js` (pure, `node --test`) turns the run state (`GET /api/scenarios/run`) into the scenario's steps, grouped by their YAML number, one badge per part, the expectation pins and the words for the rail and the strip. `runlayer.js` draws it into `#flow` as `#runlayer`, again after every rebuild of the Circuit view (ADR 0086).
+
+**Where a step lands:**
+1. `scenario.touches(step)` in `benchctl/scenario.py` gives the ids: node names, service ids, and the parts `slurmctld`, `slurmdbd`, `slurmrestd`, `login` and `teleport`.
+2. The page looks for a node's square (`data-names`), then `data-part`, then `data-ent`. A greyed part counts as not drawn, and the rail says so.
+3. For a new target kind, map it in `touches`. If it truly lands nowhere, add it to `UNMAPPED` in `tests/test_scenario_touches.py` with the reason. That list only shrinks.
+
+Badges come from the run state, never from flow events. Each badge has a number and a glyph, and says its state in words in its `aria-label`. Nothing in the layer animates. Colours are tokens only: `--accent`, `--warn`, `--bad`.
+
+**Badge size.** `runlayer.js` sets sizes in screen pixels and turns them into drawing units with the drawing's scale (`getScreenCTM()`): text 15 px (never under 14 px; the Circuit view is drawn at about 0.55 of its 1700 units on a laptop or a phone), a pill about 1.7 times the text, and a transparent `.rl-hit` rectangle of at least 40 px round it for touch. `ui_shots.py` fails on smaller text, a smaller tap target, or two overlapping pills, for `node-down` and for the dense `client-stress` (every node badged).
+
+**Before Play (phase 2).** `previewRun(p)` turns the preview (`GET /api/scenarios/{name}`) into a run that has not started: every step `planned` (or `cli`), nothing reached. `shownRun()` picks what the layer draws: a live run always; else the scenario picked in Test run, as a preview until it has run; else the last run. The ghosts are the same badges with the class `ghost` (dashed), `data-runghost` gives every touched part a dotted ring, `data-runblast` gives the chosen step's blast parts the red dashes, and `.rl-blast` draws ◎ (role `img`, not a tab stop). Play swaps the preview for the run state of the same name in one redraw; badges keep their parts and order (`ui_shots.py` checks they do not move). Stop pressed on the page sets `runStopHide`; once the run says it stopped, the layer is taken off.
+
+**Replay (phase 3).** `replayStops(groups)` lists the recorded steps in the order they ran. `replayGroups(groups, stops, at)` and `replayPins(pins, stops, at)` give the layer as it stood at stop `at`; `replayText` is the slider's `aria-valuetext`, `replayKey` maps the slider keys. `S.replay` (`{key, at}`) holds the position, and `paintRun()` swaps the groups, so the badges, the ring, the pins and the rail follow one value.
+
+**The player.** `#rs-replay` in the strip holds `#rs-slider` (`role="slider"`, its ticks `aria-hidden`), **Play** (hidden under reduced motion; a 1.2 s step timer, no tween) and **End replay**. After Stop (`runStopHide`) the diagram is plain and `#run-last` offers **Replay the last run** from the page's own run state (memory only). `ui_shots.py` `check_replay` drives it by keyboard on desktop and phone.
+
+**A run from the CLI (phase 4).** `benchctl/pagefeed.py` posts a `scenario run`'s events to `POST /api/scenarios/cli` (127.0.0.1 only, the page token and `X-Requested-With` in headers) from a background thread: `start` (name, speed, `scenario.plan_key`), then `step` (index, status, detail, `t`), `expect`, `beat` every 10 s, and `end`. The page builds the plan from its own scenario file and refuses another plan key. `Runs` keeps the run with `source: 'cli'`; one quiet for 30 s ends with `lost`.
+
+**On the page.** `fromCli(run)` and `sourceWords(run)` in `runlayermodel.js` mark it: the heading, the strip, the layer's label and Test run say *run from the CLI*, and `cliNote` fills `#run-sum`. For such a run a skip stays a skip and a pending expectation waits: nothing says ↷ CLI only. `ui_shots.py` `check_cli_run` checks it on desktop and phone.
+
+**Blast for every target.** `webui/blast.py` `TARGETS` declares, per target kind, the parts a client reads that a step changes, with one sentence; `step_blast(step)` adds the entries of what the step implies (`scenario.side_effects`). `blast.preview()` and the run state carry `blast` and `blast_caption` per step. `tests/test_blast_targets.py` fails on a target kind the engine accepts with no entry, or a part the Circuit view does not draw.
+
+**Step words.** `describe()` in `testrunmodel.js` gives every step one sentence for the rail, the strip, the badge labels and the Test run tab. A new step key in the engine fails `tests/test_step_words.py` until it has a sample there and words in `describe()`; a shipped step that falls back to JSON fails it too (`RAW_OK` only shrinks). The same test covers expectations (`expectWords()`; the engine's label stays the key that joins plan and result; `EXPECT_RAW_OK` only shrinks) and the part ids the engine names (`partWords()`, `PART_WORDS` in `runlayermodel.js`).
+
+```bash
+node --test webui/tests/js/runlayermodel.test.mjs        # grouping, one badge per part, glyphs and words, Tab order, pins, the strip's words
+.venv/bin/python -m pytest tests/test_scenario_touches.py  # every shipped step lands on a part, or is listed with its reason
+.venv/bin/python -m pytest tests/test_step_words.py       # every shipped step and every engine step key reads as a sentence, not JSON
+.venv/bin/python -m pytest tests/test_blast_targets.py    # a declared blast entry for every target kind, parts the Circuit view draws
+.venv/bin/python scripts/ui_shots.py                       # a sample run, no cluster: badges, order, rail, strip, phone sheet, reduced motion
+```
+
 ## Traffic analysis
 
 `trafficanalysis.js` (pure, `node --test`) computes rates, river bands, probe readings, periods and findings from `/api/traffic`; `analysis.js` draws them and

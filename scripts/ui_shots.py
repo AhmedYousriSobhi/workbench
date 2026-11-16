@@ -18,6 +18,7 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+from benchctl import scenario as _scn
 from webui import blast, graph
 from webui.app import login_url
 
@@ -31,6 +32,18 @@ SYNTH_GRAPH = graph.build(
 SYNTH_CLUSTER = SYNTH_CLUSTER.replace("actions: [", "graph: " + json.dumps(SYNTH_GRAPH) + ", blast: " + json.dumps(blast.payload()) + ", actions: [", 1)
 TEST_HOOK = "window.__WB_TEST = true; try { sessionStorage.setItem('workbench-circuit', '0'); sessionStorage.getItem('workbench-tab') || sessionStorage.setItem('workbench-tab', 'nodes'); } catch (e) {}"  # (the classic diagram: the circuit is the default and has its own checks) main.js then exposes its modules as globals (webui/static/js/testhook.js) so the checks below can call them by name
 VIEWPORTS = {"desktop": (1280, 900), "phone": (390, 800)}
+
+
+def sample_run(applied: int = 3, name: str = "node-down") -> dict:
+    """A run state as GET /api/scenarios/run reports it (ADR 0086): `name` with its first `applied` steps done. Sample data: no
+    scenario runs, the page's poll is answered by the test."""
+    import yaml
+    sim = yaml.safe_load((ROOT / "sim.yaml").read_text())
+    pv = blast.preview(_scn.load(name, ROOT / "scenarios", sim), sim)  # with each step's declared blast, as the page's endpoint answers
+    return {"running": True, "name": name, "speed": 1.0, "stopped": False, "ok": None, "trace": None, "started": 1763200000.0, "elapsed": 7.0,
+            "plan_expects": [{k: x[k] for k in ("e", "label", "ids", "page")} for x in pv["expects"]], "expects": [],
+            "steps": [{**{k: x[k] for k in ("at", "target", "do", "n", "ids", "no_part", "page", "blast", "blast_caption")}, "status": "ok" if i < applied else "pending", "detail": "",
+                       "t": x["at"] if i < applied else None} for i, x in enumerate(pv["steps"])]}
 
 
 WIRE_PROBE = """async () => {
@@ -140,6 +153,263 @@ def check_zoom(page) -> list[str]:
     only("fleet", "the FLEET stop")
     page.click(".fl-card .fl-head")
     only("cluster", "opening a card")
+    return bad
+
+
+RUN_PROBE = """() => { const q = s => [...document.querySelectorAll(s)], badges = q('#runlayer .rl-badge');
+  return { badges: badges.map(b => ({ n: +b.dataset.n, label: b.getAttribute('aria-label') || '', text: b.textContent, role: b.getAttribute('role'), tab: b.getAttribute('tabindex') })),
+           pins: q('#runlayer .rl-pin').map(p => p.getAttribute('aria-label') || ''), rail: q('#runrail li').map(l => l.textContent.replace(/\\s+/g, ' ').trim()),
+           ring: q('#flow [data-runring]').length, head: document.getElementById('run-head').textContent, sheet: !document.getElementById('runsheet').hidden,
+           sheetText: document.getElementById('rs-title').textContent, moving: document.getAnimations().filter(a => a.effect && a.effect.target && a.effect.target.closest && a.effect.target.closest('#runlayer, #runsheet, #ipane-run')).length,
+           wide: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1 } }"""
+
+
+# The badges' size on screen and whether any two overlap (issue 813): text >= 14 px, a tap target >= 40 px, no pill over another.
+MARK_PROBE = """() => { const f = document.getElementById('flow'), k = f.getScreenCTM().a, marks = [...document.querySelectorAll('#runlayer [role=button], #runlayer .rl-blast')];
+  const box = el => el.getBoundingClientRect(), pills = marks.map(m => box(m.querySelector('.rl-pill'))), out = { n: marks.length, small: [], tiny: [], overlap: [] };
+  marks.forEach((m, i) => { const fs = parseFloat(getComputedStyle(m.querySelector('.rl-t')).fontSize) * k, hit = box(m);
+    if (fs < 14) out.small.push(`${m.dataset.key}: ${fs.toFixed(1)} px`);
+    if (m.getAttribute('role') === 'button' && (hit.width < 40 || hit.height < 40)) out.tiny.push(`${m.dataset.key}: ${Math.round(hit.width)}x${Math.round(hit.height)}`);
+    for (let j = 0; j < i; j++) { const a = pills[i], b = pills[j];
+      if (a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5) out.overlap.push(`${m.dataset.key} / ${marks[j].dataset.key}`); } });
+  return out; }"""
+
+
+def mark_problems(page, what: str) -> list[str]:
+    m = page.evaluate(MARK_PROBE)
+    return ([f"{what}: badge text under 14 px on screen: {m['small'][:3]}"] if m["small"] else []) + \
+        ([f"{what}: badge tap targets under 40 px: {m['tiny'][:3]}"] if m["tiny"] else []) + \
+        ([f"{what}: badges overlap: {m['overlap'][:3]}"] if m["overlap"] else [])
+
+
+PREVIEW_PROBE = """() => { const q = s => [...document.querySelectorAll(s)];
+  return { layer: !!document.querySelector('#runlayer.preview'), badges: q('#runlayer .rl-badge').map(b => ({ id: b.dataset.id, ghost: b.classList.contains('ghost'), label: b.getAttribute('aria-label') || '', text: b.textContent,
+             box: (r => [Math.round(+r.getAttribute('x')), Math.round(+r.getAttribute('y'))])(b.querySelector('.rl-pill')) })),  // in drawing units: a scroll is not a jump
+           pins: q('#runlayer .rl-pin').map(p => p.querySelector('.rl-t').textContent + '|' + (p.getAttribute('aria-label') || '')), blast: q('#runlayer .rl-blast').map(m => (m.getAttribute('role') || '') + '|' + (m.getAttribute('aria-label') || '')),
+           ghosts: q('#flow [data-runghost]').length, head: document.getElementById('run-head').textContent, sum: document.getElementById('run-sum').textContent,
+           blastRail: q('#runrail li').filter(l => /Clients may see a change on/.test(l.textContent)).length, topo: !document.getElementById('tab-nodes').hidden } }"""
+
+
+def check_preview(page, shot: str, state: dict) -> list[str]:
+    """ADR 0086 phase 2, before Play: the scenario picked in Test run drawn as ghosts (dashed badges that say planned, a dotted ring on every
+    part it will touch, the E1 pin with ↷, ◎ where clients may see a change), reached with Show on the diagram; Play turns the ghosts into
+    live badges on the same parts without moving them; Stop leaves the plain diagram. Sample data: the preview is the page's own endpoint."""
+    bad = []
+    page.evaluate("async () => { trPrev = await (await fetch('/api/scenarios/node-down')).json(); runHidden = ''; trLast = {running: false}; }")
+    page.click("#tb-run")
+    page.evaluate("paintPreview(trLast)")
+    if not page.locator("#run-show").is_visible() or page.locator("#run-watch").is_visible():
+        bad.append("Test run offers no Show on the diagram before the scenario has run (or offers Watch instead)")
+    page.click("#run-show")
+    page.wait_for_selector("#runlayer.preview .rl-badge", timeout=5000)
+    r = page.evaluate(PREVIEW_PROBE)
+    if not r["topo"]:
+        bad.append("Show on the diagram did not open the Topology tab")
+    if len(r["badges"]) < 3 or not all(b["ghost"] and ", planned: " in b["label"] and "○" in b["text"] for b in r["badges"]):
+        bad.append(f"the preview badges are not ghosts that say planned: {r['badges'][:2]}")
+    if r["ghosts"] < 3:
+        bad.append(f"the parts the scenario will touch have no dotted ring: {r['ghosts']}")
+    if not r["pins"] or not r["pins"][0].startswith("E1 ↷|Expectation E1, CLI only"):
+        bad.append(f"the preview's expectation pin is missing or not marked CLI only: {r['pins']}")
+    if not r["blast"] or not all(m.startswith("img|Clients of this part may see a change") for m in r["blast"]):
+        bad.append(f"no ◎ mark with words where clients may see a change: {r['blast']}")
+    if "Preview: nothing has run yet" not in r["head"] or "touch" not in r["sum"] or not r["blastRail"]:
+        bad.append(f"the Run tab does not say it is a preview, what it touches and whose clients may see a change: {r['head']!r} / {r['sum']!r}")
+    bad += mark_problems(page, "preview")
+    page.screenshot(path=shot.replace(".png", "-preview.png"), full_page=False)
+    ghost = {b["id"]: b["box"] for b in r["badges"]}
+    page.route("**/api/scenarios/run", lambda rt: rt.fulfill(json=state))  # Play: the run state of the same scenario takes over
+    page.evaluate("poll()")
+    page.wait_for_selector("#runlayer:not(.preview) .rl-badge", timeout=5000)
+    live = page.evaluate(PREVIEW_PROBE)
+    if [b["id"] for b in live["badges"]] != list(ghost) or any(b["ghost"] for b in live["badges"]) or live["ghosts"]:
+        bad.append(f"Play did not turn the ghosts into live badges on the same parts: {[b['id'] for b in live['badges']]} vs {list(ghost)}")
+    moved = [b["id"] for b in live["badges"] if abs(b["box"][0] - ghost[b["id"]][0]) > 8 or b["box"][1] != ghost[b["id"]][1]]
+    if moved:
+        bad.append(f"badges jumped when the run took over: {moved}")
+    stopped = {**state, "running": False, "stopped": True, "ok": True}
+    page.unroute("**/api/scenarios/run")
+    page.route("**/api/scenarios/run", lambda rt: rt.fulfill(json=stopped))
+    page.evaluate("runStopHide = 'node-down'; poll()")  # Stop pressed on this page
+    page.wait_for_function("!document.querySelector('#runlayer') && !document.querySelector('#flow [data-runring], #flow [data-runghost]')", timeout=5000)
+    page.unroute("**/api/scenarios/run")
+    return bad
+
+
+REPLAY_PROBE = """() => { const sl = document.getElementById('rs-slider'), q = s => [...document.querySelectorAll(s)], sh = document.getElementById('runsheet').getBoundingClientRect();
+  return { role: sl.getAttribute('role'), min: sl.getAttribute('aria-valuemin'), max: sl.getAttribute('aria-valuemax'), now: sl.getAttribute('aria-valuenow'),
+           text: sl.getAttribute('aria-valuetext') || '', label: sl.getAttribute('aria-label') || '', tab: sl.getAttribute('tabindex'), active: document.activeElement.id,
+           shown: !document.getElementById('rs-replay').hidden && !document.getElementById('runsheet').hidden, cap: document.getElementById('rs-rcap').textContent,
+           play: !document.getElementById('rs-play').hidden, sel: (document.querySelector('#runrail [aria-pressed=true]') || { dataset: {} }).dataset.n,
+           nowBadges: q('#runlayer .rl-badge').filter(b => (b.getAttribute('aria-label') || '').includes(', now: ')).map(b => +b.dataset.n),
+           badges: q('#runlayer .rl-badge').length, ring: q('#flow [data-runring]').length, head: document.getElementById('run-head').textContent,
+           h: sl.getBoundingClientRect().height, top: sh.top, bottom: sh.bottom, fixed: getComputedStyle(document.getElementById('runsheet')).position === 'fixed',
+           last: !document.getElementById('run-last').hidden, again: !document.getElementById('run-replay').hidden && document.getElementById('run-replay').textContent,
+           moving: document.getAnimations().filter(a => a.effect && a.effect.target && a.effect.target.closest && a.effect.target.closest('#runlayer, #runsheet')).length,
+           wide: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1 } }"""
+
+
+def check_replay(page, shot: str, vp: str) -> list[str]:
+    """ADR 0086 phase 3, after the run: Stop leaves the plain diagram and the Run tab offers Replay the last run; the strip becomes a
+    WAI-ARIA slider over the recorded steps only (role, value, aria-valuetext naming the step), driven end to end by the keyboard; it moves
+    the current-step badge, the ring and the rail selection; the strip fits a phone; no playback and nothing moving under reduced motion."""
+    bad = []
+    stopped = sample_run(3)
+    stopped.update(running=False, stopped=True, ok=True, elapsed=9.0)
+    page.unroute("**/api/scenarios/run")
+    page.route("**/api/scenarios/run", lambda r: r.fulfill(json=stopped))
+    page.evaluate("trPrev = null; runHidden = ''; runStopHide = 'node-down'; poll()")  # Stop pressed on this page: the plain diagram comes back
+    page.wait_for_function("trLast && trLast.stopped", timeout=5000)
+    page.evaluate("showPane('run'); paintRun()")
+    r = page.evaluate(REPLAY_PROBE)
+    if r["badges"] or not r["last"]:
+        bad.append(f"after Stop the diagram is not plain, or the Run tab offers no Replay the last run: {r['badges']} badges, offered {r['last']}")
+    page.focus("#run-lastbtn")
+    page.keyboard.press("Enter")
+    r = page.evaluate(REPLAY_PROBE)
+    if (r["role"], r["min"], r["max"], r["now"], r["tab"]) != ("slider", "1", "3", "1", "0") or not r["label"]:
+        bad.append(f"the replay slider's ARIA attributes are wrong (3 recorded steps): {r}")
+    if r["active"] != "rs-slider" or not r["shown"]:
+        bad.append(f"Replay the last run did not show the strip and focus the slider: {r['active']}")
+    if not r["text"].startswith("Step 1, 1 of 3 recorded: ") or "never ran" not in r["cap"] or "stay live" not in r["cap"]:
+        bad.append(f"aria-valuetext does not name the step, or the strip does not say it walks recorded steps only: {r['text']!r} / {r['cap']!r}")
+    for key, want in (("End", "3"), ("Home", "1"), ("ArrowRight", "2")):
+        page.keyboard.press(key)
+        r = page.evaluate(REPLAY_PROBE)
+        if r["now"] != want or r["sel"] != want or set(r["nowBadges"]) != {int(want)} or not r["ring"] or f"Replay: step {want}" not in r["head"]:
+            bad.append(f"{key} did not move the slider, the rail selection, the current badge and the ring to step {want}: {r}")
+    page.keyboard.press("Tab")
+    if page.evaluate("document.activeElement.id") != "rs-end":
+        bad.append("Tab from the slider does not reach End replay")
+    page.keyboard.press("Shift+Tab")
+    r = page.evaluate(REPLAY_PROBE)
+    if r["h"] < 40 or r["wide"]:
+        bad.append(f"the slider is under 40 px tall or the page scrolls sideways: {r['h']}")
+    if vp == "phone" and (not r["fixed"] or r["bottom"] > page.viewport_size["height"] + 1 or r["top"] < page.viewport_size["height"] * 0.4):
+        bad.append(f"on a phone the replay strip is not a bottom sheet that leaves the diagram room: {r['top']}..{r['bottom']}")
+    small = page.evaluate("[...document.querySelectorAll('#rs-replay button')].filter(b => !b.hidden && b.getBoundingClientRect().height < 40).map(b => b.id)")
+    if small:
+        bad.append(f"replay buttons under 40 px: {small}")
+    page.screenshot(path=shot.replace(".png", "-replay.png"), full_page=False)
+    page.emulate_media(reduced_motion="reduce")
+    page.keyboard.press("ArrowRight")
+    r = page.evaluate(REPLAY_PROBE)
+    if r["play"] or r["moving"] or r["now"] != "3":
+        bad.append(f"under reduced motion the replay offers playback, animates, or does not change in place: play {r['play']}, moving {r['moving']}, at {r['now']}")
+    page.emulate_media(reduced_motion="no-preference")
+    page.focus("#rs-end")
+    page.keyboard.press("Enter")
+    r = page.evaluate(REPLAY_PROBE)
+    if r["shown"] or "Replay" in r["head"] or r["again"] != "Replay the run":
+        bad.append(f"End replay did not return to the run as it ended, with Replay the run offered: {r['head']!r} / {r['again']!r}")
+    return bad
+
+
+def check_cli_run(page, shot: str) -> list[str]:
+    """ADR 0086 phase 4: a run from the CLI (`benchctl scenario run` posted it to the page) is drawn like a page run and said in words, in
+    the Run tab's heading, the strip over the diagram and the layer's label; its CLI-only steps show their real result, never ↷ CLI only."""
+    bad, name = [], "slurm-upgrade-mid-job"
+    run = sample_run(99, name)
+    run.update(running=False, ok=True, source="cli", elapsed=14.0, expects=[{**x, "status": "ok", "detail": "", "t": 10.0} for x in run["plan_expects"]])
+    page.unroute("**/api/scenarios/run")
+    page.route("**/api/scenarios/run", lambda r: r.fulfill(json=run))
+    page.evaluate("trPrev = null; runHidden = ''; runSel = null; replay = null; poll()")
+    page.wait_for_function(f"trLast && trLast.name === '{name}'", timeout=5000)
+    page.evaluate("watchRun()")
+    page.wait_for_selector("#runlayer .rl-badge", timeout=5000)
+    r = page.evaluate(RUN_PROBE)
+    extra = page.evaluate("({ layer: document.getElementById('runlayer').getAttribute('aria-label'), line: document.getElementById('rs-line').textContent, "
+                          "sum: document.getElementById('run-sum').hidden ? '' : document.getElementById('run-sum').textContent })")
+    if "run from the CLI" not in r["head"] or "run from the CLI" not in extra["layer"] or not extra["line"].startswith("Run from the CLI"):
+        bad.append(f"a run from the CLI is not said in words: {r['head']!r} / {extra['line']!r}")
+    if "Ctrl+C" in extra["sum"] or "ran on the host" not in extra["sum"]:
+        bad.append(f"the Run tab does not say where a finished CLI run ran: {extra['sum']!r}")
+    if not r["badges"] or any("↷" in b["text"] or "CLI only" in b["label"] for b in r["badges"]):
+        bad.append(f"a CLI run's badges show ↷ CLI only instead of their real result: {[b['text'] for b in r['badges']]}")
+    if any("CLI only" in p for p in r["pins"]) or not all(", held: " in p for p in r["pins"]):
+        bad.append(f"a CLI run's expectation pins do not show their result: {r['pins']}")
+    if r["wide"]:
+        bad.append("a CLI run makes the page scroll sideways")
+    bad += mark_problems(page, name)
+    page.screenshot(path=shot.replace(".png", "-cli.png"), full_page=False)
+    page.locator("#ipane-run").screenshot(path=shot.replace(".png", "-cli-rail.png"))  # the Run tab: heading and the line under it
+    return bad
+
+
+def check_runlayer(page, shot: str, vp: str) -> list[str]:
+    """The run layer (ADR 0086, webui/static/js/runlayer.js) with a sample run, no cluster: numbered badges with a glyph and words on the
+    parts each step touched, in step order for Tab; the step rail; the strip over the diagram (a bottom sheet on a phone) with Previous and
+    Next; the blast radius still drawn; nothing moving under reduced motion. Leaves the page on the classic view with no run shown."""
+    bad, state = [], sample_run()
+    page.evaluate(SYNTH_CLUSTER)
+    try:
+        bad += check_preview(page, shot, sample_run(1))
+        page.evaluate("runHidden = ''")
+        page.route("**/api/scenarios/run", lambda r: r.fulfill(json=state))
+        page.evaluate("poll()")
+        page.wait_for_function("trLast && trLast.name === 'node-down'", timeout=5000)
+        page.evaluate("watchRun()")
+        page.wait_for_selector("#runlayer .rl-badge", timeout=5000)
+        r = page.evaluate(RUN_PROBE)
+        ns = [b["n"] for b in r["badges"]]
+        if len(r["badges"]) < 3 or ns != sorted(ns):
+            bad.append(f"badges missing or not in step order (Tab must follow the scenario): {ns}")
+        for b in r["badges"]:
+            if not b["label"].startswith("Step ") or b["role"] != "button" or b["tab"] != "0" or not any(g in b["text"] for g in "✓●○↷✗◐"):
+                bad.append(f"a badge without a number, glyph and spoken words: {b}")
+        if not any(", now: " in b["label"] for b in r["badges"]) or not any(", done: " in b["label"] for b in r["badges"]):
+            bad.append("the badges do not say done and now in words")
+        if len(r["rail"]) != 6 or "Step 3: now" not in " ".join(r["rail"]) or "Step 4: next" not in " ".join(r["rail"]):
+            bad.append(f"the step rail does not list every step with its state in words: {r['rail'][:3]}")
+        if not r["pins"] or not r["pins"][0].startswith("Expectation E1, CLI only"):
+            bad.append(f"the expectation pin is missing or says nothing: {r['pins']}")
+        if r["ring"] < 2 or "step 3 of 6" not in r["head"]:
+            bad.append(f"the current step's parts are not ringed, or the heading is wrong: {r['ring']} / {r['head']!r}")
+        if not r["sheet"] or not r["sheetText"].startswith("Step 3:"):
+            bad.append(f"the step strip over the diagram is missing: {r['sheetText']!r}")
+        if r["wide"]:
+            bad.append("the run layer makes the page scroll sideways")
+        bad += mark_problems(page, "node-down")
+        box = page.locator("#runsheet").bounding_box()
+        if vp == "phone" and (box is None or box["y"] + box["height"] > page.viewport_size["height"] + 1 or page.evaluate("getComputedStyle(document.getElementById('runsheet')).position") != "fixed"):
+            bad.append(f"on a phone the step sheet is not fixed to the bottom of the screen: {box}")
+        small = page.evaluate("[...document.querySelectorAll('#runsheet button')].filter(b => b.getClientRects().length && b.getBoundingClientRect().height < 40).map(b => b.id)")
+        if small:
+            bad.append(f"step sheet buttons under 40 px: {small}")
+        page.click("#rs-next")
+        if not page.locator("#rs-title").text_content().startswith("Step 4:") or page.get_attribute("#runrail [data-n='4']", "aria-pressed") != "true":
+            bad.append("Next did not move the strip and the rail to step 4")
+        page.locator("#runlayer .rl-badge").first.dispatch_event("click")
+        if page.get_attribute("#runrail [data-n='1']", "aria-pressed") != "true":
+            bad.append("a badge did not select its step in the rail")
+        page.evaluate("setBlast(blastFor({to: 'bmc-farm', label: 'power-off on cn002', nodes: ['cn002']}))")
+        dash = page.evaluate("(() => { const b = document.querySelector('#flow [data-blast] > .cv-box'); return b ? getComputedStyle(b).strokeDasharray : null; })()")
+        if not dash or dash == "none":
+            bad.append(f"the blast radius lost its dashes under the run layer: {dash}")
+        page.screenshot(path=shot, full_page=False)
+        page.evaluate("setBlast(null)")
+        page.emulate_media(reduced_motion="reduce")
+        page.evaluate("paintRunLayer(true)")
+        if page.evaluate(RUN_PROBE)["moving"]:
+            bad.append("something in the run layer animates under reduced motion")
+        page.emulate_media(reduced_motion="no-preference")
+        dense = sample_run(99, "client-stress")  # a dense pool: every node of both racks has a badge, several steps per part
+        page.unroute("**/api/scenarios/run")
+        page.route("**/api/scenarios/run", lambda r: r.fulfill(json=dense))
+        page.evaluate("poll()")
+        page.wait_for_function("trLast && trLast.name === 'client-stress'", timeout=5000)
+        page.evaluate("paintRun(); paintRunLayer(true)")
+        if page.evaluate("document.querySelectorAll('#runlayer .rl-badge').length") < 6:
+            bad.append("client-stress: fewer than 6 badges on a run that touches every node")
+        bad += mark_problems(page, "client-stress")
+        page.screenshot(path=shot.replace(".png", "-dense.png"), full_page=False)
+        bad += check_cli_run(page, shot)
+        bad += check_replay(page, shot, vp)
+    except PlaywrightError as e:
+        bad.append(f"the run layer did not draw a sample run: {str(e).splitlines()[0]}")
+    finally:
+        page.unroute("**/api/scenarios/run")
+        page.evaluate("trLast = {running: false}; trPrev = null; runHidden = ''; runStopHide = ''; runSel = null; replay = null; paintRun(); setCircuit(false); lastCluster = ''; loadCluster()")  # back to the page's own cluster answer
     return bad
 
 
@@ -429,6 +699,10 @@ def capture(out: Path) -> dict:
                         result["a11y"].append("theme toggle did not switch to dark")
                     for problem in check_circuit(page):
                         result["a11y"].append(f"circuit {vp} {scheme}: {problem}")
+                    rpath = out / f"runlayer-{vp}-{scheme}.png"
+                    for problem in check_runlayer(page, str(rpath), vp):
+                        result["a11y"].append(f"run layer {vp} {scheme}: {problem}")
+                    result["shots"].append(str(rpath))
                     for problem in check_home(page):
                         result["a11y"].append(f"overview {vp} {scheme}: {problem}")
                     hpath = out / f"overview-{vp}-{scheme}.png"

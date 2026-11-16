@@ -174,3 +174,28 @@
 @media (min-width:1100px) { #nodeswrap.circuit #trafficpanel #flow[data-cv] { min-width:0; } }  /* the 1100 px floor made it scroll sideways inside a 960 px panel */
 #nodeswrap.circuit #trafficpanel #flow[data-cv] { width:100%; max-width:100%; max-height:max(520px, calc(100vh - 250px)); }
 .cvlayer { flex:1 1 118px; gap:8px; padding:6px 8px; } .cvlayer .plate { width:30px; height:18px; }
+
+/* ---- The run layer (ADR 0086, js/runlayer.js): a scenario's steps as numbered badges on the parts they touched, expectations as E pins.
+   The state is the glyph and the words in every badge's name; the colour only helps. Nothing here animates, so reduced motion needs no rule. ---- */
+#flow[data-cv] .runlayer [role=button] { cursor:pointer; outline:none; }
+#flow[data-cv] .runlayer rect { fill:var(--cv-surface); stroke:var(--cv-text-muted); stroke-width:2; }
+#flow[data-cv] .runlayer rect.rl-hit { fill:transparent; stroke:none; }  /* the 40 px tap target round a smaller pill; draws nothing */
+#flow[data-cv] .runlayer text { font:700 var(--rl-fs, 21px) var(--cv-font-ui); fill:var(--cv-text); pointer-events:none; }  /* --rl-fs: set by runlayer.js so the text is >= 14 px on screen */
+#flow[data-cv] .runlayer .rl-more { font-size:calc(var(--rl-fs, 21px) * 0.82); font-weight:600; fill:var(--cv-text-2); }
+#flow[data-cv] .runlayer .k-done .rl-pill { fill:var(--accent-fill); stroke:var(--accent-fill); } #flow[data-cv] .runlayer .k-done text { fill:var(--on-accent); }
+#flow[data-cv] .runlayer :is(.k-now, .k-active) .rl-pill { stroke:var(--accent); stroke-width:3; } #flow[data-cv] .runlayer :is(.k-now, .k-active) .rl-t { fill:var(--accent-text); }
+#flow[data-cv] .runlayer :is(.k-next, .k-notrun) .rl-pill { stroke-dasharray:5 4; } #flow[data-cv] .runlayer :is(.k-next, .k-notrun) .rl-t { fill:var(--cv-text-2); }
+#flow[data-cv] .runlayer :is(.k-cli, .k-skipped) .rl-pill { fill:var(--cv-badge-bg); stroke:var(--warn); } #flow[data-cv] .runlayer :is(.k-cli, .k-skipped) .rl-t { fill:var(--warn-text); }
+#flow[data-cv] .runlayer .k-failed .rl-pill { stroke:var(--bad); stroke-width:3; } #flow[data-cv] .runlayer .k-failed .rl-t { fill:var(--bad); }
+#flow[data-cv] .runlayer .sel .rl-pill, #flow[data-cv] .runlayer [role=button]:hover .rl-pill { stroke-width:4; }
+#flow[data-cv] .runlayer [role=button]:focus-visible .rl-pill { stroke:var(--focus); stroke-width:4; }
+/* the chosen step's parts (the current one while the run plays): an accent outline. The declared blast radius keeps its red dashes. */
+#flow[data-cv] [data-runring]:not([data-blast]) > .cv-box { stroke:var(--accent); stroke-width:4; }
+#flow[data-cv] .cv-sq[data-runring]:not([data-blast]) rect { stroke:var(--accent); stroke-width:3.5; }
+/* before Play (phase 2): ghosts. Dashed badges and pins, a dotted ring on every part the scenario will touch, ◎ where clients may see a change */
+#flow[data-cv] .runlayer .ghost .rl-pill { fill:var(--cv-surface); stroke-dasharray:6 4; }
+#flow[data-cv] .runlayer .k-planned .rl-pill { stroke:var(--accent); } #flow[data-cv] .runlayer .k-planned .rl-t { fill:var(--accent-text); }
+#flow[data-cv] .runlayer .rl-blast .rl-pill { fill:var(--cv-surface); stroke:var(--cv-error); stroke-width:2; } #flow[data-cv] .runlayer .rl-blast .rl-t { fill:var(--cv-text); font-weight:400; }
+#flow[data-cv] [data-runblast]:not([data-runring]) > .cv-box { stroke:var(--cv-error); stroke-dasharray:7 4; stroke-width:3.5; }  /* the chosen step's declared blast, as the blast radius draws it */
+#flow[data-cv] [data-runghost]:not([data-runring]):not([data-blast]) > .cv-box { stroke:var(--accent); stroke-width:3; stroke-dasharray:3 5; }
+#flow[data-cv] .cv-sq[data-runghost]:not([data-runring]):not([data-blast]) rect { stroke:var(--accent); stroke-width:3; stroke-dasharray:3 4; }

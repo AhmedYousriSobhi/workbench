@@ -12,7 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from demo_tour import readme_tour, zoom_tour  # scripts/, next to this file
+from demo_tour import GOV, readme_tour, zoom_tour  # scripts/, next to this file
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent; OUT = ROOT / "docs/manual/img"
@@ -91,7 +91,7 @@ try:
             j = r.fetch().json(); j["logins"]["now"] = ["ssh", "teleport", "both"]; r.fulfill(json=j)
         pg.route("**/api/settings", settings)
         pg.goto(login_url(base_url, ui_token)); pg.wait_for_selector("#flow rect.blk"); pg.wait_for_timeout(1200)
-        pg.evaluate("setTree(true, false)"); pg.evaluate(FLOW)
+        pg.evaluate(GOV); pg.evaluate("setTree(true, false)"); pg.evaluate(FLOW)  # a calm governor, whatever the host runs: no banner in the manual's images
         pg.wait_for_timeout(500)
         pg.screenshot(path=str(OUT / f"web-infrastructure-{SCHEME}.png"))
         pg.hover("#lg-login2"); pg.wait_for_timeout(250); pg.screenshot(path=str(OUT / f"web-architecture-hover-{SCHEME}.png")); pg.mouse.move(2, 2)
@@ -121,6 +121,7 @@ try:
             q.route("**/api/connections", lambda r: r.fulfill(json={"entities": connections.entities(SIM)})); q.route("**/api/settings", settings)
             q.route("**/api/nodes/*", lambda r: r.fulfill(json={"ip": "10.141.0.2", "bmc_ip": "10.148.0.2", "text": "cn002: powered off, BMC reports DOWN"}) if r.request.method == "GET" else r.abort())
             q.goto(login_url(base_url, ui_token)); q.wait_for_selector("#flow[data-cv] .cv-box"); q.wait_for_timeout(1500)  # the circuit is the page's default layout
+            q.evaluate(GOV)
             if flow: q.evaluate(FLOW)
             q.wait_for_timeout(400)
             return q
@@ -134,11 +135,28 @@ try:
         pg2 = sample_page(1280, 900, off); pg2.evaluate("showNode('cn002')"); pg2.wait_for_selector("#nodepane:not([hidden])"); pg2.wait_for_timeout(600)
         pg2.screenshot(path=str(OUT / f"web-node-powered-off-{SCHEME}.png"))
         pg2.locator("#nodeacts-fault").locator("xpath=ancestor::div[contains(@class,'np-card')]").screenshot(path=str(OUT / f"web-fault-actions-{SCHEME}.png")); pg2.close()
-        pv = scn.preview(scn.load("node-down", ROOT / "scenarios"))
-        state = {"running": True, "name": "node-down", "speed": 1.0, "stopped": False, "ok": None, "trace": None, "expects": [],
-                 "steps": [{"at": x["at"], "target": x["target"], "do": x["do"], "status": "ok" if i < 2 else "pending", "detail": ""} for i, x in enumerate(pv["steps"])]}
+        pv = blast.preview(scn.load("node-down", ROOT / "scenarios", SIM), SIM)  # with each step's declared blast, as the page's endpoint answers
+        def run_state(applied):  # the run state GET /api/scenarios/run reports, `applied` steps in (ADR 0086: step numbers, diagram ids, times)
+            return {"running": True, "name": "node-down", "speed": 1.0, "stopped": False, "ok": None, "trace": None, "expects": [], "started": 1763200000.0, "elapsed": 7.0,
+                    "plan_expects": [{k: x[k] for k in ("e", "label", "ids", "page")} for x in pv["expects"]],
+                    "steps": [{**{k: x[k] for k in ("at", "target", "do", "n", "ids", "no_part", "page", "blast", "blast_caption")}, "status": "ok" if i < applied else "pending", "detail": "",
+                               "t": x["at"] if i < applied else None} for i, x in enumerate(pv["steps"])]}
+        state = run_state(2)
         pg3 = sample_page(1280, 900); pg3.route("**/api/scenarios/run", lambda r: r.fulfill(json=state)); pg3.click("#tb-run"); pg3.evaluate("poll()"); pg3.wait_for_selector("#timeline li"); pg3.wait_for_timeout(1500)
         pg3.screenshot(path=str(OUT / f"web-scenario-running-{SCHEME}.png")); pg3.close()
+        at3 = run_state(3)  # the same run on the diagram, at step 3: badges, the ring, the E1 pin and the step strip
+        pg6 = sample_page(1280, 900, off); pg6.route("**/api/scenarios/run", lambda r: r.fulfill(json=at3)); pg6.evaluate("poll()"); pg6.wait_for_timeout(600); pg6.evaluate("watchRun()")
+        pg6.evaluate("document.querySelector('header.top').style.setProperty('position', 'static', 'important'); scrollTo(0, 0)"); pg6.wait_for_selector("#runlayer .rl-badge"); pg6.wait_for_timeout(600)
+        pg6.locator("#trafficpanel").screenshot(path=str(OUT / f"web-run-layer-{SCHEME}.png")); save(OUT / f"web-run-layer-{SCHEME}.png"); pg6.close()
+        fin = {**run_state(6), "running": False, "ok": True, "elapsed": 48.0}  # after the run (ADR 0086 phase 3): replay at the third recorded step
+        pg8 = sample_page(1280, 900, off); pg8.route("**/api/scenarios/run", lambda r: r.fulfill(json=fin)); pg8.evaluate("poll()"); pg8.wait_for_timeout(600)
+        pg8.evaluate("startReplay(); replay.at = 2; paintRun(); document.activeElement.blur(); document.querySelector('header.top').style.setProperty('position', 'static', 'important'); scrollTo(0, 0)")
+        pg8.wait_for_selector("#runlayer .rl-badge.cur"); pg8.wait_for_timeout(600)
+        pg8.locator("#trafficpanel").screenshot(path=str(OUT / f"web-run-replay-{SCHEME}.png")); save(OUT / f"web-run-replay-{SCHEME}.png"); pg8.close()
+        idle = {"running": False}  # before Play (ADR 0086 phase 2): node-down picked in Test run, Show on the diagram; nothing has run
+        pg7 = sample_page(1280, 900); pg7.route("**/api/scenarios/run", lambda r: r.fulfill(json=idle)); pg7.evaluate("pv => { trPrev = pv; }", pv); pg7.evaluate("poll()"); pg7.wait_for_timeout(600); pg7.evaluate("watchRun()")
+        pg7.evaluate("document.querySelector('header.top').style.setProperty('position', 'static', 'important'); scrollTo(0, 0)"); pg7.wait_for_selector("#runlayer.preview .rl-badge"); pg7.wait_for_timeout(600)
+        pg7.locator("#trafficpanel").screenshot(path=str(OUT / f"web-run-preview-{SCHEME}.png")); save(OUT / f"web-run-preview-{SCHEME}.png"); pg7.close()
         down = {**cluster, "nodes": [], "services": {k: False for k in cluster["services"]}}
         pg4 = sample_page(1280, 700, down, flow=False); pg4.wait_for_timeout(800); pg4.screenshot(path=str(OUT / f"web-stack-down-{SCHEME}.png")); pg4.close()
         pg5 = b.new_page(viewport={"width": 1180, "height": 760}, color_scheme=SCHEME); pg5.goto(login_url(base_url, ui_token)); pg5.goto(base_url + "/help/manual/11-which-command"); pg5.wait_for_timeout(500)

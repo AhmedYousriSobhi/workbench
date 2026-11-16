@@ -38,7 +38,7 @@ By hand: `.venv/bin/python -m webui [port]` serves the page on `127.0.0.1:8088` 
 The **stage** on Infrastructure has three areas that fill the window:
 - **Left:** the **Infrastructure architecture**. Clients are across the top, the access layer under them, the cluster nodes below that and the services in a column at the right.
 - **Top right:** the **node list** (Compute, GPU and Services).
-- **Bottom right:** **Connections**, which shows how to reach each part (address and a Copy button). Click a part and it shows that part instead. A **Timeline** tab lists recent traffic and faults.
+- **Bottom right:** **Connections**, which shows how to reach each part (address and a Copy button). Click a part and it shows that part instead. A **Timeline** tab lists recent traffic and faults. A **Run** tab lists the steps of a scenario run ([a scenario run on the diagram](#a-scenario-run-on-the-diagram)).
 
 **Topology** in the left rail gives the whole right column to Connections. The choice is remembered.
 
@@ -283,6 +283,60 @@ Each move takes about 0.7 s (none under reduced motion). The old level is gone a
 
 ![The Fleet level: a card per cluster](img/web-fleet-light.png)
 
+### A scenario run on the diagram
+
+![The Circuit view during node-down at step 3: numbered badges on BMC farm, BCM, the controller and node cn002, an E1 pin, and the step strip over the diagram](img/web-run-layer-light.png)
+
+Press **Watch on the diagram** in Test run, during or after a run. The Topology tab opens on the Circuit view with the run drawn on it. Pressing **Play** keeps you in Test run.
+
+- **Badges.** Each part a step acted on gets a badge: the step number and a glyph. ✓ done, ● now, ◐ in progress, ○ next, ↷ CLI only or skipped, ✗ failed. Badge text stays at least 14 px on screen however small the diagram is drawn, and each badge is a 40 px tap target.
+- **+N.** A part that several steps touch shows the newest step and **+N** for the others.
+- **The ring.** The current step's parts (or the step you picked) get an outline. The blast radius keeps its red dashes.
+- **Pins.** An expectation gets a pin such as **E1 ↷** on the part it checks.
+- **The strip** over the diagram says the step in words, with **◀ Previous**, **Steps** and **Next ▶**. On a phone it is a sheet at the bottom of the screen, and the diagram scrolls to the step's parts.
+- **The Run tab** in the inspector lists every step in order: what it does in one sentence (for example *Freeze the login node (SSH hangs)* or *Add 200 ms delay and 5% packet loss on cn001 for 60 s*), its time, its parts and its state in words. A step that lands on no part says why.
+- **Keyboard.** Tab goes through the badges in step order. Enter or Space picks that step.
+- **Take off the diagram** removes a finished run's badges. The run itself lives in the page's memory until the next Play or a page restart.
+- **Stop.** Pressing **■ Stop** in Test run ends the run and leaves the plain diagram. The Run tab then offers **Replay the last run** ([replay](#after-the-run-replay)); **Watch on the diagram** brings the stopped run back as it ended.
+
+Badges are drawn on the Circuit view only; the 2.5D view keeps its diamonds. A run started with `benchctl scenario run` is drawn too ([a run from the CLI](#a-run-from-the-cli)).
+
+#### Before Play: where a scenario will act
+
+![The Circuit view before node-down runs: dashed badges 1, 2 and 3 on BMC farm, BCM, the controller and node cn002, dotted rings on those parts, an E1 ↷ pin, ◎ on the services whose clients may see a change, and step 1's blast radius in red dashes](img/web-run-preview-light.png)
+
+Pick a scenario in Test run and press **Show on the diagram**. The Topology tab opens on the Circuit view with the scenario drawn as a preview. Nothing has run yet. Picking a scenario alone keeps you in Test run.
+
+- **Dashed badges** (○, said as *planned*) sit on every part a step will act on: the first step there, and **+N** for the others. A part that only CLI steps reach shows **↷**.
+- **Dotted rings** outline every part the scenario will touch.
+- **Pins** such as **E1 ↷** mark the expectations; ↷ means only `benchctl scenario run` can check it.
+- **◎** marks a part whose clients may see a change during the scenario. This is the declared blast radius, not a measurement.
+- **The strip and the Run tab** walk the steps with **◀ Previous** and **Next ▶**. The step you pick gets a solid ring, and the parts its clients read get the blast radius's red dashes. The Run tab says, for each step, *Clients may see a change on ...* and why.
+- **Play** turns the dashed badges into the live badges on the same parts, with no jump. **Take the preview off the diagram** leaves the plain diagram.
+
+#### After the run: replay
+
+![The Circuit view replaying node-down at step 3: steps 1 and 2 done, step 3 now on the controller and cn002, the later steps next, and the player strip with its slider over the diagram](img/web-run-replay-light.png)
+
+When a run has ended (passed, failed or stopped), press **Replay the run** in the Run tab. After **■ Stop** the diagram is plain, and the Run tab offers **Replay the last run**. The strip over the diagram becomes a player.
+
+- **The slider** has one tick per recorded step, in the order they ran. Drag it, click a tick, or use the keys: ← → (or ↑ ↓) one step, Home the first, End the last. A screen reader hears the step, its result and when it ran.
+- **What moves.** The badges, the ring, the pins and the Run tab's selection go back to that step. Earlier steps keep their result, this step is ● now, later ones are ○ next. Picking a recorded step in the Run tab moves the slider too.
+- **What does not.** Replay walks the recorded steps only, and the strip says so. Node states on the diagram stay live. Steps a stopped run never reached are not on the slider.
+- **▶ Play** moves one step every 1.2 s; **⏸ Pause** stops it. With reduced motion there is no Play: each step changes in place.
+- **End replay**, or ✕, shows the run as it ended. On a phone the player is the sheet at the bottom of the screen.
+- **Memory only.** The last run lives in the page's process until the next Play or a page restart. Export the report to keep it.
+
+#### A run from the CLI
+
+`./scripts/benchctl scenario run NAME` sends each step's result to the page while the page runs. The page draws it like its own runs: badges, strip, Run tab, Test run and replay. Each of them says **run from the CLI**.
+
+- **Real results.** The CLI runs every step on the host. A step the page marks ↷ CLI only shows its real result: ✓ done, ✗ failed or ↷ skipped.
+- **One run at a time.** While the page plays a scenario, it refuses the CLI's run. The CLI says so once and plays on.
+- **Stop** it with Ctrl+C in its terminal; the page has no Stop for it. A CLI run that sends nothing for 30 s ends on the page as *No word from the CLI*.
+- **Best effort.** With no page running, the command does and prints exactly what it did before. A page that does not answer within 1 s gets one notice, and the rest of the run is not shown there.
+- **Nothing on disk.** The page keeps the run in memory, like its own runs. The post carries step results only; the page token goes in a header.
+
 ### Traffic & Communication
 
 This workspace lists the documented links: protocol, port, real or simulated, observed or configured, and the measured probe latency.
@@ -515,15 +569,15 @@ See [choose the workbench](../guides/choose-workbench.md).
 
 **▶ Test run** opens one workspace for a whole test, with the library on the left and the chosen scenario on the right. Open it from the left nav, the **▶ Scenarios** chip in the top strip, or **Open Test run** on Overview.
 
-1. **Pick.** Click a scenario's name. You see its description, its length and every step as it will play, **before anything starts**.
+1. **Pick.** Click a scenario's name. You see its description, its length and every step as it will play, **before anything starts**. **Show on the diagram** shows where each step will act ([before Play](#before-play-where-a-scenario-will-act)).
 2. **Play.**
    1. Type in *Filter scenarios*.
    2. Pick a speed. It applies to all.
    3. Tick **Slurm trace** if you want what the jobs and Slurm's logs did around each step ([Slurm resilience](../guides/slurm-resilience.md)).
    4. Press **▶ Play**.
-3. **Watch.** The steps, a progress bar, **Stop**, the expectations (pending, then passed or failed) and **Client's eye** update live.
+3. **Watch.** The steps, a progress bar, **Stop**, the expectations (pending, then passed or failed) and **Client's eye** update live. **Watch on the diagram** shows the same run on the Infrastructure architecture ([a scenario run on the diagram](#a-scenario-run-on-the-diagram)).
 4. **Read Client's eye.** For each service it shows the calls the mock counted during the run, and the errors where the mock counts them.
-5. **Export.** When the run ends, **Markdown** or **JSON** downloads a report built in the browser.
+5. **Export.** When the run ends, **Markdown** or **JSON** downloads a report built in the browser. It has the run's start, end and length, and for each step its planned time and when it ran (seconds after Play). Each expectation has its result, its time and its words.
 
 **Steps the page cannot run**
 - They are marked **↷ CLI only**, with the reason. A notice gives the command that runs everything: `./scripts/benchctl scenario run NAME` (**Copy** puts it on the clipboard).

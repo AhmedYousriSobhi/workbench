@@ -23,6 +23,8 @@
 # Root-only tests (scripts/real-test-root.sh) still need `sudo`; the summary says when to run them.
 # Each step shows a live status line (elapsed, a tqdm-style bar with the percentage, tests done, the last test) so a long run is visibly alive.
 # Your workbench selection (compose/generated/workbench.yaml, profile, sim.yaml) is saved first and put back on exit.
+# Ctrl+C (or SIGTERM/SIGHUP) stops every step's process tree, giving pytest up to IR_GRACE=45 s to tear down (a second Ctrl+C
+# kills at once), stops a stack this run started, puts the selection back and exits 130 (scripts/lib-interrupt.sh, issue 819).
 set -u
 cd "$(dirname "$0")/.."
 nightly="" nightly_at="02:30" withjira=0 changed=0 base="origin/dev" explain=0 serial=0 trustci=0 full=0 revalidate=0 nobrowser=0 only="" unit="" unit_given=0 clean=0 list=0 dry=0
@@ -117,10 +119,23 @@ if [ "$dry" = 1 ] && [ "$unit_given" = 0 ]; then
   exit 0
 fi
 . scripts/lib-selection.sh
+. scripts/lib-interrupt.sh
+. scripts/lib-skips.sh
+skipall=()  # steps where every test was skipped (issue 818)
 log=$(mktemp)
 selection_save  # the real tests build and forget their own selections: keep yours, so the next `up` is your cluster, not std
-vlog=$(mktemp) vpid=""
-trap 'rm -f "$log" "$vlog" "$vlog.secs"; [ -n "$vpid" ] && kill "$vpid" 2>/dev/null; selection_restore' EXIT
+vlog=$(mktemp) vpid="" stack_ours=0
+verify_cleanup() {  # every exit; on Ctrl+C/TERM/HUP lib-interrupt.sh has already stopped the child tree (issue 819)
+  rm -f "$log" "$vlog" "$vlog.secs"
+  if [ -n "$IR_SIG" ] && [ "$stack_ours" = 1 ]; then  # the clean start stopped your cluster, so whatever is up now is this run's
+    echo "STOP  stopping the stack this run started (./scripts/benchctl down --yes)" >&2
+    if ./scripts/benchctl down --yes >/dev/null 2>&1; then IR_DONE="the stack this run started is down"
+    else IR_DONE="could not stop the stack, run ./scripts/benchctl down --yes"; fi
+  fi
+  [ -n "${SELECTION_DIR:-}" ] && [ -n "$IR_SIG" ] && IR_DONE="${IR_DONE:+$IR_DONE; }your selection is restored"
+  selection_restore  # after the tree is gone: an orphaned pytest used to overwrite it again
+}
+ir_trap verify_cleanup
 status=0
 . scripts/lib-stamp.sh
 timings=()
@@ -148,25 +163,29 @@ progress() {  # progress NAME T0 PID: one live status line while PID runs (in pl
   [ -t 1 ] && printf '\r\033[K'
 }
 step() {  # step NAME CMD...: run with a live status line, record, keep the output only if it failed; every line says how long it took
-  local name="$1" t0 secs pid rc; shift; t0=$SECONDS
+  local name="$1" t0 secs pid rc word; shift; t0=$SECONDS
   echo "START $name"
-  "$@" >"$log" 2>&1 & pid=$!
+  ir_bg "$@" >"$log" 2>&1; pid=$IR_PID  # its own session, so Ctrl+C stops the whole tree (lib-interrupt.sh)
   progress "$name" "$t0" "$pid"
-  wait "$pid"; rc=$?
+  rc=0; ir_wait "$pid" || rc=$?
   secs=$((SECONDS - t0))
-  if [ $rc = 0 ]; then echo "PASS  $name  [${secs}s]  ($(tail -1 "$log"))"; else
+  if [ $rc = 0 ]; then
+    word=$(skip_word "$log"); [ "$word" = SKIP-ALL ] && skipall+=("$name")
+    echo "$word  $name  [${secs}s]  ($(tail -1 "$log"))"
+  else
     echo "FAIL  $name  [${secs}s]"; tail -40 "$log"; status=1
     mkdir -p compose/generated; keep="compose/generated/verify-fail-${name%% *}-$(date +%H%M%S).log"; cp "$log" "$keep"
     echo "      full output of this step: $keep  (attach it; nothing needs re-running with -vv)"; fi
   awk '/slowest .*durations/{f=1} f&&/^=+ .* in [0-9.]+s/{f=0} f' "$log" | sed 's/^/      /'  # where the time went (pytest --durations)
   grep '^SKIPPED' "$log" | sed 's/^/      /'  # a skipped test names its file, line and reason (issue 639), so a pass with skips is never anonymous
+  [ $rc = 0 ] && skip_note "$log" "$name"
   grep '^SLOW ' "$log" | sed 's/^/      /'  # per-module seconds from tests/real/verify_times.py (issue 576)
   timings+=("${secs}s $name")
 }
-validate_start() { vt0=$SECONDS; echo "START validate.sh (in the background, own log)"; bash -c 'SECONDS=0; ./scripts/validate.sh; rc=$?; echo $SECONDS >"$1.secs"; exit $rc' _ "$vlog" >"$vlog" 2>&1 & vpid=$!; }
+validate_start() { vt0=$SECONDS; echo "START validate.sh (in the background, own log)"; ir_bg bash -c 'SECONDS=0; ./scripts/validate.sh; rc=$?; echo $SECONDS >"$1.secs"; exit $rc' _ "$vlog" >"$vlog" 2>&1; vpid=$IR_PID; }
 validate_wait() {  # the live tests are done: collect validate.sh; either failing fails the run
   [ -n "$vpid" ] || return 0
-  local rc; wait "$vpid"; rc=$?; vpid=""
+  local rc=0; ir_wait "$vpid" || rc=$?; vpid=""
   local secs; secs=$(cat "$vlog.secs" 2>/dev/null || echo $((SECONDS - vt0)))  # its own run time, not how long we waited for it
   if [ $rc = 0 ]; then echo "PASS  validate.sh  [${secs}s, ran next to the live tests]  ($(tail -1 "$vlog"))"; else
     echo "FAIL  validate.sh  [${secs}s]"; tail -40 "$vlog"; status=1
@@ -180,7 +199,7 @@ ci_green() {  # CI passed for exactly this commit and nothing is modified: its r
 }
 if [ "$unit_given" = 1 ]; then
   if [ "$clean" = 1 ]; then
-    step "clean start (benchctl down)" ./scripts/benchctl down --yes
+    step "clean start (benchctl down)" ./scripts/benchctl down --yes; stack_ours=1
     [ -n "$hook" ] && step "reset $unit state ($hook)" "$hook"
   fi
   [ ${#fast[@]} -gt 0 ] && step "$unit unit tests" python3 -m pytest -v "${fast[@]}"
@@ -196,7 +215,7 @@ else
   if [ "$run_validate" = 1 ] && [ "$serial" = 1 ]; then step "validate.sh" ./scripts/validate.sh; run_validate=0; fi
   [ "$run_validate" = 1 ] && validate_start
   # the tests start their own stacks: a cluster running with your selection would meet them half way (issue 535)
-  step "clean start (benchctl down)" ./scripts/benchctl down --yes
+  step "clean start (benchctl down)" ./scripts/benchctl down --yes; stack_ours=1  # from here, a stack that is up is this run's
   for f in $SELECTION_FILES; do rm -f "$f"; done
   sel=()
   if [ "$changed" = 1 ] && [ "${sel_line:-ALL}" != "ALL" ]; then
@@ -218,6 +237,7 @@ fi
 case "$selection_kept" in *workbench.yaml*)
   echo "NOTE  your workbench selection was kept; the tests stopped the cluster, so bring it back with ./scripts/benchctl up (or start)" ;;
 esac
+[ ${#skipall[@]} -gt 0 ] && echo "WARN  every test was skipped in: ${skipall[*]}; nothing there was exercised (start a governor: ./scripts/benchctl start)"
 echo "TIME  total ${SECONDS}s: ${timings[*]:-no steps}"
 echo "NOTE  root-only checks: sudo ./scripts/real-test-root.sh (when governor cgroup/systemd code changed)"
 exit $status
