@@ -81,7 +81,7 @@ def test_each_action_changes_what_the_real_mocks_report(ui):
     assert all(n["state"] == "ok" for n in api(base, h, "/api/cluster")["nodes"])  # clear restores everything
     api(base, h, "/api/nodes/cn002/power-off", "POST")
     api(base, h, "/api/nodes/cn002/power-on", "POST")
-    assert node(base, h, "cn002")["state"] == "ok"
+    assert wait_for(lambda: node(base, h, "cn002")["state"] == "ok", timeout=30)  # the power-on takes a moment
 
 
 def test_screenshot_of_a_faulted_cluster(ui, tmp_path):
@@ -112,3 +112,4 @@ def test_screenshot_of_a_faulted_cluster(ui, tmp_path):
         browser.close()
     for name in ("cn002", "cn003", "gpu001", "gpu002"):
         api(base, h, f"/api/nodes/{name}/clear", "POST")
+    assert wait_for(lambda: node(base, h, "cn002")["state"] == "ok", timeout=30)
