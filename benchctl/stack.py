@@ -562,12 +562,13 @@ def scale(sim: dict, profile: str, n: int, runner: Runner = _run,
 SSH_DIR = Path("compose/generated/secrets/ssh")
 
 
-def ensure_ssh_keys(path: Path = SSH_DIR, runner: Runner = _run) -> Path:
+def ensure_ssh_keys(path: Path | None = None, runner: Runner = _run) -> Path:
     """Login host key, one host key shared by the nodes, a client key, a cluster key (login -> node hops) and
     authorized_keys listing both public keys (0600, never tracked).
 
     Kept across `up`s so a client that pinned the host key keeps trusting it.
     """
+    path = SSH_DIR if path is None else path  # looked up per call, so the unit tests can point it at a temp dir (#750)
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
     for name in ("ssh_host_ed25519_key", "ssh_host_node_ed25519_key", "ssh_host_jump_ed25519_key", "id_ed25519", "id_cluster"):
         if not (path / name).exists():
@@ -585,7 +586,7 @@ def ensure_ssh_keys(path: Path = SSH_DIR, runner: Runner = _run) -> Path:
 SLURM_KEYS = Path("compose/generated/secrets/slurm")
 
 
-def ensure_slurm_keys(path: Path = SLURM_KEYS) -> Path:
+def ensure_slurm_keys(path: Path | None = None) -> Path:
     """The munge key and the Slurm JWT signing key, made once per checkout and mounted read-only into every Slurm container
     (issue 465): no key material lives in an image layer, and no two clones share keys. The container's entrypoint (root)
     installs them with the owners munge and slurmctld need, so the host files can stay 0600 and owned by you.
@@ -594,6 +595,7 @@ def ensure_slurm_keys(path: Path = SLURM_KEYS) -> Path:
     """
     import secrets
 
+    path = SLURM_KEYS if path is None else path
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
     for name, size in (("munge.key", 1024), ("jwt_hs256.key", 32)):
         if not (path / name).exists():
@@ -610,9 +612,10 @@ def ensure_slurm_keys(path: Path = SLURM_KEYS) -> Path:
 BMC_CREDENTIALS = Path("compose/generated/secrets/bmc_credentials")
 
 
-def ensure_bmc_credentials(path: Path = BMC_CREDENTIALS) -> Path:
+def ensure_bmc_credentials(path: Path | None = None) -> Path:
     """'admin:<random>' for the bmc-farm's TLS surface, made once. Mounted read-only into a container that runs as
     `nobody`, so the file is world-readable; the 0700 folder above it keeps other host users out."""
+    path = BMC_CREDENTIALS if path is None else path
     if path.exists():
         return path
     import secrets

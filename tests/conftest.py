@@ -7,7 +7,7 @@ import pytest
 # Host tools a unit test must never run: they act on the machine (containers, units, keys, packets) and are absent on a clean runner.
 # A test that needs the behaviour passes a runner or stubs the call; tests/real is the place for the real tool (#473).
 HOST_TOOLS = {"systemd-run", "systemctl", "tc", "nsenter", "tcpdump", "kubectl", "sudo"}
-# Tools with a harmless stand-in in tests/hostbin: docker answers like a stopped daemon, virsh like no libvirt, ssh-keygen writes placeholder keys.
+# Tools with a harmless stand-in in tests/hostbin: docker answers like a stopped daemon, virsh like no libvirt, ssh-keygen writes placeholder keys (into a temp dir, see _secrets_in_tmp, #750).
 STUBS = {"docker", "ssh-keygen", "virsh"}
 HOSTBIN = os.path.join(os.path.dirname(__file__), "hostbin")
 
@@ -40,6 +40,21 @@ def _no_host_tools(request, monkeypatch):
         return original(self, args, *a, **kw)
 
     monkeypatch.setattr(subprocess.Popen, "__init__", guarded)
+
+
+@pytest.fixture(autouse=True)
+def _secrets_in_tmp(request, monkeypatch, tmp_path_factory):
+    """`up` makes the SSH keys, Slurm keys and BMC credentials under compose/generated/secrets, which the live stack also uses.
+    A unit test that reaches them (with the ssh-keygen stand-in, placeholder keys) must not write into the real directory:
+    a live run after validate.sh then crashed sshd on a stub host key (#750)."""
+    if "real" in request.node.path.parts:
+        return
+    from benchctl import stack
+
+    d = tmp_path_factory.mktemp("secrets")
+    monkeypatch.setattr(stack, "SSH_DIR", d / "ssh")
+    monkeypatch.setattr(stack, "SLURM_KEYS", d / "slurm")
+    monkeypatch.setattr(stack, "BMC_CREDENTIALS", d / "bmc_credentials")
 
 
 @pytest.fixture(autouse=True)
