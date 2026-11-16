@@ -328,11 +328,12 @@ def test_daemon_steps_become_docker_commands():
 def test_cancel_covers_every_simulated_user(tmp_path, monkeypatch):
     """#834: preempt-burst submits as bob; `cancel` must not stop at alice."""
     sim = {"users": [{"name": "alice"}, {"name": "bob"}]}
-    assert scenario.daemon_commands({"cancel": True}, sim) == [["docker", "exec", scenario.SLURMCTLD, "scancel", "--quiet", "-u", "alice,bob"]]
-    assert scenario.daemon_commands({"cancel": True}, {"users": []})[0][-1] == "alice"
+    one = lambda user: ["docker", "exec", scenario.SLURMCTLD, "scancel", "--quiet", "-u", user]  # scancel -u takes one user, not a list (#849)
+    assert scenario.daemon_commands({"cancel": True}, sim) == [one("alice"), one("bob")]
+    assert scenario.daemon_commands({"cancel": True}, {"users": []}) == [one("alice")]
     monkeypatch.chdir(Path(__file__).resolve().parent.parent)  # no sim given: the repo's sim.yaml
-    users = scenario.daemon_commands({"cancel": True})[0][-1].split(",")
-    assert {"alice", "bob"} <= set(users)
+    users = {c[-1] for c in scenario.daemon_commands({"cancel": True})}
+    assert {"alice", "bob"} <= users and all("," not in u for u in users)
 
 
 def test_submit_makes_the_same_job_as_benchctl_submit_and_a_failed_submit_fails_the_step():
