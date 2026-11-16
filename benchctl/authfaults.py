@@ -2,7 +2,7 @@
 
 Each step makes the real component answer with its real error; nothing is simulated in the client's path:
 
-  slurm_token_ttl: {user, ttl}   issue a Slurm JWT that lives `ttl` and save it to compose/generated/secrets/slurm_token; slurmrestd answers 401 after
+  slurm_token_ttl: {user, ttl}   issue a Slurm JWT that lives `ttl` and save it to compose/generated/secrets/slurm_token; slurmrestd refuses it (HTTP 511) after
   teleport_cert_ttl: {user, ttl} re-sign the user's identity file with a short life; `tsh`/ssh then say the certificate has expired
   teleport_cert_restore: [users] sign the identity again with the cluster's normal life (sim.yaml teleport.cert_ttl)
   munge_wrong_key: [nodes]       a node gets another munge key: slurmctld logs "Invalid credential"; the original is kept inside the node

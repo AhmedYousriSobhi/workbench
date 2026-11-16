@@ -1,6 +1,6 @@
 """Expiry and authentication faults on the live stack (issue 549): each `auth` step, applied by the scenario engine's own executor,
 and the real error it causes. Not covered here: the Teleport step (needs --with teleport, see test_teleport_real), the Kubernetes step (needs
---with k8s, see test_k8s_real) and slurmrestd's 401 for an expired token (slurmrestd runs only with the accounting group)."""
+--with k8s, see test_k8s_real) and slurmrestd's 511 for an expired token (slurmrestd runs only with the accounting group)."""
 import base64
 import json
 import os
