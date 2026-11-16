@@ -47,6 +47,7 @@ What each verb does not do, exit codes, and what to use in a script: [the verbs 
 | `apply -f FILE` | build the workbench a file describes |
 | `scenario list` / `scenario run NAME|SC-nn [--speed N] [--dry-run] [--json]` | list scenarios; play one, exit 1 on failure |
 | `export profile [-o FILE] [--bmc] [--user U] [--name N] [--format ID] [--configured]` | write the running cluster as a client profile file (also the page's **⇩ Export** button) ([guide](../guides/export-profile.md)) |
+| `export test-report [RUN] [--json] [-o FILE]` | a report of the page's last scenario run, to attach to a bug report: Markdown, or `--json` (the page's **Markdown** and **JSON** buttons make the same report) ([guide](../guides/client-testing.md#attach-a-test-report-to-a-bug-report)) |
 | `ssh-key install\|remove` | put the login key under `~/.ssh` for clients that only read there |
 | `status [--socket S]` | governor level, signals, recent actions, then whether the cluster and the web page run |
 | `check` | machine check before building (OS, RAM, disk, Docker, ports); exit 1 if not ready |

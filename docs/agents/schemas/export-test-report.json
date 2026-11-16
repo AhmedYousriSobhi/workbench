@@ -1,0 +1,266 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "export test-report --json",
+  "description": "A report of the web page's last scenario run (the Test run tab's report, plus what only the CLI can read, under at_export). No request bodies, tokens, hostnames, paths or a step's raw action. clients_eye is empty when the page could not read the mocks' counters; a count is null where the mock keeps none. Exit 1 (no JSON) when the page is not running or has no finished run of that name.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "scenario": {
+      "type": "string"
+    },
+    "ref": {
+      "type": "string"
+    },
+    "speed": {
+      "type": "number"
+    },
+    "verdict": {
+      "enum": [
+        "passed",
+        "passed with skips",
+        "failed",
+        "stopped"
+      ]
+    },
+    "ran_from": {
+      "enum": [
+        "page",
+        "cli"
+      ]
+    },
+    "started": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "finished": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "duration_s": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "t": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "target": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "failed",
+              "skipped",
+              "pending"
+            ]
+          },
+          "page_could_run": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "t",
+          "target",
+          "action",
+          "status",
+          "page_could_run",
+          "note"
+        ]
+      }
+    },
+    "expectations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "words": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "failed",
+              "skipped"
+            ]
+          },
+          "t": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "words",
+          "status",
+          "t",
+          "detail"
+        ]
+      }
+    },
+    "clients_eye": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "calls_during_run": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "errors_during_run": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "verdict": {
+            "enum": [
+              "called",
+              "not called yet",
+              "not measured",
+              "not reachable"
+            ]
+          }
+        },
+        "required": [
+          "service",
+          "calls_during_run",
+          "errors_during_run",
+          "verdict"
+        ]
+      }
+    },
+    "at_export": {
+      "type": "object",
+      "description": "True when the report was made, not when the run ended. nodes counts containers per Docker state; null means it could not be read (never an empty list in its place).",
+      "properties": {
+        "taken": {
+          "type": "string"
+        },
+        "nodes": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "faults": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "target",
+              "kind",
+              "state",
+              "label"
+            ]
+          }
+        },
+        "alerts": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "severity": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "state",
+              "severity"
+            ]
+          }
+        }
+      },
+      "required": [
+        "taken",
+        "nodes",
+        "faults",
+        "alerts"
+      ]
+    }
+  },
+  "required": [
+    "contract_version",
+    "scenario",
+    "ref",
+    "speed",
+    "verdict",
+    "ran_from",
+    "started",
+    "finished",
+    "duration_s",
+    "steps",
+    "expectations",
+    "clients_eye",
+    "at_export"
+  ]
+}

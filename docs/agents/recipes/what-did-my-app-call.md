@@ -13,7 +13,7 @@ Profile `min`, and your app already pointed at workbench (see `connect-your-app`
 ./scripts/benchctl get traffic --json
 ./scripts/benchctl get traffic --since 1790000000 --json
 ```
-`--since` takes seconds since the epoch and keeps only newer entries in `recent`; `streams` is always cumulative. The record covers the three mocks (BMC farm, BCM, Jira) and keeps the caller's User-Agent product name only, never a body.
+`--since` takes seconds since the epoch and keeps only newer entries in `recent`; `streams` is always cumulative. The record covers the three mocks (BMC farm, BCM, Jira) and keeps the caller's User-Agent product name only, never a body. After a scenario has played with the page up, `./scripts/benchctl export test-report last --json` gives the calls and errors per mock during that run, with the steps and their times.
 
 ## What your app should show
 Nothing: this is a read-only view of what it did.

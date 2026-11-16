@@ -49,6 +49,7 @@ from . import (
     stack,
     storage,
     teleport,
+    testreport,
     ticketbot,
     tuning,
     wait,
@@ -1618,6 +1619,41 @@ def export_profile(out: str = typer.Option("bench-profile.json", "-o", "--output
                "  SSH key: benchctl ssh-key install, then pick ~/.ssh/workbench_ed25519\n"
                "  Grafana token: cat compose/generated/secrets/grafana_viewer_token (new after every `up`)"
                + ("\n  BMC password: the part after 'admin:' in compose/generated/secrets/bmc_credentials" if bmc else ""))
+
+
+def _best_effort(read):
+    """One part of the report that only the CLI can read: None when it cannot (never an empty answer in its place)."""
+    import subprocess
+
+    try:
+        return read()
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, alerts.NotRunning):
+        return None
+
+
+@export_app.command("test-report")
+def export_test_report(run: str = typer.Argument("last", help="last, or the name of the scenario the page ran last"),
+                       json_: bool = JSON,
+                       out: str = typer.Option(None, "-o", "--output", help="file to write (default: print on stdout; - is stdout)")) -> None:
+    """A report of the web page's last scenario run, to attach to a bug report: what was injected and when, each expectation, the calls and errors per mock during the run, and (as at export) node states, faults and firing alerts. Markdown; `--json` gives the same data with a contract_version. Left out: request bodies, tokens, hostnames, paths, a step's raw action, capture contents. The page keeps the run in memory only: play it with the page up (`benchctl open`, or `benchctl scenario run NAME`). Exit 1 when the page is not running or has no finished run of that name."""
+    try:
+        state = _page_run_state()
+    except (OSError, ValueError) as e:
+        typer.echo(errors.render("WB-PART-NOT-RUNNING", f"the web page does not answer ({e}); start it with: benchctl start"), err=True)
+        raise typer.Exit(1) from e
+    try:
+        data, markdown = testreport.report(
+            state, run, time.time(), nodes=lambda: _best_effort(lambda: inventory.node_rows(_sim())), faults=lambda: _best_effort(_fault_rows),
+            alerts=lambda: _best_effort(alerts.fetch))
+    except testreport.NoRun as e:
+        typer.echo(errors.render("WB-NO-RUN", str(e)), err=True)
+        raise typer.Exit(1) from e
+    text = contract.dumps(data) + "\n" if contract.wanted("table", json_) == "json" else markdown
+    if out is None or out == "-":
+        typer.echo(text, nl=False)
+        return
+    _Path(out).write_text(text)
+    typer.echo(f"wrote {out} (test report of {data['scenario']}: {data['verdict']})")
 
 
 ssh_key_app = typer.Typer(cls=SuggestingGroup, help="Put the login key where a client that only reads ~/.ssh can use it")

@@ -72,7 +72,7 @@
   paths: ["compose/observability.yml", "components/jira-mock/**", "benchctl/alerts.py"]
   tests: [test_alerting_real]
 - name: agent interface
-  paths: ["benchctl/agentverbs.py", "benchctl/faultstate.py", "benchctl/wait.py", "benchctl/alerts.py", "benchctl/mcp_server.py", "benchctl/agents.py", "benchctl/contract.py"]
+  paths: ["benchctl/agentverbs.py", "benchctl/faultstate.py", "benchctl/wait.py", "benchctl/alerts.py", "benchctl/mcp_server.py", "benchctl/agents.py", "benchctl/contract.py", "benchctl/testreport.py", "benchctl/testwords.py"]
   tests: [test_agent_recipes_real]
 - name: slurm version
   paths: ["benchctl/slurmver.py", "images/slurm-ctl/Dockerfile", "images/login/Dockerfile"]

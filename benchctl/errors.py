@@ -26,6 +26,7 @@ REGISTRY: dict[str, tuple[str, str]] = {
     "WB-UNKNOWN-PROFILE": ("No such size preset.", "benchctl get profiles"),
     "WB-UNKNOWN-SCENARIO": ("No such scenario.", "benchctl get scenarios"),
     "WB-PART-NOT-RUNNING": ("A part this needs is not running (Prometheus, or the web page).", "benchctl start"),
+    "WB-NO-RUN": ("The web page holds no finished scenario run to export (none yet, another scenario, or one still playing).", "benchctl scenario run NAME"),
     "WB-STACK-NOT-RUNNING": ("No container of the workbench is running.", "benchctl start"),
     "WB-EXTRA-MISSING": ("An optional extra is not installed.", "pip install -e '.[mcp]'"),
     "WB-USAGE": ("The command line is wrong.", "benchctl VERB --help"),

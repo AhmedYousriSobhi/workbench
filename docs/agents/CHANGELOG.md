@@ -2,6 +2,10 @@
 
 Every JSON output of `benchctl` carries `contract_version` (`MAJOR.MINOR`); the schemas are in [schemas/](schemas/) (JSON Schema draft 2020-12). Adding a field is a minor bump. Removing or renaming a field, or changing a type, is a major bump. Every change gets a line here (SPEC AG-3, ADR 0062).
 
+## 2.3 (2026-11-16)
+
+Minor, nothing removed. New JSON output: `export test-report RUN --json` (a report of the web page's last scenario run: the scenario, verdict, where it ran, times, each step and expectation with the seconds after Play it happened, the calls and errors per mock during the run, and under `at_export` the node states, faults and firing alerts when the report was made). New error code `WB-NO-RUN` (nothing to export: the page has no finished run of that name). New MCP tool `report_export` (sixteen tools). The page's run state (`/api/scenarios/run`) gains `ref`, `counters` (the mocks' counters at Play and at the end) and a `why` on each step; `get scenario-status` does not show them (issue 739).
+
 ## 2.2 (2026-11-14)
 
 Minor, nothing removed. Each `doctor` `tuning` entry gains `persist` and `persist_undo`: the print-only text that keeps the setting across reboots, and its undo (issue 679).

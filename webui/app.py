@@ -111,8 +111,12 @@ class SharedStatus:
 class Runs:
     """At most one scenario at a time; state is what the page polls."""
 
-    def __init__(self, root: Path, sim: dict, flow: Flow | None = None, slurm=None, daemon=None, trace=None, clock=time.monotonic, wall=time.time):
+    def __init__(self, root: Path, sim: dict, flow: Flow | None = None, slurm=None, daemon=None, trace=None, clock=time.monotonic, wall=time.time,
+                 counters=None):
         self.root, self.sim, self.flow, self.slurm, self.daemon, self.trace = root, sim, flow, slurm, daemon, trace
+        # `counters()` reads the mocks' request counters now ({totals, errors, reachable}); a run keeps them at Play and at its end, so
+        # `benchctl export test-report` can say what the client called during the run, with no browser open (issue 739). None: not kept.
+        self.counters = counters
         self.clock, self.wall, self.t0 = clock, wall, 0.0  # t0: the clock at Play; step and expectation times are seconds after it
         self.lock = threading.Lock()
         self.stop_flag = threading.Event()
@@ -121,6 +125,17 @@ class Runs:
 
     def since(self) -> float:
         return round(self.clock() - self.t0, 1)
+
+    def _count(self) -> dict | None:
+        try:
+            return self.counters() if self.counters else None
+        except Exception:  # noqa: BLE001 best effort: a mock that does not answer must never leave a run "running" (the report then says "not measured")
+            return None
+
+    def _end(self, read=None, **fields) -> None:
+        """A run is over: its end counters (`read`, or read now), then the fields. They are read before `running` goes false, so a finished run always has them."""
+        self.state.setdefault("counters", {"base": None, "end": None})["end"] = self._count() if read is None else read
+        self.state.update(**fields)
 
     def snapshot(self) -> dict:
         """What the page polls: the state, with `elapsed` (seconds since Play) counted now while the run plays."""
@@ -157,8 +172,8 @@ class Runs:
         """A new run state: each row says where it lands on the diagram (ids, its step number n) and, once applied, when (t), ADR 0086."""
         self.t0 = self.clock()
         plan_expects = [{"e": x["e"], "label": x["label"], "ids": x["ids"], "page": x["page"]} for x in scenario.preview(sc, self.sim)["expects"]]
-        self.state = {"running": True, "name": name, "speed": speed, "stopped": False, "ok": None, "started": round(self.wall(), 3), "elapsed": 0.0,
-                      "source": source, "steps": [{"at": s.at, "target": s.target, "do": s.do, "n": s.n, "page": not scenario.page_support(s), "status": "pending",
+        self.state = {"running": True, "name": name, "ref": sc.get("ref", ""), "speed": speed, "stopped": False, "ok": None, "started": round(self.wall(), 3), "elapsed": 0.0,
+                      "source": source, "counters": {"base": None, "end": None}, "steps": [{"at": s.at, "target": s.target, "do": s.do, "n": s.n, "page": not scenario.page_support(s), "why": scenario.page_support(s), "status": "pending",
                                                    "detail": "", "t": None, **scenario.touch_fields(s, self.sim), **step_blast(s)} for s in steps],
                       "expects": [], "plan_expects": plan_expects, "trace": [] if trace else None}
 
@@ -167,14 +182,15 @@ class Runs:
     # step or expectation, never a part id or a command. Memory only (decision 4); a CLI that stops posting is dropped after CLI_QUIET_S.
     def _expire(self) -> None:
         if self.cli and self.clock() - self.cli["seen"] > CLI_QUIET_S:
-            self.state.update(running=False, stopped=True, lost=True, elapsed=self.since())
+            self._end(running=False, stopped=True, lost=True, elapsed=self.since())
             self.cli = None
 
     def cli_event(self, ev: dict) -> dict:
         kind = ev.get("event")
+        counted = self._count() if kind in ("start", "end") else None  # reads the mocks: not while holding the lock the page's polls need
         with self.lock:
             if kind == "start":
-                return self._cli_start(ev)
+                return self._cli_start(ev, counted)
             if not self.cli or not isinstance(ev.get("run"), str) or not hmac.compare_digest(ev["run"].encode(), self.cli["id"].encode()):
                 self._expire()
                 raise HTTPException(409, "no such run from the CLI on the page (it ended, was dropped, or another run took its place)")
@@ -185,13 +201,13 @@ class Runs:
                 self._cli_expect(ev)
             elif kind == "end":
                 ok = ev.get("ok")
-                self.state.update(ok=ok if isinstance(ok, bool) else None, stopped=ev.get("stopped") is True, running=False, elapsed=self.since())
+                self._end(counted, ok=ok if isinstance(ok, bool) else None, stopped=ev.get("stopped") is True, running=False, elapsed=self.since())
                 self.cli = None
             elif kind != "beat":
                 raise HTTPException(422, "event must be start, step, expect, beat or end")
             return {"ok": True}
 
-    def _cli_start(self, ev: dict) -> dict:
+    def _cli_start(self, ev: dict, counted: dict | None) -> dict:
         name, speed, key = ev.get("name"), ev.get("speed"), ev.get("key")
         if not (isinstance(name, str) and 0 < len(name) <= 100 and isinstance(key, str) and len(key) <= 64
                 and isinstance(speed, (int, float)) and not isinstance(speed, bool) and 0 < speed <= 1000):
@@ -205,6 +221,7 @@ class Runs:
         if scenario.plan_key(steps) != key:
             raise HTTPException(409, "the page reads another copy of this scenario or another cluster (restart the page after changing either)")
         self._fresh(sc, sc["name"], float(speed), steps, "cli")
+        self.state["counters"]["base"] = counted
         self.cli = {"id": secrets.token_urlsafe(12), "seen": self.clock()}
         return {"run": self.cli["id"]}
 
@@ -236,6 +253,7 @@ class Runs:
 
     def _play(self, sc: dict, steps: list, speed: float, trace: bool = False) -> None:
         done = [0]
+        self.state["counters"]["base"] = self._count()  # before the first step, outside the lock (it reads the mocks)
 
         def on_step(step, outcome) -> None:
             row = self.state["steps"][done[0]]
@@ -259,7 +277,7 @@ class Runs:
                 tracer.finish()
             self.state.update(ok=rep.ok, stopped=rep.stopped)
         finally:
-            self.state.update(elapsed=self.since(), running=False)
+            self._end(elapsed=self.since(), running=False)
 
     def stop(self) -> dict:
         if self.state.get("source") == "cli" and self.state.get("running"):
@@ -279,10 +297,17 @@ def login_url(base: str, token: str) -> str:
 
 def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Path("scenarios"),
                sim_yaml: Path = Path("sim.yaml"), interval: float = 1.0, docs: Path = DOCS,
-               fetch=None, poster=None, nhc_src: Path = nhc.SRC, nhc_out: Path = nhc.OUT) -> Starlette:
+               fetch=None, poster=None, nhc_src: Path = nhc.SRC, nhc_out: Path = nhc.OUT, counters=None) -> Starlette:
     sim = yaml.safe_load(sim_yaml.read_text())
     flow = Flow()
-    runs = Runs(scenarios, sim, flow, slurm=lambda n, s, r: _governed(slurm_state(n, s, r)),
+
+    def live_counters() -> dict:
+        flow.poll(force=True)
+        return flow.counters()
+
+    if counters is None and not fetch:  # a test that passes `fetch` must not reach the host's mocks: it keeps no counters unless it passes its own
+        counters = live_counters
+    runs = Runs(scenarios, sim, flow, counters=counters, slurm=lambda n, s, r: _governed(slurm_state(n, s, r)),
                 daemon=lambda do: daemon_step(do), trace=lambda nodes, since: slurm_trace(nodes, since))
     cluster = Cluster(sim, **{k: v for k, v in (("fetch", fetch), ("poster", poster)) if v})  # test seams: a host stack must not answer or be hit
     wiki = Wiki(docs)
@@ -797,7 +822,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             raise HTTPException(422, "the body must be JSON") from e
         if not isinstance(ev, dict):
             raise HTTPException(422, "the body must be a JSON object")
-        return JSONResponse(runs.cli_event(ev))
+        return JSONResponse(await asyncio.to_thread(runs.cli_event, ev))  # a start and an end read the mocks' counters
 
     async def run(request: Request):
         try:
