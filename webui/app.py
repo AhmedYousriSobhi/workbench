@@ -76,7 +76,7 @@ CLI_QUIET_S = 30.0  # a run from the CLI that posts nothing for this long has en
 DOCS = Path(__file__).resolve().parent.parent / "docs"
 
 
-SLURM_STATE = {"power-off": "off", "power-on": "on", "clear": "resume"}  # page action -> governor node-state (off/on freeze the node)
+SLURM_STATE = {"power-off": ("off",), "power-on": ("on",), "clear": ("on", "resume")}  # page action -> governor node-states in order (off/on freeze or thaw the node; clear thaws it, then resumes it, #845)
 
 
 def governor_status(socket: str) -> dict:
@@ -784,9 +784,10 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             results = await asyncio.to_thread(cluster.act, request.path_params["node"], request.path_params["action"])
         except ActionError as e:
             raise HTTPException(422, str(e)) from e
-        state = SLURM_STATE.get(request.path_params["action"])
-        if state and any(r["status"] == "ok" for r in results):  # the BMC changed; Slurm only knows through the governor
-            results.append(await asyncio.to_thread(slurm_state, request.path_params["node"], state))
+        states = SLURM_STATE.get(request.path_params["action"], ())
+        if states and any(r["status"] == "ok" for r in results):  # the BMC changed; Slurm only knows through the governor
+            for state in states:
+                results.append(await asyncio.to_thread(slurm_state, request.path_params["node"], state))
         for r in results:
             if r["status"] == "ok":
                 flow.note(r["target"], f"{request.path_params['action']} on {request.path_params['node']}", [request.path_params["node"]])

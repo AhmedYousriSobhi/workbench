@@ -113,3 +113,6 @@ def test_screenshot_of_a_faulted_cluster(ui, tmp_path):
     for name in ("cn002", "cn003", "gpu001", "gpu002"):
         api(base, h, f"/api/nodes/{name}/clear", "POST")
     assert wait_for(lambda: node(base, h, "cn002")["state"] == "ok", timeout=30)
+    # the page asks the governor, which thaws the node in the background (#845): the next module must not start with it paused
+    assert wait_for(lambda: "workbench-cn002-1" not in subprocess.run(
+        ["docker", "ps", "--filter", "status=paused", "--format", "{{.Names}}"], capture_output=True, text=True, check=False).stdout, timeout=30)
