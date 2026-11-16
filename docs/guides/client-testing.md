@@ -297,6 +297,23 @@ When the web page's **Cluster architecture, Apply** rebuilds the workbench under
 
 Then use a node's **Actions** in the web page (power off, overheat, fan failure, GPU error) and confirm the client sees each through BMC, BCM and the GPU metrics.
 
+## Attach a test report to a bug report
+
+After a scenario has run, write down what it did and what the client called, without screenshots. Play the scenario with the page up: on the page (**▶ Play**), or `./scripts/benchctl scenario run NAME` (it posts its steps to the page when the page answers). Then:
+
+```bash
+./scripts/benchctl export test-report last -o test-report.md     # Markdown, to attach
+./scripts/benchctl export test-report last --json                # the same data for a script or an agent
+```
+
+`RUN` is `last` (the page's last run) or that scenario's name or reference (`SC-02`). The report has the scenario, the result, where it ran from, the start and length, every step with the second after Play it ran, every expectation with its result and time, and for each mock the calls and errors it counted during the run. A last part, **At export**, says what is true when you made the report, not when the run ended: the nodes' container states, the faults and the firing alerts. A part the command cannot read is "not read", never an empty list.
+
+What the report does not hold: request bodies, header values, tokens, hostnames, file paths, a step's raw action (only its sentence) and capture contents. A step or expectation message that holds a path, an address or a password is cleaned (`<path>`, `<address>`, `<redacted>`).
+
+The page keeps the last run in memory only, so it must be up while the scenario plays; after a page restart there is nothing to export. One message says so, with the way out: `nothing to export: the page has no scenario run ...`. It also stops, with the command to wait, when the run is still playing. This is not the config lab's report (`export lab-report`, issue 614). The same report is the MCP tool `report_export`.
+
+**Exercised:** the builder (it gives the page's own report, byte for byte, in a test that runs both), the run state's counters, the command and its messages, the schema and a leak check, all with fakes. **Not exercised:** a real export after a live run against the running stack (`./scripts/verify.sh --unit webui` runs `test_export_test_report_of_a_page_run_and_a_cli_run_holds_the_mocks_counters`, and it is yours to run), and the client's own screens.
+
 ## Verify without a GUI
 
 A headless check is faster than driving a window. Connect with any SSH library to `127.0.0.1:2222`, run the client's fixed Slurm command and parse it with the client's own parser. `tests/real/test_login_real.py`, `tests/real/test_gpu_grafana_real.py`, `tests/real/test_bmc_tls_real.py` and `tests/real/test_mocks_real.py` assert the same wire behaviour against the live stack (`WORKBENCH_REAL=1 pytest tests/real/<file> -q`).

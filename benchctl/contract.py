@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-CONTRACT_VERSION = "2.2"
+CONTRACT_VERSION = "2.3"
 
 
 def wrap(data):

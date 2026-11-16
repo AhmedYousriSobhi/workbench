@@ -577,7 +577,13 @@ See [choose the workbench](../guides/choose-workbench.md).
    4. Press **▶ Play**.
 3. **Watch.** The steps, a progress bar, **Stop**, the expectations (pending, then passed or failed) and **Client's eye** update live. **Watch on the diagram** shows the same run on the Infrastructure architecture ([a scenario run on the diagram](#a-scenario-run-on-the-diagram)).
 4. **Read Client's eye.** For each service it shows the calls the mock counted during the run, and the errors where the mock counts them.
-5. **Export.** When the run ends, **Markdown** or **JSON** downloads a report built in the browser. It has the run's start, end and length, and for each step its planned time and when it ran (seconds after Play). Each expectation has its result, its time and its words.
+5. **Export.** When the run ends, **Markdown** or **JSON** downloads a report built in the browser.
+   - It has the run's start, end and length.
+   - For each step it has the planned time and when it ran (seconds after Play).
+   - Each expectation has its result, its time and its words.
+   - A similar report is on the command line after the run, with no browser: `./scripts/benchctl export test-report last` (Markdown, or `--json`).
+   - The command adds the node states, faults and alerts as at export ([guide](../guides/client-testing.md#attach-a-test-report-to-a-bug-report)).
+   - The page's own buttons count the calls from the tab's reading at Play; the command uses the counters the page process keeps from Play to the end, so it does not depend on a tab being open.
 
 **Steps the page cannot run**
 - They are marked **↷ CLI only**, with the reason. A notice gives the command that runs everything: `./scripts/benchctl scenario run NAME` (**Copy** puts it on the clipboard).

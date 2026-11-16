@@ -101,6 +101,12 @@ def build(run: Callable[..., dict] = run_cli) -> MCPServer:
     def scenario_status() -> dict:
         return run(["get", "scenario-status", "--json"])
 
+    @s.tool(description="A report of the web page's last scenario run, for a bug report: what was injected and when, each expectation, the calls and errors per mock during the run, "
+                        "and (as at export) node states, faults and firing alerts. name: last, or the scenario's name. No bodies, tokens, hostnames or paths. "
+                        "Needs the web page and a finished run (scenario_run or the page's Play): exit_code 1 and an error line otherwise.", annotations=READ)
+    def report_export(name: str = "last") -> dict:
+        return run(["export", "test-report", name, "--json"])
+
     @s.tool(description="Clear every injected node fault at once (hot BMC, failed fans, GPU XID, InfiniBand or NIC trouble; powered-off nodes are powered on), like the page's Clear faults. "
                         "Service and credential faults are not touched. Safe to repeat.", annotations=WRITE)
     def fault_clear() -> dict:
