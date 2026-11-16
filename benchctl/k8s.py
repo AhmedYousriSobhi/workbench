@@ -525,7 +525,7 @@ def step_args(do: dict) -> list[list[str]]:
     if "pod" in do:
         out.append(["apply", "-f", f"/state/{SCENARIO_POD}"])
     if "delete_pod" in do:
-        out.append(["-n", do["delete_pod"]["namespace"], "delete", "pod", do["delete_pod"]["name"], "--wait=false"])
+        out.append(["-n", do["delete_pod"]["namespace"], "delete", "pod", do["delete_pod"]["name"], "--wait=false", "--ignore-not-found"])  # the scheduler may have preempted it already (#835)
     if "scale" in do:
         s = do["scale"]
         out.append(["-n", s["namespace"], "scale", f"deployment/{s['deploy']}", f"--replicas={int(s['replicas'])}"])

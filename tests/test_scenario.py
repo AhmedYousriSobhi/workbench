@@ -325,6 +325,16 @@ def test_daemon_steps_become_docker_commands():
     assert ran[0][:2] == ["docker", "restart"] and "scancel" in ran[1]
 
 
+def test_cancel_covers_every_simulated_user(tmp_path, monkeypatch):
+    """#834: preempt-burst submits as bob; `cancel` must not stop at alice."""
+    sim = {"users": [{"name": "alice"}, {"name": "bob"}]}
+    assert scenario.daemon_commands({"cancel": True}, sim) == [["docker", "exec", scenario.SLURMCTLD, "scancel", "--quiet", "-u", "alice,bob"]]
+    assert scenario.daemon_commands({"cancel": True}, {"users": []})[0][-1] == "alice"
+    monkeypatch.chdir(Path(__file__).resolve().parent.parent)  # no sim given: the repo's sim.yaml
+    users = scenario.daemon_commands({"cancel": True})[0][-1].split(",")
+    assert {"alice", "bob"} <= set(users)
+
+
 def test_submit_makes_the_same_job_as_benchctl_submit_and_a_failed_submit_fails_the_step():
     ran, runner = _rec()
     sub = {"node": "gpu001", "gpus": 2, "duration": 40}

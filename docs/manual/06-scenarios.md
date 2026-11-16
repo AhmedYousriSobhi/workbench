@@ -194,7 +194,7 @@ Every scenario carries an `expect`, or is listed with its reason in `NO_EXPECT` 
 
 | Target | Keys |
 |---|---|
-| `slurm` | `drain` and `resume` (node lists); the job and daemon steps of the [resilience guide](../guides/slurm-resilience.md): `submit: {node, gpus, duration}`, `cancel`, `slurmd_restart`, `slurmd_stop`, `slurmd_start`, `slurmctld_restart` |
+| `slurm` | `drain` and `resume` (node lists); the job and daemon steps of the [resilience guide](../guides/slurm-resilience.md): `submit: {node, gpus, duration}`, `cancel: true` (cancels the jobs of every simulated user in `sim.yaml`, not only alice's), `slurmd_restart`, `slurmd_stop`, `slurmd_start`, `slurmctld_restart` |
 | `jira` | `failure: {mode: "429"\|"503"\|null, count: N}` |
 | `bmc-farm` | `power`, `temp`, `fan_fail`, `ramp: {to, over}`, `clear` |
 | `ssh` (the login node) | `state: down\|hung\|up` (stop, freeze, restore), `rotate_host_key: true`, `max_sessions: N` (OpenSSH MaxSessions), `reset: true` (original key, default limit, node up) |

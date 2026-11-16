@@ -415,9 +415,10 @@ def submit_command(sub: dict, sim: dict | None = None) -> list[str]:
     return workload.command(sim, sub["node"], int(sub.get("gpus", 0)), int(sub.get("duration", 600)), sub.get("user"), qos=sub.get("qos"))
 
 
-def daemon_commands(do: dict) -> list[list[str]]:
+def daemon_commands(do: dict, sim: dict | None = None) -> list[list[str]]:
     """Docker commands for the resilience steps. A stop creates the hold file first so the supervisor does not bring
-    slurmd back; `pkill -x slurmd` stops only the daemon (slurmstepd, the job's step process, is a different name)."""
+    slurmd back; `pkill -x slurmd` stops only the daemon (slurmstepd, the job's step process, is a different name).
+    `cancel` cancels the jobs of every simulated user of sim.yaml (#834), not only alice's."""
     cmds: list[list[str]] = []
     for n in do.get("slurmd_stop", []):
         c = f"workbench-{n}-1"
@@ -431,7 +432,9 @@ def daemon_commands(do: dict) -> list[list[str]]:
     if do.get("submit"):
         cmds.append(submit_command(do["submit"]))
     if do.get("cancel"):
-        cmds.append(["docker", "exec", SLURMCTLD, "scancel", "--quiet", "-u", "alice"])
+        sim = sim or yaml.safe_load(Path("sim.yaml").read_text())
+        users = [u["name"] for u in sim.get("users") or []] or ["alice"]
+        cmds.append(["docker", "exec", SLURMCTLD, "scancel", "--quiet", "-u", ",".join(users)])
     return cmds
 
 
