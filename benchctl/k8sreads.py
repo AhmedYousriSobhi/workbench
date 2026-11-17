@@ -8,6 +8,7 @@ reads through `tsh ssh`. Nothing here copies a client's command text: each read 
 An outcome is one word: `yes` or `no` (what `kubectl auth can-i` prints), `ok` (exit 0), `forbidden` (RBAC refused it),
 `not-found` (the API path is not served), `served` or `not-served` (an API group has resources or has none), `error`."""
 import json
+import re
 from dataclasses import dataclass
 
 LIMITED_NS = "team-a"        # the one namespace the limited user may read (k8s/fixtures/30-rbac-viewer.yaml)
@@ -20,7 +21,10 @@ POOL_LABEL = "pool"
 # Kinds the viewer role may read that the client does not (tests/test_k8sreads.py: a new viewer rule needs a read or a name here)
 NOT_READ_BY_CLIENT = {"services", "configmaps", "replicasets", "statefulsets", "cronjobs", "customresourcedefinitions", "selfsubjectaccessreviews",
                       "selfsubjectrulesreviews"}
-READ_VERBS = {("get",), ("describe",), ("auth", "can-i"), ("config", "view"), ("api-resources",)}
+READ_VERBS = {("get",), ("describe",), ("logs",), ("auth", "can-i"), ("config", "view"), ("api-resources",)}
+LOG_LIMIT_BYTES = 1048576  # the cap a log read asks for (this repository's figure; a client chooses its own)
+LOG_ARGS = ("--tail=500", "--timestamps", f"--limit-bytes={LOG_LIMIT_BYTES}")
+TIMESTAMPED = r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z \S"  # what --timestamps puts before each line (RFC 3339)
 
 
 @dataclass(frozen=True)
@@ -94,6 +98,12 @@ READS: tuple[Read, ...] = (
          "discovery", ("not-served",), ("not-served",), True),
     Read("describe-pod", "what the user sees when it opens a pod", ("describe", "pod", "sized", "-n", LIMITED_NS),
          "get on pods and list on events in that namespace", ("ok",), ("ok",)),
+    # Logs (issue 760): KWOK serves canned kubelet log files (k8s/kwok/logs.yaml). The limited user's role has pods and events, not
+    # pods/log, so it is refused in its own namespace: the refusal is the subresource, not the namespace
+    Read("pod-logs", "the last lines of a pod's log, with timestamps and a byte cap", ("logs", "sized", "-n", LIMITED_NS, *LOG_ARGS),
+         "get on pods/log in that namespace", ("ok",), ("forbidden",)),
+    Read("pod-logs-previous", "the log of the run before, for a crash-looping pod", ("logs", "crashloop", "-n", OTHER_NS, "--previous", *LOG_ARGS),
+         "get on pods/log in that namespace", ("ok",), ("forbidden",)),
     *_signal_reads(),
 )
 BY_KEY = {r.key: r for r in READS}
@@ -160,6 +170,14 @@ def shape_problems(read: Read, role: str, stdout: str, api_version: str) -> list
         items = (_json(stdout) or {}).get("items") or []
         if not items or any(not {"cpu", "memory"} <= set(i.get("usage") or {}) for i in items):
             bad.append("not a list of nodes with cpu and memory usage")
+    elif key in ("pod-logs", "pod-logs-previous"):
+        lines = [ln for ln in stdout.splitlines() if ln.strip()]
+        if not lines or not all(re.match(TIMESTAMPED, ln) for ln in lines):
+            bad.append("not log lines that each start with a timestamp")
+        if len(stdout.encode()) > LOG_LIMIT_BYTES:
+            bad.append("more bytes than --limit-bytes allows")
+        if key == "pod-logs-previous" and "failing" not in stdout:
+            bad.append("not the previous run's output")
     elif key == "describe-pod":
         if "Name:" not in stdout or "sized" not in stdout:
             bad.append("no pod description")

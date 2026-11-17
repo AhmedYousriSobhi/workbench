@@ -565,6 +565,18 @@ def test_kwok_mounts_the_canned_log_files_read_only_and_every_file_a_logs_object
         assert lines and all(re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{9}Z (stdout|stderr) [FP] .*", ln) for ln in lines), f
 
 
+def test_the_crash_loop_pod_has_a_current_and_a_previous_log_and_wins_over_the_catch_all():
+    """Issue 760: `kubectl logs --previous` needs a previousLogsFile; a Logs object naming the pod beats every ClusterLogs (KWOK v0.8.0)."""
+    docs = list(yaml.safe_load_all((ROOT / "k8s/kwok/logs.yaml").read_text()))
+    pod = next(d for d in docs if d["kind"] == "Logs")
+    fixture = next(d for d in yaml.safe_load_all((ROOT / "k8s/fixtures/10-workloads.yaml").read_text()) if d["metadata"]["name"] == "crashloop")
+    assert (pod["metadata"]["name"], pod["metadata"]["namespace"]) == ("crashloop", fixture["metadata"]["namespace"])
+    entry = pod["spec"]["logs"][0]
+    assert entry["containers"] == [c["name"] for c in fixture["spec"]["containers"]] and entry["previousLogsFile"] != entry["logsFile"]
+    for f in (entry["logsFile"], entry["previousLogsFile"]):
+        assert "failing" in (ROOT / "k8s/kwok/logs" / f.rsplit("/", 1)[1]).read_text()  # what the fixture's command prints
+
+
 def test_every_node_points_metrics_server_at_kwoks_resource_metrics_path():
     node = k8s.node_manifest("kcn001", k8s.node_groups(SIM)[0])
     assert node["metadata"]["annotations"][k8s.RESOURCE_METRICS_PATH] == "/metrics/nodes/kcn001/metrics/resource"

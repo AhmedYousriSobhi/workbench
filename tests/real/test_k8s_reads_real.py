@@ -8,6 +8,7 @@ The metrics API answers 200 for the viewer and is refused for the limited user (
 Volcano and Kubeflow groups (issues 765 and 390 flip them). Written without a live run in the authoring session."""
 import json
 import os
+import re
 import shlex
 import subprocess
 from pathlib import Path
@@ -125,6 +126,23 @@ def test_a_wrong_host_gives_one_clear_error(cluster):
     r = docker_exec_as("alice", S_LOGIN, f"ssh {' '.join(HOP_OPTS)} no-such-k-login kubectl version")
     lines = [ln for ln in r.stderr.splitlines() if ln.strip()]
     assert r.returncode == 255 and len(lines) == 1 and "no-such-k-login" in lines[0], r.stderr
+
+
+def test_kubectl_logs_honours_tail_limit_bytes_timestamps_and_previous(cluster):
+    """Issue 760 (ADR 0084): KWOK v0.8.0 applies the kubelet's log options to the canned file (pkg/kwok/server/debugging_logs.go)."""
+    def logs(args: str) -> subprocess.CompletedProcess:
+        return docker_exec_as("alice", K_LOGIN, f"kubectl logs {args}")
+    full = logs("sized -n team-a")
+    assert full.returncode == 0 and len(full.stdout.splitlines()) >= 3, full.stderr
+    assert logs("sized -n team-a --tail=2").stdout.splitlines() == full.stdout.splitlines()[-2:]
+    assert len(logs("sized -n team-a --limit-bytes=20").stdout.encode()) <= 20
+    stamped = logs("sized -n team-a --timestamps").stdout.splitlines()
+    assert stamped and all(re.match(k8sreads.TIMESTAMPED, ln) for ln in stamped)
+    now = logs("crashloop -n team-b --timestamps").stdout
+    before = logs("crashloop -n team-b --previous --timestamps").stdout
+    assert "failing" in now and "failing" in before and now != before  # two runs: the current one and the one before
+    nothing = logs("sized -n team-a --previous")  # no run before: an error, as a kubelet with no terminated container gives
+    assert nothing.returncode != 0, nothing.stdout
 
 
 def test_kubectl_top_lists_every_kwok_node_and_the_pod_usage_its_annotations_give(cluster):
