@@ -26,6 +26,14 @@ def test_the_issue_762_reads_are_all_there():
             "get-clusterqueues", "can-i-get-pod-logs", "can-i-list-namespaces"} <= keys
     assert k8sreads.BY_KEY["can-i-list-nodes"].limited == ("no",) and k8sreads.BY_KEY["can-i-list-pods-ns"].limited == ("yes",)
     assert k8sreads.BY_KEY["metrics-probe"].viewer == k8sreads.BY_KEY["node-usage"].viewer == ("ok",)  # metrics-server (#382)
+    for key in ("pod-logs", "pod-logs-previous"):  # #760: the viewer reads logs; the limited user has no pods/log, even in team-a
+        assert k8sreads.BY_KEY[key].viewer == ("ok",) and k8sreads.BY_KEY[key].limited == ("forbidden",)
+        assert {"--tail=500", "--timestamps"} <= set(k8sreads.BY_KEY[key].args) and any(a.startswith("--limit-bytes=") for a in k8sreads.BY_KEY[key].args)
+    assert "--previous" in k8sreads.BY_KEY["pod-logs-previous"].args and k8sreads.BY_KEY["pod-logs"].args[3] == k8sreads.LIMITED_NS
+    logs = "2026-11-17T09:35:47.552910347Z failing\n"
+    assert k8sreads.shape_problems(k8sreads.BY_KEY["pod-logs-previous"], "viewer", logs, "v1") == []
+    assert k8sreads.shape_problems(k8sreads.BY_KEY["pod-logs"], "viewer", "no timestamp\n", "v1") == ["not log lines that each start with a timestamp"]
+    assert k8sreads.shape_problems(k8sreads.BY_KEY["pod-logs-previous"], "viewer", "2026-11-17T09:41:02Z other\n", "v1") == ["not the previous run's output"]
     assert k8sreads.BY_KEY["metrics-probe"].limited == k8sreads.BY_KEY["node-usage"].limited == ("forbidden",)  # no metrics.k8s.io rule
     ok_usage = '{"items": [{"metadata": {"name": "kcn001"}, "usage": {"cpu": "350m", "memory": "200Mi"}}]}'
     assert k8sreads.shape_problems(k8sreads.BY_KEY["node-usage"], "viewer", ok_usage, "v1") == []

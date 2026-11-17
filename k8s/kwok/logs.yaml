@@ -11,3 +11,18 @@ spec:
   logs:
   - logsFile: /logs/default.log
     follow: false
+---
+# The crash-looping fixture pod (k8s/fixtures/10-workloads.yaml, `echo failing; exit 1`): what its last run printed, and with
+# `--previous` what the run before it printed (issue 760). Without a previousLogsFile `--previous` is an error, as on a kubelet
+# that has no terminated container to show.
+apiVersion: kwok.x-k8s.io/v1alpha1
+kind: Logs
+metadata:
+  name: crashloop
+  namespace: team-b
+spec:
+  logs:
+  - containers: [c]
+    logsFile: /logs/crashloop.log
+    previousLogsFile: /logs/crashloop-previous.log
+    follow: false
