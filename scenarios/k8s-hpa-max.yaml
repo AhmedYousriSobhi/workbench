@@ -1,0 +1,6 @@
+name: k8s-hpa-max
+ref: SC-48
+description: the autoscaler hpa-below (team-a, 1 to 4 replicas) is pushed to its maximum when each pod's CPU use rises to 400m (the real HPA controller reacts through metrics-server, so allow about 2 minutes), then back to 50m after 5 minutes; the client lists an autoscaler only while it sits at its maximum with scaling limited (issue 764)
+steps:
+  - {at: 0s,   target: k8s, do: {usage: {namespace: team-a, deploy: hpa-below, cpu: 400m}}}
+  - {at: 300s, target: k8s, do: {usage: {namespace: team-a, deploy: hpa-below, cpu: 50m}}}

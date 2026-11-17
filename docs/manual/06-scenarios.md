@@ -91,6 +91,7 @@ The command exits 1 when a step errors or an `expect` line does not hold.
 | SC-40 | `k8s-api-throttled` | the API server throttles the client's user (`viewer`) to about three seats and no queue, so a burst gets 429; removed after 2 minutes (needs `k8s`) |
 | SC-45 | `k8s-queue-inactive` | the `gpu-training` Kueue queue and its local queues go inactive with a growing backlog, then recover (needs `k8s`; no controller, the step writes the status) |
 | SC-47 | `k8s-metrics-down` | metrics-server stops: the metrics API answers 503 and node and pod usage disappear, the rest of the API answers; it starts again after 2 minutes (needs `k8s`, issue 382) |
+| SC-48 | `k8s-hpa-max` | the autoscaler `hpa-below` is pushed to its maximum replicas by a rise in per-pod CPU use, then back; the real HPA controller reacts through metrics-server (needs `k8s`, issue 764) |
 | SC-18 | `pod-crashloop` | a pod crash-loops and another is OOMKilled (needs the `k8s` part) |
 
 ## Write your own

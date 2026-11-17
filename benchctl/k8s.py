@@ -527,7 +527,7 @@ def bootstrap_kueue(sim: dict, say: Callable[[str], None], runner: Callable, src
 # ---- scenario steps and expectations (target `k8s`, run by benchctl/scenario.py on the host) ----
 
 FAULTS = ("crashloop", "oom", "imagepull", "jobfail")  # the pod stages in k8s/kwok/stage-faults.yaml (a node has fault-node-down)
-STEP_KEYS = ("down", "up", "cordon", "uncordon", "pod", "delete_pod", "scale", "apply", "remove", "drain", "queue", "metrics_server")
+STEP_KEYS = ("down", "up", "cordon", "uncordon", "pod", "delete_pod", "scale", "apply", "remove", "drain", "queue", "metrics_server", "usage")
 _NAME = r"[a-z0-9]([-a-z0-9]*[a-z0-9])?"
 SCENARIO_POD = "scenario-pod.yaml"
 
@@ -573,6 +573,12 @@ def step_problems(do: dict, nodes: set[str]) -> list[str]:
         out += kueue.queue_problems(do["queue"])
     if "metrics_server" in do and do["metrics_server"] not in ("stop", "start"):
         out.append("k8s metrics_server is stop or start")
+    if "usage" in do:
+        u = do["usage"] if isinstance(do["usage"], dict) else {}
+        if not (_ok_name(u.get("namespace")) and _ok_name(u.get("deploy"))):
+            out.append("k8s usage needs a namespace and a deploy (a Deployment name)")
+        if not re.fullmatch(r"[0-9]+(m|)", str(u.get("cpu", ""))):
+            out.append("k8s usage cpu is CPU per pod such as 400m or 2")
     for path in [*(do.get("apply") or []), *(do.get("remove") or [])]:
         if not (isinstance(path, str) and not path.startswith("/") and ".." not in path.split("/")):
             out.append(f"k8s apply path {path!r} must be relative to the k8s/ directory")
@@ -604,6 +610,10 @@ def step_args(do: dict) -> list[list[str]]:
     if "scale" in do:
         s = do["scale"]
         out.append(["-n", s["namespace"], "scale", f"deployment/{s['deploy']}", f"--replicas={int(s['replicas'])}"])
+    if "usage" in do:  # what metrics-server reports per pod changes with the pod template, so the real HPA controller reacts (issue 764)
+        u = do["usage"]
+        patch = {"spec": {"template": {"metadata": {"annotations": {"kwok.x-k8s.io/usage-cpu": str(u["cpu"])}}}}}
+        out.append(["-n", u["namespace"], "patch", f"deployment/{u['deploy']}", "--type=merge", "-p", json.dumps(patch)])
     out += [["apply", "--server-side", "--force-conflicts", "-f", f"/k8s/{path}"] for path in do.get("apply") or []]
     out += [["delete", "--ignore-not-found", "-f", f"/k8s/{path}"] for path in do.get("remove") or []]
     if "queue" in do:  # a ClusterQueue and its LocalQueues go inactive (or back); no controller, so the status is written
