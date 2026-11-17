@@ -29,7 +29,7 @@ from pathlib import Path
 
 import yaml
 
-from . import lab, lab_candidate, lab_import, lab_slurm, lab_validate
+from . import lab, lab_candidate, lab_import, lab_slurm, lab_users, lab_validate
 from .lab import LabError
 
 MARKER = "active.json"
@@ -518,12 +518,27 @@ def _apply_sacct(name: str, files: dict[str, str], env: Env, rd: Path) -> list[s
             if r.returncode != 0:
                 out.append(f"warning: QOS {row['Name']} not fully set: {(r.stderr or r.stdout).strip()[-120:]}")
     if files.get("sacctmgr.dump"):
-        r = env.exec("slurmctld", "sh", "-c", "f=$(mktemp) && cat > $f && sacctmgr -i load $f; rc=$?; rm -f $f; exit $rc", input=with_cluster(files["sacctmgr.dump"]))
+        users = lab_users.for_lab(name, env.root)
+        out += _lab_linux_users(env, lab_users.setup_script(users), "created")  # slurmdbd needs a Linux user for every name it loads
+        r = env.exec("slurmctld", "sh", "-c", "f=$(mktemp) && cat > $f && sacctmgr -i load $f; rc=$?; rm -f $f; exit $rc",
+                     input=lab_users.rewrite_dump(with_cluster(files["sacctmgr.dump"]), users))
         if r.returncode != 0:
             raise LabError(f"sacctmgr load failed: {(r.stderr or r.stdout).strip()[-200:]}. The lab marker is kept; `benchctl remove lab {name}` restores the accounts")
     (rd / "sacctmgr.post.dump").write_text(_sacct_dump(env))
     (rd / "qos.post.txt").write_text(_qos_dump(env))
     out.append(f"accounting: {len(qos)} QOS and the account dump applied" if files.get("sacctmgr.dump") else f"accounting: {len(qos)} QOS applied")
+    return out
+
+
+def _lab_linux_users(env: Env, script: str, what: str) -> list[str]:
+    """Run the user script in every service that holds the users (slurmctld, slurmdbd, the login node); a failure is a warning, not a stop."""
+    out = []
+    for svc in lab_users.SERVICES:
+        if not env.running(svc):
+            continue
+        r = env.exec(svc, "sh", "-c", script)
+        if r.returncode != 0:
+            out.append(f"warning: the lab users were not all {what} in {svc}: {(r.stderr or r.stdout).strip()[-120:]}")
     return out
 
 
@@ -659,6 +674,7 @@ def _remove_sacct(name: str, env: Env, rd: Path) -> list[str]:
             refused.append(f"qos {n} (limits not restored)")
     for n in qmade:
         delete(f"qos {n}", "sacctmgr", "-i", "delete", "qos", n)
+    out += _lab_linux_users(env, lab_users.teardown_script(lab_users.load(name, env.root)), "removed")
     out.append(f"accounting: {len(made)} account/user row(s) and {len(qmade)} QOS removed, {len(changed)} account row(s) and {len(qchanged)} QOS restored")
     if gone:
         out.append("already gone (an A/B run's restore removed them): " + ", ".join(gone))

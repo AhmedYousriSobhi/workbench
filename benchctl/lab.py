@@ -20,7 +20,7 @@ from pathlib import Path
 import yaml
 
 from . import lab_import as li
-from . import lab_replay, lab_slurm
+from . import lab_replay, lab_slurm, lab_users
 from .lab_import import ImportError_ as LabError
 
 ROOT = Path("compose/generated/lab")
@@ -107,6 +107,14 @@ def _counts(kind: str, data) -> dict:
     return {"rows": len(data)}
 
 
+def run_active(name: str, root: Path | None = None) -> bool:
+    """Whether the governor's `run-active.json` names a run of this lab (it exists while a run is replaying or recovering)."""
+    try:
+        return json.loads(((root or ROOT) / "run-active.json").read_text()).get("name") == name
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 def import_lab(name: str, src: Path, root: Path | None = None, replace: bool = False, sim: dict | None = None) -> dict:
     """Parse, scrub and store a folder of exports; returns the manifest. Nothing is written unless every check passes."""
     dest = path(name, root)
@@ -115,6 +123,8 @@ def import_lab(name: str, src: Path, root: Path | None = None, replace: bool = F
         raise LabError(f"{src.name or src}: no such folder (export the files on the production side and copy the folder here)")
     if exists(name, root) and not replace:
         raise LabError(f"lab {name} already exists: pick another name, or add --replace to overwrite it")
+    if replace and run_active(name, root):
+        raise LabError(f"a run of lab {name} is active or recovering: wait for it or stop it (benchctl stop lab {name}), then import again")
     stored: dict[str, str] = {}  # stored relative name -> scrubbed text
     files: list[dict] = []
     scrubbed: list[dict] = []
@@ -177,6 +187,10 @@ def import_lab(name: str, src: Path, root: Path | None = None, replace: bool = F
         manifest["workbench_versions"], manifest["version_match"] = ours, version_match(prod, ours)
     tmp = dest.with_name(dest.name + ".tmp")
     shutil.rmtree(tmp, ignore_errors=True)
+    users_file = dest / "users.json"
+    if replace and users_file.is_file():
+        tmp.mkdir(parents=True)
+        shutil.copy2(users_file, tmp / "users.json")  # the lab-uNNN numbers only grow (issue 869)
     for rel, text in stored.items():
         f = tmp / "baseline" / rel
         f.parent.mkdir(parents=True, exist_ok=True)
@@ -238,7 +252,9 @@ def plan(name: str, sim: dict, root: Path | None = None, max_nodes: int | None =
         load = lab_replay.plan_load(nodes, b["trace"], max_nodes, cfg["max_running_jobs"])
         scale, sampled = load["scale"], load["sampled"]
         factor = lab_replay.time_factor(sampled, target)
-        mapping = lab_replay.map_users(sampled, keep_users)
+        mapping = {u: m for u, m in lab_users.for_lab(name, root, write=False).items() if u in {j["User"] for j in sampled}}
+        if keep_users:
+            mapping = {u: u for u in mapping}
         out["jobs"] = {"production": len(b["trace"]), "sampled": len(sampled), "users": len(mapping), "user_map": mapping,
                        "peak_running": load["peak"], "max_running_jobs": load["cap"], "fits": load["fits"],
                        "requested_nodes": load["requested_nodes"], "proposed_nodes": load["proposed_nodes"]}

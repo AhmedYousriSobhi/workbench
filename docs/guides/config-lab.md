@@ -41,7 +41,7 @@ Changes nothing. It shows:
   - If there are more groups than the budget, the command says so and how many nodes it needs. Above 64 groups, drop a partition, shape or switch from the export.
   - Production node names are kept as the Slurm `NodeName` and hostname. The compose services are `lab-node-001`, `lab-node-002`, ...
   - A ratio above 100 production nodes per lab node marks the results indicative.
-- **Jobs.** The trace is sampled at the same ratio (a lab node's share of the production nodes), per (account, QOS, partition) stratum, at least one job per stratum, the same jobs every time. Users become `lab-u001`, `lab-u002`, ... unless `--keep-users`. If the sampled trace would run more than `lab.max_running_jobs` (default 50) at once, a smaller node count is proposed instead of throttling submissions, so both runs see the same load.
+- **Jobs.** The trace is sampled at the same ratio (a lab node's share of the production nodes), per (account, QOS, partition) stratum, at least one job each, the same jobs every time. Users become `lab-u001`, `lab-u002`, ... (see "Users") unless `--keep-users`. If the sampled trace would run more than `lab.max_running_jobs` (default 50) at once, a smaller node count is proposed instead of throttling, so both runs see the same load.
 - **Time.** The dilation factor is the trace length divided by `--target-hours` (default `lab.target_hours`, 2; 0.5 to 6), never below 1. Every time-based scheduling parameter (listed, with before and after) is divided by it, and so are partition time limits and job runtimes, the same in both runs.
 - **Key classes.** `slurm.conf` keys are `policy` (applied live), `time-scaled`, `restart` (applied, slurmctld restarts), `lab-owned` (hosts, paths, auth, privileged plugins: the base value stays, reported "not tested") or `unknown` (applied and flagged, restarts slurmctld). A key ending in `Type` also restarts.
 - **Memory.** `lab nodes x 13 MB + 250 MB` for the replay is the amount a lab run asks the governor to admit.
@@ -144,9 +144,14 @@ Rows `sacctmgr` refuses to delete are listed.
 ./scripts/benchctl stop lab prod-a                      # end the run (an A/B run is put back to its snapshot)
 ```
 
-**Not usable end to end yet.** The commands work, but a real trace cannot be replayed until two things exist ([ADR 0050 addendum](../adr/0050-config-lab-ab-replay-method.md)):
-- the lab node containers (issue 863): until then a job naming a production partition is refused by Slurm and counted as `rejected`;
-- the `lab-uNNN` users in accounting and on slurmctld and the nodes (issue 869): with associations enforced, Slurm refuses a user it does not know.
+**Not usable end to end yet.** The commands work, but a real trace cannot be replayed until the lab node containers exist (issue 863, [ADR 0050 addendum](../adr/0050-config-lab-ab-replay-method.md)): until then a job naming a production partition is refused by Slurm and counted as `rejected`. The `lab-uNNN` users are built (issue 869): see "Users" below.
+
+**Users (issue 869).** Each lab keeps one mapping from production user to `lab-uNNN`.
+- It lives in `compose/generated/lab/NAME/users.json` (mode 600), never in a report, `status`, export or diag bundle.
+- It covers the dump's users and the trace's users, is numbered once by sorted name and then only grows: a new name goes at the end, a number is never reused. The same person is the same `lab-uNNN` whatever the seed or `--target-hours`.
+- `import lab NAME --replace` keeps it, and is refused while a run of that lab is active or recovering.
+- `apply lab` rewrites the dump (users, coordinators, names in the description) before `sacctmgr load`, and creates the Linux users (uid 30000+N, no home) on slurmctld, slurmdbd and the login node. `remove lab` deletes them.
+- A trace user with no account in the dump gets a number too; its jobs are refused by Slurm and counted as `rejected: no association`.
 
 A run goes **only through the governor** (`./scripts/benchctl start`), needs the cluster with accounting (`benchctl up --with accounting`) and a lab with a trace. One run at a time.
 

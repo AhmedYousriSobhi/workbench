@@ -33,7 +33,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from . import lab, lab_replay, lab_slurm
+from . import lab, lab_replay, lab_slurm, lab_users
 from . import lab_import as li
 from .lab import LabError
 
@@ -145,14 +145,14 @@ def build_jobs(name: str, sim: dict, root: Path | None = None, seed: int = DEFAU
     load = lab_replay.plan_load(nodes, b["trace"], max_nodes or cfg["max_nodes"], cfg["max_running_jobs"], seed)
     sampled = load["sampled"]
     factor = lab_replay.time_factor(sampled, target)
-    users = lab_replay.map_users(sampled, keep=False)  # decision 5: never the production names, whatever `get lab` was asked
+    users = lab_users.for_lab(name, root)  # decision 5, issue 869: one stable mapping per lab, never the production names
     starts = [t for j in sampled if (t := lab_replay.parse_time(j.get("Submit", "")))]
     t0 = min(starts)
     jobs = [job_record(i, j, t0, factor, users) for i, j in enumerate(sampled, 1)]
     span = lab_replay.span_s(sampled)
     doc = {"contract": CONTRACT, "lab": name, "seed": seed, "target_hours": target, "factor": round(factor, 4),
            "length_s": round(span / factor), "lab_nodes": load["scale"]["lab_nodes"], "peak_running": load["peak"],
-           "fits": load["fits"], "users": sorted(users.values()), "jobs": jobs}
+           "fits": load["fits"], "users": sorted({j["user"] for j in jobs}), "jobs": jobs}
     prod = production_users(name, root) | set(users)
     if n := leaks(doc, prod):
         raise LabError(f"refused: {n} production user name(s) also appear as an account, QOS, partition or TRES value in the trace; "
