@@ -29,7 +29,7 @@ from pathlib import Path
 
 import yaml
 
-from . import lab, lab_candidate, lab_import, lab_slurm, lab_users, lab_validate
+from . import lab, lab_candidate, lab_import, lab_nodes, lab_slurm, lab_users, lab_validate
 from .lab import LabError
 
 MARKER = "active.json"
@@ -86,7 +86,7 @@ def _quote(v: str) -> str:
 def strip_overlay(text: str) -> str:
     """The generated slurm.conf as it was before any overlay: lines replaced in place are restored, the block is dropped."""
     out, skip = [], False
-    for line in text.splitlines():
+    for line in lab_nodes.strip(text).splitlines():
         if line.startswith("# BEGIN lab "):
             skip = True
         elif line.startswith("# END lab "):
@@ -97,11 +97,11 @@ def strip_overlay(text: str) -> str:
     return "\n".join(out) + "\n"
 
 
-def overlay_text(text: str, keys: dict[str, str], name: str) -> str:
+def overlay_text(text: str, keys: dict[str, str], name: str, extra: list[str] | None = None) -> str:
     """Put `keys` on top of the generated text: a key on its own line is replaced in place (the old value kept in a trailing comment so
     `strip_overlay` can restore it); any other key goes in a block at the end."""
-    lines = strip_overlay(text).splitlines()
-    added: list[str] = []
+    lines = (lab_nodes.switch_off(strip_overlay(text), extra) if extra else strip_overlay(text)).splitlines()
+    added: list[str] = list(extra or [])  # the lab nodes and partitions (issue 863)
     for k, v in keys.items():
         idx = [i for i, ln in enumerate(lines) if re.fullmatch(rf"\s*{re.escape(k)}=\S*", ln, re.IGNORECASE)]
         if len(idx) == 1:
@@ -121,8 +121,17 @@ def reapply(slurm_dir: Path, root: Path | None = None) -> str | None:
     conf = slurm_dir / "slurm.conf"
     if not m or not conf.is_file():
         return None
-    conf.write_text(overlay_text(conf.read_text(), m.get("keys", {}), m["name"]))
+    conf.write_text(overlay_text(conf.read_text(), m.get("keys", {}), m["name"], m.get("lab_lines", {}).get("slurm")))
+    gres = slurm_dir / "gres.conf"
+    if gres.is_file():
+        gres.write_text(overlay_block(gres.read_text(), m.get("lab_lines", {}).get("gres", []), m["name"]))
     return m["name"]
+
+
+def overlay_block(text: str, lines: list[str], name: str) -> str:
+    """`text` without any earlier lab block, plus the lab's lines in a block at the end."""
+    base = strip_overlay(text).rstrip("\n")
+    return base + "\n" + ("\n".join([BEGIN.format(name=name), *lines, END.format(name=name)]) + "\n" if lines else "")
 
 
 def note_active(say: Callable[[str], None], root: Path | None = None) -> None:
@@ -264,6 +273,7 @@ class Env:
     http_get: Callable[[str], str] = lambda url: urllib.request.urlopen(url, timeout=5).read().decode()
     rules_check: Callable[[list[Path]], list[str]] | None = None  # None: promtool_check (issue 552's executor)
     restart_ctld: Callable[[], bool] | None = None
+    compose_file: Path = field(default_factory=lambda: Path("compose/generated/docker-compose.yml"))
     sleep: Callable[[float], None] = time.sleep
     say: Callable[[str], None] = print
 
@@ -429,6 +439,7 @@ def apply(name: str, side: str, env: Env) -> dict:
         if has_sacct and env.running("slurmdbd"):
             (rd / "sacctmgr.pre.dump").write_text(_sacct_dump(env))
             (rd / "qos.pre.txt").write_text(_qos_dump(env))
+    ln = _lab_node_plan(name, side, files, env)
     prev = (old or {}).get("created_objects", {})
     k8s_made = [{"kind": o["kind"], "name": o["metadata"]["name"], "namespace": o["metadata"].get("namespace")} for o in objs]
     k8s_made += [x for x in prev.get("k8s", []) if x not in k8s_made]  # the other side's objects stay listed until remove
@@ -442,13 +453,21 @@ def apply(name: str, side: str, env: Env) -> dict:
         (rule_dir / stale).unlink(missing_ok=True)
     # ---- slurm.conf
     changed = changed_keys(sl["keys"], conf_keys(live_text), (old or {}).get("keys", {}))
-    restart = any(lab_slurm.restart_required(k) for k in changed)
+    nodes_changed = (old or {}).get("lab_nodes") != (ln or {}).get("nodes") and bool(ln or (old or {}).get("lab_nodes"))
+    if ln:
+        m["lab_nodes"], m["lab_lines"] = ln["nodes"], {"slurm": ln["slurm"], "gres": ln["gres"]}
+    restart = any(lab_slurm.restart_required(k) for k in changed) or nodes_changed
     m["restart"] = restart
     write_marker(m, env.root)
-    (env.slurm_dir / "slurm.conf").write_text(overlay_text(live_text, sl["keys"], name))
+    (env.slurm_dir / "slurm.conf").write_text(overlay_text(live_text, sl["keys"], name, (ln or {}).get("slurm")))
+    if (env.slurm_dir / "gres.conf").is_file():
+        gres = env.slurm_dir / "gres.conf"
+        gres.write_text(overlay_block(gres.read_text(), (ln or {}).get("gres", []), name))
+    if ln and nodes_changed:
+        lines += _start_lab_nodes(env, m)
     (rd / "slurm.keys.json").write_text(json.dumps(sl["keys"], indent=2) + "\n")
     if restart:
-        lines.append("slurmctld restarts: " + ", ".join(k for k in changed if lab_slurm.restart_required(k)))
+        lines.append("slurmctld restarts: " + ", ".join([k for k in changed if lab_slurm.restart_required(k)] + (["new lab nodes"] if nodes_changed else [])))
         if not env.restart():
             raise LabError("slurmctld did not come back after the restart; look at `docker logs workbench-slurmctld-1`; the lab marker is kept, `benchctl remove lab " + name + "` returns to the plain cluster")
     else:
@@ -530,6 +549,47 @@ def _apply_sacct(name: str, files: dict[str, str], env: Env, rd: Path) -> list[s
     return out
 
 
+def _lab_node_plan(name: str, side: str, files: dict[str, str], env: Env) -> dict | None:
+    """The lab nodes and partitions of the downscale (issue 863), or None for a lab without a trace or without node lines (nothing to replay on)."""
+    b = lab.load_baseline(name, env.root)
+    if not b["trace"] or b["slurm"] is None or not b["slurm"]["nodes"]:
+        return None
+    cfg = lab_slurm.settings(env.sim) if env.sim else {"max_nodes": lab_slurm.DEFAULT_MAX_NODES}
+    scale = lab_slurm.downscale(lab_slurm.production_nodes(b["slurm"], b["topology"], b["gres"]), cfg["max_nodes"])
+    side_conf = None
+    if files.get("slurm.conf"):
+        try:
+            side_conf = lab_import.parse_slurm_conf(files["slurm.conf"])
+        except lab_import.ImportError_:
+            side_conf = None
+    sim_nodes: set[str] = set()
+    if env.sim:
+        from . import nodes as _nodes
+        sim_nodes = {n for n, _ in _nodes.node_names(env.sim)}
+    return lab_nodes.plan(b, side_conf, scale, sim_nodes)
+
+
+def _sync_compose(env: Env, marker: dict | None) -> None:
+    """Put the lab node services into (or take them out of) the generated compose file, as `compose.generate` would."""
+    from . import compose
+    f = env.compose_file
+    if not f.is_file():
+        return
+    data = yaml.safe_load(f.read_text())
+    compose.add_lab_nodes(data["services"], marker, env.sim, env.root)
+    f.write_text("# GENERATED from sim.yaml by `benchctl compose`; do not edit.\n" + yaml.safe_dump(data, sort_keys=False))
+
+
+def _start_lab_nodes(env: Env, m: dict) -> list[str]:
+    lab_users.for_lab(m["name"], env.root)  # the nodes create the same lab-uNNN users (issue 869)
+    _sync_compose(env, m)
+    svcs = [n["service"] for n in m["lab_nodes"]]
+    r = env.runner(env.dc("up", "-d", "--no-deps", *svcs))
+    if r.returncode != 0:
+        raise LabError(f"starting the lab nodes failed: {(r.stderr or r.stdout).strip()[-200:]}. The lab marker is kept; `benchctl remove lab {m['name']}` returns to the plain cluster")
+    return [f"lab nodes: {len(svcs)} started ({svcs[0]} to {svcs[-1]})"]
+
+
 def _lab_linux_users(env: Env, script: str, what: str) -> list[str]:
     """Run the user script in every service that holds the users (slurmctld, slurmdbd, the login node); a failure is a warning, not a stop."""
     out = []
@@ -604,6 +664,13 @@ def remove(name: str, env: Env) -> dict:
         raise LabError(f"cannot remove lab {name}: the cluster is not running. Start it (./scripts/benchctl up) and run `benchctl remove lab {name}` again; the lab stays active until then")
     rd = render_dir(name, env)
     lines: list[str] = []
+    if m.get("lab_nodes"):
+        svcs = [n["service"] for n in m["lab_nodes"]]
+        r = env.runner(env.dc("rm", "-sf", *svcs))
+        if r.returncode != 0:
+            raise LabError(f"stopping the lab nodes failed: {(r.stderr or r.stdout).strip()[-200:]}; the lab stays active")
+        _sync_compose(env, None)
+        lines.append(f"lab nodes: {len(svcs)} stopped and removed")
     if made.get("sacctmgr"):
         lines += _remove_sacct(name, env, rd)
     if made.get("k8s"):
@@ -625,7 +692,9 @@ def remove(name: str, env: Env) -> dict:
     conf = env.slurm_dir / "slurm.conf"
     if conf.is_file():
         conf.write_text(strip_overlay(conf.read_text()))
-    restart = any(lab_slurm.restart_required(k) for k in m.get("keys", {}))
+    if (env.slurm_dir / "gres.conf").is_file():
+        (env.slurm_dir / "gres.conf").write_text(strip_overlay((env.slurm_dir / "gres.conf").read_text()))
+    restart = any(lab_slurm.restart_required(k) for k in m.get("keys", {})) or bool(m.get("lab_nodes"))
     if restart:
         if not env.restart():
             raise LabError("slurmctld did not come back after the restart; the lab stays active. Look at `docker logs workbench-slurmctld-1`")

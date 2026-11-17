@@ -144,9 +144,15 @@ Rows `sacctmgr` refuses to delete are listed.
 ./scripts/benchctl stop lab prod-a                      # end the run (an A/B run is put back to its snapshot)
 ```
 
-**Not usable end to end yet.** The commands work, but a real trace cannot be replayed until the lab node containers exist (issue 863, [ADR 0050 addendum](../adr/0050-config-lab-ab-replay-method.md)): until then a job naming a production partition is refused by Slurm and counted as `rejected`. The `lab-uNNN` users are built (issue 869): see "Users" below.
+**Built, not yet run live.** The lab nodes (issue 863) and the `lab-uNNN` users (issue 869) exist in code and unit tests; the live tests (`./scripts/verify.sh --unit lab_nodes --clean`, `--unit lab_users --clean`) have not been run, so treat a first replay as the live check ([ADR 0050 addendum](../adr/0050-config-lab-ab-replay-method.md)).
 
-**Users (issue 869).** Each lab keeps one mapping from production user to `lab-uNNN`.
+**Lab nodes (issue 863).** `apply lab` on a lab that has a trace starts the downscaled nodes.
+- One container per lab node (`lab-node-001`, ...), a copy of a simulated compute node: unprivileged, memory-limited, class P4. Its hostname is the production node name, and it has the `lab-uNNN` users.
+- The lab block of `slurm.conf` gets one `NodeName` line per node and the production partitions, listing only the nodes kept. `Gres` becomes a file-less `gres.conf` line. `AllowGroups` and `DenyGroups` are dropped, because the production groups do not exist here.
+- A simulated partition with the same name as a lab partition is switched off while the lab is active; if a lab partition is the default, the simulated ones lose `Default=YES`. `remove lab` puts both back and removes the containers.
+- slurmctld restarts when the node set changes. A lab node with the name of a simulated node is refused with one message.
+- Topology is not rendered: the nodes have no switch tree (`not tested`). The node count is `lab.max_nodes` from `sim.yaml`; a `--max-nodes` given to `run lab` must match it.
+ Each lab keeps one mapping from production user to `lab-uNNN`.
 - It lives in `compose/generated/lab/NAME/users.json` (mode 600), never in a report, `status`, export or diag bundle.
 - It covers the dump's users and the trace's users, is numbered once by sorted name and then only grows: a new name goes at the end, a number is never reused. The same person is the same `lab-uNNN` whatever the seed or `--target-hours`.
 - `import lab NAME --replace` keeps it, and is refused while a run of that lab is active or recovering.

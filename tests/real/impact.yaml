@@ -30,8 +30,8 @@
   paths: ["benchctl/lab.py", "benchctl/lab_import.py", "benchctl/lab_slurm.py", "benchctl/lab_replay.py", "benchctl/lab_candidate.py", "benchctl/lab_diff.py"]
   tests: []
 - name: config lab apply and remove (live)
-  paths: ["benchctl/lab_apply.py", "benchctl/lab_users.py"]
-  tests: [test_lab_apply_real, test_lab_users_real]
+  paths: ["benchctl/lab_apply.py", "benchctl/lab_users.py", "benchctl/lab_nodes.py"]
+  tests: [test_lab_apply_real, test_lab_users_real, test_lab_nodes_real]
 - name: config lab run, snapshot and restore (live)
   paths: ["benchctl/lab_run.py", "benchctl/lab_snapshot.py"]
   tests: [test_lab_run_real]
