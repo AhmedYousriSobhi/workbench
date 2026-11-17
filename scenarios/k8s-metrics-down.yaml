@@ -1,0 +1,9 @@
+name: k8s-metrics-down
+ref: SC-47
+description: metrics-server stops, so the metrics API answers 503 (ServiceUnavailable) and node and pod usage disappear while the rest of the API keeps answering; it comes back after 120 s and usage returns within about 30 s (two scrapes); while it is stopped API discovery (api-resources) also fails, as on a real cluster (issue 382)
+steps:
+  - {at: 0s,   target: k8s, do: {metrics_server: stop}}
+  - {at: 120s, target: k8s, do: {metrics_server: start}}
+expect:
+  - k8s.metrics_api: {served: false, within: 30s}
+  - k8s.metrics_api: {served: true, after: 125s, within: 90s}

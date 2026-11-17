@@ -1,0 +1,33 @@
+# The metrics API (issue 382, ADR 0084): metrics-server runs as the compose service k8s-metrics-server (benchctl/k8s.py), not as a
+# pod, so the API server reaches it the way kwokctl v0.8.0 wires it (pkg/kwokctl/components/metrics_server_manifest.go): the
+# upstream APIService (metrics-server v0.9.1 manifests/base/apiservice.yaml, unchanged but for the port) and a Service of type
+# ExternalName that names the container. With the default aggregator routing the API server resolves an ExternalName Service to
+# that name (k8s.io/apiserver/pkg/util/proxy ResolveCluster, v1.36.1); a ClusterIP Service would need kube-proxy, which this
+# cluster does not run. Compose DNS resolves the name inside the API server's container.
+apiVersion: v1
+kind: Service
+metadata:
+  name: metrics-server
+  namespace: kube-system
+  labels: {k8s-app: metrics-server}
+spec:
+  type: ExternalName
+  externalName: k8s-metrics-server
+  ports:
+  - {name: https, port: 10250, protocol: TCP}
+---
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1beta1.metrics.k8s.io
+  labels: {k8s-app: metrics-server}
+spec:
+  service:
+    name: metrics-server
+    namespace: kube-system
+    port: 10250
+  group: metrics.k8s.io
+  version: v1beta1
+  insecureSkipTLSVerify: true
+  groupPriorityMinimum: 100
+  versionPriority: 100

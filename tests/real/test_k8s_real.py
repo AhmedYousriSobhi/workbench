@@ -1,6 +1,6 @@
 """Kubernetes (ADR 0034, issue 232): a real control plane with KWOK nodes, read as a client reads it.
 
-Checks, on the live containers: the five services run unprivileged, limited and labelled for the governor; the nodes are
+Checks, on the live containers: the services (five plus metrics-server, issue 382) run unprivileged, limited and labelled for the governor; the nodes are
 Ready with GPU capacity; the failing fixtures show the status a kubelet would report; the read-only kubeconfig on the login
 node works as the simulated user and cannot change anything; the namespace-limited one sees only its namespace; and the
 scenario steps (a node reported NotReady, a crash-looping pod) are seen by the same kubectl."""
@@ -88,6 +88,33 @@ def test_failing_fixtures_show_what_a_kubelet_would_report(cluster):
     assert waiting == "Pending"  # asks for 9 GPUs, a node has 8: the real scheduler leaves it unschedulable
     events = kubectl_as("alice", "get", "events", "-A", "--field-selector", "type=Warning", "-o", "jsonpath={.items[*].reason}").stdout
     assert "FailedScheduling" in events
+
+
+def test_every_kwok_node_advertises_the_kwok_controllers_address_not_loopback(cluster):
+    """Issue 872 (ADR 0084 P1): the API server and metrics-server dial a node's InternalIP. A cluster made before this change keeps
+    127.0.0.1 in etcd (KWOK's stages keep existing addresses), so `up` writes the addresses through the status subresource."""
+    r = kubectl_as("alice", "get", "nodes", "-o", "json")
+    for n in json.loads(r.stdout)["items"]:
+        internal = [a["address"] for a in n["status"].get("addresses", []) if a["type"] == "InternalIP"]
+        assert internal == [k8s.kwok_ip()], (n["metadata"]["name"], n["status"].get("addresses"))
+        assert n["status"]["daemonEndpoints"]["kubeletEndpoint"]["Port"] == k8s.KWOK_PORT
+        assert n["metadata"]["annotations"][k8s.RESOURCE_METRICS_PATH] == f"/metrics/nodes/{n['metadata']['name']}/metrics/resource"
+
+
+def test_the_api_server_reaches_kwok_for_logs_and_node_metrics(cluster):
+    """Issue 872: `kubectl logs` goes API server -> node InternalIP:10247 (KWOK); the node proxy reaches KWOK's resource metrics."""
+    assert wait_for(lambda: "simulated container started" in k8s.kubectl(cluster, "-n", "team-a", "logs", "sized").stdout, timeout=60), \
+        k8s.kubectl(cluster, "-n", "team-a", "logs", "sized").stderr
+    raw = k8s.kubectl(cluster, "get", "--raw", "/api/v1/nodes/kcn001/proxy/metrics/nodes/kcn001/metrics/resource")
+    assert raw.returncode == 0 and "node_cpu_usage_seconds_total" in raw.stdout and "node_memory_working_set_bytes" in raw.stdout, raw.stderr
+
+
+def test_kwok_serves_logs_without_asking_for_a_client_certificate(cluster):
+    """The open point of the ADR 0084 addendum, read from the KWOK v0.8.0 source (ServeTLS without ClientAuth) and confirmed here:
+    a TLS request with no client certificate is answered. The API server still sends one, as on a real cluster."""
+    r = docker("exec", K_LOGIN, "curl", "-sk", "--max-time", "10", "-o", "/dev/null", "-w", "%{http_code}",
+               f"https://{k8s.kwok_ip()}:{k8s.KWOK_PORT}/containerLogs/team-a/sized/c")
+    assert r.stdout.strip() == "200", (r.stdout, r.stderr)
 
 
 def test_the_login_node_kubeconfig_is_the_users_own_mode_600_and_read_only(cluster):
@@ -328,3 +355,23 @@ def test_the_throttling_scenario_gives_the_viewer_real_429s_and_touches_nobody_e
     finally:
         k8s.kubectl(cluster, "delete", "--ignore-not-found", "-f", "/k8s/scenario/70-apf.yaml", mounts=[(k8s.SRC, "/k8s")])
     assert wait_for(lambda: status(viewer) == 200, timeout=30)
+
+
+def test_metrics_server_runs_unprivileged_and_a_stop_gives_503_until_it_starts_again(cluster):
+    """Issue 382: the scenario step `metrics_server: stop|start` (scenario k8s-metrics-down). Stopped, the APIService answers 503
+    (ServiceUnavailable) while the rest of the API answers; started, usage returns after two scrapes. The container is started in any case."""
+    probe = ("get", "--raw", "/apis/metrics.k8s.io/v1beta1/nodes")
+    assert wait_for(lambda: kubectl_as("alice", *probe).returncode == 0, timeout=180), kubectl_as("alice", *probe).stderr
+    info = json.loads(docker("inspect", f"workbench-{k8s.METRICS_SERVER}-1").stdout)[0]
+    assert info["Config"]["Image"] == k8s.METRICS_SERVER_IMAGE and not info["HostConfig"]["CapAdd"] and info["Config"]["User"] != "0"
+
+    def unavailable() -> bool:
+        err = kubectl_as("alice", *probe).stderr
+        return "ServiceUnavailable" in err or "503" in err
+    try:
+        assert scenario.execute(scenario.Step(0, "k8s", {"metrics_server": "stop"}), runner=k8s._run).status == "ok"
+        assert wait_for(unavailable, timeout=60), kubectl_as("alice", *probe).stderr
+        assert kubectl_as("alice", "get", "nodes").returncode == 0  # only the metrics API is gone
+    finally:
+        docker("start", f"workbench-{k8s.METRICS_SERVER}-1")
+    assert wait_for(lambda: kubectl_as("alice", *probe).returncode == 0, timeout=120), kubectl_as("alice", *probe).stderr

@@ -62,6 +62,8 @@ function k8s(d) {
     const q = d.queue, pend = q.pending != null ? ` (${count(q.pending, 'workload')} pending)` : '';
     out.push(q.active === false ? `Stop queue ${q.name} admitting work${pend}` : q.active === true ? `Let queue ${q.name} admit work again${pend}` : `Set queue ${q.name} to ${count(q.pending, 'pending workload')}`);
   }
+  if (d.metrics_server === 'stop') out.push('Stop metrics-server (the metrics API answers 503)');
+  else if (d.metrics_server === 'start') out.push('Start metrics-server again (the metrics API answers)');
   return out;
 }
 
@@ -168,6 +170,7 @@ const EXPECT = {
   'slurm.stepd': a => a.alive === false ? `No slurmstepd runs on ${a.node}` : `A slurmstepd runs on ${a.node}`,
   'k8s.node_ready': a => `Kubernetes node ${a.node} is ${a.ready === false ? 'NotReady' : 'Ready'}`,
   'k8s.pod_status': a => `Pod ${a.namespace}/${a.name} shows ${a.reason}`,
+  'k8s.metrics_api': a => `The metrics API ${a.served === false ? 'is unavailable' : 'answers'}`,
   'k8s.pods_on_node': a => `At least ${count(a.min ?? 1, 'Running pod')} (${a.selector}, ${a.namespace}) on Kubernetes node ${a.node}`,
   'storage.mount': a => `${a.mount} on ${a.node || 'cn001'}: ${[a.min_used_pct != null ? pctUsed(a.min_used_pct, 'used') : '', a.min_inodes_used_pct != null ? pctUsed(a.min_inodes_used_pct, 'of its inodes used') : '',
     a.quota_exceeded ? `${a.quota_exceeded} over quota` : '', a.stale != null ? (a.stale ? 'stale' : 'not stale') : ''].filter(Boolean).join(', ') || 'mounted'}`,

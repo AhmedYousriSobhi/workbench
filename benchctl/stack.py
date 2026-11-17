@@ -48,7 +48,7 @@ STAGES = [  # (label, service-name pattern); later stages depend on earlier ones
     ("jira real", r"jira-db|jira-real"),
     ("object store", r"objectstore"),
     ("kubernetes", r"k8s-etcd|k8s-apiserver|k8s-controller-manager|k8s-scheduler"),
-    ("kubernetes nodes", r"kwok-controller"),  # starts only once the stages exist: with none it exits
+    ("kubernetes nodes", r"kwok-controller|k8s-metrics-server"),  # KWOK starts only once the stages exist (with none it exits); metrics-server scrapes it
     ("teleport", r"teleport"),  # after the API server: its Kubernetes Service registers that cluster at start (ADR 0083); before the nodes, which read its host certificates
     ("bmc addresses", r"bmc-(cn|gpu)\d+"),
     ("nodes", r"(cn|gpu|rgpu)\d+"),

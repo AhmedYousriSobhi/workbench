@@ -41,7 +41,8 @@ PER_NODE_MB: dict[str, int] = {
     "bmc-forwarder": 16,   # every per-node BMC address; a static Go binary, about 3 MB (issue 454; the Python forwarder was 18 MB measured, capped at 32)
     "dcgm-exporter": 150,  # optional (--with dcgm), real-gpu nodes only; 125 MB measured, the one part that is not a few MB
 }
-NOT_MEASURED = ("accounting-init",)  # one-shot: expected at the cap
+NOT_MEASURED = ("accounting-init",  # one-shot: expected at the cap
+                "k8s-metrics-server")  # issue 382: not yet measured (no live run); expected at its 128 MB cap until `benchctl measure`
 
 
 def key_of(name: str, labels: dict | None = None) -> str:

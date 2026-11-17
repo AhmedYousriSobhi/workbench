@@ -236,7 +236,7 @@ def expect_touches(exp: dict) -> list[str]:
     args = args if isinstance(args, dict) else {}
     if kind.startswith("jira."):
         return ["jira-real" if args.get("target") == "real" else "jira-mock"]
-    if kind == "k8s.pod_status":
+    if kind in ("k8s.pod_status", "k8s.metrics_api"):
         return ["k8s-api"]
     if kind == "storage.mount":
         return ["gpu-exporter", str(args.get("node", "cn001"))]
@@ -612,6 +612,10 @@ def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcom
             return _dcgm(step, label, runner)
         elif step.target == "k8s":
             k8s.write_pod(step.do)
+            for cmd in k8s.host_commands(step.do):
+                r = runner(cmd)
+                if r.returncode:
+                    return Outcome(label, "failed", (r.stderr or r.stdout).strip()[-300:])
             for args in k8s.step_args(step.do):
                 r = runner(k8s.kubectl_cmd(k8s.current_sim(), *args))
                 if r.returncode and args[0] != "drain":  # a drain that the disruption budget blocks times out: that is what the step plays
@@ -867,6 +871,8 @@ def expectation(exp: dict, runner=checks.run, host: bool = True, seen: dict | No
         return label, lambda: k8s.node_ready(args["node"], runner) == bool(args.get("ready", True)), within
     if kind == "k8s.pod_status" and host:  # the pod's phase or a container's waiting/terminated reason is `reason`
         return label, lambda: args["reason"] in k8s.pod_reasons(args["namespace"], args["name"], runner).split(), within
+    if kind == "k8s.metrics_api" and host:  # the metrics API answers (served: true, default) or does not (503 while metrics-server is stopped)
+        return label, lambda: k8s.metrics_api_served(runner) == bool(args.get("served", True)), within
     if kind == "k8s.pods_on_node" and host:  # at least `min` (default 1) Running pods matching `selector` on the node
         return label, lambda: (k8s.pods_on_node(args["node"], args["namespace"], args["selector"], runner) or 0) >= int(args.get("min", 1)), within
     if kind == "storage.mount" and host:  # the declared mount is as full, stale or over quota as the scenario made it

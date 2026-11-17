@@ -27,6 +27,7 @@ workbench-diag-*
 .mypy_cache/
 htmlcov/
 *.log
+!k8s/kwok/logs/*.log
 
 # Credentials and key material (examples are fine: .env.example)
 .env.*

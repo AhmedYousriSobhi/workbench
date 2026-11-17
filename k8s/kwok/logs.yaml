@@ -1,0 +1,13 @@
+# What `kubectl logs` answers for a KWOK pod (issue 872, ADR 0084): KWOK's Logs and ClusterLogs (v1alpha1, KWOK v0.8.0 logs
+# configuration). The files are kubelet (CRI) log files in k8s/kwok/logs/, mounted read-only into kwok-controller at /logs; KWOK
+# serves them through the kubelet logs endpoint and honours --tail, --limit-bytes, --timestamps, --since and --previous
+# (pkg/kwok/server/debugging_logs.go). A Logs object that names a pod wins over every ClusterLogs; this catch-all serves the rest.
+apiVersion: kwok.x-k8s.io/v1alpha1
+kind: ClusterLogs
+metadata:
+  name: workbench-default
+spec:
+  selector: {}
+  logs:
+  - logsFile: /logs/default.log
+    follow: false
