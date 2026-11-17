@@ -18,3 +18,8 @@ A real GPU cluster has priority classes, quotas and disruption budgets, and its 
 - Three more pods in `team-a`. The pod quota there (`20-signals.yaml`) was 8 and the fixtures already asked for 9; with `dra-train` and `inference` they ask for 12, so the quota is now 16 (the first live run failed every Kubernetes module with `exceeded quota: pods`). Scenario pods go to `team-b`.
 - `gpu-train` keeps the default priority (0): a PriorityClass cannot be used by a pod applied in the same pass.
 - APF stays off until a scenario turns it on.
+
+## Pointer: group 4 decisions (issue 867, 2026-11-17)
+[ADR 0084, group 4 addendum](0084-tsh-kube-production-practice.md#addendum-group-4-decisions-issue-867-2026-11-17):
+- The scale work (issue 768) puts its 10,001 pods in a dedicated namespace, never in `team-a`, whose pod quota is 16.
+- The version spike (issue 769) expects these fixtures to depend on the server version: the DRA claim quota needs `resource.k8s.io/v1` (Kubernetes 1.34 or later).
