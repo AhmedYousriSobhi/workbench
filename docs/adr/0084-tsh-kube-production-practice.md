@@ -284,6 +284,13 @@ Memory is the change to the Kubernetes or Teleport part; "none" means no new pro
 - the Kubeflow manifests (Q4)
 - every live result in the table
 
+## Addendum: Teleport audit helper, issue 754 (2026-11-17)
+- **Where the log is read from.** `benchctl/teleportaudit.py` reads every `*.log` under `/var/lib/teleport/log` in the Teleport container with `docker exec` (the `dir` backend writes JSON lines, one file per day, under the data directory's `log/`; Teleport audit reference, Evidence 4). Host-side reading was not chosen because the files belong to the container's user; the host folder holds the same data. A missing folder raises an error that names it and fails the test; it never returns an empty log.
+- **Matching.** Events are selected by `event`, a start mark (`now_minus`, 5 s in the past for clock difference) and exact field values; `response_code` may be a number or a string. The refused write uses a random pod name so only that call matches.
+- **Recorded, not asserted:** what is written for a user with no Kubernetes group (the test asserts only that no 200 is audited for that user), the exact field set of 18.11.8, and the event types present in the log (`exec`, `port`, `session.*` expected absent without a pod shell; the exec spike is issue 760).
+- **Not verified:** every live result of the new tests; that a refused write appears with 403 (expected: Teleport forwards, the API server refuses); the field names of 18.11.8 (docs example only).
+- The helper is reused by 763 for the `tsh ssh` session events.
+
 ## Addendum: built, issues 762 and 766 part a (2026-11-17)
 Decisions taken while building; each cites its source. Written and unit-tested; the live module has not been run (the owner runs it).
 - **One catalogue of reads.** `benchctl/k8sreads.py` lists every read in this repository's words, with the outcome expected for the viewer and for the limited user, a classifier for one run's exit code and text, and a shape check for the answers a client parses. The live module `tests/real/test_k8s_reads_real.py` runs each read as both users from the k-login; the unit tests keep it read-only, complete against the viewer role (a new rule in `k8s/fixtures/40-rbac-cluster-viewer.yaml` needs a read or a stated reason) and in step with the table in `docs/guides/client-testing.md`, which is generated from it. The same catalogue can run through `tsh ssh` in 763.
