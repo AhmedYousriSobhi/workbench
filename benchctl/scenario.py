@@ -23,6 +23,7 @@ from . import (
     dcgm,
     faultmodel,
     k8s,
+    lab_interference,
     netemfaults,
     selectors,
     slurmupgrade,
@@ -536,6 +537,7 @@ def execute(step: Step, poster=post, runner=checks.run, host: bool = True, slurm
     main = _apply(step, poster, runner, host, slurm, daemon)
     if main.status != "ok":
         return main
+    lab_interference.record(f"scenario step {','.join(sorted(step.do))}", step.target, "scenario")  # issue 554: a lab run is then not comparable
     failed, notes = [], []
     for extra in side_effects(step):
         o = _apply(extra, poster, runner, host, slurm, daemon)

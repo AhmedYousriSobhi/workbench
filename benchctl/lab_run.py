@@ -14,12 +14,10 @@ Owner decisions of 2026-11-17 (issue 554) that this module carries:
 - 3: the snapshot restore between A and B is internal to the run (`lab_snapshot`), never a governor verb. Run A's accounting is
   written to the report folder before the restore, which erases it (`Run.require_collected`).
 
-Not here (later steps of #554): the driver that submits the jobs (step 3: it names each job by its `key`, so A and B pair by key,
-not by Slurm job id, which the restore reuses), the governor verbs, thread and admission (step 4), the CLI (step 5), and the lab
-node containers (#863).
-
-TODO(#554, decision 9): the Prometheus `lab_run` label. Decided 2026-11-17: a relabel rule adds it from a file the driver writes;
-not built yet (the driver is step 3, the Prometheus part step 4), so nothing here sets it.
+Elsewhere: the driver that submits the jobs (`images/slurm-ctl/lab_driver.py`: it names each job by its `key`, so A and B pair by
+key, not by Slurm job id, which the restore reuses), the real steps and the `lab_run` Prometheus label (`lab_steps`, decision 9),
+the governor verbs, thread and admission (`governor/labrun.py`), the CLI (`benchctl run lab`, `stop lab`). Not built: the lab node
+containers (#863).
 
 Layout: compose/generated/lab/NAME/reports/RUN/ holds run.json (the run record), progress.json (what governor `status` will show),
 jobs.json and, per side, a/ and b/ (collected accounting). Snapshots live outside the report folder (lab_snapshot).
@@ -56,6 +54,7 @@ RUN_ID = re.compile(r"\d{8}-\d{6}(-\d+)?")
 STATE_KINDS = {"COMPLETED": "completed", "FAILED": "failed", "TIMEOUT": "timeout", "OUT_OF_MEMORY": "oom", "CANCELLED": "cancelled",
                "NODE_FAIL": "node_fail", "PREEMPTED": "preempted", "DEADLINE": "timeout", "BOOT_FAIL": "failed"}
 OOM_EXIT = 137  # ADR 0050: an out-of-memory job exits 137 in the lab
+INTERFERENCE = "interference.jsonl"  # node actions during a replay (benchctl.lab_interference, governor.labrun)
 
 
 def legal(path: tuple[str, ...], frm: str, to: str) -> bool:
@@ -210,7 +209,7 @@ class Run:
         (folder / "jobs.json").write_text(text)
         (folder / "jobs.json").chmod(0o444)  # frozen: both sides read this file
         rec = {"contract": CONTRACT, "name": name, "run": rid, "ab": ab, "sides": ["a", "b"] if ab else ["b"],
-               "seed": seed, "target_hours": doc["target_hours"], "factor": doc["factor"], "length_s": doc["length_s"],
+               "seed": seed, "target_hours": doc["target_hours"], "factor": doc["factor"], "length_s": doc["length_s"], "lab_nodes": doc["lab_nodes"],
                "jobs": len(doc["jobs"]), "jobs_sha256": sha256(text), "state": "idle", "history": [{"state": "idle", "at": clock()}],
                "paused_s": 0.0, "paused_side_s": dict.fromkeys(["a", "b"] if ab else ["b"], 0.0), "paused_since": None, "side": None, "counts": {"submitted": 0, "running": 0, "pending": 0},
                "replay_s": 0.0, "collected": {}, "snapshot": None, "restore": None, "reason": None}
@@ -246,9 +245,25 @@ class Run:
         return json.loads(text)
 
     def comparable(self) -> bool:
-        """Each side on its own: a side paused for more than 5 % of the run length (one side's length) is not comparable."""
+        """Each side on its own: a side paused for more than 5 % of the run length (one side's length) is not comparable; nor is a
+        run during whose replay someone acted on a node (a fault, a scenario: `interference.jsonl`, owner decision round 3)."""
         limit = COMPARABLE_PAUSE * max(1, self.r["length_s"])
-        return all(self.paused_s(side) <= limit for side in self.r["sides"])
+        return all(self.paused_s(side) <= limit for side in self.r["sides"]) and self.interference() is None
+
+    def interference(self) -> dict | None:
+        """The first action recorded in the run's `interference.jsonl` ({at, action, target, side, by}), or None."""
+        try:
+            with (self.folder / INTERFERENCE).open() as f:
+                for line in f:
+                    try:
+                        doc = json.loads(line)
+                    except ValueError:
+                        continue
+                    if isinstance(doc, dict):
+                        return {k: doc.get(k) for k in ("at", "action", "target", "side", "by")}
+        except OSError:
+            return None
+        return None
 
     def _ongoing(self) -> float:
         return self.clock() - self.r["paused_since"] if self.r["paused_since"] is not None else 0.0
@@ -287,7 +302,7 @@ class Run:
         return {"name": self.r["name"], "state": self.state, "percent": self.percent(), "submitted": c["submitted"],
                 "running": c["running"], "pending": c["pending"], "paused_s": self.paused_s(), "run": self.r["run"],
                 "side": self.r["side"], "paused": self.r["paused_since"] is not None, "comparable": self.comparable(),
-                "reason": self.r["reason"]}
+                "reason": self.r["reason"], "restore_pending": bool(self.r.get("restore_pending")), "interference": self.interference()}
 
     def save(self) -> None:
         write_atomic(self.folder / "run.json", dump(self.r))
@@ -391,7 +406,8 @@ def drive(run: Run, steps: Any) -> Run:
     `snapshot()`, `apply(side_name)`, `replay(side, run)` (returns None or an abort reason), `collect(side, run) -> {file: text}`,
     `restore()`, `compare(run)`, `report(run)`, `abort_reason()` (None, or why to stop, checked before every state) and, optionally,
     `discard()` when the run has ended (`lab_snapshot.StateSteps` gives snapshot, restore, collect and discard).
-    Any exception aborts the run with its message; the A/B path restores the snapshot if it was taken (cluster restored after abort)."""
+    Any exception aborts the run with its message; the A/B path restores the snapshot if it was taken (cluster restored after abort),
+    after the optional `wait_calm(run)` (the real steps wait for L0-L1). A snapshot whose restore failed is kept, not discarded."""
     try:
         for to in run.path[run.path.index(run.state) + 1:]:
             if why := steps.abort_reason():
@@ -419,8 +435,8 @@ def drive(run: Run, steps: Any) -> Run:
         _abort(run, steps, str(e))
     except Exception as e:  # noqa: BLE001 - any failure ends the run in `aborted`, never half-way with a stale state
         _abort(run, steps, f"{type(e).__name__}: {e}")
-    if run.state in TERMINAL and (discard := getattr(steps, "discard", None)):
-        discard()  # the snapshot may hold production names in its accounting dump: it does not outlive the run
+    if run.state in TERMINAL and (discard := getattr(steps, "discard", None)) and run.r.get("restored_after_abort") is not False:
+        discard()  # the snapshot may hold production names in its accounting dump: it does not outlive the run (kept only when a restore is still owed)
     return run
 
 
@@ -437,7 +453,7 @@ def _abort(run: Run, steps: Any, reason: str) -> None:
     was = run.last_state()
     applied = any(h["state"].startswith("apply_") for h in run.r["history"])
     run.abort(reason + (REMOVE_HINT.format(name=run.r["name"]) if applied else ""))
-    if not (run.r["ab"] and run.r.get("snapshot") is not None):
+    if not owes_restore(run):
         return
     side = REPLAY.get(was) or (was.removeprefix("collect_") if was.startswith("collect_") else None)
     if side and side not in run.r["collected"]:
@@ -445,10 +461,36 @@ def _abort(run: Run, steps: Any, reason: str) -> None:
             run.record_collected(side, steps.collect(side, run))
         except Exception as e:  # noqa: BLE001 - partial accounting is a bonus; the restore still runs
             run.r["collect_error"] = run.scrub(str(e)[-300:])
+    restore_after_abort(run, steps)
+
+
+def owes_restore(run: Run) -> bool:
+    """An A/B run whose snapshot was taken and has not been put back yet."""
+    return bool(run.r["ab"] and run.r.get("snapshot") is not None and run.r.get("restored_after_abort") is not True)
+
+
+def restore_after_abort(run: Run, steps: Any) -> None:
+    """Put an aborted run's snapshot back: after the optional `wait_calm(run)` (L0-L1, GV-8), unless `skip_restore()` says why not
+    (`benchctl down --force`: the snapshot is then kept). Safe to call again (the restore is re-runnable), so a restore-only child
+    started after a governor restart uses it too."""
+    if (skip := getattr(steps, "skip_restore", None)) and (why := skip()):
+        run.r["restored_after_abort"] = False
+        run.r["restore_error"] = (f"restore skipped ({why}): the snapshot is kept; `benchctl remove lab {run.r['name']}` "
+                                  "returns to the plain cluster")
+        run.save()
+        return
     try:
+        if wait := getattr(steps, "wait_calm", None):  # GV-8: the restore forks Docker and reloads MariaDB, never at L2 and up
+            wait(run)
         run.r["restore"] = steps.restore()
         run.r["restored_after_abort"] = True
     except Exception as e:  # noqa: BLE001 - the abort reason stays; the failed restore is recorded beside it
         run.r["restored_after_abort"] = False
         run.r["restore_error"] = run.scrub(str(e)[-300:])
     run.save()
+
+
+def abort_and_restore(run: Run, steps: Any, reason: str) -> None:
+    """End a run that has not ended as aborted, collecting the side in progress and restoring an A/B snapshot (the recovery child)."""
+    _abort(run, steps, reason)
+

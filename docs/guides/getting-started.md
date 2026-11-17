@@ -12,6 +12,8 @@ How to run workbench on your workstation and see it working. Keep this page in s
 ./scripts/benchctl stop       # stop the web page and the cluster
 ```
 
+`benchctl stop lab NAME` stops only a config lab's replay run (`benchctl run lab NAME`), not the cluster; see [config-lab.md](config-lab.md).
+
 ### What `start` builds
 
 | You type | You get |
