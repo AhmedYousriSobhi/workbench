@@ -68,3 +68,30 @@ def test_restore_puts_back_the_state_of_the_snapshot(stack_up, tmp_path):
     assert ctl("scontrol", "token", "username=" + user).returncode == 0  # the JWT key was kept, not restored
     lab_snapshot.discard(dest)
     assert not dest.exists()
+
+
+def test_sacct_u_refuses_a_user_unknown_on_slurmctld(stack_up):
+    """Issue 554 item 7, read from the Slurm 26.05.5 source: `sacct -u NAME` resolves NAME on the host it runs on. Confirms it live, and
+    that `sacct -a` (what collect_sacct runs) works without the user."""
+    r = ctl("sacct", "-X", "-P", "-u", "lab-u999", "-S", "now-60")
+    assert r.returncode != 0 and "Invalid user id" in (r.stderr + r.stdout)
+    assert ctl("sacct", "-a", "-X", "-P", "-S", "now-60").returncode == 0
+
+
+def test_driver_replays_a_side_as_an_unlabelled_one_shot(stack_up, tmp_path):
+    """Issue 554 step 3: the driver container starts, submits every job of the side (or counts it as rejected: the lab-uNNN users and
+    lab nodes are not built yet, decision 5 and issue 863), reports progress, and leaves no container behind."""
+    from benchctl import lab, lab_run, lab_steps
+    root = tmp_path / "lab"
+    lab.import_lab("prod-a", ROOT / "tests" / "fixtures" / "lab" / "full", root=root)
+    run = lab_run.Run.create("prod-a", stack_up, root, ab=False)
+    run.move("apply_candidate")
+    run.move("replay_b")
+    steps = lab_steps.RunSteps("prod-a", run.r["run"], root=root)
+    reason = steps.replay("b", run)
+    assert reason is None, reason
+    n = run.r["jobs"]
+    assert run.r["counts"]["submitted"] + run.r["rejected"]["b"] == n
+    names = subprocess.run(["docker", "ps", "-a", "--format", "{{.Names}}"], capture_output=True, text=True, check=True).stdout
+    assert lab_steps.driver_name(run.r["run"], "b") not in names  # --rm
+    assert not (ROOT / "compose" / "generated" / lab_steps.PROM_DIR / "slurm.json").exists()  # the lab_run label file is removed after the side

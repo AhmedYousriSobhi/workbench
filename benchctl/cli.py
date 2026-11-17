@@ -4,6 +4,7 @@ import os
 import sqlite3
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path as _Path
 
 import click
@@ -188,11 +189,25 @@ def status(socket: str = checks.GOV_SOCKET, output: str = OUTPUT, json_: bool = 
     typer.echo(f"level L{st['level']}{' (dry-run)' if st['dry_run'] else ''}  [{st.get('mode', 'root')} mode]  "
                f"avail {gb:.2f} GB  psi some {st['psi_some']}% full {st['psi_full']}%")
     typer.echo(f"groups: {', '.join(st['groups']) or '-'}")
+    if st.get("lab"):
+        typer.echo(_lab_line(st["lab"]))
     for v in st.get("violations", []):
         typer.echo(f"  SECURITY: {v}")
     for line in st["audit"]:
         typer.echo(f"  {line}")
     _cluster_and_page()
+
+
+def _lab_line(lb: dict) -> str:
+    """The governor's `lab` block as one line: the applied lab, and a run's progress while one is supervised (issue 554)."""
+    text = f"lab {lb.get('name')}" + (f" ({lb['side']}) applied" if lb.get("side") else "")
+    if lb.get("run"):
+        text += (f"; run {lb['run']}: {lb.get('state')} {lb.get('percent') or 0}%"
+                 + (f" side {lb['replay_side']}" if lb.get("replay_side") else "")
+                 + f", {lb.get('submitted') or 0} submitted, {lb.get('running') or 0} running, {lb.get('pending') or 0} pending"
+                 + (f", paused {lb.get('paused_s') or 0:g} s" if lb.get("paused_s") else "") + (" (PAUSED)" if lb.get("paused") else "")
+                 + (" (restore waits for L0-L1)" if lb.get("restore_pending") else "") + (f": {lb['reason']}" if lb.get("reason") else ""))
+    return text
 
 
 def _cluster_and_page(as_data: bool = False) -> dict | None:
@@ -538,9 +553,18 @@ for _sh in completion.SHELLS:
 
 
 @app.command()
-def stop() -> None:
-    """Stop the web page, the cluster and the governor this tool started."""
-    _launcher("stop")
+def stop(resource: str = typer.Argument(None, help="`lab NAME` stops that lab's replay run through the governor"),
+         lab_name: str = typer.Argument(None, help="the lab whose run to stop (with `lab`)")) -> None:
+    """Stop the web page, the cluster and the governor this tool started (with `lab NAME`, only that config lab's replay run).
+
+    `stop lab NAME` ends the run through the governor; an A/B run then puts the cluster back to its snapshot."""
+    if resource is None:
+        _launcher("stop")
+    if resource != "lab" or not lab_name:
+        typer.echo("usage: benchctl stop lab NAME   (or: benchctl stop)", err=True)
+        raise typer.Exit(2)
+    _lab_request({"cmd": "lab-stop", "name": lab_name},
+                 lambda r: f"run {r['run']} of lab {lab_name} is stopping; `benchctl status` shows when it has ended")
 
 
 @app.command("open")
@@ -1296,8 +1320,61 @@ def set_jira_activity(state: str = typer.Argument(..., help="on or off"),
     typer.echo(f"jira activity: {state}" + (f", a change about every {body['every']:g} s" if state == "on" else ""))
 
 
-run_app = typer.Typer(cls=SuggestingGroup, help="Run ticket automation against the mock or the real Jira")
+run_app = typer.Typer(cls=SuggestingGroup, help="Run something: a config lab's replay, ticket automation against the mock or the real Jira")
 app.add_typer(run_app, name="run")
+
+
+def _lab_request(req: dict, ok_text: Callable[[dict], str]) -> None:
+    """Send a lab run command to the governor; one line for each answer (W-10)."""
+    sock = os.environ.get("WORKBENCH_GOV_SOCKET", checks.GOV_SOCKET)
+    try:
+        r = checks.governor_request(req, sock, timeout=60)
+    except OSError:
+        typer.echo("the governor is not reachable: lab runs go through it. Start it with ./scripts/benchctl start", err=True)
+        raise typer.Exit(1) from None
+    if not r.get("ok"):
+        typer.echo(str(r.get("error", "refused")), err=True)
+        raise typer.Exit(1)
+    typer.echo("the governor is in dry-run mode: nothing was started" if r.get("dry_run") else ok_text(r))
+
+
+@run_app.command("lab")
+def run_lab(name: str = typer.Argument(..., help="a lab made with `benchctl import lab`"),
+            ab: bool = typer.Option(False, "--ab", help="replay the baseline, restore the snapshot, replay the candidate (default: the candidate only)"),
+            target_hours: float = typer.Option(None, "--target-hours", help="run length per side, 0.5 to 6 (default lab.target_hours, 2)"),
+            seed: int = typer.Option(None, "--seed", min=0, help="sampling seed, recorded in the run (default 1, the one `get lab` uses)"),
+            prepare: bool = typer.Option(False, "--prepare", hidden=True, help="freeze the jobs and print the run (the governor's child)"),
+            run_id: str = typer.Option(None, "--run", hidden=True, help="with --execute: the prepared run"),
+            execute: bool = typer.Option(False, "--execute", hidden=True, help="walk a prepared run here (the governor's child)"),
+            output: str = OUTPUT) -> None:
+    """Replay a config lab's sampled trace on the running cluster through the governor (L0-L1, admitted): with --ab the baseline, then
+    the candidate from the same snapshot; without it the candidate only. Returns once the run started; `benchctl status` shows it,
+    `benchctl stop lab NAME` ends it. L2 pauses it, L3 aborts it."""
+    from . import lab_run, lab_steps
+    if target_hours is not None and not 0.5 <= target_hours <= 6:
+        typer.echo(f"--target-hours must be from 0.5 to 6, not {target_hours:g}", err=True)
+        raise typer.Exit(1)
+    try:
+        if prepare:
+            p = lab_steps.prepare(name, _base_sim(), ab, target_hours, lab_run.DEFAULT_SEED if seed is None else seed)
+            typer.echo(json.dumps(p) if output == "json" else f"run {p['run']} of lab {name}: {p['jobs']} jobs, {p['lab_nodes']} lab nodes")
+            return
+        if execute:
+            if not run_id:
+                raise lab.LabError("--execute needs --run RID")
+            sock = os.environ.get("WORKBENCH_GOV_SOCKET", checks.GOV_SOCKET)
+            run = lab_steps.execute(name, run_id, _lab_env(), lambda r: checks.governor_request(r, sock, timeout=5))
+            raise typer.Exit(0 if run.state == "done" else 1)
+        lab.valid_name(name)
+    except lab.LabError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from e
+    req = {"cmd": "lab-run", "name": name, "ab": ab, **({"target_hours": target_hours} if target_hours is not None else {}),
+           **({"seed": seed} if seed is not None else {})}
+    _lab_request(req, lambda r: f"run {r['run']} of lab {name} started ({'A/B' if r.get('ab') else 'candidate only'}, admitted {r['admit_mb']} MB); "
+                                f"follow it with `benchctl status`, end it with `benchctl stop lab {name}`")
+
+
 _TARGET = typer.Option("mock", "--target", help="mock (the Jira mock) or real (the Data Center part)")
 
 

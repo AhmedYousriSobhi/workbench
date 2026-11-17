@@ -14,12 +14,10 @@ Owner decisions of 2026-11-17 (issue 554) that this module carries:
 - 3: the snapshot restore between A and B is internal to the run (`lab_snapshot`), never a governor verb. Run A's accounting is
   written to the report folder before the restore, which erases it (`Run.require_collected`).
 
-Not here (later steps of #554): the driver that submits the jobs (step 3: it names each job by its `key`, so A and B pair by key,
-not by Slurm job id, which the restore reuses), the governor verbs, thread and admission (step 4), the CLI (step 5), and the lab
-node containers (#863).
-
-TODO(#554, decision 9): the Prometheus `lab_run` label. Decided 2026-11-17: a relabel rule adds it from a file the driver writes;
-not built yet (the driver is step 3, the Prometheus part step 4), so nothing here sets it.
+Elsewhere: the driver that submits the jobs (`images/slurm-ctl/lab_driver.py`: it names each job by its `key`, so A and B pair by
+key, not by Slurm job id, which the restore reuses), the real steps and the `lab_run` Prometheus label (`lab_steps`, decision 9),
+the governor verbs, thread and admission (`governor/labrun.py`), the CLI (`benchctl run lab`, `stop lab`). Not built: the lab node
+containers (#863).
 
 Layout: compose/generated/lab/NAME/reports/RUN/ holds run.json (the run record), progress.json (what governor `status` will show),
 jobs.json and, per side, a/ and b/ (collected accounting). Snapshots live outside the report folder (lab_snapshot).
