@@ -38,7 +38,8 @@ IMAGE = "workbench/slurm-ctl:dev"
 NETWORK = "workbench_default"
 DRIVER_MB = 250  # ADR 0050: the replay's cap, the same 250 MB the governor admits
 FLAGS = "flags"
-PAUSE_FLAG, ABORT_FLAG = "lab.paused", "lab.abort"  # the governor writes them; images/slurm-ctl/lab_driver.py reads them
+PAUSE_FLAG, ABORT_FLAG, NORESTORE_FLAG = "lab.paused", "lab.abort", "lab.norestore"  # written by the governor (governor/labrun.py)
+RESTARTED = "the governor restarted during the run"
 PROM_DIR = "prometheus/lab-run"
 SLURM_PATHS = ("jobs", "nodes", "partitions", "scheduler")  # benchctl.promtargets.SLURM_PATHS
 SLURM_TARGET = "slurmctld:6817"
@@ -87,6 +88,10 @@ def parse_line(line: str) -> tuple[str, dict] | None:
     return None
 
 
+def _quiet(argv: list[str]) -> int:
+    return subprocess.run(argv, capture_output=True, check=False, timeout=60).returncode
+
+
 def _popen(argv: list[str]) -> subprocess.Popen:
     return subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
@@ -101,6 +106,7 @@ class RunSteps:
     root: Path | None = None
     gen: Path = GENERATED
     popen: Popen = _popen
+    run_cmd: Callable[[list[str]], int] = _quiet
     governor: Callable[[dict], dict] | None = None
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
@@ -119,6 +125,16 @@ class RunSteps:
             return None
         except OSError:
             return ""
+
+    def skip_restore(self) -> str | None:
+        """`benchctl down --force` (the governor's `lab.norestore` flag): the abort keeps the snapshot instead of restoring it."""
+        why = self.flag(NORESTORE_FLAG)
+        return None if why is None else (why.strip() or "forced")
+
+    def remove_drivers(self) -> None:
+        """A driver left by a run whose child is gone (a governor restart): removed by name, both sides."""
+        for side in ("a", "b"):
+            self.run_cmd(["docker", "rm", "-f", driver_name(self.run_id, side)])
 
     def abort_reason(self) -> str | None:
         """Checked before every state. While the governor's pause flag exists (L2 and up) it waits: the next state (snapshot, apply,
@@ -252,6 +268,23 @@ def prepare(name: str, sim: dict, ab: bool, target_hours: float | None, seed: in
     run = lab_run.Run.create(name, sim, root, ab=ab, seed=seed, target_hours=target_hours)
     return {"name": name, "run": run.r["run"], "lab_nodes": run.r["lab_nodes"], "ab": ab, "jobs": run.r["jobs"],
             "length_s": run.r["length_s"], "seed": seed}
+
+
+def recover(name: str, run_id: str, governor: Callable[[dict], dict] | None, root: Path | None = None,
+            steps: RunSteps | None = None) -> lab_run.Run:
+    """The restore-only child the governor starts after a restart when the old run's child is gone (owner decision round 3, Q1):
+    remove the run's driver containers, end the run as aborted if it had not ended (collecting the side in progress), restore an
+    A/B snapshot once the level is at L0-L1, and discard the snapshot when it was put back. Safe to run again."""
+    run = lab_run.Run.load(name, run_id, root)
+    steps = steps or RunSteps(name, run_id, root=root, governor=governor)
+    steps.remove_drivers()
+    if run.state not in lab_run.TERMINAL:
+        lab_run.abort_and_restore(run, steps, RESTARTED)
+    elif lab_run.owes_restore(run):
+        lab_run.restore_after_abort(run, steps)
+    if run.r.get("restored_after_abort") is not False:
+        steps.discard()
+    return run
 
 
 def execute(name: str, run_id: str, env: lab_apply.Env, governor: Callable[[dict], dict] | None, root: Path | None = None) -> lab_run.Run:

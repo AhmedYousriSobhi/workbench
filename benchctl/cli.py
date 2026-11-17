@@ -201,6 +201,8 @@ def status(socket: str = checks.GOV_SOCKET, output: str = OUTPUT, json_: bool = 
 def _lab_line(lb: dict) -> str:
     """The governor's `lab` block as one line: the applied lab, and a run's progress while one is supervised (issue 554)."""
     text = f"lab {lb.get('name')}" + (f" ({lb['side']}) applied" if lb.get("side") else "")
+    if lb.get("state") in ("preparing", "refused") and not lb.get("run"):
+        return text + f"; run {lb['state']}" + (f": {lb['reason']}" if lb.get("reason") else "")
     if lb.get("run"):
         text += (f"; run {lb['run']}: {lb.get('state')} {lb.get('percent') or 0}%"
                  + (f" side {lb['replay_side']}" if lb.get("replay_side") else "")
@@ -554,12 +556,16 @@ for _sh in completion.SHELLS:
 
 @app.command()
 def stop(resource: str = typer.Argument(None, help="`lab NAME` stops that lab's replay run through the governor"),
-         lab_name: str = typer.Argument(None, help="the lab whose run to stop (with `lab`)")) -> None:
+         lab_name: str = typer.Argument(None, help="the lab whose run to stop (with `lab`)"),
+         force: bool = typer.Option(False, "--force", help="while a config lab run is active: abort it without its restore (see `down --force`)"),
+         yes: bool = typer.Option(False, "-y", "--yes", help="do not ask (BENCHCTL_AGENT=1 requires it with --force)")) -> None:
     """Stop the web page, the cluster and the governor this tool started (with `lab NAME`, only that config lab's replay run).
 
-    `stop lab NAME` ends the run through the governor; an A/B run then puts the cluster back to its snapshot."""
+    `stop lab NAME` ends the run through the governor; an A/B run then puts the cluster back to its snapshot. While a lab run is
+    active a bare `stop` refuses and names the two ways out (`stop lab NAME` then wait, or `--force`)."""
     if resource is None:
-        _launcher("stop")
+        _guard_lab_run("stop", force, yes)
+        _launcher("stop", *(["--force"] if force else []), *(["--yes"] if yes else []))
     if resource != "lab" or not lab_name:
         typer.echo("usage: benchctl stop lab NAME   (or: benchctl stop)", err=True)
         raise typer.Exit(2)
@@ -576,6 +582,45 @@ def open_ui() -> None:
 YES = typer.Option(False, "-y", "--yes", help="do not ask (a terminal asks; scripts are never asked; BENCHCTL_AGENT=1 requires it)")
 
 
+FORCE_RUN = typer.Option(False, "--force", help="while a config lab run is active: abort it, skip its restore and keep the snapshot "
+                         "(`benchctl remove lab NAME` then returns to the plain cluster); BENCHCTL_AGENT=1 also needs --yes")
+RUN_REFUSED = 3  # exit code of `down` and `stop` refused because a lab run is active (scripts/benchctl-launch checks it)
+
+
+def _active_lab_run() -> dict | None:
+    """The governor's `lab` block when a run is preparing, running or recovering; None when there is none or no governor."""
+    try:
+        block = checks.governor_request({"cmd": "status"}, os.environ.get("WORKBENCH_GOV_SOCKET", checks.GOV_SOCKET)).get("lab")
+    except (OSError, ValueError):
+        return None
+    return block if isinstance(block, dict) and block.get("active") else None
+
+
+def _guard_lab_run(verb: str, force: bool, yes: bool) -> None:
+    """`down` and bare `stop` while a lab run is active (owner decision, issue 554 round 3): refused, naming the two ways out;
+    `--force` aborts the run without its restore (the snapshot is kept). `--yes` never overrides; with BENCHCTL_AGENT=1 `--force`
+    also needs `--yes`."""
+    run = _active_lab_run()
+    if not run:
+        return
+    name, rid = run.get("name"), run.get("run") or "(preparing)"
+    if not force:
+        typer.echo(f"refused: lab run {rid} of {name} is {run.get('state')}. Either `benchctl stop lab {name}`, wait until "
+                   f"`benchctl status` shows it ended, then `benchctl {verb}`; or `benchctl {verb} --force`, which aborts the run, skips its "
+                   f"restore and keeps the snapshot (`benchctl remove lab {name}` then returns to the plain cluster)", err=True)
+        raise typer.Exit(RUN_REFUSED)
+    _confirm(f"This aborts lab run {rid} of {name} without restoring its snapshot.", yes, ask=False)
+    try:
+        r = checks.governor_request({"cmd": "lab-stop", "name": name, "force": True}, os.environ.get("WORKBENCH_GOV_SOCKET", checks.GOV_SOCKET))
+    except OSError as e:
+        typer.echo(f"the governor stopped answering: {e}", err=True)
+        raise typer.Exit(1) from e
+    if not r.get("ok"):
+        typer.echo(str(r.get("error")), err=True)
+        raise typer.Exit(1)
+    typer.echo(f"lab run {rid} of {name} aborted without its restore; the snapshot is kept: `benchctl remove lab {name}` returns to the plain cluster")
+
+
 def _confirm(what: str, yes: bool, ask: bool = True) -> None:
     """Ask before a step that ends shells or removes nodes, but only for a person at a terminal: scripts and the
     launcher (no TTY) are never blocked, and `--yes` skips the question. With BENCHCTL_AGENT=1 nobody can be asked, so
@@ -590,12 +635,13 @@ def _confirm(what: str, yes: bool, ask: bool = True) -> None:
 
 @app.command()
 def down(dry_run: bool = typer.Option(False, "-n", "--dry-run", help="list what would stop; change nothing"),
-         yes: bool = YES) -> None:
-    """Stop and remove the workbench compose project (nothing else)."""
+         yes: bool = YES, force: bool = FORCE_RUN) -> None:
+    """Stop and remove the workbench compose project (nothing else). Refused while a config lab run is active (see --force)."""
     running = [r["name"] for r in inventory.service_rows() if r["state"] == "running"]
     if dry_run:
         typer.echo(f"would stop and remove {len(running)} containers: {', '.join(running) or 'none running'}")
         return
+    _guard_lab_run("down", force, yes)
     if running:
         _confirm(f"This stops {len(running)} containers and ends open shells on the nodes.", yes)
     try:
@@ -1324,7 +1370,7 @@ run_app = typer.Typer(cls=SuggestingGroup, help="Run something: a config lab's r
 app.add_typer(run_app, name="run")
 
 
-def _lab_request(req: dict, ok_text: Callable[[dict], str]) -> None:
+def _lab_request(req: dict, ok_text: Callable[[dict], str]) -> dict:
     """Send a lab run command to the governor; one line for each answer (W-10)."""
     sock = os.environ.get("WORKBENCH_GOV_SOCKET", checks.GOV_SOCKET)
     try:
@@ -1336,6 +1382,7 @@ def _lab_request(req: dict, ok_text: Callable[[dict], str]) -> None:
         typer.echo(str(r.get("error", "refused")), err=True)
         raise typer.Exit(1)
     typer.echo("the governor is in dry-run mode: nothing was started" if r.get("dry_run") else ok_text(r))
+    return r
 
 
 @run_app.command("lab")
@@ -1346,6 +1393,7 @@ def run_lab(name: str = typer.Argument(..., help="a lab made with `benchctl impo
             prepare: bool = typer.Option(False, "--prepare", hidden=True, help="freeze the jobs and print the run (the governor's child)"),
             run_id: str = typer.Option(None, "--run", hidden=True, help="with --execute: the prepared run"),
             execute: bool = typer.Option(False, "--execute", hidden=True, help="walk a prepared run here (the governor's child)"),
+            recover: bool = typer.Option(False, "--recover", hidden=True, help="restore-only: finish a run whose child is gone (the governor's child)"),
             output: str = OUTPUT) -> None:
     """Replay a config lab's sampled trace on the running cluster through the governor (L0-L1, admitted): with --ab the baseline, then
     the candidate from the same snapshot; without it the candidate only. Returns once the run started; `benchctl status` shows it,
@@ -1359,6 +1407,12 @@ def run_lab(name: str = typer.Argument(..., help="a lab made with `benchctl impo
             p = lab_steps.prepare(name, _base_sim(), ab, target_hours, lab_run.DEFAULT_SEED if seed is None else seed)
             typer.echo(json.dumps(p) if output == "json" else f"run {p['run']} of lab {name}: {p['jobs']} jobs, {p['lab_nodes']} lab nodes")
             return
+        if recover:
+            if not run_id:
+                raise lab.LabError("--recover needs --run RID")
+            sock = os.environ.get("WORKBENCH_GOV_SOCKET", checks.GOV_SOCKET)
+            run = lab_steps.recover(name, run_id, lambda r: checks.governor_request(r, sock, timeout=5))
+            raise typer.Exit(0 if run.r.get("restored_after_abort") is not False else 1)
         if execute:
             if not run_id:
                 raise lab.LabError("--execute needs --run RID")
@@ -1371,8 +1425,31 @@ def run_lab(name: str = typer.Argument(..., help="a lab made with `benchctl impo
         raise typer.Exit(1) from e
     req = {"cmd": "lab-run", "name": name, "ab": ab, **({"target_hours": target_hours} if target_hours is not None else {}),
            **({"seed": seed} if seed is not None else {})}
-    _lab_request(req, lambda r: f"run {r['run']} of lab {name} started ({'A/B' if r.get('ab') else 'candidate only'}, admitted {r['admit_mb']} MB); "
-                                f"follow it with `benchctl status`, end it with `benchctl stop lab {name}`")
+    if _lab_request(req, lambda r: f"lab {name}: preparing the run (freezing the jobs, then the memory check)").get("dry_run"):
+        return
+    raise typer.Exit(_lab_run_outcome(name))
+
+
+def _lab_run_outcome(name: str, timeout: float = 120) -> int:
+    """`lab-run` answers at once (W-13); watch `status` until the run has started or was refused, and say which in one line."""
+    sock = os.environ.get("WORKBENCH_GOV_SOCKET", checks.GOV_SOCKET)
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        try:
+            lb = checks.governor_request({"cmd": "status"}, sock).get("lab") or {}
+        except OSError as e:
+            typer.echo(f"the governor stopped answering: {e}", err=True)
+            return 1
+        if lb.get("name") == name and lb.get("state") == "refused":
+            typer.echo(str(lb.get("reason")), err=True)
+            return 1
+        if lb.get("name") == name and lb.get("run") and lb.get("state") not in (None, "preparing"):
+            typer.echo(f"run {lb['run']} of lab {name} started ({'A/B' if lb.get('ab') else 'candidate only'}, admitted {lb.get('admit_mb')} MB); "
+                       f"follow it with `benchctl status`, end it with `benchctl stop lab {name}`")
+            return 0
+        time.sleep(1)
+    typer.echo(f"the run of lab {name} is still preparing after {int(timeout)} s; `benchctl status` shows when it starts", err=True)
+    return 1
 
 
 _TARGET = typer.Option("mock", "--target", help="mock (the Jira mock) or real (the Data Center part)")
@@ -1592,6 +1669,10 @@ def import_lab(name: str = typer.Argument(..., help="lab name: lowercase letters
                src: str = typer.Option(..., "--from", help="folder of exported files (slurm.conf, topology.conf, gres.conf, sacctmgr.dump, qos.txt, trace.sacct, k8s/, rules/, teleport/, versions.yaml)"),
                replace: bool = typer.Option(False, "--replace", help="overwrite a lab of the same name")) -> None:
     """Import exported production configuration into a config lab: parse, scrub secrets, record versions. Reads files only; never connects to production."""
+    if replace and (run := _active_lab_run()):
+        typer.echo(f"refused: lab run {run.get('run') or '(preparing)'} of {run.get('name')} is {run.get('state')}: "
+                   "`import lab --replace` waits until it has ended (the run reads the imported files)", err=True)
+        raise typer.Exit(1)
     try:
         m = lab.import_lab(name, _Path(src), replace=replace, sim=_base_sim())
     except lab.LabError as e:

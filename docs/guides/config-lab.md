@@ -146,12 +146,15 @@ Rows `sacctmgr` refuses to delete are listed.
 
 **Not usable end to end yet.** The commands work, but a real trace cannot be replayed until two things exist ([ADR 0050 addendum](../adr/0050-config-lab-ab-replay-method.md)):
 - the lab node containers (issue 863): until then a job naming a production partition is refused by Slurm and counted as `rejected`;
-- the `lab-uNNN` users in accounting and on slurmctld and the nodes (decision 5, not built): with associations enforced, Slurm refuses a user it does not know.
+- the `lab-uNNN` users in accounting and on slurmctld and the nodes (issue 869): with associations enforced, Slurm refuses a user it does not know.
 
 A run goes **only through the governor** (`./scripts/benchctl start`), needs the cluster with accounting (`benchctl up --with accounting`) and a lab with a trace. One run at a time.
 
-- **Start.** Only at L0 or L1. The governor first freezes the run's jobs, then asks for `lab nodes x 13 MB + 250 MB` (the same estimate `get lab` prints). Otherwise one message says why, for example `refused at L2: lab runs start only at L0-L1 (GV-8)` or `refused: 302 MB would leave ...`.
-- **While it runs.** `scale`, `apply-plan`, a profile change and the other lab commands are refused with one message naming `benchctl stop lab NAME`.
+- **Start.** Only at L0 or L1. The governor answers at once (`preparing`), freezes the run's jobs, then asks for `lab nodes x 13 MB + 250 MB` (the same estimate `get lab` prints). `run lab` waits for the outcome and prints one line: the run started, or why it was refused, for example `refused: 302 MB would leave ...`. `benchctl status` keeps a refusal until the next start.
+- **While it runs** (and while it is preparing or being recovered): `up`, `scale`, `apply-plan`, a profile change, the other lab commands, `remove jobs` and `import lab --replace` are refused with one message naming `benchctl stop lab NAME`. Freezing, thawing or draining a node stays allowed.
+- **`down` and `stop`** are refused too (exit 3), naming two ways out: `benchctl stop lab NAME`, wait until `benchctl status` shows it ended, then `down`; or `benchctl down --force` (also `stop --force`), which aborts the run, skips its restore and keeps the snapshot (`benchctl remove lab NAME` then returns to the plain cluster). `--yes` does not override; with `BENCHCTL_AGENT=1`, `--force` needs `--yes` too.
+- **A fault or a scenario during a replay** is allowed but recorded in `reports/RUN/interference.jsonl`. The run is then not comparable, and `status` names the first action and its time.
+- **If the governor restarts** during a run, its status says `recovering` until the run is wound up: the run is aborted and, for an A/B run, its snapshot restored once memory is calm. The same commands are refused meanwhile.
 - **L2** pauses the replay: no new job is submitted and the pause is counted. A side paused for more than 5 % of the run length marks the run not comparable. L1 does not pause it.
 - **L3** aborts it as `aborted under memory pressure (L3)`. The jobs it submitted are cancelled. An A/B run puts the cluster back to its snapshot once the level is back at L0 or L1 (status says `restore waits for L0-L1` meanwhile).
 - **`stop lab NAME`** works at any level and ends the run the same way.
@@ -185,6 +188,9 @@ Files of a run, under `compose/generated/lab/NAME/`:
 | `aborted under memory pressure (L3)` | start a new run when memory is back |
 | `the replay driver ended without a result` | is the cluster up and the slurm-ctl image built (`benchctl up`)? |
 | `the governor did not answer ...: the restore was not run` | `benchctl remove lab NAME` returns to the plain cluster |
+| `refused: lab run ... is replay_a. Either ...` (down, stop) | `benchctl stop lab NAME` and wait, or add `--force` |
+| `... is being recovered after a governor restart` | wait: `benchctl status` shows when it is done |
+| `restore skipped (benchctl down --force)` | `benchctl remove lab NAME` returns to the plain cluster |
 
 ## Secrets
 

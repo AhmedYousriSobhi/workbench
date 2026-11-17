@@ -206,3 +206,41 @@ def test_lab_run_pauses_at_l2_and_aborts_at_l3(sim, tmp_path):
         subprocess.run([str(ROOT / "scripts" / "benchctl"), "remove", "lab", name, "--execute"], cwd=ROOT, capture_output=True, check=False)
         shutil.rmtree(lab.path(name), ignore_errors=True)
         (flags / "lab.abort").unlink(missing_ok=True)
+
+
+def test_lab_run_answers_at_once_refuses_down_and_recovers_after_a_governor_restart(sim, tmp_path):
+    """Issue 554, owner decisions round 3: `lab-run` answers `preparing` at once; `benchctl down` is refused (exit 3) while the run
+    is active; a governor restarted mid-run shows `recovering` and refuses `admit` until the old run is wound up. Written, not yet run."""
+    import shutil
+
+    from benchctl import lab, lab_candidate
+    name = "recover-run"
+    flags = ROOT / "compose" / "generated" / "flags"
+    lab.import_lab(name, ROOT / "tests" / "fixtures" / "lab" / "full", replace=True, sim=sim)
+    lab_candidate.init(name, replace=True)
+    gov, _sig, sock = start_governor(tmp_path, "--no-watchdog", "--user-mode", "--workdir", str(ROOT), "--thresholds", FAST)
+    gov2 = None
+    try:
+        r = ask(sock, {"cmd": "lab-run", "name": name})
+        assert r.get("state") == "preparing", r
+        assert wait_for(lambda: (ask(sock, {"cmd": "status"})["lab"] or {}).get("state") not in (None, "preparing"), timeout=60)
+        lb = ask(sock, {"cmd": "status"})["lab"]
+        if lb.get("state") == "refused":
+            pytest.skip(f"ENVIRONMENT, not a code defect: {lb.get('reason')}")
+        env = {**os.environ, "WORKBENCH_GOV_SOCKET": str(sock)}
+        down = subprocess.run([str(ROOT / "scripts" / "benchctl"), "down"], cwd=ROOT, env=env, capture_output=True, text=True, check=False)
+        assert down.returncode == 3 and f"benchctl stop lab {name}" in down.stderr and "--force" in down.stderr
+        stop_governor(gov)
+        gov = None
+        gov2, _sig, sock = start_governor(tmp_path / "again", "--no-watchdog", "--user-mode", "--workdir", str(ROOT), "--thresholds", FAST)
+        assert wait_for(lambda: (ask(sock, {"cmd": "status"})["lab"] or {}).get("state") == "recovering", timeout=15)
+        assert "being recovered" in ask(sock, {"cmd": "admit", "budget_mb": 10})["error"]
+        assert wait_for(lambda: not (ask(sock, {"cmd": "status"})["lab"] or {}).get("active"), timeout=600)
+    finally:
+        for g in (gov, gov2):
+            if g:
+                stop_governor(g)
+        subprocess.run([str(ROOT / "scripts" / "benchctl"), "remove", "lab", name, "--execute"], cwd=ROOT, capture_output=True, check=False)
+        shutil.rmtree(lab.path(name), ignore_errors=True)
+        (flags / "lab.abort").unlink(missing_ok=True)
+        (ROOT / "compose" / "generated" / "lab" / "run-active.json").unlink(missing_ok=True)

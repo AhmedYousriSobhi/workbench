@@ -184,7 +184,8 @@ def main(argv: list[str] | None = None) -> None:
         return json.loads(r.stdout)
 
     def reader(argv: list[str]) -> str:
-        """`benchctl ARGV` as the repository's owner, its stdout as text (read-only verbs only, chosen by the governor, never by the page)."""
+        """`benchctl ARGV` as the repository's owner, its stdout as text. The governor chooses ARGV, never the page: read-only verbs, and
+        `run lab NAME --prepare` (issue 554), which writes only the new run's own folder (its frozen jobs and record), nothing on the cluster."""
         cmd = [py, "-m", "benchctl.cli", *argv]
         owner = Path(args.workdir).stat().st_uid
         if os.geteuid() == 0 and owner != 0:

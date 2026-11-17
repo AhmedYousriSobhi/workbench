@@ -52,7 +52,7 @@ def lab_run_error(req: dict) -> str | None:
     if not (isinstance(req.get("name"), str) and LAB_NAME_RE.fullmatch(req["name"])):
         return f"{req.get('cmd')} needs name:NAME (lowercase letters, digits, -)"
     if req.get("cmd") == "lab-stop":
-        return None
+        return None if isinstance(req.get("force", False), bool) else "lab-stop force must be true or false"
     if "ab" in req and not isinstance(req["ab"], bool):
         return "lab-run ab must be true or false"
     h = req.get("target_hours")

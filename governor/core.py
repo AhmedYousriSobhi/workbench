@@ -1,6 +1,7 @@
 """Governor core: ties sampler, ladder, planner and the control commands together."""
 import json
 import logging
+import re
 import threading
 import time
 from collections.abc import Callable
@@ -29,7 +30,9 @@ EVENTS_EVERY = 5.0  # seconds between memory.events reads (one small file per co
 ADMIT_FLOOR = int(1.0 * 1024**3)  # MemAvailable that must remain after a start (matches benchctl preflight)
 LAB_VALIDATE_MB = 250  # a lab validation one-shot set (P5, ADR 0050: the replay and validation estimate)
 CHANGE_MAX_LEVEL = 1  # scale/set-profile fork docker; GV-8 forbids that under pressure (L2+)
-RUN_EXCLUSIVE = {"scale", "set-profile", "apply-plan", "lab-apply", "lab-restore", "lab-validate"}  # would change the cluster under a lab run
+RUN_EXCLUSIVE = {"scale", "set-profile", "apply-plan", "lab-apply", "lab-restore", "lab-validate", "admit"}  # would change the cluster under a lab run
+NODE_IN = re.compile(r"(?:^|-)[a-z]{2,8}[0-9]{3}(?:-|$)")  # a node container (workbench-cn001-1), not a service
+INTERFERING = {"node-state", "freeze", "thaw", "stop", "start", "netem-set", "submit-job", "slurm-step"}  # allowed during a run, recorded
 
 
 class Governor:
@@ -275,6 +278,19 @@ class Governor:
         base = marker or {"name": run["name"], "side": None, "time_scale": 1.0}
         return {**base, **{k: v for k, v in run.items() if k not in ("name", "side")}, "replay_side": run.get("side")}
 
+    def _lab_run_guard(self, cmd: str, req: dict) -> dict | None:
+        """While a lab run is preparing, running or recovering (owner decisions, issue 554 round 3): a command that would change the
+        cluster under it is refused with one message; an operator's node action (allowed: it is relief) is recorded as interference."""
+        remove_jobs = cmd == "slurm-step" and req.get("name") == "cancel-jobs"
+        if (why := self.labrun.busy()) and (cmd in RUN_EXCLUSIVE or remove_jobs):
+            a = self.labrun.active
+            how = "" if a["phase"] == "recovering" else f" (benchctl stop lab {a['name']} ends it)"
+            return {"ok": False, "error": f"{why}: {cmd}{' remove-jobs' if remove_jobs else ''} waits for it{how}"}
+        on_node = cmd not in ("freeze", "thaw", "stop", "start") or bool(NODE_IN.search(str(req.get("target") or "")))
+        if cmd in INTERFERING and on_node:
+            self.labrun.interfere(cmd if cmd != "slurm-step" else f"slurm-step {req.get('name')}", req.get("node") or req.get("target"))
+        return None
+
     def _lab_apply_admit(self, req: dict) -> dict | None:
         """GV-9 for `lab-apply` (ADR 0050 addendum): the lab's node count from `benchctl get lab NAME -o json` (read-only), then
         admit `nodes x 13 + 250` MB. Only at L0-L1 (above, `_change` refuses with its own message) and with --workdir."""
@@ -328,6 +344,8 @@ class Governor:
 
     def handle(self, cmd: str, req: dict) -> dict:
         """Control-socket command handler; request already validated by control.dispatch."""
+        if self.labrun and (refused := self._lab_run_guard(cmd, req)):
+            return refused
         if cmd == "slurm-trace":  # read-only, so allowed at every level, and slow (Docker): the lock is not held
             if not self.tracer:
                 return {"ok": False, "error": "no trace without --workdir (the governor runs `benchctl get trace`)"}
@@ -369,7 +387,7 @@ class Governor:
             if not self.labrun:
                 return {"ok": False, "error": "no lab runs without --workdir (the governor runs `benchctl run lab`)"}
             if cmd == "lab-stop":
-                return self.labrun.stop(req["name"])
+                return self.labrun.stop(req["name"], bool(req.get("force", False)))
             if (err := self._lab_missing(req)):
                 return err
             if self.dry_run:
@@ -378,8 +396,6 @@ class Governor:
             if self.change and self.change.get("state") == "running":
                 return {"ok": False, "error": "a change is already running: wait for it, then start the run"}
             return self.labrun.start(req["name"], bool(req.get("ab", False)), req.get("target_hours"), req.get("seed"))
-        if self.labrun and (a := self.labrun.active) and cmd in RUN_EXCLUSIVE:
-            return {"ok": False, "error": f"lab run {a['run']} of {a['name']} is in progress: {cmd} waits for it (benchctl stop lab {a['name']} ends it)"}
         if cmd == "lab-apply" and not self._lab_missing(req) and (refused := self._lab_apply_admit(req)):  # slow (a child): not under the lock
             return refused
         if cmd in ("freeze", "thaw", "stop", "start"):  # slow, so not under the lock: it would hold `status` up like a plan does

@@ -249,3 +249,86 @@ def test_abort_reason_waits_while_paused_and_ends_on_resume_or_abort(run, root, 
     (flags / lab_steps.PAUSE_FLAG).write_text("L3")
     s, _ = steps(run, root, tmp_path, sleep=lambda x: (flags / lab_steps.ABORT_FLAG).write_text("aborted under memory pressure (L3)"))
     assert s.abort_reason() == "aborted under memory pressure (L3)"
+
+
+class Recorder:
+    """The state steps of a recovery: records snapshot, restore, collect and discard; can fail the restore."""
+
+    def __init__(self, restore_fails=False):
+        self.calls, self.restore_fails = [], restore_fails
+
+    def snapshot(self):
+        return {}
+
+    def restore(self):
+        self.calls.append("restore")
+        if self.restore_fails:
+            raise LabError("restore failed")
+        return {"spool_match": True}
+
+    def collect(self, side, r):
+        self.calls.append(f"collect {side}")
+        return {"sacct.txt": "JobID|JobName|User\n"}
+
+    def discard(self):
+        self.calls.append("discard")
+
+
+def recovery(run, root, tmp_path, state=None, **kw):
+    removed = []
+    st = state or Recorder()
+    s, _ = steps(run, root, tmp_path, state=st, run_cmd=lambda argv: removed.append(argv) or 0, **kw)
+    return s, st, removed
+
+
+def test_recover_aborts_a_run_left_mid_replay_restores_and_discards(run, root, tmp_path):
+    for st in ("snapshot", "apply_baseline", "replay_a"):
+        run.move(st)
+    run.r["snapshot"] = {"spool_files": 1}
+    run.save()
+    s, st, removed = recovery(run, root, tmp_path)
+    out = lab_steps.recover("prod-a", run.r["run"], None, root, steps=s)
+    assert out.state == "aborted" and out.r["reason"].startswith(lab_steps.RESTARTED) and out.r["restored_after_abort"] is True
+    assert st.calls == ["collect a", "restore", "discard"]
+    assert [a[-1] for a in removed] == [lab_steps.driver_name(run.r["run"], "a"), lab_steps.driver_name(run.r["run"], "b")]
+
+
+def test_recover_finishes_a_restore_still_owed_and_is_safe_to_run_again(run, root, tmp_path):
+    for st in ("snapshot", "apply_baseline"):
+        run.move(st)
+    run.r["snapshot"] = {"spool_files": 1}
+    run.abort("aborted under memory pressure (L3)")
+    run.r["restored_after_abort"] = False
+    run.save()
+    s, st, _ = recovery(run, root, tmp_path, state=Recorder(restore_fails=True))
+    out = lab_steps.recover("prod-a", run.r["run"], None, root, steps=s)
+    assert out.r["restored_after_abort"] is False and "discard" not in st.calls  # the snapshot is kept for the next try
+    s, st, _ = recovery(run, root, tmp_path)
+    out = lab_steps.recover("prod-a", run.r["run"], None, root, steps=s)
+    assert out.r["restored_after_abort"] is True and st.calls == ["restore", "discard"]
+    s, st, _ = recovery(run, root, tmp_path)
+    lab_steps.recover("prod-a", run.r["run"], None, root, steps=s)
+    assert st.calls == ["discard"]  # nothing owed any more
+
+
+def test_down_force_skips_the_restore_and_keeps_the_snapshot(run, root, tmp_path):
+    for st in ("snapshot", "apply_baseline", "replay_a"):
+        run.move(st)
+    run.r["snapshot"] = {"spool_files": 1}
+    run.save()
+    flags = tmp_path / "gen" / "flags"
+    flags.mkdir(parents=True)
+    (flags / lab_steps.NORESTORE_FLAG).write_text("benchctl down --force\n")
+    s, st, _ = recovery(run, root, tmp_path)
+    assert s.skip_restore() == "benchctl down --force"
+    out = lab_steps.recover("prod-a", run.r["run"], None, root, steps=s)
+    assert out.r["restored_after_abort"] is False and "restore skipped (benchctl down --force)" in out.r["restore_error"]
+    assert "remove lab prod-a" in out.r["restore_error"] and "restore" not in st.calls and "discard" not in st.calls
+
+
+def test_interference_marks_the_run_not_comparable(run):
+    assert run.interference() is None and run.comparable()
+    (run.folder / "interference.jsonl").write_text('not json\n{"at": "2026-11-17T10:00:00Z", "action": "node-state", "target": "cn001", '
+                                                    '"side": "a", "by": "governor"}\n')
+    assert run.interference() == {"at": "2026-11-17T10:00:00Z", "action": "node-state", "target": "cn001", "side": "a", "by": "governor"}
+    assert run.comparable() is False and run.progress()["interference"]["action"] == "node-state"

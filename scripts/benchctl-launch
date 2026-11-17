@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One command to start, stop and look at workbench.
 #   ./scripts/benchctl-launch start [--profile min|std|full]   check the machine, build/start the cluster, start the web page
-#   ./scripts/benchctl-launch stop                             stop the web page and the cluster (only the workbench project)
+#   ./scripts/benchctl-launch stop [--force [--yes]]           stop the web page and the cluster (only the workbench project); refused during a lab run unless --force
 #   ./scripts/benchctl-launch status                           governor, cluster and web page at a glance
 #   ./scripts/benchctl-launch open                             print the login link (and open it in a browser when possible)
 # No sudo is needed. The memory governor runs as you (pause/stop through Docker) unless the optional system
@@ -107,9 +107,12 @@ cmd_start() {
   echo; echo "Stop everything with: ./scripts/benchctl-launch stop"
 }
 cmd_stop() {
+  # `down` first: while a config lab run is active it refuses (exit 3) and names the ways out; then nothing else is stopped (issue 554).
+  ./scripts/benchctl down "$@"
+  rc=$?
+  [ "$rc" -eq 3 ] && exit 3
   if ui_pid >/dev/null; then kill "$(ui_pid)" 2>/dev/null; echo "web page stopped"; else echo "web page was not running"; fi
   rm -f "$pidf"
-  ./scripts/benchctl down
   stop_own_governor
 }
 cmd_status() {
@@ -124,7 +127,7 @@ cmd_open() { ui_pid >/dev/null || { echo "web page is not running: ./scripts/ben
 
 case "${1:-}" in
   start) shift; cmd_start "$@" ;;
-  stop) cmd_stop ;;
+  stop) shift; cmd_stop "$@" ;;
   status) cmd_status ;;
   open) cmd_open ;;
   *) sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
