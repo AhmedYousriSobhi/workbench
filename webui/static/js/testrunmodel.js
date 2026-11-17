@@ -64,6 +64,11 @@ function k8s(d) {
   }
   if (d.metrics_server === 'stop') out.push('Stop metrics-server (the metrics API answers 503)');
   else if (d.metrics_server === 'start') out.push('Start metrics-server again (the metrics API answers)');
+  if (d.gpu) {
+    const g = d.gpu;
+    out.push(g.advertised !== undefined ? `Kubernetes node ${g.node} ${g.advertised ? 'advertises its GPUs again' : 'stops advertising its GPUs (allocatable 0)'}` : `Kubernetes node ${g.node} ${g.mig.strategy === 'none' ? 'is a normal GPU node again' : `becomes a MIG node (${g.mig.strategy}, ${g.mig.profile || '1g.18gb'})`}`);
+  }
+  if (d.kubelet) out.push(d.kubelet.skew === 'same' ? `Kubernetes node ${d.kubelet.node} reports the API server's version` : `Kubernetes node ${d.kubelet.node} reports a kubelet ${d.kubelet.skew} than the API server`);
   if (d.volcano) out.push(d.volcano.queue ? `Set Volcano queue ${d.volcano.queue} ${String(d.volcano.state).toLowerCase()}` : `Set Volcano PodGroup ${d.volcano.namespace}/${d.volcano.podgroup} to ${d.volcano.phase}`);
   if (d.usage) out.push(`Set the CPU use of each ${d.usage.namespace}/${d.usage.deploy} pod to ${d.usage.cpu} (its autoscaler reacts)`);
   return out;
@@ -173,6 +178,8 @@ const EXPECT = {
   'k8s.node_ready': a => `Kubernetes node ${a.node} is ${a.ready === false ? 'NotReady' : 'Ready'}`,
   'k8s.pod_status': a => `Pod ${a.namespace}/${a.name} shows ${a.reason}`,
   'k8s.metrics_api': a => `The metrics API ${a.served === false ? 'is unavailable' : 'answers'}`,
+  'k8s.node_gpus': a => `Kubernetes node ${a.node} allocates ${a.allocatable ?? 0} of ${a.resource || 'nvidia.com/gpu'}`,
+  'k8s.node_kubelet': a => `Kubernetes node ${a.node} reports a kubelet ${a.skew || 'different'} than the API server`,
   'k8s.pods_on_node': a => `At least ${count(a.min ?? 1, 'Running pod')} (${a.selector}, ${a.namespace}) on Kubernetes node ${a.node}`,
   'storage.mount': a => `${a.mount} on ${a.node || 'cn001'}: ${[a.min_used_pct != null ? pctUsed(a.min_used_pct, 'used') : '', a.min_inodes_used_pct != null ? pctUsed(a.min_inodes_used_pct, 'of its inodes used') : '',
     a.quota_exceeded ? `${a.quota_exceeded} over quota` : '', a.stale != null ? (a.stale ? 'stale' : 'not stale') : ''].filter(Boolean).join(', ') || 'mounted'}`,

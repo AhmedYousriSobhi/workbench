@@ -23,6 +23,7 @@ from . import (
     dcgm,
     faultmodel,
     k8s,
+    k8sgpu,
     lab_interference,
     netemfaults,
     selectors,
@@ -873,6 +874,10 @@ def expectation(exp: dict, runner=checks.run, host: bool = True, seen: dict | No
         return label, lambda: args["reason"] in k8s.pod_reasons(args["namespace"], args["name"], runner).split(), within
     if kind == "k8s.metrics_api" and host:  # the metrics API answers (served: true, default) or does not (503 while metrics-server is stopped)
         return label, lambda: k8s.metrics_api_served(runner) == bool(args.get("served", True)), within
+    if kind == "k8s.node_gpus" and host:  # the node's allocatable `resource` (default nvidia.com/gpu) is `allocatable` (issue 766)
+        return label, lambda: k8s.node_gpus(args["node"], args.get("resource", "nvidia.com/gpu"), runner) == int(args["allocatable"]), within
+    if kind == "k8s.node_kubelet" and host:  # the node's kubelet is newer than, older than or as the API server (skew: newer, older or same)
+        return label, lambda: k8s.node_kubelet(args["node"], runner) == k8sgpu.skewed(k8s.version(k8s.current_sim()), args["skew"]), within
     if kind == "k8s.pods_on_node" and host:  # at least `min` (default 1) Running pods matching `selector` on the node
         return label, lambda: (k8s.pods_on_node(args["node"], args["namespace"], args["selector"], runner) or 0) >= int(args.get("min", 1)), within
     if kind == "storage.mount" and host:  # the declared mount is as full, stale or over quota as the scenario made it

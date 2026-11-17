@@ -1,0 +1,9 @@
+name: k8s-gpu-unadvertised
+ref: SC-50
+description: the first Kubernetes GPU node stops advertising its GPUs (the GPU Feature Discovery labels still say it has them, allocatable and capacity of nvidia.com/gpu go to 0), then advertises them again after 120 s (issue 766)
+steps:
+  - {at: 0s,   target: k8s, do: {gpu: {node: first k8s gpu node, count: 8, advertised: false}}}
+  - {at: 120s, target: k8s, do: {gpu: {node: first k8s gpu node, count: 8, advertised: true}}}
+expect:
+  - k8s.node_gpus: {node: first k8s gpu node, allocatable: 0, within: 20s}
+  - k8s.node_gpus: {node: first k8s gpu node, allocatable: 8, after: 125s, within: 20s}

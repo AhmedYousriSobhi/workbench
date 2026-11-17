@@ -191,6 +191,15 @@ def k8s(d) -> list[str]:
         out.append("Stop metrics-server (the metrics API answers 503)")
     elif d.get("metrics_server") == "start":
         out.append("Start metrics-server again (the metrics API answers)")
+    if isinstance(d.get("gpu"), dict):
+        g = d["gpu"]
+        if "advertised" in g:
+            out.append(f"Kubernetes node {g['node']} {'advertises its GPUs again' if g['advertised'] else 'stops advertising its GPUs (allocatable 0)'}")
+        else:
+            m = g["mig"]
+            out.append(f"Kubernetes node {g['node']} " + ("is a normal GPU node again" if m["strategy"] == "none" else f"becomes a MIG node ({m['strategy']}, {m.get('profile', '1g.18gb')})"))
+    if isinstance(d.get("kubelet"), dict):
+        out.append(f"Kubernetes node {d['kubelet']['node']} reports a kubelet {d['kubelet']['skew']} than the API server" if d["kubelet"]["skew"] != "same" else f"Kubernetes node {d['kubelet']['node']} reports the API server's version")
     if isinstance(d.get("volcano"), dict):
         v = d["volcano"]
         out.append(f"Set Volcano queue {v['queue']} {v['state'].lower()}" if "queue" in v else f"Set Volcano PodGroup {v['namespace']}/{v['podgroup']} to {v['phase']}")
@@ -424,6 +433,8 @@ EXPECT = {
     "k8s.node_ready": lambda a: f"Kubernetes node {js(a.get('node'))} is {'NotReady' if a.get('ready') is False else 'Ready'}",
     "k8s.pod_status": lambda a: f"Pod {js(a.get('namespace'))}/{js(a.get('name'))} shows {js(a.get('reason'))}",
     "k8s.metrics_api": lambda a: f"The metrics API {'is unavailable' if a.get('served') is False else 'answers'}",
+    "k8s.node_gpus": lambda a: f"Kubernetes node {js(a.get('node'))} allocates {nn(a.get('allocatable'), 0)} of {a.get('resource') or 'nvidia.com/gpu'}",
+    "k8s.node_kubelet": lambda a: f"Kubernetes node {js(a.get('node'))} reports a kubelet {a.get('skew') or 'different'} than the API server",
     "k8s.pods_on_node": lambda a: f"At least {count(nn(a.get('min'), 1), 'Running pod')} ({js(a.get('selector'))}, {js(a.get('namespace'))}) on Kubernetes node {js(a.get('node'))}",
     "storage.mount": _mount,
     "jira.issue_created": lambda a: f"A {_jira(a)} ticket is filed with the labels {lst(a.get('labels'))}",

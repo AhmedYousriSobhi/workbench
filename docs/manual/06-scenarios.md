@@ -91,6 +91,11 @@ The command exits 1 when a step errors or an `expect` line does not hold.
 | SC-40 | `k8s-api-throttled` | the API server throttles the client's user (`viewer`) to about three seats and no queue, so a burst gets 429; removed after 2 minutes (needs `k8s`) |
 | SC-45 | `k8s-queue-inactive` | the `gpu-training` Kueue queue and its local queues go inactive with a growing backlog, then recover (needs `k8s`; no controller, the step writes the status) |
 | SC-47 | `k8s-metrics-down` | metrics-server stops: the metrics API answers 503 and node and pod usage disappear, the rest of the API answers; it starts again after 2 minutes (needs `k8s`, issue 382) |
+| SC-50 | `k8s-gpu-unadvertised` | the first Kubernetes GPU node stops advertising GPUs (labels still say it has them, allocatable 0), then advertises them again (needs `k8s`, issue 766) |
+| SC-51 | `k8s-mig-single` | the first Kubernetes GPU node becomes a MIG node (`mig.strategy` single, product `...-MIG-1g.18gb`, 7 devices as `nvidia.com/gpu`), then a normal node again (needs `k8s`, issue 766) |
+| SC-52 | `k8s-mig-mixed` | the first Kubernetes GPU node serves 7 `nvidia.com/mig-1g.18gb` devices and one fewer whole GPU (`mixed`), then goes back (needs `k8s`, issue 766) |
+| SC-53 | `k8s-kubelet-skew` | the first Kubernetes GPU node reports a kubelet newer than the API server, then one four minors older, then the API server's version (needs `k8s`, issue 766) |
+| SC-54 | `k8s-gpu-fragmentation` | two pods take 4 GPUs on each GPU node, then a pod asking for 5 waits: the free GPUs add up to enough but no single node has them (needs `k8s` with two GPU nodes, issue 766) |
 | SC-49 | `k8s-volcano-queue-closed` | the Volcano queue `gpu-batch` is closed and the PodGroup `train-wait` stays Pending, then the queue opens again (needs `k8s`; no controller, the step writes the status, issue 765) |
 | SC-48 | `k8s-hpa-max` | the autoscaler `hpa-below` is pushed to its maximum replicas by a rise in per-pod CPU use, then back; the real HPA controller reacts through metrics-server (needs `k8s`, issue 764) |
 | SC-18 | `pod-crashloop` | a pod crash-loops and another is OOMKilled (needs the `k8s` part) |
@@ -222,6 +227,8 @@ Every scenario carries an `expect`, or is listed with its reason in `NO_EXPECT` 
 | `k8s.node_ready: {node, ready, within}` | the node's Ready condition matches |
 | `k8s.pod_status: {namespace, name, reason, within}` | the pod's phase, or a container's waiting or terminated reason, matches |
 | `k8s.pods_on_node: {node, namespace, selector, min, within}` | enough matching pods run on the node |
+| `k8s.node_gpus: {node, allocatable, resource, within}` | the node's allocatable `resource` (default `nvidia.com/gpu`) equals `allocatable` (0 for a node that advertises no GPUs, issue 766) |
+| `k8s.node_kubelet: {node, skew, within}` | the node's kubelet is `newer` than, `older` (four minors) than, or the `same` as the API server (issue 766) |
 | `k8s.metrics_api: {served, within}` | the metrics API answers (`served: true`) or does not (`false`, 503 while metrics-server is stopped) |
 | `storage.mount: {node, mount, min_used_pct, min_inodes_used_pct, quota_exceeded, stale, within}` | the mount shows that storage state |
 

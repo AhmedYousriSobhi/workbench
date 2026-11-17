@@ -1,0 +1,11 @@
+name: k8s-kubelet-skew
+ref: SC-53
+description: the first Kubernetes GPU node reports a kubelet one minor newer than the API server (not allowed), after 60 s one four minors older (outside the supported three), after 120 s the API server's version again (issue 766)
+steps:
+  - {at: 0s,   target: k8s, do: {kubelet: {node: first k8s gpu node, skew: newer}}}
+  - {at: 60s,  target: k8s, do: {kubelet: {node: first k8s gpu node, skew: older}}}
+  - {at: 120s, target: k8s, do: {kubelet: {node: first k8s gpu node, skew: same}}}
+expect:
+  - k8s.node_kubelet: {node: first k8s gpu node, skew: newer, within: 20s}
+  - k8s.node_kubelet: {node: first k8s gpu node, skew: older, after: 60s, within: 20s}
+  - k8s.node_kubelet: {node: first k8s gpu node, skew: same, after: 125s, within: 20s}
