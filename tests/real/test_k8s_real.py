@@ -375,3 +375,35 @@ def test_metrics_server_runs_unprivileged_and_a_stop_gives_503_until_it_starts_a
     finally:
         docker("start", f"workbench-{k8s.METRICS_SERVER}-1")
     assert wait_for(lambda: kubectl_as("alice", *probe).returncode == 0, timeout=120), kubectl_as("alice", *probe).stderr
+
+
+def _hpa(name: str) -> dict:
+    out = kubectl_as("alice", "-n", "team-a", "get", "hpa", name, "-o", "json")
+    return json.loads(out.stdout) if out.returncode == 0 else {}
+
+
+def _limited(hpa: dict) -> str | None:
+    return next((c["status"] for c in hpa.get("status", {}).get("conditions", []) if c["type"] == "ScalingLimited"), None)
+
+
+def test_the_real_hpa_controller_gives_the_three_autoscaler_states_and_the_scenario_pushes_one_to_max(cluster):
+    """Issue 764: three HPAs (k8s/fixtures/25-hpa.yaml) computed by the real controller from the metrics API (issue 382): hpa-limited at max with
+    ScalingLimited True, hpa-steady at max with it False, hpa-below under max. The step `usage` (scenario k8s-hpa-max) pushes hpa-below to its maximum
+    and back; the status is never patched, so it survives a controller-manager restart."""
+    def at_max(name: str) -> bool:
+        s = _hpa(name).get("status", {})
+        return s.get("currentReplicas") == _hpa(name).get("spec", {}).get("maxReplicas") and s.get("desiredReplicas") is not None
+    assert wait_for(lambda: _limited(_hpa("hpa-limited")) == "True", timeout=240), _hpa("hpa-limited").get("status")
+    assert at_max("hpa-limited")
+    assert wait_for(lambda: _limited(_hpa("hpa-steady")) == "False", timeout=240), _hpa("hpa-steady").get("status")
+    assert at_max("hpa-steady")
+    below = _hpa("hpa-below")
+    assert below["status"]["currentReplicas"] < below["spec"]["maxReplicas"]
+    up = scenario.Step(0, "k8s", {"usage": {"namespace": "team-a", "deploy": "hpa-below", "cpu": "400m"}})
+    down = scenario.Step(0, "k8s", {"usage": {"namespace": "team-a", "deploy": "hpa-below", "cpu": "50m"}})
+    try:
+        assert scenario.execute(up, runner=k8s._run).status == "ok"
+        assert wait_for(lambda: _hpa("hpa-below").get("status", {}).get("currentReplicas") == 4 and _limited(_hpa("hpa-below")) == "True", timeout=420), \
+            _hpa("hpa-below").get("status")
+    finally:
+        assert scenario.execute(down, runner=k8s._run).status == "ok"
