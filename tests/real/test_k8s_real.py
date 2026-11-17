@@ -92,7 +92,7 @@ def test_failing_fixtures_show_what_a_kubelet_would_report(cluster):
 
 def test_every_kwok_node_advertises_the_kwok_controllers_address_not_loopback(cluster):
     """Issue 872 (ADR 0084 P1): the API server and metrics-server dial a node's InternalIP. A cluster made before this change keeps
-    127.0.0.1 (KWOK's stages keep existing addresses): `benchctl down`, then `up`, recreates the nodes."""
+    127.0.0.1 in etcd (KWOK's stages keep existing addresses), so `up` writes the addresses through the status subresource."""
     r = kubectl_as("alice", "get", "nodes", "-o", "json")
     for n in json.loads(r.stdout)["items"]:
         internal = [a["address"] for a in n["status"].get("addresses", []) if a["type"] == "InternalIP"]
