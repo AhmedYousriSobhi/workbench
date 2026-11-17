@@ -87,7 +87,7 @@ The command exits 1 when a step errors or an `expect` line does not hold.
 | SC-42 | `quota-exceeded` | alice is over her quota on `/scratch`; `lfs quota -u alice` shows `*` and a grace time |
 | SC-43 | `stale-mount` | `cn002` loses `/scratch`: `df` fails there, its series go, `node_filesystem_device_error` is 1 |
 | SC-38 | `k8s-preempt` | filler pods hold GPUs of `kgpu001`; an inference pod needs more than are free and the real scheduler preempts them (needs the `k8s` part; [ADR 0077](../adr/0077-k8s-policy-objects-and-api-throttling.md)) |
-| SC-39 | `k8s-drain-blocked` | `kgpu001` is drained while it holds an `inference` pod whose disruption budget allows no eviction; the drain blocks and the pod stays (needs `k8s`) |
+| SC-39 | `k8s-drain-blocked` | `kgpu001` is drained while it holds an `inference` pod whose disruption budget allows no eviction; the drain blocks and the pod stays; only `inference` pods are evicted, other pods on the node stay (needs `k8s`) |
 | SC-40 | `k8s-api-throttled` | the API server throttles the client's user (`viewer`) to about three seats and no queue, so a burst gets 429; removed after 2 minutes (needs `k8s`) |
 | SC-45 | `k8s-queue-inactive` | the `gpu-training` Kueue queue and its local queues go inactive with a growing backlog, then recover (needs `k8s`; no controller, the step writes the status) |
 | SC-18 | `pod-crashloop` | a pod crash-loops and another is OOMKilled (needs the `k8s` part) |
@@ -208,7 +208,7 @@ Every scenario carries an `expect`, or is listed with its reason in `NO_EXPECT` 
 - `delete_pod: {namespace, name}`
 - `scale: {namespace, deploy, replicas}`
 - `apply` and `remove: [path under k8s/]`
-- `drain: {node, timeout}` (eviction through the API, so a disruption budget can block it)
+- `drain: {node, selector, timeout}` (eviction through the API, so a disruption budget can block it; with a `selector` such as `app=inference` only those pods are evicted and the node's other pods stay)
 
 ### Expectations by target
 
