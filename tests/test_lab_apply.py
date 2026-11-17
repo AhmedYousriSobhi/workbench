@@ -143,6 +143,8 @@ class Cluster:
         if "tctl rm role/" in text:
             self.roles.pop(cmd[-1].split("/")[1], None)
             return ok()
+        if "useradd -M -u" in text or "userdel lab-u" in text or text.endswith("sh -c set -u\ntrue\n"):  # the lab-uNNN Linux users (issue 869)
+            return ok()
         raise AssertionError(f"unexpected command: {text}")
 
     def kubectl(self, args, stdin):
@@ -459,15 +461,15 @@ def test_accounting_is_applied_and_remove_restores_changes_and_deletes_only_what
         "Account - 'ml':Description='ml':Organization='sci':Fairshare=20\nParent - 'ml'\nUser - 'u2':DefaultAccount='ml':Fairshare=1\n")
     (root / "prod-a" / "baseline" / "qos.txt").write_text("Name|Priority|GraceTime\nnormal|9|00:01:00\nhigh|1000|00:00:30\n")
     res = lab_apply.apply("prod-a", "baseline", env)
-    assert "Fairshare=99" in c.records["Account/root/sim"] and "Account/root/ml" in c.records and "User/ml/u2" in c.records
+    assert "Fairshare=99" in c.records["Account/root/sim"] and "Account/root/ml" in c.records and "User/ml/lab-u002" in c.records
     assert c.qos["high"]["Priority"] == "1000" and c.qos["normal"]["Priority"] == "9"
     assert any(line.startswith("accounting:") for line in res["lines"])
     pre_sacct = (root / "prod-a" / "render" / "sacctmgr.pre.dump").read_text()
     assert pre_sacct == pre_dump
     made, changed = lab_apply.record_delta(pre_sacct, (root / "prod-a" / "render" / "sacctmgr.post.dump").read_text())
-    assert made == ["Account/root/ml", "User/ml/u2"] and changed == ["Account/root/sim"]
+    assert made == ["Account/root/ml", "User/ml/lab-u002"] and changed == ["Account/root/sim"]
     out = "\n".join(lab_apply.remove("prod-a", env)["lines"])
-    assert "Fairshare=5" in c.records["Account/root/sim"] and "Account/root/ml" not in c.records and "User/ml/u2" not in c.records
+    assert "Fairshare=5" in c.records["Account/root/sim"] and "Account/root/ml" not in c.records and "User/ml/lab-u002" not in c.records
     assert "User/sim/sim1" in c.records  # present before the lab: never deleted
     assert "high" not in c.qos and c.qos["normal"]["Priority"] == "0" and c.qos["normal"]["GraceTime"] == "00:00:00"
     assert "2 account/user row(s) and 1 QOS removed" in out and "sacctmgr refused" not in out
@@ -477,9 +479,9 @@ def test_remove_lists_rows_sacctmgr_refuses_to_delete(world):
     env, c, root = world
     (root / "prod-a" / "baseline" / "qos.txt").write_text("Name|Priority\nhigh|1000\n")
     lab_apply.apply("prod-a", "baseline", env)
-    c.refuse_delete = {"high", "u2"}
+    c.refuse_delete = {"high", "lab-u003"}
     out = "\n".join(lab_apply.remove("prod-a", env)["lines"])
-    assert "sacctmgr refused: user u2, qos high" in out and lab_apply.read_marker(root) is None
+    assert "sacctmgr refused: user lab-u003, qos high" in out and lab_apply.read_marker(root) is None
 
 
 def test_remove_succeeds_after_a_run_restore_already_removed_the_rows(world):
@@ -491,7 +493,7 @@ def test_remove_succeeds_after_a_run_restore_already_removed_the_rows(world):
         "Cluster - 'prodsim'\nParent - 'root'\nAccount - 'ml':Description='ml':Organization='sci':Fairshare=20\nParent - 'ml'\nUser - 'u2':DefaultAccount='ml':Fairshare=1\n")
     (root / "prod-a" / "baseline" / "qos.txt").write_text("Name|Priority\nhigh|1000\n")
     lab_apply.apply("prod-a", "baseline", env)
-    assert "User/ml/u2" in c.records and "high" in c.qos
+    assert "User/ml/lab-u002" in c.records and "high" in c.qos
     c.records, c.qos = pre_records, pre_qos  # the run's restore put the database back
     out = "\n".join(lab_apply.remove("prod-a", env)["lines"])
     assert "sacctmgr refused" not in out and "already gone" in out and lab_apply.read_marker(root) is None
