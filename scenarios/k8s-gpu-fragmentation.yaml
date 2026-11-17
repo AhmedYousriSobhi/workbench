@@ -1,0 +1,12 @@
+name: k8s-gpu-fragmentation
+ref: SC-54
+description: two pods take 4 GPUs on each of the two Kubernetes GPU nodes, then a pod asking for 5 GPUs waits Pending (Unschedulable) although the free GPUs add up to enough, because no single node has 5 free (needs two GPU nodes with 8 GPUs; issue 766)
+steps:
+  - {at: 0s,  target: k8s, do: {pod: {namespace: team-a, name: frag-a, gpus: 4, node: first k8s gpu node}}}
+  - {at: 0s,  target: k8s, do: {pod: {namespace: team-a, name: frag-b, gpus: 4, node: second k8s gpu node}}}
+  - {at: 20s, target: k8s, do: {pod: {namespace: team-a, name: frag-wait, gpus: 5}}}
+  - {at: 180s, target: k8s, do: {delete_pod: {namespace: team-a, name: frag-wait}}}
+  - {at: 180s, target: k8s, do: {delete_pod: {namespace: team-a, name: frag-a}}}
+  - {at: 180s, target: k8s, do: {delete_pod: {namespace: team-a, name: frag-b}}}
+expect:
+  - k8s.pod_status: {namespace: team-a, name: frag-wait, reason: Pending, after: 25s, within: 30s}

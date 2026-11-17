@@ -434,3 +434,46 @@ def test_the_volcano_queues_and_podgroups_are_served_listed_by_the_viewer_and_th
         scenario.execute(scenario.Step(0, "k8s", {"volcano": {"podgroup": "train-run", "namespace": "team-a", "phase": "Running"}}), runner=k8s._run)
     assert wait_for(lambda: _queue_state("gpu-batch") == "Open", timeout=30)
 
+
+def _gpu_node() -> dict:
+    return json.loads(kubectl_as("alice", "get", "node", "kgpu001", "-o", "json").stdout)
+
+
+def _step(do: dict) -> None:
+    assert scenario.execute(scenario.Step(0, "k8s", do), runner=k8s._run).status == "ok"
+
+
+def test_gpu_shapes_mig_unadvertised_and_kubelet_skew_are_served_and_restored(cluster):
+    """Issue 766: the labels and allocatable of each shape, as GPU Feature Discovery and the device plugin publish them, and the restore."""
+    node = _gpu_node()
+    assert node["metadata"]["labels"]["nvidia.com/mig.strategy"] == "none" and node["status"]["allocatable"]["nvidia.com/gpu"] == "8"
+    assert node["status"]["nodeInfo"]["kubeletVersion"] == k8s.version(k8s.current_sim())  # the API server's version (#762)
+    try:
+        _step({"gpu": {"node": "kgpu001", "count": 8, "advertised": False}})  # labels still say it has GPUs, none are allocatable
+        n = _gpu_node()
+        assert n["metadata"]["labels"]["nvidia.com/gpu.present"] == "true" and n["status"]["allocatable"]["nvidia.com/gpu"] == "0"
+        _step({"gpu": {"node": "kgpu001", "count": 8, "advertised": True}})
+        _step({"gpu": {"node": "kgpu001", "count": 8, "mig": {"strategy": "single", "profile": "1g.18gb", "devices": 7}}})
+        n = _gpu_node()
+        assert n["metadata"]["labels"]["nvidia.com/mig.strategy"] == "single" and n["metadata"]["labels"]["nvidia.com/gpu.product"].endswith("-MIG-1g.18gb")
+        assert n["metadata"]["labels"]["nvidia.com/gpu.count"] == "7" and n["status"]["allocatable"]["nvidia.com/gpu"] == "7"
+        _step({"gpu": {"node": "kgpu001", "count": 8, "mig": {"strategy": "mixed", "profile": "1g.18gb", "devices": 7}}})
+        n = _gpu_node()
+        assert n["metadata"]["labels"]["nvidia.com/mig-1g.18gb.count"] == "7" and n["status"]["allocatable"]["nvidia.com/mig-1g.18gb"] == "7"
+        assert n["status"]["allocatable"]["nvidia.com/gpu"] == "7"
+        _step({"kubelet": {"node": "kgpu001", "skew": "older"}})
+        assert _gpu_node()["status"]["nodeInfo"]["kubeletVersion"] == k8sgpu_skewed("older")
+    finally:
+        _step({"gpu": {"node": "kgpu001", "count": 8, "mig": {"strategy": "none", "profile": "1g.18gb"}}})
+        _step({"gpu": {"node": "kgpu001", "count": 8, "advertised": True}})
+        _step({"kubelet": {"node": "kgpu001", "skew": "same"}})
+    n = _gpu_node()
+    assert n["metadata"]["labels"]["nvidia.com/mig.strategy"] == "none" and "nvidia.com/mig-1g.18gb.count" not in n["metadata"]["labels"]
+    assert n["status"]["allocatable"]["nvidia.com/gpu"] == "8" and "nvidia.com/mig-1g.18gb" not in n["status"]["allocatable"]
+    assert n["status"]["nodeInfo"]["kubeletVersion"] == k8s.version(k8s.current_sim())
+
+
+def k8sgpu_skewed(skew: str) -> str:
+    from benchctl import k8sgpu
+    return k8sgpu.skewed(k8s.version(k8s.current_sim()), skew)
+

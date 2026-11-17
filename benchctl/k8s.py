@@ -24,7 +24,7 @@ from pathlib import Path
 
 import yaml
 
-from . import addressing, dra, kubeconfigs, kueue, volcano
+from . import addressing, dra, k8sgpu, kubeconfigs, kueue, volcano
 from .nodes import node_names
 
 VERSION = "v1.36.1"            # Kubernetes (the control-plane images and kubectl); sim.yaml kubernetes.version overrides
@@ -547,7 +547,7 @@ def bootstrap_volcano(sim: dict, say: Callable[[str], None], runner: Callable, s
 # ---- scenario steps and expectations (target `k8s`, run by benchctl/scenario.py on the host) ----
 
 FAULTS = ("crashloop", "oom", "imagepull", "jobfail")  # the pod stages in k8s/kwok/stage-faults.yaml (a node has fault-node-down)
-STEP_KEYS = ("down", "up", "cordon", "uncordon", "pod", "delete_pod", "scale", "apply", "remove", "drain", "queue", "metrics_server", "usage", "volcano")
+STEP_KEYS = ("down", "up", "cordon", "uncordon", "pod", "delete_pod", "scale", "apply", "remove", "drain", "queue", "metrics_server", "usage", "volcano", "gpu", "kubelet")
 _NAME = r"[a-z0-9]([-a-z0-9]*[a-z0-9])?"
 SCENARIO_POD = "scenario-pod.yaml"
 
@@ -591,6 +591,10 @@ def step_problems(do: dict, nodes: set[str]) -> list[str]:
             out.append(f"unknown Kubernetes node {p['node']!r}")
     if "queue" in do:
         out += kueue.queue_problems(do["queue"])
+    if "gpu" in do:
+        out += k8sgpu.gpu_problems(do["gpu"], nodes)
+    if "kubelet" in do:
+        out += k8sgpu.kubelet_problems(do["kubelet"], nodes)
     if "volcano" in do:
         out += volcano.step_problems(do["volcano"])
     if "metrics_server" in do and do["metrics_server"] not in ("stop", "start"):
@@ -638,6 +642,10 @@ def step_args(do: dict) -> list[list[str]]:
         out.append(["-n", u["namespace"], "patch", f"deployment/{u['deploy']}", "--type=merge", "-p", json.dumps(patch)])
     out += [["apply", "--server-side", "--force-conflicts", "-f", f"/k8s/{path}"] for path in do.get("apply") or []]
     out += [["delete", "--ignore-not-found", "-f", f"/k8s/{path}"] for path in do.get("remove") or []]
+    if "gpu" in do:  # a node advertises no GPUs, or becomes a MIG node, and back (issue 766)
+        out += k8sgpu.gpu_calls(do["gpu"])
+    if "kubelet" in do:  # a kubelet newer than the API server or outside the supported skew
+        out += k8sgpu.kubelet_calls(do["kubelet"], version(current_sim()))
     if "volcano" in do:  # a Queue closes (or a PodGroup goes Pending) and back; no controller, so the status is written
         out += volcano.calls(do["volcano"])
     if "queue" in do:  # a ClusterQueue and its LocalQueues go inactive (or back); no controller, so the status is written
@@ -687,6 +695,22 @@ def node_ready(node: str, runner: Callable) -> bool | None:
     """True/False for the node's Ready condition, None when it cannot be read."""
     r = runner(kubectl_cmd(current_sim(), "get", "node", node, "-o", r'jsonpath={.status.conditions[?(@.type=="Ready")].status}'))
     return None if r.returncode else r.stdout.strip() == "True"
+
+
+def node_gpus(node: str, resource: str, runner: Callable) -> int | None:
+    """The node's allocatable count of `resource` (0 when it is not listed), None when it cannot be read."""
+    r = runner(kubectl_cmd(current_sim(), "get", "node", node, "-o", "json"))
+    if r.returncode:
+        return None
+    try:
+        return int(json.loads(r.stdout)["status"].get("allocatable", {}).get(resource, 0))
+    except (ValueError, KeyError):
+        return None
+
+
+def node_kubelet(node: str, runner: Callable) -> str:
+    r = runner(kubectl_cmd(current_sim(), "get", "node", node, "-o", "jsonpath={.status.nodeInfo.kubeletVersion}"))
+    return "" if r.returncode else r.stdout.strip()
 
 
 def pod_reasons(namespace: str, name: str, runner: Callable) -> str:
