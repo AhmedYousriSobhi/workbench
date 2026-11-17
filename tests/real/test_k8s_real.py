@@ -1,6 +1,6 @@
 """Kubernetes (ADR 0034, issue 232): a real control plane with KWOK nodes, read as a client reads it.
 
-Checks, on the live containers: the five services run unprivileged, limited and labelled for the governor; the nodes are
+Checks, on the live containers: the services (five plus metrics-server, issue 382) run unprivileged, limited and labelled for the governor; the nodes are
 Ready with GPU capacity; the failing fixtures show the status a kubelet would report; the read-only kubeconfig on the login
 node works as the simulated user and cannot change anything; the namespace-limited one sees only its namespace; and the
 scenario steps (a node reported NotReady, a crash-looping pod) are seen by the same kubectl."""
@@ -355,3 +355,23 @@ def test_the_throttling_scenario_gives_the_viewer_real_429s_and_touches_nobody_e
     finally:
         k8s.kubectl(cluster, "delete", "--ignore-not-found", "-f", "/k8s/scenario/70-apf.yaml", mounts=[(k8s.SRC, "/k8s")])
     assert wait_for(lambda: status(viewer) == 200, timeout=30)
+
+
+def test_metrics_server_runs_unprivileged_and_a_stop_gives_503_until_it_starts_again(cluster):
+    """Issue 382: the scenario step `metrics_server: stop|start` (scenario k8s-metrics-down). Stopped, the APIService answers 503
+    (ServiceUnavailable) while the rest of the API answers; started, usage returns after two scrapes. The container is started in any case."""
+    probe = ("get", "--raw", "/apis/metrics.k8s.io/v1beta1/nodes")
+    assert wait_for(lambda: kubectl_as("alice", *probe).returncode == 0, timeout=180), kubectl_as("alice", *probe).stderr
+    info = json.loads(docker("inspect", f"workbench-{k8s.METRICS_SERVER}-1").stdout)[0]
+    assert info["Config"]["Image"] == k8s.METRICS_SERVER_IMAGE and not info["HostConfig"]["CapAdd"] and info["Config"]["User"] != "0"
+
+    def unavailable() -> bool:
+        err = kubectl_as("alice", *probe).stderr
+        return "ServiceUnavailable" in err or "503" in err
+    try:
+        assert scenario.execute(scenario.Step(0, "k8s", {"metrics_server": "stop"}), runner=k8s._run).status == "ok"
+        assert wait_for(unavailable, timeout=60), kubectl_as("alice", *probe).stderr
+        assert kubectl_as("alice", "get", "nodes").returncode == 0  # only the metrics API is gone
+    finally:
+        docker("start", f"workbench-{k8s.METRICS_SERVER}-1")
+    assert wait_for(lambda: kubectl_as("alice", *probe).returncode == 0, timeout=120), kubectl_as("alice", *probe).stderr

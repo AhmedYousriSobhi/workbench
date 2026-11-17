@@ -58,7 +58,7 @@ SAMPLES = [  # (target, do): one per key the engine or a mock's /sim/inject acce
     ("k8s", {"pod": {"namespace": "team-b", "name": "p", "fault": "imagepull"}}), ("k8s", {"pod": {"namespace": "team-b", "name": "p", "fault": "jobfail"}}),
     ("k8s", {"delete_pod": {"namespace": "team-b", "name": "p"}}), ("k8s", {"scale": {"namespace": "team-b", "deploy": "web", "replicas": 3}}),
     ("k8s", {"apply": ["scenario/70-apf.yaml"]}), ("k8s", {"remove": ["scenario/70-apf.yaml"]}),
-    ("k8s", {"drain": {"node": "kgpu001", "timeout": 30}}), ("k8s", {"queue": {"name": "gpu-training", "active": False, "pending": 3}}),
+    ("k8s", {"drain": {"node": "kgpu001", "timeout": 30}}), ("k8s", {"queue": {"name": "gpu-training", "active": False, "pending": 3}}), ("k8s", {"metrics_server": "stop"}), ("k8s", {"metrics_server": "start"}),
     ("dcgm", {"nodes": ["gpu001"], "stop": True}), ("dcgm", {"nodes": ["gpu001"], "start": True}), ("dcgm", {"nodes": ["gpu001"], "restart": True}),
     ("jira", {"tickets": {"action": "create", "summary": "s"}}), ("jira", {"tickets": {"action": "transition", "jql": "x", "to": "Done"}}),
     ("jira", {"tickets": {"action": "comment", "jql": "x", "body": "b"}}), ("jira", {"tickets": {"action": "fault", "node": "cn001", "kind": "fan"}}),

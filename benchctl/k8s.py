@@ -30,16 +30,21 @@ VERSION = "v1.36.1"            # Kubernetes (the control-plane images and kubect
 ETCD_IMAGE = "registry.k8s.io/etcd:3.6.10-0"
 KWOK_VERSION = "v0.8.0"
 KWOK_IMAGE = f"registry.k8s.io/kwok/kwok:{KWOK_VERSION}"
-SERVICES = ("k8s-etcd", "k8s-apiserver", "k8s-controller-manager", "k8s-scheduler", "kwok-controller")
+METRICS_SERVER = "k8s-metrics-server"  # the metrics API (issue 382): kwokctl v0.8.0 tests 0.8.1; 0.9.1 is the latest release
+METRICS_SERVER_VERSION = "v0.9.1"
+METRICS_SERVER_IMAGE = f"registry.k8s.io/metrics-server/metrics-server:{METRICS_SERVER_VERSION}"
+METRICS_SERVER_PORT = 10250  # the upstream manifest's secure port; k8s/metrics/metrics-server.yaml names the same
+SERVICES = ("k8s-etcd", "k8s-apiserver", "k8s-controller-manager", "k8s-scheduler", "kwok-controller", METRICS_SERVER)
 API = "k8s-apiserver"
 ENTRYPOINT = {"k8s-etcd": "etcd", "k8s-apiserver": "kube-apiserver", "k8s-controller-manager": "kube-controller-manager",
-              "k8s-scheduler": "kube-scheduler", "kwok-controller": "kwok"}
+              "k8s-scheduler": "kube-scheduler", "kwok-controller": "kwok", METRICS_SERVER: "/metrics-server"}
 API_PORT = 6443
 TELEPORT_USER = "teleport"  # Teleport's Kubernetes Service registers the cluster with this token user; it may impersonate, nothing else (k8s/fixtures/47-rbac-teleport.yaml, ADR 0083)
 CONTEXT = "workbench-k8s"  # the kubeconfig context name: Teleport names the registered cluster after it (`tsh kube ls`)
 METRICS_USER = "metrics"  # reads /metrics only (k8s/fixtures/45-rbac-metrics.yaml); the page uses it for request counts
 # limits in MB (upper bounds for the planning estimate; measured idle 275 MiB, 310 MiB with 50 nodes and the fixtures)
-LIMITS = {"k8s-etcd": 256, "k8s-apiserver": 384, "k8s-controller-manager": 128, "k8s-scheduler": 64, "kwok-controller": 64}
+# metrics-server: a planning cap, not measured (benchctl/memory.py NOT_MEASURED); the upstream manifest requests 200 MiB for a real cluster
+LIMITS = {"k8s-etcd": 256, "k8s-apiserver": 384, "k8s-controller-manager": 128, "k8s-scheduler": 64, "kwok-controller": 64, METRICS_SERVER: 128}
 SECRETS_DIR = Path("compose/generated/secrets/k8s")   # PKI, tokens and kubeconfigs (gitignored)
 STATE_DIR = Path("compose/generated/k8s")             # etcd data and the manifests generated from sim.yaml
 SRC = Path("k8s")
@@ -53,6 +58,7 @@ KWOK_LOGS = "/logs"  # where k8s/kwok/logs is mounted in kwok-controller (the fi
 KWOK_CRDS = ("Stage", "Logs", "ClusterLogs", "Metric", "ClusterResourceUsage")
 KWOK_OBJECTS = (("/k8s/kwok/logs.yaml", "KWOK logs"), ("/k8s/kwok/metrics-resource.yaml", "KWOK node metrics"),
                 ("/k8s/kwok/usage-from-annotation.yaml", "KWOK pod usage"))
+METRICS_API_FILE = "/k8s/metrics/metrics-server.yaml"  # the APIService and the ExternalName Service that routes to METRICS_SERVER
 RESOURCE_METRICS_PATH = "metrics.k8s.io/resource-metrics-path"  # metrics-server 0.7.0+ reads a node's kubelet metrics path from it
 # Node Feature Discovery / GPU Feature Discovery product label per sim.yaml gpu type
 GPU_PRODUCT = {"h200": "NVIDIA-H200", "h100": "NVIDIA-H100-80GB-HBM3", "a100": "NVIDIA-A100-SXM4-80GB",
@@ -73,7 +79,7 @@ def images(sim: dict) -> dict[str, str]:
     v = version(sim)
     return {"k8s-etcd": ETCD_IMAGE, "k8s-apiserver": f"registry.k8s.io/kube-apiserver:{v}",
             "k8s-controller-manager": f"registry.k8s.io/kube-controller-manager:{v}",
-            "k8s-scheduler": f"registry.k8s.io/kube-scheduler:{v}", "kwok-controller": KWOK_IMAGE}
+            "k8s-scheduler": f"registry.k8s.io/kube-scheduler:{v}", "kwok-controller": KWOK_IMAGE, METRICS_SERVER: METRICS_SERVER_IMAGE}
 
 
 def kubectl_image(sim: dict) -> str:
@@ -281,6 +287,15 @@ def wire(services: dict, sim: dict) -> None:
                f"--node-name={KWOK}", f"--node-port={KWOK_PORT}", f"--server-address=0.0.0.0:{KWOK_PORT}",
                "--node-lease-duration-seconds=40", f"--enable-crds={','.join(KWOK_CRDS)}",
                              f"--tls-cert-file={CONTAINER_PKI}/admin.crt", f"--tls-private-key-file={CONTAINER_PKI}/admin.key"],
+        # kwokctl v0.8.0's container-mode arguments (pkg/kwokctl/components/metrics_server.go), with the upstream manifest's
+        # --cert-dir=/tmp (a self-signed serving certificate on a tmpfs) instead of the admin certificate. --kubelet-insecure-tls:
+        # KWOK serves the admin certificate, which names no node address; the aggregator does not verify this one either
+        # (insecureSkipTLSVerify in the APIService, as upstream)
+        METRICS_SERVER: [kc, f"--authentication-kubeconfig={CONTAINER_PKI}/component.kubeconfig",
+                         f"--authorization-kubeconfig={CONTAINER_PKI}/component.kubeconfig",
+                         "--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname", "--kubelet-use-node-status-port",
+                         "--kubelet-insecure-tls", "--metric-resolution=15s", "--cert-dir=/tmp", "--bind-address=0.0.0.0",
+                         f"--secure-port={METRICS_SERVER_PORT}"],
     }
     for name in SERVICES:
         if name not in services:
@@ -292,6 +307,8 @@ def wire(services: dict, sim: dict) -> None:
         svc["volumes"] = ["./k8s/etcd:/etcd-data"] if name == "k8s-etcd" else list(pki)
         if name == KWOK:  # the canned kubelet log files (k8s/kwok/logs.yaml names them); compose runs from compose/generated
             svc["volumes"].append(f"../../{SRC}/kwok/logs:{KWOK_LOGS}:ro")
+        if name == METRICS_SERVER:  # its self-signed serving certificate, as the upstream manifest's emptyDir; counted in the cap
+            svc["tmpfs"] = ["/tmp:size=4m,mode=1777"]
         if name != "k8s-etcd":
             svc["depends_on"] = ["k8s-etcd"] if name == API else [API]
     if API in services:
@@ -465,6 +482,8 @@ def bootstrap(sim: dict, ips: dict, say: Callable[[str], None] = print, runner: 
         return False
     if not apply("/state/50-dra.yaml", "DRA devices"):
         return False
+    if not apply(METRICS_API_FILE, "metrics API"):  # the APIService answers 503 until metrics-server has scraped every node twice
+        return False
     return bootstrap_kueue(sim, say, runner, src, apply)
 
 
@@ -489,7 +508,7 @@ def bootstrap_kueue(sim: dict, say: Callable[[str], None], runner: Callable, src
 # ---- scenario steps and expectations (target `k8s`, run by benchctl/scenario.py on the host) ----
 
 FAULTS = ("crashloop", "oom", "imagepull", "jobfail")  # the pod stages in k8s/kwok/stage-faults.yaml (a node has fault-node-down)
-STEP_KEYS = ("down", "up", "cordon", "uncordon", "pod", "delete_pod", "scale", "apply", "remove", "drain", "queue")
+STEP_KEYS = ("down", "up", "cordon", "uncordon", "pod", "delete_pod", "scale", "apply", "remove", "drain", "queue", "metrics_server")
 _NAME = r"[a-z0-9]([-a-z0-9]*[a-z0-9])?"
 SCENARIO_POD = "scenario-pod.yaml"
 
@@ -533,6 +552,8 @@ def step_problems(do: dict, nodes: set[str]) -> list[str]:
             out.append(f"unknown Kubernetes node {p['node']!r}")
     if "queue" in do:
         out += kueue.queue_problems(do["queue"])
+    if "metrics_server" in do and do["metrics_server"] not in ("stop", "start"):
+        out.append("k8s metrics_server is stop or start")
     for path in [*(do.get("apply") or []), *(do.get("remove") or [])]:
         if not (isinstance(path, str) and not path.startswith("/") and ".." not in path.split("/")):
             out.append(f"k8s apply path {path!r} must be relative to the k8s/ directory")
@@ -577,6 +598,14 @@ def step_args(do: dict) -> list[list[str]]:
     return out
 
 
+def host_commands(do: dict) -> list[list[str]]:
+    """The Docker calls a step makes before its kubectl calls: `metrics_server: stop` stops the metrics-server container, so the metrics
+    API answers 503 (ServiceUnavailable) as when metrics-server is down on a real cluster; `start` brings it back (issue 382)."""
+    if do.get("metrics_server") in ("stop", "start"):
+        return [["docker", do["metrics_server"], f"workbench-{METRICS_SERVER}-1"]]
+    return []
+
+
 def write_pod(do: dict, state_dir: Path | None = None) -> None:
     if "pod" in do:
         d = state_dir or STATE_DIR
@@ -613,6 +642,11 @@ def pod_reasons(namespace: str, name: str, runner: Callable) -> str:
           "{.status.containerStatuses[*].state.terminated.reason} {.status.containerStatuses[*].lastState.terminated.reason}")
     r = runner(kubectl_cmd(current_sim(), "-n", namespace, "get", "pod", name, "-o", jp))
     return "" if r.returncode else r.stdout.strip()
+
+
+def metrics_api_served(runner: Callable) -> bool:
+    """Whether the metrics API answers a node list (as admin): False while metrics-server is stopped (503) or not registered (404)."""
+    return runner(kubectl_cmd(current_sim(), "get", "--raw", "/apis/metrics.k8s.io/v1beta1/nodes")).returncode == 0
 
 
 def pods_on_node(node: str, namespace: str, selector: str, runner: Callable) -> int | None:

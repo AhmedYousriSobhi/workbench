@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from benchctl import addressing, compose, k8s, kueue, scenario, stack, workbench
+from benchctl import addressing, compose, k8s, kueue, memory, scenario, stack, workbench
 
 ROOT = Path(__file__).resolve().parent.parent
 SIM = yaml.safe_load((ROOT / "sim.yaml").read_text())
@@ -53,7 +53,7 @@ def test_every_node_reports_the_api_servers_version_not_kwoks_own_string():
     assert "kwok" not in k8s.node_manifest("kcn001", {})["status"]["nodeInfo"]["kubeletVersion"]
 
 
-def test_the_part_is_off_by_default_and_the_five_services_are_limited_unprivileged_and_addressed():
+def test_the_part_is_off_by_default_and_its_services_are_limited_unprivileged_and_addressed():
     assert "k8s" not in workbench.DEFAULT_PARTS and workbench.PARTS["k8s"] == ("k8s", None)
     assert "k8s-apiserver" not in compose.generate(SIM, {"groups": ["core"]})["services"]
     svcs = compose.generate(SIM, {"groups": ["core", "k8s"]})["services"]
@@ -126,7 +126,7 @@ def test_bootstrap_applies_definitions_then_stages_then_nodes_then_fixtures_and_
     assert k8s.bootstrap(SIM, addressing.plan(SIM), lambda m: None, runner=run, ready=lambda ips: True, sleep=lambda s: None)
     files = [c[-1] for c in calls if c[0] == "apply"]
     assert files == ["/k8s/kwok/crds.yaml", "/k8s/kwok/stage-fast.yaml", "/k8s/kwok/stage-faults.yaml", *[f for f, _ in k8s.KWOK_OBJECTS], "/state/nodes.yaml",
-                     "/k8s/fixtures/00-namespaces.yaml", "/k8s/fixtures", "/state/50-dra.yaml",
+                     "/k8s/fixtures/00-namespaces.yaml", "/k8s/fixtures", "/state/50-dra.yaml", k8s.METRICS_API_FILE,
                      "/k8s/kueue/crds.yaml", "/k8s/kueue/queues.yaml"]
     wait = next(c for c in calls if c[0] == "wait")  # KWOK's objects cannot be applied before their definitions exist (issue 872)
     assert {f"crd/{n}" for n in ("stages", "logs", "clusterlogs", "metrics", "clusterresourceusages")} <= {a.replace(".kwok.x-k8s.io", "") for a in wait}
@@ -572,3 +572,65 @@ def test_every_node_points_metrics_server_at_kwoks_resource_metrics_path():
 def test_every_kwok_kind_enabled_has_its_definition_in_the_vendored_crds():
     crds = {d["metadata"]["name"] for d in yaml.safe_load_all((ROOT / "k8s/kwok/crds.yaml").read_text()) if d}
     assert set(k8s.kwok_crd_names()) <= crds
+
+
+def test_metrics_server_is_one_unprivileged_p3_container_with_kwokctls_arguments():
+    """Issue 382: metrics-server v0.9.1 as a compose service at a fixed address, P3, with a declared cap."""
+    svcs = compose.generate(SIM, {"groups": ["core", "k8s"]})["services"]
+    ms = svcs[k8s.METRICS_SERVER]
+    assert ms["image"] == "registry.k8s.io/metrics-server/metrics-server:v0.9.1" and ms["entrypoint"] == ["/metrics-server"]
+    assert ms["mem_limit"] == f"{k8s.LIMITS[k8s.METRICS_SERVER]}m" and ms["labels"]["workbench.class"] == "P3"
+    assert ms["networks"]["default"]["ipv4_address"] == addressing.service_ip(k8s.METRICS_SERVER) == "10.141.255.45"
+    assert not ms.get("privileged") and "cap_add" not in ms and "ports" not in ms  # reached by the API server only
+    cmd = ms["command"]
+    for flag in ("--kubelet-use-node-status-port", "--kubelet-insecure-tls", "--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname",
+                 "--metric-resolution=15s", "--cert-dir=/tmp", f"--secure-port={k8s.METRICS_SERVER_PORT}"):
+        assert flag in cmd, flag
+    assert all(any(a.startswith(f"--{k}=") for a in cmd) for k in ("kubeconfig", "authentication-kubeconfig", "authorization-kubeconfig"))
+    assert ms["tmpfs"] == ["/tmp:size=4m,mode=1777"] and ms["depends_on"] == [k8s.API]
+    assert k8s.METRICS_SERVER in memory.NOT_MEASURED  # expected at its cap until measured
+
+
+def test_the_metrics_api_routes_to_the_container_by_an_externalname_service():
+    """Without kube-proxy a ClusterIP is unreachable; the aggregator resolves an ExternalName Service to its name (kwokctl's shape)."""
+    docs = {d["kind"]: d for d in yaml.safe_load_all((ROOT / "k8s/metrics/metrics-server.yaml").read_text())}
+    svc, api = docs["Service"], docs["APIService"]
+    assert svc["spec"]["type"] == "ExternalName" and svc["spec"]["externalName"] == k8s.METRICS_SERVER
+    assert (svc["metadata"]["name"], svc["metadata"]["namespace"]) == (api["spec"]["service"]["name"], api["spec"]["service"]["namespace"])
+    assert api["metadata"]["name"] == "v1beta1.metrics.k8s.io" and api["spec"]["service"]["port"] == k8s.METRICS_SERVER_PORT
+    assert api["spec"]["insecureSkipTLSVerify"] is True  # as the upstream manifest
+
+
+def test_metrics_server_starts_with_kwok_after_the_api_server():
+    stages = dict(stack.stage_services(["k8s-etcd", "k8s-apiserver", "kwok-controller", k8s.METRICS_SERVER]))
+    assert stages["kubernetes nodes"] == ["kwok-controller", k8s.METRICS_SERVER]
+
+
+def test_fixture_pods_carry_usage_annotations_below_their_requests():
+    pods = {d["metadata"]["name"]: d for f in ("10-workloads.yaml", "20-signals.yaml")
+            for d in yaml.safe_load_all((ROOT / "k8s/fixtures" / f).read_text()) if d}
+    for name in ("sized", "gpu-train"):
+        ann = pods[name]["metadata"]["annotations"]
+        assert "kwok.x-k8s.io/usage-cpu" in ann and "kwok.x-k8s.io/usage-memory" in ann
+    assert pods["web"]["spec"]["template"]["metadata"]["annotations"]["kwok.x-k8s.io/usage-cpu"] == "120m"
+
+
+def test_the_metrics_server_step_stops_and_starts_the_container_and_validates():
+    nodes = {n for n, _ in k8s.node_list(SIM)}
+    assert k8s.step_problems({"metrics_server": "stop"}, nodes) == []
+    assert k8s.step_problems({"metrics_server": "pause"}, nodes) == ["k8s metrics_server is stop or start"]
+    assert k8s.host_commands({"metrics_server": "stop"}) == [["docker", "stop", "workbench-k8s-metrics-server-1"]]
+    assert k8s.host_commands({"metrics_server": "start"}) == [["docker", "start", "workbench-k8s-metrics-server-1"]]
+    assert k8s.host_commands({"cordon": ["kcn001"]}) == [] and k8s.step_args({"metrics_server": "stop"}) == []
+    sc = scenario.load("k8s-metrics-down")
+    assert not scenario.validate(sc, SIM) and [s["do"].get("metrics_server") for s in sc["steps"]] == ["stop", "start"]
+
+
+def test_the_metrics_server_step_runs_docker_and_says_why_it_failed(monkeypatch):
+    calls = []
+    monkeypatch.setattr(k8s, "current_sim", lambda: SIM)
+    step = scenario.Step(0, "k8s", {"metrics_server": "stop"})
+    out = scenario.execute(step, runner=lambda c, **k: calls.append(c) or ok())
+    assert out.status == "ok" and calls == [["docker", "stop", "workbench-k8s-metrics-server-1"]]
+    out = scenario.execute(step, runner=lambda c, **k: bad("No such container"))
+    assert out.status == "failed" and "No such container" in out.detail

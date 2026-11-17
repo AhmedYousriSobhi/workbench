@@ -25,7 +25,11 @@ def test_the_issue_762_reads_are_all_there():
             "can-i-list-deployments", "can-i-get-deployments", "get-jobs", "get-pvcs", "get-daemonsets", "get-resourcequotas", "get-hpas",
             "get-clusterqueues", "can-i-get-pod-logs", "can-i-list-namespaces"} <= keys
     assert k8sreads.BY_KEY["can-i-list-nodes"].limited == ("no",) and k8sreads.BY_KEY["can-i-list-pods-ns"].limited == ("yes",)
-    assert "ok" in k8sreads.BY_KEY["metrics-probe"].viewer and "not-found" in k8sreads.BY_KEY["metrics-probe"].viewer  # 404 today, 200 with #382
+    assert k8sreads.BY_KEY["metrics-probe"].viewer == k8sreads.BY_KEY["node-usage"].viewer == ("ok",)  # metrics-server (#382)
+    assert k8sreads.BY_KEY["metrics-probe"].limited == k8sreads.BY_KEY["node-usage"].limited == ("forbidden",)  # no metrics.k8s.io rule
+    ok_usage = '{"items": [{"metadata": {"name": "kcn001"}, "usage": {"cpu": "350m", "memory": "200Mi"}}]}'
+    assert k8sreads.shape_problems(k8sreads.BY_KEY["node-usage"], "viewer", ok_usage, "v1") == []
+    assert k8sreads.shape_problems(k8sreads.BY_KEY["node-usage"], "viewer", '{"items": []}', "v1")
     assert k8sreads.BY_KEY["api-group-volcano"].viewer == k8sreads.BY_KEY["api-group-kubeflow"].viewer == ("not-served",)
 
 

@@ -42,7 +42,7 @@ spec:
 ---
 apiVersion: v1
 kind: Pod
-metadata: {name: sized, namespace: team-a}
+metadata: {name: sized, namespace: team-a, annotations: {kwok.x-k8s.io/usage-cpu: 350m, kwok.x-k8s.io/usage-memory: 200Mi}}  # usage below its requests (issue 382)
 spec:
   containers: [{name: c, image: "rancher/mirrored-pause:3.6", resources: {requests: {cpu: 500m, memory: 256Mi}}}]
 ---

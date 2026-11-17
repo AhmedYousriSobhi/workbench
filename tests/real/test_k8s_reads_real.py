@@ -4,8 +4,8 @@ docs/guides/client-testing.md); each one is run over `docker exec -u alice k-log
 its outcome and the shape of its answer are asserted. Also the hop: `ssh k-login kubectl ...` from another node, and one clear error for a
 wrong host.
 
-Recorded, not failed: the metrics API probe answers 404 today (it becomes 200 with issue 382). Asserted as "not served": the Volcano and
-Kubeflow groups (issues 765 and 390 flip them). Written without a live run in the authoring session."""
+The metrics API answers 200 for the viewer and is refused for the limited user (issue 382, metrics-server). Asserted as "not served": the
+Volcano and Kubeflow groups (issues 765 and 390 flip them). Written without a live run in the authoring session."""
 import json
 import os
 import shlex
@@ -50,6 +50,9 @@ def cluster():
     assert wait_for(lambda: run_read(first, "viewer").returncode == 0, timeout=90), run_read(first, "viewer").stderr
     # the fixtures (pods, events, Deployments) are applied after the API answers; the pod reads below need them
     assert wait_for(lambda: "sized" in run_read(k8sreads.BY_KEY["pods-ns"], "viewer").stdout, timeout=120)
+    # metrics-server answers only after two scrapes of every node (--metric-resolution=15s); until then the APIService says 503
+    assert wait_for(lambda: run_read(k8sreads.BY_KEY["node-usage"], "viewer").returncode == 0, timeout=180), \
+        run_read(k8sreads.BY_KEY["node-usage"], "viewer").stderr
     yield sim
     stack.down(say=lambda m: None)
 
@@ -65,8 +68,6 @@ def test_each_read_has_the_outcome_and_shape_the_client_needs(cluster, read, rol
     got = k8sreads.classify(read, r.returncode, r.stdout, r.stderr)
     want = read.viewer if role == "viewer" else read.limited
     assert got in want, f"{read.key} as {role}: outcome {got!r}, expected one of {want}; stderr: {r.stderr.strip()[-300:]}"
-    if read.key == "metrics-probe":
-        print(f"metrics API probe as {role}: {got} (404 today, 200 with issue 382)")  # recorded, not failed
     if got == "ok":
         assert not (problems := k8sreads.shape_problems(read, role, r.stdout, api_version)), f"{read.key} as {role}: {problems}"
 
@@ -115,3 +116,17 @@ def test_a_wrong_host_gives_one_clear_error(cluster):
     r = docker_exec_as("alice", S_LOGIN, f"ssh {' '.join(HOP_OPTS)} no-such-k-login kubectl version")
     lines = [ln for ln in r.stderr.splitlines() if ln.strip()]
     assert r.returncode == 255 and len(lines) == 1 and "no-such-k-login" in lines[0], r.stderr
+
+
+def test_kubectl_top_lists_every_kwok_node_and_the_pod_usage_its_annotations_give(cluster):
+    """Issue 382: metrics-server scrapes KWOK's /metrics/nodes/<node>/metrics/resource; a pod's usage is its kwok.x-k8s.io/usage-* annotations."""
+    top = docker_exec_as("alice", K_LOGIN, "kubectl top nodes --no-headers")
+    assert top.returncode == 0, top.stderr
+    assert {ln.split()[0] for ln in top.stdout.splitlines() if ln.strip()} == {n for n, _ in k8s.node_list(cluster)}
+
+    def sized():
+        r = docker_exec_as("alice", K_LOGIN, "kubectl top pod sized -n team-a --no-headers")
+        return r.stdout.split() if r.returncode == 0 else []
+    assert wait_for(lambda: sized()[1:3] == ["350m", "200Mi"], timeout=90), sized()  # the fixture's annotations (k8s/fixtures/20-signals.yaml)
+    limited = docker_exec_as("alice", K_LOGIN, "kubectl --kubeconfig $HOME/.kube/limited.yaml top pod -n team-a")
+    assert limited.returncode != 0 and "forbidden" in limited.stderr.lower(), limited.stderr  # no metrics.k8s.io rule in the namespace role

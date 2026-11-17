@@ -1,7 +1,7 @@
 # Ported from the earlier Kubernetes lab bin/fixtures.sh. GPUs are fake: see apply.sh for the capacity patch.
 apiVersion: v1
 kind: Pod
-metadata: {name: gpu-train, namespace: team-a}
+metadata: {name: gpu-train, namespace: team-a, annotations: {kwok.x-k8s.io/usage-cpu: "6", kwok.x-k8s.io/usage-memory: 48Gi}}  # what metrics-server reports (issue 382)
 spec:
   containers: [{name: c, image: "rancher/mirrored-pause:3.6", resources: {limits: {nvidia.com/gpu: "2"}}}]
 ---
@@ -40,6 +40,6 @@ spec:
   replicas: 2
   selector: {matchLabels: {app: web}}
   template:
-    metadata: {labels: {app: web}}
+    metadata: {labels: {app: web}, annotations: {kwok.x-k8s.io/usage-cpu: 120m, kwok.x-k8s.io/usage-memory: 180Mi}}
     spec:
       containers: [{name: c, image: "rancher/mirrored-pause:3.6"}]

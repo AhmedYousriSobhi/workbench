@@ -187,6 +187,10 @@ def k8s(d) -> list[str]:
         out.append(f"Remove k8s/{lst(d['remove'])} from the Kubernetes API")
     if has(d.get("queue")):
         out.append(_queue(d["queue"]))
+    if d.get("metrics_server") == "stop":
+        out.append("Stop metrics-server (the metrics API answers 503)")
+    elif d.get("metrics_server") == "start":
+        out.append("Start metrics-server again (the metrics API answers)")
     return out
 
 
@@ -414,6 +418,7 @@ EXPECT = {
     "slurm.stepd": lambda a: f"No slurmstepd runs on {js(a.get('node'))}" if a.get("alive") is False else f"A slurmstepd runs on {js(a.get('node'))}",
     "k8s.node_ready": lambda a: f"Kubernetes node {js(a.get('node'))} is {'NotReady' if a.get('ready') is False else 'Ready'}",
     "k8s.pod_status": lambda a: f"Pod {js(a.get('namespace'))}/{js(a.get('name'))} shows {js(a.get('reason'))}",
+    "k8s.metrics_api": lambda a: f"The metrics API {'is unavailable' if a.get('served') is False else 'answers'}",
     "k8s.pods_on_node": lambda a: f"At least {count(nn(a.get('min'), 1), 'Running pod')} ({js(a.get('selector'))}, {js(a.get('namespace'))}) on Kubernetes node {js(a.get('node'))}",
     "storage.mount": _mount,
     "jira.issue_created": lambda a: f"A {_jira(a)} ticket is filed with the labels {lst(a.get('labels'))}",

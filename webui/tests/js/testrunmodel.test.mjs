@@ -105,6 +105,7 @@ test('every expectation kind reads as a sentence; an unknown one keeps its label
   assert.equal(said('slurm.job_state', { node: 'cn001', state: 'RUNNING' }), 'A job on cn001 is running in Slurm');
   assert.equal(said('slurm.stepd', { node: 'cn001', alive: false }), 'No slurmstepd runs on cn001');
   assert.equal(said('k8s.node_ready', { node: 'kgpu001', ready: false }), 'Kubernetes node kgpu001 is NotReady');
+  assert.equal(said('k8s.metrics_api', { served: false }), 'The metrics API is unavailable');
   assert.equal(said('k8s.pod_status', { namespace: 'team-b', name: 'oom-demo', reason: 'OOMKilled' }), 'Pod team-b/oom-demo shows OOMKilled');
   assert.equal(said('k8s.pods_on_node', { node: 'kgpu001', namespace: 'team-a', selector: 'app=inference', min: 1 }), 'At least 1 Running pod (app=inference, team-a) on Kubernetes node kgpu001');
   assert.equal(said('storage.mount', { node: 'cn001', mount: '/scratch', min_used_pct: 99, min_inodes_used_pct: 90 }), '/scratch on cn001: at least 99% used, at least 90% of its inodes used');

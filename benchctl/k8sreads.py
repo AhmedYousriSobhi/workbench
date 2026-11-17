@@ -71,7 +71,9 @@ READS: tuple[Read, ...] = (
     Read("nodes", "every node: conditions, GPU capacity, labels, kubelet version", ("get", "nodes", "-o", "json"),
          "list on nodes (cluster-wide)", ("ok",), ("forbidden",)),
     Read("metrics-probe", "is the metrics API served (one item)", ("get", "--raw", "/apis/metrics.k8s.io/v1beta1/nodes?limit=1"),
-         "list on nodes in metrics.k8s.io", ("not-found", "ok"), ("forbidden", "not-found", "ok")),
+         "list on nodes in metrics.k8s.io", ("ok",), ("forbidden",)),
+    Read("node-usage", "CPU and memory use of every node (metrics-server, issue 382)", ("get", "nodes.metrics.k8s.io", "-o", "json"),
+         "list on nodes in metrics.k8s.io", ("ok",), ("forbidden",)),
     Read("pods-all", "pods in every namespace that are not finished, in chunks", ("get", "pods", "-A", "--field-selector=status.phase!=Succeeded", "--chunk-size=500", "-o", "json"),
          "list on pods (cluster-wide)", ("ok",), ("forbidden",)),
     Read("pods-ns", "pods in one namespace, in chunks", ("get", "pods", "-n", LIMITED_NS, "--chunk-size=500", "-o", "json"),
@@ -154,6 +156,10 @@ def shape_problems(read: Read, role: str, stdout: str, api_version: str) -> list
         items = (_json(stdout) or {}).get("items")
         if items is None or any(e.get("type") != "Warning" for e in items):
             bad.append("not a list of Warning events")
+    elif key == "node-usage":
+        items = (_json(stdout) or {}).get("items") or []
+        if not items or any(not {"cpu", "memory"} <= set(i.get("usage") or {}) for i in items):
+            bad.append("not a list of nodes with cpu and memory usage")
     elif key == "describe-pod":
         if "Name:" not in stdout or "sized" not in stdout:
             bad.append("no pod description")
