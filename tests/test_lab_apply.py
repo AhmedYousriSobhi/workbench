@@ -143,6 +143,8 @@ class Cluster:
         if "tctl rm role/" in text:
             self.roles.pop(cmd[-1].split("/")[1], None)
             return ok()
+        if "up -d --no-deps lab-node-" in text or "rm -sf lab-node-" in text:  # the lab node containers (issue 863)
+            return ok()
         if "useradd -M -u" in text or "userdel lab-u" in text or text.endswith("sh -c set -u\ntrue\n"):  # the lab-uNNN Linux users (issue 869)
             return ok()
         raise AssertionError(f"unexpected command: {text}")
@@ -176,7 +178,7 @@ def world(tmp_path):
     lab.import_lab("prod-a", export, root=root)
     c = Cluster(tmp_path)
     env = lab_apply.Env(root=root, slurm_dir=c.slurm_dir, prom_dir=tmp_path / "gen", sim={}, runner=c.run, running=lambda s: s in c.services,
-                        kubectl=c.kubectl, http_get=c.http, rules_check=lambda paths: [], restart_ctld=c.restart, sleep=lambda s: None, say=lambda s: None)
+                        kubectl=c.kubectl, http_get=c.http, rules_check=lambda paths: [], restart_ctld=c.restart, sleep=lambda s: None, say=lambda s: None, compose_file=tmp_path / "docker-compose.yml")
     (c.slurm_dir.parent / "gen").mkdir(exist_ok=True)
     (root / "prod-a" / "baseline" / "sacctmgr.dump").write_text(PRE_DUMP.replace("workbench", "prodsim") + "Account - 'ml':Description='ml':Organization='sci':Fairshare=20\nParent - 'ml'\nUser - 'u2':DefaultAccount='ml':Fairshare=1\n")
     conf = root / "prod-a" / "baseline" / "slurm.conf"
@@ -661,3 +663,50 @@ def test_governor_refuses_lab_changes_at_l2_with_one_message_and_without_workdir
     plain, _ = _gov(tmp_path)
     assert "no lab prod-a on disk" in d(plain, {"cmd": "lab-apply", "name": "prod-a", "side": "baseline"})["error"]
     assert plain.handle("status", {})["lab"] is None
+
+
+# ---------------------------------------------------------------- lab nodes (issue 863)
+
+def test_apply_adds_lab_nodes_partitions_and_gres_and_remove_takes_them_out(world):
+    env, c, root = world
+    (c.slurm_dir / "slurm.conf").write_text(BASE_CONF + "PartitionName=cpu Nodes=cn1 Default=YES\n")  # a simulated partition of the same name
+    (c.slurm_dir / "gres.conf").write_text("NodeName=g1 Name=gpu Count=1\n")
+    env.compose_file.write_text(yaml.safe_dump({"services": {"cn1": {"labels": {"workbench.node": "compute", "workbench.class": "P4"}, "environment": {"WORKBENCH_USERS": "a:1001", "WORKBENCH_GPUS": "0"}, "hostname": "cn1"}}}))
+    res = lab_apply.apply("prod-a", "baseline", env)
+    m = lab_apply.read_marker(root)
+    assert [n["host"] for n in m["lab_nodes"]][:2] == ["cpu001", "cpu002"] and m["lab_nodes"][0]["service"] == "lab-node-001"
+    conf = (c.slurm_dir / "slurm.conf").read_text()
+    assert "NodeName=cpu001 NodeHostname=cpu001 NodeAddr=lab-node-001 CPUs=64 RealMemory=256000" in conf
+    assert "PartitionName=gpu Nodes=gpu001,gpu002 MaxTime=1-00:00:00 QOS=normal" in conf
+    assert "# lab-off PartitionName=cpu Nodes=cn1 Default=YES" in conf  # the simulated cpu partition gives way to the lab's
+    assert "NodeName=gpu001 Name=gpu Type=h100 Count=8" in (c.slurm_dir / "gres.conf").read_text()
+    svc = yaml.safe_load(env.compose_file.read_text())["services"]
+    assert svc["lab-node-001"]["hostname"] == "cpu001" and svc["lab-node-001"]["labels"]["workbench.lab"] == "prod-a"
+    assert "lab-u001:30001" in svc["lab-node-001"]["environment"]["WORKBENCH_USERS"] and "WORKBENCH_GPUS" not in svc["lab-node-001"]["environment"]
+    assert any(line.startswith("lab nodes: 6 started") for line in res["lines"]) and "new lab nodes" in "\n".join(res["lines"])
+    lab_apply.remove("prod-a", env)
+    conf = (c.slurm_dir / "slurm.conf").read_text()
+    assert "lab-node" not in conf and "NodeName=cpu001" not in conf and "\nPartitionName=cpu Nodes=cn1 Default=YES\n" in conf
+    assert (c.slurm_dir / "gres.conf").read_text() == "NodeName=g1 Name=gpu Count=1\n"
+    assert list(yaml.safe_load(env.compose_file.read_text())["services"]) == ["cn1"]
+
+
+def test_a_lab_without_a_trace_gets_no_lab_nodes(world):
+    env, _c, root = world
+    (root / "prod-a" / "baseline" / "trace.sacct").unlink()
+    lab_apply.apply("prod-a", "baseline", env)
+    assert not lab_apply.read_marker(root).get("lab_nodes")
+
+
+def test_default_partition_moves_to_the_lab_when_a_simulated_one_keeps_another_name():
+    from benchctl import lab_nodes
+    out = lab_nodes.switch_off("PartitionName=sim Nodes=a Default=YES\n", ["PartitionName=prod Nodes=x Default=YES"])
+    assert "Default=NO #lab-default" in out and lab_nodes.strip(out) == "PartitionName=sim Nodes=a Default=YES\n"
+
+
+def test_lab_node_name_clash_with_a_simulated_node_is_refused():
+    from benchctl import lab_nodes, lab_slurm
+    b = {"slurm": {"nodes": [{"NodeName": "n1"}], "partitions": [], "other": [], "keys": {}}, "topology": [], "gres": []}
+    scale = lab_slurm.downscale([{"name": "n1", "shape": "s", "partitions": [], "leaf": None}], 1)
+    with pytest.raises(lab_nodes.LabError, match="also simulated nodes"):
+        lab_nodes.plan(b, None, scale, {"n1"})
