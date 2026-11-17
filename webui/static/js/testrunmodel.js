@@ -64,6 +64,7 @@ function k8s(d) {
   }
   if (d.metrics_server === 'stop') out.push('Stop metrics-server (the metrics API answers 503)');
   else if (d.metrics_server === 'start') out.push('Start metrics-server again (the metrics API answers)');
+  if (d.volcano) out.push(d.volcano.queue ? `Set Volcano queue ${d.volcano.queue} ${String(d.volcano.state).toLowerCase()}` : `Set Volcano PodGroup ${d.volcano.namespace}/${d.volcano.podgroup} to ${d.volcano.phase}`);
   if (d.usage) out.push(`Set the CPU use of each ${d.usage.namespace}/${d.usage.deploy} pod to ${d.usage.cpu} (its autoscaler reacts)`);
   return out;
 }

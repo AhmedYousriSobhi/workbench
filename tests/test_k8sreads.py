@@ -38,7 +38,7 @@ def test_the_issue_762_reads_are_all_there():
     ok_usage = '{"items": [{"metadata": {"name": "kcn001"}, "usage": {"cpu": "350m", "memory": "200Mi"}}]}'
     assert k8sreads.shape_problems(k8sreads.BY_KEY["node-usage"], "viewer", ok_usage, "v1") == []
     assert k8sreads.shape_problems(k8sreads.BY_KEY["node-usage"], "viewer", '{"items": []}', "v1")
-    assert k8sreads.BY_KEY["api-group-volcano"].viewer == k8sreads.BY_KEY["api-group-kubeflow"].viewer == ("not-served",)
+    assert k8sreads.BY_KEY["api-group-volcano"].viewer == ("served",) and k8sreads.BY_KEY["api-group-kubeflow"].viewer == ("not-served",)  # Volcano: issue 765
 
 
 def test_the_viewer_role_has_no_kind_without_a_read_or_a_stated_reason():
@@ -67,8 +67,8 @@ def test_classify_reads_the_outcome_from_the_exit_code_and_the_text():
     assert k8sreads.classify(by["metrics-probe"], 1, "", "Error from server (NotFound): the server could not find the requested resource") == "not-found"
     assert k8sreads.classify(by["nodes"], 1, "", "Unable to connect to the server") == "error"
     assert k8sreads.classify(by["api-group-kueue"], 0, "clusterqueues\nlocalqueues\n", "") == "served"
-    assert k8sreads.classify(by["api-group-volcano"], 0, "\n", "No resources found") == "not-served"
-    assert k8sreads.classify(by["api-group-volcano"], 1, "", "x") == "not-served"
+    assert k8sreads.classify(by["api-group-kubeflow"], 0, "\n", "No resources found") == "not-served"
+    assert k8sreads.classify(by["api-group-kubeflow"], 1, "", "x") == "not-served"
 
 
 def _node(name, kv, gpus=None, pool="gpu"):

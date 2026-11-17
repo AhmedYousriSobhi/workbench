@@ -127,7 +127,7 @@ def test_bootstrap_applies_definitions_then_stages_then_nodes_then_fixtures_and_
     files = [c[-1] for c in calls if c[0] == "apply"]
     assert files == ["/k8s/kwok/crds.yaml", "/k8s/kwok/stage-fast.yaml", "/k8s/kwok/stage-faults.yaml", *[f for f, _ in k8s.KWOK_OBJECTS], "/state/nodes.yaml",
                      "/k8s/fixtures/00-namespaces.yaml", "/k8s/fixtures", "/state/50-dra.yaml",
-                     "/k8s/kueue/crds.yaml", "/k8s/kueue/queues.yaml", k8s.METRICS_API_FILE]  # the metrics API last (discovery fails while it is 503)
+                     "/k8s/kueue/crds.yaml", "/k8s/kueue/queues.yaml", "/k8s/volcano/crds.yaml", "/k8s/volcano/queues.yaml", k8s.METRICS_API_FILE]  # the metrics API last (discovery fails while it is 503)
     patch = next(c for c in calls if c[0] == "patch")  # an existing cluster's nodes get the reachable address too (etcd keeps them)
     assert patch[:4] == ["patch", "-f", "/state/nodes.yaml", "--subresource=status"] and k8s.kwok_ip() in patch[-1]
     assert calls.index(patch) > next(i for i, c in enumerate(calls) if c[-1] == "/state/nodes.yaml")
@@ -494,7 +494,9 @@ def test_bootstrap_waits_for_the_kueue_definitions_then_applies_queues_then_stat
 
     assert k8s.bootstrap(SIM, addressing.plan(SIM), lambda m: None, runner=run, ready=lambda ips: True, sleep=lambda s: None)
     assert calls[-1][-1] == k8s.METRICS_API_FILE
-    tail = calls[-(2 + 1 + 9 + 1):-1]
+    tail = calls[-(5 + 2 + 1 + 9 + 1):-(5 + 1)]  # Kueue, then Volcano, then the metrics API
+    vol = calls[-(5 + 1):-1]
+    assert vol[0][-1] == "/k8s/volcano/crds.yaml" and vol[1][0] == "wait" and vol[2][-1] == "/k8s/volcano/queues.yaml" and all("patch" in c for c in vol[3:])
     assert tail[0][-1] == "/k8s/kueue/crds.yaml" and tail[1][0] == "wait" and "crd/clusterqueues.kueue.x-k8s.io" in tail[1]
     assert tail[2][-1] == "/k8s/kueue/queues.yaml" and all(c[0] == "patch" or "patch" in c for c in tail[3:])
     said = []
