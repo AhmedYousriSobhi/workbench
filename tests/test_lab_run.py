@@ -293,6 +293,44 @@ def test_long_pause_makes_the_run_not_comparable_and_move_ends_a_pause(root):
     assert json.loads((run.folder / "progress.json").read_text())["comparable"] is False
 
 
+def test_pause_limit_is_per_side(root):
+    c = Clock()
+    run = lab_run.Run.create("prod-a", SIM, root, clock=c)
+    five = 0.05 * run.r["length_s"]
+    for s in ("snapshot", "apply_baseline", "replay_a"):
+        run.move(s)
+    run.pause()
+    c.t += five * 0.8
+    for s in ("collect_a", "restore", "apply_candidate", "replay_b"):
+        run.move(s)
+    run.pause()
+    c.t += five * 0.8  # 4 % in each side: comparable, though the total is 8 % of one side
+    assert run.comparable() and run.paused_s("b") == round(five * 0.8, 1)
+    c.t += five * 0.4  # side B now at 6 %
+    assert not run.comparable() and run.paused_s("a") == round(five * 0.8, 1)
+    run.resume()
+    assert run.r["paused_side_s"]["b"] == round(five * 1.2, 1) and run.paused_s() == round(five * 2.0, 1)
+
+
+def test_abort_reason_and_errors_never_name_a_production_user(root):
+    run = lab_run.Run.create("prod-a", SIM, root, clock=Clock())
+    s = Steps(fail_at="replay a", collect_fails=True, restore_fails=True)
+    s.collect = lambda side, run: (_ for _ in ()).throw(RuntimeError("sacct: user u2 unknown"))
+    s.restore = lambda: (_ for _ in ()).throw(RuntimeError("load: u1,u2 rows"))
+
+    def replay(side, run):
+        raise RuntimeError("sacctmgr: user u1 is not in account ml")
+
+    s.replay = replay
+    lab_run.drive(run, s)
+    assert run.r["reason"] == "RuntimeError: sacctmgr: user <user> is not in account ml"
+    assert run.r["collect_error"] == "sacct: user <user> unknown" and run.r["restore_error"] == "load: <user>,<user> rows"
+    for f in ("run.json", "progress.json"):
+        text = (run.folder / f).read_text()
+        assert lab_run.leaks(json.loads(text), PROD_USERS) == 0, f
+    assert run.scrub("u10 and u1.") == "u10 and <user>."  # a longer name that starts with one is left alone
+
+
 def test_abort_keeps_the_percent_reached(root):
     run = lab_run.Run.create("prod-a", SIM, root, clock=Clock())
     for s in ("snapshot", "apply_baseline", "replay_a", "collect_a", "restore"):

@@ -6,7 +6,8 @@ and checked by its sha256 before each side, so they see exactly the same jobs at
 
 Owner decisions of 2026-11-17 (issue 554) that this module carries:
 - 5: users become `lab-u001...`; no production user name is written to `jobs.json`, the progress record or the report. The run
-  path always maps (ADR 0050's `--keep-users` applies to `get lab` only). The mapping itself holds production names and is never stored.
+  path always maps (so `--keep-users` applies to `get lab` only: an implementation choice to confirm, ADR 0050 addendum). The mapping
+  itself holds production names and is never stored; free text (an abort reason, a tool's error) has them replaced by `<user>`.
 - 6: the run length is `--target-hours` / `lab.target_hours`. The dilation factor is `max(1, span / target)`, so a short trace runs
   for its own span, below the target; the run records both.
 - 8: a seed, recorded in `jobs.json` and the run record; sampling uses it, and both sides read it from the same file.
@@ -41,7 +42,7 @@ from .lab import LabError
 CONTRACT = 1
 DEFAULT_SEED = 1  # the seed `get lab` samples with, so a run with no --seed replays the jobs the plan showed
 SIDES = {"a": "baseline", "b": "candidate"}
-COMPARABLE_PAUSE = 0.05  # paused longer than 5 % of the run length: not comparable (ADR 0050)
+COMPARABLE_PAUSE = 0.05  # a side paused longer than 5 % of the run length: not comparable (ADR 0050)
 
 # States in run order. An A/B run walks AB_PATH, a candidate-only run CANDIDATE_PATH (decision 7: no snapshot, restore or compare).
 AB_PATH = ("idle", "snapshot", "apply_baseline", "replay_a", "collect_a", "restore", "apply_candidate", "replay_b", "collect_b",
@@ -211,7 +212,7 @@ class Run:
         rec = {"contract": CONTRACT, "name": name, "run": rid, "ab": ab, "sides": ["a", "b"] if ab else ["b"],
                "seed": seed, "target_hours": doc["target_hours"], "factor": doc["factor"], "length_s": doc["length_s"],
                "jobs": len(doc["jobs"]), "jobs_sha256": sha256(text), "state": "idle", "history": [{"state": "idle", "at": clock()}],
-               "paused_s": 0.0, "paused_since": None, "side": None, "counts": {"submitted": 0, "running": 0, "pending": 0},
+               "paused_s": 0.0, "paused_side_s": dict.fromkeys(["a", "b"] if ab else ["b"], 0.0), "paused_since": None, "side": None, "counts": {"submitted": 0, "running": 0, "pending": 0},
                "replay_s": 0.0, "collected": {}, "snapshot": None, "restore": None, "reason": None}
         run = cls(rec, folder, clock, prod)
         run.save()
@@ -245,11 +246,23 @@ class Run:
         return json.loads(text)
 
     def comparable(self) -> bool:
-        return self.paused_s() <= COMPARABLE_PAUSE * max(1, self.r["length_s"]) * len(self.r["sides"])
+        """Each side on its own: a side paused for more than 5 % of the run length (one side's length) is not comparable."""
+        limit = COMPARABLE_PAUSE * max(1, self.r["length_s"])
+        return all(self.paused_s(side) <= limit for side in self.r["sides"])
 
-    def paused_s(self) -> float:
-        extra = self.clock() - self.r["paused_since"] if self.r["paused_since"] is not None else 0.0
-        return round(self.r["paused_s"] + extra, 1)
+    def _ongoing(self) -> float:
+        return self.clock() - self.r["paused_since"] if self.r["paused_since"] is not None else 0.0
+
+    def paused_s(self, side: str | None = None) -> float:
+        """Paused seconds of the whole run, or of one side, a pause in progress included."""
+        if side is None:
+            return round(self.r["paused_s"] + self._ongoing(), 1)
+        return round(self.r["paused_side_s"].get(side, 0.0) + (self._ongoing() if self.r["side"] == side else 0.0), 1)
+
+    def scrub(self, text: str) -> str:
+        """Free text bound for run.json or progress.json (an abort reason, a tool's error) with every production user name replaced
+        by `<user>`: a failing tool's message may name one (decision 5)."""
+        return re.sub(r"[A-Za-z0-9_@-]+(?:\.[A-Za-z0-9_@-]+)*", lambda m: "<user>" if m.group(0) in self._prod else m.group(0), text)
 
     def last_state(self) -> str:
         """The state the run is in, or the one it had reached when it aborted."""
@@ -291,7 +304,7 @@ class Run:
         if to in REPLAY:
             self.r.update(side=REPLAY[to], replay_s=0.0, counts={"submitted": 0, "running": 0, "pending": 0})
         if to == "aborted":
-            self.r["reason"] = reason or "aborted"
+            self.r["reason"] = self.scrub(reason or "aborted")
         self.save()
 
     def abort(self, reason: str) -> None:
@@ -308,7 +321,9 @@ class Run:
 
     def resume(self) -> None:
         if self.r["paused_since"] is not None:
-            self.r["paused_s"] = round(self.r["paused_s"] + self.clock() - self.r["paused_since"], 1)
+            took = self._ongoing()
+            self.r["paused_s"] = round(self.r["paused_s"] + took, 1)
+            self.r["paused_side_s"][self.r["side"]] = round(self.r["paused_side_s"][self.r["side"]] + took, 1)
             self.r["paused_since"] = None
             self.save()
 
@@ -336,6 +351,13 @@ class Run:
             write_atomic(self.side_dir(side) / fname, text)
         self.r["collected"][side] = sorted(files)
         self.save()
+
+    def entered(self, state: str) -> float:
+        """When the run last entered `state` (the clock's time)."""
+        for h in reversed(self.r["history"]):
+            if h["state"] == state:
+                return h["at"]
+        raise LabError(f"run {self.r['run']} has not been in {state}")
 
     def require_collected(self, side: str) -> None:
         """The restore erases the accounting of the side before it: it may run only once that side's export is on disk."""
@@ -367,7 +389,8 @@ def pair(a: list[dict[str, str]], b: list[dict[str, str]], key: str = "JobName")
 def drive(run: Run, steps: Any) -> Run:
     """Walk the run's path with injected steps (tests use fakes; step 4's governor thread will pass the real ones):
     `snapshot()`, `apply(side_name)`, `replay(side, run)` (returns None or an abort reason), `collect(side, run) -> {file: text}`,
-    `restore()`, `compare(run)`, `report(run)`, `abort_reason()` (None, or why to stop, checked before every state).
+    `restore()`, `compare(run)`, `report(run)`, `abort_reason()` (None, or why to stop, checked before every state) and, optionally,
+    `discard()` when the run has ended (`lab_snapshot.StateSteps` gives snapshot, restore, collect and discard).
     Any exception aborts the run with its message; the A/B path restores the snapshot if it was taken (cluster restored after abort)."""
     try:
         for to in run.path[run.path.index(run.state) + 1:]:
@@ -396,6 +419,8 @@ def drive(run: Run, steps: Any) -> Run:
         _abort(run, steps, str(e))
     except Exception as e:  # noqa: BLE001 - any failure ends the run in `aborted`, never half-way with a stale state
         _abort(run, steps, f"{type(e).__name__}: {e}")
+    if run.state in TERMINAL and (discard := getattr(steps, "discard", None)):
+        discard()  # the snapshot may hold production names in its accounting dump: it does not outlive the run
     return run
 
 
@@ -411,11 +436,11 @@ def _abort(run: Run, steps: Any, reason: str) -> None:
         try:
             run.record_collected(side, steps.collect(side, run))
         except Exception as e:  # noqa: BLE001 - partial accounting is a bonus; the restore still runs
-            run.r["collect_error"] = str(e)[-300:]
+            run.r["collect_error"] = run.scrub(str(e)[-300:])
     try:
         run.r["restore"] = steps.restore()
         run.r["restored_after_abort"] = True
     except Exception as e:  # noqa: BLE001 - the abort reason stays; the failed restore is recorded beside it
         run.r["restored_after_abort"] = False
-        run.r["restore_error"] = str(e)[-300:]
+        run.r["restore_error"] = run.scrub(str(e)[-300:])
     run.save()
