@@ -401,6 +401,12 @@ def test_the_new_k8s_steps_validate_and_become_kubectl_calls():
     assert k8s.step_args({"remove": ["scenario/70-apf.yaml"]}) == [["delete", "--ignore-not-found", "-f", "/k8s/scenario/70-apf.yaml"]]
     args = k8s.step_args({"drain": {"node": "kgpu001", "timeout": 20}})[0]
     assert args[:2] == ["drain", "kgpu001"] and args[-1] == "--timeout=20s" and "--disable-eviction" not in args  # eviction, so a budget can refuse
+    # #749: with a selector only those pods are evicted and --force is absent (it deletes bare fixture pods for good)
+    sel = k8s.step_args({"drain": {"node": "kgpu001", "selector": "app=inference", "timeout": 20}})[0]
+    assert "--pod-selector=app=inference" in sel and "--force" not in sel and sel[-1] == "--timeout=20s"
+    assert "--force" in args and not any(a.startswith("--pod-selector") for a in args)
+    assert "selector" in k8s.step_problems({"drain": {"node": "kgpu001", "selector": "app=a;rm"}}, nodes)[0]
+    assert k8s.step_problems({"drain": {"node": "kgpu001", "selector": "app=inference"}}, nodes) == []
     pod = yaml.safe_load(k8s.pod_manifest({"namespace": "a", "name": "p", "priority_class": "inference", "node": "kgpu001", "gpus": 4}))["spec"]
     assert pod["priorityClassName"] == "inference" and pod["nodeSelector"] == {"kubernetes.io/hostname": "kgpu001"}
 

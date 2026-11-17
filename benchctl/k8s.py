@@ -490,6 +490,8 @@ def step_problems(do: dict, nodes: set[str]) -> list[str]:
             out.append(f"k8s drain needs a known Kubernetes node, not {d.get('node')!r}")
         if not isinstance(d.get("timeout", 30), int) or isinstance(d.get("timeout", 30), bool) or not 1 <= d.get("timeout", 30) <= 600:
             out.append("k8s drain timeout is whole seconds, 1 to 600")
+        if d.get("selector") is not None and not re.fullmatch(r"[A-Za-z0-9._/-]+(=|!=)[A-Za-z0-9._-]+", str(d["selector"])):
+            out.append("k8s drain selector is one label test such as app=inference")
     if "pod" in do and isinstance(do["pod"], dict):
         p = do["pod"]
         if p.get("priority_class") is not None and not _ok_name(p["priority_class"]):
@@ -534,7 +536,11 @@ def step_args(do: dict) -> list[list[str]]:
     if "queue" in do:  # a ClusterQueue and its LocalQueues go inactive (or back); no controller, so the status is written
         out += kueue.queue_calls(do["queue"])
     if "drain" in do:  # cordons, then evicts through the eviction API, so a PodDisruptionBudget can refuse; the timeout ends a blocked drain
-        out.append(["drain", do["drain"]["node"], "--ignore-daemonsets", "--delete-emptydir-data", "--force", f"--timeout={int(do['drain'].get('timeout', 30))}s"])
+        d = do["drain"]
+        # With a selector only those pods are evicted and there is no --force: `drain --force` would also delete the fixture's bare pods
+        # (dra-train, gpu-train, sized) for good, as nothing recreates them (#749).
+        out.append(["drain", d["node"], "--ignore-daemonsets", "--delete-emptydir-data",
+                    f"--pod-selector={d['selector']}" if d.get("selector") else "--force", f"--timeout={int(d.get('timeout', 30))}s"])
     return out
 
 
