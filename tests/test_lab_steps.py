@@ -232,3 +232,20 @@ def test_a_failed_restore_after_an_abort_keeps_the_snapshot(run):
             calls.append("discard")
     lab_run.drive(run, S())
     assert run.state == "aborted" and run.r["restored_after_abort"] is False and calls == ["wait"]
+
+
+def test_abort_reason_waits_while_paused_and_ends_on_resume_or_abort(run, root, tmp_path):
+    flags = tmp_path / "gen" / "flags"
+    flags.mkdir(parents=True)
+    (flags / lab_steps.PAUSE_FLAG).write_text("L2")
+    slept = []
+
+    def resume_after_two(s):
+        slept.append(s)
+        if len(slept) == 2:
+            (flags / lab_steps.PAUSE_FLAG).unlink()
+    s, _ = steps(run, root, tmp_path, sleep=resume_after_two)
+    assert s.abort_reason() is None and slept == [lab_steps.CALM_POLL_S] * 2  # the next state waits for L0-L1 (GV-8)
+    (flags / lab_steps.PAUSE_FLAG).write_text("L3")
+    s, _ = steps(run, root, tmp_path, sleep=lambda x: (flags / lab_steps.ABORT_FLAG).write_text("aborted under memory pressure (L3)"))
+    assert s.abort_reason() == "aborted under memory pressure (L3)"

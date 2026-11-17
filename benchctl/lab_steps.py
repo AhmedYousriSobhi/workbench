@@ -121,8 +121,16 @@ class RunSteps:
             return ""
 
     def abort_reason(self) -> str | None:
-        why = self.flag(ABORT_FLAG)
-        return None if why is None else (why.strip() or "aborted")
+        """Checked before every state. While the governor's pause flag exists (L2 and up) it waits: the next state (snapshot, apply,
+        collect, the A to B restore) forks Docker, which GV-8 keeps to L0-L1. A state already running finishes. The abort flag ends
+        the wait at once."""
+        while True:
+            why = self.flag(ABORT_FLAG)
+            if why is not None:
+                return why.strip() or "aborted"
+            if self.flag(PAUSE_FLAG) is None:
+                return None
+            self.sleep(CALM_POLL_S)
 
     # ---- the states
     def snapshot(self) -> dict:
