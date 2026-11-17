@@ -118,6 +118,8 @@ class Cluster:
         if "sacctmgr -i delete qos" in text:
             if cmd[-1] in self.refuse_delete:
                 return bad("busy")
+            if cmd[-1] not in self.qos:
+                return bad(" Nothing deleted\n")  # what sacctmgr says for a row that is not there
             self.qos.pop(cmd[-1], None)
             return ok()
         m = re.search(r"sacctmgr -i delete (user|account) (\S+)", text)
@@ -125,7 +127,10 @@ class Cluster:
             kind, n = m.group(1).capitalize(), m.group(2)
             if n in self.refuse_delete:
                 return bad("busy")
-            for k in [k for k in self.records if k.startswith(kind + "/") and k.endswith("/" + n)]:
+            gone = [k for k in self.records if k.startswith(kind + "/") and k.endswith("/" + n)]
+            if not gone:
+                return bad(" Nothing deleted\n")
+            for k in gone:
                 del self.records[k]
             return ok()
         if "tctl get role/" in text:
@@ -477,6 +482,21 @@ def test_remove_lists_rows_sacctmgr_refuses_to_delete(world):
     assert "sacctmgr refused: user u2, qos high" in out and lab_apply.read_marker(root) is None
 
 
+def test_remove_succeeds_after_a_run_restore_already_removed_the_rows(world):
+    """Issue 554, owner decision round 3 (item 4): an aborted A/B run restores the accounting database to its snapshot, taken before
+    the baseline, so the rows the lab made are gone while the marker still lists them. `remove lab` must still end the lab."""
+    env, c, root = world
+    pre_records, pre_qos = dict(c.records), {k: dict(v) for k, v in c.qos.items()}
+    (root / "prod-a" / "baseline" / "sacctmgr.dump").write_text(
+        "Cluster - 'prodsim'\nParent - 'root'\nAccount - 'ml':Description='ml':Organization='sci':Fairshare=20\nParent - 'ml'\nUser - 'u2':DefaultAccount='ml':Fairshare=1\n")
+    (root / "prod-a" / "baseline" / "qos.txt").write_text("Name|Priority\nhigh|1000\n")
+    lab_apply.apply("prod-a", "baseline", env)
+    assert "User/ml/u2" in c.records and "high" in c.qos
+    c.records, c.qos = pre_records, pre_qos  # the run's restore put the database back
+    out = "\n".join(lab_apply.remove("prod-a", env)["lines"])
+    assert "sacctmgr refused" not in out and "already gone" in out and lab_apply.read_marker(root) is None
+
+
 def test_remove_returns_to_the_plain_cluster(world):
     env, c, root = world
     plain_conf, plain_cfg = (c.slurm_dir / "slurm.conf").read_text(), dict(c.cfg)
@@ -598,7 +618,7 @@ def test_governor_rejects_bad_lab_commands_and_names(tmp_path):
                 {"cmd": "lab-apply", "name": "prod-a", "side": "both"}, {"cmd": "lab-restore", "name": 5}, {"cmd": "lab-restore"}):
         r = d(g, bad)
         assert r["ok"] is False and r["error"].startswith(bad["cmd"] + " needs name"), bad
-    assert d(g, {"cmd": "lab-run", "name": "prod-a"})["error"].startswith("unknown command")
+    assert d(g, {"cmd": "lab-run", "name": "prod-a"})["error"].startswith("no lab runs without --workdir")  # issue 554 made the verb
     assert "not on disk" in d(g, {"cmd": "lab-restore", "name": "gone"})["error"] or "no lab gone on disk" in d(g, {"cmd": "lab-restore", "name": "gone"})["error"]
 
 

@@ -1,6 +1,7 @@
 """Governor core: ties sampler, ladder, planner and the control commands together."""
 import json
 import logging
+import re
 import threading
 import time
 from collections.abc import Callable
@@ -10,6 +11,7 @@ from .annotate import Annotator
 from .capture import Capture
 from .control import PLAN_PARTS
 from .executors import UserExecutor
+from .labrun import LabRun, admission_mb
 from .ladder import Ladder
 from .netem import USER_MODE_MSG, Netem
 from .planner import Action, Group, plan, reversible_first, undo
@@ -28,6 +30,9 @@ EVENTS_EVERY = 5.0  # seconds between memory.events reads (one small file per co
 ADMIT_FLOOR = int(1.0 * 1024**3)  # MemAvailable that must remain after a start (matches benchctl preflight)
 LAB_VALIDATE_MB = 250  # a lab validation one-shot set (P5, ADR 0050: the replay and validation estimate)
 CHANGE_MAX_LEVEL = 1  # scale/set-profile fork docker; GV-8 forbids that under pressure (L2+)
+RUN_EXCLUSIVE = {"scale", "set-profile", "apply-plan", "lab-apply", "lab-restore", "lab-validate", "admit"}  # would change the cluster under a lab run
+NODE_IN = re.compile(r"(?:^|-)[a-z]{2,8}[0-9]{3}(?:-|$)")  # a node container (workbench-cn001-1), not a service
+INTERFERING = {"node-state", "freeze", "thaw", "stop", "start", "netem-set", "submit-job", "slurm-step"}  # allowed during a run, recorded
 
 
 class Governor:
@@ -37,8 +42,9 @@ class Governor:
                  inventory: Callable[[], tuple[list[Group], dict]] | None = None,
                  refresh_interval: float = 30.0, effector: Effector | None = None, tracer: Callable | None = None, statser: Callable | None = None, capturer: Callable | None = None, reader: Callable | None = None,
                  streamer: Streamer | None = None, admit_floor: int = ADMIT_FLOOR, lab_exists: Callable[[str], bool] | None = None,
-                 lab_status: Callable[[], dict | None] | None = None, netemer: Callable | None = None):
+                 lab_status: Callable[[], dict | None] | None = None, netemer: Callable | None = None, labrun: LabRun | None = None):
         self.sampler, self.ladder, self.groups = sampler, ladder, groups
+        self.labrun = labrun  # issue 554: the supervised lab run (one at a time); None without --workdir
         self.admit_floor = admit_floor
         self.lab_status = lab_status  # issue 553: the active lab's status block from compose/generated/lab/active.json, or None
         self.lab_exists = lab_exists  # issue 552: does compose/generated/lab/NAME exist in the workdir
@@ -261,6 +267,47 @@ class Governor:
             return {"ok": False, "error": f"no lab {req['name']} on disk: import it first (benchctl import lab {req['name']} --from DIR)"}
         return None
 
+    def _lab_view(self) -> dict | None:
+        """`status`'s `lab`: the marker's block (issue 553) and, while a run is supervised, its progress (ADR 0049's keys: state, percent,
+        submitted, running, pending, paused_s; plus the run id, the replay side, paused, comparable, reason). Without a run the block is
+        the marker's alone, as before."""
+        marker = self.lab_status() if self.lab_status else None
+        run = self.labrun.progress() if self.labrun else None
+        if run is None:
+            return marker
+        base = marker or {"name": run["name"], "side": None, "time_scale": 1.0}
+        return {**base, **{k: v for k, v in run.items() if k not in ("name", "side")}, "replay_side": run.get("side")}
+
+    def _lab_run_guard(self, cmd: str, req: dict) -> dict | None:
+        """While a lab run is preparing, running or recovering (owner decisions, issue 554 round 3): a command that would change the
+        cluster under it is refused with one message; an operator's node action (allowed: it is relief) is recorded as interference."""
+        remove_jobs = cmd == "slurm-step" and req.get("name") == "cancel-jobs"
+        if (why := self.labrun.busy()) and (cmd in RUN_EXCLUSIVE or remove_jobs):
+            a = self.labrun.active
+            how = "" if a["phase"] == "recovering" else f" (benchctl stop lab {a['name']} ends it)"
+            return {"ok": False, "error": f"{why}: {cmd}{' remove-jobs' if remove_jobs else ''} waits for it{how}"}
+        on_node = cmd not in ("freeze", "thaw", "stop", "start") or bool(NODE_IN.search(str(req.get("target") or "")))
+        if cmd in INTERFERING and on_node:
+            self.labrun.interfere(cmd if cmd != "slurm-step" else f"slurm-step {req.get('name')}", req.get("node") or req.get("target"))
+        return None
+
+    def _lab_apply_admit(self, req: dict) -> dict | None:
+        """GV-9 for `lab-apply` (ADR 0050 addendum): the lab's node count from `benchctl get lab NAME -o json` (read-only), then
+        admit `nodes x 13 + 250` MB. Only at L0-L1 (above, `_change` refuses with its own message) and with --workdir."""
+        if self.dry_run or not self.reader or self.ladder.level > CHANGE_MAX_LEVEL:
+            return None
+        try:
+            nodes = int(json.loads(self.reader(["get", "lab", req["name"], "-o", "json"]))["scale"]["lab_nodes"])
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": f"lab-apply {req['name']}: could not read the lab's plan: {str(e)[:200]}"}
+        adm = self.admit_locked(admission_mb(nodes))
+        return None if adm.get("ok") else adm
+
+    def admit_locked(self, budget_mb: int) -> dict:
+        """`_admit` from outside the lock (the lab run's start, `lab-apply`)."""
+        with self._lock:
+            return self._admit(budget_mb)
+
     def _change_view(self) -> dict | None:
         """The latest change for `status`: job id, state and stages (name, state, seconds); no timestamps of its own beyond start and end."""
         c = self.change
@@ -297,6 +344,8 @@ class Governor:
 
     def handle(self, cmd: str, req: dict) -> dict:
         """Control-socket command handler; request already validated by control.dispatch."""
+        if self.labrun and (refused := self._lab_run_guard(cmd, req)):
+            return refused
         if cmd == "slurm-trace":  # read-only, so allowed at every level, and slow (Docker): the lock is not held
             if not self.tracer:
                 return {"ok": False, "error": "no trace without --workdir (the governor runs `benchctl get trace`)"}
@@ -334,6 +383,21 @@ class Governor:
                 return {"ok": False, "error": "dry run: no netem"}
             return (self.netem.set(req["node"], req.get("delay_ms"), req.get("loss_pct"), req.get("ttl_s")) if cmd == "netem-set"
                     else self.netem.clear(req.get("node")))
+        if cmd in ("lab-run", "lab-stop"):  # issue 554: a supervised run; start is L0-L1 and admitted, stop works at every level
+            if not self.labrun:
+                return {"ok": False, "error": "no lab runs without --workdir (the governor runs `benchctl run lab`)"}
+            if cmd == "lab-stop":
+                return self.labrun.stop(req["name"], bool(req.get("force", False)))
+            if (err := self._lab_missing(req)):
+                return err
+            if self.dry_run:
+                self._record(f"dry-run: would lab-run={req['name']}")
+                return {"ok": True, "dry_run": True}
+            if self.change and self.change.get("state") == "running":
+                return {"ok": False, "error": "a change is already running: wait for it, then start the run"}
+            return self.labrun.start(req["name"], bool(req.get("ab", False)), req.get("target_hours"), req.get("seed"))
+        if cmd == "lab-apply" and not self._lab_missing(req) and (refused := self._lab_apply_admit(req)):  # slow (a child): not under the lock
+            return refused
         if cmd in ("freeze", "thaw", "stop", "start"):  # slow, so not under the lock: it would hold `status` up like a plan does
             self._act(Action(cmd, req["target"], self.ladder.level))
             return {"ok": True}
@@ -354,7 +418,7 @@ class Governor:
                         "violations": sorted(self.violations),
                         "audit": self.audit[-60:],
                         "change": self._change_view(),
-                        "lab": self.lab_status() if self.lab_status else None,
+                        "lab": self._lab_view(),
                         "netem": self.netem.status() if self.netem else None}  # None: the user-mode governor offers no netem
             if cmd == "admit":
                 return self._admit(req["budget_mb"])

@@ -134,6 +134,64 @@ An object that already exists without the lab's label (for example a PriorityCla
 
 Rows `sacctmgr` refuses to delete are listed.
 
+## Run the replay (built, not yet usable end to end)
+
+```bash
+./scripts/benchctl run lab prod-a --ab                  # baseline, restore, candidate; returns once the run started
+./scripts/benchctl run lab prod-a                       # the candidate side only
+./scripts/benchctl run lab prod-a --ab --target-hours 1 --seed 7
+./scripts/benchctl status                               # one line: state, percent, submitted, running, pending, paused
+./scripts/benchctl stop lab prod-a                      # end the run (an A/B run is put back to its snapshot)
+```
+
+**Not usable end to end yet.** The commands work, but a real trace cannot be replayed until two things exist ([ADR 0050 addendum](../adr/0050-config-lab-ab-replay-method.md)):
+- the lab node containers (issue 863): until then a job naming a production partition is refused by Slurm and counted as `rejected`;
+- the `lab-uNNN` users in accounting and on slurmctld and the nodes (issue 869): with associations enforced, Slurm refuses a user it does not know.
+
+A run goes **only through the governor** (`./scripts/benchctl start`), needs the cluster with accounting (`benchctl up --with accounting`) and a lab with a trace. One run at a time.
+
+- **Start.** Only at L0 or L1. The governor answers at once (`preparing`), freezes the run's jobs, then asks for `lab nodes x 13 MB + 250 MB` (the same estimate `get lab` prints). `run lab` waits for the outcome and prints one line: the run started, or why it was refused, for example `refused: 302 MB would leave ...`. `benchctl status` keeps a refusal until the next start.
+- **While it runs** (and while it is preparing or being recovered): `up`, `scale`, `apply-plan`, a profile change, the other lab commands, `remove jobs` and `import lab --replace` are refused with one message naming `benchctl stop lab NAME`. Freezing, thawing or draining a node stays allowed.
+- **`down` and `stop`** are refused too (exit 3), naming two ways out: `benchctl stop lab NAME`, wait until `benchctl status` shows it ended, then `down`; or `benchctl down --force` (also `stop --force`), which aborts the run, skips its restore and keeps the snapshot (`benchctl remove lab NAME` then returns to the plain cluster). `--yes` does not override; with `BENCHCTL_AGENT=1`, `--force` needs `--yes` too.
+- **A fault or a scenario during a replay** is allowed but recorded in `reports/RUN/interference.jsonl`. The run is then not comparable, and `status` names the first action and its time.
+- **If the governor restarts** during a run, its status says `recovering` until the run is wound up: the run is aborted and, for an A/B run, its snapshot restored once memory is calm. The same commands are refused meanwhile.
+- **L2** pauses the replay: no new job is submitted and the pause is counted. A side paused for more than 5 % of the run length marks the run not comparable. L1 does not pause it.
+- **L3** aborts it as `aborted under memory pressure (L3)`. The jobs it submitted are cancelled. An A/B run puts the cluster back to its snapshot once the level is back at L0 or L1 (status says `restore waits for L0-L1` meanwhile).
+- **`stop lab NAME`** works at any level and ends the run the same way.
+
+What happens, in order. With `--ab`: snapshot, apply baseline, replay A, collect A, restore, apply candidate, replay B, collect B, compare, report. Without it: the candidate only (apply, replay, collect, report). Any state can end in `aborted`.
+
+- **The plan of a run.** A run freezes one `jobs.json` that both sides read: the sampled jobs with lab users `lab-u001`, `lab-u002`, ... (never the production names, whatever `get lab --keep-users` showed), scaled submit, run and limit times, the seed (default 1, the one `get lab` samples with) and the run length from `--target-hours` or `lab.target_hours` (a trace shorter than that is not stretched).
+- **The replay.** A one-shot container (P5, 250 MB, no `workbench.class` label, so the governor never freezes it before it can stop) submits each job at its lab time as its `lab-uNNN` user.
+- **A job** sleeps for its scaled run time, then exits with its exit code. A timeout sleeps past its limit; an out-of-memory job exits 137. Its name is its key (`j0001`), so A and B are paired by key.
+- **Snapshot and restore.** Before run A the slurmctld state and the accounting database are saved; before run B both are put back and compared file by file, and run A's accounting is written to the report folder first (the restore erases it).
+- **Prometheus.** While a side replays, slurmctld's metrics are also scraped by the `lab-run` job with a `lab_run="NAME/RUN/SIDE"` label, so the two sides can be told apart in Grafana. Only those series carry it. A cluster started before this change needs one Prometheus restart (`benchctl up`) to learn the job.
+
+Files of a run, under `compose/generated/lab/NAME/`:
+
+| Path | What |
+|---|---|
+| `reports/RUN/jobs.json` | the frozen jobs (read-only), lab users only |
+| `reports/RUN/run.json`, `progress.json` | the state, history, seed, run length, progress (`percent`, `submitted`, `running`, `pending`, `paused_s`) |
+| `reports/RUN/a/sacct.txt`, `b/sacct.txt` | each side's jobs from accounting |
+| `reports/RUN/compare.json`, `report.json` | jobs paired by key; a short summary (the full report and verdict are issue 555) |
+| `snapshots/RUN/` | the saved state (mode 700); deleted when the run ends, kept only when an abort's restore could not run |
+
+**If a run is refused or ends early**
+
+| Message | Fix |
+|---|---|
+| `the governor is not reachable` | `./scripts/benchctl start` |
+| `refused at L2: lab runs start only at L0-L1 (GV-8)` | wait for the memory level to drop (`benchctl status`) |
+| `refused: N MB would leave ...` | free memory, or fewer lab nodes (`lab.max_nodes`) |
+| `lab run ... is in progress` | one run at a time: wait, or `benchctl stop lab NAME` |
+| `aborted under memory pressure (L3)` | start a new run when memory is back |
+| `the replay driver ended without a result` | is the cluster up and the slurm-ctl image built (`benchctl up`)? |
+| `the governor did not answer ...: the restore was not run` | `benchctl remove lab NAME` returns to the plain cluster |
+| `refused: lab run ... is replay_a. Either ...` (down, stop) | `benchctl stop lab NAME` and wait, or add `--force` |
+| `... is being recovered after a governor restart` | wait: `benchctl status` shows when it is done |
+| `restore skipped (benchctl down --force)` | `benchctl remove lab NAME` returns to the plain cluster |
+
 ## Secrets
 
 These become `<scrubbed>`:
@@ -166,4 +224,13 @@ Imported files stay local: `compose/generated/` is gitignored and `scripts/check
 
 ## Under the hood
 
-Source: `benchctl/lab.py` (store, manifest, version match, plan), `benchctl/lab_import.py` (parsers, scrubber), `benchctl/lab_slurm.py` (key classes, time scaling, downscale), `benchctl/lab_replay.py` (sampling, users, dilation, concurrency), `benchctl/lab_candidate.py` (candidate overlay), `benchctl/lab_diff.py` (diff), `benchctl/lab_apply.py` (apply, remove, marker, slurm.conf overlay; every cluster call goes through an injectable runner, so the tests need no Docker), `benchctl/lab_validate.py` (render, one-shots, results; [ADR 0081](../adr/0081-config-lab-validation.md)). The store is `compose/generated/lab/NAME/baseline/` (scrubbed copies) and `manifest.json` (files with counts and hashes, scrubbed counts, dropped kinds, versions, the workbench's own versions and `version_match`: same, differs or unknown; `differs` marks that component's results indicative). The import writes a temporary folder and renames it, so a refused import leaves nothing. Slurm keys are all stored (secrets scrubbed); `KEY_CLASS` in `lab_slurm.py` decides which are applied, kept or reported "not tested".
+Source: `benchctl/lab.py` (store, manifest, version match, plan), `benchctl/lab_import.py` (parsers, scrubber), `benchctl/lab_slurm.py` (key classes, time scaling, downscale), `benchctl/lab_replay.py` (sampling, users, dilation, concurrency), `benchctl/lab_candidate.py` (candidate overlay), `benchctl/lab_diff.py` (diff), `benchctl/lab_apply.py` (apply, remove, marker, slurm.conf overlay; every cluster call goes through an injectable runner, so the tests need no Docker), `benchctl/lab_validate.py` (render, one-shots, results; [ADR 0081](../adr/0081-config-lab-validation.md)).
+
+The run:
+- `benchctl/lab_run.py`: run states, frozen jobs file, user remap, seed, A/B pairing.
+- `benchctl/lab_snapshot.py` with `images/slurm-ctl/restore-state.sh`: snapshot, restore, hash compare, collecting a side's accounting.
+- `benchctl/lab_steps.py`: the host side of each state of a run.
+- `images/slurm-ctl/lab_driver.py`: the replay driver.
+- `governor/labrun.py`: `lab-run`, `lab-stop`, the supervising thread, admission, the pause and abort flags.
+
+The store is `compose/generated/lab/NAME/baseline/` (scrubbed copies) and `manifest.json` (files with counts and hashes, scrubbed counts, dropped kinds, versions, the workbench's own versions and `version_match`: same, differs or unknown; `differs` marks that component's results indicative). The import writes a temporary folder and renames it, so a refused import leaves nothing. Slurm keys are all stored (secrets scrubbed); `KEY_CLASS` in `lab_slurm.py` decides which are applied, kept or reported "not tested".

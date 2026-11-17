@@ -17,6 +17,9 @@
 - name: node health check
   paths: ["images/node-base/nhc", "images/node-base/nhc.d/**", "benchctl/nhc.py"]
   tests: [test_nhc_real, test_nhc_browser]
+- name: config lab replay driver and the governor's run supervision (mounted at run time, not baked into an image)
+  paths: ["images/slurm-ctl/lab_driver.py", "governor/labrun.py", "benchctl/lab_steps.py", "benchctl/lab_interference.py"]
+  tests: [test_lab_run_real, test_pressure_real]
 - name: images of the cluster
   paths: ["images/node-base/**", "images/slurm-ctl/**"]
   tests: ALL
@@ -29,6 +32,9 @@
 - name: config lab apply and remove (live)
   paths: ["benchctl/lab_apply.py"]
   tests: [test_lab_apply_real]
+- name: config lab run, snapshot and restore (live)
+  paths: ["benchctl/lab_run.py", "benchctl/lab_snapshot.py"]
+  tests: [test_lab_run_real]
 - name: config lab validation
   paths: ["benchctl/lab_validate.py", "scripts/verify.d/lab.sh", "tests/fixtures/lab/**"]
   tests: [test_lab_real]
