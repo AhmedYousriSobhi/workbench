@@ -18,8 +18,8 @@ Not here (later steps of #554): the driver that submits the jobs (step 3: it nam
 not by Slurm job id, which the restore reuses), the governor verbs, thread and admission (step 4), the CLI (step 5), and the lab
 node containers (#863).
 
-TODO(#554, decision 9): the Prometheus `lab_run` label. The owner answered "both" (a relabel rule and an external label with a
-reload); how the two combine is not decided, so nothing here sets it.
+TODO(#554, decision 9): the Prometheus `lab_run` label. Decided 2026-11-17: a relabel rule adds it from a file the driver writes;
+not built yet (the driver is step 3, the Prometheus part step 4), so nothing here sets it.
 
 Layout: compose/generated/lab/NAME/reports/RUN/ holds run.json (the run record), progress.json (what governor `status` will show),
 jobs.json and, per side, a/ and b/ (collected accounting). Snapshots live outside the report folder (lab_snapshot).

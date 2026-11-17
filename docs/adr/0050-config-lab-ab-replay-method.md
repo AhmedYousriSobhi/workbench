@@ -44,7 +44,7 @@ The ten design questions of issue 554, in the owner's words (the issue's comment
 | 6 | The run length is the existing **`--target-hours` / `lab.target_hours`**, not a new `--duration`. | Yes (in `jobs.json` and `run.json`; the CLI flag comes with step 5) |
 | 7 | `run lab` without `--ab` runs **the candidate side only**. | Yes (the candidate-only path) |
 | 8 | **Add a seed.** Recorded in the report; both sides of the A/B use it. | Partly: recorded in `jobs.json` and `run.json`, read by both sides; the scenario engine does not take a seed yet (step 3 or 4) |
-| 9 | Answered **"Both"** (relabel rule and external label with a reload). Unclear how the two combine, so it is **not implemented yet**; to be clarified before the Prometheus part (step 4). | No: a TODO in `lab_run.py` |
+| 9 | First answered "Both" (relabel rule and external label with a reload), which was unclear. **Decided 2026-11-17: a relabel rule** adds the `lab_run` label from a file the driver writes. | No: a TODO in `lab_run.py` (the driver and the Prometheus part come with steps 3 and 4) |
 | 10 | The page **may start and stop a run through the governor** (W-3 only forbids Docker and root on the page). | No (step 5 and issue 556) |
 
 **Implementation choices of steps 1 and 2, not decided by the owner (to confirm):**
