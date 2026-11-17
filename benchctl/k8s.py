@@ -98,8 +98,10 @@ def problems(sim: dict) -> list[str]:
     return out
 
 
-def node_manifest(name: str, g: dict) -> dict:
-    """A KWOK node: the labels and extended resources a real GPU node advertises (GPU Feature Discovery), no taint."""
+def node_manifest(name: str, g: dict, kubelet_version: str = VERSION) -> dict:
+    """A KWOK node: the labels and extended resources a real GPU node advertises (GPU Feature Discovery), no taint.
+    `kubelet_version` is the API server's version, as on a cluster whose kubelets match its control plane: a client reads the
+    major and minor from a `vX.Y` prefix to judge version skew, and KWOK's own default (`kwok-v0.8.0`) has none (ADR 0084 addendum)."""
     cpus, mem = int(g.get("cpus", 8)), int(g.get("memory_gb", 32))
     gpus = int(g.get("gpus", 0))
     labels = {"kubernetes.io/hostname": name, "kubernetes.io/os": "linux", "kubernetes.io/arch": "amd64",
@@ -114,12 +116,12 @@ def node_manifest(name: str, g: dict) -> dict:
             "metadata": {"name": name, "labels": labels,
                          "annotations": {"node.alpha.kubernetes.io/ttl": "0", "kwok.x-k8s.io/node": "fake"}},
             "status": {"capacity": dict(cap), "allocatable": dict(cap),
-                       "nodeInfo": {"architecture": "amd64", "kubeletVersion": f"kwok-{KWOK_VERSION}", "operatingSystem": "linux",
+                       "nodeInfo": {"architecture": "amd64", "kubeletVersion": kubelet_version, "operatingSystem": "linux",
                                     "osImage": "Ubuntu 22.04.5 LTS", "kernelVersion": "5.15.0", "containerRuntimeVersion": "kwok://sim"}}}
 
 
 def nodes_yaml(sim: dict, gpu_override: int | None = None) -> str:
-    return "".join("---\n" + yaml.safe_dump(node_manifest(n, g), sort_keys=False) for n, g in node_list(sim, gpu_override))
+    return "".join("---\n" + yaml.safe_dump(node_manifest(n, g, version(sim)), sort_keys=False) for n, g in node_list(sim, gpu_override))
 
 
 def api_ip(ips: dict) -> str:
