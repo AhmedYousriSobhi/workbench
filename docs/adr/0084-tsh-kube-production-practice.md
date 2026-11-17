@@ -283,3 +283,10 @@ Memory is the change to the Kubernetes or Teleport part; "none" means no new pro
 - Kueue and KWOK at 1.29 (769)
 - the Kubeflow manifests (Q4)
 - every live result in the table
+
+## Addendum: Teleport audit helper, issue 754 (2026-11-17)
+- **Where the log is read from.** `benchctl/teleportaudit.py` reads every `*.log` under `/var/lib/teleport/log` in the Teleport container with `docker exec` (the `dir` backend writes JSON lines, one file per day, under the data directory's `log/`; Teleport audit reference, Evidence 4). Host-side reading was not chosen because the files belong to the container's user; the host folder holds the same data. A missing folder raises an error that names it and fails the test; it never returns an empty log.
+- **Matching.** Events are selected by `event`, a start mark (`now_minus`, 5 s in the past for clock difference) and exact field values; `response_code` may be a number or a string. The refused write uses a random pod name so only that call matches.
+- **Recorded, not asserted:** what is written for a user with no Kubernetes group (the test asserts only that no 200 is audited for that user), the exact field set of 18.11.8, and the event types present in the log (`exec`, `port`, `session.*` expected absent without a pod shell; the exec spike is issue 760).
+- **Not verified:** every live result of the new tests; that a refused write appears with 403 (expected: Teleport forwards, the API server refuses); the field names of 18.11.8 (docs example only).
+- The helper is reused by 763 for the `tsh ssh` session events.
