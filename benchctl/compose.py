@@ -13,6 +13,7 @@ from . import (
     hwinventory,
     jira_real,
     k8s,
+    kubeconfigs,
     logins,
     mig,
     nhc,
@@ -194,7 +195,8 @@ def generate(sim: dict, profile: dict) -> dict:
     if k8s.API in services:  # every login node gets the read-only kubeconfigs (login.sh puts them in each user's ~/.kube)
         for lname in [n for n, k in lkinds.items() if k in ("k8s", "both")]:  # an s-login gets none
             services[lname]["volumes"] += ["./secrets/k8s/viewer.kubeconfig:/run/workbench/k8s/viewer.kubeconfig:ro",
-                                           "./secrets/k8s/limited.kubeconfig:/run/workbench/k8s/limited.kubeconfig:ro"]
+                                           "./secrets/k8s/limited.kubeconfig:/run/workbench/k8s/limited.kubeconfig:ro",
+                                           f"./secrets/k8s/{kubeconfigs.DIR}:/run/workbench/k8s/{kubeconfigs.DIR}:ro"]  # the fixture files (issue 767)
     if "bmc-farm" in services:  # Redfish endpoints for every node in sim.yaml, localhost only
         # :8443 is TLS at the standard /redfish/v1, the node chosen by Host: clients reach it as bmc-<node>
         services["bmc-farm"].update({

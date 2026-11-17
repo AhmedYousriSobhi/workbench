@@ -15,6 +15,25 @@ for u in $WORKBENCH_USERS; do
     install -m 600 -o "${u%%:*}" -g "${u%%:*}" /run/workbench/k8s/viewer.kubeconfig "/home/${u%%:*}/.kube/config"
     install -m 600 -o "${u%%:*}" -g "${u%%:*}" /run/workbench/k8s/limited.kubeconfig "/home/${u%%:*}/.kube/limited.yaml"
   fi
+  # The fixture kubeconfigs a client's Discover step must judge (issue 767, benchctl/kubeconfigs.py): loose, foreign-owned, root-owned,
+  # an exec plugin and a browser sign-in, next to `config`, never replacing it. Each line of the manifest is: path owner group mode.
+  kc=/run/workbench/k8s/kubeconfigs
+  if [ -r "$kc/manifest" ]; then
+    me="${u%%:*}"; other=""
+    for o in $WORKBENCH_USERS; do
+      if [ -z "$other" ] && [ "${o%%:*}" != "$me" ]; then other="${o%%:*}"; fi
+    done
+    install -d -m 700 -o "$me" -g "$me" "/home/$me/.kube" "/home/$me/.kube/plugins"
+    while read -r path owner group mode; do
+      [ -n "$path" ] || continue
+      case "$owner" in user) o="$me" ;; other) o="$other" ;; *) o="$owner" ;; esac
+      case "$group" in user) g="$me" ;; other) g="$other" ;; *) g="$group" ;; esac
+      [ -n "$o" ] && [ -n "$g" ] || continue   # a single simulated user has no "other" user
+      sed "s#@HOME@#/home/$me#g" "$kc/$path" > /tmp/kubeconfig-fixture
+      install -m "$mode" -o "$o" -g "$g" /tmp/kubeconfig-fixture "/home/$me/.kube/$path"
+    done < "$kc/manifest"
+    rm -f /tmp/kubeconfig-fixture
+  fi
   names="$names ${u%%:*}"
 done
 echo "AllowUsers$names" >> /etc/ssh/sshd_config

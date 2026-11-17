@@ -106,6 +106,47 @@ What the live test (`tests/real/test_k8s_reads_real.py`) records or asserts beyo
 - **The hop:** from the s-login, `ssh -o BatchMode=yes login2 kubectl version` runs kubectl on the k-login as the client does for a "Kubernetes host"; a wrong host name gives one line, `Could not resolve hostname ...`.
 - **Pod logs:** authorization is asserted (`can-i-get-pod-logs`); reading the log text waits for issue 760 (KWOK has no kubelet).
 
+## Kubeconfig files a client must judge
+
+A client that runs `kubectl` on every poll refuses a kubeconfig it should not trust, because an exec credential plugin named in the file would run each time: a file owned by someone else (root is accepted) or writable by others is refused, and one that signs in through a browser cannot work. With the Kubernetes part on, every simulated user's `~/.kube` on the k-login holds one file for each case, next to `config` and `limited.yaml`, which are never replaced (issue 767; the catalogue is `benchctl/kubeconfigs.py`). Point the client's Discover step at `~/.kube` and check that it lists each file and judges it as the "Client's verdict" column says.
+
+| File in `~/.kube` | What it is | Owner, group, mode | Client's verdict | `kubectl get nodes` without a terminal |
+|---|---|---|---|---|
+| `config` | the normal token kubeconfig, read-only, cluster-wide (not changed by these fixtures) | user, user, 600 | accepted | ok |
+| `loose-world.yaml` | writable by everyone | the user, the user's group, 666 | refused | ok |
+| `loose-group.yaml` | writable by a group that is not the user's own | the user, users, 660 | refused | ok |
+| `foreign-owner.yaml` | owned by another simulated user, readable | another user, that user's group, 644 | refused | ok |
+| `root-owned.yaml` | owned by root, readable (an administrator's hand-over) | root, root, 644 | accepted | ok |
+| `exec-token.yaml` | private; an exec plugin prints a token, no terminal needed | the user, the user's group, 600 | accepted | ok |
+| `browser-signin.yaml` | private; a plugin that needs a browser (interactiveMode Always) | the user, the user's group, 600 | unusable | error |
+
+The listing to expect for `alice` (owner and group names are the user's; written from the generator, not yet seen live):
+
+```bash
+docker exec -u alice workbench-login2-1 sh -c 'ls -l ~/.kube'
+```
+
+```text
+-rw------- 1 alice alice ... browser-signin.yaml
+-rw------- 1 alice alice ... config
+-rw------- 1 alice alice ... exec-token.yaml
+-rw-r--r-- 1 bob   bob   ... foreign-owner.yaml
+-rw------- 1 alice alice ... limited.yaml
+-rw-rw---- 1 alice users ... loose-group.yaml
+-rw-rw-rw- 1 alice alice ... loose-world.yaml
+drwx------ 2 alice alice ... plugins
+-rw-r--r-- 1 root  root  ... root-owned.yaml
+```
+
+Try one, without a terminal (as an SSH session from a client has none):
+
+```bash
+docker exec -u alice workbench-login2-1 sh -c 'kubectl --kubeconfig ~/.kube/exec-token.yaml get nodes'     # works: the plugin prints a token
+docker exec -u alice workbench-login2-1 sh -c 'kubectl --kubeconfig ~/.kube/browser-signin.yaml get nodes' # fails
+```
+
+The second fails because the plugin says `interactiveMode: Always`: the Kubernetes authentication documentation says such a plugin "will only be run if standard input is available for user input. If standard input is not available for user input, then the exec plugin will not be run and an error will be returned", and `kubectl` answers `standard input is not a terminal` (client-go source; the exact wording of the wrapped message is checked by the live test). On a terminal the plugin would run and fail with its own message, that it needs a browser and a display. The client's rules (owner, group-writable, plugin, browser) come from its own guide and code, read once (ADR 0084); nothing here ran the client.
+
 ## Point the client at it
 
 - **Execution target:** set a node such as `cn001` as the scheduler's execution target. The client runs `ssh <node> <command>` from the login node; no keys to set up, because the login node already trusts the nodes.
