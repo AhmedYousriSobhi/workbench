@@ -323,7 +323,7 @@ def test_abort_reason_and_errors_never_name_a_production_user(root):
 
     s.replay = replay
     lab_run.drive(run, s)
-    assert run.r["reason"] == "RuntimeError: sacctmgr: user <user> is not in account ml"
+    assert run.r["reason"].startswith("RuntimeError: sacctmgr: user <user> is not in account ml; ")
     assert run.r["collect_error"] == "sacct: user <user> unknown" and run.r["restore_error"] == "load: <user>,<user> rows"
     for f in ("run.json", "progress.json"):
         text = (run.folder / f).read_text()
@@ -447,7 +447,7 @@ def test_drive_abort_during_replay_collects_then_restores(root):
     run = lab_run.Run.create("prod-a", SIM, root, clock=Clock())
     s = Steps(replay_says="aborted under memory pressure")
     lab_run.drive(run, s)
-    assert run.state == "aborted" and run.r["reason"] == "aborted under memory pressure"
+    assert run.state == "aborted" and run.r["reason"] == "aborted under memory pressure" + lab_run.REMOVE_HINT.format(name="prod-a")
     assert s.calls == ["snapshot", "apply baseline", "replay a", "collect a", "restore"]
     assert run.r["restored_after_abort"] and (run.side_dir("a") / "sacct.txt").is_file()
 
