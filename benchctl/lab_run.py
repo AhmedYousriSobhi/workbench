@@ -210,7 +210,7 @@ class Run:
         (folder / "jobs.json").write_text(text)
         (folder / "jobs.json").chmod(0o444)  # frozen: both sides read this file
         rec = {"contract": CONTRACT, "name": name, "run": rid, "ab": ab, "sides": ["a", "b"] if ab else ["b"],
-               "seed": seed, "target_hours": doc["target_hours"], "factor": doc["factor"], "length_s": doc["length_s"],
+               "seed": seed, "target_hours": doc["target_hours"], "factor": doc["factor"], "length_s": doc["length_s"], "lab_nodes": doc["lab_nodes"],
                "jobs": len(doc["jobs"]), "jobs_sha256": sha256(text), "state": "idle", "history": [{"state": "idle", "at": clock()}],
                "paused_s": 0.0, "paused_side_s": dict.fromkeys(["a", "b"] if ab else ["b"], 0.0), "paused_since": None, "side": None, "counts": {"submitted": 0, "running": 0, "pending": 0},
                "replay_s": 0.0, "collected": {}, "snapshot": None, "restore": None, "reason": None}
@@ -287,7 +287,7 @@ class Run:
         return {"name": self.r["name"], "state": self.state, "percent": self.percent(), "submitted": c["submitted"],
                 "running": c["running"], "pending": c["pending"], "paused_s": self.paused_s(), "run": self.r["run"],
                 "side": self.r["side"], "paused": self.r["paused_since"] is not None, "comparable": self.comparable(),
-                "reason": self.r["reason"]}
+                "reason": self.r["reason"], "restore_pending": bool(self.r.get("restore_pending"))}
 
     def save(self) -> None:
         write_atomic(self.folder / "run.json", dump(self.r))
@@ -391,7 +391,8 @@ def drive(run: Run, steps: Any) -> Run:
     `snapshot()`, `apply(side_name)`, `replay(side, run)` (returns None or an abort reason), `collect(side, run) -> {file: text}`,
     `restore()`, `compare(run)`, `report(run)`, `abort_reason()` (None, or why to stop, checked before every state) and, optionally,
     `discard()` when the run has ended (`lab_snapshot.StateSteps` gives snapshot, restore, collect and discard).
-    Any exception aborts the run with its message; the A/B path restores the snapshot if it was taken (cluster restored after abort)."""
+    Any exception aborts the run with its message; the A/B path restores the snapshot if it was taken (cluster restored after abort),
+    after the optional `wait_calm(run)` (the real steps wait for L0-L1). A snapshot whose restore failed is kept, not discarded."""
     try:
         for to in run.path[run.path.index(run.state) + 1:]:
             if why := steps.abort_reason():
@@ -419,8 +420,8 @@ def drive(run: Run, steps: Any) -> Run:
         _abort(run, steps, str(e))
     except Exception as e:  # noqa: BLE001 - any failure ends the run in `aborted`, never half-way with a stale state
         _abort(run, steps, f"{type(e).__name__}: {e}")
-    if run.state in TERMINAL and (discard := getattr(steps, "discard", None)):
-        discard()  # the snapshot may hold production names in its accounting dump: it does not outlive the run
+    if run.state in TERMINAL and (discard := getattr(steps, "discard", None)) and run.r.get("restored_after_abort") is not False:
+        discard()  # the snapshot may hold production names in its accounting dump: it does not outlive the run (kept only when a restore is still owed)
     return run
 
 
@@ -438,6 +439,8 @@ def _abort(run: Run, steps: Any, reason: str) -> None:
         except Exception as e:  # noqa: BLE001 - partial accounting is a bonus; the restore still runs
             run.r["collect_error"] = run.scrub(str(e)[-300:])
     try:
+        if wait := getattr(steps, "wait_calm", None):  # GV-8: the restore forks Docker and reloads MariaDB, never at L2 and up
+            wait(run)
         run.r["restore"] = steps.restore()
         run.r["restored_after_abort"] = True
     except Exception as e:  # noqa: BLE001 - the abort reason stays; the failed restore is recorded beside it

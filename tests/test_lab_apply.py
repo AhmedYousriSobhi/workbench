@@ -598,7 +598,7 @@ def test_governor_rejects_bad_lab_commands_and_names(tmp_path):
                 {"cmd": "lab-apply", "name": "prod-a", "side": "both"}, {"cmd": "lab-restore", "name": 5}, {"cmd": "lab-restore"}):
         r = d(g, bad)
         assert r["ok"] is False and r["error"].startswith(bad["cmd"] + " needs name"), bad
-    assert d(g, {"cmd": "lab-run", "name": "prod-a"})["error"].startswith("unknown command")
+    assert d(g, {"cmd": "lab-run", "name": "prod-a"})["error"].startswith("no lab runs without --workdir")  # issue 554 made the verb
     assert "not on disk" in d(g, {"cmd": "lab-restore", "name": "gone"})["error"] or "no lab gone on disk" in d(g, {"cmd": "lab-restore", "name": "gone"})["error"]
 
 

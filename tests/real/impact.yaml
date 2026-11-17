@@ -17,6 +17,9 @@
 - name: node health check
   paths: ["images/node-base/nhc", "images/node-base/nhc.d/**", "benchctl/nhc.py"]
   tests: [test_nhc_real, test_nhc_browser]
+- name: config lab replay driver and the governor's run supervision (mounted at run time, not baked into an image)
+  paths: ["images/slurm-ctl/lab_driver.py", "governor/labrun.py", "benchctl/lab_steps.py"]
+  tests: [test_lab_run_real, test_pressure_real]
 - name: images of the cluster
   paths: ["images/node-base/**", "images/slurm-ctl/**"]
   tests: ALL
