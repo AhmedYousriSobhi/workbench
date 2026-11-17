@@ -423,11 +423,19 @@ def drive(run: Run, steps: Any) -> Run:
     return run
 
 
+# Owner decision round 3, item 4: the snapshot stays before the baseline. A restore covers only the accounting database and the
+# controller's spool; the slurm.conf overlay, the lab marker, Prometheus rules, Kubernetes objects and Teleport roles stay, so the
+# abort reason says how to return to the plain cluster.
+REMOVE_HINT = ("; the lab's settings stay applied (a restore covers only the accounting database and the controller state): "
+               "`benchctl remove lab {name}` returns to the plain cluster")
+
+
 def _abort(run: Run, steps: Any, reason: str) -> None:
     """End the run as aborted. An A/B run whose snapshot was taken is put back to it (the cluster is restored after an abort);
     a side that was replaying or collecting is collected first, best effort, because the restore erases its accounting."""
     was = run.last_state()
-    run.abort(reason)
+    applied = any(h["state"].startswith("apply_") for h in run.r["history"])
+    run.abort(reason + (REMOVE_HINT.format(name=run.r["name"]) if applied else ""))
     if not (run.r["ab"] and run.r.get("snapshot") is not None):
         return
     side = REPLAY.get(was) or (was.removeprefix("collect_") if was.startswith("collect_") else None)

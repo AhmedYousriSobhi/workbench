@@ -145,3 +145,9 @@ The client reads queue status with `kubectl get`, only when `kubectl api-resourc
   Volcano and Kubeflow (pytorchjobs, mpijobs) definitions are not added: their CRDs are large and several versions, and the client
   only looks for them; say if the evidence needs them.
 - **Upgrade:** `k8s/kueue/README.md`.
+
+## Pointer: group 4 decisions (issue 867, 2026-11-17)
+[ADR 0084, group 4 addendum](0084-tsh-kube-production-practice.md#addendum-group-4-decisions-issue-867-2026-11-17) changes three phase 1 choices:
+- **Logs and the metrics API need a reachable node address.** KWOK runs with `--node-ip=127.0.0.1`, so neither the API server (`kubectl logs`) nor metrics-server can reach its kubelet port. Prerequisite P1: the kwok-controller's fixed address, and more KWOK definitions enabled (`Logs`, `ClusterLogs`, `Metric`, `ClusterResourceUsage`).
+- **Nodes report a real kubelet version**, the API server's, instead of `kwok-<version>`, so a client can judge version skew.
+- **The Kueue pattern** (definitions plus status, no controller) fits Volcano. It does not fit HPAs: their controller runs in the controller manager, so HPAs need the metrics API.

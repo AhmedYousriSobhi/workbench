@@ -376,3 +376,28 @@ def test_image_runs_restore_state_before_slurmctld():
     cmd = json.loads(text.split("CMD ", 1)[1].splitlines()[0])
     assert cmd[2].startswith("/usr/local/sbin/restore-state || exit 1; ") and cmd[2].endswith("exec slurmctld -D")
     assert "restore-state.sh /usr/local/sbin/restore-state" in text
+
+
+# ---------------------------------------------------------------- a restore cut off part way can be run again (round 3, Q1)
+
+@pytest.mark.parametrize("cut", [ls.LOAD_SH, f"{ls.CTLD}:{ls.RESTORE_TAR}", ls.RESTORED_SUMS],
+                         ids=["database reload fails", "spool copy fails", "controller never reports"])
+def test_a_restore_cut_off_at_any_point_succeeds_when_run_again(tmp_path, cut):
+    """The governor may die, or a step fail, anywhere in a restore: a restore-only child then runs `restore` again from the start.
+    Each cut-off point leaves something different (database half loaded, controller stopped with no tar, tar copied but no sums);
+    the second run must reproduce the snapshot all the same."""
+    fake = FakeDocker()
+    c = cluster(fake, wait_s=4)
+    dest = tmp_path / "snap"
+    s = ls.snapshot(dest, c)
+    fake.spool["job_state"] = b"run A"
+    fake.db = DUMP + b"INSERT INTO `job_table` VALUES (3);\n"
+    fake.fail = {cut}
+    with pytest.raises(LabError):
+        ls.restore(dest, c)
+    if cut == ls.LOAD_SH:
+        fake.db = b"half a dump"  # the reload stopped part way
+    fake.fail = set()
+    r = ls.restore(dest, c)
+    assert r["spool_match"] and r["db_match"] and r["spool_sha256"] == s["spool_sha256"]
+    assert fake.spool == SPOOL and fake.up == {"slurmctld": True, "slurmdbd": True}

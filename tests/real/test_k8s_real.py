@@ -273,22 +273,31 @@ def test_a_drain_is_blocked_by_the_disruption_budget_and_the_pod_stays(cluster):
     assert wait_for(lambda: (k8s.pods_on_node("kgpu001", "team-a", "app=inference", k8s._run) or 0) >= 1, timeout=90), \
         "the spread constraint should put one inference replica on each GPU node"
     try:
-        r = k8s.kubectl(cluster, "drain", "kgpu001", "--ignore-daemonsets", "--delete-emptydir-data", "--force", "--timeout=25s")
+        # the same argv as the scenario (#749): `--force` without a selector deleted dra-train, a bare pod, when it sat on this node
+        r = k8s.kubectl(cluster, "drain", "kgpu001", *k8s.step_args({"drain": {"node": "kgpu001", "selector": "app=inference", "timeout": 25}})[0][2:])
         assert r.returncode != 0 and "disruption budget" in (r.stderr + r.stdout).lower(), r.stderr[-600:]
         assert (k8s.pods_on_node("kgpu001", "team-a", "app=inference", k8s._run) or 0) >= 1
+        assert k8s.kubectl(cluster, "-n", "team-a", "get", "pod", "dra-train").returncode == 0, "the drain must leave the other fixture pods alone"
     finally:
         k8s.kubectl(cluster, "uncordon", "kgpu001")
 
 
 def test_the_gpu_claim_quota_rejects_a_claim_over_the_limit(cluster):
-    """Issue 548: team-a may hold two DRA devices and dra-train holds one."""
+    """Issue 548: team-a may hold two DRA devices. Fills what is left of the quota, then one more claim is refused (#749: it no
+    longer assumes how many devices the fixture pod holds)."""
     claim = "apiVersion: resource.k8s.io/v1\nkind: ResourceClaim\nmetadata: {name: %s, namespace: team-a}\nspec:\n  devices:\n    requests: [{name: gpu, exactly: {deviceClassName: gpu.sim.test, count: 1}}]\n"
+    key = "gpu.sim.test.deviceclass.resource.k8s.io/devices"
+    names = [f"quota-{i}" for i in range(4)]
     try:
-        assert k8s.kubectl(cluster, "create", "-f", "-", stdin=claim % "quota-a").returncode == 0
-        r = k8s.kubectl(cluster, "create", "-f", "-", stdin=claim % "quota-b")
+        st = json.loads(k8s.kubectl(cluster, "-n", "team-a", "get", "resourcequota", "gpu-claims", "-o", "json").stdout)["status"]
+        free = int(st["hard"][key]) - int(st.get("used", {}).get(key, 0))
+        assert 0 <= free < len(names), st
+        for n in names[:free]:
+            assert k8s.kubectl(cluster, "create", "-f", "-", stdin=claim % n).returncode == 0
+        r = k8s.kubectl(cluster, "create", "-f", "-", stdin=claim % names[free])
         assert r.returncode != 0 and "exceeded quota" in r.stderr, r.stderr[-500:]
     finally:
-        k8s.kubectl(cluster, "-n", "team-a", "delete", "resourceclaim", "quota-a", "quota-b", "--ignore-not-found")
+        k8s.kubectl(cluster, "-n", "team-a", "delete", "resourceclaim", *names, "--ignore-not-found")
 
 
 def test_the_throttling_scenario_gives_the_viewer_real_429s_and_touches_nobody_else(cluster):

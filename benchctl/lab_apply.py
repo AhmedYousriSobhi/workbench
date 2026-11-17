@@ -635,7 +635,13 @@ def _remove_sacct(name: str, env: Env, rd: Path) -> list[str]:
     pre, post = rd / "sacctmgr.pre.dump", rd / "sacctmgr.post.dump"
     if not (pre.is_file() and post.is_file()):
         raise LabError(f"the saved sacctmgr dumps of lab {name} are missing in compose/generated/lab/{name}/render; the lab stays active")
-    out, refused = [], []
+    out, refused, gone = [], [], []
+
+    def delete(what: str, *cmd: str) -> None:
+        """A row that is already absent (`Nothing deleted`: an A/B run's restore can remove it, issue 554) counts as removed."""
+        r = env.exec("slurmctld", *cmd)
+        if r.returncode != 0:
+            (gone if "nothing deleted" in ((r.stdout or "") + (r.stderr or "")).lower() else refused).append(what)
     made, changed = record_delta(pre.read_text(), post.read_text())
     r = env.exec("slurmctld", "sh", "-c", "f=$(mktemp) && cat > $f && sacctmgr -i load $f; rc=$?; rm -f $f; exit $rc", input=pre.read_text())  # puts changed rows back
     if r.returncode != 0:
@@ -643,8 +649,7 @@ def _remove_sacct(name: str, env: Env, rd: Path) -> list[str]:
     for key in sorted(made, key=lambda k: (k.startswith("Account/"), -k.count("/"))):  # users before accounts
         kind, parent, nm = key.split("/", 2)
         cmd = ["sacctmgr", "-i", "delete", "user", nm] + ([f"account={parent}"] if parent else []) if kind == "User" else ["sacctmgr", "-i", "delete", "account", nm]
-        if env.exec("slurmctld", *cmd).returncode != 0:
-            refused.append(f"{kind.lower()} {nm}")
+        delete(f"{kind.lower()} {nm}", *cmd)
     qpre = qos_table((rd / "qos.pre.txt").read_text()) if (rd / "qos.pre.txt").is_file() else {}
     qpost = qos_table((rd / "qos.post.txt").read_text()) if (rd / "qos.post.txt").is_file() else {}
     qmade, qchanged = qos_delta(qpre, qpost)
@@ -653,9 +658,10 @@ def _remove_sacct(name: str, env: Env, rd: Path) -> list[str]:
         if env.exec("slurmctld", "sacctmgr", "-i", "modify", "qos", n, "set", *sets).returncode != 0:
             refused.append(f"qos {n} (limits not restored)")
     for n in qmade:
-        if env.exec("slurmctld", "sacctmgr", "-i", "delete", "qos", n).returncode != 0:
-            refused.append(f"qos {n}")
+        delete(f"qos {n}", "sacctmgr", "-i", "delete", "qos", n)
     out.append(f"accounting: {len(made)} account/user row(s) and {len(qmade)} QOS removed, {len(changed)} account row(s) and {len(qchanged)} QOS restored")
+    if gone:
+        out.append("already gone (an A/B run's restore removed them): " + ", ".join(gone))
     if refused:
         out.append("sacctmgr refused: " + ", ".join(refused) + " (still in the accounting database; remove them by hand with sacctmgr)")
     return out
