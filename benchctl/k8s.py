@@ -14,6 +14,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import ssl
 import subprocess
 import time
@@ -23,7 +24,7 @@ from pathlib import Path
 
 import yaml
 
-from . import addressing, dra, kueue
+from . import addressing, dra, kubeconfigs, kueue
 from .nodes import node_names
 
 VERSION = "v1.36.1"            # Kubernetes (the control-plane images and kubectl); sim.yaml kubernetes.version overrides
@@ -214,7 +215,7 @@ def prepare(sim: dict, ips: dict, secrets_dir: Path | None = None, state_dir: Pa
     ips_stamp = d / "api-ip"
     if not (d / "ca.crt").exists() or not ips_stamp.exists() or ips_stamp.read_text() != api_ip(ips):  # a new address needs a new cert
         for f in d.iterdir():
-            f.unlink()
+            shutil.rmtree(f) if f.is_dir() else f.unlink()  # the kubeconfigs fixtures are a directory (issue 767)
         _openssl("ecparam", "-name", "prime256v1", "-genkey", "-noout", "-out", "ca.key", cwd=d)
         _openssl("req", "-x509", "-new", "-key", "ca.key", "-subj", "/CN=workbench-k8s-ca", "-days", "3650",
                  "-addext", "basicConstraints=critical,CA:TRUE", "-addext", "keyUsage=critical,keyCertSign,cRLSign",
@@ -245,6 +246,7 @@ def prepare(sim: dict, ips: dict, secrets_dir: Path | None = None, state_dir: Pa
                 f.write(f"{secrets.token_hex(24)},{extra},{extra}-uid\n")
     (d / "audit-policy.yaml").write_text(AUDIT_POLICY)  # always rewritten: a cluster made before this existed gets it on its next start
     (d / "audit-policy.yaml").chmod(0o600)
+    kubeconfigs.write(d, f"https://{api_ip(ips)}:{API_PORT}", _b64(d / "ca.crt"), _token("viewer", d) or "")  # the negative and exec-plugin files for the k-login (issue 767)
     (st / "nodes.yaml").write_text(nodes_yaml(sim, gpu_override))
     (st / "50-dra.yaml").write_text(dra.slices_yaml(node_list(sim, gpu_override)))  # the DeviceClass and a ResourceSlice per GPU node (ADR 0076)
 

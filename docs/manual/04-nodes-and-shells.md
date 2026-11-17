@@ -265,6 +265,8 @@ ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2222 al
 ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2222 alice@127.0.0.1 kubectl get pods -A
 ```
 
+Six more files sit beside them in each user's `~/.kube` for a client's Discover step to judge: loose (world- or group-writable), foreign-owned, root-owned, an exec plugin that prints a token and a plugin that needs a browser. They never replace `config`. Owners, modes and what to expect are in [Kubeconfig files a client must judge](../guides/client-testing.md#kubeconfig-files-a-client-must-judge).
+
 You, the administrator, have `compose/generated/secrets/k8s/admin.kubeconfig` (API on `127.0.0.1:6443`); never hand it to a client.
 Faults: scenarios `k8s-node-notready` (a GPU node reports NotReady, then recovers) and `pod-crashloop`
 ([chapter 6](06-scenarios.md)). Not built: a real node (real pod logs), metrics-server, Kubernetes through Teleport. See ADR 0034.

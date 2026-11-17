@@ -5,7 +5,8 @@ its outcome and the shape of its answer are asserted. Also the hop: `ssh k-login
 wrong host.
 
 The metrics API answers 200 for the viewer and is refused for the limited user (issue 382, metrics-server). Asserted as "not served": the
-Volcano and Kubeflow groups (issues 765 and 390 flip them). Written without a live run in the authoring session."""
+Volcano and Kubeflow groups (issues 765 and 390 flip them). The kubeconfig fixtures (issue 767) are checked for owner, group and mode in every
+simulated user's ~/.kube and run with kubectl without a terminal. Written without a live run in the authoring session."""
 import json
 import os
 import re
@@ -17,7 +18,7 @@ import pytest
 import yaml
 from helpers import wait_for
 
-from benchctl import k8s, k8sreads, stack, workbench
+from benchctl import k8s, k8sreads, kubeconfigs, stack, workbench
 
 ROOT = Path(__file__).resolve().parents[2]
 SIM = yaml.safe_load((ROOT / "sim.yaml").read_text())
@@ -161,3 +162,46 @@ def test_kubectl_top_lists_every_kwok_node_and_the_pod_usage_its_annotations_giv
     assert wait_for(near, timeout=90), sized()  # the fixture's annotations (k8s/fixtures/20-signals.yaml): 350m, 200Mi
     limited = docker_exec_as("alice", K_LOGIN, "kubectl --kubeconfig $HOME/.kube/limited.yaml top pod -n team-a")
     assert limited.returncode != 0 and "forbidden" in limited.stderr.lower(), limited.stderr  # no metrics.k8s.io rule in the namespace role
+
+
+SIM_USERS = [u["name"] for u in SIM["users"]]
+
+
+def _stat(user: str, rel: str) -> list[str]:
+    return docker_exec_as(user, K_LOGIN, f"stat -c '%U %G %a' $HOME/.kube/{rel}").stdout.split()
+
+
+def test_every_kubeconfig_fixture_has_the_stated_owner_group_and_mode_for_every_user(cluster):
+    """Issue 767: real files with real owners and modes, in each user's ~/.kube; `config` and `limited.yaml` stay the user's own, mode 600."""
+    assert len(SIM_USERS) >= 2, "a foreign-owned file needs a second simulated user"
+    for me in SIM_USERS:
+        other = next(u for u in SIM_USERS if u != me)
+        for f in kubeconfigs.FIXTURES:
+            owner = {"user": me, "other": other, "root": "root"}[f.owner]
+            group = {"user": me, "other": other, "root": "root"}.get(f.group, f.group)
+            assert _stat(me, f.name) == [owner, group, f.mode], (me, f.name, _stat(me, f.name))
+        for rel in kubeconfigs.SCRIPTS:
+            assert _stat(me, rel) == [me, me, "700"], (me, rel)
+        assert _stat(me, "plugins") == [me, me, "700"]
+
+
+def test_the_default_kubeconfig_is_untouched_by_the_fixtures(cluster):
+    for me in SIM_USERS:
+        assert _stat(me, "config") == [me, me, "600"] and _stat(me, "limited.yaml") == [me, me, "600"]
+        same = docker_exec_as(me, K_LOGIN, "cmp $HOME/.kube/config /run/workbench/k8s/viewer.kubeconfig && cmp $HOME/.kube/limited.yaml /run/workbench/k8s/limited.kubeconfig")
+        assert same.returncode == 0, same.stderr
+
+
+def test_kubectl_works_with_every_fixture_file_except_the_browser_sign_in(cluster):
+    """The token file, the loose and foreign files (kubectl does not judge them; a client does) and the exec plugin that prints a token work;
+    the plugin that needs a browser is refused by kubectl itself without a terminal (interactiveMode Always: Kubernetes authentication docs)."""
+    for f in kubeconfigs.FIXTURES:
+        r = docker_exec_as("alice", K_LOGIN, f"kubectl --kubeconfig $HOME/.kube/{f.name} get nodes -o name")
+        if f.kubectl == "ok":
+            assert r.returncode == 0 and "node/kgpu001" in r.stdout, (f.name, r.stderr)
+        else:
+            assert r.returncode != 0 and kubeconfigs.INTERACTIVE_ERROR in r.stderr.lower(), (f.name, r.stdout, r.stderr)
+    # the plugin itself, run by hand, is the "plugin's own error" a person at a terminal would see
+    own = docker_exec_as("alice", K_LOGIN, "$HOME/.kube/plugins/browser-signin.sh")
+    assert own.returncode == 1 and "browser" in own.stderr
+
