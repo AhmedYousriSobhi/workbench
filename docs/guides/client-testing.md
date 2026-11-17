@@ -70,7 +70,9 @@ A client that monitors Kubernetes runs `kubectl` on the k-login over its SSH ses
 | `events-warning` | Warning events in every namespace: `kubectl get events -A --field-selector=type=Warning -o json` | list on events (cluster-wide) | ok | forbidden |
 | `events-warning-ns` | Warning events in one namespace: `kubectl get events -n team-a --field-selector=type=Warning -o json` | list on events in that namespace | ok | ok |
 | `api-group-kueue` (signal) | is the Kueue group served: `kubectl api-resources --api-group=kueue.x-k8s.io --no-headers -o name` | discovery (every authenticated user) | served | served |
-| `api-group-volcano` (signal) | is the Volcano group served (not yet: issue 765): `kubectl api-resources --api-group=scheduling.volcano.sh --no-headers -o name` | discovery | not-served | not-served |
+| `api-group-volcano` (signal) | is the Volcano group served: `kubectl api-resources --api-group=scheduling.volcano.sh --no-headers -o name` | discovery (every authenticated user) | served | served |
+| `get-volcano-queues` (signal) | list Volcano Queues (workload signal): `kubectl get queues.scheduling.volcano.sh -o json` | list on queues (cluster-scoped) | ok | forbidden |
+| `get-volcano-podgroups` (signal) | list Volcano PodGroups in one namespace: `kubectl get podgroups.scheduling.volcano.sh -n team-a -o json` | list on podgroups in that namespace | ok | ok |
 | `api-group-kubeflow` (signal) | is the Kubeflow group served (not yet: issue 390): `kubectl api-resources --api-group=kubeflow.org --no-headers -o name` | discovery | not-served | not-served |
 | `describe-pod` | what the user sees when it opens a pod: `kubectl describe pod sized -n team-a` | get on pods and list on events in that namespace | ok | ok |
 | `pod-logs` | the last lines of a pod's log, with timestamps and a byte cap: `kubectl logs sized -n team-a --tail=500 --timestamps --limit-bytes=1048576` | get on pods/log in that namespace | ok | forbidden |

@@ -1,0 +1,25 @@
+# Volcano objects without a controller (issue 765): two Queues and two PodGroups. The Queue status is written by benchctl/volcano.py through
+# the status subresource; a PodGroup has none in v1beta1, so its status below is stored by the apply. Nothing schedules these.
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: Queue
+metadata: {name: gpu-batch}
+spec: {weight: 4, reclaimable: true}
+---
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: Queue
+metadata: {name: maintenance}
+spec: {weight: 1, reclaimable: false}
+---
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: PodGroup
+metadata: {name: train-run, namespace: team-a}
+spec: {minMember: 2, queue: gpu-batch}
+status: {phase: Running, running: 2}
+---
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: PodGroup
+metadata: {name: train-wait, namespace: team-a}
+spec: {minMember: 4, queue: gpu-batch}
+status:
+  phase: Pending
+  conditions: [{type: Unschedulable, status: "True", reason: NotEnoughResources, message: "4 pods in the group need 8 GPUs, 4 are free", lastTransitionTime: "2026-01-01T00:00:00Z", transitionID: fixture}]

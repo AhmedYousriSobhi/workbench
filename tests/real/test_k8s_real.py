@@ -407,3 +407,30 @@ def test_the_real_hpa_controller_gives_the_three_autoscaler_states_and_the_scena
             _hpa("hpa-below").get("status")
     finally:
         assert scenario.execute(down, runner=k8s._run).status == "ok"
+
+
+def _queue_state(name: str) -> str | None:
+    out = kubectl_as("alice", "get", "queues.scheduling.volcano.sh", name, "-o", "json")
+    return json.loads(out.stdout)["status"]["state"] if out.returncode == 0 else None
+
+
+def test_the_volcano_queues_and_podgroups_are_served_listed_by_the_viewer_and_the_step_closes_a_queue(cluster):
+    """Issue 765: `api-resources --api-group=scheduling.volcano.sh` lists queues and podgroups; the viewer lists them cluster-wide, `limited` lists
+    PodGroups in team-a only; the step `volcano` (scenario k8s-volcano-queue-closed) closes a queue and moves a PodGroup, and puts them back."""
+    names = kubectl_as("alice", "api-resources", "--api-group=scheduling.volcano.sh", "--no-headers", "-o", "name")
+    assert {"queues.scheduling.volcano.sh", "podgroups.scheduling.volcano.sh"} <= set(names.stdout.split()), names.stderr
+    queues = json.loads(kubectl_as("alice", "get", "queues.scheduling.volcano.sh", "-o", "json").stdout)["items"]
+    assert {q["metadata"]["name"]: q["status"]["state"] for q in queues} == {"gpu-batch": "Open", "maintenance": "Closed"}
+    pgs = json.loads(kubectl_as("alice", "get", "podgroups.scheduling.volcano.sh", "-A", "-o", "json").stdout)["items"]
+    assert {p["metadata"]["name"]: p["status"]["phase"] for p in pgs} == {"train-run": "Running", "train-wait": "Pending"}
+    close = scenario.Step(0, "k8s", {"volcano": {"queue": "gpu-batch", "state": "Closed"}})
+    pend = scenario.Step(0, "k8s", {"volcano": {"podgroup": "train-run", "namespace": "team-a", "phase": "Pending"}})
+    try:
+        assert scenario.execute(close, runner=k8s._run).status == "ok"
+        assert scenario.execute(pend, runner=k8s._run).status == "ok"
+        assert wait_for(lambda: _queue_state("gpu-batch") == "Closed", timeout=30)
+    finally:
+        scenario.execute(scenario.Step(0, "k8s", {"volcano": {"queue": "gpu-batch", "state": "Open"}}), runner=k8s._run)
+        scenario.execute(scenario.Step(0, "k8s", {"volcano": {"podgroup": "train-run", "namespace": "team-a", "phase": "Running"}}), runner=k8s._run)
+    assert wait_for(lambda: _queue_state("gpu-batch") == "Open", timeout=30)
+

@@ -191,6 +191,9 @@ def k8s(d) -> list[str]:
         out.append("Stop metrics-server (the metrics API answers 503)")
     elif d.get("metrics_server") == "start":
         out.append("Start metrics-server again (the metrics API answers)")
+    if isinstance(d.get("volcano"), dict):
+        v = d["volcano"]
+        out.append(f"Set Volcano queue {v['queue']} {v['state'].lower()}" if "queue" in v else f"Set Volcano PodGroup {v['namespace']}/{v['podgroup']} to {v['phase']}")
     if isinstance(d.get("usage"), dict):
         out.append(f"Set the CPU use of each {d['usage']['namespace']}/{d['usage']['deploy']} pod to {d['usage']['cpu']} (its autoscaler reacts)")
     return out

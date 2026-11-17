@@ -351,3 +351,12 @@ Written and unit-tested; the live tests are written and have not been run (the o
 - **Scenario.** The k8s step `usage: {namespace, deploy, cpu}` patches the Deployment's pod-template annotation, so new pods report the new usage and the real HPA reacts; `k8s-hpa-max` (SC-48) pushes `hpa-below` to its maximum at 0 s and back at 300 s (allow about 2 minutes for the controller, whose sync period is 15 s). There is no expect form for an autoscaler's replica count; the live test asserts the three states.
 - **Not verified live:** the timing of the controller's reaction, and that the viewer's role reads HPAs in `team-a` (the issue says it does). The owner runs `./scripts/verify.sh --unit k8s --clean`.
 - **Source:** the HPA controller, `pkg/controller/podautoscaler/horizontal.go` at v1.36.1 (as in the group 4 addendum).
+
+## Addendum: Volcano fixtures (issue 765)
+
+- **Pinned definitions, no controller.** `k8s/volcano/crds.yaml` is the `Queue` and `PodGroup` of Volcano v1.16.0 (`scheduling.volcano.sh/v1beta1`), copied from `config/crd/volcano/bases/` of that tag. No Volcano controller or scheduler runs and no container is added, so memory is unchanged. Source: https://github.com/volcano-sh/volcano/tree/v1.16.0/config/crd/volcano/bases.
+- **Status.** Only `Queue` has a status subresource (checked in the CRD), so its state is written with `kubectl patch --subresource=status` (`benchctl/volcano.py`); a `PodGroup` has none, so its status is stored by the apply and a scenario changes it with a plain patch.
+- **Objects.** Queues `gpu-batch` (Open, 2 running, 5 pending) and `maintenance` (Closed); PodGroups `train-run` (Running) and `train-wait` (Pending, minMember 4, an `Unschedulable` condition) in `team-a`. RBAC `48-rbac-volcano.yaml`: the viewer lists both kinds cluster-wide; `limited` lists PodGroups in team-a only (Queues are cluster-scoped).
+- **Scenario.** The k8s step `volcano` (`{queue, state}` or `{podgroup, namespace, phase}`) and `k8s-volcano-queue-closed` (SC-49). The conformance catalogue (#762) now expects the group served and has reads for both kinds.
+- **Not verified live:** that kube-apiserver v1.36.1 stores the PodGroup `status` from a server-side apply on a CRD without the subresource (expected, as Kueue's non-status fields), and the viewer and limited reads. The owner runs `./scripts/verify.sh --unit k8s --clean` and `--unit k8s_reads --clean`.
+

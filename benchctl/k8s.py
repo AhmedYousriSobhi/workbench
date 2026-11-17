@@ -24,7 +24,7 @@ from pathlib import Path
 
 import yaml
 
-from . import addressing, dra, kubeconfigs, kueue
+from . import addressing, dra, kubeconfigs, kueue, volcano
 from .nodes import node_names
 
 VERSION = "v1.36.1"            # Kubernetes (the control-plane images and kubectl); sim.yaml kubernetes.version overrides
@@ -501,6 +501,8 @@ def bootstrap(sim: dict, ips: dict, say: Callable[[str], None] = print, runner: 
         return False
     if not bootstrap_kueue(sim, say, runner, src, apply):
         return False
+    if not bootstrap_volcano(sim, say, runner, src, apply):
+        return False
     # last: until metrics-server (started in the next stage) has scraped every node twice the APIService answers 503, and while
     # an aggregated API is unavailable, discovery calls (`kubectl api-resources`) exit non-zero
     return apply(METRICS_API_FILE, "metrics API")
@@ -524,10 +526,28 @@ def bootstrap_kueue(sim: dict, say: Callable[[str], None], runner: Callable, src
     return True
 
 
+def bootstrap_volcano(sim: dict, say: Callable[[str], None], runner: Callable, src: list, apply: Callable) -> bool:
+    """Volcano without a controller (issue 765): the definitions, the objects, then each Queue's status through the status subresource."""
+    if not apply("/k8s/volcano/crds.yaml", "Volcano definitions"):
+        return False
+    r = kubectl(sim, "wait", "--for=condition=established", "--timeout=60s", *[f"crd/{c}" for c in volcano.CRDS], runner=runner)
+    if r.returncode != 0:
+        say(f"FAILED kubernetes: the Volcano definitions did not become ready: {r.stderr.strip()[-200:]}")
+        return False
+    if not apply("/k8s/volcano/queues.yaml", "Volcano queues"):
+        return False
+    for args in volcano.status_calls():
+        r = kubectl(sim, *args, runner=runner, mounts=src)
+        if r.returncode != 0:
+            say(f"FAILED kubernetes Volcano status: {(r.stderr or r.stdout).strip()[-300:]}")
+            return False
+    return True
+
+
 # ---- scenario steps and expectations (target `k8s`, run by benchctl/scenario.py on the host) ----
 
 FAULTS = ("crashloop", "oom", "imagepull", "jobfail")  # the pod stages in k8s/kwok/stage-faults.yaml (a node has fault-node-down)
-STEP_KEYS = ("down", "up", "cordon", "uncordon", "pod", "delete_pod", "scale", "apply", "remove", "drain", "queue", "metrics_server", "usage")
+STEP_KEYS = ("down", "up", "cordon", "uncordon", "pod", "delete_pod", "scale", "apply", "remove", "drain", "queue", "metrics_server", "usage", "volcano")
 _NAME = r"[a-z0-9]([-a-z0-9]*[a-z0-9])?"
 SCENARIO_POD = "scenario-pod.yaml"
 
@@ -571,6 +591,8 @@ def step_problems(do: dict, nodes: set[str]) -> list[str]:
             out.append(f"unknown Kubernetes node {p['node']!r}")
     if "queue" in do:
         out += kueue.queue_problems(do["queue"])
+    if "volcano" in do:
+        out += volcano.step_problems(do["volcano"])
     if "metrics_server" in do and do["metrics_server"] not in ("stop", "start"):
         out.append("k8s metrics_server is stop or start")
     if "usage" in do:
@@ -616,6 +638,8 @@ def step_args(do: dict) -> list[list[str]]:
         out.append(["-n", u["namespace"], "patch", f"deployment/{u['deploy']}", "--type=merge", "-p", json.dumps(patch)])
     out += [["apply", "--server-side", "--force-conflicts", "-f", f"/k8s/{path}"] for path in do.get("apply") or []]
     out += [["delete", "--ignore-not-found", "-f", f"/k8s/{path}"] for path in do.get("remove") or []]
+    if "volcano" in do:  # a Queue closes (or a PodGroup goes Pending) and back; no controller, so the status is written
+        out += volcano.calls(do["volcano"])
     if "queue" in do:  # a ClusterQueue and its LocalQueues go inactive (or back); no controller, so the status is written
         out += kueue.queue_calls(do["queue"])
     if "drain" in do:  # cordons, then evicts through the eviction API, so a PodDisruptionBudget can refuse; the timeout ends a blocked drain
