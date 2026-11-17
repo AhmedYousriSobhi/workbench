@@ -90,6 +90,33 @@ def test_failing_fixtures_show_what_a_kubelet_would_report(cluster):
     assert "FailedScheduling" in events
 
 
+def test_every_kwok_node_advertises_the_kwok_controllers_address_not_loopback(cluster):
+    """Issue 872 (ADR 0084 P1): the API server and metrics-server dial a node's InternalIP. A cluster made before this change keeps
+    127.0.0.1 (KWOK's stages keep existing addresses): `benchctl down`, then `up`, recreates the nodes."""
+    r = kubectl_as("alice", "get", "nodes", "-o", "json")
+    for n in json.loads(r.stdout)["items"]:
+        internal = [a["address"] for a in n["status"].get("addresses", []) if a["type"] == "InternalIP"]
+        assert internal == [k8s.kwok_ip()], (n["metadata"]["name"], n["status"].get("addresses"))
+        assert n["status"]["daemonEndpoints"]["kubeletEndpoint"]["Port"] == k8s.KWOK_PORT
+        assert n["metadata"]["annotations"][k8s.RESOURCE_METRICS_PATH] == f"/metrics/nodes/{n['metadata']['name']}/metrics/resource"
+
+
+def test_the_api_server_reaches_kwok_for_logs_and_node_metrics(cluster):
+    """Issue 872: `kubectl logs` goes API server -> node InternalIP:10247 (KWOK); the node proxy reaches KWOK's resource metrics."""
+    assert wait_for(lambda: "simulated container started" in k8s.kubectl(cluster, "-n", "team-a", "logs", "sized").stdout, timeout=60), \
+        k8s.kubectl(cluster, "-n", "team-a", "logs", "sized").stderr
+    raw = k8s.kubectl(cluster, "get", "--raw", "/api/v1/nodes/kcn001/proxy/metrics/nodes/kcn001/metrics/resource")
+    assert raw.returncode == 0 and "node_cpu_usage_seconds_total" in raw.stdout and "node_memory_working_set_bytes" in raw.stdout, raw.stderr
+
+
+def test_kwok_serves_logs_without_asking_for_a_client_certificate(cluster):
+    """The open point of the ADR 0084 addendum, read from the KWOK v0.8.0 source (ServeTLS without ClientAuth) and confirmed here:
+    a TLS request with no client certificate is answered. The API server still sends one, as on a real cluster."""
+    r = docker("exec", K_LOGIN, "curl", "-sk", "--max-time", "10", "-o", "/dev/null", "-w", "%{http_code}",
+               f"https://{k8s.kwok_ip()}:{k8s.KWOK_PORT}/containerLogs/team-a/sized/c")
+    assert r.stdout.strip() == "200", (r.stdout, r.stderr)
+
+
 def test_the_login_node_kubeconfig_is_the_users_own_mode_600_and_read_only(cluster):
     cfg = as_user("alice", "stat", "-c", "%U %a", "$HOME/.kube/config").stdout.split()
     assert cfg == ["alice", "600"]  # a client refuses a kubeconfig that is not the user's or is group or world readable

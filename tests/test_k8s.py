@@ -65,7 +65,7 @@ def test_the_part_is_off_by_default_and_the_five_services_are_limited_unprivileg
         assert re.fullmatch(r"\d+:\d+", s["user"]) and s["image"].startswith("registry.k8s.io/") and "build" not in s
     assert svcs["k8s-apiserver"]["ports"] == ["127.0.0.1:6443:6443"]  # localhost only
     assert svcs["k8s-etcd"]["image"] == k8s.ETCD_IMAGE and svcs["kwok-controller"]["entrypoint"] == ["kwok"]
-    assert "--enable-crds=Stage" in svcs["kwok-controller"]["command"]  # without it KWOK exits ("no stages found")
+    assert "--enable-crds=Stage,Logs,ClusterLogs,Metric,ClusterResourceUsage" in svcs["kwok-controller"]["command"]  # without Stage KWOK exits
     assert "--manage-nodes-with-annotation-selector=kwok.x-k8s.io/node=fake" in svcs["kwok-controller"]["command"]  # a real node may join later
     assert any("--token-auth-file" in a for a in svcs["k8s-apiserver"]["command"])
     assert len(set(ips.values())) == len(ips)  # no two services share an address
@@ -125,10 +125,11 @@ def test_bootstrap_applies_definitions_then_stages_then_nodes_then_fixtures_and_
 
     assert k8s.bootstrap(SIM, addressing.plan(SIM), lambda m: None, runner=run, ready=lambda ips: True, sleep=lambda s: None)
     files = [c[-1] for c in calls if c[0] == "apply"]
-    assert files == ["/k8s/kwok/crds.yaml", "/k8s/kwok/stage-fast.yaml", "/k8s/kwok/stage-faults.yaml", "/state/nodes.yaml",
+    assert files == ["/k8s/kwok/crds.yaml", "/k8s/kwok/stage-fast.yaml", "/k8s/kwok/stage-faults.yaml", *[f for f, _ in k8s.KWOK_OBJECTS], "/state/nodes.yaml",
                      "/k8s/fixtures/00-namespaces.yaml", "/k8s/fixtures", "/state/50-dra.yaml",
                      "/k8s/kueue/crds.yaml", "/k8s/kueue/queues.yaml"]
-    assert any(c[0] == "wait" and "crd/stages.kwok.x-k8s.io" in c for c in calls)  # stages cannot be applied before their definition exists
+    wait = next(c for c in calls if c[0] == "wait")  # KWOK's objects cannot be applied before their definitions exist (issue 872)
+    assert {f"crd/{n}" for n in ("stages", "logs", "clusterlogs", "metrics", "clusterresourceusages")} <= {a.replace(".kwok.x-k8s.io", "") for a in wait}
     first_sa = next(i for i, c in enumerate(calls) if "serviceaccount" in c)
     fx = next(i for i, c in enumerate(calls) if c[-1] == "/k8s/fixtures")
     assert first_sa < fx  # pods are refused until the default service account exists
@@ -150,7 +151,7 @@ def test_bootstrap_stops_with_one_message_where_it_failed():
     said.clear()
     assert not k8s.bootstrap(SIM, addressing.plan(SIM), said.append, ready=lambda ips: True, sleep=lambda s: None,
                              runner=lambda c, **k: bad("not established") if "wait" in c else ok())
-    assert "stage definition did not become ready" in said[0]
+    assert "the KWOK definitions did not become ready" in said[0]
     said.clear()
     assert not k8s.bootstrap(SIM, addressing.plan(SIM), said.append, ready=lambda ips: True, sleep=lambda s: None,
                              runner=lambda c, **k: bad("denied") if c[-1] == "/k8s/fixtures" else ok())
@@ -526,3 +527,48 @@ def test_a_queue_step_with_pending_keeps_the_local_queues_adding_up_and_limited_
     role = next(d for d in docs if d["kind"] == "Role")
     assert role["metadata"]["namespace"] == "team-a" and role["rules"][0]["resources"] == ["localqueues"]
     assert next(d for d in docs if d["kind"] == "RoleBinding")["subjects"][0]["name"] == "limited"
+
+
+def test_kwok_nodes_advertise_the_controllers_own_address_and_the_api_server_dials_it(tmp_path):
+    """Issue 872 (ADR 0084 P1): with --node-ip=127.0.0.1 the API server and metrics-server would dial their own container."""
+    svcs = compose.generate(SIM, {"groups": ["core", "k8s"]})["services"]
+    kwok, api = svcs["kwok-controller"], svcs["k8s-apiserver"]["command"]
+    assert k8s.kwok_ip() == addressing.plan(SIM)["services"]["kwok-controller"] == kwok["networks"]["default"]["ipv4_address"]
+    assert f"--node-ip={k8s.kwok_ip()}" in kwok["command"] and not any(a == "--node-ip=127.0.0.1" for a in kwok["command"])
+    assert f"--node-port={k8s.KWOK_PORT}" in kwok["command"] and f"--server-address=0.0.0.0:{k8s.KWOK_PORT}" in kwok["command"]
+    assert "--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname" in api  # kubeadm's order: the IP, not a name
+    assert any(a.startswith("--kubelet-client-certificate=") for a in api) and any(a.startswith("--kubelet-client-key=") for a in api)
+
+
+def test_kwok_mounts_the_canned_log_files_read_only_and_every_file_a_logs_object_names_exists():
+    kwok = compose.generate(SIM, {"groups": ["core", "k8s"]})["services"]["kwok-controller"]
+    assert f"../../k8s/kwok/logs:{k8s.KWOK_LOGS}:ro" in kwok["volumes"]
+    named = []
+    for path in ("k8s/kwok/logs.yaml",):
+        for doc in yaml.safe_load_all((ROOT / path).read_text()):
+            assert doc["kind"] in ("Logs", "ClusterLogs") and doc["apiVersion"] == "kwok.x-k8s.io/v1alpha1"
+            for entry in doc["spec"]["logs"]:
+                named += [entry[k] for k in ("logsFile", "previousLogsFile") if k in entry]
+    assert named
+    for f in named:
+        assert f.startswith(k8s.KWOK_LOGS + "/")
+        lines = (ROOT / "k8s/kwok/logs" / f[len(k8s.KWOK_LOGS) + 1:]).read_text().splitlines()
+        # kubelet (CRI) format, or KWOK's reader fails: <RFC3339Nano> <stdout|stderr> <F|P> <message>
+        assert lines and all(re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{9}Z (stdout|stderr) [FP] .*", ln) for ln in lines), f
+
+
+def test_every_node_points_metrics_server_at_kwoks_resource_metrics_path():
+    node = k8s.node_manifest("kcn001", k8s.node_groups(SIM)[0])
+    assert node["metadata"]["annotations"][k8s.RESOURCE_METRICS_PATH] == "/metrics/nodes/kcn001/metrics/resource"
+    metric = yaml.safe_load((ROOT / "k8s/kwok/metrics-resource.yaml").read_text())
+    assert metric["kind"] == "Metric" and metric["spec"]["path"] == "/metrics/nodes/{nodeName}/metrics/resource"
+    names = {m["name"] for m in metric["spec"]["metrics"]}
+    assert {"node_cpu_usage_seconds_total", "node_memory_working_set_bytes", "container_cpu_usage_seconds_total"} <= names
+    usage = yaml.safe_load((ROOT / "k8s/kwok/usage-from-annotation.yaml").read_text())
+    exprs = " ".join(u["usage"][r]["expression"] for u in usage["spec"]["usages"] for r in ("cpu", "memory"))
+    assert usage["kind"] == "ClusterResourceUsage" and "kwok.x-k8s.io/usage-cpu" in exprs and "kwok.x-k8s.io/usage-memory" in exprs
+
+
+def test_every_kwok_kind_enabled_has_its_definition_in_the_vendored_crds():
+    crds = {d["metadata"]["name"] for d in yaml.safe_load_all((ROOT / "k8s/kwok/crds.yaml").read_text()) if d}
+    assert set(k8s.kwok_crd_names()) <= crds

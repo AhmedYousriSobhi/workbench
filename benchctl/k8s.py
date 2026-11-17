@@ -23,7 +23,7 @@ from pathlib import Path
 
 import yaml
 
-from . import dra, kueue
+from . import addressing, dra, kueue
 from .nodes import node_names
 
 VERSION = "v1.36.1"            # Kubernetes (the control-plane images and kubectl); sim.yaml kubernetes.version overrides
@@ -45,6 +45,15 @@ STATE_DIR = Path("compose/generated/k8s")             # etcd data and the manife
 SRC = Path("k8s")
 CONTAINER_PKI = "/pki"
 NETWORK = "workbench_default"
+KWOK = "kwok-controller"
+KWOK_PORT = 10247   # the fake nodes' kubelet port: logs and the resource metrics are served here (issue 872)
+KWOK_LOGS = "/logs"  # where k8s/kwok/logs is mounted in kwok-controller (the files the Logs and ClusterLogs objects name)
+# KWOK's own objects, applied after their definitions are established: what `kubectl logs` answers, the kubelet /metrics/resource
+# endpoint per node, and pod usage from annotations (issue 872, ADR 0084 addendum P1). KWOK reads them because --enable-crds names them.
+KWOK_CRDS = ("Stage", "Logs", "ClusterLogs", "Metric", "ClusterResourceUsage")
+KWOK_OBJECTS = (("/k8s/kwok/logs.yaml", "KWOK logs"), ("/k8s/kwok/metrics-resource.yaml", "KWOK node metrics"),
+                ("/k8s/kwok/usage-from-annotation.yaml", "KWOK pod usage"))
+RESOURCE_METRICS_PATH = "metrics.k8s.io/resource-metrics-path"  # metrics-server 0.7.0+ reads a node's kubelet metrics path from it
 # Node Feature Discovery / GPU Feature Discovery product label per sim.yaml gpu type
 GPU_PRODUCT = {"h200": "NVIDIA-H200", "h100": "NVIDIA-H100-80GB-HBM3", "a100": "NVIDIA-A100-SXM4-80GB",
                "l40s": "NVIDIA-L40S", "v100": "Tesla-V100-SXM2-32GB"}
@@ -114,7 +123,8 @@ def node_manifest(name: str, g: dict, kubelet_version: str = VERSION) -> dict:
         cap["nvidia.com/gpu"] = str(gpus)
     return {"apiVersion": "v1", "kind": "Node",
             "metadata": {"name": name, "labels": labels,
-                         "annotations": {"node.alpha.kubernetes.io/ttl": "0", "kwok.x-k8s.io/node": "fake"}},
+                         "annotations": {"node.alpha.kubernetes.io/ttl": "0", "kwok.x-k8s.io/node": "fake",
+                                         RESOURCE_METRICS_PATH: f"/metrics/nodes/{name}/metrics/resource"}},
             "status": {"capacity": dict(cap), "allocatable": dict(cap),
                        "nodeInfo": {"architecture": "amd64", "kubeletVersion": kubelet_version, "operatingSystem": "linux",
                                     "osImage": "Ubuntu 22.04.5 LTS", "kernelVersion": "5.15.0", "containerRuntimeVersion": "kwok://sim"}}}
@@ -126,6 +136,12 @@ def nodes_yaml(sim: dict, gpu_override: int | None = None) -> str:
 
 def api_ip(ips: dict) -> str:
     return ips["services"][API]
+
+
+def kwok_ip() -> str:
+    """The address every KWOK node advertises as InternalIP: the kwok-controller's own fixed one, which serves the fake kubelets'
+    logs and metrics. The API server and metrics-server dial it; 127.0.0.1 would be the caller's own container (issue 872)."""
+    return addressing.service_ip(KWOK)
 
 
 def api_sans(ips: dict) -> list[str]:
@@ -248,15 +264,22 @@ def wire(services: dict, sim: dict) -> None:
                           f"--service-account-key-file={CONTAINER_PKI}/sa.pub", f"--service-account-signing-key-file={CONTAINER_PKI}/sa.key",
                           "--service-account-issuer=https://kubernetes.default.svc.cluster.local",
                           f"--proxy-client-cert-file={CONTAINER_PKI}/admin.crt", f"--proxy-client-key-file={CONTAINER_PKI}/admin.key",
-                          f"--audit-policy-file={CONTAINER_PKI}/audit-policy.yaml", "--audit-log-path=-", "--audit-log-format=json"],
+                          f"--audit-policy-file={CONTAINER_PKI}/audit-policy.yaml", "--audit-log-path=-", "--audit-log-format=json",
+                          # dial a node's InternalIP first, as kubeadm does; the default (Hostname first) depends on the Hostname
+                          # address resolving. KWOK asks for no client certificate (v0.8.0 server.go: ServeTLS without ClientAuth);
+                          # the certificate is passed as on a real cluster, where the kubelet does ask (issue 872)
+                          "--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname",
+                          f"--kubelet-client-certificate={CONTAINER_PKI}/admin.crt", f"--kubelet-client-key={CONTAINER_PKI}/admin.key"],
         "k8s-controller-manager": [kc, "--authorization-always-allow-paths=/healthz,/readyz,/livez,/metrics", "--bind-address=0.0.0.0",
                                    "--secure-port=10257", f"--root-ca-file={CONTAINER_PKI}/ca.crt",
                                    f"--service-account-private-key-file={CONTAINER_PKI}/sa.key", "--use-service-account-credentials=true",
                                    "--node-monitor-period=5s", "--node-monitor-grace-period=20s"],
         "k8s-scheduler": [kc, "--authorization-always-allow-paths=/healthz,/readyz,/livez,/metrics", "--bind-address=0.0.0.0", "--secure-port=10259"],
-        "kwok-controller": [kc, "--manage-nodes-with-annotation-selector=kwok.x-k8s.io/node=fake", "--node-ip=127.0.0.1",
-                            "--node-name=kwok-controller", "--node-port=10247", "--server-address=0.0.0.0:10247",
-                            "--node-lease-duration-seconds=40", "--enable-crds=Stage",  # without it KWOK reads no Stage objects and exits ("no stages found")
+        # --node-ip: the address every fake node advertises; kwokctl v0.8.0 passes the controller's own (issue 872).
+        # --enable-crds: without Stage KWOK reads no stages and exits ("no stages found"); the others serve logs and metrics
+        KWOK: [kc, "--manage-nodes-with-annotation-selector=kwok.x-k8s.io/node=fake", f"--node-ip={kwok_ip()}",
+               f"--node-name={KWOK}", f"--node-port={KWOK_PORT}", f"--server-address=0.0.0.0:{KWOK_PORT}",
+               "--node-lease-duration-seconds=40", f"--enable-crds={','.join(KWOK_CRDS)}",
                              f"--tls-cert-file={CONTAINER_PKI}/admin.crt", f"--tls-private-key-file={CONTAINER_PKI}/admin.key"],
     }
     for name in SERVICES:
@@ -267,6 +290,8 @@ def wire(services: dict, sim: dict) -> None:
         svc.update({"image": img[name], "user": user, "entrypoint": [ENTRYPOINT[name]],
                     "command": flags[name]})
         svc["volumes"] = ["./k8s/etcd:/etcd-data"] if name == "k8s-etcd" else list(pki)
+        if name == KWOK:  # the canned kubelet log files (k8s/kwok/logs.yaml names them); compose runs from compose/generated
+            svc["volumes"].append(f"../../{SRC}/kwok/logs:{KWOK_LOGS}:ro")
         if name != "k8s-etcd":
             svc["depends_on"] = ["k8s-etcd"] if name == API else [API]
     if API in services:
@@ -396,6 +421,12 @@ def node_rows(sim: dict, fetch: Callable = api_json) -> list[dict]:
     return rows
 
 
+def kwok_crd_names() -> list[str]:
+    """The definitions KWOK watches (--enable-crds), by their CRD names: Stage -> stages.kwok.x-k8s.io, Logs -> logs.kwok.x-k8s.io."""
+    plural = {"Logs": "logs", "ClusterLogs": "clusterlogs", "Metric": "metrics"}
+    return [f"{plural.get(k, k.lower() + 's')}.kwok.x-k8s.io" for k in KWOK_CRDS]
+
+
 def bootstrap(sim: dict, ips: dict, say: Callable[[str], None] = print, runner: Callable = _run, ready: Callable = api_ready,
               retries: int = 10, sleep: Callable[[float], None] = time.sleep) -> bool:
     """Once the API server answers: the KWOK CRDs, the stages, the nodes, then the fixtures and RBAC. Idempotent."""
@@ -412,11 +443,11 @@ def bootstrap(sim: dict, ips: dict, say: Callable[[str], None] = print, runner: 
 
     if not apply("/k8s/kwok/crds.yaml", "KWOK definitions"):
         return False
-    r = kubectl(sim, "wait", "--for=condition=established", "--timeout=60s", "crd/stages.kwok.x-k8s.io", runner=runner)
+    r = kubectl(sim, "wait", "--for=condition=established", "--timeout=60s", *[f"crd/{c}" for c in kwok_crd_names()], runner=runner)
     if r.returncode != 0:
-        say(f"FAILED kubernetes: the stage definition did not become ready: {r.stderr.strip()[-200:]}")
+        say(f"FAILED kubernetes: the KWOK definitions did not become ready: {r.stderr.strip()[-200:]}")
         return False
-    for path, what in (("/k8s/kwok/stage-fast.yaml", "default stages"), ("/k8s/kwok/stage-faults.yaml", "fault stages"),
+    for path, what in (("/k8s/kwok/stage-fast.yaml", "default stages"), ("/k8s/kwok/stage-faults.yaml", "fault stages"), *KWOK_OBJECTS,
                        ("/state/nodes.yaml", "nodes"), ("/k8s/fixtures/00-namespaces.yaml", "namespaces")):
         if not apply(path, what):
             return False

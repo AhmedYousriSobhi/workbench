@@ -1,0 +1,20 @@
+# KWOK v0.8.0 kustomize/metrics/usage/usage-from-annotation.yaml (Apache-2.0), unchanged: every KWOK pod uses what its annotations
+# kwok.x-k8s.io/usage-cpu and kwok.x-k8s.io/usage-memory say (1m and 1Mi without them); a node's usage is the sum of its pods'.
+# Source: https://github.com/kubernetes-sigs/kwok/blob/v0.8.0/kustomize/metrics/usage/usage-from-annotation.yaml
+apiVersion: kwok.x-k8s.io/v1alpha1
+kind: ClusterResourceUsage
+metadata:
+  name: usage-from-annotation
+spec:
+  usages:
+  - usage:
+      cpu:
+        expression: |
+          "kwok.x-k8s.io/usage-cpu" in pod.metadata.annotations
+          ? Quantity(pod.metadata.annotations["kwok.x-k8s.io/usage-cpu"])
+          : Quantity("1m")
+      memory:
+        expression: |
+          "kwok.x-k8s.io/usage-memory" in pod.metadata.annotations
+          ? Quantity(pod.metadata.annotations["kwok.x-k8s.io/usage-memory"])
+          : Quantity("1Mi")
