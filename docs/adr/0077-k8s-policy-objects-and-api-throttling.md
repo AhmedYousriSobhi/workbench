@@ -8,13 +8,18 @@ A real GPU cluster has priority classes, quotas and disruption budgets, and its 
 ## Decision
 - `k8s/fixtures/60-policy.yaml` (applied by `up`): PriorityClasses `inference` (2000), `training` (1000) and `best-effort` (-100, never preempts); a ResourceQuota `gpu-claims` in `team-a` of two DRA devices of the simulated driver (ADR 0076; `dra-train` holds one); a Deployment `inference` (two replicas, one per GPU node by a spread constraint) with a PodDisruptionBudget `minAvailable: 2`, so `kubectl drain` of a node that holds a replica blocks.
 - `k8s/scenario/70-apf.yaml` (not in `k8s/fixtures/`, which differs from the issue text): a PriorityLevelConfiguration with one concurrency share (about three seats, `Reject`, no queue) and a FlowSchema that matches only the user `viewer`. `up` applies every file in `k8s/fixtures/`, and this one changes how the API server treats a user, so only scenario `k8s-api-throttled` applies it and removes it. The metrics-only user and every other caller are not matched, and RBAC is untouched.
-- Scenario steps: `pod` takes `priority_class` and `node`; new `drain: {node, timeout}` (cordon and evict through the eviction API; a drain the budget blocks times out and is not a failed step) and `remove: [path under k8s/]`. New expectation `k8s.pods_on_node: {node, namespace, selector, min}`.
+- Scenario steps: `pod` takes `priority_class` and `node`; new `drain: {node, selector, timeout}` (cordon and evict through the eviction API; a drain the budget blocks times out and is not a failed step; with a `selector` only those pods are evicted and `--force` is not passed, because `drain --force` deletes bare pods such as `dra-train` for good, which broke the quota test when the scheduler had put it on the drained node, issue 749; `k8s-drain-blocked` uses `selector: app=inference`) and `remove: [path under k8s/]`. New expectation `k8s.pods_on_node: {node, namespace, selector, min}`.
 - Scenarios `k8s-preempt` (SC-38: two best-effort pods of 3 GPUs and an inference pod of 4 on `kgpu001`), `k8s-drain-blocked` (SC-39) and `k8s-api-throttled` (SC-40).
 
 ## Not verified yet
-`./scripts/verify.sh --unit k8s`: that the scheduler preempts and records `Preempted`, that the drain is refused with the budget named, that the quota rejects the second claim (the quota resource name follows the DRA documentation), and that a burst of 300 concurrent requests as `viewer` gets a 429. The APF seat count is a calculation (600 seats shared by about 245 shares), so a 429 under a light burst is likely but not guaranteed; the live test uses a heavy one.
+`./scripts/verify.sh --unit k8s`: that the scheduler preempts and records `Preempted`, that the drain is refused with the budget named, that the quota rejects the claim that goes over the limit (the quota resource name follows the DRA documentation; the test fills what is left of the quota, so it does not depend on the fixture pod, issue 749), and that a burst of 300 concurrent requests as `viewer` gets a 429. The APF seat count is a calculation (600 seats shared by about 245 shares), so a 429 under a light burst is likely but not guaranteed; the live test uses a heavy one.
 
 ## Consequences
 - Three more pods in `team-a`. The pod quota there (`20-signals.yaml`) was 8 and the fixtures already asked for 9; with `dra-train` and `inference` they ask for 12, so the quota is now 16 (the first live run failed every Kubernetes module with `exceeded quota: pods`). Scenario pods go to `team-b`.
 - `gpu-train` keeps the default priority (0): a PriorityClass cannot be used by a pod applied in the same pass.
 - APF stays off until a scenario turns it on.
+
+## Pointer: group 4 decisions (issue 867, 2026-11-17)
+[ADR 0084, group 4 addendum](0084-tsh-kube-production-practice.md#addendum-group-4-decisions-issue-867-2026-11-17):
+- The scale work (issue 768) puts its 10,001 pods in a dedicated namespace, never in `team-a`, whose pod quota is 16.
+- The version spike (issue 769) expects these fixtures to depend on the server version: the DRA claim quota needs `resource.k8s.io/v1` (Kubernetes 1.34 or later).

@@ -1,8 +1,8 @@
 name: k8s-drain-blocked
 ref: SC-39
-description: A node is drained while it holds a pod of a deployment whose disruption budget allows no eviction; the drain blocks and the pod stays
+description: A node is drained while it holds a pod of a deployment whose disruption budget allows no eviction; the drain blocks and the pod stays; only the budgeted pods are evicted, so no other fixture pod is lost
 steps:
-  - {at: 0s,   target: k8s, do: {drain: {node: first k8s gpu node, timeout: 30}}}
+  - {at: 0s,   target: k8s, do: {drain: {node: first k8s gpu node, selector: app=inference, timeout: 30}}}
   - {at: 100s, target: k8s, do: {uncordon: [first k8s gpu node]}}
 expect:
   - k8s.pods_on_node: {node: first k8s gpu node, namespace: team-a, selector: app=inference, min: 1, after: 35s, within: 20s}   # the drain (30 s timeout) gave up and the pod is still there
