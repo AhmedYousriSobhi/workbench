@@ -438,6 +438,13 @@ def node_rows(sim: dict, fetch: Callable = api_json) -> list[dict]:
     return rows
 
 
+def node_addresses() -> dict:
+    """The status patch that gives a node the addresses KWOK's node-initialize stage writes (InternalIP from --node-ip, Hostname
+    from --node-name) and its kubelet port."""
+    return {"status": {"addresses": [{"type": "InternalIP", "address": kwok_ip()}, {"type": "Hostname", "address": KWOK}],
+                       "daemonEndpoints": {"kubeletEndpoint": {"Port": KWOK_PORT}}}}
+
+
 def kwok_crd_names() -> list[str]:
     """The definitions KWOK watches (--enable-crds), by their CRD names: Stage -> stages.kwok.x-k8s.io, Logs -> logs.kwok.x-k8s.io."""
     plural = {"Logs": "logs", "ClusterLogs": "clusterlogs", "Metric": "metrics"}
@@ -468,6 +475,14 @@ def bootstrap(sim: dict, ips: dict, say: Callable[[str], None] = print, runner: 
                        ("/state/nodes.yaml", "nodes"), ("/k8s/fixtures/00-namespaces.yaml", "namespaces")):
         if not apply(path, what):
             return False
+    # The addresses KWOK would give a new node, written through the status subresource: etcd keeps the nodes between `down`
+    # and `up` (compose/generated/k8s/etcd), and KWOK's stages keep an existing node's addresses, so a cluster made with
+    # --node-ip=127.0.0.1 would keep that address for good (issue 872). Idempotent; one call for every node in the file.
+    r = kubectl(sim, "patch", "-f", "/state/nodes.yaml", "--subresource=status", "--type=merge", "-p", json.dumps(node_addresses()),
+                runner=runner, mounts=src)
+    if r.returncode != 0:
+        say(f"FAILED kubernetes node addresses: {(r.stderr or r.stdout).strip()[-300:]}")
+        return False
     # the fixtures (workloads, signals, RBAC). A new namespace has no default service account until the controller manager
     # makes one, and a pod is refused until then; wait for them, then apply once (a retry of a half-applied set would meet
     # the ResourceQuota fixture).
@@ -482,9 +497,11 @@ def bootstrap(sim: dict, ips: dict, say: Callable[[str], None] = print, runner: 
         return False
     if not apply("/state/50-dra.yaml", "DRA devices"):
         return False
-    if not apply(METRICS_API_FILE, "metrics API"):  # the APIService answers 503 until metrics-server has scraped every node twice
+    if not bootstrap_kueue(sim, say, runner, src, apply):
         return False
-    return bootstrap_kueue(sim, say, runner, src, apply)
+    # last: until metrics-server (started in the next stage) has scraped every node twice the APIService answers 503, and while
+    # an aggregated API is unavailable, discovery calls (`kubectl api-resources`) exit non-zero
+    return apply(METRICS_API_FILE, "metrics API")
 
 
 def bootstrap_kueue(sim: dict, say: Callable[[str], None], runner: Callable, src: list, apply: Callable) -> bool:

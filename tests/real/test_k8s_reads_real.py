@@ -50,9 +50,6 @@ def cluster():
     assert wait_for(lambda: run_read(first, "viewer").returncode == 0, timeout=90), run_read(first, "viewer").stderr
     # the fixtures (pods, events, Deployments) are applied after the API answers; the pod reads below need them
     assert wait_for(lambda: "sized" in run_read(k8sreads.BY_KEY["pods-ns"], "viewer").stdout, timeout=120)
-    # metrics-server answers only after two scrapes of every node (--metric-resolution=15s); until then the APIService says 503
-    assert wait_for(lambda: run_read(k8sreads.BY_KEY["node-usage"], "viewer").returncode == 0, timeout=180), \
-        run_read(k8sreads.BY_KEY["node-usage"], "viewer").stderr
     yield sim
     stack.down(say=lambda m: None)
 
@@ -62,7 +59,19 @@ def _ids():
 
 
 @pytest.mark.parametrize("read,role", _ids(), ids=lambda v: v if isinstance(v, str) else v.key)
+def metrics_ready() -> None:
+    """metrics-server answers only after two scrapes of every node (--metric-resolution=15s); until then the APIService says 503, and
+    API discovery fails too. Waited for only by the tests that need it, so a broken metrics-server fails those and nothing else."""
+    assert wait_for(lambda: run_read(k8sreads.BY_KEY["node-usage"], "viewer").returncode == 0, timeout=180), \
+        "metrics-server never answered: " + run_read(k8sreads.BY_KEY["node-usage"], "viewer").stderr.strip()[-300:]
+
+
+METRICS_READS = {"metrics-probe", "node-usage"}
+
+
 def test_each_read_has_the_outcome_and_shape_the_client_needs(cluster, read, role):
+    if read.key in METRICS_READS or read.key.startswith("api-group-"):
+        metrics_ready()
     api_version = k8s.version(cluster)
     r = run_read(read, role)
     got = k8sreads.classify(read, r.returncode, r.stdout, r.stderr)
@@ -120,6 +129,7 @@ def test_a_wrong_host_gives_one_clear_error(cluster):
 
 def test_kubectl_top_lists_every_kwok_node_and_the_pod_usage_its_annotations_give(cluster):
     """Issue 382: metrics-server scrapes KWOK's /metrics/nodes/<node>/metrics/resource; a pod's usage is its kwok.x-k8s.io/usage-* annotations."""
+    metrics_ready()
     top = docker_exec_as("alice", K_LOGIN, "kubectl top nodes --no-headers")
     assert top.returncode == 0, top.stderr
     assert {ln.split()[0] for ln in top.stdout.splitlines() if ln.strip()} == {n for n, _ in k8s.node_list(cluster)}
@@ -127,6 +137,9 @@ def test_kubectl_top_lists_every_kwok_node_and_the_pod_usage_its_annotations_giv
     def sized():
         r = docker_exec_as("alice", K_LOGIN, "kubectl top pod sized -n team-a --no-headers")
         return r.stdout.split() if r.returncode == 0 else []
-    assert wait_for(lambda: sized()[1:3] == ["350m", "200Mi"], timeout=90), sized()  # the fixture's annotations (k8s/fixtures/20-signals.yaml)
+    def near() -> bool:  # memory is a gauge (exact); CPU is a rate over KWOK's cumulative counter, so allow a little either side
+        got = sized()
+        return len(got) >= 3 and got[2] == "200Mi" and got[1].endswith("m") and 340 <= int(got[1][:-1]) <= 360
+    assert wait_for(near, timeout=90), sized()  # the fixture's annotations (k8s/fixtures/20-signals.yaml): 350m, 200Mi
     limited = docker_exec_as("alice", K_LOGIN, "kubectl --kubeconfig $HOME/.kube/limited.yaml top pod -n team-a")
     assert limited.returncode != 0 and "forbidden" in limited.stderr.lower(), limited.stderr  # no metrics.k8s.io rule in the namespace role
