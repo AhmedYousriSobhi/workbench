@@ -211,16 +211,34 @@ def discard(dest: Path) -> None:
 
 # ---------------------------------------------------------------- run A's accounting, before the restore
 
-def collect_sacct(users: list[str], since_s: float, c: Cluster) -> dict[str, str]:
-    """The side's jobs from accounting: an allow-listed `sacct` export of the lab users only, covering the last `since_s` seconds
-    (Slurm's `now-N` form, so the container's time zone does not matter). Returns {file name: text} for `Run.record_collected`."""
+def filter_rows(text: str, users: set[str], keys: set[str]) -> str:
+    """A `sacct -P` text (header first) cut to the rows of the lab users or of the run's job keys (the job name)."""
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        return ""
+    head = lines[0].split("|")
+    iu, ij = head.index("User") if "User" in head else None, head.index("JobName") if "JobName" in head else None
+
+    def ours(row: list[str]) -> bool:
+        return (iu is not None and iu < len(row) and row[iu] in users) or (ij is not None and ij < len(row) and row[ij] in keys)
+    return "\n".join([lines[0]] + [ln for ln in lines[1:] if ours(ln.split("|"))]) + "\n"
+
+
+def collect_sacct(users: list[str], since_s: float, c: Cluster, keys: list[str] | None = None) -> dict[str, str]:
+    """The side's jobs from accounting: an allow-listed `sacct` export covering the last `since_s` seconds (Slurm's `now-N` form, so
+    the container's time zone does not matter), cut to the lab users and the run's job keys. Returns {file name: text} for
+    `Run.record_collected`.
+
+    `sacct -a`, not `-u lab-u001,...`: sacct turns every `-u` name into a uid on the host it runs on (slurmctld here), and an
+    unknown name (or a number with no passwd entry) is `Invalid user id` and exit 1 (Slurm 26.05.5, `src/sacct/options.c` and
+    `_convert_to_id` in `src/common/slurm_protocol_defs.c`, issue 554 item 7). The rows are filtered here instead."""
     if not users:
         raise LabError("the jobs file names no lab user")
     if not c.accounting:
         raise LabError("accounting is not running: a run needs it to compare the sides (benchctl up --with accounting)")
-    out = c.must(c.dc("exec", "-T", "slurmctld", "sacct", "-X", "-P", "-u", ",".join(users), "-S", f"now-{int(since_s) + 60}",
+    out = c.must(c.dc("exec", "-T", "slurmctld", "sacct", "-a", "-X", "-P", "-S", f"now-{int(since_s) + 60}",
                       "-E", "now", "-o", SACCT_FIELDS), "sacct")
-    return {"sacct.txt": out.decode()}
+    return {"sacct.txt": filter_rows(out.decode(), set(users), set(keys or []))}
 
 
 @dataclass
@@ -238,7 +256,8 @@ class StateSteps:
         return restore(self.dest, self.cluster)
 
     def collect(self, side: str, run) -> dict[str, str]:
-        return collect_sacct(run.jobs()["users"], run.clock() - run.entered(f"replay_{side}"), self.cluster)
+        doc = run.jobs()
+        return collect_sacct(doc["users"], run.clock() - run.entered(f"replay_{side}"), self.cluster, [j["key"] for j in doc["jobs"]])
 
     def discard(self) -> None:
         discard(self.dest)

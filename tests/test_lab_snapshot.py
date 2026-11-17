@@ -80,7 +80,7 @@ class FakeDocker:
                     self.db += b"INSERT INTO `job_table` VALUES (9);\n"
                 return cp()
             if verb == "exec" and rest[1] == "slurmctld":
-                return cp(out=b"JobID|JobName|User\n7|j0001|lab-u001\n")
+                return cp(out=b"JobID|JobName|User\n7|j0001|lab-u001\n8|other|u9\n9|j0002|30002\n")
         if cmd[:2] == ["docker", "cp"]:
             assert not self.up["slurmctld"], "docker cp runs while slurmctld is stopped"
             if cmd[2] == f"{ls.CTLD}:{ls.SPOOL}":
@@ -272,13 +272,19 @@ def test_snapshot_dir_is_outside_the_reports(tmp_path):
 
 # ---------------------------------------------------------------- run A's accounting
 
-def test_collect_sacct_asks_for_the_lab_users_only():
+def test_collect_sacct_reads_every_user_and_keeps_the_lab_users_and_keys_only():
     fake = FakeDocker()
-    out = ls.collect_sacct(["lab-u001", "lab-u002"], 3600.4, cluster(fake))
-    assert out == {"sacct.txt": "JobID|JobName|User\n7|j0001|lab-u001\n"}
+    out = ls.collect_sacct(["lab-u001", "lab-u002"], 3600.4, cluster(fake), keys=["j0001", "j0002"])
+    assert out == {"sacct.txt": "JobID|JobName|User\n7|j0001|lab-u001\n9|j0002|30002\n"}  # a user unknown on slurmctld shows as a uid
     cmd = fake.calls[-1]
-    assert cmd[cmd.index("-u") + 1] == "lab-u001,lab-u002" and cmd[cmd.index("-S") + 1] == "now-3660"
-    assert cmd[cmd.index("-o") + 1] == ls.SACCT_FIELDS and "-a" not in cmd
+    assert "-u" not in cmd and "-a" in cmd and cmd[cmd.index("-S") + 1] == "now-3660"  # sacct -u refuses names it cannot resolve
+    assert cmd[cmd.index("-o") + 1] == ls.SACCT_FIELDS
+    assert ls.collect_sacct(["lab-u001"], 1, cluster(fake)) == {"sacct.txt": "JobID|JobName|User\n7|j0001|lab-u001\n"}
+
+
+def test_filter_rows_handles_empty_text_and_missing_columns():
+    assert ls.filter_rows("", {"lab-u001"}, set()) == ""
+    assert ls.filter_rows("JobID\n1\n", {"lab-u001"}, {"j1"}) == "JobID\n"
 
 
 def test_collect_sacct_refusals():
