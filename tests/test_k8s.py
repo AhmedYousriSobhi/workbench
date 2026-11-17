@@ -43,6 +43,16 @@ def test_a_gpu_node_advertises_what_gpu_feature_discovery_and_the_device_plugin_
     assert len(list(yaml.safe_load_all(k8s.nodes_yaml(SIM)))) == 4
 
 
+def test_every_node_reports_the_api_servers_version_not_kwoks_own_string():
+    """#766 a: a client parses `vX.Y` from kubeletVersion to judge skew; `kwok-v0.8.0` has no such prefix."""
+    import re
+    for sim in (SIM, {**SIM, "kubernetes": {**(SIM.get("kubernetes") or {}), "version": "v1.35.2"}}):
+        docs = list(yaml.safe_load_all(k8s.nodes_yaml(sim)))
+        got = {d["status"]["nodeInfo"]["kubeletVersion"] for d in docs}
+        assert got == {k8s.version(sim)} and re.match(r"v\d+\.\d+\.\d+$", next(iter(got))), got
+    assert "kwok" not in k8s.node_manifest("kcn001", {})["status"]["nodeInfo"]["kubeletVersion"]
+
+
 def test_the_part_is_off_by_default_and_the_five_services_are_limited_unprivileged_and_addressed():
     assert "k8s" not in workbench.DEFAULT_PARTS and workbench.PARTS["k8s"] == ("k8s", None)
     assert "k8s-apiserver" not in compose.generate(SIM, {"groups": ["core"]})["services"]

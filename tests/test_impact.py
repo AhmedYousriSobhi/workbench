@@ -44,7 +44,7 @@ def test_unknown_live_helper_files_select_all():
 
 def test_union_of_rules_and_first_match_wins():
     got = pick("benchctl/nhc.py", "benchctl/k8s.py")
-    assert set(got) == {"test_nhc_real", "test_nhc_browser", "test_k8s_real", "test_wire_capture_real", "test_compose_real"}
+    assert set(got) == {"test_nhc_real", "test_nhc_browser", "test_k8s_real", "test_k8s_reads_real", "test_wire_capture_real", "test_compose_real"}
     assert pick("images/node-base/nhc.d/checks.conf") == ["test_nhc_browser", "test_nhc_real"]  # not swallowed by images/node-base/**
     assert pick("images/node-base/Dockerfile") == "ALL"
 

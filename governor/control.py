@@ -17,6 +17,10 @@ LAB_VERBS = {"lab-validate"}  # the config lab verbs (ADR 0049); issue 553 adds 
 ALLOWED |= LAB_VERBS
 LAB_APPLY_VERBS = {"lab-apply", "lab-restore"}  # issue 553: apply a side of a lab; return to the plain cluster (never the A/B snapshot restore, which gets its own name)
 ALLOWED |= LAB_APPLY_VERBS
+LAB_RUN_VERBS = {"lab-run", "lab-stop"}  # issue 554: start a supervised replay run (L0-L1, admitted); stop it (any level)
+ALLOWED |= LAB_RUN_VERBS
+TARGET_HOURS = (0.5, 6.0)  # mirrors benchctl.lab_slurm.MIN_TARGET_HOURS, MAX_TARGET_HOURS
+MAX_SEED = 2**31 - 1
 MAX_REQUEST = 4096
 TARGETED = {"freeze", "thaw", "stop", "start"}  # require a known group name
 
@@ -40,6 +44,23 @@ def lab_args_error(cmd: str, req: dict) -> str | None:
     name = req.get("name")
     if not (isinstance(name, str) and LAB_NAME_RE.fullmatch(name) and req.get("side", "baseline") in ("baseline", "candidate")):
         return f"{cmd} needs name:NAME (lowercase letters, digits, -) and an optional side: baseline"
+    return None
+
+
+def lab_run_error(req: dict) -> str | None:
+    """`lab-run`: a lab name, then only an optional bool `ab`, a number `target_hours` 0.5..6 and an int `seed` 0..2^31-1 (W-3: nothing free-form)."""
+    if not (isinstance(req.get("name"), str) and LAB_NAME_RE.fullmatch(req["name"])):
+        return f"{req.get('cmd')} needs name:NAME (lowercase letters, digits, -)"
+    if req.get("cmd") == "lab-stop":
+        return None if isinstance(req.get("force", False), bool) else "lab-stop force must be true or false"
+    if "ab" in req and not isinstance(req["ab"], bool):
+        return "lab-run ab must be true or false"
+    h = req.get("target_hours")
+    if h is not None and not (isinstance(h, (int, float)) and not isinstance(h, bool) and TARGET_HOURS[0] <= h <= TARGET_HOURS[1]):
+        return f"lab-run target_hours must be a number from {TARGET_HOURS[0]:g} to {TARGET_HOURS[1]:g}"
+    s = req.get("seed")
+    if s is not None and not (isinstance(s, int) and not isinstance(s, bool) and 0 <= s <= MAX_SEED):
+        return f"lab-run seed must be an int 0..{MAX_SEED}"
     return None
 
 
@@ -133,6 +154,8 @@ def dispatch(line: bytes, handle: Handler, groups: Callable[[], set[str]]) -> di
         if cmd == "capture-read" and not (isinstance(req.get("since", 0), int) and not isinstance(req.get("since", 0), bool) and req.get("since", 0) >= 0):
             return {"ok": False, "error": "capture-read takes an optional since:int>=0"}
         if cmd in LAB_VERBS | LAB_APPLY_VERBS and (err := lab_args_error(cmd, req)):
+            return {"ok": False, "error": err}
+        if cmd in LAB_RUN_VERBS and (err := lab_run_error(req)):
             return {"ok": False, "error": err}
         if cmd == "admit" and not (isinstance(req.get("budget_mb"), int) and not isinstance(req["budget_mb"], bool)
                                    and req["budget_mb"] >= 0):
