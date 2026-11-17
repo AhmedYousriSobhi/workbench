@@ -29,3 +29,43 @@ Policy behaviour (priority, fairshare, QOS, preemption, topology placement, Kube
 - The dilation factor is `max(1, trace span / target)`: a short trace is not stretched. The span runs from the first submit to the last end.
 - Scaled: `PriorityDecayHalfLife`, `PriorityMaxAge`, `PreemptExemptTime`, `PriorityCalcPeriod`, `OverTimeLimit`, `MinJobAge`, `KillWait`, `SchedulerTimeSlice`, `InactiveLimit`, `WaitTime`, the duration options of `SchedulerParameters` (`bf_interval`, `bf_resolution`, `bf_window`, `bf_max_time`, `sched_interval`, `batch_sched_delay`), partition `MaxTime` and `DefaultTime`, QOS `GraceTime` and `MaxWall`, job runtimes and limits. Daemon and node timeouts (`SlurmctldTimeout`, `SlurmdTimeout`, `MessageTimeout`, health check and power timers) are lab-owned: they keep the workbench's own stable values. A scaled value is never below one second (one minute for the minute-unit keys).
 - The memory the governor must admit for a run is `nodes x 13 MB + 250 MB` (`lab_slurm.admission_mb`); the apply command (issue 553) passes it to `admit`.
+
+## Addendum (issue 554, the run: owner decisions of 2026-11-17)
+
+The ten design questions of issue 554, in the owner's words (the issue's comments "Design pass and owner decisions" and "Owner answers"). "Built" means built by plan steps 1 and 2 (`benchctl/lab_run.py`, `benchctl/lab_snapshot.py`, `images/slurm-ctl/restore-state.sh`); everything else waits for steps 3 to 5 or for issue 863. Choices made while building that the owner has not decided are listed after the table, to confirm.
+
+| # | Decision (owner) | Built? |
+|---|---|---|
+| 1 | The replay driver (250 MB cap) runs as an **unlabelled P5 one-shot container**, like `lab-validate`, that polls the pause and abort flags. A labelled P5 container would be frozen at L3 before it could abort; the login node (P2, 40 MB) is too small. | No (step 3) |
+| 2 | **Yes, a thread.** The governor starts a run thread that only supervises flags and progress; the work is the one-shot driver container (decision 1). SPEC C-24 gets a wording note ("no new long-running process" means no new daemon; a supervising thread inside the governor is allowed). | No (step 4; the SPEC note with step 5) |
+| 3 | Snapshot restore is **internal to `lab-run`**, not a socket verb. (So the issue 553 addendum's example verb `lab-snapshot-restore` is not made.) | Yes: `lab_snapshot.restore`, called by `lab_run.drive` |
+| 4 | **Lab node containers are split into a child issue** (863); issue 554 does not build them. | Not here (issue 863) |
+| 5 | **Rewrite to `lab-uNNN`.** The dump's users become `lab-u001...` in accounting, and Linux users with those names are created on the login and lab nodes. No production user name reaches the cluster. | Partly: the jobs file, the progress record, the run record and the collected accounting hold lab names only (checked; a refusal gives a count, never a name; free text such as an abort reason has production names replaced by `<user>`). Not yet: the dump rewrite in `apply lab` (a snapshot's database dump may still hold production names: it lives outside the report folder and is deleted when the run ends) and the Linux users |
+| 6 | The run length is the existing **`--target-hours` / `lab.target_hours`**, not a new `--duration`. | Yes (in `jobs.json` and `run.json`; the CLI flag comes with step 5) |
+| 7 | `run lab` without `--ab` runs **the candidate side only**. | Yes (the candidate-only path) |
+| 8 | **Add a seed.** Recorded in the report; both sides of the A/B use it. | Partly: recorded in `jobs.json` and `run.json`, read by both sides; the scenario engine does not take a seed yet (step 3 or 4) |
+| 9 | First answered "Both" (relabel rule and external label with a reload), which was unclear. **Decided 2026-11-17: a relabel rule** adds the `lab_run` label from a file the driver writes. | No: a TODO in `lab_run.py` (the driver and the Prometheus part come with steps 3 and 4) |
+| 10 | The page **may start and stop a run through the governor** (W-3 only forbids Docker and root on the page). | No (step 5 and issue 556) |
+
+**Implementation choices of steps 1 and 2, not decided by the owner (to confirm):**
+
+- The run always maps users, so `--keep-users` stays an option of `get lab` only (from decision 5).
+- The seed also drives the sampling; its default is 1, the seed `get lab` samples with, so a default run replays the jobs the plan showed.
+- A candidate-only run takes no snapshot and has no restore or compare.
+- An aborted A/B run whose snapshot was taken collects the side in progress (best effort) and restores the snapshot. (The issue's acceptance says "cluster restored after abort"; whether that means the snapshot or `remove lab` is not stated.)
+- The 5 % pause limit is checked per side, against one side's length.
+- The snapshot is taken before `apply_baseline` (the issue's order). **Decided (owner, round 3, 2026-11-17): keep it.** A restore covers only the accounting database and the controller's spool, not the slurm.conf overlay, the lab marker, Prometheus rules, Kubernetes objects or Teleport roles, so an aborted run's reason names `benchctl remove lab NAME`, and `remove lab` counts a row the restore already removed (`Nothing deleted`) as gone instead of refused (unit-tested; sacctmgr's exact message for a missing row and whether `sacctmgr load` reconciles or only adds are not verified live).
+- A trace shorter than the target is not stretched (`time_factor` is at least 1, as in the issue 551 addendum), so its run is shorter than `target_hours`; the run records both.
+- The restore needs a new start step in the slurm-ctl image (`restore-state`, run before slurmctld; it does nothing without a restore tar), because nothing can be exec'd into the controller while slurmctld is stopped.
+- An account, QOS, partition or TRES value equal to a production user name makes the jobs file refuse (decision 5), rather than being renamed.
+
+How steps 1 and 2 work:
+
+- **States.** A/B: `idle, snapshot, apply_baseline, replay_a, collect_a, restore, apply_candidate, replay_b, collect_b, compare, report, done`; candidate only: `idle, apply_candidate, replay_b, collect_b, report, done`; `aborted` from any state that has not ended. A pause (L2) is a flag on a replay state; its time adds to `paused_s` (and to that side's own count), and a side paused for over 5 % of the run length marks the run not comparable.
+- **Files.** `compose/generated/lab/NAME/reports/RUN/` holds `run.json`, `progress.json` (ADR 0049's `{name, state, percent, submitted, running, pending, paused_s}` plus the run id, side and flags, written atomically), the frozen `jobs.json` (read-only, its sha256 in `run.json`, checked before each side) and `a/`, `b/` with each side's `sacct` export. A job keeps only key, lab user, account, QOS, partition, TRES, node count, scaled submit, run and limit times, kind and exit code (OOM exits 137).
+- **Pairing.** The driver names each job by its key (`j0001`), so A and B pair by key: the restore makes run B reuse run A's job ids.
+- **Snapshot.** `compose stop slurmctld` (it writes its state on the way down), `docker cp` the spool out, `mariadb-dump` the accounting database, start slurmctld. The JWT key is never saved: the entrypoint installs it at every start from the keys `up` makes (issue 465).
+- **Restore.** Only after run A's accounting is in the report folder (the restore erases it). Stop slurmctld and slurmdbd, drop and reload the database, dump it again and compare, start slurmdbd, `docker cp` the tar into the stopped controller, start it. The image's `restore-state` (run before slurmctld in the container's command) empties the spool except the JWT key, extracts the tar, writes the sha256 of every file and removes the tar. The run is refused (aborted) when a file or the database differs. The database compare ignores `AUTO_INCREMENT=` counters, which a reload resets.
+- **Abort.** An aborted A/B run whose snapshot was taken collects the side in progress (best effort) and restores the snapshot, so the cluster is back where it started.
+- **Not exercised live.** The command sequence is unit-tested against a fake Docker and the `restore-state` script runs for real in a temporary folder; `tests/real/test_lab_run_real.py` is written and not yet run.
+- **A restore can be run again from any point it was cut off** (owner decision round 3, Q1): a failed database reload, a failed copy of the spool into the stopped controller, or a controller that never reports its sums. Each step is idempotent (stop a stopped service, drop and reload the database, copy the tar again; `restore-state` removes the tar last), so a second `restore` reproduces the snapshot. Three unit tests, one per cut-off point.
