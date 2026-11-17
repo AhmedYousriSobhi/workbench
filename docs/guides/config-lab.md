@@ -134,6 +134,25 @@ An object that already exists without the lab's label (for example a PriorityCla
 
 Rows `sacctmgr` refuses to delete are listed.
 
+## Run the replay (in progress, not usable yet)
+
+`benchctl run lab NAME [--ab]` is **not available yet**: issue 554 builds it in steps. What exists now is the inside of a run, with no command to start it ([ADR 0050 addendum, issue 554](../adr/0050-config-lab-ab-replay-method.md)):
+
+- **The plan of a run.** A run freezes one `jobs.json` that both sides read: the sampled jobs with lab users `lab-u001`, `lab-u002`, ... (never the production names, whatever `get lab --keep-users` showed), scaled submit, run and limit times, the seed (default 1, the one `get lab` samples with) and the run length from `lab.target_hours` (a trace shorter than that is not stretched).
+- **The states.** With `--ab`: snapshot, apply baseline, replay A, collect A, restore, apply candidate, replay B, collect B, compare, report. Without it: the candidate only (apply, replay, collect, report). Any state can end in `aborted`; a pause at L2 is counted, and a side paused for more than 5 % of the run length marks the run not comparable.
+- **Snapshot and restore.** Before run A the slurmctld state and the accounting database are saved; before run B both are put back and compared file by file, and run A's accounting is written to the report folder first (the restore erases it). An aborted A/B run is put back to its snapshot.
+
+Files of a run, under `compose/generated/lab/NAME/`:
+
+| Path | What |
+|---|---|
+| `reports/RUN/jobs.json` | the frozen jobs (read-only), lab users only |
+| `reports/RUN/run.json`, `progress.json` | the state, history, seed, run length, progress (`percent`, `submitted`, `running`, `pending`, `paused_s`) |
+| `reports/RUN/a/sacct.txt`, `b/sacct.txt` | each side's jobs from accounting |
+| `snapshots/RUN/` | the saved state (mode 700); deleted when the run ends |
+
+Still to come: the driver that submits the jobs, the governor commands `lab-run` and `lab-stop`, the CLI, the lab node containers (issue 863) and the comparison report (issue 555).
+
 ## Secrets
 
 These become `<scrubbed>`:
@@ -166,4 +185,4 @@ Imported files stay local: `compose/generated/` is gitignored and `scripts/check
 
 ## Under the hood
 
-Source: `benchctl/lab.py` (store, manifest, version match, plan), `benchctl/lab_import.py` (parsers, scrubber), `benchctl/lab_slurm.py` (key classes, time scaling, downscale), `benchctl/lab_replay.py` (sampling, users, dilation, concurrency), `benchctl/lab_candidate.py` (candidate overlay), `benchctl/lab_diff.py` (diff), `benchctl/lab_apply.py` (apply, remove, marker, slurm.conf overlay; every cluster call goes through an injectable runner, so the tests need no Docker), `benchctl/lab_validate.py` (render, one-shots, results; [ADR 0081](../adr/0081-config-lab-validation.md)). The store is `compose/generated/lab/NAME/baseline/` (scrubbed copies) and `manifest.json` (files with counts and hashes, scrubbed counts, dropped kinds, versions, the workbench's own versions and `version_match`: same, differs or unknown; `differs` marks that component's results indicative). The import writes a temporary folder and renames it, so a refused import leaves nothing. Slurm keys are all stored (secrets scrubbed); `KEY_CLASS` in `lab_slurm.py` decides which are applied, kept or reported "not tested".
+Source: `benchctl/lab.py` (store, manifest, version match, plan), `benchctl/lab_import.py` (parsers, scrubber), `benchctl/lab_slurm.py` (key classes, time scaling, downscale), `benchctl/lab_replay.py` (sampling, users, dilation, concurrency), `benchctl/lab_candidate.py` (candidate overlay), `benchctl/lab_diff.py` (diff), `benchctl/lab_apply.py` (apply, remove, marker, slurm.conf overlay; every cluster call goes through an injectable runner, so the tests need no Docker), `benchctl/lab_validate.py` (render, one-shots, results; [ADR 0081](../adr/0081-config-lab-validation.md)), `benchctl/lab_run.py` (run states, frozen jobs file, user remap, seed, A/B pairing) and `benchctl/lab_snapshot.py` with `images/slurm-ctl/restore-state.sh` (snapshot, restore, hash compare, collecting a side's accounting). The store is `compose/generated/lab/NAME/baseline/` (scrubbed copies) and `manifest.json` (files with counts and hashes, scrubbed counts, dropped kinds, versions, the workbench's own versions and `version_match`: same, differs or unknown; `differs` marks that component's results indicative). The import writes a temporary folder and renames it, so a refused import leaves nothing. Slurm keys are all stored (secrets scrubbed); `KEY_CLASS` in `lab_slurm.py` decides which are applied, kept or reported "not tested".
