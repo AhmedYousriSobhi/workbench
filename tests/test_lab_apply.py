@@ -133,6 +133,9 @@ class Cluster:
             for k in gone:
                 del self.records[k]
             return ok()
+        if "scancel -u" in text or "squeue -h -u" in text:  # the lab users' jobs end before their accounting rows go
+            self.cancelled = getattr(self, "cancelled", 0) + ("scancel" in text)
+            return ok()
         if "tctl get role/" in text:
             n = cmd[-2].split("/")[1]
             return ok(json.dumps([self.roles[n]])) if n in self.roles else bad("not found")
@@ -751,3 +754,14 @@ def test_lab_gpu_node_gets_stand_in_device_files():
         lu.load = orig
     assert services["lab-node-005"]["environment"]["WORKBENCH_GPUS"] == "8"
     assert "WORKBENCH_GPUS" not in services["lab-node-001"]["environment"]
+
+
+def test_remove_cancels_the_lab_users_jobs_before_deleting_their_accounting_rows(world):
+    """sacctmgr refuses to delete a user with a job (live lab_users: `sacctmgr refused: user lab-u001`)."""
+    env, c, _root = world
+    lab_apply.apply("prod-a", "baseline", env)
+    c.calls.clear()
+    lab_apply.remove("prod-a", env)
+    cancel = next(i for i, t in enumerate(c.calls) if "scancel -u" in t)
+    first_delete = next(i for i, t in enumerate(c.calls) if "sacctmgr -i delete user" in t)
+    assert cancel < first_delete
