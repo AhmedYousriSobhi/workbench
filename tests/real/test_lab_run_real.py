@@ -3,6 +3,7 @@ and from accounting after the restore, the restored state hashes equal the snaps
 the JWT key still works. Own cold start (ISOLATED_MODULES): a selection with accounting and one CPU node; it stops the stack at the end.
 Not run by the agent: `./scripts/verify.sh --unit lab_run --clean`."""
 import os
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -27,6 +28,13 @@ def wait_ctld(timeout: int = 90) -> None:
             return
         time.sleep(2)
     raise AssertionError("slurmctld did not answer after the restore")
+
+
+SHORT_TRACE = """JobID|User|Account|QOS|Partition|AllocTRES|NNodes|Timelimit|Submit|Start|End|Elapsed|State|ExitCode
+1|u1|physics|normal|cpu|cpu=64,mem=256000M,node=1|1|01:00:00|2026-01-05T08:00:00|2026-01-05T08:00:01|2026-01-05T08:00:11|00:00:10|COMPLETED|0:0
+2|u2|ml|high|gpu|cpu=128,gres/gpu:h100=8,node=1|1|12:00:00|2026-01-05T08:00:03|2026-01-05T08:00:04|2026-01-05T08:00:14|00:00:10|COMPLETED|0:0
+3|u2|ml|normal|gpu|cpu=16,gres/gpu:h100=1,node=1|1|01:00:00|2026-01-05T08:00:05|2026-01-05T08:00:06|2026-01-05T08:00:16|00:00:10|COMPLETED|0:0
+"""
 
 
 @pytest.fixture(scope="module")
@@ -79,19 +87,30 @@ def test_sacct_u_refuses_a_user_unknown_on_slurmctld(stack_up):
 
 
 def test_driver_replays_a_side_as_an_unlabelled_one_shot(stack_up, tmp_path):
-    """Issue 554 step 3: the driver container starts, submits every job of the side (or counts it as rejected: the lab-uNNN users and
-    lab nodes are not built yet, decision 5 and issue 863), reports progress, and leaves no container behind."""
-    from benchctl import lab, lab_run, lab_steps
+    """Issue 554 step 3: the driver container starts, submits every job of the side (or counts it as rejected), reports progress, and
+    leaves no container behind. The side is applied first (issues 863, 869): the lab users and the lab nodes with the production shape
+    exist, as in a real run. Without them the trace's 64-CPU job pends for ever on the 8-CPU simulated node (PartitionConfig) and the
+    driver waits for it up to its deadline (issue 895)."""
+    from benchctl import lab, lab_apply, lab_run, lab_steps
     root = tmp_path / "lab"
-    lab.import_lab("prod-a", ROOT / "tests" / "fixtures" / "lab" / "full", root=root)
+    export = tmp_path / "export"
+    shutil.copytree(ROOT / "tests" / "fixtures" / "lab" / "full", export)
+    (export / "trace.sacct").write_text(SHORT_TRACE)  # the fixture's 3-hour trace would replay for about half an hour (--target-hours is at least 0.5)
+    lab.import_lab("prod-a", export, root=root)
+    env = lab_apply.Env(root=root, sim=stack_up, running=lambda s: s in workbench.running_services(), say=lambda m: None)
     run = lab_run.Run.create("prod-a", stack_up, root, ab=False)
     run.move("apply_candidate")
-    run.move("replay_b")
-    steps = lab_steps.RunSteps("prod-a", run.r["run"], root=root)
-    reason = steps.replay("b", run)
-    assert reason is None, reason
-    n = run.r["jobs"]
-    assert run.r["counts"]["submitted"] + run.r["rejected"]["b"] == n
-    names = subprocess.run(["docker", "ps", "-a", "--format", "{{.Names}}"], capture_output=True, text=True, check=True).stdout
-    assert lab_steps.driver_name(run.r["run"], "b") not in names  # --rm
-    assert not (ROOT / "compose" / "generated" / lab_steps.PROM_DIR / "slurm.json").exists()  # the lab_run label file is removed after the side
+    steps = lab_steps.RunSteps("prod-a", run.r["run"], env=env, root=root)
+    try:
+        steps.apply("baseline")
+        run.move("replay_b")
+        reason = steps.replay("b", run)
+        assert reason is None, reason
+        n = run.r["jobs"]
+        assert run.r["counts"]["submitted"] + run.r["rejected"]["b"] == n
+        names = subprocess.run(["docker", "ps", "-a", "--format", "{{.Names}}"], capture_output=True, text=True, check=True).stdout
+        assert lab_steps.driver_name(run.r["run"], "b") not in names  # --rm
+        assert not (ROOT / "compose" / "generated" / lab_steps.PROM_DIR / "slurm.json").exists()  # the lab_run label file is removed after the side
+    finally:
+        if lab_apply.read_marker(root):
+            lab_apply.remove("prod-a", env)
