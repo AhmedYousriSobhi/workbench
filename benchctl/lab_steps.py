@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import lab, lab_apply, lab_report, lab_run, lab_slurm, lab_snapshot
+from . import lab, lab_apply, lab_prom, lab_report, lab_run, lab_slurm, lab_snapshot
 from .lab import LabError
 
 GENERATED = Path("compose/generated")
@@ -110,6 +110,7 @@ class RunSteps:
     governor: Callable[[dict], dict] | None = None
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
+    prom_get: Callable[[str], Any] | None = None  # reads Prometheus (tests inject a fake; None means the real one)
     state: lab_snapshot.StateSteps | None = None
     applied: list[str] = field(default_factory=list)
 
@@ -238,9 +239,30 @@ class RunSteps:
         meta = {"contract": lab_run.CONTRACT, "name": r["name"], "run": r["run"], "ab": r["ab"], "seed": r["seed"], "jobs": r["jobs"],
                 "target_hours": r["target_hours"], "factor": r["factor"], "length_s": r["length_s"], "paused_s": run.paused_s(),
                 "paused_side_s": r["paused_side_s"], "comparable": run.comparable(), "rejected": r.get("rejected", {}), "collected": r["collected"]}
-        doc = lab_report.build(meta, a, b, lab_report.thresholds(sim or {}), pairing, time_scaled)
+        doc = lab_report.build(meta, a, b, lab_report.thresholds(sim or {}), pairing, time_scaled, self._earlier(run), self._alerts(run))
         lab_run.write_atomic(run.folder / "report.json", lab_run.dump(doc))
         lab_run.write_atomic(run.folder / "report.md", lab_report.markdown(doc))
+
+    def _earlier(self, run: lab_run.Run) -> list[str | None]:
+        """The verdicts of this lab's earlier finished runs of the same frozen jobs (the repeats of one experiment)."""
+        out = []
+        for d in sorted(p for p in lab_run.reports_dir(self.name, self.root).glob("*") if p.is_dir() and p.name < run.r["run"]):
+            try:
+                if json.loads((d / "run.json").read_text()).get("jobs_sha256") == run.r["jobs_sha256"]:
+                    out.append(json.loads((d / "report.json").read_text()).get("verdict"))
+            except (OSError, ValueError):
+                continue
+        return out
+
+    def _alerts(self, run: lab_run.Run) -> dict[str, dict | None]:
+        """Alerts per side from Prometheus over the side's replay window; a side whose window is unknown or Prometheus is down is left out."""
+        out: dict[str, dict | None] = {}
+        for side in run.r["sides"]:
+            try:
+                out[side] = lab_prom.side_alerts(run.entered(f"replay_{side}"), run.entered(f"collect_{side}"), float(run.r["factor"]), **({"get": self.prom_get} if self.prom_get else {}))
+            except lab_run.LabError:
+                out[side] = None
+        return out
 
     def wait_calm(self, run: lab_run.Run) -> None:
         """Before an abort's restore: wait until the governor says L0 or L1 (GV-8). Shows `restore_pending` meanwhile. Raises when the

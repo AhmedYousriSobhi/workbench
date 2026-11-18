@@ -97,3 +97,49 @@ def test_markdown_prints_thresholds_scaling_and_what_was_not_measured():
     doc = lab_report.build(meta, rows(12), rows(12, wait=50), TH, pairing(), [{"key": "PriorityDecayHalfLife", "from": "7-0", "to": "2-8"}])
     md = lab_report.markdown(doc)
     assert "**Verdict:" in md and "## Thresholds" in md and "PriorityDecayHalfLife: 7-0 -> 2-8" in md and "alerts fired" in md and "x3.0" in md
+
+
+# ---------------------------------------------------------------- alerts, repeats and the QOS table (issue 555)
+
+def prom_answer(series):
+    return lambda url: {"data": {"result": series}}
+
+
+def test_side_alerts_reads_the_alerts_series_and_counts_flaps_in_production_time():
+    from benchctl import lab_prom
+    flap = {"metric": {"alertname": "NodeDrained"}, "values": [[100, "1"], [115, "1"], [400, "1"], [415, "1"], [700, "1"]]}
+    once = {"metric": {"alertname": "NodeDown"}, "values": [[130, "1"], [145, "1"]]}
+    got = lab_prom.side_alerts(100, 1000, 3.0, get=prom_answer([flap, once]))
+    assert got["fired"] == 2
+    assert got["alerts"][0] == {"name": "NodeDown", "first_after_prod_s": 90.0, "flaps": 0}
+    assert got["alerts"][1] == {"name": "NodeDrained", "first_after_prod_s": 0.0, "flaps": 2}
+
+
+def test_side_alerts_is_none_when_prometheus_does_not_answer_and_empty_when_nothing_fired():
+    from benchctl import lab_prom
+
+    def down(url):
+        raise OSError("refused")
+    assert lab_prom.side_alerts(0, 10, 1.0, get=down) is None
+    assert lab_prom.side_alerts(0, 10, 1.0, get=prom_answer([])) == {"alerts": [], "fired": 0}
+
+
+META = {"contract": "1", "name": "x", "run": "r2", "ab": True, "seed": 1, "jobs": 3, "target_hours": 2, "factor": 3.0, "length_s": 10,
+        "paused_s": 0, "paused_side_s": {}, "comparable": True, "rejected": {}, "collected": {}}
+
+
+def test_report_labels_repeats_and_lists_alerts_and_qos_and_drops_them_from_not_measured():
+    a = b = rows(12)
+    prom = {"a": {"alerts": [], "fired": 0}, "b": {"alerts": [{"name": "NodeDown", "first_after_prod_s": 30.0, "flaps": 1}], "fired": 1}}
+    doc = lab_report.build(META, a, b, TH, {"only_a": [], "only_b": []}, [], earlier=["No effect"], prom=prom)
+    assert doc["single_run"] is False and doc["repeat"] == {"runs": 2, "verdicts": ["No effect", "No effect"], "consistent": True}
+    assert not any(n.startswith(("alerts fired", "alert flapping")) for n in doc["not_measured"]) and "scheduler load" in doc["not_measured"]
+    md = lab_report.markdown(doc)
+    assert "repeated: 2 runs" in md and "same verdict" in md and "## Wait by QOS" in md and "NodeDown first after 30s, 1 flap" in md
+    assert "A: none fired" in md
+
+
+def test_report_without_prometheus_or_earlier_runs_is_a_single_run_with_alerts_not_measured():
+    doc = lab_report.build(META, rows(12), rows(12), TH, {"only_a": [], "only_b": []}, [], prom={"a": None, "b": None})
+    assert doc["single_run"] is True and doc["alerts"] == {} and "alerts fired and time to alert" in doc["not_measured"]
+    assert lab_report.repeats(["Ship", "Do not ship"])["consistent"] is False

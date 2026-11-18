@@ -40,6 +40,9 @@ def steps(run, root, tmp_path, lines=(), rc=0, **kw):
     def popen(argv):
         seen.append(argv)
         return Proc([*lines], rc)
+    def no_prom(url):
+        raise OSError("no Prometheus in unit tests")
+    kw.setdefault("prom_get", no_prom)
     s = lab_steps.RunSteps("prod-a", run.r["run"], root=root, gen=tmp_path / "gen", popen=popen, **kw)
     return s, seen
 
@@ -333,3 +336,24 @@ def test_interference_marks_the_run_not_comparable(run):
                                                     '"side": "a", "by": "governor"}\n')
     assert run.interference() == {"at": "2026-11-17T10:00:00Z", "action": "node-state", "target": "cn001", "side": "a", "by": "governor"}
     assert run.comparable() is False and run.progress()["interference"]["action"] == "node-state"
+
+
+def test_report_counts_earlier_runs_of_the_same_jobs_and_reads_alerts_per_side(run, root, tmp_path):
+    older = run.folder.parent / "20200101-000000"
+    older.mkdir()
+    (older / "run.json").write_text(json.dumps({"jobs_sha256": run.r["jobs_sha256"]}))
+    (older / "report.json").write_text(json.dumps({"verdict": "Ship"}))
+    other = run.folder.parent / "20200102-000000"
+    other.mkdir()
+    (other / "run.json").write_text(json.dumps({"jobs_sha256": "different"}))
+    (other / "report.json").write_text(json.dumps({"verdict": "Do not ship"}))
+    seen = []
+
+    def prom(url):
+        seen.append(url)
+        return {"data": {"result": [{"metric": {"alertname": "NodeDown"}, "values": [[1, "1"]]}]}}
+    run.r["history"] += [{"state": f"{k}_{s}", "at": t} for s in "ab" for k, t in (("replay", 100.0), ("collect", 200.0))]
+    s, _ = steps(run, root, tmp_path, prom_get=prom)
+    assert s._earlier(run) == ["Ship"]
+    got = s._alerts(run)
+    assert set(got) == set(run.r["sides"]) and all(v["fired"] == 1 for v in got.values()) and len(seen) == len(got)
