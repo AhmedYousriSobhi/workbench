@@ -55,10 +55,13 @@ def plan(baseline: dict, slurm_text_parsed: dict | None, nodes_scale: dict, sim_
         g = (line_of[n].get("Gres") or "")
         gpus = sum(int(x.rsplit(":", 1)[-1]) for x in g.split(",") if x.startswith("gpu") and x.rsplit(":", 1)[-1].isdigit())
         nodes.append({"service": services[n], "host": n, "gpus": gpus})
-        for item in [x for x in g.split(",") if x]:  # `gpu:h100:8` or `gpu:8`: a stand-in has no device file, so Slurm counts it without one
+        first = 0  # the node's stand-in device files /dev/workbench-gpuN (made by the container from WORKBENCH_GPUS); Slurm ignores a GPU without a file (issue 895)
+        for item in [x for x in g.split(",") if x]:  # `gpu:h100:8` or `gpu:8`
             bits = item.split(":")
             if len(bits) >= 2 and bits[-1].isdigit():
-                gres.append(_fmt({"NodeName": n, "Name": bits[0], **({"Type": bits[1]} if len(bits) == 3 else {}), "Count": bits[-1]}))
+                files = {"File": f"/dev/workbench-gpu[{first}-{first + int(bits[-1]) - 1}]" if int(bits[-1]) > 1 else f"/dev/workbench-gpu{first}"} if bits[0] == "gpu" and int(bits[-1]) > 0 else {}
+                first += int(bits[-1]) if bits[0] == "gpu" else 0
+                gres.append(_fmt({"NodeName": n, "Name": bits[0], **({"Type": bits[1]} if len(bits) == 3 else {}), "Count": bits[-1], **files}))
     dropped: list[str] = []
     parts = (slurm_text_parsed or b)["partitions"] or b["partitions"]
     for p in parts:

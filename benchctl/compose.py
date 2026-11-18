@@ -121,6 +121,8 @@ def add_lab_nodes(services: dict, marker: dict | None, sim: dict, root: Path | N
         svc["hostname"] = n["host"]
         env = {k: v for k, v in svc.get("environment", {}).items() if not k.startswith("WORKBENCH_GRES") and k != "WORKBENCH_GPUS"}
         env.update({"WORKBENCH_USERS": users, "WORKBENCH_IB": "0"})
+        if n.get("gpus"):
+            env["WORKBENCH_GPUS"] = str(n["gpus"])  # stand-in device files /dev/workbench-gpuN: Slurm ignores a GPU without one, the node would be `inval` (issue 895)
         svc["environment"] = env
         svc.pop("devices", None)
         svc["networks"] = {"default": {}}  # never the template's fixed address: two containers on 10.141.0.1 fail with "Address already in use"

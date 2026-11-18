@@ -133,6 +133,9 @@ class Cluster:
             for k in gone:
                 del self.records[k]
             return ok()
+        if "scancel -u" in text or "squeue -h -u" in text:  # the lab users' jobs end before their accounting rows go
+            self.cancelled = getattr(self, "cancelled", 0) + ("scancel" in text)
+            return ok()
         if "tctl get role/" in text:
             n = cmd[-2].split("/")[1]
             return ok(json.dumps([self.roles[n]])) if n in self.roles else bad("not found")
@@ -679,7 +682,7 @@ def test_apply_adds_lab_nodes_partitions_and_gres_and_remove_takes_them_out(worl
     assert "NodeName=cpu001 NodeHostname=cpu001 NodeAddr=lab-node-001 CPUs=64 RealMemory=256000" in conf
     assert "PartitionName=gpu Nodes=gpu001,gpu002 MaxTime=1-00:00:00 QOS=normal" in conf
     assert "# lab-off PartitionName=cpu Nodes=cn1 Default=YES" in conf  # the simulated cpu partition gives way to the lab's
-    assert "NodeName=gpu001 Name=gpu Type=h100 Count=8" in (c.slurm_dir / "gres.conf").read_text()
+    assert "NodeName=gpu001 Name=gpu Type=h100 Count=8 File=/dev/workbench-gpu[0-7]" in (c.slurm_dir / "gres.conf").read_text()
     svc = yaml.safe_load(env.compose_file.read_text())["services"]
     assert svc["lab-node-001"]["hostname"] == "cpu001" and svc["lab-node-001"]["labels"]["workbench.lab"] == "prod-a"
     assert "lab-u001:30001" in svc["lab-node-001"]["environment"]["WORKBENCH_USERS"] and "WORKBENCH_GPUS" not in svc["lab-node-001"]["environment"]
@@ -735,3 +738,30 @@ def test_lab_node_services_do_not_copy_the_templates_fixed_address():
         lu.load = orig
     assert services["lab-node-001"]["networks"] == {"default": {}}
     assert services["cn001"]["networks"]["default"]["ipv4_address"] == "10.141.0.1"
+
+
+def test_lab_gpu_node_gets_stand_in_device_files():
+    """Slurm ignores a GPU without a device file (the node turns `inval`: count reported 0 < 8): the lab node makes /dev/workbench-gpuN (issue 895)."""
+    from benchctl import compose
+    services = {"cn001": {"labels": {"workbench.node": "compute"}, "environment": {}}}
+    marker = {"name": "x", "lab_nodes": [{"service": "lab-node-005", "host": "gpu001", "gpus": 8}, {"service": "lab-node-001", "host": "c0000", "gpus": 0}]}
+    import benchctl.lab_users as lu
+    orig = lu.load
+    lu.load = lambda name, root=None: {}
+    try:
+        compose.add_lab_nodes(services, marker, {})
+    finally:
+        lu.load = orig
+    assert services["lab-node-005"]["environment"]["WORKBENCH_GPUS"] == "8"
+    assert "WORKBENCH_GPUS" not in services["lab-node-001"]["environment"]
+
+
+def test_remove_cancels_the_lab_users_jobs_before_deleting_their_accounting_rows(world):
+    """sacctmgr refuses to delete a user with a job (live lab_users: `sacctmgr refused: user lab-u001`)."""
+    env, c, _root = world
+    lab_apply.apply("prod-a", "baseline", env)
+    c.calls.clear()
+    lab_apply.remove("prod-a", env)
+    cancel = next(i for i, t in enumerate(c.calls) if "scancel -u" in t)
+    first_delete = next(i for i, t in enumerate(c.calls) if "sacctmgr -i delete user" in t)
+    assert cancel < first_delete
