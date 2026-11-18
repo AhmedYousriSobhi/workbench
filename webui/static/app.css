@@ -410,6 +410,7 @@
   #flow .sico { fill:none; stroke:var(--fg); stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; opacity:.22; pointer-events:none; }
   /* where a jump line crosses a Teleport line the Teleport line breaks (a halo in the frame colour under the jump line) */
   #flow .lanehalo { fill:none; stroke:color-mix(in srgb,var(--panel) 70%,var(--bg)); stroke-width:9; pointer-events:none; } #trafficpanel[data-view="iso"] #flow .lanehalo { stroke:color-mix(in srgb,var(--panel) 92%,var(--accent)); }
+  #flow .grule { fill:none; stroke:var(--line); stroke-width:1; stroke-dasharray:2 4; pointer-events:none; }  /* the line under a node group title: where the lines to that group end (#388) */
 
   /* global view (#321) */
   #trafficpanel { position:relative; }
