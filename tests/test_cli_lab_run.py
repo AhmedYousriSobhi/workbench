@@ -178,3 +178,43 @@ def test_status_line_shows_the_lab_and_its_run():
     assert line.startswith("lab prod-a (candidate) applied; run 20261117-120000: replay_b 63% side b, 40 submitted, 7 running, 3 pending")
     assert "paused 12 s (PAUSED)" in line and "restore waits for L0-L1" in line and line.endswith(": aborted under memory pressure (L3)")
     assert "refused: no trace" in cli._lab_line({"name": "prod-a", "state": "refused", "reason": "refused: no trace"})
+
+
+def test_repeat_starts_the_run_again_only_after_the_last_one_is_done(gov, monkeypatch):
+    sent, _answers, status = gov
+    status["lab"] = RUNNING
+    states = iter(["done", "done"])
+    monkeypatch.setattr(cli, "_wait_run_end", lambda name: next(states))
+    r = run(cli.app, ["run", "lab", "prod-a", "--ab", "--repeat", "3"])
+    assert r.exit_code == 0, r.output
+    assert [q["cmd"] for q in sent if q["cmd"] == "lab-run"] == ["lab-run"] * 3
+    assert "repeat 1 of 3" in r.output and "repeat 3 of 3" in r.output
+
+
+def test_repeat_stops_when_a_run_did_not_finish(gov, monkeypatch):
+    sent, _answers, status = gov
+    status["lab"] = RUNNING
+    monkeypatch.setattr(cli, "_wait_run_end", lambda name: "aborted")
+    r = run(cli.app, ["run", "lab", "prod-a", "--repeat", "3"])
+    assert r.exit_code == 1 and "repeat 1 of 3 ended aborted: not starting the next one" in r.output
+    assert sum(q["cmd"] == "lab-run" for q in sent) == 1
+
+
+def test_repeat_is_bounded():
+    assert run(cli.app, ["run", "lab", "prod-a", "--repeat", "0"]).exit_code != 0
+    assert run(cli.app, ["run", "lab", "prod-a", "--repeat", "11"]).exit_code != 0
+
+
+def test_wait_run_end_polls_the_newest_runs_record_until_it_is_done(tmp_path, monkeypatch):
+    folder = tmp_path / "reports"
+    old, new = folder / "20261117-100000", folder / "20261117-120000"
+    for d, st in ((old, "done"), (new, "replay_a")):
+        d.mkdir(parents=True)
+        (d / "run.json").write_text(json.dumps({"state": st}))
+    monkeypatch.setattr(lab_run, "reports_dir", lambda name, root=None: folder)
+    waits = []
+
+    def sleep(s):
+        waits.append(s)
+        (new / "run.json").write_text(json.dumps({"state": "done"}))
+    assert cli._wait_run_end("prod-a", poll=5, sleep=sleep) == "done" and waits == [5]

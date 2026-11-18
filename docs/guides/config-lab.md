@@ -140,6 +140,7 @@ Rows `sacctmgr` refuses to delete are listed.
 ./scripts/benchctl run lab prod-a --ab                  # baseline, restore, candidate; returns once the run started
 ./scripts/benchctl run lab prod-a                       # the candidate side only
 ./scripts/benchctl run lab prod-a --ab --target-hours 1 --seed 7
+./scripts/benchctl run lab prod-a --ab --repeat 3       # the same jobs three times; the report says whether the verdicts agree
 ./scripts/benchctl status                               # one line: state, percent, submitted, running, pending, paused
 ./scripts/benchctl stop lab prod-a                      # end the run (an A/B run is put back to its snapshot)
 ```
@@ -167,7 +168,7 @@ Rows `sacctmgr` refuses to delete are listed.
 - Suggestions come from a fixed catalogue (preemptions, wait spread between accounts, pending up, wait regression). They are text only.
 - Not measured yet, and listed in every report: alerts and time to alert, flapping, scheduler load, Kubernetes counts, idle-but-free GPUs, pending reasons, fairshare usage spread.
 - **Alerts (issue 555).** The report lists the alerts Prometheus saw firing on each side, with the time to the first one (production-equivalent) and the flaps. If Prometheus does not answer, they stay under "not measured".
-- **Repeats (issue 555).** Run the same lab again with the same seed (`benchctl run lab NAME --ab`). The report then says "repeated: 2 runs" and whether the verdicts agree. One run is always labelled single-run.
+- **Repeats (issue 555).** `benchctl run lab NAME --ab --repeat 3` runs the same jobs three times in a row (same seed, one run after the other; the command stays until the last run ends and stops if one aborts). The report then says "repeated: 2 runs" and whether the verdicts agree. One run is always labelled single-run.
 - **QOS (issue 555).** The report has a wait-by-QOS table next to the one by partition.
 - **Export (issue 614).** `benchctl export lab-report NAME [RUN] [--anonymize] [--json] [-o FILE]` writes one run's report (`RUN` is a run folder or `last`). `--anonymize` swaps production node names for `lab-node-NNN` and user names for `<user>` in the text and the JSON; the mapping is never written. The MCP tool is `lab_report_export`.
 

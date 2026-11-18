@@ -1213,6 +1213,7 @@ def run_lab(name: str = typer.Argument(..., help="a lab made with `benchctl impo
             ab: bool = typer.Option(False, "--ab", help="replay the baseline, restore the snapshot, replay the candidate (default: the candidate only)"),
             target_hours: float = typer.Option(None, "--target-hours", help="run length per side, 0.5 to 6 (default lab.target_hours, 2)"),
             seed: int = typer.Option(None, "--seed", min=0, help="sampling seed, recorded in the run (default 1, the one `get lab` uses)"),
+            repeat: int = typer.Option(1, "--repeat", min=1, max=10, help="run the same jobs N times one after the other (same seed); the report then says whether the verdicts agree"),
             prepare: bool = typer.Option(False, "--prepare", hidden=True, help="freeze the jobs and print the run (the governor's child)"),
             run_id: str = typer.Option(None, "--run", hidden=True, help="with --execute: the prepared run"),
             execute: bool = typer.Option(False, "--execute", hidden=True, help="walk a prepared run here (the governor's child)"),
@@ -1248,9 +1249,29 @@ def run_lab(name: str = typer.Argument(..., help="a lab made with `benchctl impo
         raise typer.Exit(1) from e
     req = {"cmd": "lab-run", "name": name, "ab": ab, **({"target_hours": target_hours} if target_hours is not None else {}),
            **({"seed": seed} if seed is not None else {})}
-    if _lab_request(req, lambda r: f"lab {name}: preparing the run (freezing the jobs, then the memory check)").get("dry_run"):
-        return
-    raise typer.Exit(_lab_run_outcome(name))
+    for n in range(1, repeat + 1):
+        if repeat > 1:
+            typer.echo(f"repeat {n} of {repeat}")
+        if _lab_request(req, lambda r: f"lab {name}: preparing the run (freezing the jobs, then the memory check)").get("dry_run"):
+            return
+        rc = _lab_run_outcome(name)
+        if rc or n == repeat:
+            raise typer.Exit(rc)
+        if (state := _wait_run_end(name)) != "done":
+            typer.echo(f"repeat {n} of {repeat} ended {state}: not starting the next one", err=True)
+            raise typer.Exit(1)
+
+
+def _wait_run_end(name: str, poll: float = 15.0, sleep: Callable[[float], None] = time.sleep) -> str:
+    """Block until the newest run of the lab is done or aborted and return that state (what `run lab --repeat` waits for between runs).
+    Reads the run's own record, so it needs no governor answer."""
+    from . import lab_run
+    while True:
+        runs = sorted(p for p in lab_run.reports_dir(name).glob("*") if p.is_dir())
+        state = json.loads((runs[-1] / "run.json").read_text()).get("state") if runs and (runs[-1] / "run.json").is_file() else None
+        if state in lab_run.TERMINAL:
+            return state
+        sleep(poll)
 
 
 def _lab_run_outcome(name: str, timeout: float = 120) -> int:
