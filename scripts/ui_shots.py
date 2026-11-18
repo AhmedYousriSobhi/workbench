@@ -149,7 +149,10 @@ def check_zoom(page) -> list[str]:
         bad.append("the pool level drew no tiles or filters")
     page.keyboard.press("Escape")
     only("cluster", "Escape in the pool")
-    page.click("#zoomrail [data-level=fleet]")
+    if page.evaluate("innerWidth <= 640"):  # E2 (#861): a phone has the current level with - and + only
+        page.click("#zr-out")
+    else:
+        page.click("#zoomrail [data-level=fleet]")
     only("fleet", "the FLEET stop")
     page.click(".fl-card .fl-head")
     only("cluster", "opening a card")
@@ -416,6 +419,36 @@ def check_runlayer(page, shot: str, vp: str) -> list[str]:
 _POLL_CHECKED = False
 
 
+def check_shell(page) -> list[str]:
+    """Shell (issue 861 B2, B4, B5, B6, E2): the zoom rail only on Topology and Traffic, the left tiles only on Overview, an all-clear
+    tick chip instead of a band, one selected workspace, SVG icons in the navigation, one row of zoom rail on a phone."""
+    bad = []
+    narrow = page.evaluate("innerWidth <= 640")
+    page.click("#tb-nodes")
+    page.click("#vw-cv")  # the rail belongs to the circuit view; the classic diagram has no zoom
+    for tab, rail, tiles in (("home", False, True), ("run", False, False), ("nodes", True, False), ("traffic", True, False)):
+        page.click(f"#tb-{tab}")
+        page.wait_for_timeout(300)
+        if page.locator("#zoomrail").is_visible() != rail:
+            bad.append(f"{tab}: the zoom rail must be {'shown' if rail else 'hidden'}")
+        if page.locator("#kpis .kpi").count() and page.locator("#kpis").is_visible() != tiles:
+            bad.append(f"{tab}: the left tiles must be {'shown' if tiles else 'hidden'} (Overview only)")
+        if page.locator('[role=tab][aria-selected="true"]').count() != 1:
+            bad.append(f"{tab}: exactly one workspace must be selected")
+        clear = page.locator("#attn .ic.good").count() > 0
+        if page.locator("#c-attn").is_visible() != clear or (tab in ("nodes", "traffic") and page.locator(".subbar").is_visible() == clear):
+            bad.append(f"{tab}: all clear must show as the strip chip and no band; something to attend to as the band and no chip")
+        if rail:
+            rows = page.evaluate("(() => { const r = document.getElementById('zoomrail'); return [r.getBoundingClientRect().height, [...r.querySelectorAll('[data-level]')].filter(b => b.offsetParent).length]; })()")
+            if narrow and (rows[0] > 60 or rows[1] > 1):
+                bad.append(f"{tab}: on a phone the zoom rail is one row with the current level only (height {rows[0]:.0f}, {rows[1]} levels)")
+    if page.locator(".side .sidei .ic, .menuitem .ic").count() < 8 or page.locator(".side .sidei, .menuitem").evaluate_all("els => els.some(e => /[\u2302\u25b6\u25a6\u21c4\u2316\u2699\u271a\u21e9\u270e]/.test(e.textContent))"):
+        bad.append("navigation and menu icons must be SVG, not font glyphs")
+    page.click("#tb-nodes")
+    page.click("#vw-iso")  # back to the view check_circuit expects to find
+    return bad
+
+
 def check_run(page, shot: str) -> list[str]:
     """Test run (webui/static/js/testrun.js): the library, a chosen scenario's timeline before Play with the CLI-only steps marked in
     words (U7), the Client's eye panel, and no sideways scroll. Returns the problems found."""
@@ -444,6 +477,18 @@ def check_run(page, shot: str) -> list[str]:
         return r.right > c.right + 1 || r.left < c.left - 1 || b.scrollWidth > b.clientWidth + 1 || r.width < 40; }).map(li => li.dataset.name)""")
     if clipped:  # D1 (#861): a long title must wrap, never push Play out of its card
         bad.append(f"Play button clipped or cut off on: {', '.join(clipped[:5])}")
+    chips = page.locator("#scngroups [data-group]")  # D2: group chips with counts; D3: one sentence on the card
+    total = int(page.locator('#scngroups [data-group="all"] .dim').inner_text())
+    if total != page.locator("#list .scn").count() or sum(int(t) for t in page.locator('#scngroups [data-group]:not([data-group="all"]) .dim').all_inner_texts()) != total:
+        bad.append("the group chips do not add up to the scenarios listed")
+    if chips.count() > 2:
+        chips.nth(1).click()
+        shown = page.locator("#list .scn:visible").count()
+        if shown != int(page.locator("#scngroups [data-group]").nth(1).locator(".dim").inner_text()) or page.locator("#list .scn:visible:not([data-group='" + page.locator("#scngroups [data-group]").nth(1).get_attribute("data-group") + "'])").count():
+            bad.append("a group chip must show exactly its scenarios")
+        page.click('#scngroups [data-group="all"]')
+    if page.locator("#list .scnd").evaluate_all("els => els.some(e => /[.!?]\\s+\\S/.test(e.textContent.trim().replace(/\\b(e\\.g|i\\.e)\\./gi, '')))"):
+        bad.append("a scenario card must show the first sentence only")
     if not page.locator("#run-eye").inner_text().strip():
         bad.append("Client's eye panel is empty")
     if page.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth + 1"):
@@ -738,6 +783,8 @@ def capture(out: Path) -> dict:
                     for problem in check_runlayer(page, str(rpath), vp):
                         result["a11y"].append(f"run layer {vp} {scheme}: {problem}")
                     result["shots"].append(str(rpath))
+                    for problem in check_shell(page):
+                        result["a11y"].append(f"shell {vp} {scheme}: {problem}")
                     for problem in check_home(page):
                         result["a11y"].append(f"overview {vp} {scheme}: {problem}")
                     hpath = out / f"overview-{vp}-{scheme}.png"

@@ -182,7 +182,7 @@ function paintService(p, el, rate) {
   let text;
   if (!p.present) text = '';
   else if (known) { const up = snap.reachable[key], n = snap.totals?.[key], e = snap.errors?.[key]; text = up ? (e ? `▲ up · ${e} ${e === 1 ? 'error' : 'errors'}` : `✓ up · ${rate[key] || 0} req/min`) + (n === undefined ? '' : '') : stackUp() ? '✗ not reachable' : '– offline'; }
-  else if (key === 'prometheus' || key === 'grafana') { const l = (S.monLinks || []).find(x => x.from === key); text = l ? (l.targets != null ? `${l.up === l.targets ? '✓' : '▲'} ${l.up} of ${l.targets} targets up` : '✓ answers') : ''; }
+  else if (key === 'prometheus' || key === 'grafana') { const l = (S.monLinks || []).find(x => x.from === key); text = !stackUp() ? OFFLINE : l ? (l.targets != null ? `${l.up === l.targets ? '✓' : '▲'} ${l.up} of ${l.targets} targets up` : '✓ answers') : ''; }
   else text = key === 'slurmrestd' ? (stackUp() ? '– not probed' : '– offline') : '';
   if (st.textContent !== text) st.textContent = text;
   el.classList.toggle('flt', !!(snap && snap.errors && snap.errors[key]));

@@ -63,7 +63,8 @@ export function setTheme(t) {
 export const TABS = ['home', 'run', 'nodes', 'traffic', 'conn', 'lab'];  // 'lab' is hidden until a config lab exists (W-10)
 export function selectTab(t, focus) {
   TABS.forEach(k => { const on = k === t; $('tab-' + k).hidden = !on; $('tb-' + k).setAttribute('aria-selected', on); $('tb-' + k).tabIndex = on ? 0 : -1; });
-  $('main').dataset.tab = t; $('subseg').hidden = t !== 'nodes';  // the view choice belongs to Infrastructure
+  $('main').dataset.tab = t; document.querySelector('.shell').dataset.tab = t;  // the left tiles show on Overview only (B2, #861)
+  $('subseg').hidden = t !== 'nodes';  // the view choice belongs to Infrastructure
   if (focus) $('tb-' + t).focus();
   if ((t === 'run' || t === 'nodes' || t === 'traffic') && !document.hidden) openFlow(); else closeFlow();  // the run's Client's eye reads the same counters
   if (t === 'conn') paintConnections();

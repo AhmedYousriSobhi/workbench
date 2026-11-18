@@ -843,7 +843,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         return JSONResponse({"results": results})
 
     async def list_scenarios(request: Request):
-        return JSONResponse([{"name": s["name"], "description": s.get("description", ""), "steps": len(s.get("steps", []))}
+        return JSONResponse([{"name": s["name"], "description": s.get("description", ""), "steps": len(s.get("steps", [])),
+                              "targets": sorted({x["target"] for x in s.get("steps", [])})}
                              for s in scenario.list_all(scenarios)])
 
     async def scenario_preview(request: Request):

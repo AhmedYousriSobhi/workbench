@@ -154,3 +154,7 @@ Source: `webui/static/canvas.css`, `webui/static/js/wire.js`, [ADR 0038](../adr/
 
 - [The web page](../manual/05-web-page.md)
 - [Client testing](client-testing.md)
+
+### UX review, second batch (issue 909, part of 861)
+
+B2 the left tiles show on Overview only (`.shell[data-tab]`). B4 the zoom rail is hidden unless Topology or Traffic is open, and the + / - keys do nothing while it is hidden. B5 all clear is the `#c-attn` chip in the strip and the Needs attention band (`.subbar`) is hidden. B6 icons are the inline `<symbol>` set at the top of `index.html` (`.ic`, 16 px grid, `currentColor`). D2 the Test run library has group chips from the scenario's step targets (`SCN_GROUPS` in `testrunmodel.js`; `/api/scenarios` lists `targets`). D3 a card shows `firstSentence()` of the description. D4 a skipped expectation gets the CLI command and a Copy button. E2 on a phone the zoom rail is one row with the current level. `ui_shots.py` `check_shell` and `check_run` measure these; `testrunmodel.test.mjs` covers the grouping and the sentence cut.
