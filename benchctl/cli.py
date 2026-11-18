@@ -1,4 +1,3 @@
-import difflib
 import json
 import os
 import sqlite3
@@ -7,10 +6,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path as _Path
 
-import click
 import typer
 import typer.completion
-from typer.core import TyperGroup
 
 from . import (
     agentmode,
@@ -18,6 +15,7 @@ from . import (
     alerts,
     capture,
     checks,
+    commands,
     completion,
     compose,
     contract,
@@ -36,12 +34,10 @@ from . import (
     lab_validate,
     logins,
     machine,
-    measure,
     memory,
     netemfaults,
     nhc,
     nodes,
-    pagefeed,
     ready,
     scenario,
     situation,
@@ -52,60 +48,21 @@ from . import (
     storage,
     teleport,
     testreport,
-    ticketbot,
     tuning,
     wait,
     workbench,
 )
-
-
-class CodedUsageError(click.UsageError):
-    def __init__(self, message: str, code: str, ctx=None):
-        super().__init__(message, ctx=ctx)
-        self.code = code
-
-
-class SuggestingGroup(TyperGroup):
-    """A mistyped verb gets a hint and an error (exit 2). It is never guessed and run: `benchctl dwon` must not
-    run `down` (CLI guidelines: suggest, do not silently correct; no prefix abbreviations that block future verbs)."""
-
-    def resolve_command(self, ctx, args):
-        try:
-            return super().resolve_command(ctx, args)
-        except click.UsageError as e:
-            close = difflib.get_close_matches(args[0], self.list_commands(ctx), n=1) if args else []
-            hint = f" Did you mean '{close[0]}'?" if close else ""
-            raise CodedUsageError(f"{e.message}{hint}", "WB-UNKNOWN-VERB", ctx=ctx) from e
-
-    def main(self, *args, **kwargs):
-        """Agent mode (BENCHCTL_AGENT=1): a usage error is one coded line on stderr, not a usage box (ADR 0065)."""
-        agentmode.apply()
-        if not agentmode.agent():
-            return super().main(*args, **kwargs)
-        kwargs["standalone_mode"] = False
-        try:
-            code = super().main(*args, **kwargs)
-        except Exception as e:  # typer 0.27 carries its own copy of click's exceptions: match them by shape
-            if type(e).__name__ == "Abort":
-                sys.exit(1)
-            if not (hasattr(e, "exit_code") and hasattr(e, "format_message")):
-                raise
-            sys.stderr.write(errors.click_line(e) + "\n")
-            sys.exit(e.exit_code)
-        sys.exit(code if isinstance(code, int) else 0)
-
-
-def _profile_check(value: str | None) -> str | None:
-    return completion.check_value(value, completion.profiles(""), "profile")
-
-
-def _node_check(value: str) -> str:
-    return completion.check_value(value, completion.nodes(""), "node")
-
-
-def _target_check(value: str) -> str:
-    return completion.check_value(value, completion.targets(""), "node or service")
-
+from .commands.base import (
+    JSON,
+    OUTPUT,
+    SuggestingGroup,
+    _base_sim,
+    _node_check,
+    _profile_check,
+    _sim,
+    _target_check,
+)
+from .commands.shellcompletion import _completion_install
 
 typer.completion.completion_init()  # register the shell handlers; the options are ours (`benchctl completion`)
 app = typer.Typer(cls=SuggestingGroup, add_completion=False, epilog="Scripts: use -o json where offered, read data from stdout (messages and errors "
@@ -116,8 +73,6 @@ def _main() -> None:
     pass
 
 
-OUTPUT = typer.Option("table", "-o", "--output", autocompletion=completion.outputs, help="table, json (for scripts) or name (one per line)")
-JSON = typer.Option(False, "--json", help="same as -o json: one JSON object with a contract_version (docs/agents/schemas)")
 ICON = {checks.OK: "ok  ", checks.WARN: "WARN", checks.FAIL: "FAIL"}
 
 
@@ -250,24 +205,6 @@ def compose_cmd(profile: str = typer.Option("std", "--profile", autocompletion=c
     data = compose.generate(sim, prof)
     typer.echo(f"{compose.write(data, sim=sim, compute_nodes=prof.get('compute_nodes'))}: {len(data['services'])} services, "
                f"{compose.budget_mb(data)} MB of limits (plus observability)")
-
-
-def _base_sim() -> dict:
-    from pathlib import Path
-
-    import yaml
-
-    return yaml.safe_load(Path("sim.yaml").read_text())
-
-
-def _sim() -> dict:
-    """sim.yaml with the workbench last built applied (node counts), so every command sees what is really there."""
-    base = _base_sim()
-    try:
-        spec = workbench.current(base)
-    except workbench.SpecError:
-        return base
-    return workbench.effective(base, spec)[0] if spec else base
 
 
 def _selection(file, name, cpu_nodes, gpu_nodes, gpus_per_node, with_, without, k8s_nodes, k8s_cpu_nodes, bmc_nodes=None, login=None, bmc_groups=None, bcm_k8s=None, controller=None, dcgm_nodes=None, slurm_version=None):
@@ -515,44 +452,7 @@ def _offer_completion() -> None:
         typer.echo(f"could not set up completion: {e}", err=True)
 
 
-completion_app = typer.Typer(cls=SuggestingGroup, help="Tab completion: install, remove, or print the script for bash, zsh, fish")
-app.add_typer(completion_app, name="completion")
-
-
-def _completion_install(shell: str) -> None:
-    for line in completion.install(shell, _Path(__file__).resolve().parent.parent):
-        typer.echo(line)
-
-
-def _shell_arg(shell: str | None) -> str:
-    shell = shell or completion.detect_shell()
-    if shell not in completion.SHELLS:
-        typer.echo(f"which shell? Valid: {', '.join(completion.SHELLS)} (e.g. benchctl completion install bash)", err=True)
-        raise typer.Exit(2)
-    return shell
-
-
-SHELL = typer.Argument(None, help="bash, zsh or fish (default: the one in $SHELL)")
-
-
-@completion_app.command("install")
-def completion_install(shell: str = SHELL) -> None:
-    """Turn on Tab completion for your shell. No sudo; one line in your rc file; undo with `completion remove`."""
-    _completion_install(_shell_arg(shell))
-
-
-@completion_app.command("remove")
-def completion_remove(shell: str = SHELL) -> None:
-    """Undo `completion install`: the script, the rc line and the ~/.local/bin link."""
-    for line in completion.remove(_shell_arg(shell), _Path(__file__).resolve().parent.parent):
-        typer.echo(line)
-
-
-for _sh in completion.SHELLS:
-    def _show(_sh: str = _sh) -> None:
-        typer.echo(completion.script(_sh), nl=False)
-    _show.__doc__ = f"Print the {_sh} completion script (source it yourself, or use `completion install`)."
-    completion_app.command(_sh)(_show)
+app.add_typer(commands.shellcompletion.completion_app, name="completion")
 
 
 @app.command()
@@ -1168,37 +1068,8 @@ def remove_storage_state(yes: bool = YES) -> None:
     typer.echo("removed: " + ", ".join(gone) if gone else "nothing to remove: no shared volume")
 
 
-refresh_app = typer.Typer(cls=SuggestingGroup, help="Renew something that runs out: the real Jira's test licence")
-app.add_typer(refresh_app, name="refresh")
-
-
-@refresh_app.command("jira-real-licence")
-def refresh_jira_real_licence() -> None:
-    """Give the real Jira another 3 hours: the test key counts from the start of Jira, so this restarts it (users, tickets and
-    tokens stay) and prints the new end time. No sudo, no key to paste."""
-    try:
-        jira_real.refresh_licence(say=lambda m: typer.echo(m))
-    except jira_real.JiraRealError as e:
-        typer.echo(f"FAILED: {e}", err=True)
-        raise typer.Exit(1) from e
-
-
-setup_app = typer.Typer(cls=SuggestingGroup, help="Finish a started part: the real Jira")
-app.add_typer(setup_app, name="setup")
-
-
-@setup_app.command("jira-real")
-def setup_jira_real(licence: str = typer.Option("", "--licence", help="a file with Atlassian's 3-hour Data Center test licence "
-                                                f"(default ${jira_real.LICENSE_VAR} or {jira_real.LICENSE})")) -> None:
-    """Finish the real Jira after `benchctl start --with jira-real`: the setup wizard, users alice to erin, project OPS, tickets,
-    and an access token per user (written to compose/generated/secrets/jira-real.env, never printed). Safe to repeat."""
-    try:
-        text = jira_real.read_license(_Path(licence)) if licence else None
-        jira_real.provision(licence=text, say=lambda m: typer.echo(m))
-    except jira_real.JiraRealError as e:
-        typer.echo(f"FAILED: {e}", err=True)
-        raise typer.Exit(1) from None
-    typer.echo(f"Jira (real): {jira_real.URL}  sign in as admin, alice, bob, carol, dave or erin; passwords and tokens: {jira_real.ENV}")
+app.add_typer(commands.jira_real.refresh_app, name="refresh")
+app.add_typer(commands.jira_real.setup_app, name="setup")
 
 
 @remove_app.command("check")
@@ -1298,56 +1169,7 @@ def submit(node: str = TARGET, gpus: int = typer.Option(0, "--gpus", help="GPUs 
     raise typer.Exit(r.returncode)
 
 
-load_app = typer.Typer(cls=SuggestingGroup, help="Simulated users submitting jobs")
-app.add_typer(load_app, name="load")
-
-
-@load_app.command("on")
-def load_on(rate: float = typer.Option(6, "--rate", help="jobs per minute (Poisson arrivals)"),
-            duration: float = typer.Option(120, "--duration", help="mean job length in seconds"),
-            seed: int = typer.Option(None, "--seed", help="a fixed seed makes the arrivals repeatable"),
-            personas: bool = typer.Option(False, "--personas", help="each user follows the job mix of the persona in sim.yaml, with some failing and cancelled jobs"),
-            day: float = typer.Option(0, "--day", help="daily rhythm: seconds one simulated day lasts (60 to 86400; 0 = off), the arrival rate rises and falls"),
-            mocks: bool = typer.Option(False, "--mocks", help="also start a demo client that calls Jira, BCM and the BMC farm, so the Traffic tab has requests"),
-            mock_rate: float = typer.Option(30, "--mock-rate", help="demo client requests per minute"),
-            tickets: bool = typer.Option(False, "--tickets", help="also start the ticket bot: fake engineers work the alert tickets in jira-mock (never a real Jira)"),
-            ticket_every: float = typer.Option(120, "--ticket-every", help="ticket bot: mean seconds between actions (10 to 3600)"),
-            ticket_resolve: float = typer.Option(600, "--ticket-resolve", help="ticket bot: seconds a ticket stays In Progress before it is resolved")) -> None:
-    """Start the user simulator: alice and bob submit cpu jobs and GPU jobs at random, so squeue and the node states have a live queue."""
-    from . import workload
-
-    try:
-        cmds = workload.load_on(_sim(), rate, duration, seed, personas, day)
-        if mocks:
-            cmds += workload.mocks_on(_sim(), mock_rate)
-        if tickets:
-            cmds += workload.tickets_on(ticket_every, ticket_resolve, day, seed)
-    except workload.WorkloadError as e:
-        typer.echo(str(e), err=True)
-        raise typer.Exit(1) from e
-    for cmd in cmds:
-        r = stack._run(cmd)
-        if r.returncode and cmd not in (workload.load_off(), workload.mocks_off(), workload.tickets_off()):  # pkill finding nothing to stop is fine
-            typer.echo(f"cannot start the load: {(r.stderr or r.stdout).strip()}", err=True)
-            raise typer.Exit(1)
-    typer.echo(f"load: on, about {rate:g} job(s) a minute, each about {duration:g} s (benchctl load off to stop)"
-               + ("; personas on: job mixes by persona, some jobs fail or are cancelled" if personas else "")
-               + (f"; daily rhythm: a day lasts {day:g} s" if day else "")
-               + (f"; demo client for Jira, BCM and the BMC farm: about {mock_rate:g} request(s) a minute" if mocks else "")
-               + (f"; ticket bot on jira-mock: about one action every {ticket_every:g} s" if tickets else ""))
-
-
-@load_app.command("off")
-def load_off() -> None:
-    """Stop the user simulator (jobs already queued keep running)."""
-    from . import workload
-
-    stack._run(workload.mocks_off())
-    stack._run(workload.tickets_off())
-    r = stack._run(workload.load_off())
-    typer.echo("load: off" if r.returncode in (0, 1) else f"cannot stop the load: {(r.stderr or r.stdout).strip()}",
-               err=r.returncode not in (0, 1))
-    raise typer.Exit(0 if r.returncode in (0, 1) else 1)
+app.add_typer(commands.load.load_app, name="load")
 
 
 @set_app.command("jira-activity")
@@ -1453,42 +1275,7 @@ def _lab_run_outcome(name: str, timeout: float = 120) -> int:
     return 1
 
 
-_TARGET = typer.Option("mock", "--target", help="mock (the Jira mock) or real (the Data Center part)")
-
-
-def _driver(target: str):
-    from .jira_driver import JiraDriver, JiraError
-    try:
-        return JiraDriver.for_target(target)
-    except JiraError as e:
-        typer.echo(f"FAILED: {e}", err=True)
-        raise typer.Exit(1) from None
-
-
-@run_app.command("ticket-team")
-def run_ticket_team(target: str = _TARGET, every: float = typer.Option(45, "--every", help="seconds between changes"),
-                    count: int = typer.Option(0, "--count", help="stop after N changes (default: until Ctrl-C)")) -> None:
-    """A team works the tickets: moves them along, comments, reassigns, reopens, files follow-ups. Same on either Jira."""
-    driver = _driver(target)
-    typer.echo(f"ticket team on the {target} Jira, a change about every {every:g} s (Ctrl-C stops)")
-    try:
-        ticketbot.team(driver, every, count or None, say=typer.echo)
-    except KeyboardInterrupt:
-        typer.echo("stopped")
-    except OSError as e:
-        typer.echo(f"cannot reach the {target} Jira: {e}", err=True)
-        raise typer.Exit(1) from e
-
-
-@run_app.command("ticket-watch")
-def run_ticket_watch(target: str = _TARGET, every: float = typer.Option(10, "--every", help="seconds between polls")) -> None:
-    """Watch Slurm and file a ticket when a node goes out of service, resolve it when it returns (what node_watch does for the mock)."""
-    driver = _driver(target)
-    typer.echo(f"watching sinfo for the {target} Jira, every {every:g} s (Ctrl-C stops)")
-    try:
-        ticketbot.watch_nodes(driver, stack.PROJECT, every, say=typer.echo)
-    except KeyboardInterrupt:
-        typer.echo("stopped")
+commands.tickets.register(run_app)
 
 
 @app.command("exec", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
@@ -1546,19 +1333,7 @@ def logs(node: str = TARGET, follow: bool = typer.Option(False, "-f", "--follow"
                          f"{stack.PROJECT}-{node}-1"])
 
 
-serve_app = typer.Typer(cls=SuggestingGroup, help="Serve workbench to other programs")
-app.add_typer(serve_app, name="serve")
-
-
-@serve_app.command("mcp")
-def serve_mcp() -> None:
-    """Serve the workbench as typed MCP tools over stdio (optional extra: pip install -e '.[mcp]'). Each tool runs the same benchctl command, so the governor and `--yes` rules apply."""
-    try:
-        from . import mcp_server
-    except ImportError as e:
-        typer.echo(errors.render("WB-EXTRA-MISSING", "the MCP package is not installed"), err=True)
-        raise typer.Exit(1) from e
-    mcp_server.serve()
+app.add_typer(commands.serve.serve_app, name="serve")
 
 
 describe_app = typer.Typer(cls=SuggestingGroup, help="Everything known about one thing")
@@ -1834,25 +1609,7 @@ def export_test_report(run: str = typer.Argument("last", help="last, or the name
     typer.echo(f"wrote {out} (test report of {data['scenario']}: {data['verdict']})")
 
 
-ssh_key_app = typer.Typer(cls=SuggestingGroup, help="Put the login key where a client that only reads ~/.ssh can use it")
-app.add_typer(ssh_key_app, name="ssh-key")
-
-
-@ssh_key_app.command("install")
-def ssh_key_install() -> None:
-    """Copy the login key to ~/.ssh/workbench_ed25519 (mode 600) and print the path to give the client."""
-    try:
-        stack.install_client_key()
-    except (OSError, FileNotFoundError) as e:
-        typer.echo(str(e), err=True)
-        raise typer.Exit(1)
-    typer.echo(f"key: ~/.ssh/{stack.CLIENT_KEY}  (host 127.0.0.1, port 2222, user alice)\nremove it when done: benchctl ssh-key remove")
-
-
-@ssh_key_app.command("remove")
-def ssh_key_remove() -> None:
-    """Delete ~/.ssh/workbench_ed25519 (only if it is the workbench key)."""
-    typer.echo("removed" if stack.remove_client_key() else "nothing to remove")
+app.add_typer(commands.sshkey.ssh_key_app, name="ssh-key")
 
 
 @app.command()
@@ -1877,182 +1634,8 @@ def scale(n: int = typer.Argument(..., min=0, help="compute node count"),
     raise typer.Exit(0 if stack.scale(_sim(), profile or stack.current_profile(), n, say=typer.echo) else 1)
 
 
-scenario_app = typer.Typer(cls=SuggestingGroup, help="Run named fault and workload scenarios (scenarios/*.yaml)")
-app.add_typer(scenario_app, name="scenario")
-
-
-@scenario_app.command("list")
-def scenario_list(output: str = OUTPUT, json_: bool = JSON) -> None:
-    """Reference (SC-nn), name, step count and description of every scenario; `run` takes the name or the reference."""
-    if contract.wanted(output, json_) == "json":
-        typer.echo(contract.dumps(inventory.scenario_rows()))
-        return
-    for sc in scenario.list_all():
-        typer.echo(f"{sc.get('ref', '-'):6} {sc['name']:26} {len(sc.get('steps', [])):2} steps  {sc.get('description', '')}")
-
-
-@scenario_app.command("run")
-def scenario_run(name: str = typer.Argument(..., autocompletion=completion.scenarios, help="see `scenario list`"),
-                 speed: float = typer.Option(1.0, help="fast-forward: 10 plays it ten times faster"),
-                 dry_run: bool = typer.Option(False, "--dry-run", help="validate and show the timeline only"),
-                 trace: bool = typer.Option(False, "--trace", help="after each step print job states and the new Slurm log lines"),
-                 output: str = OUTPUT, json_: bool = JSON) -> None:
-    """Play a scenario against the running stack; exit 1 if a step or expectation fails. `--json` prints progress on stderr and one result object on stdout."""
-    as_json = contract.wanted(output, json_) == "json"
-
-    def say(msg: str) -> None:
-        typer.echo(msg, err=as_json)
-    sim = _sim()
-    try:
-        sc = scenario.load(name)
-    except scenario.ScenarioError as e:
-        typer.echo(errors.render("WB-UNKNOWN-SCENARIO", completion.explain(name, completion.scenarios(""), "scenario")) if completion.scenarios("") else str(e), err=True)
-        raise typer.Exit(1) from e
-    try:
-        sc = scenario.selectors.resolve_scenario(sc, sim)  # `first gpu node` becomes this cluster's node name
-    except scenario.ScenarioError as e:
-        typer.echo(f"invalid: {e}", err=True)
-        raise typer.Exit(1) from e
-    problems = scenario.validate(sc, sim)
-    for p in problems:
-        typer.echo(f"invalid: {p}", err=True)
-    if problems:
-        raise typer.Exit(1)
-    say(scenario.summary(sc))
-    if dry_run:
-        timeline = scenario.plan(sc)
-        if as_json:
-            typer.echo(contract.dumps({"scenario": sc["name"], "dry_run": True, "timeline": [{"at": s.at, "target": s.target, "do": s.do} for s in timeline]}))
-        for s in [] if as_json else timeline:
-            typer.echo(f"[{s.at:6.1f}s] {s.target} {s.do}")
-        raise typer.Exit(0)
-    if scenario.disruptive(sc) and not stack.governor_admits(0, say):  # GV-9: nothing starts at L2 and above
-        typer.echo("not run: the governor admits no new work at this memory level (see `benchctl status`)", err=True)
-        raise typer.Exit(1)
-    tracer = slurmtrace.Tracer(slurmtrace.nodes_of(sc), say=say) if trace else None
-    feed = pagefeed.Feed(sc, speed, say)  # the web page shows the run when it answers; never waits for it (ADR 0086 phase 4)
-
-    def on_step(step, outcome) -> None:
-        feed.step(step, outcome)
-        if tracer:
-            tracer.step(step, outcome)
-    try:
-        report = scenario.run(sc, speed=speed, dilation=float(sim.get("time_dilation", 1.0)), say=say, on_step=on_step, on_expect=feed.expect)
-    except KeyboardInterrupt:
-        feed.close(None, True)
-        raise
-    feed.close(report.ok, report.stopped)
-    say("scenario " + ("passed" if report.ok else "FAILED"))
-    if as_json:
-        def row(o) -> dict:
-            return {"label": o.label, "status": o.status, "detail": o.detail}
-        typer.echo(contract.dumps({"scenario": report.name, "passed": report.ok, "stopped": report.stopped,
-                                   "steps": [row(o) for o in report.steps], "expects": [row(o) for o in report.expects]}))
-    raise typer.Exit(0 if report.ok else 1)
-
-
-measure_app = typer.Typer(help="Phase 0: read-only memory measurement")
-app.add_typer(measure_app, name="measure")
-
-
-@measure_app.command("run")
-def measure_run(label: str = typer.Argument(..., help="e.g. idle, loaded"),
-                duration: float = typer.Option(30, help="seconds to sample"),
-                interval: float = typer.Option(5, help="seconds between samples")) -> None:
-    """Sample host, containers, processes (PSS) and VMs; save docs/measurements/<label>.json."""
-    snaps = measure.sample(duration, interval)
-    typer.echo(f"{len(snaps)} samples -> {measure.save(label, snaps)}")
-
-
-@measure_app.command("overhead")
-def measure_overhead(save: bool = typer.Option(False, "--save", help="keep it as this machine's default for the plan (compose/generated, gitignored)")) -> None:
-    """Docker's own memory (containerd-shims, dockerd, containerd), which `docker stats` does not count; run it with the stack up."""
-    raw = measure.docker_overhead()
-    ov = measure.overhead_summary({f"overhead:{k}": {"peak": v} for k, v in raw.items()})
-    if not ov:
-        typer.echo("no containerd-shim is running: start the stack (`benchctl up`) and retry", err=True)
-        raise typer.Exit(1)
-    typer.echo(f"{ov['shims']} containers: {ov['per_container_mb']} MB each for the shim; dockerd + containerd {ov['fixed_mb']} MB fixed "
-               + (f"(private memory, not exact PSS, for {raw['estimated']} root-owned process(es); `sudo ./scripts/benchctl measure overhead` shows the exact PSS, do not `--save` it with sudo)" if raw["estimated"] else "(exact PSS)"))
-    if save:
-        typer.echo(f"saved: {memory.save_overhead(ov['per_container_mb'], ov['fixed_mb'])}; the plan adds {ov['per_container_mb']} MB for every container a start creates (delete the file to stop)")
-    else:
-        typer.echo("keep it for the plan: rerun with --save")
-
-
-CGROUP_DEFAULT = ["mariadb", "prometheus", "teleport"]
-CGROUP_NAMES = typer.Argument(None, help=f"container names (default {' '.join(CGROUP_DEFAULT)}; the compose project prefix is added)")
-
-
-def _mb(b: int) -> str:
-    return f"{b / 1024**2:.0f} MB"
-
-
-@measure_app.command("cgroup")
-def measure_cgroup(name: list[str] = CGROUP_NAMES) -> None:
-    """Per container: memory in use, the tmpfs part (`shmem`), page cache, anon and OOM kills, from its cgroup (read-only, no root). Issue 455: MariaDB moves off tmpfs only if shmem is 50 MB or more."""
-    typer.echo(f"{'container':28}{'current':>9}{'shmem':>9}{'file':>9}{'anon':>9}{'limit':>9}  oom_kill")
-    missing = 0
-    for short in name or CGROUP_DEFAULT:
-        full = f"workbench-{short}-1" if not short.startswith("workbench-") else short
-        m = measure.cgroup_memory(full)
-        if m is None:
-            missing += 1
-            typer.echo(f"{full:28}not running (or its cgroup is not readable)")
-            continue
-        typer.echo(f"{full:28}{_mb(m['current']):>9}{_mb(m['shmem']):>9}{_mb(m['file']):>9}{_mb(m['anon']):>9}"
-                   f"{(_mb(m['limit']) if m['limit'] else 'none'):>9}  {m['oom_kill']}")
-    if missing:
-        raise typer.Exit(1)
-
-
-APP_MATCH = typer.Option(None, "--match", help="process name or command-line text of the app (repeatable)")
-APP_PID = typer.Option(None, "--pid", help="a process id of the app (repeatable)")
-APP_SAVE = typer.Option(False, "--save", help="keep the suggested reserve as this machine's default (compose/generated, gitignored)")
-
-
-@measure_app.command("app")
-def measure_app_cmd(match: list[str] = APP_MATCH, pid: list[int] = APP_PID,
-                    duration: float = typer.Option(120, help="seconds to sample; 0 runs until Ctrl-C"),
-                    interval: float = typer.Option(2, min=0.1, help="seconds between samples"),
-                    save: bool = APP_SAVE) -> None:
-    """Measure the app under test (PSS of all its processes): peak, typical use and a suggested --app-mb."""
-    if not match and not pid:
-        typer.echo("give the app with --match NAME or --pid N (repeatable); the app must be running", err=True)
-        raise typer.Exit(2)
-    if not measure.app_bytes(match or [], pid or [])[1]:
-        typer.echo(f"no running process matches {', '.join(match or [])} {' '.join(map(str, pid or []))}; start the app and retry", err=True)
-        raise typer.Exit(1)
-    caught = measure.app_breakdown(match or [], pid or [])
-    typer.echo("matched: " + ", ".join(f"{n} x{c} ({b // 1024**2} MB)" for n, (b, c) in list(caught.items())[:6]) + (" ..." if len(caught) > 6 else ""))
-    if len(caught) > measure.APP_MAX_NAMES:
-        typer.echo(f"warning: {len(caught)} different programs match; a loose --match counts other programs' memory. Narrow it (a path or full name) before using --save", err=True)
-    typer.echo("sampling" + (f" for {duration:g} s" if duration else " until Ctrl-C") + "; use the app as you normally would ...")
-    stats = measure.app_summary(measure.sample_app(match or [], pid or [], duration, interval))
-    if not stats:
-        typer.echo("the app exited before the first sample; start it and retry", err=True)
-        raise typer.Exit(1)
-    mib = 1024**2
-    typer.echo(f"{stats['samples']} samples, up to {stats['processes']} process(es)\n"
-               f"  peak     {stats['peak'] // mib:>7} MB\n  typical  {stats['typical'] // mib:>7} MB (median)\n"
-               f"  suggested --app-mb {stats['suggested_mb']} (peak + 10%, rounded up to 100 MB)")
-    if save:
-        typer.echo(f"saved {stats['suggested_mb']} MB as the default reserve: {memory.save_app(stats['suggested_mb'])} (delete the file to return to {memory.APP_MB})")
-    else:
-        typer.echo("keep it as this machine's default: rerun with --save")
-
-
-@measure_app.command("report")
-def measure_report(idle: str = typer.Argument(..., help="label of the idle run"),
-                   loaded: str = typer.Argument(None, help="label of the loaded run")) -> None:
-    """Markdown table: idle vs loaded peak with suggested budgets (peak x 1.2)."""
-    import json
-    from pathlib import Path
-
-    def load(label: str) -> dict:
-        return json.loads((Path("docs/measurements") / f"{label}.json").read_text())
-
-    typer.echo(measure.report(load(idle), load(loaded) if loaded else None))
+app.add_typer(commands.scenario.scenario_app, name="scenario")
+app.add_typer(commands.measure.measure_app, name="measure")
 
 
 if __name__ == "__main__":

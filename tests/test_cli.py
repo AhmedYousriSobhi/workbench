@@ -6,7 +6,7 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from benchctl import checks, cli, stack
+from benchctl import checks, cli, measure, stack
 from governor import control
 
 runner = CliRunner()
@@ -116,7 +116,7 @@ def test_scenario_run_reports_pass_and_fail(monkeypatch):
 
 def test_measure_run_saves_and_report_reads_it_back(monkeypatch, tmp_path):
     snap = {"docker:a": 10 << 20, "host:used": 1 << 30}
-    monkeypatch.setattr(cli.measure, "sample", lambda duration, interval: [snap, snap])
+    monkeypatch.setattr(measure, "sample", lambda duration, interval: [snap, snap])
     monkeypatch.chdir(tmp_path)  # measure.save writes docs/measurements/<label>.json under the cwd
     r = invoke("measure", "run", "idle", "--duration", "1")
     assert r.exit_code == 0 and "2 samples" in r.output
