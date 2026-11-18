@@ -2,10 +2,13 @@
 `<data dir>/log/`, which the compose file mounts from `compose/generated/teleport/data`. The live Kubernetes test (and issue 763's
 `tsh ssh` test) use these helpers to prove that a named user's kubectl call was audited.
 
-The files belong to the user inside the container, so they are read with `docker exec` (the same path works whatever the host
-user is); `read_log` says plainly when the folder is missing instead of returning nothing."""
+The Teleport image is distroless (no shell, no `test`, no `find`), so the folder is read with `docker cp`, which streams it as a tar
+without running anything in the container and works whatever the host user is (issue 899); `read_log` says plainly when the folder is
+missing instead of returning nothing."""
+import io
 import json
 import subprocess
+import tarfile
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
@@ -20,15 +23,19 @@ class AuditError(Exception):
 
 def read_log(runner: Callable = subprocess.run, container: str = CONTAINER, log_dir: str = LOG_DIR) -> str:
     """All audit lines as one text. Raises AuditError with the reason when the folder is not there."""
-    chk = runner(["docker", "exec", container, "test", "-d", log_dir], capture_output=True, text=True, timeout=30, check=False)
-    if chk.returncode != 0:
-        raise AuditError(f"the Teleport audit log folder {log_dir} does not exist in {container}: "
-                         "is the teleport part up, and is compose/generated/teleport/data mounted at /var/lib/teleport?")
-    r = runner(["docker", "exec", container, "sh", "-c", f"find {log_dir} -type f -name '*.log' -exec cat {{}} +"],
-               capture_output=True, text=True, timeout=60, check=False)
+    r = runner(["docker", "cp", f"{container}:{log_dir}", "-"], capture_output=True, timeout=60, check=False)
     if r.returncode != 0:
-        raise AuditError(f"could not read the audit files in {container}: {r.stderr.strip()[-200:]}")
-    return r.stdout
+        raise AuditError(f"the Teleport audit log folder {log_dir} cannot be read from {container}: "
+                         f"is the teleport part up, and is compose/generated/teleport/data mounted at /var/lib/teleport? ({(r.stderr or b'').decode(errors='replace').strip()[-160:]})")
+    out = []
+    try:
+        with tarfile.open(fileobj=io.BytesIO(r.stdout), mode="r|*") as tar:
+            for m in tar:
+                if m.isfile() and m.name.endswith(".log") and (f := tar.extractfile(m)):
+                    out.append(f.read().decode(errors="replace"))
+    except tarfile.TarError as e:
+        raise AuditError(f"could not read the audit files in {container}: {e}") from e
+    return "".join(out)
 
 
 def parse(text: str) -> list[dict]:

@@ -30,23 +30,35 @@ def test_select_by_fields_since_and_number_or_string_codes():
     assert ta.types_seen(ev) == ["kube.request", "session.start"]
 
 
+def _tar(files: dict[str, str]) -> bytes:
+    import io
+    import tarfile
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as t:
+        for name, text in files.items():
+            data = text.encode()
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            t.addfile(info, io.BytesIO(data))
+    return buf.getvalue()
+
+
 def test_a_missing_folder_is_an_error_naming_it_not_an_empty_log():
     calls = []
 
     def runner(cmd, **kw):
         calls.append(cmd)
-        return SimpleNamespace(returncode=1, stdout="", stderr="")
-    with pytest.raises(ta.AuditError, match="/var/lib/teleport/log does not exist"):
+        return SimpleNamespace(returncode=1, stdout=b"", stderr=b"Could not find the file")
+    with pytest.raises(ta.AuditError, match="/var/lib/teleport/log cannot be read"):
         ta.read_log(runner)
-    assert calls[0][:3] == ["docker", "exec", ta.CONTAINER]
+    assert calls[0][:3] == ["docker", "cp", f"{ta.CONTAINER}:{ta.LOG_DIR}"] and calls[0][3] == "-"  # no shell in the distroless image (issue 899)
 
 
 def test_read_log_returns_the_files_text_and_reports_a_read_failure():
-    ok = [SimpleNamespace(returncode=0, stdout="", stderr=""), SimpleNamespace(returncode=0, stdout=LINES, stderr="")]
-    assert ta.read_log(lambda *_a, **_k: ok.pop(0)) == LINES
-    bad = [SimpleNamespace(returncode=0, stdout="", stderr=""), SimpleNamespace(returncode=1, stdout="", stderr="denied")]
-    with pytest.raises(ta.AuditError, match="denied"):
-        ta.read_log(lambda *_a, **_k: bad.pop(0))
+    tar = _tar({"log/uuid/2026-11-18.00:00:00.log": LINES, "log/uuid/readme.txt": "ignored"})
+    assert ta.read_log(lambda *_a, **_k: SimpleNamespace(returncode=0, stdout=tar, stderr=b"")) == LINES
+    with pytest.raises(ta.AuditError, match="could not read the audit files"):
+        ta.read_log(lambda *_a, **_k: SimpleNamespace(returncode=0, stdout=b"not a tar", stderr=b""))
 
 
 def test_wait_returns_when_events_appear_and_gives_up_at_the_timeout():
