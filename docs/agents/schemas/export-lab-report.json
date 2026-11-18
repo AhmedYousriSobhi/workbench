@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "export lab-report --json",
+  "description": "The config lab's report of one run (report.json of the run folder). verdict is null for a candidate-only run. With --anonymize, production node names are lab-node-NNN, user names <user>, and anonymized is true. Exit 1 (no JSON) when the lab, the run or its report is missing.",
+  "type": "object",
+  "properties": {
+    "contract_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"},
+    "name": {"type": "string"},
+    "run": {"type": "string"},
+    "verdict": {"enum": ["Do not ship", "Ship with changes", "Ship", "No effect", null]},
+    "comparable": {"type": "boolean"},
+    "single_run": {"type": "boolean"},
+    "factor": {"type": "number"},
+    "findings": {"type": ["object", "null"]},
+    "thresholds": {"type": "object"},
+    "a": {"type": ["object", "null"]},
+    "b": {"type": "object"},
+    "suggestions": {"type": "array"},
+    "time_scaled": {"type": "array"},
+    "not_measured": {"type": "array", "items": {"type": "string"}},
+    "anonymized": {"type": "boolean"}
+  },
+  "required": ["contract_version", "name", "run", "verdict", "comparable", "b"]
+}

@@ -104,3 +104,5 @@ Still open: the live checks (all `tests/real` tests are written, none run), the 
 - A wait change is relative to the larger of side A's median and a floor (`wait_floor_s`, 60 s of production time), so a near-zero baseline does not turn noise into a failure.
 - Not built, because accounting cannot say it and Prometheus needs a live stack: alerts and time to alert, flapping, scheduler load (the `lab_run` series of decision 9), Kubernetes counts, idle-but-free GPUs, pending-reason mix, fairshare usage spread, the anonymizer (issue 614) and the `lab-idle` and `lab-run` memory measurements. The report lists them as not measured.
 - `--repeat N` (median and range) is not built; every report says single run.
+
+**Addendum, issue 614 (export, 2026-11-18).** `benchctl export lab-report NAME [RUN] [--anonymize]` reads one run's `report.json` and `report.md` and writes either; `--anonymize` maps production node names to `lab-node-NNN` (the sorted production names) and user names to `<user>`, and never writes the mapping. The MCP tool is `lab_report_export` (contract 2.4, `WB-NO-LAB-REPORT`); there is no bare `export report`.

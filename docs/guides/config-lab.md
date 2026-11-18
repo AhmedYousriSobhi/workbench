@@ -166,6 +166,7 @@ Rows `sacctmgr` refuses to delete are listed.
 - The thresholds are `lab.verdict` in `sim.yaml` (defaults in the commented block) and are printed in every report, with the time-scaled parameters. One run per side is labelled a single run.
 - Suggestions come from a fixed catalogue (preemptions, wait spread between accounts, pending up, wait regression). They are text only.
 - Not measured yet, and listed in every report: alerts and time to alert, flapping, scheduler load, Kubernetes counts, idle-but-free GPUs, pending reasons, fairshare usage spread.
+- **Export (issue 614).** `benchctl export lab-report NAME [RUN] [--anonymize] [--json] [-o FILE]` writes one run's report (`RUN` is a run folder or `last`). `--anonymize` swaps production node names for `lab-node-NNN` and user names for `<user>` in the text and the JSON; the mapping is never written. The MCP tool is `lab_report_export`.
 
 A run goes **only through the governor** (`./scripts/benchctl start`), needs the cluster with accounting (`benchctl up --with accounting`) and a lab with a trace. One run at a time.
 

@@ -22,6 +22,7 @@ With `BENCHCTL_AGENT=1` an error is one line on stderr: `CODE: message | fix: CO
 | `WB-DOCTOR-TSH` | The local tsh is newer than the Teleport server. | `benchctl doctor` |
 | `WB-EXTRA-MISSING` | An optional extra is not installed. | `pip install -e '.[mcp]'` |
 | `WB-NEEDS-YES` | A destructive command needs --yes in agent mode. | `repeat the command with --yes` |
+| `WB-NO-LAB-REPORT` | No such lab, no such run, or the run has no report (aborted or still running). | `benchctl run lab NAME` |
 | `WB-NO-RUN` | The web page holds no finished scenario run to export (none yet, another scenario, or one still playing). | `benchctl scenario run NAME` |
 | `WB-PART-NOT-RUNNING` | A part this needs is not running (Prometheus, or the web page). | `benchctl start` |
 | `WB-REFUSED-CHECKSUM` | A Slurm tarball's hash and GitHub's digest for it disagree. | `benchctl get slurm-checksum VERSION` |
