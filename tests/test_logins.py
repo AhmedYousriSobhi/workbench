@@ -196,6 +196,9 @@ def test_the_graph_joins_each_login_to_the_nodes_it_serves():
     assert not ({"login2>nodes:jump", "login>k8s-nodes:kubectl"} & ids)
     assert {"id": "k8s-nodes", "type": "group"} in g["entities"] and {"id": "kgpu001", "type": "k8s-node", "group": "k8s-nodes"} in g["entities"]
     assert not any(e["id"] == "k8s-nodes" for e in graph.build({}, nodes[:1], lg)["entities"])      # no Kubernetes nodes, no group
+    api = {e["id"] for e in graph.build({"k8s-api": True}, nodes, lg)["edges"]}                     # kubectl also talks to the API server (#388)
+    assert {"login2>k8s-api:kubectl", "login3>k8s-api:kubectl"} <= api and "login>k8s-api:kubectl" not in api
+    assert not any(i.endswith("k8s-api:kubectl") for i in ids)                                      # no API server part, no line
 
 
 def test_the_cli_and_the_governor_accept_a_login_kind():
