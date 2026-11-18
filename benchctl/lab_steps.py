@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import lab, lab_apply, lab_run, lab_snapshot
+from . import lab, lab_apply, lab_report, lab_run, lab_slurm, lab_snapshot
 from .lab import LabError
 
 GENERATED = Path("compose/generated")
@@ -220,13 +220,27 @@ class RunSteps:
         lab_run.write_atomic(run.folder / "compare.json", lab_run.dump({"pairs": len(p["pairs"]), "only_a": p["only_a"], "only_b": p["only_b"]}))
 
     def report(self, run: lab_run.Run) -> None:
-        """A short machine-readable summary; `report.md`, the comparison and the verdict are issue 555."""
+        """`report.json` and `report.md`: the metrics of each side, the findings, the verdict and the suggestions (issue 555)."""
         r = run.r
-        lab_run.write_atomic(run.folder / "report.json", lab_run.dump({
-            "contract": lab_run.CONTRACT, "name": r["name"], "run": r["run"], "ab": r["ab"], "seed": r["seed"], "jobs": r["jobs"],
-            "target_hours": r["target_hours"], "factor": r["factor"], "length_s": r["length_s"], "paused_s": run.paused_s(),
-            "paused_side_s": r["paused_side_s"], "comparable": run.comparable(), "rejected": r.get("rejected", {}),
-            "collected": r["collected"], "verdict": None, "note": "the comparison and the verdict come with issue 555"}))
+
+        def rows(side: str) -> list[dict[str, str]] | None:
+            f = run.side_dir(side) / "sacct.txt"
+            return lab_run.parse_rows(f.read_text()) if f.is_file() else None
+
+        a, b = (rows("a") if r["ab"] else None), rows("b") or []
+        pairing = lab_run.pair(a, b) if a is not None else None
+        sim = self.env.sim if self.env is not None else {}
+        try:
+            base = lab.load_baseline(self.name, self.root)
+            time_scaled = lab_slurm.dilate_keys(base["slurm"]["keys"], float(r["factor"]))[1] if base["slurm"] else []
+        except LabError:
+            time_scaled = []
+        meta = {"contract": lab_run.CONTRACT, "name": r["name"], "run": r["run"], "ab": r["ab"], "seed": r["seed"], "jobs": r["jobs"],
+                "target_hours": r["target_hours"], "factor": r["factor"], "length_s": r["length_s"], "paused_s": run.paused_s(),
+                "paused_side_s": r["paused_side_s"], "comparable": run.comparable(), "rejected": r.get("rejected", {}), "collected": r["collected"]}
+        doc = lab_report.build(meta, a, b, lab_report.thresholds(sim or {}), pairing, time_scaled)
+        lab_run.write_atomic(run.folder / "report.json", lab_run.dump(doc))
+        lab_run.write_atomic(run.folder / "report.md", lab_report.markdown(doc))
 
     def wait_calm(self, run: lab_run.Run) -> None:
         """Before an abort's restore: wait until the governor says L0 or L1 (GV-8). Shows `restore_pending` meanwhile. Raises when the

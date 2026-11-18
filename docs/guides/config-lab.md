@@ -159,6 +159,14 @@ Rows `sacctmgr` refuses to delete are listed.
 - `apply lab` rewrites the dump (users, coordinators, names in the description) before `sacctmgr load`, and creates the Linux users (uid 30000+N, no home) on slurmctld, slurmdbd and the login node. `remove lab` deletes them.
 - A trace user with no account in the dump gets a number too; its jobs are refused by Slurm and counted as `rejected: no association`.
 
+**The report (issue 555).** `report.md` and `report.json` come from each side's accounting, jobs paired by key.
+- Per partition and QOS: jobs, still pending, median and p95 wait, shown in production-equivalent time (lab time times the dilation factor). Also preemptions and GPU-hours lost.
+- The verdict follows ADR 0050: a hard failure is "Do not ship" (a lost job, still-pending up over 20 %, or a median wait up over 20 % in a partition with enough samples). A new cost or a 5 to 20 % regression is "Ship with changes". An improvement over 5 % and nothing worse is "Ship". Within 5 % is "No effect".
+- A partition with fewer than `min_samples` started jobs never fails a run. A run that is not comparable has no verdict, and a candidate-only run has none either.
+- The thresholds are `lab.verdict` in `sim.yaml` (defaults in the commented block) and are printed in every report, with the time-scaled parameters. One run per side is labelled a single run.
+- Suggestions come from a fixed catalogue (preemptions, wait spread between accounts, pending up, wait regression). They are text only.
+- Not measured yet, and listed in every report: alerts and time to alert, flapping, scheduler load, Kubernetes counts, idle-but-free GPUs, pending reasons, fairshare usage spread.
+
 A run goes **only through the governor** (`./scripts/benchctl start`), needs the cluster with accounting (`benchctl up --with accounting`) and a lab with a trace. One run at a time.
 
 - **Start.** Only at L0 or L1. The governor answers at once (`preparing`), freezes the run's jobs, then asks for `lab nodes x 13 MB + 250 MB` (the same estimate `get lab` prints). `run lab` waits for the outcome and prints one line: the run started, or why it was refused, for example `refused: 302 MB would leave ...`. `benchctl status` keeps a refusal until the next start.
@@ -185,7 +193,8 @@ Files of a run, under `compose/generated/lab/NAME/`:
 | `reports/RUN/jobs.json` | the frozen jobs (read-only), lab users only |
 | `reports/RUN/run.json`, `progress.json` | the state, history, seed, run length, progress (`percent`, `submitted`, `running`, `pending`, `paused_s`) |
 | `reports/RUN/a/sacct.txt`, `b/sacct.txt` | each side's jobs from accounting |
-| `reports/RUN/compare.json`, `report.json` | jobs paired by key; a short summary (the full report and verdict are issue 555) |
+| `reports/RUN/compare.json` | jobs paired by key |
+| `reports/RUN/report.md`, `report.json` | the metrics, findings, verdict, suggestions, thresholds and what was not measured (issue 555) |
 | `snapshots/RUN/` | the saved state (mode 700); deleted when the run ends, kept only when an abort's restore could not run |
 
 **If a run is refused or ends early**

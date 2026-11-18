@@ -151,7 +151,8 @@ def test_compare_and_report_write_their_files(run, root, tmp_path):
     assert json.loads((run.folder / "compare.json").read_text()) == {"pairs": 1, "only_a": ["j0002"], "only_b": []}
     s.report(run)
     rep = json.loads((run.folder / "report.json").read_text())
-    assert rep["verdict"] is None and rep["comparable"] is True and rep["seed"] == lab_run.DEFAULT_SEED
+    assert rep["verdict"] == "Do not ship" and "lost jobs" in rep["findings"]["hard"][0] and rep["comparable"] is True and rep["seed"] == lab_run.DEFAULT_SEED
+    assert (run.folder / "report.md").read_text().startswith("# Config lab report:")
 
 
 def test_apply_needs_an_environment_and_calls_lab_apply(run, root, tmp_path, monkeypatch):

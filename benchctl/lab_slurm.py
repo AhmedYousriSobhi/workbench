@@ -305,4 +305,7 @@ def problems(sim: dict) -> list[str]:
             out.append(f"lab.{key} must be a whole number from 1 to {top}")
     if not isinstance(s["target_hours"], (int, float)) or isinstance(s["target_hours"], bool) or not MIN_TARGET_HOURS <= s["target_hours"] <= MAX_TARGET_HOURS:
         out.append(f"lab.target_hours must be from {MIN_TARGET_HOURS} to {MAX_TARGET_HOURS}")
-    return out
+    from . import (
+        lab_report,  # late: lab_report does not import this module, but it is only needed here
+    )
+    return out + lab_report.problems(sim)
