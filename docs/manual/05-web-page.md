@@ -46,8 +46,7 @@ The **stage** on Infrastructure has three areas that fill the window:
 
 - The strip is for status only.
 - The theme switch cycles Auto, Light, Dark, **Midnight** (deep navy and neon accents) and **Dim** (soft slate, low glare). The choice is remembered.
-- **☰ Menu** has three groups, each item with a one-line hint. Esc closes it.
-  - *Run:* **▶ Scenarios**
+- **☰ Menu** has two groups, each item with a one-line hint. Esc closes it. Scenarios are not a chip or a menu item: open **▶ Test run** in the left navigation.
   - *Configure:* **▦ Cluster architecture** (nodes, GPUs per node, optional parts, the plan) and **✚ Health checks**
   - *Share:* **⇩ Export**
 - Press the level or memory chip to open the **Governor** panel.
@@ -100,7 +99,9 @@ Read it from left to right:
 | **Cluster nodes** | every compute and GPU node as a tile with its state |
 | **Services: what clients call** | BMC farm, BCM, Jira, GPU exporter (all simulated) and, when the real Jira is on, **Jira DC** |
 
-A login node that is selected but not running is drawn **dashed with "✗ not running"**. The page checks whether anything answers on its port 22, so the diagram shows what runs, not only what you picked. With the whole stack down, they all look dim.
+A login node that is selected but not running is drawn **dashed with "✗ not running"**. The page checks whether anything answers on its port 22, so the diagram shows what runs, not only what you picked.
+
+With the whole stack down, every part shows one word, **– offline**, and no tick. Only the **Needs attention** entry says why and gives the command to start it.
 
 ### Colours and marks
 
@@ -567,7 +568,7 @@ See [choose the workbench](../guides/choose-workbench.md).
 
 ## Test run
 
-**▶ Test run** opens one workspace for a whole test, with the library on the left and the chosen scenario on the right. Open it from the left nav, the **▶ Scenarios** chip in the top strip, or **Open Test run** on Overview.
+**▶ Test run** opens one workspace for a whole test, with the library on the left and the chosen scenario on the right. Open it from the left nav, or with **Open Test run** on Overview. While a scenario runs, its chip in the top strip (name and step count) also opens it. A long scenario name wraps inside its card, so **▶ Play** is always whole.
 
 1. **Pick.** Click a scenario's name. You see its description, its length and every step as it will play, **before anything starts**. **Show on the diagram** shows where each step will act ([before Play](#before-play-where-a-scenario-will-act)).
 2. **Play.**

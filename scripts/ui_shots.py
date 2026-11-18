@@ -440,6 +440,10 @@ def check_run(page, shot: str) -> list[str]:
             bad.append(f"{name}: a CLI-only mark without words")
         if page.locator("#run-export").is_visible():
             bad.append(f"{name}: export offered before any run")
+    clipped = page.evaluate("""() => [...document.querySelectorAll('#list .scn')].filter(li => { const b = li.querySelector('.btn'), c = li.getBoundingClientRect(), r = b.getBoundingClientRect();
+        return r.right > c.right + 1 || r.left < c.left - 1 || b.scrollWidth > b.clientWidth + 1 || r.width < 40; }).map(li => li.dataset.name)""")
+    if clipped:  # D1 (#861): a long title must wrap, never push Play out of its card
+        bad.append(f"Play button clipped or cut off on: {', '.join(clipped[:5])}")
     if not page.locator("#run-eye").inner_text().strip():
         bad.append("Client's eye panel is empty")
     if page.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth + 1"):
@@ -586,6 +590,37 @@ def check_analysis(page) -> list[str]:
     return bad
 
 
+STACK_DOWN = {"logins": [{"name": "login", "mode": "ssh", "port": 2222, "ip": "10.141.255.254"}, {"name": "login2", "mode": "teleport", "port": None, "ip": "10.141.255.252"}],
+              "services": {k: False for k in ("bmc-farm", "bcm-mock", "jira-mock", "gpu-exporter", "teleport", "jump", "controller")}, "nodes": [], "actions": []}
+
+
+def check_stack_down(browser, base_url: str, ui_token: str, vp: str, size: tuple[int, int], scheme: str, shot: str) -> list[str]:
+    """With the stack down (SPEC W-10, issue 861 A1 and A2): one recovery command on the whole screen, and no tick in the diagram (a part
+    that cannot answer shows one `offline` state, `built` is not a live state). Answered with sample data, so no cluster is touched."""
+    bad = []
+    for view in ("circuit", "classic"):
+        pg = browser.new_page(viewport={"width": size[0], "height": size[1]}, color_scheme=scheme)
+        pg.add_init_script(TEST_HOOK.replace("sessionStorage.setItem('workbench-circuit', '0');", f"sessionStorage.setItem('workbench-circuit', '{int(view == 'circuit')}');"))
+        pg.route("**/api/cluster", lambda r: r.fulfill(json=STACK_DOWN))
+        pg.route("**/api/flow*", lambda r: r.abort())
+        pg.goto(login_url(base_url, ui_token))
+        pg.wait_for_function("typeof setTree === 'function'", timeout=15000)
+        pg.wait_for_selector("#flow [data-part], #flow rect.blk", timeout=15000)
+        pg.wait_for_timeout(800)
+        said = pg.evaluate("document.body.innerText.split('benchctl start').length - 1")
+        if said != 1:
+            bad.append(f"stack down ({vp} {view} {scheme}): the recovery command shows {said} times on the screen, expected once")
+        if pg.locator("#stackdown").count():
+            bad.append("stack down: the #stackdown notice is back, the Needs attention entry is the one message")
+        ticks = pg.evaluate("[...document.querySelectorAll('#flow text')].map(t => t.textContent).filter(t => t.includes('✓'))")
+        if ticks:
+            bad.append(f"stack down ({vp} {view} {scheme}): ticks in the diagram: {ticks[:3]}")
+        if view == "circuit":
+            pg.screenshot(path=shot)
+        pg.close()
+    return bad
+
+
 def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -681,7 +716,7 @@ def capture(out: Path) -> dict:
                     for sel in ("#banner", "#attn", "#list .btn", "#services .er", "#flow", ".node"):
                         if page.locator(sel).count() == 0:
                             result["a11y"].append(f"dashboard is missing {sel}")
-                    down = page.locator("#stackdown").is_visible()  # stack down: one notice, nothing repeating it
+                    down = "simulation stack is not running" in page.locator("#attn").inner_text()  # stack down: one notice, nothing repeating it
                     for sel in ("#svcpanel", "#br-compute"):
                         if page.locator(sel).is_visible() == down:
                             result["a11y"].append(f"{sel} must be {'hidden' if down else 'shown'} when the stack is {'down' if down else 'up'}")
@@ -811,6 +846,10 @@ def capture(out: Path) -> dict:
                     page.keyboard.press("Escape")
                     if page.locator("#menu:visible").count() or page.evaluate("document.activeElement.id") != "menubtn":
                         result["a11y"].append("Escape must close the menu and return focus to the Menu button")
+                    sdpath = out / f"stackdown-{vp}-{scheme}.png"
+                    for problem in check_stack_down(browser, base_url, ui_token, vp, (w, h), scheme, str(sdpath)):
+                        result["a11y"].append(problem)
+                    result["shots"].append(str(sdpath))
                     spath = out / f"testrun-{vp}-{scheme}.png"
                     for problem in check_run(page, str(spath)):
                         result["a11y"].append(problem)

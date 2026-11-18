@@ -66,10 +66,6 @@ export async function poll() {
   if (s.running) S.pollTimer = setTimeout(poll, 1000);
 }
 
-export function init() {
-  $('scn-toggle').onclick = () => scnOpen(true);
-}
-
 export function init2() {
   $('scnq').oninput = filterScenarios;
 }

@@ -672,9 +672,10 @@ def test_state_update_keeps_the_kind_class_of_a_service_box(ui):
 def test_scenarios_live_in_the_test_run_workspace_not_a_drawer():
     """Issue 509: scenario, run, expectations and Client's eye share one workspace; the drawer is gone."""
     html = page_source()
-    for needle in ('id="tab-run"', 'id="tb-run"', 'id="scn-toggle"', 'id="run-eye"', 'id="runcli"', 'id="run-md"', 'id="run-json"', "li.classList.toggle('active'", "function scnOpen("):
+    for needle in ('id="tab-run"', 'id="tb-run"', 'id="run-eye"', 'id="runcli"', 'id="run-md"', 'id="run-json"', "li.classList.toggle('active'", "function scnOpen("):
         assert needle in html, needle
     assert "scndlg" not in html and "dialog.drawer" not in html
+    assert 'id="scn-toggle"' not in html and 'id="stackdown"' not in html  # #861 A4 and A1: the strip is status only, and the stack-down message is the Needs attention entry alone
 
 
 

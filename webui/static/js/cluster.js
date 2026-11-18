@@ -31,7 +31,6 @@ export function renderCluster(c) {
   if ($('flow').firstChild) paintTiles();
   setTimeout(paintKpis);
   const stackUp = Object.values(c.services).some(Boolean);
-  $('stackdown').hidden = stackUp;
   $('nodeswrap').classList.toggle('solo', !stackUp);
   for (const id of ['nodesmain']) $(id).hidden = !stackUp;  // one message when down, not five
   const svcs = Object.entries(c.services), svcUp = svcs.filter(([, u]) => u).length;
