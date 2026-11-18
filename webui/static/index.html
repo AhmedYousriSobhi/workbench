@@ -52,6 +52,7 @@
     <button role="tab" class="sidei" id="tb-nodes" aria-controls="tab-nodes" aria-selected="false" tabindex="-1"><b aria-hidden="true">▦</b>Topology</button>
     <button role="tab" class="sidei" id="tb-traffic" aria-controls="tab-traffic" aria-selected="false" tabindex="-1"><b aria-hidden="true">⇄</b>Traffic &amp; Communication</button>
     <button role="tab" class="sidei" id="tb-conn" aria-controls="tab-conn" aria-selected="false" tabindex="-1"><b aria-hidden="true">⌖</b>Connections</button>
+    <button role="tab" class="sidei" id="tb-lab" aria-controls="tab-lab" aria-selected="false" tabindex="-1" hidden><b aria-hidden="true">⚗</b>Lab</button>
   </div>
   <button class="sidei" id="planbtn" aria-haspopup="dialog"><b aria-hidden="true">⚙</b>Cluster architecture</button>
   <div class="itabs seg rsub" id="subseg" role="group" aria-label="Infrastructure view"><button class="btn small" data-sub="all" aria-pressed="true">All</button><button class="btn small" data-sub="topo" aria-pressed="false">Topology</button><button class="btn small" data-sub="nodes" aria-pressed="false">Nodes</button></div>
@@ -198,6 +199,10 @@
       </div>
       <div class="panel" id="run-eyebox"><h2 class="rh">Client's eye</h2><p class="small dim">What the monitoring client called, from the mocks' request counters. “n/a” means the mock keeps no counter for it, never zero.</p><div id="run-eye"></div></div>
     </section>
+  </div>
+  <div id="tab-lab" role="tabpanel" aria-labelledby="tb-lab" hidden>
+    <p id="lab-none" class="panel dim" hidden>No config lab yet. Import one: benchctl import lab NAME --from DIR (docs/guides/config-lab.md).</p>
+    <div id="lab-body"></div>
   </div>
   <div id="tab-conn" role="tabpanel" aria-labelledby="tb-conn" hidden>
     <div class="panel"><h2>How to reach each part</h2>

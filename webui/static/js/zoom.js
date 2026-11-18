@@ -20,7 +20,7 @@ export const ZOOM_LEVELS = ['fleet', 'cluster', 'pool', 'traffic', 'requests'], 
 export const MS = 700, EASE = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
 const scroller = () => document.querySelector('#trafficpanel > .flowscroll');
 const layerEl = lv => lv === 'fleet' ? $('fleetview') : lv === 'pool' ? $('poolview') : lv === 'traffic' || lv === 'requests' ? $('tab-traffic') : scroller();
-const onTraffic = () => !$('tab-traffic').hidden, onConn = () => !$('tab-conn').hidden;
+const onTraffic = () => !$('tab-traffic').hidden, onConn = () => !$('tab-conn').hidden || !$('tab-lab').hidden;  // the Lab workspace has no zoom either
 
 // The level of the infrastructure itself, and the level the page is at: Traffic is the deepest stop, a tab of its own that the rail reaches.
 export const infraLevel = () => !S.circuit ? null : curLevel() === 'overview' ? 'fleet' : S.pool ? 'pool' : 'cluster';

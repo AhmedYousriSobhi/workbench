@@ -609,6 +609,55 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         finally:
             task.cancel()
 
+    async def lab_list(request: Request):
+        from webui import lab as labview
+
+        return JSONResponse({"labs": [labview.summary(n) for n in await asyncio.to_thread(labview.names)]})
+
+    async def lab_detail(request: Request):
+        from webui import lab as labview
+
+        gov = (await asyncio.to_thread(governor_status, socket)).get("lab")
+        try:
+            return JSONResponse(await asyncio.to_thread(labview.view, request.path_params["name"], yaml.safe_load(sim_yaml.read_text()), gov))
+        except (labview.LabRequestError, labview.lab.LabError) as e:
+            raise HTTPException(404, str(e)) from e
+
+    async def lab_report(request: Request):
+        """One run's report as a download (`format=md|json`); `anonymize=1` maps node and user names (issue 614)."""
+        from webui import lab as labview
+
+        q = request.query_params
+        try:
+            data, md = await asyncio.to_thread(labview.report, request.path_params["name"], q.get("run", "last"), q.get("anonymize") == "1")
+        except (labview.LabRequestError, labview.lab.LabError) as e:
+            raise HTTPException(404, str(e)) from e
+        if q.get("format") == "json":
+            return JSONResponse(data)
+        return Response(md, media_type="text/markdown; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="lab-report.md"'})
+
+    async def lab_act(request: Request):
+        """A lab button: the governor runs it (L0-L1, admitted); this page never touches Docker (W-3). One message back."""
+        from webui import lab as labview
+
+        try:
+            body = await request.json()
+        except ValueError:
+            body = {}
+        try:
+            req = labview.request(request.path_params["name"], request.path_params["action"], body if isinstance(body, dict) else {})
+        except (labview.LabRequestError, labview.lab.LabError) as e:
+            raise HTTPException(422, str(e)) from e
+        try:
+            res = await asyncio.to_thread(checks.governor_request, req, socket)
+        except (OSError, ValueError) as e:
+            raise HTTPException(503, "the governor is not reachable: start it with ./scripts/benchctl start") from e
+        if not res.get("ok"):
+            raise HTTPException(409, res.get("error", "the governor refused"))
+        if res.get("dry_run"):
+            return JSONResponse({"started": False, "message": "The governor is in dry-run mode, so nothing was started."})
+        return JSONResponse({"started": True, "message": f"Sent: {req['cmd']} {req['name']}. Watch the status chip."})
+
     async def connections(request: Request):
         from webui import connections as conn
 
@@ -893,6 +942,10 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/jira-real/refresh", protected(jira_refresh, write=True), methods=["POST"]),
             Route("/api/nhc", protected(nhc_state)),
             Route("/api/nhc", protected(nhc_change, write=True), methods=["POST"]),
+            Route("/api/lab", protected(lab_list)),
+            Route("/api/lab/{name}", protected(lab_detail)),
+            Route("/api/lab/{name}/report", protected(lab_report)),
+            Route("/api/lab/{name}/{action}", protected(lab_act, write=True), methods=["POST"]),
             Route("/api/connections", protected(connections)),
             Route("/api/export/profile", protected(export_profile)),
             Route("/api/nodes/{node}", protected(node_detail)),
