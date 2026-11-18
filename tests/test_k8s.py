@@ -125,8 +125,8 @@ def test_bootstrap_applies_definitions_then_stages_then_nodes_then_fixtures_and_
 
     assert k8s.bootstrap(SIM, addressing.plan(SIM), lambda m: None, runner=run, ready=lambda ips: True, sleep=lambda s: None)
     files = [c[-1] for c in calls if c[0] == "apply"]
-    assert files == ["/k8s/kwok/crds.yaml", "/k8s/kwok/stage-fast.yaml", "/k8s/kwok/stage-faults.yaml", *[f for f, _ in k8s.KWOK_OBJECTS], "/state/nodes.yaml",
-                     "/k8s/fixtures/00-namespaces.yaml", "/k8s/fixtures", "/state/50-dra.yaml",
+    assert files == ["/k8s/kwok/crds.yaml", "/k8s/kwok/stage-fast.yaml", "/k8s/kwok/stage-faults.yaml", "/k8s/fixtures/00-namespaces.yaml", *[f for f, _ in k8s.KWOK_OBJECTS], "/state/nodes.yaml",
+                     "/k8s/fixtures", "/state/50-dra.yaml",
                      "/k8s/kueue/crds.yaml", "/k8s/kueue/queues.yaml", "/k8s/volcano/crds.yaml", "/k8s/volcano/queues.yaml", k8s.METRICS_API_FILE]  # the metrics API last (discovery fails while it is 503)
     patch = next(c for c in calls if c[0] == "patch")  # an existing cluster's nodes get the reachable address too (etcd keeps them)
     assert patch[:4] == ["patch", "-f", "/state/nodes.yaml", "--subresource=status"] and k8s.kwok_ip() in patch[-1]
