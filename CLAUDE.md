@@ -57,7 +57,7 @@ See [docs/architecture/08-repository-and-migration.md](docs/architecture/08-repo
 - Do not add real NFS/Lustre or heavy JS frameworks; see SPEC C-11 and W-1.
 - Record significant decisions as ADRs in `docs/adr/`.
 
-- **Keep the progress tracker current.** Any PR that changes what is built updates `docs/progress.yaml` (status, how, where, PR; architecture nodes and edges), then `python -m benchctl.progress` regenerates `docs/PROGRESS.md` and `docs/progress.html`. `validate.sh` fails on stale output. See [docs/guides/progress-and-diagrams.md](docs/guides/progress-and-diagrams.md).
+- **Keep the progress tracker current.** Any PR that changes what is built updates `docs/progress.yaml` (status, how, where, PR; architecture nodes and edges), then `python -m benchctl.progress` regenerates `docs/PROGRESS.md` and `docs/progress.html`. `validate.sh` fails on stale output. See [docs/guides/progress-and-diagrams.md](docs/guides/progress-and-diagrams.md). Raise an item's `verified:` (unit, live, client; `verified_on` for the last two) only when a run or its PR states it; never guess; `python -m benchctl.progress --unverified` lists what is unstated.
 
 ## Commands
 

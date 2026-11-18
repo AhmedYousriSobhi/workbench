@@ -2,6 +2,7 @@
 
 Run `python -m benchctl.progress` to regenerate, `--check` to fail when the outputs are stale.
 """
+import datetime
 import html
 import sys
 from pathlib import Path
@@ -12,6 +13,8 @@ SRC, MD, HTML = Path("docs/progress.yaml"), Path("docs/PROGRESS.md"), Path("docs
 MERMAID_JS = "https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"
 LABEL = {"done": "Done", "review": "In review", "partial": "Partial", "todo": "To do"}
 ICON = {"done": "✅", "review": "🔍", "partial": "🟡", "todo": "⬜"}
+# Highest level an item was verified at; each level includes the ones before. Absent = not stated.
+VERIFIED = {"unit": "Unit", "live": "Live", "client": "Client"}
 COLOR = {"done": "#1a7f37", "review": "#0969da", "partial": "#bf8700", "todo": "#6e7781"}
 
 
@@ -21,6 +24,18 @@ def load(path: Path = SRC) -> dict:
         for it in ph["items"]:
             if it["status"] not in LABEL:
                 raise ValueError(f"{ph['id']}/{it['name']}: unknown status {it['status']!r}")
+            where = f"{ph['id']}/{it['name']}"
+            v = it.get("verified")
+            if v is not None and v not in VERIFIED:
+                raise ValueError(f"{where}: unknown verified level {v!r} (use {', '.join(VERIFIED)})")
+            on = it.get("verified_on")
+            if on is not None:
+                if v not in ("live", "client"):
+                    raise ValueError(f"{where}: verified_on needs verified: live or client")
+                try:
+                    datetime.date.fromisoformat(str(on))
+                except ValueError:
+                    raise ValueError(f"{where}: verified_on {on!r} is not YYYY-MM-DD") from None
     return data
 
 
@@ -46,6 +61,27 @@ def pct(items: list[dict]) -> int:
     """Share of items that are built (done or in review)."""
     c = counts(items)
     return round(100 * (c["done"] + c["review"]) / len(items)) if items else 0
+
+
+def verified_counts(items: list[dict]) -> dict[str, int]:
+    """Built items (done or in review) by highest verification level; "none" = level not stated."""
+    built = [i for i in items if i["status"] in ("done", "review")]
+    out = {k: sum(i.get("verified") == k for i in built) for k in VERIFIED}
+    out["none"] = sum(not i.get("verified") for i in built)
+    return out
+
+
+def verified_cell(item: dict) -> str:
+    v = item.get("verified")
+    if not v:
+        return "not stated"
+    return f"{VERIFIED[v]} {item['verified_on']}" if item.get("verified_on") else VERIFIED[v]
+
+
+def verified_summary(items: list[dict]) -> str:
+    v = verified_counts(items)
+    return (f"Verified, built items by highest level: {v['client']} client, {v['live']} live, "
+            f"{v['unit']} unit only, {v['none']} not stated.")
 
 
 def all_items(data: dict) -> list[dict]:
@@ -98,7 +134,7 @@ def render_md(data: dict) -> str:
     out = [
         "# Progress", "",
         "<!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->",
-        intro, "", summary, "",
+        intro, "", summary, "", verified_summary(items), "",
         "## Roadmap", "", "```mermaid", roadmap_mermaid(data), "```", "",
         "## As built", "", legend, "",
         "```mermaid", architecture_mermaid(data), "```", "",
@@ -107,10 +143,10 @@ def render_md(data: dict) -> str:
     for p in data["phases"]:
         n = counts(p["items"])
         out += [f"### {p['title']} ({pct(p['items'])}%)", "", f"_{p['goal']}._", "",
-                "| Part | Status | How it is built | Where | PR |", "|---|---|---|---|---|"]
+                "| Part | Status | Verified | How it is built | Where | PR |", "|---|---|---|---|---|---|"]
         for i in p["items"]:
             where = ", ".join(f"`{w.strip()}`" for w in i["where"].split(",")) if i.get("where") else "-"
-            out.append(f"| {i['name']} | {ICON[i['status']]} {LABEL[i['status']]} | {i['how']} | {where} | "
+            out.append(f"| {i['name']} | {ICON[i['status']]} {LABEL[i['status']]} | {verified_cell(i)} | {i['how']} | {where} | "
                        f"{_pr_links(i, repo, legacy)} |")
         out += ["", f"{n['done']}/{len(p['items'])} done", ""]
     out += ["## Next up", ""] + [f"{k}. {t}" for k, t in enumerate(data["next"], 1)]
@@ -124,14 +160,14 @@ def render_html(data: dict) -> str:
     rows = []
     for p in data["phases"]:
         rows.append(f'<h3>{html.escape(p["title"])} <small>{pct(p["items"])}%</small></h3>'
-                    f'<p class="goal">{html.escape(p["goal"])}</p><table><tr><th>Part</th><th>Status</th>'
+                    f'<p class="goal">{html.escape(p["goal"])}</p><table><tr><th>Part</th><th>Status</th><th>Verified</th>'
                     "<th>How it is built</th><th>Where</th><th>PR</th></tr>")
         for i in p["items"]:
             where = ", ".join(f"<code>{html.escape(w.strip())}</code>" for w in i["where"].split(",")) \
                 if i.get("where") else "-"
             prl = ", ".join(f"#{n}" if n <= legacy else f'<a href="{repo}/pull/{n}">#{n}</a>' for n in prs(i)) or "-"
             rows.append(f'<tr><td>{html.escape(i["name"])}</td><td><span class="pill {i["status"]}">'
-                        f'{LABEL[i["status"]]}</span></td><td>{html.escape(i["how"])}</td><td>{where}</td>'
+                        f'{LABEL[i["status"]]}</span></td><td>{verified_cell(i)}</td><td>{html.escape(i["how"])}</td><td>{where}</td>'
                         f"<td>{prl}</td></tr>")
         rows.append("</table>")
     css = (":root{--bg:#fff;--fg:#1f2328;--mut:#59636e;--line:#d1d9e0}"
@@ -150,7 +186,7 @@ def render_html(data: dict) -> str:
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 <h1>workbench progress</h1>
 <p>Last updated {data['updated']}. <b>{pct(items)}% built</b>: {c['done']} done, {c['review']} in review,
-{c['partial']} partial, {c['todo']} to do ({len(items)} items).</p>
+{c['partial']} partial, {c['todo']} to do ({len(items)} items).<br>{verified_summary(items)}</p>
 <h2>Roadmap</h2><pre class="mermaid">{roadmap_mermaid(data)}</pre>
 <h2>As built</h2><p class="goal">Green verified, blue in review, amber partial, grey not started.</p>
 <pre class="mermaid">{architecture_mermaid(data)}</pre>
@@ -177,7 +213,15 @@ def stale(data: dict | None = None) -> list[Path]:
     return [p for p, text in want.items() if not p.exists() or p.read_text() != text]
 
 
+def unverified(data: dict | None = None) -> list[str]:
+    """Built items (done or in review) whose verification level is not stated."""
+    return [i["name"] for i in all_items(data or load()) if i["status"] in ("done", "review") and not i.get("verified")]
+
+
 def main(argv: list[str]) -> int:
+    if "--unverified" in argv:
+        print("\n".join(unverified()))
+        return 0
     if "--check" in argv:
         bad = stale()
         for p in bad:
