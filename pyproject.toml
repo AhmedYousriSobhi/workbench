@@ -1,6 +1,6 @@
 [project]
 name = "workbench"
-version = "0.11.0"
+version = "0.12.0"
 requires-python = ">=3.11"
 license = {text = "Apache-2.0 OR MIT"}
 # Every dependency is an exact pin (issue 855): raise one on purpose, in its own PR. tests/test_docs.py fails on a loose one.
