@@ -32,6 +32,7 @@ from . import (
     lab_apply,
     lab_candidate,
     lab_diff,
+    lab_export,
     lab_validate,
     logins,
     machine,
@@ -1787,6 +1788,25 @@ def _best_effort(read):
         return read()
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, alerts.NotRunning):
         return None
+
+
+@export_app.command("lab-report")
+def export_lab_report(name: str = typer.Argument(..., help="a lab made with `benchctl import lab`"),
+                      run: str = typer.Argument("last", help="a run folder name (see benchctl get lab NAME), or last"),
+                      anonymize: bool = typer.Option(False, "--anonymize", help="replace production node names with lab-node-NNN and user names with <user>"),
+                      json_: bool = JSON,
+                      out: str = typer.Option(None, "-o", "--output", help="file to write (default: print on stdout; - is stdout)")) -> None:
+    """The config lab's report of one run (the verdict, findings, wait by partition, suggestions), to attach to a ticket. Markdown; `--json` gives report.json with a contract_version. `--anonymize` maps production node names to their lab names and user names to <user>; the mapping is never written. Reads the run's report files only. Exit 1 when the lab, the run or its report is missing."""
+    try:
+        data, markdown = lab_export.export(name, run, anonymize)
+    except lab_export.ExportError as e:
+        typer.echo(errors.render("WB-NO-LAB-REPORT", str(e)), err=True)
+        raise typer.Exit(1) from e
+    text = contract.dumps(data) + "\n" if contract.wanted("table", json_) == "json" else markdown
+    if out is None or out == "-":
+        typer.echo(text, nl=False)
+        return
+    _Path(out).write_text(text)
 
 
 @export_app.command("test-report")

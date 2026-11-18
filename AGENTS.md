@@ -46,6 +46,7 @@ Optional parts (Teleport, jump host, Kubernetes, real Jira): `benchctl get endpo
 | `benchctl wait ready` | Until every started service answers (the same check `start` uses) |
 | `benchctl export profile` | Write a profile file the monitoring client can import |
 | `benchctl export test-report` | A report of the web page's last scenario run, to attach to a bug report |
+| `benchctl export lab-report` | The config lab's report of one run (the verdict, findings, wait by partition, suggestions), to attach to a ticket |
 | `benchctl run lab` | Replay a config lab A/B through the governor; `stop lab NAME` ends it |
 <!-- END verbs -->
 
@@ -63,5 +64,5 @@ Add `--json` to any read verb. Scenarios: `benchctl scenario list`. Recipes (one
 - Do not name or imitate the monitoring client in files you commit.
 
 <!-- BEGIN contract -->
-JSON contract version 2.3. Schemas: `docs/agents/schemas/`. Changes: `docs/agents/CHANGELOG.md`. Error codes: `docs/agents/ERROR-CODES.md`.
+JSON contract version 2.4. Schemas: `docs/agents/schemas/`. Changes: `docs/agents/CHANGELOG.md`. Error codes: `docs/agents/ERROR-CODES.md`.
 <!-- END contract -->

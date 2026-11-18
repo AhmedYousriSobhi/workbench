@@ -23,9 +23,10 @@ TOOLS = {
     "fault_clear": ({}, ["clear", "faults", "--json"]),
     "capture_once": ({"node": "cn001", "seconds": 5, "max_messages": 50}, ["get", "capture", "cn001", "--once", "--seconds", "5", "--max-messages", "50"]),
     "report_export": ({"name": "node-down"}, ["export", "test-report", "node-down", "--json"]),
+    "lab_report_export": ({"name": "prod-a", "anonymize": True}, ["export", "lab-report", "prod-a", "last", "--json", "--anonymize"]),
     "wait": ({"kind": "node-state", "name": "cn001", "state": "running", "timeout": 5}, ["wait", "node-state", "cn001", "running", "--timeout", "5.0"]),
 }
-READ_ONLY = {"workbench_describe", "workbench_plan", "scenario_list", "faults_get", "endpoints_get", "traffic_get", "alerts_get", "wait", "scenario_status", "capture_once", "report_export"}
+READ_ONLY = {"workbench_describe", "workbench_plan", "scenario_list", "faults_get", "endpoints_get", "traffic_get", "alerts_get", "wait", "scenario_status", "capture_once", "report_export", "lab_report_export"}
 DESTRUCTIVE = {"workbench_down", "fault_inject"}
 
 
