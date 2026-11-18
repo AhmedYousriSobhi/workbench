@@ -8,7 +8,7 @@ _TARGET = typer.Option("mock", "--target", help="mock (the Jira mock) or real (t
 
 
 def _driver(target: str):
-    from .jira_driver import JiraDriver, JiraError
+    from ..jira_driver import JiraDriver, JiraError
     try:
         return JiraDriver.for_target(target)
     except JiraError as e:

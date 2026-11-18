@@ -8,6 +8,7 @@ import pytest
 from typer.testing import CliRunner
 
 from benchctl import agentmode, checks, cli, inventory, stack, tuning
+from benchctl.commands import reset as cmd_reset
 
 runner = CliRunner()
 ROOT = Path(__file__).resolve().parent.parent
@@ -84,7 +85,7 @@ def test_doctor_in_agent_mode_prints_only_what_needs_attention(monkeypatch):
 
 def test_destructive_verbs_need_yes_only_in_agent_mode(monkeypatch):
     cancelled = []
-    monkeypatch.setattr(cli, "_daemon", lambda req, msg: cancelled.append(msg))
+    monkeypatch.setattr(cmd_reset, "_daemon", lambda req, msg: cancelled.append(msg))
     r = runner.invoke(cli.app, ["remove", "jobs"])
     assert r.exit_code == 0 and cancelled == ["jobs cancelled"]  # a script or a person: unchanged
     cancelled.clear()

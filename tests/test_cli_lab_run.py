@@ -9,6 +9,10 @@ import yaml
 from typer.testing import CliRunner
 
 from benchctl import cli, lab, lab_run, lab_steps
+from benchctl.commands import health as cmd_health
+from benchctl.commands import lab as cmd_lab
+from benchctl.commands import lab_support as cmd_lab_support
+from benchctl.commands import lifecycle as cmd_lifecycle
 
 ROOT = Path(__file__).resolve().parents[1]
 FIX = ROOT / "tests" / "fixtures" / "lab" / "full"
@@ -53,9 +57,9 @@ def test_run_lab_asks_the_governor_then_watches_status_until_it_started(gov):
 def test_run_lab_says_when_the_watch_ends_without_an_answer(gov, monkeypatch):
     _sent, _answers, status = gov
     status["lab"] = {"name": "prod-a", "state": "preparing", "active": True}
-    assert cli._lab_run_outcome("prod-a", timeout=0.01) == 1
+    assert cmd_lab._lab_run_outcome("prod-a", timeout=0.01) == 1
     status["lab"] = OSError("gone")
-    assert cli._lab_run_outcome("prod-a", timeout=5) == 1
+    assert cmd_lab._lab_run_outcome("prod-a", timeout=5) == 1
 
 
 def test_run_lab_says_one_line_per_refusal(gov):
@@ -83,7 +87,7 @@ def test_stop_lab_and_plain_stop(gov, monkeypatch):
     assert run(cli.app, ["stop", "lab", "prod-a"]).exit_code == 1
     assert run(cli.app, ["stop", "lab"]).exit_code == 2 and run(cli.app, ["stop", "other"]).exit_code == 2
     seen = []
-    monkeypatch.setattr(cli, "_launcher", lambda *a: seen.append(a))
+    monkeypatch.setattr(cmd_lifecycle, "_launcher", lambda *a: seen.append(a))
     run(cli.app, ["stop"])
     assert seen == [("stop",)]
 
@@ -92,12 +96,12 @@ def test_down_and_stop_refuse_during_a_run_and_name_both_ways_out(gov, monkeypat
     sent, _answers, status = gov
     status["lab"] = RUNNING
     seen = []
-    monkeypatch.setattr(cli, "_launcher", lambda *a: seen.append(a))
+    monkeypatch.setattr(cmd_lifecycle, "_launcher", lambda *a: seen.append(a))
     monkeypatch.setattr(cli.stack, "down", lambda say: seen.append("down") or True)
     monkeypatch.setattr(cli.inventory, "service_rows", list)
     for argv in (["down"], ["stop"], ["down", "--yes"], ["stop", "--yes"]):  # --yes never overrides
         r = run(cli.app, argv)
-        assert r.exit_code == cli.RUN_REFUSED, argv
+        assert r.exit_code == cmd_lab_support.RUN_REFUSED, argv
         assert "benchctl stop lab prod-a" in r.output and f"benchctl {argv[0]} --force" in r.output and "remove lab prod-a" in r.output
     assert seen == [] and not [s for s in sent if s["cmd"] == "lab-stop"]
 
@@ -106,7 +110,7 @@ def test_down_force_aborts_without_restore_and_agent_mode_needs_yes(gov, monkeyp
     sent, answers, status = gov
     status["lab"] = RUNNING
     seen = []
-    monkeypatch.setattr(cli, "_launcher", lambda *a: seen.append(a))
+    monkeypatch.setattr(cmd_lifecycle, "_launcher", lambda *a: seen.append(a))
     monkeypatch.setattr(cli.stack, "down", lambda say: seen.append("down") or True)
     monkeypatch.setattr(cli.inventory, "service_rows", list)
     monkeypatch.setattr(cli.teleport, "snapshot", lambda: None)
@@ -128,9 +132,9 @@ def test_down_force_aborts_without_restore_and_agent_mode_needs_yes(gov, monkeyp
 def test_down_without_a_governor_or_a_run_goes_ahead(gov, monkeypatch):
     _sent, _answers, status = gov
     status["lab"] = OSError("no governor")
-    assert cli._active_lab_run() is None
+    assert cmd_lab_support._active_lab_run() is None
     status["lab"] = {"name": "prod-a", "side": "baseline", "state": "applied"}  # a lab applied, no run
-    assert cli._active_lab_run() is None
+    assert cmd_lab_support._active_lab_run() is None
 
 
 def test_import_replace_is_refused_during_a_run(gov, tmp_path):
@@ -144,7 +148,7 @@ def test_prepare_execute_and_recover_children(tmp_path, monkeypatch, gov):
     root = tmp_path / "lab"
     lab.import_lab("prod-a", FIX, root=root)
     monkeypatch.setattr(lab, "ROOT", root)
-    monkeypatch.setattr(cli, "_base_sim", lambda: yaml.safe_load((ROOT / "sim.yaml").read_text()))
+    monkeypatch.setattr(cmd_lab, "_base_sim", lambda: yaml.safe_load((ROOT / "sim.yaml").read_text()))
     r = run(cli.app, ["run", "lab", "prod-a", "--prepare", "--ab", "-o", "json"])
     assert r.exit_code == 0, r.output
     p = json.loads(r.output)
@@ -158,7 +162,7 @@ def test_prepare_execute_and_recover_children(tmp_path, monkeypatch, gov):
         def __init__(self, restored=None):
             self.state, self.r = next(states, "aborted"), {"restored_after_abort": restored}
     seen = []
-    monkeypatch.setattr(cli, "_lab_env", lambda: "env")
+    monkeypatch.setattr(cmd_lab, "_lab_env", lambda: "env")
     monkeypatch.setattr(lab_steps, "execute", lambda name, rid, env, governor: (seen.append((name, rid, env, governor({"cmd": "status"}))), R())[1])
     assert run(cli.app, ["run", "lab", "prod-a", "--execute", "--run", p["run"]]).exit_code == 0
     assert run(cli.app, ["run", "lab", "prod-a", "--execute", "--run", p["run"]]).exit_code == 1
@@ -171,20 +175,20 @@ def test_prepare_execute_and_recover_children(tmp_path, monkeypatch, gov):
 
 
 def test_status_line_shows_the_lab_and_its_run():
-    assert cli._lab_line({"name": "prod-a", "side": "baseline"}) == "lab prod-a (baseline) applied"
-    line = cli._lab_line({"name": "prod-a", "side": "candidate", "run": "20261117-120000", "state": "replay_b", "percent": 63,
+    assert cmd_health._lab_line({"name": "prod-a", "side": "baseline"}) == "lab prod-a (baseline) applied"
+    line = cmd_health._lab_line({"name": "prod-a", "side": "candidate", "run": "20261117-120000", "state": "replay_b", "percent": 63,
                           "replay_side": "b", "submitted": 40, "running": 7, "pending": 3, "paused_s": 12.0, "paused": True,
                           "restore_pending": True, "reason": "aborted under memory pressure (L3)"})
     assert line.startswith("lab prod-a (candidate) applied; run 20261117-120000: replay_b 63% side b, 40 submitted, 7 running, 3 pending")
     assert "paused 12 s (PAUSED)" in line and "restore waits for L0-L1" in line and line.endswith(": aborted under memory pressure (L3)")
-    assert "refused: no trace" in cli._lab_line({"name": "prod-a", "state": "refused", "reason": "refused: no trace"})
+    assert "refused: no trace" in cmd_health._lab_line({"name": "prod-a", "state": "refused", "reason": "refused: no trace"})
 
 
 def test_repeat_starts_the_run_again_only_after_the_last_one_is_done(gov, monkeypatch):
     sent, _answers, status = gov
     status["lab"] = RUNNING
     states = iter(["done", "done"])
-    monkeypatch.setattr(cli, "_wait_run_end", lambda name: next(states))
+    monkeypatch.setattr(cmd_lab, "_wait_run_end", lambda name: next(states))
     r = run(cli.app, ["run", "lab", "prod-a", "--ab", "--repeat", "3"])
     assert r.exit_code == 0, r.output
     assert [q["cmd"] for q in sent if q["cmd"] == "lab-run"] == ["lab-run"] * 3
@@ -194,7 +198,7 @@ def test_repeat_starts_the_run_again_only_after_the_last_one_is_done(gov, monkey
 def test_repeat_stops_when_a_run_did_not_finish(gov, monkeypatch):
     sent, _answers, status = gov
     status["lab"] = RUNNING
-    monkeypatch.setattr(cli, "_wait_run_end", lambda name: "aborted")
+    monkeypatch.setattr(cmd_lab, "_wait_run_end", lambda name: "aborted")
     r = run(cli.app, ["run", "lab", "prod-a", "--repeat", "3"])
     assert r.exit_code == 1 and "repeat 1 of 3 ended aborted: not starting the next one" in r.output
     assert sum(q["cmd"] == "lab-run" for q in sent) == 1
@@ -217,4 +221,4 @@ def test_wait_run_end_polls_the_newest_runs_record_until_it_is_done(tmp_path, mo
     def sleep(s):
         waits.append(s)
         (new / "run.json").write_text(json.dumps({"state": "done"}))
-    assert cli._wait_run_end("prod-a", poll=5, sleep=sleep) == "done" and waits == [5]
+    assert cmd_lab._wait_run_end("prod-a", poll=5, sleep=sleep) == "done" and waits == [5]
