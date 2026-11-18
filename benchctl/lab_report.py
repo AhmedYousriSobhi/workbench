@@ -99,17 +99,28 @@ def suggestions(a: dict | None, b: dict, findings: dict[str, list[str]] | None) 
     return out
 
 
+def repeats(verdicts: list[str | None]) -> dict[str, Any]:
+    """Runs of the same frozen jobs (same `jobs_sha256`): how many, their verdicts, and whether they agree. A verdict of one run is
+    labelled single-run; two or more agreeing runs make it repeatable (issue 555)."""
+    seen = [v for v in verdicts if v]
+    return {"runs": len(verdicts), "verdicts": verdicts, "consistent": len(set(seen)) <= 1 and bool(seen)}
+
+
 def build(meta: dict, a_rows: list[dict[str, str]] | None, b_rows: list[dict[str, str]], th: dict[str, float], pairing: dict[str, Any] | None,
-          time_scaled: list[dict[str, str]]) -> dict[str, Any]:
+          time_scaled: list[dict[str, str]], earlier: list[str | None] | None = None, prom: dict[str, dict | None] | None = None) -> dict[str, Any]:
     """The report document (report.json). `meta` carries run, seed, factor, length, comparable, paused and rejected counts."""
     f = float(meta["factor"])
     ab = a_rows is not None
     a = lab_metrics.side_metrics(a_rows, f) if ab else None
     b = lab_metrics.side_metrics(b_rows, f)
     findings = compare(a, b, th, f, pairing or {"only_a": [], "only_b": []}) if ab else None
-    return {**meta, "single_run": True, "verdict": verdict(findings, bool(meta["comparable"]), ab) if findings else None, "findings": findings,
+    v = verdict(findings, bool(meta["comparable"]), ab) if findings else None
+    rep = repeats([*(earlier or []), v])
+    prom = {k: x for k, x in (prom or {}).items() if x is not None}
+    nm = [n for n in lab_metrics.NOT_MEASURED if not (prom and n.startswith(("alerts fired", "alert flapping")))]
+    return {**meta, "single_run": rep["runs"] == 1, "repeat": rep, "alerts": prom, "verdict": v, "findings": findings,
             "thresholds": th, "a": a, "b": b, "suggestions": suggestions(a, b, findings), "time_scaled": time_scaled,
-            "not_measured": list(lab_metrics.NOT_MEASURED)}
+            "not_measured": nm}
 
 
 def _fmt(v: float | None) -> str:
@@ -118,7 +129,7 @@ def _fmt(v: float | None) -> str:
 
 def markdown(r: dict[str, Any]) -> str:
     L = [f"# Config lab report: {r['name']} run {r['run']}", ""]
-    L.append(f"**Verdict: {r['verdict'] or 'none (candidate-only run: nothing to compare with)'}**" + (" (single run: repeat before relying on it)" if r["single_run"] else ""))
+    L.append(f"**Verdict: {r['verdict'] or 'none (candidate-only run: nothing to compare with)'}**" + (" (single run: repeat before relying on it)" if r["single_run"] else f" (repeated: {r['repeat']['runs']} runs of the same jobs, {'same verdict' if r['repeat']['consistent'] else 'verdicts differ: ' + ', '.join(str(x) for x in r['repeat']['verdicts'])})"))
     L += ["", f"seed {r['seed']}, {r['jobs']} jobs, {r['target_hours']} h per side, time scaled x{r['factor']}, comparable: {'yes' if r['comparable'] else 'NO'}"]
     L.append(f"rejected by Slurm (no association, bad partition): {r['rejected'] or 'none'}")
     if r["findings"]:
@@ -133,6 +144,15 @@ def markdown(r: dict[str, Any]) -> str:
         if r[side]:
             for part, s in r[side]["by_partition"].items():
                 L.append(f"| {part or '(none)'} | {side.upper()} | {s['jobs']} | {s['pending']} | {_fmt(None if s['wait_median_s'] is None else s['wait_median_s'] * r['factor'])} | {_fmt(None if s['wait_p95_s'] is None else s['wait_p95_s'] * r['factor'])} |")
+    L += ["", "## Wait by QOS (production-equivalent time)", "", "| QOS | side | jobs | pending | median | p95 |", "|---|---|---|---|---|---|"]
+    for side in ("a", "b"):
+        if r[side]:
+            for q, s in r[side]["by_qos"].items():
+                L.append(f"| {q or '(none)'} | {side.upper()} | {s['jobs']} | {s['pending']} | {_fmt(None if s['wait_median_s'] is None else s['wait_median_s'] * r['factor'])} | {_fmt(None if s['wait_p95_s'] is None else s['wait_p95_s'] * r['factor'])} |")
+    if r.get("alerts"):
+        L += ["", "## Alerts (from Prometheus, production-equivalent time)", ""]
+        for side, d in sorted(r["alerts"].items()):
+            L += [f"- {side.upper()}: " + ("none fired" if not d["alerts"] else "; ".join(f"{x['name']} first after {x['first_after_prod_s']:.0f}s, {x['flaps']} flap(s)" for x in d["alerts"]))]
     L += ["", "## Preemption", ""] + [f"- {side.upper()}: {r[side]['preempted']} preempted, {r[side]['gpu_hours_lost']} GPU-hours lost of {r[side]['gpu_hours']}" for side in ("a", "b") if r[side]]
     if r["suggestions"]:
         L += ["", "## Suggestions"] + [f"- {s['text']}" for s in r["suggestions"]]

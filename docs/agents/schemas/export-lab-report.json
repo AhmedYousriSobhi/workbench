@@ -10,6 +10,8 @@
     "verdict": {"enum": ["Do not ship", "Ship with changes", "Ship", "No effect", null]},
     "comparable": {"type": "boolean"},
     "single_run": {"type": "boolean"},
+    "repeat": {"type": "object", "properties": {"runs": {"type": "integer"}, "verdicts": {"type": "array"}, "consistent": {"type": "boolean"}}},
+    "alerts": {"type": "object"},
     "factor": {"type": "number"},
     "findings": {"type": ["object", "null"]},
     "thresholds": {"type": "object"},
