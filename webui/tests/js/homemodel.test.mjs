@@ -11,6 +11,13 @@ test('no governor is one item, a clear cluster has none', () => {
   assert.deepEqual(attentionItems(null, null, LV).map(i => i.kind), ['bad']);
   assert.deepEqual(attentionItems({ level: 0 }, cl([n('cn001', 'ok')], { slurm: true }), LV), []);
 });
+test('stack down is one entry with the one command, no per-node or per-service lines (W-10)', () => {
+  const down = cl([n('cn001', 'down'), n('cn002', 'unknown')], { slurm: false, bmc: false });
+  const items = attentionItems({ level: 0 }, down, LV);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].text.split('benchctl start').length - 1, 1);
+  assert.equal(homeSummary(down), 'The simulation stack is not running.');  // no second command here
+});
 test('pressure from L2, findings are capped at five', () => {
   const g = { level: 3, violations: [1, 2, 3, 4, 5, 6, 7] };
   const items = attentionItems(g, null, LV);

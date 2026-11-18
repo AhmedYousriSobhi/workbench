@@ -47,17 +47,18 @@ export function wireState(w, links, rate) {
 
 const T = (cls, x, y, text, extra = {}) => sv('text', { class: cls, x, y, ...extra }, text);
 
+const OFFLINE = '– offline';  // the one word for a part when the stack is not running (W-10): a build fact such as "built" is not a live state
 function partText(p, f) {
   const up = stackUp(), lg = p.login;
   switch (p.role) {
-    case 'login': return { t: lg ? lg.name + ' · ' + KIND_NAME[loginKind(lg)] : 'login', s: lg ? (loginRuns(lg) ? `✓ ${MODE_TEXT[lg.mode]}` : '✗ not running') : '', m: lg && loginRuns(lg) ? loginAddr(lg) : '', badge: p.head ? 'HEAD NODE · cmsh' : '' };
-    case 'klogin': return { t: lg ? (p.via ? `kubectl · via ${lg.name}` : lg.name + ' · k-login') : 'k-login', s: lg ? (loginRuns(lg) ? `✓ ${MODE_TEXT[lg.mode]}` : '✗ not running') : '', m: lg && loginRuns(lg) ? loginAddr(lg) : '' };
-    case 'teleport': return { t: 'Teleport proxy', s: p.present ? (S.flowSnap?.reachable.teleport ? '✓ up' : up ? '✗ not reachable' : '– offline') : '', m: ':3080 · certificates' };
-    case 'jump': return { t: 'Jump host', s: p.present ? '✓ built' : '', m: 'bare sshd bastion · :2220' };
-    case 'slurmctld': return { t: p.ctl ? 'controller · slurmctld' : 'slurmctld', s: p.present ? (S.slurmNodes ? '✓ answers (sinfo)' : up ? '– not probed' : '– offline') : '', m: p.ctl ? 'sshd + cmsh · BCM head node' : 'real · Slurm RPC :6817' };
-    case 'slurmdbd': return { t: 'slurmdbd + MariaDB', s: p.present ? '✓ answers (sacctmgr)' : '', m: p.present ? 'real · accounting :6819' : 'accounting · not read' };
+    case 'login': return { t: lg ? lg.name + ' · ' + KIND_NAME[loginKind(lg)] : 'login', s: lg ? (!up ? OFFLINE : loginRuns(lg) ? `✓ ${MODE_TEXT[lg.mode]}` : '✗ not running') : '', m: lg && up && loginRuns(lg) ? loginAddr(lg) : '', badge: p.head ? 'HEAD NODE · cmsh' : '' };
+    case 'klogin': return { t: lg ? (p.via ? `kubectl · via ${lg.name}` : lg.name + ' · k-login') : 'k-login', s: lg ? (!up ? OFFLINE : loginRuns(lg) ? `✓ ${MODE_TEXT[lg.mode]}` : '✗ not running') : '', m: lg && up && loginRuns(lg) ? loginAddr(lg) : '' };
+    case 'teleport': return { t: 'Teleport proxy', s: p.present ? (S.flowSnap?.reachable.teleport ? '✓ up' : up ? '✗ not reachable' : OFFLINE) : '', m: ':3080 · certificates' };
+    case 'jump': return { t: 'Jump host', s: p.present ? (up ? '✓ built' : OFFLINE) : '', m: 'bare sshd bastion · :2220' };
+    case 'slurmctld': return { t: p.ctl ? 'controller · slurmctld' : 'slurmctld', s: p.present ? (!up ? OFFLINE : S.slurmNodes ? '✓ answers (sinfo)' : '– not probed') : '', m: p.ctl ? 'sshd + cmsh · BCM head node' : 'real · Slurm RPC :6817' };
+    case 'slurmdbd': return { t: 'slurmdbd + MariaDB', s: p.present ? (up ? '✓ answers (sacctmgr)' : OFFLINE) : '', m: p.present ? 'real · accounting :6819' : 'accounting · not read' };
     case 'storage': return { t: 'Shared storage', s: '– planned, not built', m: 'NFS or Lustre (SPEC C-11)' };
-    case 'k8s-api': return { t: 'kube-apiserver', s: p.present ? (S.flowSnap?.reachable['k8s-api'] ? '✓ up' : up ? '✗ not reachable' : '– offline') : '', m: 'real · :6443' };
+    case 'k8s-api': return { t: 'kube-apiserver', s: p.present ? (S.flowSnap?.reachable['k8s-api'] ? '✓ up' : up ? '✗ not reachable' : OFFLINE) : '', m: 'real · :6443' };
     case 'etcd': return { t: 'etcd', s: '', m: 'real · :2379' };
     case 'kwok': return { t: 'KWOK', s: '', m: 'plays the kubelets' };
     case 'service': return { t: p.title, s: '', m: p.sub };

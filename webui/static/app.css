@@ -468,11 +468,11 @@
 .trun { display:grid; grid-template-columns:minmax(260px,340px) minmax(0,1fr); gap:var(--sp5); align-items:start; max-width:1280px; }
 .trun-lib, .trun-main { display:flex; flex-direction:column; gap:var(--sp3); min-width:0; } .trun-lib input[type=search] { width:100%; min-height:40px; font:inherit; border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--fg); padding:0 12px; }
 .trun ul.scns { max-height:calc(100vh - 330px); min-height:160px; overflow-y:auto; scrollbar-width:thin; display:flex; flex-direction:column; gap:var(--sp2); border-top:0; }
-.trun .scn { display:grid; grid-template-columns:1fr auto; gap:var(--sp2); align-items:center; padding:var(--sp2) var(--sp3); border:1px solid var(--line); border-radius:12px; margin:0; }
+.trun .scn { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:var(--sp2); align-items:center; padding:var(--sp2) var(--sp3); border:1px solid var(--line); border-radius:12px; margin:0; }
 .trun .scn.sel { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 8%,var(--panel)); } .trun .scn.active { box-shadow:0 0 0 2px var(--accent) inset; }
-.scnsel { text-align:left; display:flex; flex-direction:column; gap:2px; min-height:40px; padding:4px 2px; border:0; background:none; color:var(--fg); font:inherit; cursor:pointer; } .scnsel:focus-visible { outline:2px solid var(--accent); border-radius:6px; }
-.scnsel .hd { display:flex; align-items:center; gap:var(--sp2); } .scnd { font-size:0.8125rem; color:var(--dim); display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
-.trun .scn .btn { min-height:40px; }
+.scnsel { min-width:0; text-align:left; display:flex; flex-direction:column; gap:2px; min-height:40px; padding:4px 2px; border:0; background:none; color:var(--fg); font:inherit; cursor:pointer; } .scnsel:focus-visible { outline:2px solid var(--accent); border-radius:6px; }
+.scnsel .hd { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp1) var(--sp2); } .scnsel .hd b { overflow-wrap:anywhere; min-width:0; } .scnd { font-size:0.8125rem; color:var(--dim); display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+.trun .scn .btn { min-height:40px; flex:none; white-space:nowrap; }
 .trun .runbox { margin:0; } .runexp { display:flex; align-items:center; gap:var(--sp2); } .trun .row { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:var(--sp3); }
 .clitag { display:inline-block; margin-left:var(--sp2); padding:0 8px; border:1px dashed var(--dim); border-radius:6px; font-size:0.75rem; }
 #runcli { margin:var(--sp3) 0; } #runcli code { word-break:break-all; }

@@ -314,7 +314,7 @@ Everything is on one screen:
 
 | Part | What it shows |
 |---|---|
-| Top strip | governor level, free memory, healthy services and nodes, any running scenario, then **☰ Menu** (**▶ Scenarios**, **▦ Cluster architecture**, **✚ Health checks**, **⇩ Export**), help and a theme switch (auto, light, dark). Press the level or memory chip for the **Governor** panel |
+| Top strip | governor level, free memory, healthy services and nodes, any running scenario, then **☰ Menu** (**✚ Health checks**, **✎ Ticket bot**, **⇩ Export**), help and a theme switch (auto, light, dark). Press the level or memory chip for the **Governor** panel |
 | *Needs attention* | anything that needs you |
 | **Infrastructure architecture** | login nodes, the Teleport proxy, the services and every node, one labelled line per way in (*direct SSH*, *Teleport*, *jump host*). A round dot travels from *Clients* to a service for each real request; a diamond travels from *Faults* to the node it hits |
 | **Entity list** | one card per node and per service with its status and quick facts; click a node to open its panel in place of the list |
@@ -324,7 +324,7 @@ What you can do on it:
 - **Dots:** *Pause animation* stops them. They stop by themselves at governor L3 or for reduced motion.
 - **Teleport:** when on, it is a box in the diagram and a card in the list. Turn it on with `./scripts/benchctl start --access teleport`, or tick it under **Access** in **▦ Cluster architecture**.
 - **A node's panel:** **Actions** power it off, overheat it, fail its fans or inject a GPU error (then *Recover*). **Info** shows how to reach it.
-- **▶ Scenarios:** pick a speed, press Play, and watch each step turn ok, skipped or failed. Press Stop to abort.
+- **▶ Test run** (left navigation): pick a speed, press Play, and watch each step turn ok, skipped or failed. Press Stop to abort.
 - **▦ Cluster architecture:** change the number of nodes and apply it.
 - **Phone:** the panels stack under each other.
 

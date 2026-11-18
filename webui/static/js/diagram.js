@@ -166,7 +166,7 @@ export function buildFlowBase() {
     if (Array.isArray(a2)) { g.append(accBox(a2, p)); continue; }
     const l = a2, lt = () => !loginRuns(l) ? [`${l.name} · not running`, stackUp() ? 'Selected, but nothing answers on its port 22: build it with benchctl up' : 'The stack is not running'] : [`${l.name} · ${MODE_TEXT[l.mode]}`, l.mode === 'teleport' ? 'No direct port: only through the Teleport proxy' : `${l.ip || l.name} (also 127.0.0.1:${l.port}) · click for the command`];
     const bg = asButton(sv('g', { id: 'lg-' + l.name }), `${l.name}: ${MODE_TEXT[l.mode]}${loginRuns(l) ? '' : ', not running'}. Details`, () => openPop(bg, 'login', l.name), lt);
-    const lines = col ? [`${l.name} · ${KIND_NAME[loginKind(l)]}`, MODE_TEXT[l.mode], loginRuns(l) ? (l.ip || l.name) : '✗ not running', loginRuns(l) ? portLine(l) : ''] : [`${l.name} · ${KIND_NAME[loginKind(l)]}`, MODE_TEXT[l.mode], loginRuns(l) ? loginAddr(l) : '✗ not running'];
+    const lines = col ? [`${l.name} · ${KIND_NAME[loginKind(l)]}`, MODE_TEXT[l.mode], !stackUp() ? '– offline' : loginRuns(l) ? (l.ip || l.name) : '✗ not running', stackUp() && loginRuns(l) ? portLine(l) : ''] : [`${l.name} · ${KIND_NAME[loginKind(l)]}`, MODE_TEXT[l.mode], !stackUp() ? '– offline' : loginRuns(l) ? loginAddr(l) : '✗ not running'];
     bg.append(sv('rect', { class: 'blk lgn' + (loginRuns(l) ? '' : stackUp() ? ' down' : ' off'), x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), ...lines.map((t, n) => t ? [sv('text', { class: n ? 'sub' : 'sn', x: p.x + 12, y: p.y + mA.ys[n] }, fitText(t, n ? 'sub' : 'sn', u, p.w - 24, n ? 400 : 600))] : []).flat()); g.append(bg);
   }
   svcs.forEach(([k, label, sb], i) => g.append(box(k, label, sb, P.svcP[i], 'svc', k)));
