@@ -15,6 +15,21 @@
 Status colours: green = done (merged and verified), blue = in an open PR, amber = partial, grey = not started.
 "Percent built" counts done plus in-review items.
 
+## How far an item was verified
+Built is not the same as verified. An item may carry `verified: unit | live | client` in `docs/progress.yaml`:
+the highest level it was checked at, each level including the ones before.
+
+- `unit`: unit tests pass; the live run has not been done.
+- `live`: a test or run against the real thing (live stack, real host); add `verified_on: YYYY-MM-DD`.
+- `client`: exercised from the monitoring client ([client-testing.md](client-testing.md)); add `verified_on`.
+
+The table has a **Verified** column (words, never colour). The summary counts built items (done or in review) per level, plus those with no level stated.
+
+- `python -m benchctl.progress --unverified` lists the built items whose level is not stated.
+- Raise the level in the same PR that records the run, and only when the item's `how` or its PR says so. Leave the field out rather than guess.
+- An unknown value, or `verified_on` without `live` or `client`, fails the load.
+- Whether `done` should require `live` or `client` is not decided.
+
 ## How it stays true
 The single source is [docs/progress.yaml](../progress.yaml). Nothing in `PROGRESS.md` or `progress.html` is
 written by hand. After a change that moves a status:

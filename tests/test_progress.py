@@ -81,6 +81,47 @@ def test_unknown_status_is_rejected(tmp_path):
         progress.load(bad)
 
 
+def _write(tmp_path, extra):
+    f = tmp_path / "p.yaml"
+    item = f"name: n, status: done, how: h, {extra}"
+    f.write_text("phases:\n  - {id: a, title: A, goal: g, items: [{" + item + "}]}\n")
+    return f
+
+
+def test_unknown_verified_level_is_rejected(tmp_path):
+    with pytest.raises(ValueError, match="verified level"):
+        progress.load(_write(tmp_path, "verified: perfect"))
+
+
+def test_verified_on_needs_live_or_client_and_a_date(tmp_path):
+    with pytest.raises(ValueError, match="needs verified"):
+        progress.load(_write(tmp_path, "verified: unit, verified_on: 2026-11-05"))
+    with pytest.raises(ValueError, match="YYYY-MM-DD"):
+        progress.load(_write(tmp_path, "verified: live, verified_on: yesterday"))
+    assert progress.load(_write(tmp_path, "verified: live, verified_on: 2026-11-05"))
+
+
+def test_verified_counts_cover_built_items_only():
+    items = [{"status": "done", "verified": "client"}, {"status": "review", "verified": "live"},
+             {"status": "review", "verified": "unit"}, {"status": "done"},
+             {"status": "partial", "verified": "live"}, {"status": "todo"}]
+    assert progress.verified_counts(items) == {"unit": 1, "live": 1, "client": 1, "none": 1}
+    assert "1 client, 1 live, 1 unit only, 1 not stated" in progress.verified_summary(items)
+
+
+def test_verified_is_shown_as_text_in_both_outputs():
+    assert progress.verified_cell({"verified": "live", "verified_on": "2026-11-05"}) == "Live 2026-11-05"
+    assert progress.verified_cell({}) == "not stated"
+    assert "| Verified |" in progress.render_md(DATA) and "<th>Verified</th>" in progress.render_html(DATA)
+    assert progress.verified_summary(progress.all_items(DATA)) in progress.render_md(DATA)
+
+
+def test_unverified_lists_built_items_without_a_level():
+    names = progress.unverified(DATA)
+    built = [i for i in progress.all_items(DATA) if i["status"] in ("done", "review")]
+    assert len(names) == sum(not i.get("verified") for i in built)
+
+
 def test_legacy_pr_numbers_are_plain_text():
     repo = "https://x/r"
     assert progress._pr_links({"pr": [3, 200]}, repo, legacy=160) == "#3, [#200](https://x/r/pull/200)"
