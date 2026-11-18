@@ -1,5 +1,6 @@
 """`benchctl start` names what it starts and what it replaces (#215)."""
 from benchctl import workbench
+from benchctl.commands import lifecycle as cmd_lifecycle
 
 
 def saved(**kw):
@@ -39,8 +40,8 @@ def test_start_passes_saved_to_the_launcher_only_when_it_reuses_it(monkeypatch, 
 
     from benchctl import cli
     calls = []
-    monkeypatch.setattr(cli, "_launcher", lambda *a: calls.append(a))
-    monkeypatch.setattr(cli, "_offer_completion", lambda: None)
+    monkeypatch.setattr(cmd_lifecycle, "_launcher", lambda *a: calls.append(a))
+    monkeypatch.setattr(cmd_lifecycle, "_offer_completion", lambda: None)
     here = {"spec": saved()}
     monkeypatch.setattr(workbench, "current", lambda sim, path=None: here["spec"])
     run = CliRunner().invoke

@@ -20,6 +20,7 @@ from benchctl import (
     scenario,
     stack,
 )
+from benchctl.commands import get as cmd_get
 from webui import cluster, traffic
 
 runner = CliRunner()
@@ -51,7 +52,7 @@ def in_repo(monkeypatch):
     ran = scenario.Report("node-down", [scenario.Outcome("bmc-farm power", "ok")], [scenario.Outcome("expect node down", "failed", "did not hold")])
     monkeypatch.setattr(scenario, "run", lambda sc, **k: ran)
     monkeypatch.setattr(alerts, "fetch", lambda get=None: [{"name": "NodeDown", "state": "firing", "severity": "page", "labels": {"alertname": "NodeDown"}, "active_at": "2026-11-13T10:00:00Z"}])
-    monkeypatch.setattr(cli, "_page_run_state", lambda: {"running": False, "name": "node-down", "ok": True, "steps": [{"at": 0, "target": "bmc-farm", "do": {}, "status": "ok", "detail": ""}], "expects": []})
+    monkeypatch.setattr(cmd_get, "_page_run_state", lambda: {"running": False, "name": "node-down", "ok": True, "steps": [{"at": 0, "target": "bmc-farm", "do": {}, "status": "ok", "detail": ""}], "expects": []})
     monkeypatch.setattr(agentverbs, "clear_faults", lambda sim, post, run: {"ok": True, "cleared": [{"target": "bmc-farm", "nodes": ["cn001"], "status": "ok", "detail": ""}]})
     monkeypatch.setattr(agentverbs.capture, "run", lambda sim, node, emit, seconds, packets=0, stop=None: emit({"t": 1.0, "dir": "out", "kind": "request", "type": "REQUEST_PING"}))
     monkeypatch.setattr(describe, "gather", lambda *a, **k: {"name": "cn001", "kind": "compute", "notes": [], "container": {"state": "running"}})

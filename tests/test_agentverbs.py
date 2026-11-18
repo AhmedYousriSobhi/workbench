@@ -4,6 +4,8 @@ import json
 from typer.testing import CliRunner
 
 from benchctl import agentverbs, cli, stack
+from benchctl.commands import adjust as cmd_adjust
+from benchctl.commands import get as cmd_get
 
 runner = CliRunner()
 SIM = {"compute": {"prefix": "cn", "count": 2}, "gpu": {"prefix": "gpu", "nodes": 1}}
@@ -60,7 +62,7 @@ def test_capture_once_count_never_exceeds_the_limit_when_a_batch_arrives():
 def test_cli_scenario_status_without_the_page_exits_1(monkeypatch):
     def down():
         raise OSError("refused")
-    monkeypatch.setattr(cli, "_page_run_state", down)
+    monkeypatch.setattr(cmd_get, "_page_run_state", down)
     r = runner.invoke(cli.app, ["get", "scenario-status", "--json"])
     assert r.exit_code == 1 and "benchctl start" in r.output
 
@@ -75,6 +77,6 @@ def test_cli_capture_once_refused_by_the_governor_and_too_long(monkeypatch):
 
 def test_clear_faults_cli_exit_follows_ok(monkeypatch):
     monkeypatch.setattr(agentverbs, "clear_faults", lambda *a: {"ok": False, "cleared": [{"target": "bmc-farm", "nodes": [], "status": "failed", "detail": "down"}]})
-    monkeypatch.setattr(cli, "_sim", lambda: SIM)
+    monkeypatch.setattr(cmd_adjust, "_sim", lambda: SIM)
     r = runner.invoke(cli.app, ["clear", "faults"])
     assert r.exit_code == 1 and "bmc-farm: failed (down)" in r.output

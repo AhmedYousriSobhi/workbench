@@ -10,6 +10,7 @@ import yaml
 from typer.testing import CliRunner
 
 from benchctl import cli, lab, lab_apply, lab_candidate, lab_diff, slurmconf
+from benchctl.commands import lab_support as cmd_lab_support
 from benchctl.lab import LabError
 from governor import control
 from governor.core import Governor
@@ -602,7 +603,7 @@ def test_cli_commands_read_the_lab_and_refuse_bad_input(world, monkeypatch, tmp_
     assert r.exit_code == 1 and "governor is not reachable" in r.output
     r = run(cli.app, ["remove", "lab", "prod-a"])
     assert r.exit_code == 1 and "governor is not reachable" in r.output
-    monkeypatch.setattr(cli, "_lab_env", lambda: env)
+    monkeypatch.setattr(cmd_lab_support, "_lab_env", lambda: env)
     assert run(cli.app, ["apply", "lab", "prod-a", "--execute"]).exit_code == 0
     assert run(cli.app, ["remove", "lab", "prod-a", "--execute"]).exit_code == 0
 
