@@ -473,8 +473,9 @@ def bootstrap(sim: dict, ips: dict, say: Callable[[str], None] = print, runner: 
     if r.returncode != 0:
         say(f"FAILED kubernetes: the KWOK definitions did not become ready: {r.stderr.strip()[-200:]}")
         return False
-    for path, what in (("/k8s/kwok/stage-fast.yaml", "default stages"), ("/k8s/kwok/stage-faults.yaml", "fault stages"), *KWOK_OBJECTS,
-                       ("/state/nodes.yaml", "nodes"), ("/k8s/fixtures/00-namespaces.yaml", "namespaces")):
+    for path, what in (("/k8s/kwok/stage-fast.yaml", "default stages"), ("/k8s/kwok/stage-faults.yaml", "fault stages"),
+                       ("/k8s/fixtures/00-namespaces.yaml", "namespaces"), *KWOK_OBJECTS,  # a Logs object is namespaced (team-b): the namespaces come first (issue 897)
+                       ("/state/nodes.yaml", "nodes")):
         if not apply(path, what):
             return False
     # The addresses KWOK would give a new node, written through the status subresource: etcd keeps the nodes between `down`

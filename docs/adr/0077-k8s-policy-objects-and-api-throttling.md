@@ -21,5 +21,7 @@ A real GPU cluster has priority classes, quotas and disruption budgets, and its 
 
 ## Pointer: group 4 decisions (issue 867, 2026-11-17)
 [ADR 0084, group 4 addendum](0084-tsh-kube-production-practice.md#addendum-group-4-decisions-issue-867-2026-11-17):
-- The scale work (issue 768) puts its 10,001 pods in a dedicated namespace, never in `team-a`, whose pod quota is 16.
+- The scale work (issue 768) puts its 10,001 pods in a dedicated namespace, never in `team-a`, whose pod quota is 24 (issue 897).
 - The version spike (issue 769) expects these fixtures to depend on the server version: the DRA claim quota needs `resource.k8s.io/v1` (Kubernetes 1.34 or later).
+
+**Addendum, issue 897 (2026-11-18).** The HPA fixtures (issue 764) brought the `team-a` pods to 17 against a quota of 16: no pod could be created, so the `usage` step's rollout and the HPA scale-up never happened (`exceeded quota: pods`, live run). The quota is 24 (17 plus a rollout surge and a scale-up of 3). KWOK's Logs object for the crash-looping pod is namespaced, so `bootstrap` applies the namespaces before the KWOK objects.

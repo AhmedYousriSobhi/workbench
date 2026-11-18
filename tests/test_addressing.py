@@ -59,7 +59,7 @@ def test_every_generated_service_has_its_fixed_address_and_the_network_has_the_s
             unplanned.add(name)
             continue
         assert svc["networks"]["default"]["ipv4_address"] == want, name
-    assert unplanned == {"accounting-init"}  # a one-shot job that exits; it needs no fixed address
+    assert unplanned == set()  # even the one-shot accounting-init: without an address Docker gives it the lowest free one, 10.141.0.1, and the first node then fails to start (issue 895)
     assert data["networks"]["ipmi"]["ipam"]["config"][0]["subnet"] == "10.148.0.0/16"
     assert data["services"]["bmc-farm"]["networks"]["ipmi"]["ipv4_address"] == addressing.IPMI_FARM_IP
     assert data["services"]["login"]["networks"]["ipmi"]["ipv4_address"] == addressing.IPMI_LOGIN_IP

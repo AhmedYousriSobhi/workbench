@@ -441,9 +441,9 @@ def apply(name: str, side: str, env: Env) -> dict:
             (rd / "qos.pre.txt").write_text(_qos_dump(env))
     ln = _lab_node_plan(name, side, files, env)
     prev = (old or {}).get("created_objects", {})
-    k8s_made = [{"kind": o["kind"], "name": o["metadata"]["name"], "namespace": o["metadata"].get("namespace")} for o in objs]
+    k8s_made = [{"kind": o["kind"], "name": o["metadata"]["name"], "namespace": o["metadata"].get("namespace")} for o in objs if env.running("k8s-apiserver")]  # only what was really applied: a lab made nothing in a part that is not running
     k8s_made += [x for x in prev.get("k8s", []) if x not in k8s_made]  # the other side's objects stay listed until remove
-    roles_made = [r["metadata"]["name"] for r in roles] + [x for x in prev.get("teleport_roles", []) if x not in [r["metadata"]["name"] for r in roles]]
+    roles_made = [r["metadata"]["name"] for r in roles if env.running("teleport")] + [x for x in prev.get("teleport_roles", []) if x not in [r["metadata"]["name"] for r in roles]]
     m = {"name": name, "side": side, "time_scale": 1.0, "created": (old or {}).get("created") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
          "applied": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "keys": sl["keys"], "not_applied_unknown": sl["unknown"],
          "lab_owned": sl["lab_owned"], "restart": False,
@@ -664,6 +664,8 @@ def remove(name: str, env: Env) -> dict:
         raise LabError(f"cannot remove lab {name}: the cluster is not running. Start it (./scripts/benchctl up) and run `benchctl remove lab {name}` again; the lab stays active until then")
     rd = render_dir(name, env)
     lines: list[str] = []
+    if made.get("sacctmgr"):
+        _cancel_lab_jobs(name, env)
     if m.get("lab_nodes"):
         svcs = [n["service"] for n in m["lab_nodes"]]
         r = env.runner(env.dc("rm", "-sf", *svcs))
@@ -713,6 +715,19 @@ def remove(name: str, env: Env) -> dict:
     marker_path(env.root).unlink(missing_ok=True)
     lines.append(f"lab {name} removed: the cluster is the plain sim.yaml cluster again")
     return {"lines": lines}
+
+
+def _cancel_lab_jobs(name: str, env: Env) -> None:
+    """sacctmgr refuses to delete a user that has a pending or running job, so the lab users' jobs end first (the lab nodes go away too)."""
+    users = ",".join(sorted(set(lab_users.load(name, env.root).values())))
+    if not users:
+        return
+    env.exec("slurmctld", "scancel", "-u", users)
+    for _ in range(15):
+        q = env.exec("slurmctld", "squeue", "-h", "-u", users, "-o", "%i")
+        if q.returncode != 0 or not (q.stdout or "").strip():
+            return
+        env.sleep(1)
 
 
 def _remove_sacct(name: str, env: Env, rd: Path) -> list[str]:

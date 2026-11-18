@@ -60,17 +60,22 @@ def _ids():
     return [(r, role) for r in k8sreads.READS for role in k8sreads.ROLES]
 
 
-@pytest.mark.parametrize("read,role", _ids(), ids=lambda v: v if isinstance(v, str) else v.key)
 def metrics_ready() -> None:
     """metrics-server answers only after two scrapes of every node (--metric-resolution=15s); until then the APIService says 503, and
     API discovery fails too. Waited for only by the tests that need it, so a broken metrics-server fails those and nothing else."""
-    assert wait_for(lambda: run_read(k8sreads.BY_KEY["node-usage"], "viewer").returncode == 0, timeout=180), \
+    read = k8sreads.BY_KEY["node-usage"]
+
+    def has_usage() -> bool:  # the API can answer 200 with an empty list or a node without usage until the CPU rate has two samples (live run 2026-11-18)
+        r = run_read(read, "viewer")
+        return r.returncode == 0 and not k8sreads.shape_problems(read, "viewer", r.stdout, "")
+    assert wait_for(has_usage, timeout=180), \
         "metrics-server never answered: " + run_read(k8sreads.BY_KEY["node-usage"], "viewer").stderr.strip()[-300:]
 
 
 METRICS_READS = {"metrics-probe", "node-usage"}
 
 
+@pytest.mark.parametrize("read,role", _ids(), ids=lambda v: v if isinstance(v, str) else v.key)
 def test_each_read_has_the_outcome_and_shape_the_client_needs(cluster, read, role):
     if read.key in METRICS_READS or read.key.startswith("api-group-"):
         metrics_ready()
@@ -149,9 +154,15 @@ def test_kubectl_logs_honours_tail_limit_bytes_timestamps_and_previous(cluster):
 def test_kubectl_top_lists_every_kwok_node_and_the_pod_usage_its_annotations_give(cluster):
     """Issue 382: metrics-server scrapes KWOK's /metrics/nodes/<node>/metrics/resource; a pod's usage is its kwok.x-k8s.io/usage-* annotations."""
     metrics_ready()
-    top = docker_exec_as("alice", K_LOGIN, "kubectl top nodes --no-headers")
-    assert top.returncode == 0, top.stderr
-    assert {ln.split()[0] for ln in top.stdout.splitlines() if ln.strip()} == {n for n, _ in k8s.node_list(cluster)}
+    want = {n for n, _ in k8s.node_list(cluster)}
+
+    def top_nodes() -> subprocess.CompletedProcess:
+        return docker_exec_as("alice", K_LOGIN, "kubectl top nodes --no-headers")
+
+    def every_node() -> bool:  # right after the first scrapes `top` can still say "metrics not available yet" (live run 2026-11-18)
+        r = top_nodes()
+        return r.returncode == 0 and {ln.split()[0] for ln in r.stdout.splitlines() if ln.strip()} == want
+    assert wait_for(every_node, timeout=90), top_nodes().stderr or top_nodes().stdout
 
     def sized():
         r = docker_exec_as("alice", K_LOGIN, "kubectl top pod sized -n team-a --no-headers")
@@ -188,7 +199,8 @@ def test_every_kubeconfig_fixture_has_the_stated_owner_group_and_mode_for_every_
 def test_the_default_kubeconfig_is_untouched_by_the_fixtures(cluster):
     for me in SIM_USERS:
         assert _stat(me, "config") == [me, me, "600"] and _stat(me, "limited.yaml") == [me, me, "600"]
-        same = docker_exec_as(me, K_LOGIN, "cmp $HOME/.kube/config /run/workbench/k8s/viewer.kubeconfig && cmp $HOME/.kube/limited.yaml /run/workbench/k8s/limited.kubeconfig")
+        # the sources in /run/workbench/k8s are mode 600 and not the user's: compare as root, the user's own copies by path
+        same = docker_exec_as("root", K_LOGIN, f"cmp /home/{me}/.kube/config /run/workbench/k8s/viewer.kubeconfig && cmp /home/{me}/.kube/limited.yaml /run/workbench/k8s/limited.kubeconfig")
         assert same.returncode == 0, same.stderr
 
 
