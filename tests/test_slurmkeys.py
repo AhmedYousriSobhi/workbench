@@ -72,3 +72,8 @@ def test_up_makes_the_keys_before_it_starts_the_slurm_containers(tmp_path, monke
     with pytest.raises(FirstStart):
         stack.up(SIM, "min", runner=runner, say=lambda m: None)
     assert "keys" in events and events.index("keys") < events.index("up")
+
+
+def test_unit_tests_never_meet_the_hosts_governor():
+    import os
+    assert not os.path.exists(os.environ["WORKBENCH_GOV_SOCKET"])  # the autouse guard in conftest (#890)
