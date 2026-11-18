@@ -710,3 +710,28 @@ def test_lab_node_name_clash_with_a_simulated_node_is_refused():
     scale = lab_slurm.downscale([{"name": "n1", "shape": "s", "partitions": [], "leaf": None}], 1)
     with pytest.raises(lab_nodes.LabError, match="also simulated nodes"):
         lab_nodes.plan(b, None, scale, {"n1"})
+
+
+def test_k8s_and_teleport_not_running_are_not_recorded_as_made(world):
+    """A lab removes only what it made: with Kubernetes and Teleport down nothing was made there, so `remove` is not refused (live test lab_users)."""
+    env, c, root = world
+    c.services -= {"k8s-apiserver", "teleport"}
+    lab_apply.apply("prod-a", "baseline", env)
+    made = lab_apply.read_marker(root)["created_objects"]
+    assert made["k8s"] == [] and made["teleport_roles"] == []
+
+
+def test_lab_node_services_do_not_copy_the_templates_fixed_address():
+    from benchctl import compose
+    services = {"cn001": {"labels": {"workbench.node": "compute"}, "environment": {},
+                          "networks": {"default": {"ipv4_address": "10.141.0.1"}}}}
+    marker = {"name": "x", "lab_nodes": [{"service": "lab-node-001", "host": "c0000"}]}
+    import benchctl.lab_users as lu
+    orig = lu.load
+    lu.load = lambda name, root=None: {}
+    try:
+        compose.add_lab_nodes(services, marker, {})
+    finally:
+        lu.load = orig
+    assert services["lab-node-001"]["networks"] == {"default": {}}
+    assert services["cn001"]["networks"]["default"]["ipv4_address"] == "10.141.0.1"

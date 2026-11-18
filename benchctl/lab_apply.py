@@ -441,9 +441,9 @@ def apply(name: str, side: str, env: Env) -> dict:
             (rd / "qos.pre.txt").write_text(_qos_dump(env))
     ln = _lab_node_plan(name, side, files, env)
     prev = (old or {}).get("created_objects", {})
-    k8s_made = [{"kind": o["kind"], "name": o["metadata"]["name"], "namespace": o["metadata"].get("namespace")} for o in objs]
+    k8s_made = [{"kind": o["kind"], "name": o["metadata"]["name"], "namespace": o["metadata"].get("namespace")} for o in objs if env.running("k8s-apiserver")]  # only what was really applied: a lab made nothing in a part that is not running
     k8s_made += [x for x in prev.get("k8s", []) if x not in k8s_made]  # the other side's objects stay listed until remove
-    roles_made = [r["metadata"]["name"] for r in roles] + [x for x in prev.get("teleport_roles", []) if x not in [r["metadata"]["name"] for r in roles]]
+    roles_made = [r["metadata"]["name"] for r in roles if env.running("teleport")] + [x for x in prev.get("teleport_roles", []) if x not in [r["metadata"]["name"] for r in roles]]
     m = {"name": name, "side": side, "time_scale": 1.0, "created": (old or {}).get("created") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
          "applied": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "keys": sl["keys"], "not_applied_unknown": sl["unknown"],
          "lab_owned": sl["lab_owned"], "restart": False,

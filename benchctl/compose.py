@@ -123,6 +123,7 @@ def add_lab_nodes(services: dict, marker: dict | None, sim: dict, root: Path | N
         env.update({"WORKBENCH_USERS": users, "WORKBENCH_IB": "0"})
         svc["environment"] = env
         svc.pop("devices", None)
+        svc["networks"] = {"default": {}}  # never the template's fixed address: two containers on 10.141.0.1 fail with "Address already in use"
         services[n["service"]] = svc
 
 
