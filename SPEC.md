@@ -88,7 +88,7 @@ Profiles: `min`, `std`, `full`, `jira-real`, `mac-agent` ([architecture section 
 
 `doctor`, `up --profile`, `down`, `status`, `top`, `scale <group> <n>`, `jira mode <mock|cloud|dc>`, `scenario list|run`, `workload run`, `get|add|set|remove|validate|reload check(s)` (C-15). All state-changing commands go through the governor.
 
-### 7a. Agent interface (approved 2026-11-13, ADR 0060 to 0068, issues 603 and 613; built, except `export lab-report`, issue 614)
+### 7a. Agent interface (approved 2026-11-13, ADR 0060 to 0068, issues 603 and 613; built, including `export lab-report`, issue 614)
 
 Decisions A-1 to A-9, each with an ADR. The owner approved this block on 2026-11-13.
 
@@ -163,6 +163,6 @@ Exit tests are listed in [architecture section 11](docs/architecture/09-roadmap-
 
 See [architecture section 12](docs/architecture/09-roadmap-decisions-risks.md) (Slurm access path, BCM surface, Jira features, real GPUs, Mac access). Each MUST be resolved before the dependent component is implemented.
 
-Not built yet (so no requirement above is satisfied by them): `export lab-report` (issue 614) of the agent interface; the config lab C-24 beyond `import lab`, `get lab`, `validate lab` (baseline side), `diff lab`, `apply lab`, `remove lab`, `run lab` and `stop lab` (the Prometheus-based report metrics of issue 555; the lab node containers, issue 863, are built but not yet run live) (the Lab workspace W-17l is built, issue 556; not yet run against a live lab); Slurm job dots on the Infrastructure architecture; Teleport scenarios (certificate expiry, `teleport-outage`) and Teleport in the Web UI; the Kubernetes real agent node and a k-login node (C-2, ADR 0034); Kubernetes in the Infrastructure architecture diagram; the fidelity VM is deferred (ADR 0033).
+Not built yet (so no requirement above is satisfied by them): the config lab C-24 beyond `import lab`, `get lab`, `validate lab` (baseline side), `diff lab`, `apply lab`, `remove lab`, `run lab` and `stop lab` (the Prometheus-based report metrics of issue 555; the lab node containers, issue 863, are built but not yet run live) (the Lab workspace W-17l is built, issue 556; not yet run against a live lab); Slurm job dots on the Infrastructure architecture; the Teleport scenario `teleport-outage` (issue 209; the certificate-expiry scenario and Teleport in the Web UI are built, C-16); the Kubernetes real agent node and a k-login node (C-2, ADR 0034); Kubernetes in the Infrastructure architecture diagram; the fidelity VM is deferred (ADR 0033).
 
 The governor's control commands no longer wait for a running plan: actions run outside the state lock (ADR 0031, issue 342; it was issue 53).
