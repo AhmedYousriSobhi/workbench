@@ -444,7 +444,7 @@
   #trafficpanel[data-view="iso"][data-lens]:not([data-lens="all"]) #flow [data-ent]:not([data-ldim]) :is(.blk, .nd, .chipbg) { filter:drop-shadow(2px 2px 0 var(--ext)) drop-shadow(4px 4px 0 var(--ext)) drop-shadow(6px 6px 0 var(--ext)) drop-shadow(0 0 8px color-mix(in srgb,var(--accent) 65%,transparent)); }
   #trafficpanel[data-view="iso"][data-lens]:not([data-lens="all"]) #flow path.lane:not([data-ldim]) { stroke-width:4.5; filter:drop-shadow(0 0 4px currentColor); }
 /* Overview (redesign step 6a): the task-first home. Same tokens as the rest of the page, so every theme keeps its contrast. */
-#main[data-tab="home"] .subbar { display:none; }
+#main[data-tab="home"] .subbar, #main[data-tab="lab"] .subbar { display:none; }
 .home { display:flex; flex-direction:column; gap:var(--sp5); max-width:1180px; }
 .home-h { margin:0; font-size:1.625rem; } .home-sh { margin:0 0 var(--sp2); font-size:1.0625rem; } .home-sh .small { font-weight:400; margin-left:var(--sp2); }
 .home-attn { border:1px solid var(--line); border-radius:12px; padding:var(--sp4) var(--sp5); background:var(--panel); }
@@ -550,4 +550,25 @@
   #main[data-tab=nodes]:has(.runsheet:not([hidden])) { padding-bottom:170px; }  /* the sheet never hides the end of the page */
   .rs-rrow { grid-template-columns:minmax(0,1fr) minmax(0,1fr); } .rs-slider { grid-column:1 / -1; order:-1; }  /* the slider gets the full width; Play and End below */
   #main[data-tab=nodes]:has(.runsheet.replaying:not([hidden])) { padding-bottom:300px; }
+}
+
+/* Lab workspace (issue 556, W-17l): tokens only; every state also has its word */
+.sidei[hidden] { display:none; }
+#tab-lab .panel { margin-bottom:var(--sp4); } #tab-lab h3 { margin:0 0 var(--sp2); font-size:0.9375rem; }
+.labhead { display:flex; flex-wrap:wrap; gap:var(--sp3); align-items:center; margin-bottom:var(--sp3); } .labhead select { min-height:40px; font:inherit; }
+.labsteps { display:flex; flex-wrap:wrap; gap:var(--sp2); list-style:none; padding:0; margin:0 0 var(--sp4); }
+.labsteps li { border:1px solid var(--line); border-radius:999px; padding:4px 12px; min-height:32px; display:inline-flex; gap:6px; align-items:center; background:var(--panel); }
+.labsteps li[data-state=done] { border-color:var(--ok); } .labsteps li[data-state=now] { border-color:var(--accent); background:var(--sel); font-weight:600; }
+.labsteps small { color:var(--dim); }
+.labfiles { columns:2; padding-left:var(--sp4); margin:0 0 var(--sp3); }
+.labbtns { display:flex; flex-wrap:wrap; gap:var(--sp2); margin-top:var(--sp2); } .labbtns .btn { min-height:40px; }
+.labtag { border:1px solid var(--line); border-radius:6px; padding:1px 8px; font-size:0.8125rem; }
+.labtag[data-status=failed] { border-color:var(--bad); } .labtag[data-status=passed] { border-color:var(--ok); }
+.labverdict { display:inline-block; border:2px solid var(--line); border-radius:8px; padding:4px 12px; }
+.labverdict[data-state=ok] { border-color:var(--ok); } .labverdict[data-state=warn] { border-color:var(--warn); } .labverdict[data-state=bad] { border-color:var(--bad); }
+.labbar { width:min(160px,30vw); height:10px; vertical-align:middle; accent-color:var(--chart-1); } .labbar[data-side=b] { accent-color:var(--chart-2); }
+#tab-lab td[data-h]::before { content:none; }
+@media (max-width:640px) {
+  #tab-lab thead { display:none; } #tab-lab tr { display:block; border:1px solid var(--line); border-radius:10px; padding:8px 12px; margin-bottom:10px; } #tab-lab td { display:block; border:0; padding:4px 0; }
+  #tab-lab td[data-h]::before { content:attr(data-h) ': '; color:var(--dim); font-weight:600; } .labfiles { columns:1; }
 }

@@ -255,3 +255,9 @@ The run:
 - `governor/labrun.py`: `lab-run`, `lab-stop`, the supervising thread, admission, the pause and abort flags.
 
 The store is `compose/generated/lab/NAME/baseline/` (scrubbed copies) and `manifest.json` (files with counts and hashes, scrubbed counts, dropped kinds, versions, the workbench's own versions and `version_match`: same, differs or unknown; `differs` marks that component's results indicative). The import writes a temporary folder and renames it, so a refused import leaves nothing. Slurm keys are all stored (secrets scrubbed); `KEY_CLASS` in `lab_slurm.py` decides which are applied, kept or reported "not tested".
+
+## The Lab page (issue 556)
+
+Once a lab exists, **Lab** appears in the page's left navigation (nothing shows without one). It follows the steps above: stepper, imported files, version match, downscale, the candidate diff with an effect tag per line, the validation rows, the run buttons, and the last report with its verdict, wait bars, **Export** (anonymized or full names) and **Copy as PR comment**.
+- The buttons ask the governor (apply, back to the plain cluster, run A/B or candidate only, stop). They work only at memory level L0 or L1; a refusal is shown as one message.
+- Import stays on the command line: `benchctl import lab NAME --from DIR`.
