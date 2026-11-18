@@ -10,6 +10,7 @@ import yaml
 from typer.testing import CliRunner
 
 from benchctl import cli, lab, lab_apply, lab_candidate, lab_diff, slurmconf
+from benchctl.commands import lab_support as cmd_lab_support
 from benchctl.lab import LabError
 from governor import control
 from governor.core import Governor
@@ -118,6 +119,8 @@ class Cluster:
         if "sacctmgr -i delete qos" in text:
             if cmd[-1] in self.refuse_delete:
                 return bad("busy")
+            if cmd[-1] not in self.qos:
+                return bad(" Nothing deleted\n")  # what sacctmgr says for a row that is not there
             self.qos.pop(cmd[-1], None)
             return ok()
         m = re.search(r"sacctmgr -i delete (user|account) (\S+)", text)
@@ -125,8 +128,14 @@ class Cluster:
             kind, n = m.group(1).capitalize(), m.group(2)
             if n in self.refuse_delete:
                 return bad("busy")
-            for k in [k for k in self.records if k.startswith(kind + "/") and k.endswith("/" + n)]:
+            gone = [k for k in self.records if k.startswith(kind + "/") and k.endswith("/" + n)]
+            if not gone:
+                return bad(" Nothing deleted\n")
+            for k in gone:
                 del self.records[k]
+            return ok()
+        if "scancel -u" in text or "squeue -h -u" in text:  # the lab users' jobs end before their accounting rows go
+            self.cancelled = getattr(self, "cancelled", 0) + ("scancel" in text)
             return ok()
         if "tctl get role/" in text:
             n = cmd[-2].split("/")[1]
@@ -137,6 +146,10 @@ class Cluster:
             return ok()
         if "tctl rm role/" in text:
             self.roles.pop(cmd[-1].split("/")[1], None)
+            return ok()
+        if "up -d --no-deps lab-node-" in text or "rm -sf lab-node-" in text:  # the lab node containers (issue 863)
+            return ok()
+        if "useradd -M -u" in text or "userdel lab-u" in text or text.endswith("sh -c set -u\ntrue\n"):  # the lab-uNNN Linux users (issue 869)
             return ok()
         raise AssertionError(f"unexpected command: {text}")
 
@@ -169,7 +182,7 @@ def world(tmp_path):
     lab.import_lab("prod-a", export, root=root)
     c = Cluster(tmp_path)
     env = lab_apply.Env(root=root, slurm_dir=c.slurm_dir, prom_dir=tmp_path / "gen", sim={}, runner=c.run, running=lambda s: s in c.services,
-                        kubectl=c.kubectl, http_get=c.http, rules_check=lambda paths: [], restart_ctld=c.restart, sleep=lambda s: None, say=lambda s: None)
+                        kubectl=c.kubectl, http_get=c.http, rules_check=lambda paths: [], restart_ctld=c.restart, sleep=lambda s: None, say=lambda s: None, compose_file=tmp_path / "docker-compose.yml")
     (c.slurm_dir.parent / "gen").mkdir(exist_ok=True)
     (root / "prod-a" / "baseline" / "sacctmgr.dump").write_text(PRE_DUMP.replace("workbench", "prodsim") + "Account - 'ml':Description='ml':Organization='sci':Fairshare=20\nParent - 'ml'\nUser - 'u2':DefaultAccount='ml':Fairshare=1\n")
     conf = root / "prod-a" / "baseline" / "slurm.conf"
@@ -454,15 +467,15 @@ def test_accounting_is_applied_and_remove_restores_changes_and_deletes_only_what
         "Account - 'ml':Description='ml':Organization='sci':Fairshare=20\nParent - 'ml'\nUser - 'u2':DefaultAccount='ml':Fairshare=1\n")
     (root / "prod-a" / "baseline" / "qos.txt").write_text("Name|Priority|GraceTime\nnormal|9|00:01:00\nhigh|1000|00:00:30\n")
     res = lab_apply.apply("prod-a", "baseline", env)
-    assert "Fairshare=99" in c.records["Account/root/sim"] and "Account/root/ml" in c.records and "User/ml/u2" in c.records
+    assert "Fairshare=99" in c.records["Account/root/sim"] and "Account/root/ml" in c.records and "User/ml/lab-u002" in c.records
     assert c.qos["high"]["Priority"] == "1000" and c.qos["normal"]["Priority"] == "9"
     assert any(line.startswith("accounting:") for line in res["lines"])
     pre_sacct = (root / "prod-a" / "render" / "sacctmgr.pre.dump").read_text()
     assert pre_sacct == pre_dump
     made, changed = lab_apply.record_delta(pre_sacct, (root / "prod-a" / "render" / "sacctmgr.post.dump").read_text())
-    assert made == ["Account/root/ml", "User/ml/u2"] and changed == ["Account/root/sim"]
+    assert made == ["Account/root/ml", "User/ml/lab-u002"] and changed == ["Account/root/sim"]
     out = "\n".join(lab_apply.remove("prod-a", env)["lines"])
-    assert "Fairshare=5" in c.records["Account/root/sim"] and "Account/root/ml" not in c.records and "User/ml/u2" not in c.records
+    assert "Fairshare=5" in c.records["Account/root/sim"] and "Account/root/ml" not in c.records and "User/ml/lab-u002" not in c.records
     assert "User/sim/sim1" in c.records  # present before the lab: never deleted
     assert "high" not in c.qos and c.qos["normal"]["Priority"] == "0" and c.qos["normal"]["GraceTime"] == "00:00:00"
     assert "2 account/user row(s) and 1 QOS removed" in out and "sacctmgr refused" not in out
@@ -472,9 +485,24 @@ def test_remove_lists_rows_sacctmgr_refuses_to_delete(world):
     env, c, root = world
     (root / "prod-a" / "baseline" / "qos.txt").write_text("Name|Priority\nhigh|1000\n")
     lab_apply.apply("prod-a", "baseline", env)
-    c.refuse_delete = {"high", "u2"}
+    c.refuse_delete = {"high", "lab-u003"}
     out = "\n".join(lab_apply.remove("prod-a", env)["lines"])
-    assert "sacctmgr refused: user u2, qos high" in out and lab_apply.read_marker(root) is None
+    assert "sacctmgr refused: user lab-u003, qos high" in out and lab_apply.read_marker(root) is None
+
+
+def test_remove_succeeds_after_a_run_restore_already_removed_the_rows(world):
+    """Issue 554, owner decision round 3 (item 4): an aborted A/B run restores the accounting database to its snapshot, taken before
+    the baseline, so the rows the lab made are gone while the marker still lists them. `remove lab` must still end the lab."""
+    env, c, root = world
+    pre_records, pre_qos = dict(c.records), {k: dict(v) for k, v in c.qos.items()}
+    (root / "prod-a" / "baseline" / "sacctmgr.dump").write_text(
+        "Cluster - 'prodsim'\nParent - 'root'\nAccount - 'ml':Description='ml':Organization='sci':Fairshare=20\nParent - 'ml'\nUser - 'u2':DefaultAccount='ml':Fairshare=1\n")
+    (root / "prod-a" / "baseline" / "qos.txt").write_text("Name|Priority\nhigh|1000\n")
+    lab_apply.apply("prod-a", "baseline", env)
+    assert "User/ml/lab-u002" in c.records and "high" in c.qos
+    c.records, c.qos = pre_records, pre_qos  # the run's restore put the database back
+    out = "\n".join(lab_apply.remove("prod-a", env)["lines"])
+    assert "sacctmgr refused" not in out and "already gone" in out and lab_apply.read_marker(root) is None
 
 
 def test_remove_returns_to_the_plain_cluster(world):
@@ -575,7 +603,7 @@ def test_cli_commands_read_the_lab_and_refuse_bad_input(world, monkeypatch, tmp_
     assert r.exit_code == 1 and "governor is not reachable" in r.output
     r = run(cli.app, ["remove", "lab", "prod-a"])
     assert r.exit_code == 1 and "governor is not reachable" in r.output
-    monkeypatch.setattr(cli, "_lab_env", lambda: env)
+    monkeypatch.setattr(cmd_lab_support, "_lab_env", lambda: env)
     assert run(cli.app, ["apply", "lab", "prod-a", "--execute"]).exit_code == 0
     assert run(cli.app, ["remove", "lab", "prod-a", "--execute"]).exit_code == 0
 
@@ -598,7 +626,7 @@ def test_governor_rejects_bad_lab_commands_and_names(tmp_path):
                 {"cmd": "lab-apply", "name": "prod-a", "side": "both"}, {"cmd": "lab-restore", "name": 5}, {"cmd": "lab-restore"}):
         r = d(g, bad)
         assert r["ok"] is False and r["error"].startswith(bad["cmd"] + " needs name"), bad
-    assert d(g, {"cmd": "lab-run", "name": "prod-a"})["error"].startswith("unknown command")
+    assert d(g, {"cmd": "lab-run", "name": "prod-a"})["error"].startswith("no lab runs without --workdir")  # issue 554 made the verb
     assert "not on disk" in d(g, {"cmd": "lab-restore", "name": "gone"})["error"] or "no lab gone on disk" in d(g, {"cmd": "lab-restore", "name": "gone"})["error"]
 
 
@@ -639,3 +667,102 @@ def test_governor_refuses_lab_changes_at_l2_with_one_message_and_without_workdir
     plain, _ = _gov(tmp_path)
     assert "no lab prod-a on disk" in d(plain, {"cmd": "lab-apply", "name": "prod-a", "side": "baseline"})["error"]
     assert plain.handle("status", {})["lab"] is None
+
+
+# ---------------------------------------------------------------- lab nodes (issue 863)
+
+def test_apply_adds_lab_nodes_partitions_and_gres_and_remove_takes_them_out(world):
+    env, c, root = world
+    (c.slurm_dir / "slurm.conf").write_text(BASE_CONF + "PartitionName=cpu Nodes=cn1 Default=YES\n")  # a simulated partition of the same name
+    (c.slurm_dir / "gres.conf").write_text("NodeName=g1 Name=gpu Count=1\n")
+    env.compose_file.write_text(yaml.safe_dump({"services": {"cn1": {"labels": {"workbench.node": "compute", "workbench.class": "P4"}, "environment": {"WORKBENCH_USERS": "a:1001", "WORKBENCH_GPUS": "0"}, "hostname": "cn1"}}}))
+    res = lab_apply.apply("prod-a", "baseline", env)
+    m = lab_apply.read_marker(root)
+    assert [n["host"] for n in m["lab_nodes"]][:2] == ["cpu001", "cpu002"] and m["lab_nodes"][0]["service"] == "lab-node-001"
+    conf = (c.slurm_dir / "slurm.conf").read_text()
+    assert "NodeName=cpu001 NodeHostname=cpu001 NodeAddr=lab-node-001 CPUs=64 RealMemory=256000" in conf
+    assert "PartitionName=gpu Nodes=gpu001,gpu002 MaxTime=1-00:00:00 QOS=normal" in conf
+    assert "# lab-off PartitionName=cpu Nodes=cn1 Default=YES" in conf  # the simulated cpu partition gives way to the lab's
+    assert "NodeName=gpu001 Name=gpu Type=h100 Count=8 File=/dev/workbench-gpu[0-7]" in (c.slurm_dir / "gres.conf").read_text()
+    svc = yaml.safe_load(env.compose_file.read_text())["services"]
+    assert svc["lab-node-001"]["hostname"] == "cpu001" and svc["lab-node-001"]["labels"]["workbench.lab"] == "prod-a"
+    assert "lab-u001:30001" in svc["lab-node-001"]["environment"]["WORKBENCH_USERS"] and "WORKBENCH_GPUS" not in svc["lab-node-001"]["environment"]
+    assert any(line.startswith("lab nodes: 6 started") for line in res["lines"]) and "new lab nodes" in "\n".join(res["lines"])
+    lab_apply.remove("prod-a", env)
+    conf = (c.slurm_dir / "slurm.conf").read_text()
+    assert "lab-node" not in conf and "NodeName=cpu001" not in conf and "\nPartitionName=cpu Nodes=cn1 Default=YES\n" in conf
+    assert (c.slurm_dir / "gres.conf").read_text() == "NodeName=g1 Name=gpu Count=1\n"
+    assert list(yaml.safe_load(env.compose_file.read_text())["services"]) == ["cn1"]
+
+
+def test_a_lab_without_a_trace_gets_no_lab_nodes(world):
+    env, _c, root = world
+    (root / "prod-a" / "baseline" / "trace.sacct").unlink()
+    lab_apply.apply("prod-a", "baseline", env)
+    assert not lab_apply.read_marker(root).get("lab_nodes")
+
+
+def test_default_partition_moves_to_the_lab_when_a_simulated_one_keeps_another_name():
+    from benchctl import lab_nodes
+    out = lab_nodes.switch_off("PartitionName=sim Nodes=a Default=YES\n", ["PartitionName=prod Nodes=x Default=YES"])
+    assert "Default=NO #lab-default" in out and lab_nodes.strip(out) == "PartitionName=sim Nodes=a Default=YES\n"
+
+
+def test_lab_node_name_clash_with_a_simulated_node_is_refused():
+    from benchctl import lab_nodes, lab_slurm
+    b = {"slurm": {"nodes": [{"NodeName": "n1"}], "partitions": [], "other": [], "keys": {}}, "topology": [], "gres": []}
+    scale = lab_slurm.downscale([{"name": "n1", "shape": "s", "partitions": [], "leaf": None}], 1)
+    with pytest.raises(lab_nodes.LabError, match="also simulated nodes"):
+        lab_nodes.plan(b, None, scale, {"n1"})
+
+
+def test_k8s_and_teleport_not_running_are_not_recorded_as_made(world):
+    """A lab removes only what it made: with Kubernetes and Teleport down nothing was made there, so `remove` is not refused (live test lab_users)."""
+    env, c, root = world
+    c.services -= {"k8s-apiserver", "teleport"}
+    lab_apply.apply("prod-a", "baseline", env)
+    made = lab_apply.read_marker(root)["created_objects"]
+    assert made["k8s"] == [] and made["teleport_roles"] == []
+
+
+def test_lab_node_services_do_not_copy_the_templates_fixed_address():
+    from benchctl import compose
+    services = {"cn001": {"labels": {"workbench.node": "compute"}, "environment": {},
+                          "networks": {"default": {"ipv4_address": "10.141.0.1"}}}}
+    marker = {"name": "x", "lab_nodes": [{"service": "lab-node-001", "host": "c0000"}]}
+    import benchctl.lab_users as lu
+    orig = lu.load
+    lu.load = lambda name, root=None: {}
+    try:
+        compose.add_lab_nodes(services, marker, {})
+    finally:
+        lu.load = orig
+    assert services["lab-node-001"]["networks"] == {"default": {}}
+    assert services["cn001"]["networks"]["default"]["ipv4_address"] == "10.141.0.1"
+
+
+def test_lab_gpu_node_gets_stand_in_device_files():
+    """Slurm ignores a GPU without a device file (the node turns `inval`: count reported 0 < 8): the lab node makes /dev/workbench-gpuN (issue 895)."""
+    from benchctl import compose
+    services = {"cn001": {"labels": {"workbench.node": "compute"}, "environment": {}}}
+    marker = {"name": "x", "lab_nodes": [{"service": "lab-node-005", "host": "gpu001", "gpus": 8}, {"service": "lab-node-001", "host": "c0000", "gpus": 0}]}
+    import benchctl.lab_users as lu
+    orig = lu.load
+    lu.load = lambda name, root=None: {}
+    try:
+        compose.add_lab_nodes(services, marker, {})
+    finally:
+        lu.load = orig
+    assert services["lab-node-005"]["environment"]["WORKBENCH_GPUS"] == "8"
+    assert "WORKBENCH_GPUS" not in services["lab-node-001"]["environment"]
+
+
+def test_remove_cancels_the_lab_users_jobs_before_deleting_their_accounting_rows(world):
+    """sacctmgr refuses to delete a user with a job (live lab_users: `sacctmgr refused: user lab-u001`)."""
+    env, c, _root = world
+    lab_apply.apply("prod-a", "baseline", env)
+    c.calls.clear()
+    lab_apply.remove("prod-a", env)
+    cancel = next(i for i, t in enumerate(c.calls) if "scancel -u" in t)
+    first_delete = next(i for i, t in enumerate(c.calls) if "sacctmgr -i delete user" in t)
+    assert cancel < first_delete

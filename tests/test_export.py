@@ -8,6 +8,7 @@ import yaml
 from typer.testing import CliRunner
 
 from benchctl import cli, export
+from benchctl.commands import lifecycle as cmd_lifecycle
 
 ROOT = Path(__file__).resolve().parent.parent
 SIM = yaml.safe_load((ROOT / "sim.yaml").read_text())
@@ -143,8 +144,8 @@ def test_warns_when_accounting_is_missing_so_sacct_would_fail():
 
 def test_start_passes_parts_to_the_launcher_and_refuses_a_mix(monkeypatch):
     seen = []
-    monkeypatch.setattr(cli, "_launcher", lambda *a: seen.append(a))
-    monkeypatch.setattr(cli, "_offer_completion", lambda: None)
+    monkeypatch.setattr(cmd_lifecycle, "_launcher", lambda *a: seen.append(a))
+    monkeypatch.setattr(cmd_lifecycle, "_offer_completion", lambda: None)
     assert runner.invoke(cli.app, ["start", "--with", "accounting", "--without", "jira"]).exit_code == 0
     assert seen[-1] == ("start", "--with", "accounting", "--without", "jira")
     assert runner.invoke(cli.app, ["start"]).exit_code == 0 and seen[-1] == ("start", "--profile", "min")

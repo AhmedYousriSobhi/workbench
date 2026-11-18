@@ -36,7 +36,7 @@ def payload(result) -> dict:
 def test_a_stdio_client_lists_the_tools_and_calls_three_of_them():
     tools, described, dry, waited = asyncio.run(asyncio.wait_for(session_calls(), timeout=120))
     by_name = {t.name: t for t in tools}
-    assert len(by_name) == 16 and {"scenario_status", "fault_clear", "capture_once", "report_export"} <= set(by_name)
+    assert len(by_name) == 17 and {"scenario_status", "fault_clear", "capture_once", "report_export", "lab_report_export"} <= set(by_name)
     # what a client uses to decide whether to ask the person first
     assert by_name["workbench_down"].annotations.destructive_hint is True and by_name["fault_inject"].annotations.destructive_hint is True
     assert all(t.annotations.read_only_hint for n, t in by_name.items() if n.endswith("_get") or n in ("workbench_describe", "scenario_status", "capture_once", "report_export"))

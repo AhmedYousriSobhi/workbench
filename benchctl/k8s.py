@@ -14,6 +14,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import ssl
 import subprocess
 import time
@@ -23,28 +24,43 @@ from pathlib import Path
 
 import yaml
 
-from . import dra, kueue
+from . import addressing, dra, k8sgpu, kubeconfigs, kueue, volcano
 from .nodes import node_names
 
 VERSION = "v1.36.1"            # Kubernetes (the control-plane images and kubectl); sim.yaml kubernetes.version overrides
 ETCD_IMAGE = "registry.k8s.io/etcd:3.6.10-0"
 KWOK_VERSION = "v0.8.0"
 KWOK_IMAGE = f"registry.k8s.io/kwok/kwok:{KWOK_VERSION}"
-SERVICES = ("k8s-etcd", "k8s-apiserver", "k8s-controller-manager", "k8s-scheduler", "kwok-controller")
+METRICS_SERVER = "k8s-metrics-server"  # the metrics API (issue 382): kwokctl v0.8.0 tests 0.8.1; 0.9.1 is the latest release
+METRICS_SERVER_VERSION = "v0.9.1"
+METRICS_SERVER_IMAGE = f"registry.k8s.io/metrics-server/metrics-server:{METRICS_SERVER_VERSION}"
+METRICS_SERVER_PORT = 10250  # the upstream manifest's secure port; k8s/metrics/metrics-server.yaml names the same
+SERVICES = ("k8s-etcd", "k8s-apiserver", "k8s-controller-manager", "k8s-scheduler", "kwok-controller", METRICS_SERVER)
 API = "k8s-apiserver"
 ENTRYPOINT = {"k8s-etcd": "etcd", "k8s-apiserver": "kube-apiserver", "k8s-controller-manager": "kube-controller-manager",
-              "k8s-scheduler": "kube-scheduler", "kwok-controller": "kwok"}
+              "k8s-scheduler": "kube-scheduler", "kwok-controller": "kwok", METRICS_SERVER: "/metrics-server"}
 API_PORT = 6443
 TELEPORT_USER = "teleport"  # Teleport's Kubernetes Service registers the cluster with this token user; it may impersonate, nothing else (k8s/fixtures/47-rbac-teleport.yaml, ADR 0083)
 CONTEXT = "workbench-k8s"  # the kubeconfig context name: Teleport names the registered cluster after it (`tsh kube ls`)
 METRICS_USER = "metrics"  # reads /metrics only (k8s/fixtures/45-rbac-metrics.yaml); the page uses it for request counts
 # limits in MB (upper bounds for the planning estimate; measured idle 275 MiB, 310 MiB with 50 nodes and the fixtures)
-LIMITS = {"k8s-etcd": 256, "k8s-apiserver": 384, "k8s-controller-manager": 128, "k8s-scheduler": 64, "kwok-controller": 64}
+# metrics-server: a planning cap, not measured (benchctl/memory.py NOT_MEASURED); the upstream manifest requests 200 MiB for a real cluster
+LIMITS = {"k8s-etcd": 256, "k8s-apiserver": 384, "k8s-controller-manager": 128, "k8s-scheduler": 64, "kwok-controller": 64, METRICS_SERVER: 128}
 SECRETS_DIR = Path("compose/generated/secrets/k8s")   # PKI, tokens and kubeconfigs (gitignored)
 STATE_DIR = Path("compose/generated/k8s")             # etcd data and the manifests generated from sim.yaml
 SRC = Path("k8s")
 CONTAINER_PKI = "/pki"
 NETWORK = "workbench_default"
+KWOK = "kwok-controller"
+KWOK_PORT = 10247   # the fake nodes' kubelet port: logs and the resource metrics are served here (issue 872)
+KWOK_LOGS = "/logs"  # where k8s/kwok/logs is mounted in kwok-controller (the files the Logs and ClusterLogs objects name)
+# KWOK's own objects, applied after their definitions are established: what `kubectl logs` answers, the kubelet /metrics/resource
+# endpoint per node, and pod usage from annotations (issue 872, ADR 0084 addendum P1). KWOK reads them because --enable-crds names them.
+KWOK_CRDS = ("Stage", "Logs", "ClusterLogs", "Metric", "ClusterResourceUsage")
+KWOK_OBJECTS = (("/k8s/kwok/logs.yaml", "KWOK logs"), ("/k8s/kwok/metrics-resource.yaml", "KWOK node metrics"),
+                ("/k8s/kwok/usage-from-annotation.yaml", "KWOK pod usage"))
+METRICS_API_FILE = "/k8s/metrics/metrics-server.yaml"  # the APIService and the ExternalName Service that routes to METRICS_SERVER
+RESOURCE_METRICS_PATH = "metrics.k8s.io/resource-metrics-path"  # metrics-server 0.7.0+ reads a node's kubelet metrics path from it
 # Node Feature Discovery / GPU Feature Discovery product label per sim.yaml gpu type
 GPU_PRODUCT = {"h200": "NVIDIA-H200", "h100": "NVIDIA-H100-80GB-HBM3", "a100": "NVIDIA-A100-SXM4-80GB",
                "l40s": "NVIDIA-L40S", "v100": "Tesla-V100-SXM2-32GB"}
@@ -64,7 +80,7 @@ def images(sim: dict) -> dict[str, str]:
     v = version(sim)
     return {"k8s-etcd": ETCD_IMAGE, "k8s-apiserver": f"registry.k8s.io/kube-apiserver:{v}",
             "k8s-controller-manager": f"registry.k8s.io/kube-controller-manager:{v}",
-            "k8s-scheduler": f"registry.k8s.io/kube-scheduler:{v}", "kwok-controller": KWOK_IMAGE}
+            "k8s-scheduler": f"registry.k8s.io/kube-scheduler:{v}", "kwok-controller": KWOK_IMAGE, METRICS_SERVER: METRICS_SERVER_IMAGE}
 
 
 def kubectl_image(sim: dict) -> str:
@@ -98,8 +114,10 @@ def problems(sim: dict) -> list[str]:
     return out
 
 
-def node_manifest(name: str, g: dict) -> dict:
-    """A KWOK node: the labels and extended resources a real GPU node advertises (GPU Feature Discovery), no taint."""
+def node_manifest(name: str, g: dict, kubelet_version: str = VERSION) -> dict:
+    """A KWOK node: the labels and extended resources a real GPU node advertises (GPU Feature Discovery), no taint.
+    `kubelet_version` is the API server's version, as on a cluster whose kubelets match its control plane: a client reads the
+    major and minor from a `vX.Y` prefix to judge version skew, and KWOK's own default (`kwok-v0.8.0`) has none (ADR 0084 addendum)."""
     cpus, mem = int(g.get("cpus", 8)), int(g.get("memory_gb", 32))
     gpus = int(g.get("gpus", 0))
     labels = {"kubernetes.io/hostname": name, "kubernetes.io/os": "linux", "kubernetes.io/arch": "amd64",
@@ -112,18 +130,25 @@ def node_manifest(name: str, g: dict) -> dict:
         cap["nvidia.com/gpu"] = str(gpus)
     return {"apiVersion": "v1", "kind": "Node",
             "metadata": {"name": name, "labels": labels,
-                         "annotations": {"node.alpha.kubernetes.io/ttl": "0", "kwok.x-k8s.io/node": "fake"}},
+                         "annotations": {"node.alpha.kubernetes.io/ttl": "0", "kwok.x-k8s.io/node": "fake",
+                                         RESOURCE_METRICS_PATH: f"/metrics/nodes/{name}/metrics/resource"}},
             "status": {"capacity": dict(cap), "allocatable": dict(cap),
-                       "nodeInfo": {"architecture": "amd64", "kubeletVersion": f"kwok-{KWOK_VERSION}", "operatingSystem": "linux",
+                       "nodeInfo": {"architecture": "amd64", "kubeletVersion": kubelet_version, "operatingSystem": "linux",
                                     "osImage": "Ubuntu 22.04.5 LTS", "kernelVersion": "5.15.0", "containerRuntimeVersion": "kwok://sim"}}}
 
 
 def nodes_yaml(sim: dict, gpu_override: int | None = None) -> str:
-    return "".join("---\n" + yaml.safe_dump(node_manifest(n, g), sort_keys=False) for n, g in node_list(sim, gpu_override))
+    return "".join("---\n" + yaml.safe_dump(node_manifest(n, g, version(sim)), sort_keys=False) for n, g in node_list(sim, gpu_override))
 
 
 def api_ip(ips: dict) -> str:
     return ips["services"][API]
+
+
+def kwok_ip() -> str:
+    """The address every KWOK node advertises as InternalIP: the kwok-controller's own fixed one, which serves the fake kubelets'
+    logs and metrics. The API server and metrics-server dial it; 127.0.0.1 would be the caller's own container (issue 872)."""
+    return addressing.service_ip(KWOK)
 
 
 def api_sans(ips: dict) -> list[str]:
@@ -190,7 +215,7 @@ def prepare(sim: dict, ips: dict, secrets_dir: Path | None = None, state_dir: Pa
     ips_stamp = d / "api-ip"
     if not (d / "ca.crt").exists() or not ips_stamp.exists() or ips_stamp.read_text() != api_ip(ips):  # a new address needs a new cert
         for f in d.iterdir():
-            f.unlink()
+            shutil.rmtree(f) if f.is_dir() else f.unlink()  # the kubeconfigs fixtures are a directory (issue 767)
         _openssl("ecparam", "-name", "prime256v1", "-genkey", "-noout", "-out", "ca.key", cwd=d)
         _openssl("req", "-x509", "-new", "-key", "ca.key", "-subj", "/CN=workbench-k8s-ca", "-days", "3650",
                  "-addext", "basicConstraints=critical,CA:TRUE", "-addext", "keyUsage=critical,keyCertSign,cRLSign",
@@ -221,6 +246,7 @@ def prepare(sim: dict, ips: dict, secrets_dir: Path | None = None, state_dir: Pa
                 f.write(f"{secrets.token_hex(24)},{extra},{extra}-uid\n")
     (d / "audit-policy.yaml").write_text(AUDIT_POLICY)  # always rewritten: a cluster made before this existed gets it on its next start
     (d / "audit-policy.yaml").chmod(0o600)
+    kubeconfigs.write(d, f"https://{api_ip(ips)}:{API_PORT}", _b64(d / "ca.crt"), _token("viewer", d) or "")  # the negative and exec-plugin files for the k-login (issue 767)
     (st / "nodes.yaml").write_text(nodes_yaml(sim, gpu_override))
     (st / "50-dra.yaml").write_text(dra.slices_yaml(node_list(sim, gpu_override)))  # the DeviceClass and a ResourceSlice per GPU node (ADR 0076)
 
@@ -246,16 +272,32 @@ def wire(services: dict, sim: dict) -> None:
                           f"--service-account-key-file={CONTAINER_PKI}/sa.pub", f"--service-account-signing-key-file={CONTAINER_PKI}/sa.key",
                           "--service-account-issuer=https://kubernetes.default.svc.cluster.local",
                           f"--proxy-client-cert-file={CONTAINER_PKI}/admin.crt", f"--proxy-client-key-file={CONTAINER_PKI}/admin.key",
-                          f"--audit-policy-file={CONTAINER_PKI}/audit-policy.yaml", "--audit-log-path=-", "--audit-log-format=json"],
+                          f"--audit-policy-file={CONTAINER_PKI}/audit-policy.yaml", "--audit-log-path=-", "--audit-log-format=json",
+                          # dial a node's InternalIP first, as kubeadm does; the default (Hostname first) depends on the Hostname
+                          # address resolving. KWOK asks for no client certificate (v0.8.0 server.go: ServeTLS without ClientAuth);
+                          # the certificate is passed as on a real cluster, where the kubelet does ask (issue 872)
+                          "--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname",
+                          f"--kubelet-client-certificate={CONTAINER_PKI}/admin.crt", f"--kubelet-client-key={CONTAINER_PKI}/admin.key"],
         "k8s-controller-manager": [kc, "--authorization-always-allow-paths=/healthz,/readyz,/livez,/metrics", "--bind-address=0.0.0.0",
                                    "--secure-port=10257", f"--root-ca-file={CONTAINER_PKI}/ca.crt",
                                    f"--service-account-private-key-file={CONTAINER_PKI}/sa.key", "--use-service-account-credentials=true",
                                    "--node-monitor-period=5s", "--node-monitor-grace-period=20s"],
         "k8s-scheduler": [kc, "--authorization-always-allow-paths=/healthz,/readyz,/livez,/metrics", "--bind-address=0.0.0.0", "--secure-port=10259"],
-        "kwok-controller": [kc, "--manage-nodes-with-annotation-selector=kwok.x-k8s.io/node=fake", "--node-ip=127.0.0.1",
-                            "--node-name=kwok-controller", "--node-port=10247", "--server-address=0.0.0.0:10247",
-                            "--node-lease-duration-seconds=40", "--enable-crds=Stage",  # without it KWOK reads no Stage objects and exits ("no stages found")
+        # --node-ip: the address every fake node advertises; kwokctl v0.8.0 passes the controller's own (issue 872).
+        # --enable-crds: without Stage KWOK reads no stages and exits ("no stages found"); the others serve logs and metrics
+        KWOK: [kc, "--manage-nodes-with-annotation-selector=kwok.x-k8s.io/node=fake", f"--node-ip={kwok_ip()}",
+               f"--node-name={KWOK}", f"--node-port={KWOK_PORT}", f"--server-address=0.0.0.0:{KWOK_PORT}",
+               "--node-lease-duration-seconds=40", f"--enable-crds={','.join(KWOK_CRDS)}",
                              f"--tls-cert-file={CONTAINER_PKI}/admin.crt", f"--tls-private-key-file={CONTAINER_PKI}/admin.key"],
+        # kwokctl v0.8.0's container-mode arguments (pkg/kwokctl/components/metrics_server.go), with the upstream manifest's
+        # --cert-dir=/tmp (a self-signed serving certificate on a tmpfs) instead of the admin certificate. --kubelet-insecure-tls:
+        # KWOK serves the admin certificate, which names no node address; the aggregator does not verify this one either
+        # (insecureSkipTLSVerify in the APIService, as upstream)
+        METRICS_SERVER: [kc, f"--authentication-kubeconfig={CONTAINER_PKI}/component.kubeconfig",
+                         f"--authorization-kubeconfig={CONTAINER_PKI}/component.kubeconfig",
+                         "--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname", "--kubelet-use-node-status-port",
+                         "--kubelet-insecure-tls", "--metric-resolution=15s", "--cert-dir=/tmp", "--bind-address=0.0.0.0",
+                         f"--secure-port={METRICS_SERVER_PORT}"],
     }
     for name in SERVICES:
         if name not in services:
@@ -265,6 +307,10 @@ def wire(services: dict, sim: dict) -> None:
         svc.update({"image": img[name], "user": user, "entrypoint": [ENTRYPOINT[name]],
                     "command": flags[name]})
         svc["volumes"] = ["./k8s/etcd:/etcd-data"] if name == "k8s-etcd" else list(pki)
+        if name == KWOK:  # the canned kubelet log files (k8s/kwok/logs.yaml names them); compose runs from compose/generated
+            svc["volumes"].append(f"../../{SRC}/kwok/logs:{KWOK_LOGS}:ro")
+        if name == METRICS_SERVER:  # its self-signed serving certificate, as the upstream manifest's emptyDir; counted in the cap
+            svc["tmpfs"] = ["/tmp:size=4m,mode=1777"]
         if name != "k8s-etcd":
             svc["depends_on"] = ["k8s-etcd"] if name == API else [API]
     if API in services:
@@ -394,6 +440,19 @@ def node_rows(sim: dict, fetch: Callable = api_json) -> list[dict]:
     return rows
 
 
+def node_addresses() -> dict:
+    """The status patch that gives a node the addresses KWOK's node-initialize stage writes (InternalIP from --node-ip, Hostname
+    from --node-name) and its kubelet port."""
+    return {"status": {"addresses": [{"type": "InternalIP", "address": kwok_ip()}, {"type": "Hostname", "address": KWOK}],
+                       "daemonEndpoints": {"kubeletEndpoint": {"Port": KWOK_PORT}}}}
+
+
+def kwok_crd_names() -> list[str]:
+    """The definitions KWOK watches (--enable-crds), by their CRD names: Stage -> stages.kwok.x-k8s.io, Logs -> logs.kwok.x-k8s.io."""
+    plural = {"Logs": "logs", "ClusterLogs": "clusterlogs", "Metric": "metrics"}
+    return [f"{plural.get(k, k.lower() + 's')}.kwok.x-k8s.io" for k in KWOK_CRDS]
+
+
 def bootstrap(sim: dict, ips: dict, say: Callable[[str], None] = print, runner: Callable = _run, ready: Callable = api_ready,
               retries: int = 10, sleep: Callable[[float], None] = time.sleep) -> bool:
     """Once the API server answers: the KWOK CRDs, the stages, the nodes, then the fixtures and RBAC. Idempotent."""
@@ -410,14 +469,23 @@ def bootstrap(sim: dict, ips: dict, say: Callable[[str], None] = print, runner: 
 
     if not apply("/k8s/kwok/crds.yaml", "KWOK definitions"):
         return False
-    r = kubectl(sim, "wait", "--for=condition=established", "--timeout=60s", "crd/stages.kwok.x-k8s.io", runner=runner)
+    r = kubectl(sim, "wait", "--for=condition=established", "--timeout=60s", *[f"crd/{c}" for c in kwok_crd_names()], runner=runner)
     if r.returncode != 0:
-        say(f"FAILED kubernetes: the stage definition did not become ready: {r.stderr.strip()[-200:]}")
+        say(f"FAILED kubernetes: the KWOK definitions did not become ready: {r.stderr.strip()[-200:]}")
         return False
     for path, what in (("/k8s/kwok/stage-fast.yaml", "default stages"), ("/k8s/kwok/stage-faults.yaml", "fault stages"),
-                       ("/state/nodes.yaml", "nodes"), ("/k8s/fixtures/00-namespaces.yaml", "namespaces")):
+                       ("/k8s/fixtures/00-namespaces.yaml", "namespaces"), *KWOK_OBJECTS,  # a Logs object is namespaced (team-b): the namespaces come first (issue 897)
+                       ("/state/nodes.yaml", "nodes")):
         if not apply(path, what):
             return False
+    # The addresses KWOK would give a new node, written through the status subresource: etcd keeps the nodes between `down`
+    # and `up` (compose/generated/k8s/etcd), and KWOK's stages keep an existing node's addresses, so a cluster made with
+    # --node-ip=127.0.0.1 would keep that address for good (issue 872). Idempotent; one call for every node in the file.
+    r = kubectl(sim, "patch", "-f", "/state/nodes.yaml", "--subresource=status", "--type=merge", "-p", json.dumps(node_addresses()),
+                runner=runner, mounts=src)
+    if r.returncode != 0:
+        say(f"FAILED kubernetes node addresses: {(r.stderr or r.stdout).strip()[-300:]}")
+        return False
     # the fixtures (workloads, signals, RBAC). A new namespace has no default service account until the controller manager
     # makes one, and a pod is refused until then; wait for them, then apply once (a retry of a half-applied set would meet
     # the ResourceQuota fixture).
@@ -432,7 +500,13 @@ def bootstrap(sim: dict, ips: dict, say: Callable[[str], None] = print, runner: 
         return False
     if not apply("/state/50-dra.yaml", "DRA devices"):
         return False
-    return bootstrap_kueue(sim, say, runner, src, apply)
+    if not bootstrap_kueue(sim, say, runner, src, apply):
+        return False
+    if not bootstrap_volcano(sim, say, runner, src, apply):
+        return False
+    # last: until metrics-server (started in the next stage) has scraped every node twice the APIService answers 503, and while
+    # an aggregated API is unavailable, discovery calls (`kubectl api-resources`) exit non-zero
+    return apply(METRICS_API_FILE, "metrics API")
 
 
 def bootstrap_kueue(sim: dict, say: Callable[[str], None], runner: Callable, src: list, apply: Callable) -> bool:
@@ -453,10 +527,28 @@ def bootstrap_kueue(sim: dict, say: Callable[[str], None], runner: Callable, src
     return True
 
 
+def bootstrap_volcano(sim: dict, say: Callable[[str], None], runner: Callable, src: list, apply: Callable) -> bool:
+    """Volcano without a controller (issue 765): the definitions, the objects, then each Queue's status through the status subresource."""
+    if not apply("/k8s/volcano/crds.yaml", "Volcano definitions"):
+        return False
+    r = kubectl(sim, "wait", "--for=condition=established", "--timeout=60s", *[f"crd/{c}" for c in volcano.CRDS], runner=runner)
+    if r.returncode != 0:
+        say(f"FAILED kubernetes: the Volcano definitions did not become ready: {r.stderr.strip()[-200:]}")
+        return False
+    if not apply("/k8s/volcano/queues.yaml", "Volcano queues"):
+        return False
+    for args in volcano.status_calls():
+        r = kubectl(sim, *args, runner=runner, mounts=src)
+        if r.returncode != 0:
+            say(f"FAILED kubernetes Volcano status: {(r.stderr or r.stdout).strip()[-300:]}")
+            return False
+    return True
+
+
 # ---- scenario steps and expectations (target `k8s`, run by benchctl/scenario.py on the host) ----
 
 FAULTS = ("crashloop", "oom", "imagepull", "jobfail")  # the pod stages in k8s/kwok/stage-faults.yaml (a node has fault-node-down)
-STEP_KEYS = ("down", "up", "cordon", "uncordon", "pod", "delete_pod", "scale", "apply", "remove", "drain", "queue")
+STEP_KEYS = ("down", "up", "cordon", "uncordon", "pod", "delete_pod", "scale", "apply", "remove", "drain", "queue", "metrics_server", "usage", "volcano", "gpu", "kubelet")
 _NAME = r"[a-z0-9]([-a-z0-9]*[a-z0-9])?"
 SCENARIO_POD = "scenario-pod.yaml"
 
@@ -490,6 +582,8 @@ def step_problems(do: dict, nodes: set[str]) -> list[str]:
             out.append(f"k8s drain needs a known Kubernetes node, not {d.get('node')!r}")
         if not isinstance(d.get("timeout", 30), int) or isinstance(d.get("timeout", 30), bool) or not 1 <= d.get("timeout", 30) <= 600:
             out.append("k8s drain timeout is whole seconds, 1 to 600")
+        if d.get("selector") is not None and not re.fullmatch(r"[A-Za-z0-9._/-]+(=|!=)[A-Za-z0-9._-]+", str(d["selector"])):
+            out.append("k8s drain selector is one label test such as app=inference")
     if "pod" in do and isinstance(do["pod"], dict):
         p = do["pod"]
         if p.get("priority_class") is not None and not _ok_name(p["priority_class"]):
@@ -498,6 +592,20 @@ def step_problems(do: dict, nodes: set[str]) -> list[str]:
             out.append(f"unknown Kubernetes node {p['node']!r}")
     if "queue" in do:
         out += kueue.queue_problems(do["queue"])
+    if "gpu" in do:
+        out += k8sgpu.gpu_problems(do["gpu"], nodes)
+    if "kubelet" in do:
+        out += k8sgpu.kubelet_problems(do["kubelet"], nodes)
+    if "volcano" in do:
+        out += volcano.step_problems(do["volcano"])
+    if "metrics_server" in do and do["metrics_server"] not in ("stop", "start"):
+        out.append("k8s metrics_server is stop or start")
+    if "usage" in do:
+        u = do["usage"] if isinstance(do["usage"], dict) else {}
+        if not (_ok_name(u.get("namespace")) and _ok_name(u.get("deploy"))):
+            out.append("k8s usage needs a namespace and a deploy (a Deployment name)")
+        if not re.fullmatch(r"[0-9]+(m|)", str(u.get("cpu", ""))):
+            out.append("k8s usage cpu is CPU per pod such as 400m or 2")
     for path in [*(do.get("apply") or []), *(do.get("remove") or [])]:
         if not (isinstance(path, str) and not path.startswith("/") and ".." not in path.split("/")):
             out.append(f"k8s apply path {path!r} must be relative to the k8s/ directory")
@@ -529,13 +637,35 @@ def step_args(do: dict) -> list[list[str]]:
     if "scale" in do:
         s = do["scale"]
         out.append(["-n", s["namespace"], "scale", f"deployment/{s['deploy']}", f"--replicas={int(s['replicas'])}"])
+    if "usage" in do:  # what metrics-server reports per pod changes with the pod template, so the real HPA controller reacts (issue 764)
+        u = do["usage"]
+        patch = {"spec": {"template": {"metadata": {"annotations": {"kwok.x-k8s.io/usage-cpu": str(u["cpu"])}}}}}
+        out.append(["-n", u["namespace"], "patch", f"deployment/{u['deploy']}", "--type=merge", "-p", json.dumps(patch)])
     out += [["apply", "--server-side", "--force-conflicts", "-f", f"/k8s/{path}"] for path in do.get("apply") or []]
     out += [["delete", "--ignore-not-found", "-f", f"/k8s/{path}"] for path in do.get("remove") or []]
+    if "gpu" in do:  # a node advertises no GPUs, or becomes a MIG node, and back (issue 766)
+        out += k8sgpu.gpu_calls(do["gpu"])
+    if "kubelet" in do:  # a kubelet newer than the API server or outside the supported skew
+        out += k8sgpu.kubelet_calls(do["kubelet"], version(current_sim()))
+    if "volcano" in do:  # a Queue closes (or a PodGroup goes Pending) and back; no controller, so the status is written
+        out += volcano.calls(do["volcano"])
     if "queue" in do:  # a ClusterQueue and its LocalQueues go inactive (or back); no controller, so the status is written
         out += kueue.queue_calls(do["queue"])
     if "drain" in do:  # cordons, then evicts through the eviction API, so a PodDisruptionBudget can refuse; the timeout ends a blocked drain
-        out.append(["drain", do["drain"]["node"], "--ignore-daemonsets", "--delete-emptydir-data", "--force", f"--timeout={int(do['drain'].get('timeout', 30))}s"])
+        d = do["drain"]
+        # With a selector only those pods are evicted and there is no --force: `drain --force` would also delete the fixture's bare pods
+        # (dra-train, gpu-train, sized) for good, as nothing recreates them (#749).
+        out.append(["drain", d["node"], "--ignore-daemonsets", "--delete-emptydir-data",
+                    f"--pod-selector={d['selector']}" if d.get("selector") else "--force", f"--timeout={int(d.get('timeout', 30))}s"])
     return out
+
+
+def host_commands(do: dict) -> list[list[str]]:
+    """The Docker calls a step makes before its kubectl calls: `metrics_server: stop` stops the metrics-server container, so the metrics
+    API answers 503 (ServiceUnavailable) as when metrics-server is down on a real cluster; `start` brings it back (issue 382)."""
+    if do.get("metrics_server") in ("stop", "start"):
+        return [["docker", do["metrics_server"], f"workbench-{METRICS_SERVER}-1"]]
+    return []
 
 
 def write_pod(do: dict, state_dir: Path | None = None) -> None:
@@ -568,12 +698,33 @@ def node_ready(node: str, runner: Callable) -> bool | None:
     return None if r.returncode else r.stdout.strip() == "True"
 
 
+def node_gpus(node: str, resource: str, runner: Callable) -> int | None:
+    """The node's allocatable count of `resource` (0 when it is not listed), None when it cannot be read."""
+    r = runner(kubectl_cmd(current_sim(), "get", "node", node, "-o", "json"))
+    if r.returncode:
+        return None
+    try:
+        return int(json.loads(r.stdout)["status"].get("allocatable", {}).get(resource, 0))
+    except (ValueError, KeyError):
+        return None
+
+
+def node_kubelet(node: str, runner: Callable) -> str:
+    r = runner(kubectl_cmd(current_sim(), "get", "node", node, "-o", "jsonpath={.status.nodeInfo.kubeletVersion}"))
+    return "" if r.returncode else r.stdout.strip()
+
+
 def pod_reasons(namespace: str, name: str, runner: Callable) -> str:
     """Everything a client would call the pod's reason: phase, status reason, container waiting and terminated reasons."""
     jp = ("jsonpath={.status.phase} {.status.reason} {.status.containerStatuses[*].state.waiting.reason} "
           "{.status.containerStatuses[*].state.terminated.reason} {.status.containerStatuses[*].lastState.terminated.reason}")
     r = runner(kubectl_cmd(current_sim(), "-n", namespace, "get", "pod", name, "-o", jp))
     return "" if r.returncode else r.stdout.strip()
+
+
+def metrics_api_served(runner: Callable) -> bool:
+    """Whether the metrics API answers a node list (as admin): False while metrics-server is stopped (503) or not registered (404)."""
+    return runner(kubectl_cmd(current_sim(), "get", "--raw", "/apis/metrics.k8s.io/v1beta1/nodes")).returncode == 0
 
 
 def pods_on_node(node: str, namespace: str, selector: str, runner: Callable) -> int | None:

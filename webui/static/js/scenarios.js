@@ -2,7 +2,7 @@ import { S } from './state.js';
 import { $, H, esc } from './util.js';
 import { selectTab } from './shell.js';
 import { setChip } from './governor.js';
-import { eyeBase } from './testrunmodel.js';
+import { eyeBase, firstSentence, groupCounts, scenarioGroup } from './testrunmodel.js';
 import { paintRunEye, paintPreview } from './testrun.js';
 import { paintRun } from './runlayer.js';
 
@@ -19,19 +19,26 @@ export async function runChip() {
 }
 
 
+let scnList = [], scnGroup = 'all';  // the library and the chip chosen (D2); the text filter is kept beside it
 export async function loadScenarios() {
-  const list = await (await fetch('/api/scenarios')).json();
+  const list = scnList = await (await fetch('/api/scenarios')).json();
   $('list').innerHTML = list.map(s =>
-    `<li class="scn" data-name="${esc(s.name)}"><button type="button" class="scnsel" data-name="${esc(s.name)}" aria-label="Show ${esc(s.name)}"><span class="hd"><b>${esc(s.name)}</b><span class="pbadge">${s.steps} ${s.steps === 1 ? 'step' : 'steps'}</span></span><span class="scnd">${esc(s.description)}</span></button>
+    `<li class="scn" data-name="${esc(s.name)}" data-group="${scenarioGroup(s.targets)}" data-q="${esc((s.name + ' ' + s.description).toLowerCase())}"><button type="button" class="scnsel" data-name="${esc(s.name)}" aria-label="Show ${esc(s.name)}"><span class="hd"><b>${esc(s.name)}</b><span class="pbadge">${s.steps} ${s.steps === 1 ? 'step' : 'steps'}</span></span><span class="scnd">${esc(firstSentence(s.description))}</span></button>
      <button class="btn" data-name="${esc(s.name)}" aria-label="Play ${esc(s.name)}">▶ Play</button></li>`).join('') || '<li class="dim">No scenarios found.</li>';
   document.querySelectorAll('#list .btn').forEach(b => b.onclick = () => play(b.dataset.name));
   document.querySelectorAll('#list .scnsel').forEach(b => b.onclick = () => selectScenario(b.dataset.name));
+  paintGroups();
   filterScenarios();
   poll();
 }
+function paintGroups() {  // one chip per group with its count; "All" first; the text filter narrows inside the chosen group
+  $('scngroups').innerHTML = [['all', 'All', scnList.length], ...groupCounts(scnList)].map(([k, l, n]) =>
+    `<button type="button" class="btn small trchip" data-group="${k}" aria-pressed="${k === scnGroup}">${esc(l)} <span class="dim">${n}</span></button>`).join('');
+  $('scngroups').querySelectorAll('[data-group]').forEach(b => b.onclick = () => { scnGroup = b.dataset.group; paintGroups(); filterScenarios(); });
+}
 export function filterScenarios() {
   const q = $('scnq').value.trim().toLowerCase();
-  document.querySelectorAll('#list .scn').forEach(li => { li.hidden = !!q && !li.textContent.toLowerCase().includes(q); });
+  document.querySelectorAll('#list .scn').forEach(li => { li.hidden = (scnGroup !== 'all' && li.dataset.group !== scnGroup) || (!!q && !(li.dataset.q || li.textContent.toLowerCase()).includes(q)); });
 }
 export async function selectScenario(name) {  // what the scenario will do, and which steps only the CLI can do, before anything runs (U7)
   const r = await fetch(`/api/scenarios/${encodeURIComponent(name)}`);
@@ -64,10 +71,6 @@ export async function poll() {
   paintRunEye();
   paintRun();
   if (s.running) S.pollTimer = setTimeout(poll, 1000);
-}
-
-export function init() {
-  $('scn-toggle').onclick = () => scnOpen(true);
 }
 
 export function init2() {

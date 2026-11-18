@@ -1,0 +1,9 @@
+name: k8s-mig-mixed
+ref: SC-52
+description: the first Kubernetes GPU node becomes a MIG node with strategy mixed (7 nvidia.com/mig-1g.18gb devices and one fewer whole GPU, plus the label nvidia.com/mig-1g.18gb.count), then a normal GPU node again after 120 s (issue 766)
+steps:
+  - {at: 0s,   target: k8s, do: {gpu: {node: first k8s gpu node, count: 8, mig: {strategy: mixed, profile: 1g.18gb, devices: 7}}}}
+  - {at: 120s, target: k8s, do: {gpu: {node: first k8s gpu node, count: 8, mig: {strategy: none, profile: 1g.18gb}}}}
+expect:
+  - k8s.node_gpus: {node: first k8s gpu node, resource: nvidia.com/mig-1g.18gb, allocatable: 7, within: 20s}
+  - k8s.node_gpus: {node: first k8s gpu node, allocatable: 8, after: 125s, within: 20s}

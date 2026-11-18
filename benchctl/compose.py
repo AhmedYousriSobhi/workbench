@@ -13,6 +13,9 @@ from . import (
     hwinventory,
     jira_real,
     k8s,
+    kubeconfigs,
+    lab_apply,
+    lab_users,
     logins,
     mig,
     nhc,
@@ -98,6 +101,34 @@ def _service(image: str, mem_mb: int, prio: int, build: str | None = None) -> di
     return svc
 
 
+def add_lab_nodes(services: dict, marker: dict | None, sim: dict, root: Path | None = None) -> None:
+    """The config lab's node containers (issue 863): a copy of a simulated compute node with the production name as its hostname, the lab users
+    and no GPU devices. Leaves `services` alone without an active lab, and removes lab nodes a marker no longer lists."""
+    for name in [n for n, s in services.items() if s.get("labels", {}).get("workbench.lab")]:
+        del services[name]
+    nodes = (marker or {}).get("lab_nodes") or []
+    if not nodes:
+        return
+    template = next((s for s in services.values() if s.get("labels", {}).get("workbench.node")), None)
+    if template is None:
+        raise ValueError("the config lab needs a Slurm compute node to copy its node containers from: start the cluster with at least one (benchctl up --cpu-nodes 1)")
+    users = users_env(sim)
+    mapping = lab_users.load(marker["name"], root)
+    users = " ".join([users, *(f"{u}:{lab_users.uid(u)}" for u in sorted(set(mapping.values())))]).strip()
+    for n in nodes:
+        svc = copy.deepcopy(template)
+        svc["labels"] = {**svc["labels"], "workbench.node": "compute", "workbench.lab": marker["name"]}
+        svc["hostname"] = n["host"]
+        env = {k: v for k, v in svc.get("environment", {}).items() if not k.startswith("WORKBENCH_GRES") and k != "WORKBENCH_GPUS"}
+        env.update({"WORKBENCH_USERS": users, "WORKBENCH_IB": "0"})
+        if n.get("gpus"):
+            env["WORKBENCH_GPUS"] = str(n["gpus"])  # stand-in device files /dev/workbench-gpuN: Slurm ignores a GPU without one, the node would be `inval` (issue 895)
+        svc["environment"] = env
+        svc.pop("devices", None)
+        svc["networks"] = {"default": {}}  # never the template's fixed address: two containers on 10.141.0.1 fail with "Address already in use"
+        services[n["service"]] = svc
+
+
 def generate(sim: dict, profile: dict) -> dict:
     if bad := slurmver.problems(sim):  # one message, before anything is written (issue 221)
         raise slurmver.SlurmVersionError("; ".join(bad))
@@ -146,6 +177,7 @@ def generate(sim: dict, profile: dict) -> dict:
                 svc.setdefault("environment", {})["WORKBENCH_SSHD"] = "1"
             svc["hostname"] = name
             svc.setdefault("environment", {})["WORKBENCH_USERS"] = users_env(sim)
+    add_lab_nodes(services, lab_apply.read_marker(Path("compose/generated/lab")), sim)  # an active config lab's node containers (issue 863)
     for i, (lname, mode) in enumerate(logins.nodes(sim) if "login" in services else []):
         # SSH for clients such as a monitoring app: localhost only, keys from ./secrets/ssh. A `teleport` login publishes
         # no port and takes no key (login.sh): the proxy is its only way in (ADR 0023)
@@ -194,7 +226,8 @@ def generate(sim: dict, profile: dict) -> dict:
     if k8s.API in services:  # every login node gets the read-only kubeconfigs (login.sh puts them in each user's ~/.kube)
         for lname in [n for n, k in lkinds.items() if k in ("k8s", "both")]:  # an s-login gets none
             services[lname]["volumes"] += ["./secrets/k8s/viewer.kubeconfig:/run/workbench/k8s/viewer.kubeconfig:ro",
-                                           "./secrets/k8s/limited.kubeconfig:/run/workbench/k8s/limited.kubeconfig:ro"]
+                                           "./secrets/k8s/limited.kubeconfig:/run/workbench/k8s/limited.kubeconfig:ro",
+                                           f"./secrets/k8s/{kubeconfigs.DIR}:/run/workbench/k8s/{kubeconfigs.DIR}:ro"]  # the fixture files (issue 767)
     if "bmc-farm" in services:  # Redfish endpoints for every node in sim.yaml, localhost only
         # :8443 is TLS at the standard /redfish/v1, the node chosen by Host: clients reach it as bmc-<node>
         services["bmc-farm"].update({

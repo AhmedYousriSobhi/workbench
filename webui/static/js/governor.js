@@ -20,6 +20,9 @@ export function paintAttention() {
   const items = attentionItems(S.lastGov, S.lastCl, LEVELS);
   $('attn').innerHTML = items.length ? items.map(i => `<li><span class="ic ${i.kind}" aria-hidden="true">${i.icon}</span><span>${esc(i.text)}</span></li>`).join('')
     : '<li><span class="ic good" aria-hidden="true">✓</span><span>All clear. Nothing needs you right now.</span></li>';
+  const clear = !items.length;  // B5 (#861): all clear is a tick chip in the strip; the band is only there when something needs you
+  $('attn').closest('.subbar').hidden = clear; $('c-attn').hidden = !clear;
+  if (clear) setChip('c-attn', 'good', '✓', 'All clear');
   paintHome();
 }
 export function paintHealth(c) {

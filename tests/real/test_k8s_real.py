@@ -1,6 +1,6 @@
 """Kubernetes (ADR 0034, issue 232): a real control plane with KWOK nodes, read as a client reads it.
 
-Checks, on the live containers: the five services run unprivileged, limited and labelled for the governor; the nodes are
+Checks, on the live containers: the services (five plus metrics-server, issue 382) run unprivileged, limited and labelled for the governor; the nodes are
 Ready with GPU capacity; the failing fixtures show the status a kubelet would report; the read-only kubeconfig on the login
 node works as the simulated user and cannot change anything; the namespace-limited one sees only its namespace; and the
 scenario steps (a node reported NotReady, a crash-looping pod) are seen by the same kubectl."""
@@ -88,6 +88,33 @@ def test_failing_fixtures_show_what_a_kubelet_would_report(cluster):
     assert waiting == "Pending"  # asks for 9 GPUs, a node has 8: the real scheduler leaves it unschedulable
     events = kubectl_as("alice", "get", "events", "-A", "--field-selector", "type=Warning", "-o", "jsonpath={.items[*].reason}").stdout
     assert "FailedScheduling" in events
+
+
+def test_every_kwok_node_advertises_the_kwok_controllers_address_not_loopback(cluster):
+    """Issue 872 (ADR 0084 P1): the API server and metrics-server dial a node's InternalIP. A cluster made before this change keeps
+    127.0.0.1 in etcd (KWOK's stages keep existing addresses), so `up` writes the addresses through the status subresource."""
+    r = kubectl_as("alice", "get", "nodes", "-o", "json")
+    for n in json.loads(r.stdout)["items"]:
+        internal = [a["address"] for a in n["status"].get("addresses", []) if a["type"] == "InternalIP"]
+        assert internal == [k8s.kwok_ip()], (n["metadata"]["name"], n["status"].get("addresses"))
+        assert n["status"]["daemonEndpoints"]["kubeletEndpoint"]["Port"] == k8s.KWOK_PORT
+        assert n["metadata"]["annotations"][k8s.RESOURCE_METRICS_PATH] == f"/metrics/nodes/{n['metadata']['name']}/metrics/resource"
+
+
+def test_the_api_server_reaches_kwok_for_logs_and_node_metrics(cluster):
+    """Issue 872: `kubectl logs` goes API server -> node InternalIP:10247 (KWOK); the node proxy reaches KWOK's resource metrics."""
+    assert wait_for(lambda: "simulated container started" in k8s.kubectl(cluster, "-n", "team-a", "logs", "sized").stdout, timeout=60), \
+        k8s.kubectl(cluster, "-n", "team-a", "logs", "sized").stderr
+    raw = k8s.kubectl(cluster, "get", "--raw", "/api/v1/nodes/kcn001/proxy/metrics/nodes/kcn001/metrics/resource")
+    assert raw.returncode == 0 and "node_cpu_usage_seconds_total" in raw.stdout and "node_memory_working_set_bytes" in raw.stdout, raw.stderr
+
+
+def test_kwok_serves_logs_without_asking_for_a_client_certificate(cluster):
+    """The open point of the ADR 0084 addendum, read from the KWOK v0.8.0 source (ServeTLS without ClientAuth) and confirmed here:
+    a TLS request with no client certificate is answered. The API server still sends one, as on a real cluster."""
+    r = docker("exec", K_LOGIN, "curl", "-sk", "--max-time", "10", "-o", "/dev/null", "-w", "%{http_code}",
+               f"https://{k8s.kwok_ip()}:{k8s.KWOK_PORT}/containerLogs/team-a/sized/c")
+    assert r.stdout.strip() == "200", (r.stdout, r.stderr)
 
 
 def test_the_login_node_kubeconfig_is_the_users_own_mode_600_and_read_only(cluster):
@@ -273,22 +300,31 @@ def test_a_drain_is_blocked_by_the_disruption_budget_and_the_pod_stays(cluster):
     assert wait_for(lambda: (k8s.pods_on_node("kgpu001", "team-a", "app=inference", k8s._run) or 0) >= 1, timeout=90), \
         "the spread constraint should put one inference replica on each GPU node"
     try:
-        r = k8s.kubectl(cluster, "drain", "kgpu001", "--ignore-daemonsets", "--delete-emptydir-data", "--force", "--timeout=25s")
+        # the same argv as the scenario (#749): `--force` without a selector deleted dra-train, a bare pod, when it sat on this node
+        r = k8s.kubectl(cluster, "drain", "kgpu001", *k8s.step_args({"drain": {"node": "kgpu001", "selector": "app=inference", "timeout": 25}})[0][2:])
         assert r.returncode != 0 and "disruption budget" in (r.stderr + r.stdout).lower(), r.stderr[-600:]
         assert (k8s.pods_on_node("kgpu001", "team-a", "app=inference", k8s._run) or 0) >= 1
+        assert k8s.kubectl(cluster, "-n", "team-a", "get", "pod", "dra-train").returncode == 0, "the drain must leave the other fixture pods alone"
     finally:
         k8s.kubectl(cluster, "uncordon", "kgpu001")
 
 
 def test_the_gpu_claim_quota_rejects_a_claim_over_the_limit(cluster):
-    """Issue 548: team-a may hold two DRA devices and dra-train holds one."""
+    """Issue 548: team-a may hold two DRA devices. Fills what is left of the quota, then one more claim is refused (#749: it no
+    longer assumes how many devices the fixture pod holds)."""
     claim = "apiVersion: resource.k8s.io/v1\nkind: ResourceClaim\nmetadata: {name: %s, namespace: team-a}\nspec:\n  devices:\n    requests: [{name: gpu, exactly: {deviceClassName: gpu.sim.test, count: 1}}]\n"
+    key = "gpu.sim.test.deviceclass.resource.k8s.io/devices"
+    names = [f"quota-{i}" for i in range(4)]
     try:
-        assert k8s.kubectl(cluster, "create", "-f", "-", stdin=claim % "quota-a").returncode == 0
-        r = k8s.kubectl(cluster, "create", "-f", "-", stdin=claim % "quota-b")
+        st = json.loads(k8s.kubectl(cluster, "-n", "team-a", "get", "resourcequota", "gpu-claims", "-o", "json").stdout)["status"]
+        free = int(st["hard"][key]) - int(st.get("used", {}).get(key, 0))
+        assert 0 <= free < len(names), st
+        for n in names[:free]:
+            assert k8s.kubectl(cluster, "create", "-f", "-", stdin=claim % n).returncode == 0
+        r = k8s.kubectl(cluster, "create", "-f", "-", stdin=claim % names[free])
         assert r.returncode != 0 and "exceeded quota" in r.stderr, r.stderr[-500:]
     finally:
-        k8s.kubectl(cluster, "-n", "team-a", "delete", "resourceclaim", "quota-a", "quota-b", "--ignore-not-found")
+        k8s.kubectl(cluster, "-n", "team-a", "delete", "resourceclaim", *names, "--ignore-not-found")
 
 
 def test_the_throttling_scenario_gives_the_viewer_real_429s_and_touches_nobody_else(cluster):
@@ -319,3 +355,125 @@ def test_the_throttling_scenario_gives_the_viewer_real_429s_and_touches_nobody_e
     finally:
         k8s.kubectl(cluster, "delete", "--ignore-not-found", "-f", "/k8s/scenario/70-apf.yaml", mounts=[(k8s.SRC, "/k8s")])
     assert wait_for(lambda: status(viewer) == 200, timeout=30)
+
+
+def test_metrics_server_runs_unprivileged_and_a_stop_gives_503_until_it_starts_again(cluster):
+    """Issue 382: the scenario step `metrics_server: stop|start` (scenario k8s-metrics-down). Stopped, the APIService answers 503
+    (ServiceUnavailable) while the rest of the API answers; started, usage returns after two scrapes. The container is started in any case."""
+    probe = ("get", "--raw", "/apis/metrics.k8s.io/v1beta1/nodes")
+    assert wait_for(lambda: kubectl_as("alice", *probe).returncode == 0, timeout=180), kubectl_as("alice", *probe).stderr
+    info = json.loads(docker("inspect", f"workbench-{k8s.METRICS_SERVER}-1").stdout)[0]
+    assert info["Config"]["Image"] == k8s.METRICS_SERVER_IMAGE and not info["HostConfig"]["CapAdd"] and info["Config"]["User"] != "0"
+
+    def unavailable() -> bool:
+        err = kubectl_as("alice", *probe).stderr
+        return "ServiceUnavailable" in err or "503" in err
+    try:
+        assert scenario.execute(scenario.Step(0, "k8s", {"metrics_server": "stop"}), runner=k8s._run).status == "ok"
+        assert wait_for(unavailable, timeout=60), kubectl_as("alice", *probe).stderr
+        assert kubectl_as("alice", "get", "nodes").returncode == 0  # only the metrics API is gone
+    finally:
+        docker("start", f"workbench-{k8s.METRICS_SERVER}-1")
+    assert wait_for(lambda: kubectl_as("alice", *probe).returncode == 0, timeout=120), kubectl_as("alice", *probe).stderr
+
+
+def _hpa(name: str) -> dict:
+    out = kubectl_as("alice", "-n", "team-a", "get", "hpa", name, "-o", "json")
+    return json.loads(out.stdout) if out.returncode == 0 else {}
+
+
+def _limited(hpa: dict) -> str | None:
+    return next((c["status"] for c in hpa.get("status", {}).get("conditions", []) if c["type"] == "ScalingLimited"), None)
+
+
+def test_the_real_hpa_controller_gives_the_three_autoscaler_states_and_the_scenario_pushes_one_to_max(cluster):
+    """Issue 764: three HPAs (k8s/fixtures/25-hpa.yaml) computed by the real controller from the metrics API (issue 382): hpa-limited at max with
+    ScalingLimited True, hpa-steady at max with it False, hpa-below under max. The step `usage` (scenario k8s-hpa-max) pushes hpa-below to its maximum
+    and back; the status is never patched, so it survives a controller-manager restart."""
+    def at_max(name: str) -> bool:
+        s = _hpa(name).get("status", {})
+        return s.get("currentReplicas") == _hpa(name).get("spec", {}).get("maxReplicas") and s.get("desiredReplicas") is not None
+    assert wait_for(lambda: _limited(_hpa("hpa-limited")) == "True", timeout=240), _hpa("hpa-limited").get("status")
+    assert at_max("hpa-limited")
+    assert wait_for(lambda: _limited(_hpa("hpa-steady")) == "False", timeout=240), _hpa("hpa-steady").get("status")
+    assert at_max("hpa-steady")
+    below = _hpa("hpa-below")
+    assert below["status"]["currentReplicas"] < below["spec"]["maxReplicas"]
+    up = scenario.Step(0, "k8s", {"usage": {"namespace": "team-a", "deploy": "hpa-below", "cpu": "400m"}})
+    down = scenario.Step(0, "k8s", {"usage": {"namespace": "team-a", "deploy": "hpa-below", "cpu": "50m"}})
+    try:
+        assert scenario.execute(up, runner=k8s._run).status == "ok"
+        assert wait_for(lambda: _hpa("hpa-below").get("status", {}).get("currentReplicas") == 4 and _limited(_hpa("hpa-below")) == "True", timeout=420), \
+            _hpa("hpa-below").get("status")
+    finally:
+        assert scenario.execute(down, runner=k8s._run).status == "ok"
+
+
+def _queue_state(name: str) -> str | None:
+    out = kubectl_as("alice", "get", "queues.scheduling.volcano.sh", name, "-o", "json")
+    return json.loads(out.stdout)["status"]["state"] if out.returncode == 0 else None
+
+
+def test_the_volcano_queues_and_podgroups_are_served_listed_by_the_viewer_and_the_step_closes_a_queue(cluster):
+    """Issue 765: `api-resources --api-group=scheduling.volcano.sh` lists queues and podgroups; the viewer lists them cluster-wide, `limited` lists
+    PodGroups in team-a only; the step `volcano` (scenario k8s-volcano-queue-closed) closes a queue and moves a PodGroup, and puts them back."""
+    names = kubectl_as("alice", "api-resources", "--api-group=scheduling.volcano.sh", "--no-headers", "-o", "name")
+    assert {"queues.scheduling.volcano.sh", "podgroups.scheduling.volcano.sh"} <= set(names.stdout.split()), names.stderr
+    queues = json.loads(kubectl_as("alice", "get", "queues.scheduling.volcano.sh", "-o", "json").stdout)["items"]
+    assert {q["metadata"]["name"]: q["status"]["state"] for q in queues} == {"gpu-batch": "Open", "maintenance": "Closed"}
+    pgs = json.loads(kubectl_as("alice", "get", "podgroups.scheduling.volcano.sh", "-A", "-o", "json").stdout)["items"]
+    assert {p["metadata"]["name"]: p["status"]["phase"] for p in pgs} == {"train-run": "Running", "train-wait": "Pending"}
+    close = scenario.Step(0, "k8s", {"volcano": {"queue": "gpu-batch", "state": "Closed"}})
+    pend = scenario.Step(0, "k8s", {"volcano": {"podgroup": "train-run", "namespace": "team-a", "phase": "Pending"}})
+    try:
+        assert scenario.execute(close, runner=k8s._run).status == "ok"
+        assert scenario.execute(pend, runner=k8s._run).status == "ok"
+        assert wait_for(lambda: _queue_state("gpu-batch") == "Closed", timeout=30)
+    finally:
+        scenario.execute(scenario.Step(0, "k8s", {"volcano": {"queue": "gpu-batch", "state": "Open"}}), runner=k8s._run)
+        scenario.execute(scenario.Step(0, "k8s", {"volcano": {"podgroup": "train-run", "namespace": "team-a", "phase": "Running"}}), runner=k8s._run)
+    assert wait_for(lambda: _queue_state("gpu-batch") == "Open", timeout=30)
+
+
+def _gpu_node() -> dict:
+    return json.loads(kubectl_as("alice", "get", "node", "kgpu001", "-o", "json").stdout)
+
+
+def _step(do: dict) -> None:
+    assert scenario.execute(scenario.Step(0, "k8s", do), runner=k8s._run).status == "ok"
+
+
+def test_gpu_shapes_mig_unadvertised_and_kubelet_skew_are_served_and_restored(cluster):
+    """Issue 766: the labels and allocatable of each shape, as GPU Feature Discovery and the device plugin publish them, and the restore."""
+    node = _gpu_node()
+    assert node["metadata"]["labels"]["nvidia.com/mig.strategy"] == "none" and node["status"]["allocatable"]["nvidia.com/gpu"] == "8"
+    assert node["status"]["nodeInfo"]["kubeletVersion"] == k8s.version(k8s.current_sim())  # the API server's version (#762)
+    try:
+        _step({"gpu": {"node": "kgpu001", "count": 8, "advertised": False}})  # labels still say it has GPUs, none are allocatable
+        n = _gpu_node()
+        assert n["metadata"]["labels"]["nvidia.com/gpu.present"] == "true" and n["status"]["allocatable"]["nvidia.com/gpu"] == "0"
+        _step({"gpu": {"node": "kgpu001", "count": 8, "advertised": True}})
+        _step({"gpu": {"node": "kgpu001", "count": 8, "mig": {"strategy": "single", "profile": "1g.18gb", "devices": 7}}})
+        n = _gpu_node()
+        assert n["metadata"]["labels"]["nvidia.com/mig.strategy"] == "single" and n["metadata"]["labels"]["nvidia.com/gpu.product"].endswith("-MIG-1g.18gb")
+        assert n["metadata"]["labels"]["nvidia.com/gpu.count"] == "7" and n["status"]["allocatable"]["nvidia.com/gpu"] == "7"
+        _step({"gpu": {"node": "kgpu001", "count": 8, "mig": {"strategy": "mixed", "profile": "1g.18gb", "devices": 7}}})
+        n = _gpu_node()
+        assert n["metadata"]["labels"]["nvidia.com/mig-1g.18gb.count"] == "7" and n["status"]["allocatable"]["nvidia.com/mig-1g.18gb"] == "7"
+        assert n["status"]["allocatable"]["nvidia.com/gpu"] == "7"
+        _step({"kubelet": {"node": "kgpu001", "skew": "older"}})
+        assert _gpu_node()["status"]["nodeInfo"]["kubeletVersion"] == k8sgpu_skewed("older")
+    finally:
+        _step({"gpu": {"node": "kgpu001", "count": 8, "mig": {"strategy": "none", "profile": "1g.18gb"}}})
+        _step({"gpu": {"node": "kgpu001", "count": 8, "advertised": True}})
+        _step({"kubelet": {"node": "kgpu001", "skew": "same"}})
+    n = _gpu_node()
+    assert n["metadata"]["labels"]["nvidia.com/mig.strategy"] == "none" and "nvidia.com/mig-1g.18gb.count" not in n["metadata"]["labels"]
+    assert n["status"]["allocatable"]["nvidia.com/gpu"] == "8" and "nvidia.com/mig-1g.18gb" not in n["status"]["allocatable"]
+    assert n["status"]["nodeInfo"]["kubeletVersion"] == k8s.version(k8s.current_sim())
+
+
+def k8sgpu_skewed(skew: str) -> str:
+    from benchctl import k8sgpu
+    return k8sgpu.skewed(k8s.version(k8s.current_sim()), skew)
+

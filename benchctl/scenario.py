@@ -23,6 +23,8 @@ from . import (
     dcgm,
     faultmodel,
     k8s,
+    k8sgpu,
+    lab_interference,
     netemfaults,
     selectors,
     slurmupgrade,
@@ -235,7 +237,7 @@ def expect_touches(exp: dict) -> list[str]:
     args = args if isinstance(args, dict) else {}
     if kind.startswith("jira."):
         return ["jira-real" if args.get("target") == "real" else "jira-mock"]
-    if kind == "k8s.pod_status":
+    if kind in ("k8s.pod_status", "k8s.metrics_api"):
         return ["k8s-api"]
     if kind == "storage.mount":
         return ["gpu-exporter", str(args.get("node", "cn001"))]
@@ -536,6 +538,7 @@ def execute(step: Step, poster=post, runner=checks.run, host: bool = True, slurm
     main = _apply(step, poster, runner, host, slurm, daemon)
     if main.status != "ok":
         return main
+    lab_interference.record(f"scenario step {','.join(sorted(step.do))}", step.target, "scenario")  # issue 554: a lab run is then not comparable
     failed, notes = [], []
     for extra in side_effects(step):
         o = _apply(extra, poster, runner, host, slurm, daemon)
@@ -610,6 +613,10 @@ def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcom
             return _dcgm(step, label, runner)
         elif step.target == "k8s":
             k8s.write_pod(step.do)
+            for cmd in k8s.host_commands(step.do):
+                r = runner(cmd)
+                if r.returncode:
+                    return Outcome(label, "failed", (r.stderr or r.stdout).strip()[-300:])
             for args in k8s.step_args(step.do):
                 r = runner(k8s.kubectl_cmd(k8s.current_sim(), *args))
                 if r.returncode and args[0] != "drain":  # a drain that the disruption budget blocks times out: that is what the step plays
@@ -865,6 +872,12 @@ def expectation(exp: dict, runner=checks.run, host: bool = True, seen: dict | No
         return label, lambda: k8s.node_ready(args["node"], runner) == bool(args.get("ready", True)), within
     if kind == "k8s.pod_status" and host:  # the pod's phase or a container's waiting/terminated reason is `reason`
         return label, lambda: args["reason"] in k8s.pod_reasons(args["namespace"], args["name"], runner).split(), within
+    if kind == "k8s.metrics_api" and host:  # the metrics API answers (served: true, default) or does not (503 while metrics-server is stopped)
+        return label, lambda: k8s.metrics_api_served(runner) == bool(args.get("served", True)), within
+    if kind == "k8s.node_gpus" and host:  # the node's allocatable `resource` (default nvidia.com/gpu) is `allocatable` (issue 766)
+        return label, lambda: k8s.node_gpus(args["node"], args.get("resource", "nvidia.com/gpu"), runner) == int(args["allocatable"]), within
+    if kind == "k8s.node_kubelet" and host:  # the node's kubelet is newer than, older than or as the API server (skew: newer, older or same)
+        return label, lambda: k8s.node_kubelet(args["node"], runner) == k8sgpu.skewed(k8s.version(k8s.current_sim()), args["skew"]), within
     if kind == "k8s.pods_on_node" and host:  # at least `min` (default 1) Running pods matching `selector` on the node
         return label, lambda: (k8s.pods_on_node(args["node"], args["namespace"], args["selector"], runner) or 0) >= int(args.get("min", 1)), within
     if kind == "storage.mount" and host:  # the declared mount is as full, stale or over quota as the scenario made it

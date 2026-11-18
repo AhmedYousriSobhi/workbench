@@ -20,7 +20,7 @@ export const ZOOM_LEVELS = ['fleet', 'cluster', 'pool', 'traffic', 'requests'], 
 export const MS = 700, EASE = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
 const scroller = () => document.querySelector('#trafficpanel > .flowscroll');
 const layerEl = lv => lv === 'fleet' ? $('fleetview') : lv === 'pool' ? $('poolview') : lv === 'traffic' || lv === 'requests' ? $('tab-traffic') : scroller();
-const onTraffic = () => !$('tab-traffic').hidden, onConn = () => !$('tab-conn').hidden;
+const onTraffic = () => !$('tab-traffic').hidden, onConn = () => !$('tab-conn').hidden || !$('tab-lab').hidden;  // the Lab workspace has no zoom either
 
 // The level of the infrastructure itself, and the level the page is at: Traffic is the deepest stop, a tab of its own that the rail reaches.
 export const infraLevel = () => !S.circuit ? null : curLevel() === 'overview' ? 'fleet' : S.pool ? 'pool' : 'cluster';
@@ -30,10 +30,10 @@ const firstPool = () => Object.keys(POOLS).find(k => facts().pools[k].length);
 function paintLevel(lv) { if (lv === 'fleet') paintFleet(); else if (lv === 'pool') paintPool(); }
 export const refreshZoom = () => { if (!S.zoomHold) paintLevel(infraLevel()); };
 
-// On Home and Test run there is no diagram: no level is marked, and a click opens the Infrastructure tab at that level.
+// On Home and Test run there is no diagram and no rail (the keys + and - still open the Infrastructure tab at that level).
 const offInfra = () => !onTraffic() && $('tab-nodes').hidden;
 function paintRail(lv) {
-  const rail = $('zoomrail'); rail.hidden = !lv || onConn();
+  const rail = $('zoomrail'); rail.hidden = !lv || onConn() || offInfra();  // B4 (#861): only on Topology and Traffic; Overview and Test run have nothing to zoom
   if (rail.hidden) return;
   const none = offInfra();
   rail.querySelectorAll('[data-level]').forEach(b => {
@@ -170,7 +170,7 @@ export function init() {
   $('tr-back').onclick = () => zoomTo(S.trReq ? 'traffic' : infraLevel());
   document.addEventListener('wheel', onWheel, { passive: false });
   document.addEventListener('keydown', e => {
-    if (!S.circuit || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.('input, textarea, select, [contenteditable]') || document.querySelector('dialog[open]:not(.drawer)')) return;
+    if (!S.circuit || $('zoomrail').hidden || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.('input, textarea, select, [contenteditable]') || document.querySelector('dialog[open]:not(.drawer)')) return;
     if (e.key === '+' || e.key === '=') zoomStep(1); else if (e.key === '-' || e.key === '_') zoomStep(-1);
     else if (e.key === 'Escape' && levelNow() === 'pool' && !S.openNode && $('ckey').hidden && $('pop').hidden) zoomTo('cluster');
     else if (e.key === 'Escape' && levelNow() === 'requests') zoomTo('traffic');

@@ -119,7 +119,7 @@ Decided with the owner while building; each can be changed later.
   has no kubeconfig mount; a k-login has no `/etc/slurm` mount and does not wait for slurmctld; a k-login needs the `k8s` part (the
   CLI and the sheet turn it on). It is an attribute of the login entry, not a separate image. The diagram groups the Kubernetes nodes
   apart from the Slurm nodes (the page reads their state from the API as the read-only user), and the graph has `login>k8s-nodes:kubectl`
-  next to `login>nodes:jump`. Printed ssh commands carry `-o IdentitiesOnly=yes`: with several keys in ssh-agent, sshd ended the login
+  next to `login>nodes:jump` (and `login>k8s-api:kubectl` when the API server is on the diagram, issue 388). Printed ssh commands carry `-o IdentitiesOnly=yes`: with several keys in ssh-agent, sshd ended the login
   after six offers.
 - **Node names** are separate from the Slurm nodes (`kcn001`, `kgpu001`); `--k8s-nodes N` sets the GPU node count.
 - **Phase 2 candidates:** one real k3s or kind worker for real CPU pods and pod logs (privileged container, own ADR),
@@ -145,3 +145,9 @@ The client reads queue status with `kubectl get`, only when `kubectl api-resourc
   Volcano and Kubeflow (pytorchjobs, mpijobs) definitions are not added: their CRDs are large and several versions, and the client
   only looks for them; say if the evidence needs them.
 - **Upgrade:** `k8s/kueue/README.md`.
+
+## Pointer: group 4 decisions (issue 867, 2026-11-17)
+[ADR 0084, group 4 addendum](0084-tsh-kube-production-practice.md#addendum-group-4-decisions-issue-867-2026-11-17) changes three phase 1 choices:
+- **Logs and the metrics API need a reachable node address.** KWOK runs with `--node-ip=127.0.0.1`, so neither the API server (`kubectl logs`) nor metrics-server can reach its kubelet port. Prerequisite P1: the kwok-controller's fixed address, and more KWOK definitions enabled (`Logs`, `ClusterLogs`, `Metric`, `ClusterResourceUsage`). **Built in issue 872** (see the ADR 0084 addendum "built, issue 872"): nodes now advertise 10.141.255.44, and KWOK serves canned CRI log files and the kubelet resource metrics.
+- **Nodes report a real kubelet version**, the API server's, instead of `kwok-<version>`, so a client can judge version skew.
+- **The Kueue pattern** (definitions plus status, no controller) fits Volcano. It does not fit HPAs: their controller runs in the controller manager, so HPAs need the metrics API.

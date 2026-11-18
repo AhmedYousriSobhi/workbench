@@ -1,7 +1,7 @@
 import './setup.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { describe, buildReport, expectWords, eyeBase, eyeRows, runVerdict, timelineRows } from '../../static/js/testrunmodel.js';
+import { describe, firstSentence, groupCounts, scenarioGroup, buildReport, expectWords, eyeBase, eyeRows, runVerdict, timelineRows } from '../../static/js/testrunmodel.js';
 
 const prev = { name: 'sc', ref: 'SC-09', steps: [
   { at: 0, target: 'slurm', do: { drain: ['cn001'] }, page: true, why: '' },
@@ -105,6 +105,7 @@ test('every expectation kind reads as a sentence; an unknown one keeps its label
   assert.equal(said('slurm.job_state', { node: 'cn001', state: 'RUNNING' }), 'A job on cn001 is running in Slurm');
   assert.equal(said('slurm.stepd', { node: 'cn001', alive: false }), 'No slurmstepd runs on cn001');
   assert.equal(said('k8s.node_ready', { node: 'kgpu001', ready: false }), 'Kubernetes node kgpu001 is NotReady');
+  assert.equal(said('k8s.metrics_api', { served: false }), 'The metrics API is unavailable');
   assert.equal(said('k8s.pod_status', { namespace: 'team-b', name: 'oom-demo', reason: 'OOMKilled' }), 'Pod team-b/oom-demo shows OOMKilled');
   assert.equal(said('k8s.pods_on_node', { node: 'kgpu001', namespace: 'team-a', selector: 'app=inference', min: 1 }), 'At least 1 Running pod (app=inference, team-a) on Kubernetes node kgpu001');
   assert.equal(said('storage.mount', { node: 'cn001', mount: '/scratch', min_used_pct: 99, min_inodes_used_pct: 90 }), '/scratch on cn001: at least 99% used, at least 90% of its inodes used');
@@ -121,4 +122,20 @@ test('the report says where the run came from (ADR 0086 phase 4)', () => {
   assert.equal(cli.data.ran_from, 'cli'); assert.equal(page.data.ran_from, 'page');
   assert.match(cli.markdown, /- Ran from: the CLI \(benchctl scenario run\)/); assert.match(cli.markdown, /skipped by the CLI/);
   assert.match(page.markdown, /- Ran from: the web page/);
+});
+
+test('a scenario sits under the first group its targets map to (D2)', () => {
+  assert.equal(scenarioGroup(['slurm', 'k8s']), 'k8s'); assert.equal(scenarioGroup(['slurm', 'auth']), 'auth');
+  assert.equal(scenarioGroup(['jira-real']), 'jira'); assert.equal(scenarioGroup(['netem']), 'network'); assert.equal(scenarioGroup(['slurm']), 'slurm');
+  assert.equal(scenarioGroup(['real']), 'other'); assert.equal(scenarioGroup([]), 'other'); assert.equal(scenarioGroup(undefined), 'other');
+});
+test('group chips count the scenarios and leave out empty groups', () => {
+  const c = groupCounts([{ targets: ['slurm'] }, { targets: ['slurm'] }, { targets: ['k8s', 'slurm'] }]);
+  assert.deepEqual(c, [['k8s', 'Kubernetes', 1], ['slurm', 'Slurm', 2]]);
+});
+test('a card keeps the first sentence only (D3)', () => {
+  assert.equal(firstSentence('Node is down. Takes 5 s. Read cat compose/generated/secrets/x.'), 'Node is down.');
+  assert.equal(firstSentence('A token (e.g. a JWT) lives 60 s. More.'), 'A token (e.g. a JWT) lives 60 s.');
+  assert.equal(firstSentence('No full stop'), 'No full stop'); assert.equal(firstSentence(''), '');
+  assert.equal(firstSentence('Reads compose/generated/secrets/slurm_token (not printed); then 511. Rest'), 'Reads compose/generated/secrets/slurm_token (not printed); then 511.');
 });

@@ -122,6 +122,12 @@ polls only while the Traffic tab is visible. To add a reading: add the pure func
 as "not measured", never 0. Periods are found per stream. `ui_shots.py` feeds the screen synthetic `/api/traffic` data and checks the river, the findings, the hash
 round trip and that nothing polls while another tab is open.
 
+## With the stack down, and the top strip
+
+With the stack down the page says it once: the **Needs attention** entry holds the one recovery command, and the strip chip is status only. Every part of the diagram shows `– offline` and no tick, because "built" is not a live state (`OFFLINE` in `circuit.js`). The top strip never holds an action (SPEC W-12): Scenarios live in the left navigation.
+
+`ui_shots.py` `check_stack_down` counts the command on the screen and looks for ticks in both views. `check_run` fails when a Play button is clipped.
+
 ## Under the hood
 
 <p align="center"><img src="../assets/art/guide-web-ui-canvas-diagram.svg" alt="Colour tokens, a wire drawn as halo, core and pulse, and the three zoom levels Fleet, Cluster and Pool" width="720"></p>
@@ -148,3 +154,7 @@ Source: `webui/static/canvas.css`, `webui/static/js/wire.js`, [ADR 0038](../adr/
 
 - [The web page](../manual/05-web-page.md)
 - [Client testing](client-testing.md)
+
+### UX review, second batch (issue 909, part of 861)
+
+B2 the left tiles show on Overview only (`.shell[data-tab]`). B4 the zoom rail is hidden unless Topology or Traffic is open, and the + / - keys do nothing while it is hidden. B5 all clear is the `#c-attn` chip in the strip and the Needs attention band (`.subbar`) is hidden. B6 icons are the inline `<symbol>` set at the top of `index.html` (`.ic`, 16 px grid, `currentColor`). D2 the Test run library has group chips from the scenario's step targets (`SCN_GROUPS` in `testrunmodel.js`; `/api/scenarios` lists `targets`). D3 a card shows `firstSentence()` of the description. D4 a skipped expectation gets the CLI command and a Copy button. E2 on a phone the zoom rail is one row with the current level. `ui_shots.py` `check_shell` and `check_run` measure these; `testrunmodel.test.mjs` covers the grouping and the sentence cut.

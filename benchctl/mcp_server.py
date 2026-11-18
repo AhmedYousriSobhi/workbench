@@ -107,6 +107,11 @@ def build(run: Callable[..., dict] = run_cli) -> MCPServer:
     def report_export(name: str = "last") -> dict:
         return run(["export", "test-report", name, "--json"])
 
+    @s.tool(description="The config lab's report of one run (verdict, findings, wait by partition, suggestions) as report.json. name: the lab; run_id: a run folder or last; "
+                        "anonymize: production node names become lab-node-NNN and user names <user>. Reads files only. exit_code 1 and an error line when the lab, the run or its report is missing.", annotations=READ)
+    def lab_report_export(name: str, run_id: str = "last", anonymize: bool = False) -> dict:
+        return run(["export", "lab-report", name, run_id, "--json", *(["--anonymize"] if anonymize else [])])
+
     @s.tool(description="Clear every injected node fault at once (hot BMC, failed fans, GPU XID, InfiniBand or NIC trouble; powered-off nodes are powered on), like the page's Clear faults. "
                         "Service and credential faults are not touched. Safe to repeat.", annotations=WRITE)
     def fault_clear() -> dict:

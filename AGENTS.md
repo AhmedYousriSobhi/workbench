@@ -34,7 +34,7 @@ Optional parts (Teleport, jump host, Kubernetes, real Jira): `benchctl get endpo
 | Command | What it does |
 |---|---|
 | `benchctl start` | Check the machine, build, start the cluster and the web page |
-| `benchctl stop` | Stop the web page, the cluster and the governor this tool started |
+| `benchctl stop` | Stop the web page, the cluster and the governor this tool started (with `lab NAME`, only that config lab's replay run) |
 | `benchctl plan` | Estimate the memory a workbench needs against what the host has free |
 | `benchctl describe workbench` | One call for situational awareness |
 | `benchctl get faults` | What is wrong right now |
@@ -46,6 +46,8 @@ Optional parts (Teleport, jump host, Kubernetes, real Jira): `benchctl get endpo
 | `benchctl wait ready` | Until every started service answers (the same check `start` uses) |
 | `benchctl export profile` | Write a profile file the monitoring client can import |
 | `benchctl export test-report` | A report of the web page's last scenario run, to attach to a bug report |
+| `benchctl export lab-report` | The config lab's report of one run (the verdict, findings, wait by partition, suggestions), to attach to a ticket |
+| `benchctl run lab` | Replay a config lab A/B through the governor; `stop lab NAME` ends it |
 <!-- END verbs -->
 
 MCP instead of the shell: `pip install -e '.[mcp]'`, then run `benchctl serve mcp` (stdio). Its tools run these same verbs; AGENTS.md, the recipes and the schemas are its resources.
@@ -62,5 +64,5 @@ Add `--json` to any read verb. Scenarios: `benchctl scenario list`. Recipes (one
 - Do not name or imitate the monitoring client in files you commit.
 
 <!-- BEGIN contract -->
-JSON contract version 2.3. Schemas: `docs/agents/schemas/`. Changes: `docs/agents/CHANGELOG.md`. Error codes: `docs/agents/ERROR-CODES.md`.
+JSON contract version 2.5. Schemas: `docs/agents/schemas/`. Changes: `docs/agents/CHANGELOG.md`. Error codes: `docs/agents/ERROR-CODES.md`.
 <!-- END contract -->

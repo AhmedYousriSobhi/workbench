@@ -16,7 +16,7 @@ Host reserve (OS, desktop, IDE, browser): **about 3 GB**, never governed. Page c
 | slurmdbd + MariaDB (small buffer pool) | 0.2 GB | P2 (profile-gated) |
 | App under test | 1.0 GB assumed until measured on your machine (664 MB peak in one session) (`benchctl measure app --save`, `--app-mb`) | P1 |
 | bmc-farm + bcm-mock + jira-mock + gpu-exporter-farm | 0.3 GB | P2 |
-| Kubernetes control plane (etcd, apiserver, controller manager, scheduler) + KWOK, five containers (ADR 0034) | 0.9 GB cap, about 0.3 GB measured | P3 |
+| Kubernetes control plane (etcd, apiserver, controller manager, scheduler) + KWOK + metrics-server, six containers (ADR 0034; metrics-server issue 382, 128 MB cap, not yet measured) | 1.0 GB cap, about 0.3 GB measured without metrics-server | P3 |
 | slurmd containers | 60 MB + 128 MB room for jobs (`job_memory_mb`) cap each, about 13 MB used | P4 |
 | Fidelity VM | 2.0 GB cap | P6 |
 | Jira DC (jira-real only) | 2.1 GB cap + Postgres 0.25 GB (measured, trimmed JVM) | P6 |
@@ -26,7 +26,7 @@ Host reserve (OS, desktop, IDE, browser): **about 3 GB**, never governed. Page c
 | Profile | What's on | Est. sim total |
 |---|---|---|
 | `min` | core, mocks, 4 slurmd | 0.5 GB expected (measured use plus 15 percent) |
-| `std` | `min` + accounting, 16 slurmd | 0.9 GB expected today (the optional Kubernetes part, `--with k8s`, adds about 0.3 GB measured, 0.9 GB cap; its KWOK node count comes from `sim.yaml` `kubernetes.nodes`, 4 today, or `--k8s-nodes`) |
+| `std` | `min` + accounting, 16 slurmd | 0.9 GB expected today (the optional Kubernetes part, `--with k8s`, adds about 0.3 GB measured, 1.0 GB cap with metrics-server; its KWOK node count comes from `sim.yaml` `kubernetes.nodes`, 4 today, or `--k8s-nodes`) |
 | `full` | `std` with 32 slurmd | 1.2 GB expected today (the fidelity VM is deferred, ADR 0033, and not counted until it is built and measured) |
 | `jira-real` | `std` plus Jira DC | 3.2 GB expected |
 | `mac-agent` | `min` + remote macOS agent (external) | 0.5 GB local |

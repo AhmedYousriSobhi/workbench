@@ -236,7 +236,7 @@ The Teleport web UI is at `https://10.141.255.30:3080` (same login).
 This adds a real Kubernetes control plane (etcd, API server, scheduler, controller manager) and KWOK, which plays the nodes. About 0.3 GB of memory. The first start pulls about 400 MB of images.
 
 - **Nodes:** fake and separate from the Slurm nodes: `kcn001`, `kcn002` (CPU) and `kgpu001`, `kgpu002` (8 GPUs each, labelled as GPU Feature Discovery does). Change them under `kubernetes:` in `sim.yaml`, set the counts with `--k8s-nodes N` (GPU nodes) and `--k8s-cpu-nodes N`, or use the page (Cluster architecture).
-- **Pods:** they never really run, so there are no real pod logs. A pod labelled `workbench_fault` (the fixtures have crash-looping, OOM-killed, image-pull and failed-job ones) shows the status a kubelet would report.
+- **Pods:** they never really run, so there are no real pod logs: `kubectl logs` shows canned log lines (`crashloop` in `team-b` also has `--previous`), and `kubectl top` shows the usage set in the pods' annotations. A pod labelled `workbench_fault` (the fixtures have crash-looping, OOM-killed, image-pull and failed-job ones) shows the status a kubelet would report.
 - **DRA:** each GPU node also publishes a `ResourceSlice` (driver `gpu.sim.test`, one device per GPU, UUIDs as in the DCGM series). The pod `dra-train` in `team-a` gets its GPU through a `ResourceClaim` the real scheduler allocates (`kubectl -n team-a get resourceclaim -o yaml`, ADR 0076).
 - **Queues (Kueue):** `kubectl api-resources | grep kueue` lists `clusterqueues`, `localqueues` and `resourceflavors` (Kueue v0.20.6, v1beta2). There is no Kueue controller, so the counts are fixtures.
   - As alice on the login node, list the cluster queues with `kubectl get clusterqueues`. It shows pending and admitted counts for `gpu-training`, `gpu-inference`, `cpu-batch` and `legacy-h100` (inactive).
@@ -264,6 +264,8 @@ From a login node a user has `kubectl` and a read-only kubeconfig (`~/.kube/conf
 ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2222 alice@127.0.0.1 kubectl get nodes
 ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2222 alice@127.0.0.1 kubectl get pods -A
 ```
+
+Six more files sit beside them in each user's `~/.kube` for a client's Discover step to judge: loose (world- or group-writable), foreign-owned, root-owned, an exec plugin that prints a token and a plugin that needs a browser. They never replace `config`. Owners, modes and what to expect are in [Kubeconfig files a client must judge](../guides/client-testing.md#kubeconfig-files-a-client-must-judge).
 
 You, the administrator, have `compose/generated/secrets/k8s/admin.kubeconfig` (API on `127.0.0.1:6443`); never hand it to a client.
 Faults: scenarios `k8s-node-notready` (a GPU node reports NotReady, then recovers) and `pod-crashloop`

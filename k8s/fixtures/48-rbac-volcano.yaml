@@ -1,0 +1,24 @@
+# Read of the Volcano objects (issue 765): a client lists Queues and PodGroups where `kubectl api-resources --api-group=scheduling.volcano.sh` lists them.
+# `viewer` reads both kinds cluster-wide. `limited` (namespace team-a) reads PodGroups in team-a only; Queues are cluster-scoped.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: workbench-volcano-viewer}
+rules:
+- {apiGroups: [scheduling.volcano.sh], resources: [queues, podgroups], verbs: [get, list, watch]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: workbench-volcano-viewer}
+subjects: [{kind: User, name: viewer}]
+roleRef: {kind: ClusterRole, name: workbench-volcano-viewer, apiGroup: rbac.authorization.k8s.io}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: podgroups-read, namespace: team-a}
+rules: [{apiGroups: [scheduling.volcano.sh], resources: [podgroups], verbs: [get, list]}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: limited-podgroups, namespace: team-a}
+subjects: [{kind: User, name: limited}]
+roleRef: {kind: Role, name: podgroups-read, apiGroup: rbac.authorization.k8s.io}

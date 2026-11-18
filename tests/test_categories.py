@@ -5,6 +5,7 @@ import pytest
 from typer.testing import CliRunner
 
 from benchctl import cli, completion, workbench
+from benchctl.commands import lifecycle as cmd_lifecycle
 
 runner = CliRunner()
 ROOT = Path(__file__).resolve().parent.parent
@@ -61,8 +62,8 @@ def test_plan_accepts_category_flags_and_addons():
 
 def test_start_forwards_the_selection_as_parts(monkeypatch):
     calls = []
-    monkeypatch.setattr(cli, "_launcher", lambda *a: calls.append(a))
-    monkeypatch.setattr(cli, "_offer_completion", lambda: None)
+    monkeypatch.setattr(cmd_lifecycle, "_launcher", lambda *a: calls.append(a))
+    monkeypatch.setattr(cmd_lifecycle, "_offer_completion", lambda: None)
     monkeypatch.setattr(cli.workbench, "current", lambda sim, path=None: None)  # a saved workbench on this machine would be kept (issue 387)
     runner.invoke(cli.app, ["start", "--access", "teleport", "--hardware", "bmc"])
     args = calls[-1]

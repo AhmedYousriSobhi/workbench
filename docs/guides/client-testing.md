@@ -34,9 +34,120 @@ Every part has a fixed private address (`10.141.x.x`, standard ports; [ADR 0018]
 | BMC Redfish over TLS, certificate pinning | one address per node, `10.148.0.N:443` / `10.148.100.N:443` (fallback: one listener `127.0.0.1:8443`, node chosen by the `Host: bmc-<node>` header) | `admin` and the password in `secrets/bmc_credentials` | merged (ADR 0012); plain HTTP on `:8000` also remains. Inside the cluster network (login node, containers) the BMCs also answer on the standard `bmc-<node>:443`; on the host only `8443` is published (443 needs root) |
 | BCM (`cmsh` on a head node) | the login node is the head node: `cmsh -c "device; list"` over the same SSH connection | as for SSH | built (ADR 0013); read-only, with a small interactive console (modes, list, status); node state follows bcm-mock and scenarios; the head node's events log `/var/spool/cmd/events.log` gets a line per node state change ( format from the documented shape, not verified against a real CMDaemon) |
 | Teleport (`tsh login`, `tsh ssh`, ssh through the proxy) | proxy `10.141.255.30:3080` or `teleport.workbench.test:3080` (self-signed; `--insecure`), optional part: `benchctl up --with teleport` | identity file per user in `secrets/teleport/identity/`, or a password and one-time code set up through `benchctl add invite <user>` | built, review (ADR 0020): agentless OpenSSH nodes; with the k8s part also `tsh kube` (ADR 0083, docs/guides/teleport-kube.md); not simulated: agent extras, web/DB access. Your `tsh` major must not be newer than `teleport.version` |
-| Kubernetes (`kubectl` over the SSH session: `get nodes\|pods\|events`, `get --raw /readyz`, `auth can-i`, `describe`, `logs`) | the login node: `kubectl` as `alice` or `bob` with `~/.kube/config` (read-only, cluster-wide) and `~/.kube/limited.yaml` (namespace `team-a` only), both mode 600 and owned by the user; the API server `https://10.141.255.40:6443` (fallback `127.0.0.1:6443`); optional part: `benchctl up --with k8s` | the kubeconfigs above (tokens in `secrets/k8s/`); the host copy `secrets/k8s/admin.kubeconfig` is for you, never for a client | built, review (ADR 0034): a real API server, scheduler and controller manager; the nodes (`kcn001`, `kgpu001`...) are KWOK fakes with `nvidia.com/gpu` and GPU Feature Discovery labels, so pods never really run: no real pod logs (`kubectl logs` has nothing to show), no `exec`, no metrics-server (the client treats it as optional); failing pods get their status from KWOK stages. With `--login ssh:slurm,ssh:k8s` the Kubernetes entry is the k-login (`login2`) and the Slurm entry the s-login. **Exercised:** `benchctl export profile` run through the client's own profile importer (the Kubernetes entry gets `k8s`: enabled, interval, workload signals, `poolLabel pool`; host and kubeconfig stay yours), and the commands it runs (`get nodes -o json`, `get pods -A`, `get events -A`, `get --raw /readyz?verbose`, `/version`, `auth can-i`, `config view --minify`, `describe pod`, Deployments, Jobs, PVCs, DaemonSets, ResourceQuotas, HPAs) as `alice` over SSH on the k-login: all answer; the metrics API answers 404, which the client treats as optional. **Not exercised:** the client's own screens (Discover step, Nodes and GPUs tabs, notifications): they need the desktop app, run by you |
+| Kubernetes (`kubectl` over the SSH session: `get nodes\|pods\|events`, `get --raw /readyz`, `auth can-i`, `describe`, `logs`) | the login node: `kubectl` as `alice` or `bob` with `~/.kube/config` (read-only, cluster-wide) and `~/.kube/limited.yaml` (namespace `team-a` only), both mode 600 and owned by the user; the API server `https://10.141.255.40:6443` (fallback `127.0.0.1:6443`); optional part: `benchctl up --with k8s` | the kubeconfigs above (tokens in `secrets/k8s/`); the host copy `secrets/k8s/admin.kubeconfig` is for you, never for a client | built, review (ADR 0034): a real API server, scheduler and controller manager; the nodes (`kcn001`, `kgpu001`...) are KWOK fakes with `nvidia.com/gpu` and GPU Feature Discovery labels, so pods never really run: no real pod logs, but `kubectl logs` answers canned kubelet log files (`--tail`, `--limit-bytes`, `--timestamps` and `--previous` work; `crashloop` in `team-b` has a previous run; the limited user has no `pods/log` right, so it is refused; issues 872 and 760), no `exec`; metrics-server v0.9.1 serves the metrics API (`kubectl top`, `nodes.metrics.k8s.io`; usage comes from the pods' `kwok.x-k8s.io/usage-cpu` and `usage-memory` annotations; issue 382; scenario `k8s-metrics-down` stops it so the API answers 503, then starts it); every node reports the API server's version as its kubelet version (a real `vX.Y.Z`, so skew can be judged); every read the client makes is listed under "Kubernetes reads, one by one"; failing pods get their status from KWOK stages. With `--login ssh:slurm,ssh:k8s` the Kubernetes entry is the k-login (`login2`) and the Slurm entry the s-login. **Exercised:** `benchctl export profile` run through the client's own profile importer (the Kubernetes entry gets `k8s`: enabled, interval, workload signals, `poolLabel pool`; host and kubeconfig stay yours), and the commands it runs (`get nodes -o json`, `get pods -A`, `get events -A`, `get --raw /readyz?verbose`, `/version`, `auth can-i`, `config view --minify`, `describe pod`, Deployments, Jobs, PVCs, DaemonSets, ResourceQuotas, HPAs) as `alice` over SSH on the k-login: all answer; the metrics API answered 404 then (before issue 382; it now answers 200 for the viewer, written and unit-tested, not yet run live). **Not exercised:** the client's own screens (Discover step, Nodes and GPUs tabs, notifications): they need the desktop app, run by you |
 
 If port 2222 refuses connections, the checkout is probably on a branch without the login node. That is not a client bug.
+
+## Kubernetes reads, one by one
+
+A client that monitors Kubernetes runs `kubectl` on the k-login over its SSH session and reads only; it never runs `exec`, `port-forward` or `proxy`. The table lists every read in this repository's own words (the catalogue is `benchctl/k8sreads.py`), what the user must be allowed to do, and the outcome asserted for `alice`'s cluster-wide `~/.kube/config` (viewer) and for `~/.kube/limited.yaml` (limited, namespace `team-a`, pods and events only). Rows marked "(signal)" are read only when the client's workload-signals option is on.
+
+```bash
+./scripts/verify.sh --unit k8s_reads      # runs every row as both users; needs host memory for the k8s part
+```
+
+| Read | What it asks | Needs | Viewer | Limited |
+|---|---|---|---|---|
+| `can-i-list-nodes` | may it list nodes: `kubectl auth can-i list nodes` | nothing (anyone may ask what they may do) | yes | no |
+| `can-i-list-pods-all` | may it list pods in every namespace: `kubectl auth can-i list pods -A` | nothing (anyone may ask what they may do) | yes | no |
+| `can-i-list-events-all` | may it list events in every namespace: `kubectl auth can-i list events -A` | nothing (anyone may ask what they may do) | yes | no |
+| `can-i-list-pods-ns` | may it list pods in one namespace: `kubectl auth can-i list pods -n team-a` | nothing (anyone may ask what they may do) | yes | yes |
+| `can-i-list-events-ns` | may it list events in one namespace: `kubectl auth can-i list events -n team-a` | nothing (anyone may ask what they may do) | yes | yes |
+| `can-i-list-pods-other-ns` | may it list pods in another namespace: `kubectl auth can-i list pods -n team-b` | nothing (anyone may ask what they may do) | yes | no |
+| `can-i-list-pods-kubeconfig-ns` | may it list pods in the kubeconfig's own namespace: `kubectl auth can-i list pods` | nothing (anyone may ask what they may do) | yes | yes |
+| `can-i-list-namespaces` | may it list namespaces: `kubectl auth can-i list namespaces` | nothing (anyone may ask what they may do) | yes | no |
+| `can-i-get-pod-logs` | may it read pod logs: `kubectl auth can-i get pods --subresource=log -n team-a` | nothing (anyone may ask what they may do) | yes | no |
+| `config-view` | which context and namespace the kubeconfig uses: `kubectl config view --minify -o json` | nothing (reads the local file) | ok | ok |
+| `readyz` | API server readiness, one line per check: `kubectl get --raw /readyz?verbose` | the public-info role every authenticated user has | ok | ok |
+| `version` | the API server's version: `kubectl get --raw /version` | the same role | ok | ok |
+| `nodes` | every node: conditions, GPU capacity, labels, kubelet version: `kubectl get nodes -o json` | list on nodes (cluster-wide) | ok | forbidden |
+| `metrics-probe` | is the metrics API served (one item): `kubectl get --raw /apis/metrics.k8s.io/v1beta1/nodes?limit=1` | list on nodes in metrics.k8s.io | ok | forbidden |
+| `node-usage` | CPU and memory use of every node (metrics-server, issue 382): `kubectl get nodes.metrics.k8s.io -o json` | list on nodes in metrics.k8s.io | ok | forbidden |
+| `pods-all` | pods in every namespace that are not finished, in chunks: `kubectl get pods -A --field-selector=status.phase!=Succeeded --chunk-size=500 -o json` | list on pods (cluster-wide) | ok | forbidden |
+| `pods-ns` | pods in one namespace, in chunks: `kubectl get pods -n team-a --chunk-size=500 -o json` | list on pods in that namespace | ok | ok |
+| `pods-count` | how many pods, from one item and `remainingItemCount`: `kubectl get --raw /api/v1/pods?limit=1` | list on pods (cluster-wide) | ok | forbidden |
+| `pods-count-ns` | the same for one namespace: `kubectl get --raw /api/v1/namespaces/team-a/pods?limit=1` | list on pods in that namespace | ok | ok |
+| `events-warning` | Warning events in every namespace: `kubectl get events -A --field-selector=type=Warning -o json` | list on events (cluster-wide) | ok | forbidden |
+| `events-warning-ns` | Warning events in one namespace: `kubectl get events -n team-a --field-selector=type=Warning -o json` | list on events in that namespace | ok | ok |
+| `api-group-kueue` (signal) | is the Kueue group served: `kubectl api-resources --api-group=kueue.x-k8s.io --no-headers -o name` | discovery (every authenticated user) | served | served |
+| `api-group-volcano` (signal) | is the Volcano group served: `kubectl api-resources --api-group=scheduling.volcano.sh --no-headers -o name` | discovery (every authenticated user) | served | served |
+| `get-volcano-queues` (signal) | list Volcano Queues (workload signal): `kubectl get queues.scheduling.volcano.sh -o json` | list on queues (cluster-scoped) | ok | forbidden |
+| `get-volcano-podgroups` (signal) | list Volcano PodGroups in one namespace: `kubectl get podgroups.scheduling.volcano.sh -n team-a -o json` | list on podgroups in that namespace | ok | ok |
+| `api-group-kubeflow` (signal) | is the Kubeflow group served (not yet: issue 390): `kubectl api-resources --api-group=kubeflow.org --no-headers -o name` | discovery | not-served | not-served |
+| `describe-pod` | what the user sees when it opens a pod: `kubectl describe pod sized -n team-a` | get on pods and list on events in that namespace | ok | ok |
+| `pod-logs` | the last lines of a pod's log, with timestamps and a byte cap: `kubectl logs sized -n team-a --tail=500 --timestamps --limit-bytes=1048576` | get on pods/log in that namespace | ok | forbidden |
+| `pod-logs-previous` | the log of the run before, for a crash-looping pod: `kubectl logs crashloop -n team-b --previous --tail=500 --timestamps --limit-bytes=1048576` | get on pods/log in that namespace | ok | forbidden |
+| `can-i-list-deployments` (signal) | may it list deployments.apps cluster-wide: `kubectl auth can-i list deployments.apps -A` | nothing (anyone may ask what they may do) | yes | no |
+| `can-i-get-deployments` (signal) | may it get deployments.apps: `kubectl auth can-i get deployments.apps -n team-a` | nothing (anyone may ask what they may do) | yes | no |
+| `get-deployments` (signal) | list deployments.apps (workload signal): `kubectl get deployments.apps -A -o json` | list on deployments.apps | ok | forbidden |
+| `can-i-list-jobs` (signal) | may it list jobs.batch cluster-wide: `kubectl auth can-i list jobs.batch -A` | nothing (anyone may ask what they may do) | yes | no |
+| `can-i-get-jobs` (signal) | may it get jobs.batch: `kubectl auth can-i get jobs.batch -n team-a` | nothing (anyone may ask what they may do) | yes | no |
+| `get-jobs` (signal) | list jobs.batch (workload signal): `kubectl get jobs.batch -A -o json` | list on jobs.batch | ok | forbidden |
+| `can-i-list-pvcs` (signal) | may it list persistentvolumeclaims cluster-wide: `kubectl auth can-i list persistentvolumeclaims -A` | nothing (anyone may ask what they may do) | yes | no |
+| `can-i-get-pvcs` (signal) | may it get persistentvolumeclaims: `kubectl auth can-i get persistentvolumeclaims -n team-a` | nothing (anyone may ask what they may do) | yes | no |
+| `get-pvcs` (signal) | list persistentvolumeclaims (workload signal): `kubectl get persistentvolumeclaims -A -o json` | list on persistentvolumeclaims | ok | forbidden |
+| `can-i-list-daemonsets` (signal) | may it list daemonsets.apps cluster-wide: `kubectl auth can-i list daemonsets.apps -A` | nothing (anyone may ask what they may do) | yes | no |
+| `can-i-get-daemonsets` (signal) | may it get daemonsets.apps: `kubectl auth can-i get daemonsets.apps -n team-a` | nothing (anyone may ask what they may do) | yes | no |
+| `get-daemonsets` (signal) | list daemonsets.apps (workload signal): `kubectl get daemonsets.apps -A -o json` | list on daemonsets.apps | ok | forbidden |
+| `can-i-list-resourcequotas` (signal) | may it list resourcequotas cluster-wide: `kubectl auth can-i list resourcequotas -A` | nothing (anyone may ask what they may do) | yes | no |
+| `can-i-get-resourcequotas` (signal) | may it get resourcequotas: `kubectl auth can-i get resourcequotas -n team-a` | nothing (anyone may ask what they may do) | yes | no |
+| `get-resourcequotas` (signal) | list resourcequotas (workload signal): `kubectl get resourcequotas -A -o json` | list on resourcequotas | ok | forbidden |
+| `can-i-list-hpas` (signal) | may it list horizontalpodautoscalers.autoscaling cluster-wide: `kubectl auth can-i list horizontalpodautoscalers.autoscaling -A` | nothing (anyone may ask what they may do) | yes | no |
+| `can-i-get-hpas` (signal) | may it get horizontalpodautoscalers.autoscaling: `kubectl auth can-i get horizontalpodautoscalers.autoscaling -n team-a` | nothing (anyone may ask what they may do) | yes | no |
+| `get-hpas` (signal) | list horizontalpodautoscalers.autoscaling (workload signal): `kubectl get horizontalpodautoscalers.autoscaling -A -o json` | list on horizontalpodautoscalers.autoscaling | ok | forbidden |
+| `can-i-list-clusterqueues` (signal) | may it list clusterqueues.kueue.x-k8s.io cluster-wide: `kubectl auth can-i list clusterqueues.kueue.x-k8s.io` | nothing (anyone may ask what they may do) | yes | no |
+| `can-i-get-clusterqueues` (signal) | may it get clusterqueues.kueue.x-k8s.io: `kubectl auth can-i get clusterqueues.kueue.x-k8s.io` | nothing (anyone may ask what they may do) | yes | no |
+| `get-clusterqueues` (signal) | list clusterqueues.kueue.x-k8s.io (workload signal): `kubectl get clusterqueues.kueue.x-k8s.io -o json` | list on clusterqueues.kueue.x-k8s.io | ok | forbidden |
+| `can-i-list-localqueues` (signal) | may it list Kueue LocalQueues in its namespace: `kubectl auth can-i list localqueues.kueue.x-k8s.io -n team-a` | nothing (anyone may ask what they may do) | yes | yes |
+| `get-localqueues` (signal) | list Kueue LocalQueues in one namespace: `kubectl get localqueues.kueue.x-k8s.io -n team-a -o json` | list on localqueues in that namespace | ok | ok |
+
+What the live test (`tests/real/test_k8s_reads_real.py`) records or asserts beyond the table:
+- **Metrics API probe:** answers 404 today and becomes 200 with issue 382; both are accepted and the actual answer is printed, so it never fails the module.
+- **Not served:** the Volcano and Kubeflow groups answer "not served" until their definitions exist (issues 765 and 390); the rows then change.
+- **Kubelet version:** every node reports the API server's version (`v1.36.1`), not KWOK's own `kwok-v0.8.0`, so a client that reads `vX.Y` can judge version skew (issue 766, part a).
+- **The hop:** from the s-login, `ssh -o BatchMode=yes login2 kubectl version` runs kubectl on the k-login as the client does for a "Kubernetes host"; a wrong host name gives one line, `Could not resolve hostname ...`.
+- **Pod logs:** authorization is asserted (`can-i-get-pod-logs`); reading the log text waits for issue 760 (KWOK has no kubelet).
+
+## Kubeconfig files a client must judge
+
+A client that runs `kubectl` on every poll refuses a kubeconfig it should not trust, because an exec credential plugin named in the file would run each time: a file owned by someone else (root is accepted) or writable by others is refused, and one that signs in through a browser cannot work. With the Kubernetes part on, every simulated user's `~/.kube` on the k-login holds one file for each case, next to `config` and `limited.yaml`, which are never replaced (issue 767; the catalogue is `benchctl/kubeconfigs.py`). Point the client's Discover step at `~/.kube` and check that it lists each file and judges it as the "Client's verdict" column says.
+
+| File in `~/.kube` | What it is | Owner, group, mode | Client's verdict | `kubectl get nodes` without a terminal |
+|---|---|---|---|---|
+| `config` | the normal token kubeconfig, read-only, cluster-wide (not changed by these fixtures) | user, user, 600 | accepted | ok |
+| `loose-world.yaml` | writable by everyone | the user, the user's group, 666 | refused | ok |
+| `loose-group.yaml` | writable by a group that is not the user's own | the user, users, 660 | refused | ok |
+| `foreign-owner.yaml` | owned by another simulated user, readable | another user, that user's group, 644 | refused | ok |
+| `root-owned.yaml` | owned by root, readable (an administrator's hand-over) | root, root, 644 | accepted | ok |
+| `exec-token.yaml` | private; an exec plugin prints a token, no terminal needed | the user, the user's group, 600 | accepted | ok |
+| `browser-signin.yaml` | private; a plugin that needs a browser (interactiveMode Always) | the user, the user's group, 600 | unusable | error |
+
+The listing to expect for `alice` (owner and group names are the user's; written from the generator, not yet seen live):
+
+```bash
+docker exec -u alice workbench-login2-1 sh -c 'ls -l ~/.kube'
+```
+
+```text
+-rw------- 1 alice alice ... browser-signin.yaml
+-rw------- 1 alice alice ... config
+-rw------- 1 alice alice ... exec-token.yaml
+-rw-r--r-- 1 bob   bob   ... foreign-owner.yaml
+-rw------- 1 alice alice ... limited.yaml
+-rw-rw---- 1 alice users ... loose-group.yaml
+-rw-rw-rw- 1 alice alice ... loose-world.yaml
+drwx------ 2 alice alice ... plugins
+-rw-r--r-- 1 root  root  ... root-owned.yaml
+```
+
+Try one, without a terminal (as an SSH session from a client has none):
+
+```bash
+docker exec -u alice workbench-login2-1 sh -c 'kubectl --kubeconfig ~/.kube/exec-token.yaml get nodes'     # works: the plugin prints a token
+docker exec -u alice workbench-login2-1 sh -c 'kubectl --kubeconfig ~/.kube/browser-signin.yaml get nodes' # fails
+```
+
+The second fails because the plugin says `interactiveMode: Always`: the Kubernetes authentication documentation says such a plugin "will only be run if standard input is available for user input. If standard input is not available for user input, then the exec plugin will not be run and an error will be returned", and `kubectl` answers `standard input is not a terminal` (client-go source; the exact wording of the wrapped message is checked by the live test). On a terminal the plugin would run and fail with its own message, that it needs a browser and a display. The client's rules (owner, group-writable, plugin, browser) come from its own guide and code, read once (ADR 0084); nothing here ran the client.
 
 ## Point the client at it
 
@@ -285,7 +396,7 @@ Do not report one of the last row as a client defect.
 - A client's node inventory may refresh more slowly than its jobs list, so a node can look idle for a few seconds after a job starts.
 - `sinfo` folds names (`cn[001-004]`); assert on the fold, not on single names.
 
-**Known gaps:** Kubernetes has no real kubelet (no pod logs, no metrics-server); with the Teleport and k8s parts both on it is reachable through `tsh kube`. Teleport has no dynamic labels, session recording or sharing. The fake `cmsh` console is a read-only subset.
+**Known gaps:** Kubernetes has no real kubelet (pod logs are canned files, no `exec`; node and pod usage come from metrics-server over KWOK's simulated kubelet metrics); with the Teleport and k8s parts both on it is reachable through `tsh kube`. Teleport has no dynamic labels, session recording or sharing. The fake `cmsh` console is a read-only subset.
 
 ## Check the client after the plan changes
 

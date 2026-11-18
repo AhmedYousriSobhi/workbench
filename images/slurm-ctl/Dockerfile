@@ -8,4 +8,6 @@ COPY alloc_feed.py node_watch.py /usr/local/bin/
 # Slurm power saving (issue 545): one script, two names (SuspendProgram, ResumeProgram); no RUN step, so no layer to re-run.
 COPY --chmod=755 power.sh /usr/local/sbin/power-off
 COPY --chmod=755 power.sh /usr/local/sbin/power-on
-CMD ["sh", "-c", "python3 /usr/local/bin/alloc_feed.py & python3 /usr/local/bin/node_watch.py & exec slurmctld -D"]
+# Config lab A/B restore (issue 554): puts a saved slurmctld state back before slurmctld starts; does nothing without one.
+COPY --chmod=755 restore-state.sh /usr/local/sbin/restore-state
+CMD ["sh", "-c", "/usr/local/sbin/restore-state || exit 1; python3 /usr/local/bin/alloc_feed.py & python3 /usr/local/bin/node_watch.py & exec slurmctld -D"]

@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 from webui_src import page_source
 
 from benchctl import addressing, cli, completion, compose, export, logins, teleport, workbench
+from benchctl.commands import lifecycle as cmd_lifecycle
 from governor import control
 from webui import connections
 
@@ -115,8 +116,8 @@ def test_cli_login_flag_turns_teleport_on_and_refuses_a_typo(monkeypatch):
     r = runner.invoke(cli.app, ["plan", "--login", "ssh,telepor"])
     assert r.exit_code == 1 and "Did you mean 'teleport'" in r.output
     calls = []
-    monkeypatch.setattr(cli, "_launcher", lambda *a: calls.append(a))
-    monkeypatch.setattr(cli, "_offer_completion", lambda: None)
+    monkeypatch.setattr(cmd_lifecycle, "_launcher", lambda *a: calls.append(a))
+    monkeypatch.setattr(cmd_lifecycle, "_offer_completion", lambda: None)
     runner.invoke(cli.app, ["start", "--login", "ssh,teleport"])
     args = calls[-1]
     assert args[args.index("--login") + 1] == "ssh,teleport" and "teleport" in [args[i + 1] for i, a in enumerate(args) if a == "--with"]
@@ -196,6 +197,9 @@ def test_the_graph_joins_each_login_to_the_nodes_it_serves():
     assert not ({"login2>nodes:jump", "login>k8s-nodes:kubectl"} & ids)
     assert {"id": "k8s-nodes", "type": "group"} in g["entities"] and {"id": "kgpu001", "type": "k8s-node", "group": "k8s-nodes"} in g["entities"]
     assert not any(e["id"] == "k8s-nodes" for e in graph.build({}, nodes[:1], lg)["entities"])      # no Kubernetes nodes, no group
+    api = {e["id"] for e in graph.build({"k8s-api": True}, nodes, lg)["edges"]}                     # kubectl also talks to the API server (#388)
+    assert {"login2>k8s-api:kubectl", "login3>k8s-api:kubectl"} <= api and "login>k8s-api:kubectl" not in api
+    assert not any(i.endswith("k8s-api:kubectl") for i in ids)                                      # no API server part, no line
 
 
 def test_the_cli_and_the_governor_accept_a_login_kind():

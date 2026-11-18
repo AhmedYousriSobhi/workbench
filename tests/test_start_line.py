@@ -1,5 +1,6 @@
 """`benchctl start` names what it starts and what it replaces (#215)."""
 from benchctl import workbench
+from benchctl.commands import lifecycle as cmd_lifecycle
 
 
 def saved(**kw):
@@ -39,8 +40,8 @@ def test_start_passes_saved_to_the_launcher_only_when_it_reuses_it(monkeypatch, 
 
     from benchctl import cli
     calls = []
-    monkeypatch.setattr(cli, "_launcher", lambda *a: calls.append(a))
-    monkeypatch.setattr(cli, "_offer_completion", lambda: None)
+    monkeypatch.setattr(cmd_lifecycle, "_launcher", lambda *a: calls.append(a))
+    monkeypatch.setattr(cmd_lifecycle, "_offer_completion", lambda: None)
     here = {"spec": saved()}
     monkeypatch.setattr(workbench, "current", lambda sim, path=None: here["spec"])
     run = CliRunner().invoke
@@ -49,3 +50,11 @@ def test_start_passes_saved_to_the_launcher_only_when_it_reuses_it(monkeypatch, 
     assert run(cli.app, ["start", "--with", "jira"]).exit_code == 0 and calls[-1][:2] == ("start", "--with")
     here["spec"] = None
     assert run(cli.app, ["start"]).exit_code == 0 and calls[-1] == ("start", "--profile", "min")
+
+
+def test_the_launcher_script_exists_and_is_executable():
+    """Every other test stubs `_launcher`; this one catches a wrong path (issue 911)."""
+    import os
+
+    script = cmd_lifecycle._launch_script()
+    assert script.is_file() and os.access(script, os.X_OK), script

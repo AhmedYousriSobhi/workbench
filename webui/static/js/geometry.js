@@ -15,7 +15,7 @@ export const SVC_ICON = { 'bmc-farm': 'M4 5h16v5H4z M4 14h16v5H4z M7 7.5h.01 M7 
 export const SVC_METHOD = { 'bmc-farm': 'HTTPS Redfish', 'bcm-mock': 'HTTP JSON', 'jira-mock': 'HTTP REST', 'jira-real': 'HTTP REST', 'k8s-api': 'HTTPS kubectl', 'gpu-exporter': 'HTTP metrics', 'dcgm-exporter': 'HTTP metrics', 'real-gpu': 'HTTP metrics', teleport: 'tsh · HTTPS' };
 export const MODE_TEXT = { ssh: 'Direct SSH', teleport: 'Teleport only', both: 'Direct SSH + Teleport' };
 export const KIND_TEXT = { slurm: 's-login · Slurm', k8s: 'k-login · Kubernetes', both: 'login · Slurm + Kubernetes' },
-  KIND_NAME = { slurm: 's-login', k8s: 'k-login', both: 's+k login' };
+  KIND_NAME = { slurm: 's-login', k8s: 'k-login', both: 'Slurm + K8s' };
 export const loginKind = l => l.kind || 'both';
 export const LOGIN_ONE = [{ name: 'login', mode: 'ssh', kind: 'both', port: 2222 }];
 export const stackUp = () => { try { return Object.values(JSON.parse(S.lastCluster).services).some(Boolean); } catch (e) { return false; } };
@@ -91,7 +91,7 @@ export function flowGeom(nodes, acc, svcs, a, col, u) {
     P.access = { x: M, y: L.y2, w: Wm, h: ACCH }; P.cluster = { x: M, y: L.y3, w: Wm, h: L.bottom - L.y3 }; P.svcFrame = { x: M + Wm + GW, y: L.y2, w: svW, h: L.svH };
     P.place = acc.map((_, i) => ({ x: x0 + i * (bw + 14), y: L.y2 + 46, w: bw, h: mA.h }));
     P.svcP = Array.from({ length: nS }, (_, i) => ({ x: P.svcFrame.x + 16, y: L.y2 + 46 + i * L.pitch, w: SWD, h: mS.h }));
-    Object.assign(P, { tiles: L.tg.items, tw: L.tw, th: L.th, FW: Math.round(L.W), H: Math.round(L.bottom + M), gutter: { x0: M + Wm, x1: M + Wm + GW } });
+    Object.assign(P, { tiles: L.tg.items, tw: L.tw, th: L.th, cols: L.cols, FW: Math.round(L.W), H: Math.round(L.bottom + M), gutter: { x0: M + Wm, x1: M + Wm + GW } });
     return P;
   }
   const BH = 68, PIT = 92, chipsH = 316, AW = 336;  // narrow screens: Clients and Faults | Access over Services | Cluster nodes

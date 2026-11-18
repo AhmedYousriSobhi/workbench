@@ -1,0 +1,8 @@
+name: k8s-volcano-queue-closed
+ref: SC-49
+description: the Volcano queue gpu-batch is closed (state Closed, as when an administrator stops it) and the PodGroup train-run goes Pending, then both come back after 120 s; Volcano has no controller here, so the step writes the status (issue 765)
+steps:
+  - {at: 0s,   target: k8s, do: {volcano: {queue: gpu-batch, state: Closed}}}
+  - {at: 0s,   target: k8s, do: {volcano: {podgroup: train-run, namespace: team-a, phase: Pending}}}
+  - {at: 120s, target: k8s, do: {volcano: {queue: gpu-batch, state: Open}}}
+  - {at: 120s, target: k8s, do: {volcano: {podgroup: train-run, namespace: team-a, phase: Running}}}

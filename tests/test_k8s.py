@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from benchctl import addressing, compose, k8s, kueue, scenario, stack, workbench
+from benchctl import addressing, compose, k8s, kueue, memory, scenario, stack, workbench
 
 ROOT = Path(__file__).resolve().parent.parent
 SIM = yaml.safe_load((ROOT / "sim.yaml").read_text())
@@ -43,7 +43,17 @@ def test_a_gpu_node_advertises_what_gpu_feature_discovery_and_the_device_plugin_
     assert len(list(yaml.safe_load_all(k8s.nodes_yaml(SIM)))) == 4
 
 
-def test_the_part_is_off_by_default_and_the_five_services_are_limited_unprivileged_and_addressed():
+def test_every_node_reports_the_api_servers_version_not_kwoks_own_string():
+    """#766 a: a client parses `vX.Y` from kubeletVersion to judge skew; `kwok-v0.8.0` has no such prefix."""
+    import re
+    for sim in (SIM, {**SIM, "kubernetes": {**(SIM.get("kubernetes") or {}), "version": "v1.35.2"}}):
+        docs = list(yaml.safe_load_all(k8s.nodes_yaml(sim)))
+        got = {d["status"]["nodeInfo"]["kubeletVersion"] for d in docs}
+        assert got == {k8s.version(sim)} and re.match(r"v\d+\.\d+\.\d+$", next(iter(got))), got
+    assert "kwok" not in k8s.node_manifest("kcn001", {})["status"]["nodeInfo"]["kubeletVersion"]
+
+
+def test_the_part_is_off_by_default_and_its_services_are_limited_unprivileged_and_addressed():
     assert "k8s" not in workbench.DEFAULT_PARTS and workbench.PARTS["k8s"] == ("k8s", None)
     assert "k8s-apiserver" not in compose.generate(SIM, {"groups": ["core"]})["services"]
     svcs = compose.generate(SIM, {"groups": ["core", "k8s"]})["services"]
@@ -55,7 +65,7 @@ def test_the_part_is_off_by_default_and_the_five_services_are_limited_unprivileg
         assert re.fullmatch(r"\d+:\d+", s["user"]) and s["image"].startswith("registry.k8s.io/") and "build" not in s
     assert svcs["k8s-apiserver"]["ports"] == ["127.0.0.1:6443:6443"]  # localhost only
     assert svcs["k8s-etcd"]["image"] == k8s.ETCD_IMAGE and svcs["kwok-controller"]["entrypoint"] == ["kwok"]
-    assert "--enable-crds=Stage" in svcs["kwok-controller"]["command"]  # without it KWOK exits ("no stages found")
+    assert "--enable-crds=Stage,Logs,ClusterLogs,Metric,ClusterResourceUsage" in svcs["kwok-controller"]["command"]  # without Stage KWOK exits
     assert "--manage-nodes-with-annotation-selector=kwok.x-k8s.io/node=fake" in svcs["kwok-controller"]["command"]  # a real node may join later
     assert any("--token-auth-file" in a for a in svcs["k8s-apiserver"]["command"])
     assert len(set(ips.values())) == len(ips)  # no two services share an address
@@ -115,10 +125,14 @@ def test_bootstrap_applies_definitions_then_stages_then_nodes_then_fixtures_and_
 
     assert k8s.bootstrap(SIM, addressing.plan(SIM), lambda m: None, runner=run, ready=lambda ips: True, sleep=lambda s: None)
     files = [c[-1] for c in calls if c[0] == "apply"]
-    assert files == ["/k8s/kwok/crds.yaml", "/k8s/kwok/stage-fast.yaml", "/k8s/kwok/stage-faults.yaml", "/state/nodes.yaml",
-                     "/k8s/fixtures/00-namespaces.yaml", "/k8s/fixtures", "/state/50-dra.yaml",
-                     "/k8s/kueue/crds.yaml", "/k8s/kueue/queues.yaml"]
-    assert any(c[0] == "wait" and "crd/stages.kwok.x-k8s.io" in c for c in calls)  # stages cannot be applied before their definition exists
+    assert files == ["/k8s/kwok/crds.yaml", "/k8s/kwok/stage-fast.yaml", "/k8s/kwok/stage-faults.yaml", "/k8s/fixtures/00-namespaces.yaml", *[f for f, _ in k8s.KWOK_OBJECTS], "/state/nodes.yaml",
+                     "/k8s/fixtures", "/state/50-dra.yaml",
+                     "/k8s/kueue/crds.yaml", "/k8s/kueue/queues.yaml", "/k8s/volcano/crds.yaml", "/k8s/volcano/queues.yaml", k8s.METRICS_API_FILE]  # the metrics API last (discovery fails while it is 503)
+    patch = next(c for c in calls if c[0] == "patch")  # an existing cluster's nodes get the reachable address too (etcd keeps them)
+    assert patch[:4] == ["patch", "-f", "/state/nodes.yaml", "--subresource=status"] and k8s.kwok_ip() in patch[-1]
+    assert calls.index(patch) > next(i for i, c in enumerate(calls) if c[-1] == "/state/nodes.yaml")
+    wait = next(c for c in calls if c[0] == "wait")  # KWOK's objects cannot be applied before their definitions exist (issue 872)
+    assert {f"crd/{n}" for n in ("stages", "logs", "clusterlogs", "metrics", "clusterresourceusages")} <= {a.replace(".kwok.x-k8s.io", "") for a in wait}
     first_sa = next(i for i, c in enumerate(calls) if "serviceaccount" in c)
     fx = next(i for i, c in enumerate(calls) if c[-1] == "/k8s/fixtures")
     assert first_sa < fx  # pods are refused until the default service account exists
@@ -140,11 +154,15 @@ def test_bootstrap_stops_with_one_message_where_it_failed():
     said.clear()
     assert not k8s.bootstrap(SIM, addressing.plan(SIM), said.append, ready=lambda ips: True, sleep=lambda s: None,
                              runner=lambda c, **k: bad("not established") if "wait" in c else ok())
-    assert "stage definition did not become ready" in said[0]
+    assert "the KWOK definitions did not become ready" in said[0]
     said.clear()
     assert not k8s.bootstrap(SIM, addressing.plan(SIM), said.append, ready=lambda ips: True, sleep=lambda s: None,
                              runner=lambda c, **k: bad("denied") if c[-1] == "/k8s/fixtures" else ok())
     assert said[0].startswith("FAILED kubernetes fixtures: denied")
+    said.clear()
+    assert not k8s.bootstrap(SIM, addressing.plan(SIM), said.append, ready=lambda ips: True, sleep=lambda s: None,
+                             runner=lambda c, **k: bad("no such node") if "patch" in c else ok())
+    assert said[0].startswith("FAILED kubernetes node addresses: no such node")
 
 
 def test_api_ready_gives_up_when_nothing_answers(tmp_path, monkeypatch):
@@ -401,6 +419,12 @@ def test_the_new_k8s_steps_validate_and_become_kubectl_calls():
     assert k8s.step_args({"remove": ["scenario/70-apf.yaml"]}) == [["delete", "--ignore-not-found", "-f", "/k8s/scenario/70-apf.yaml"]]
     args = k8s.step_args({"drain": {"node": "kgpu001", "timeout": 20}})[0]
     assert args[:2] == ["drain", "kgpu001"] and args[-1] == "--timeout=20s" and "--disable-eviction" not in args  # eviction, so a budget can refuse
+    # #749: with a selector only those pods are evicted and --force is absent (it deletes bare fixture pods for good)
+    sel = k8s.step_args({"drain": {"node": "kgpu001", "selector": "app=inference", "timeout": 20}})[0]
+    assert "--pod-selector=app=inference" in sel and "--force" not in sel and sel[-1] == "--timeout=20s"
+    assert "--force" in args and not any(a.startswith("--pod-selector") for a in args)
+    assert "selector" in k8s.step_problems({"drain": {"node": "kgpu001", "selector": "app=a;rm"}}, nodes)[0]
+    assert k8s.step_problems({"drain": {"node": "kgpu001", "selector": "app=inference"}}, nodes) == []
     pod = yaml.safe_load(k8s.pod_manifest({"namespace": "a", "name": "p", "priority_class": "inference", "node": "kgpu001", "gpus": 4}))["spec"]
     assert pod["priorityClassName"] == "inference" and pod["nodeSelector"] == {"kubernetes.io/hostname": "kgpu001"}
 
@@ -469,12 +493,15 @@ def test_bootstrap_waits_for_the_kueue_definitions_then_applies_queues_then_stat
         return ok()
 
     assert k8s.bootstrap(SIM, addressing.plan(SIM), lambda m: None, runner=run, ready=lambda ips: True, sleep=lambda s: None)
-    tail = calls[-(2 + 1 + 9 + 0):]
+    assert calls[-1][-1] == k8s.METRICS_API_FILE
+    tail = calls[-(5 + 2 + 1 + 9 + 1):-(5 + 1)]  # Kueue, then Volcano, then the metrics API
+    vol = calls[-(5 + 1):-1]
+    assert vol[0][-1] == "/k8s/volcano/crds.yaml" and vol[1][0] == "wait" and vol[2][-1] == "/k8s/volcano/queues.yaml" and all("patch" in c for c in vol[3:])
     assert tail[0][-1] == "/k8s/kueue/crds.yaml" and tail[1][0] == "wait" and "crd/clusterqueues.kueue.x-k8s.io" in tail[1]
     assert tail[2][-1] == "/k8s/kueue/queues.yaml" and all(c[0] == "patch" or "patch" in c for c in tail[3:])
     said = []
     assert not k8s.bootstrap(SIM, addressing.plan(SIM), said.append, ready=lambda ips: True, sleep=lambda s: None,
-                             runner=lambda c, **k: bad("nope") if "patch" in c else ok())
+                             runner=lambda c, **k: bad("nope") if "patch" in c and "-f" not in c else ok())  # not the node addresses
     assert said[0].startswith("FAILED kubernetes Kueue status: nope")
     said.clear()
     assert not k8s.bootstrap(SIM, addressing.plan(SIM), said.append, ready=lambda ips: True, sleep=lambda s: None,
@@ -510,3 +537,122 @@ def test_a_queue_step_with_pending_keeps_the_local_queues_adding_up_and_limited_
     role = next(d for d in docs if d["kind"] == "Role")
     assert role["metadata"]["namespace"] == "team-a" and role["rules"][0]["resources"] == ["localqueues"]
     assert next(d for d in docs if d["kind"] == "RoleBinding")["subjects"][0]["name"] == "limited"
+
+
+def test_kwok_nodes_advertise_the_controllers_own_address_and_the_api_server_dials_it(tmp_path):
+    """Issue 872 (ADR 0084 P1): with --node-ip=127.0.0.1 the API server and metrics-server would dial their own container."""
+    svcs = compose.generate(SIM, {"groups": ["core", "k8s"]})["services"]
+    kwok, api = svcs["kwok-controller"], svcs["k8s-apiserver"]["command"]
+    assert k8s.kwok_ip() == addressing.plan(SIM)["services"]["kwok-controller"] == kwok["networks"]["default"]["ipv4_address"]
+    assert f"--node-ip={k8s.kwok_ip()}" in kwok["command"] and not any(a == "--node-ip=127.0.0.1" for a in kwok["command"])
+    assert f"--node-port={k8s.KWOK_PORT}" in kwok["command"] and f"--server-address=0.0.0.0:{k8s.KWOK_PORT}" in kwok["command"]
+    assert "--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname" in api  # kubeadm's order: the IP, not a name
+    assert any(a.startswith("--kubelet-client-certificate=") for a in api) and any(a.startswith("--kubelet-client-key=") for a in api)
+
+
+def test_kwok_mounts_the_canned_log_files_read_only_and_every_file_a_logs_object_names_exists():
+    kwok = compose.generate(SIM, {"groups": ["core", "k8s"]})["services"]["kwok-controller"]
+    assert f"../../k8s/kwok/logs:{k8s.KWOK_LOGS}:ro" in kwok["volumes"]
+    named = []
+    for path in ("k8s/kwok/logs.yaml",):
+        for doc in yaml.safe_load_all((ROOT / path).read_text()):
+            assert doc["kind"] in ("Logs", "ClusterLogs") and doc["apiVersion"] == "kwok.x-k8s.io/v1alpha1"
+            for entry in doc["spec"]["logs"]:
+                named += [entry[k] for k in ("logsFile", "previousLogsFile") if k in entry]
+    assert named
+    for f in named:
+        assert f.startswith(k8s.KWOK_LOGS + "/")
+        lines = (ROOT / "k8s/kwok/logs" / f[len(k8s.KWOK_LOGS) + 1:]).read_text().splitlines()
+        # kubelet (CRI) format, or KWOK's reader fails: <RFC3339Nano> <stdout|stderr> <F|P> <message>
+        assert lines and all(re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{9}Z (stdout|stderr) [FP] .*", ln) for ln in lines), f
+
+
+def test_the_crash_loop_pod_has_a_current_and_a_previous_log_and_wins_over_the_catch_all():
+    """Issue 760: `kubectl logs --previous` needs a previousLogsFile; a Logs object naming the pod beats every ClusterLogs (KWOK v0.8.0)."""
+    docs = list(yaml.safe_load_all((ROOT / "k8s/kwok/logs.yaml").read_text()))
+    pod = next(d for d in docs if d["kind"] == "Logs")
+    fixture = next(d for d in yaml.safe_load_all((ROOT / "k8s/fixtures/10-workloads.yaml").read_text()) if d["metadata"]["name"] == "crashloop")
+    assert (pod["metadata"]["name"], pod["metadata"]["namespace"]) == ("crashloop", fixture["metadata"]["namespace"])
+    entry = pod["spec"]["logs"][0]
+    assert entry["containers"] == [c["name"] for c in fixture["spec"]["containers"]] and entry["previousLogsFile"] != entry["logsFile"]
+    for f in (entry["logsFile"], entry["previousLogsFile"]):
+        assert "failing" in (ROOT / "k8s/kwok/logs" / f.rsplit("/", 1)[1]).read_text()  # what the fixture's command prints
+
+
+def test_every_node_points_metrics_server_at_kwoks_resource_metrics_path():
+    node = k8s.node_manifest("kcn001", k8s.node_groups(SIM)[0])
+    assert node["metadata"]["annotations"][k8s.RESOURCE_METRICS_PATH] == "/metrics/nodes/kcn001/metrics/resource"
+    metric = yaml.safe_load((ROOT / "k8s/kwok/metrics-resource.yaml").read_text())
+    assert metric["kind"] == "Metric" and metric["spec"]["path"] == "/metrics/nodes/{nodeName}/metrics/resource"
+    names = {m["name"] for m in metric["spec"]["metrics"]}
+    assert {"node_cpu_usage_seconds_total", "node_memory_working_set_bytes", "container_cpu_usage_seconds_total"} <= names
+    usage = yaml.safe_load((ROOT / "k8s/kwok/usage-from-annotation.yaml").read_text())
+    exprs = " ".join(u["usage"][r]["expression"] for u in usage["spec"]["usages"] for r in ("cpu", "memory"))
+    assert usage["kind"] == "ClusterResourceUsage" and "kwok.x-k8s.io/usage-cpu" in exprs and "kwok.x-k8s.io/usage-memory" in exprs
+
+
+def test_every_kwok_kind_enabled_has_its_definition_in_the_vendored_crds():
+    crds = {d["metadata"]["name"] for d in yaml.safe_load_all((ROOT / "k8s/kwok/crds.yaml").read_text()) if d}
+    assert set(k8s.kwok_crd_names()) <= crds
+
+
+def test_metrics_server_is_one_unprivileged_p3_container_with_kwokctls_arguments():
+    """Issue 382: metrics-server v0.9.1 as a compose service at a fixed address, P3, with a declared cap."""
+    svcs = compose.generate(SIM, {"groups": ["core", "k8s"]})["services"]
+    ms = svcs[k8s.METRICS_SERVER]
+    assert ms["image"] == "registry.k8s.io/metrics-server/metrics-server:v0.9.1" and ms["entrypoint"] == ["/metrics-server"]
+    assert ms["mem_limit"] == f"{k8s.LIMITS[k8s.METRICS_SERVER]}m" and ms["labels"]["workbench.class"] == "P3"
+    assert ms["networks"]["default"]["ipv4_address"] == addressing.service_ip(k8s.METRICS_SERVER) == "10.141.255.45"
+    assert not ms.get("privileged") and "cap_add" not in ms and "ports" not in ms  # reached by the API server only
+    cmd = ms["command"]
+    for flag in ("--kubelet-use-node-status-port", "--kubelet-insecure-tls", "--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname",
+                 "--metric-resolution=15s", "--cert-dir=/tmp", f"--secure-port={k8s.METRICS_SERVER_PORT}"):
+        assert flag in cmd, flag
+    assert all(any(a.startswith(f"--{k}=") for a in cmd) for k in ("kubeconfig", "authentication-kubeconfig", "authorization-kubeconfig"))
+    assert ms["tmpfs"] == ["/tmp:size=4m,mode=1777"] and ms["depends_on"] == [k8s.API]
+    assert k8s.METRICS_SERVER in memory.NOT_MEASURED  # expected at its cap until measured
+
+
+def test_the_metrics_api_routes_to_the_container_by_an_externalname_service():
+    """Without kube-proxy a ClusterIP is unreachable; the aggregator resolves an ExternalName Service to its name (kwokctl's shape)."""
+    docs = {d["kind"]: d for d in yaml.safe_load_all((ROOT / "k8s/metrics/metrics-server.yaml").read_text())}
+    svc, api = docs["Service"], docs["APIService"]
+    assert svc["spec"]["type"] == "ExternalName" and svc["spec"]["externalName"] == k8s.METRICS_SERVER
+    assert (svc["metadata"]["name"], svc["metadata"]["namespace"]) == (api["spec"]["service"]["name"], api["spec"]["service"]["namespace"])
+    assert api["metadata"]["name"] == "v1beta1.metrics.k8s.io" and api["spec"]["service"]["port"] == k8s.METRICS_SERVER_PORT
+    assert api["spec"]["insecureSkipTLSVerify"] is True  # as the upstream manifest
+
+
+def test_metrics_server_starts_with_kwok_after_the_api_server():
+    stages = dict(stack.stage_services(["k8s-etcd", "k8s-apiserver", "kwok-controller", k8s.METRICS_SERVER]))
+    assert stages["kubernetes nodes"] == ["kwok-controller", k8s.METRICS_SERVER]
+
+
+def test_fixture_pods_carry_usage_annotations_below_their_requests():
+    pods = {d["metadata"]["name"]: d for f in ("10-workloads.yaml", "20-signals.yaml")
+            for d in yaml.safe_load_all((ROOT / "k8s/fixtures" / f).read_text()) if d}
+    for name in ("sized", "gpu-train"):
+        ann = pods[name]["metadata"]["annotations"]
+        assert "kwok.x-k8s.io/usage-cpu" in ann and "kwok.x-k8s.io/usage-memory" in ann
+    assert pods["web"]["spec"]["template"]["metadata"]["annotations"]["kwok.x-k8s.io/usage-cpu"] == "120m"
+
+
+def test_the_metrics_server_step_stops_and_starts_the_container_and_validates():
+    nodes = {n for n, _ in k8s.node_list(SIM)}
+    assert k8s.step_problems({"metrics_server": "stop"}, nodes) == []
+    assert k8s.step_problems({"metrics_server": "pause"}, nodes) == ["k8s metrics_server is stop or start"]
+    assert k8s.host_commands({"metrics_server": "stop"}) == [["docker", "stop", "workbench-k8s-metrics-server-1"]]
+    assert k8s.host_commands({"metrics_server": "start"}) == [["docker", "start", "workbench-k8s-metrics-server-1"]]
+    assert k8s.host_commands({"cordon": ["kcn001"]}) == [] and k8s.step_args({"metrics_server": "stop"}) == []
+    sc = scenario.load("k8s-metrics-down")
+    assert not scenario.validate(sc, SIM) and [s["do"].get("metrics_server") for s in sc["steps"]] == ["stop", "start"]
+
+
+def test_the_metrics_server_step_runs_docker_and_says_why_it_failed(monkeypatch):
+    calls = []
+    monkeypatch.setattr(k8s, "current_sim", lambda: SIM)
+    step = scenario.Step(0, "k8s", {"metrics_server": "stop"})
+    out = scenario.execute(step, runner=lambda c, **k: calls.append(c) or ok())
+    assert out.status == "ok" and calls == [["docker", "stop", "workbench-k8s-metrics-server-1"]]
+    out = scenario.execute(step, runner=lambda c, **k: bad("No such container"))
+    assert out.status == "failed" and "No such container" in out.detail

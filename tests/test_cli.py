@@ -6,7 +6,10 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from benchctl import checks, cli, stack
+from benchctl import checks, cli, measure, stack
+from benchctl.commands import base as cmd_base
+from benchctl.commands import lifecycle as cmd_lifecycle
+from benchctl.commands import nodeops as cmd_nodeops
 from governor import control
 
 runner = CliRunner()
@@ -116,7 +119,7 @@ def test_scenario_run_reports_pass_and_fail(monkeypatch):
 
 def test_measure_run_saves_and_report_reads_it_back(monkeypatch, tmp_path):
     snap = {"docker:a": 10 << 20, "host:used": 1 << 30}
-    monkeypatch.setattr(cli.measure, "sample", lambda duration, interval: [snap, snap])
+    monkeypatch.setattr(measure, "sample", lambda duration, interval: [snap, snap])
     monkeypatch.chdir(tmp_path)  # measure.save writes docs/measurements/<label>.json under the cwd
     r = invoke("measure", "run", "idle", "--duration", "1")
     assert r.exit_code == 0 and "2 samples" in r.output
@@ -290,14 +293,14 @@ def test_confirm_asks_only_a_person_at_a_terminal(monkeypatch):
             return True
 
     monkeypatch.setattr("sys.stdin", io.StringIO(""))  # a script: never asked
-    cli._confirm("x.", False)
+    cmd_base._confirm("x.", False)
     monkeypatch.setattr("sys.stdin", Tty("n\n"))
     with pytest.raises(typer.Exit):
-        cli._confirm("x.", False)
+        cmd_base._confirm("x.", False)
     monkeypatch.setattr("sys.stdin", Tty("y\n"))
-    cli._confirm("x.", False)
+    cmd_base._confirm("x.", False)
     monkeypatch.setattr("sys.stdin", Tty(""))
-    cli._confirm("x.", True)  # --yes skips the question
+    cmd_base._confirm("x.", True)  # --yes skips the question
 
 
 def test_down_dry_run_lists_and_changes_nothing(monkeypatch):
@@ -310,7 +313,7 @@ def test_down_dry_run_lists_and_changes_nothing(monkeypatch):
 def test_down_confirms_when_something_runs_and_honours_the_answer(monkeypatch):
     _live(monkeypatch)
     asked = []
-    monkeypatch.setattr(cli, "_confirm", lambda what, yes: asked.append((what, yes)))
+    monkeypatch.setattr(cmd_lifecycle, "_confirm", lambda what, yes: asked.append((what, yes)))
     monkeypatch.setattr(stack, "down", lambda say=print: True)
     assert runner.invoke(cli.app, ["down", "-y"]).exit_code == 0
     assert asked[0][0].startswith("This stops 2 containers") and asked[0][1] is True
@@ -325,7 +328,7 @@ def test_scale_dry_run_and_confirmation_only_when_shrinking(monkeypatch):
     out = runner.invoke(cli.app, ["scale", "2", "--dry-run"]).output
     assert "would stop and remove: cn003, cn004" in out and "would start: none" in out
     asked = []
-    monkeypatch.setattr(cli, "_confirm", lambda what, yes: asked.append(what))
+    monkeypatch.setattr(cmd_nodeops, "_confirm", lambda what, yes: asked.append(what))
     monkeypatch.setattr(stack, "scale", lambda *a, **k: True)
     assert runner.invoke(cli.app, ["scale", "2"]).exit_code == 0 and "cn003, cn004" in asked[0]
     asked.clear()

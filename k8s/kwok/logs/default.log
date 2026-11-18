@@ -1,0 +1,5 @@
+2026-11-17T08:00:00.000000000Z stdout F workbench: simulated container started (KWOK pod, no process runs)
+2026-11-17T08:00:01.000000000Z stdout F workbench: reading configuration from /etc/app/config.yaml
+2026-11-17T08:00:02.000000000Z stderr F workbench: warning: no GPU visible to this container, running on CPU
+2026-11-17T08:00:03.000000000Z stdout F workbench: listening on :8080
+2026-11-17T08:05:03.000000000Z stdout F workbench: heartbeat ok

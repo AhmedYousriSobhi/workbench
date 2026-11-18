@@ -42,7 +42,7 @@ spec:
 ---
 apiVersion: v1
 kind: Pod
-metadata: {name: sized, namespace: team-a}
+metadata: {name: sized, namespace: team-a, annotations: {kwok.x-k8s.io/usage-cpu: 350m, kwok.x-k8s.io/usage-memory: 200Mi}}  # usage below its requests (issue 382)
 spec:
   containers: [{name: c, image: "rancher/mirrored-pause:3.6", resources: {requests: {cpu: 500m, memory: 256Mi}}}]
 ---
@@ -57,4 +57,4 @@ apiVersion: v1
 kind: ResourceQuota
 metadata: {name: pods, namespace: team-a}
 spec:
-  hard: {pods: "16"}  # the fixtures ask for 12 (gpu-train, web 2, stuck, agent 4, sized, inference 2, dra-train); 8 was already over before issue 547
+  hard: {pods: "24"}  # the fixtures ask for 17 (gpu-train, web 2, stuck, agent 4, sized, inference 2, dra-train, the HPA deployments 5); 8 was already over before issue 547, 16 before issue 764, when no pod could be created (a rollout, a scale-up) in the live run

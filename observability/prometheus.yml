@@ -24,6 +24,18 @@ scrape_configs:
   - job_name: jira-mock  # answers only while the Jira part runs; the JiraErrors rule reads it
     static_configs:
       - targets: ["jira-mock:8080"]
+  # config lab run (issue 554, ADR 0050 decision 9): while a side replays, `benchctl/lab_steps.py` writes generated/lab-run/slurm.json
+  # with slurmctld's metrics paths and a hidden `__lab_run` label; this rule keeps only labelled targets and copies it to `lab_run`.
+  # Prometheus re-reads file_sd files by itself: nothing is rewritten or reloaded per run. No file, no target.
+  - job_name: lab-run
+    file_sd_configs:
+      - files: ["/etc/prometheus/generated/lab-run/*.json"]
+    relabel_configs:
+      - source_labels: [__lab_run]
+        regex: ".+"
+        action: keep
+      - source_labels: [__lab_run]
+        target_label: lab_run
   - job_name: governor
     static_configs:
       - targets: ["host.docker.internal:9401"]

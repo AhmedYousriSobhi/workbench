@@ -9,8 +9,9 @@ import { buildOverview, curLevel, refreshOverview, setLevel } from './overview.j
 import { STATE_ICON } from './cluster.js';
 import { ACC_PORT, G, REAL_SERVICES, accExtra, accUp, hasService, reduced, svcFit, svcList } from './flowstate.js';
 import { at, curve, dpath, poly, sv } from './svg.js';
+import { channelXs, groupRows, labelFrac, pickChannel, polyFrac, ruleDrop, sweepXs } from './diagramroute.js';
 import { CLIENT_INFO, asButton, clusterNow, nodeList, openPop } from './inspector.js';
-import { KIND_NAME, MODE_TEXT, SVC_ICON, SVC_METHOD, UF, fitKey, fitText, flowFit, flowGeom, flowSig, loginAddr, loginKind, loginList, loginRuns, portLine, stackUp, textW } from './geometry.js';
+import { GAP, KIND_NAME, MODE_TEXT, SVC_ICON, SVC_METHOD, UF, fitKey, fitText, flowFit, flowGeom, flowSig, loginAddr, loginKind, loginList, loginRuns, portLine, stackUp, textW } from './geometry.js';
 
 export function buildFlow() { buildFlowBase(); tagEntities(); applyFocus(); applyBlast(); applyLens(); syncZoom(); }
 export function buildFlowBase() {
@@ -73,21 +74,42 @@ export function buildFlowBase() {
   const svTip = k => { const l = svcList().find(x => x[0] === k); const up = S.flowSnap?.reachable[k]; return [l[1] + (REAL_SERVICES.has(k) ? ' (real)' : k === 'teleport' ? '' : ' (simulated)') + ' · ' + (up ? 'up' : S.flowSnap ? 'not reachable' : 'checking'), SVC_METHOD[k] + ' · click for address and command']; };
   const place = acc.map((a2, i) => [a2, P.place[i]]), tpP = tpBox && place[0][1], cb = P.clients.y + P.clients.h;
   let uu = 0, hh = 0;
+  const gapTop = col ? labelFrac(cb, place[0][1].y, (cb + P.access.y) / 2) : 0.5;  // a label sits in the gap above the Access frame, never over its title (#388)
   if (col) {  // Access row: straight lines down from the Clients frame; Teleport to a login runs in a U under the boxes; every box has a short jump line down to the nodes
-    if (tpBox) { const o = S.svcOut.teleport = { x: tpP.x + tpP.w / 2, y: cb }; S.svcLane.teleport = edge('api', poly([o, { x: o.x, y: tpP.y }]), SVC_METHOD.teleport, 0.5, 'ln-teleport', 'clients>teleport:api'); }
+    if (tpBox) { const o = S.svcOut.teleport = { x: tpP.x + tpP.w / 2, y: cb }; S.svcLane.teleport = edge('api', poly([o, { x: o.x, y: tpP.y }]), SVC_METHOD.teleport, gapTop, 'ln-teleport', 'clients>teleport:api'); }
     for (const [l, p] of place) {
       if (Array.isArray(l)) continue;
-      if (l.mode !== 'teleport') edge('ssh', poly([{ x: p.x + p.w / 2, y: cb }, { x: p.x + p.w / 2, y: p.y }]), 'direct SSH', 0.5, null, `clients>${l.name}:ssh`);
+      if (l.mode !== 'teleport') edge('ssh', poly([{ x: p.x + p.w / 2, y: cb }, { x: p.x + p.w / 2, y: p.y }]), 'direct SSH', gapTop, null, `clients>${l.name}:ssh`);
       if (l.mode !== 'ssh' && tpBox) { const by = p.y + p.h, uy = by + 20 + (uu++) * 26, sx = tpP.x + tpP.w / 2 - 14; edge('teleport', poly([{ x: sx, y: tpP.y + tpP.h }, { x: sx, y: uy }, { x: p.x + p.w / 2 - 14, y: uy }, { x: p.x + p.w / 2 - 14, y: by }]), '', 0.5, null, `teleport>${l.name}:teleport`); }
     }
+    const gRows = groupRows(P.tiles, P.cluster.y, u), chs = channelXs(P.cluster.x, P.cols, P.tw, GAP), usedCh = [], gapMid = (P.access.y + P.access.h + P.cluster.y) / 2, accEnd = P.access.y + P.access.h;
+    const titleR = P.cluster.x + 16 + W('Cluster nodes', 'title', 700, true) + 8;  // channels right of the frame title and of the group title: a line never runs through text
+    const crossR = Math.max(titleR, ...Object.values(gRows).map(r => P.cluster.x + 24 + W(GROUP_TITLE[r.label], 'title', 700, true) + 10)), jogs = [];
+    const toGroup = (p, want, grp, avoid) => {  // ends on the rule over its own group (#388): the Slurm group is the first, so any free x right of the frame title does; the Kubernetes group is reached down a channel between tile columns, right of every title it passes
+      const row = gRows[grp]; if (!row) return { x: want, y: P.cluster.y };
+      const span = { lo: p.x + 8, hi: p.x + p.w - 8, avoid, used: usedCh };
+      let x = grp === 'slurm' ? pickChannel(sweepXs(span.lo, span.hi), want, { ...span, minX: titleR }) : pickChannel(chs, want, { ...span, minX: crossR }), jog = null;
+      if (x == null && grp === 'k8s') { x = pickChannel(chs, want, { avoid, used: usedCh, minX: crossR }); if (x != null) jog = accEnd + 16 + jogs.length * 6, jogs.push(x); }  // no clear channel under this box: out sideways above the Cluster frame
+      if (x == null) x = Math.min(span.hi, Math.max(span.lo, want));
+      usedCh.push(x); return { x, y: row.rule, jog, from: Math.min(span.hi, Math.max(span.lo, want)) };
+    };
+    const drop = (p, to, text, eid, kind, dy = 0) => {
+      const y0 = p.y + p.h, x0 = to.jog == null ? to.x : to.from, pts = to.jog == null ? [{ x: to.x, y: y0 }, { x: to.x, y: to.y }] : [{ x: x0, y: y0 }, { x: x0, y: to.jog }, { x: to.x, y: to.jog }, { x: to.x, y: to.y }];
+      lanes.append(sv('path', { class: 'lanehalo', d: dpath(poly([{ x: x0, y: y0 }, { x: x0, y: accEnd }])) })); edge(kind, poly(pts), text, to.jog == null ? labelFrac(y0, to.y, gapMid + dy) : polyFrac(pts, 2, 0.5), null, eid);
+    };
     for (const [l, p] of place) {  // an s-login jumps to the Slurm nodes; a k-login reaches the Kubernetes nodes with kubectl; a login serving both draws both
       if (Array.isArray(l)) continue;
-      for (const [eid, jx, text] of [[`${l.name}>nodes:jump`, p.x + p.w / 2 + 22, 'jump host'], [`${l.name}>k8s-nodes:kubectl`, p.x + p.w / 2 - 22, 'kubectl']]) {
-        if (gr && !gedge(eid)) continue;
-        lanes.append(sv('path', { class: 'lanehalo', d: dpath(poly([{ x: jx, y: p.y + p.h }, { x: jx, y: P.access.y + P.access.h }])) })); edge('jump', poly([{ x: jx, y: p.y + p.h }, { x: jx, y: P.cluster.y }]), text, 0.5, null, eid);
-      }
+      const avoid = [p.x + p.w / 2 + 6, p.x + p.w / 2 - 14, p.x + p.w - 20];
+      const todo = [[`${l.name}>nodes:jump`, p.x + p.w / 2 + 22, 'jump host', 'slurm'], [`${l.name}>k8s-nodes:kubectl`, p.x + p.w / 2 - 22, 'kubectl', 'k8s']].filter(([eid]) => !gr || gedge(eid));
+      todo.forEach(([eid, want, text, grp], i) => drop(p, toGroup(p, want, grp, avoid), text, eid, 'jump', (i - (todo.length - 1) / 2) * (UF.lab * u * 1.6 + 2)));  // two lines from one box: their labels sit one above the other
     }
-    if (tpBox) lanes.append(sv('path', { class: 'lanehalo', d: dpath(poly([{ x: tpP.x + tpP.w / 2 + 22, y: tpP.y + tpP.h }, { x: tpP.x + tpP.w / 2 + 22, y: P.access.y + P.access.h }])) })), edge('teleport', poly([{ x: tpP.x + tpP.w / 2 + 22, y: tpP.y + tpP.h }, { x: tpP.x + tpP.w / 2 + 22, y: P.cluster.y }]), 'Teleport', 0.5, null, 'teleport>nodes:teleport');
+    const kapi = svcs.findIndex(([k]) => k === 'k8s-api');
+    if (kapi >= 0) for (const [l, p] of place) {  // kubectl on a k-login talks to the Kubernetes API server: out under the Access frame, through the gutter, into the box
+      const eid = `${l.name}>k8s-api:kubectl`; if (Array.isArray(l) || (gr ? !gedge(eid) : loginKind(l) === 'slurm')) continue;
+      const sp = P.svcP[kapi], x = p.x + p.w - 20, ym = accEnd + 14, gx = P.gutter.x1 - 12, ey = sp.y + sp.h / 2 + 4, pts = [{ x, y: p.y + p.h }, { x, y: ym }, { x: gx, y: ym }, { x: gx, y: ey }, { x: sp.x, y: ey }];
+      lanes.append(sv('path', { class: 'lanehalo', d: dpath(poly([pts[0], { x, y: accEnd }])) })); edge('jump', poly(pts), 'kubectl', polyFrac(pts, 1, 0.5), null, eid);
+    }
+    if (tpBox) drop(tpP, toGroup(tpP, tpP.x + tpP.w / 2 + 22, 'slurm', [tpP.x + tpP.w / 2 - 14]), 'Teleport', 'teleport>nodes:teleport', 'teleport');
   } else {
     if (tpBox) { const o = S.svcOut.teleport = out(); S.svcLane.teleport = edge('api', curve(o, { x: tpP.x, y: tpP.y + tpP.h / 2 }), SVC_METHOD.teleport, 0.5, 'ln-teleport', 'clients>teleport:api'); }
     for (const [l, p] of place) {
@@ -105,7 +127,7 @@ export function buildFlowBase() {
   };
   for (const b of accExtra()) {  // a line from the clients to the jump host and to the controller, then the hops the declared graph has
     const p = posOf(b[0]), eid = `clients>${b[0]}:ssh`;
-    if (col) edge('ssh', poly([{ x: p.x + p.w / 2, y: cb }, { x: p.x + p.w / 2, y: p.y }]), 'ssh', 0.5, null, eid);
+    if (col) edge('ssh', poly([{ x: p.x + p.w / 2, y: cb }, { x: p.x + p.w / 2, y: p.y }]), 'ssh', gapTop, null, eid);
     else edge('ssh', curve(out(), { x: p.x, y: p.y + p.h / 2 - 12 }), 'ssh', 0.3, null, eid);
   }
   if (hasService('jump')) { for (const l of keyLogins) hop('jump', l.name, `jump>${l.name}:jump`, 'ssh -J'); if (hasService('controller')) hop('jump', 'controller', 'jump>controller:jump', 'ssh -J'); }
@@ -126,18 +148,25 @@ export function buildFlowBase() {
     }
   });
   if (!col) {
+    const gRows = groupRows(P.tiles, P.cluster.y, u), kapi = svcs.findIndex(([k]) => k === 'k8s-api');
     for (const [l, p] of place) if (!Array.isArray(l)) {
-      edge('jump', curve({ x: p.x + p.w, y: p.y + p.h / 2 - 8 }, { x: P.cluster.x, y: p.y + p.h / 2 - 8 }), 'jump host', 0.5, null, `${l.name}>nodes:jump`);
-      edge('jump', curve({ x: p.x + p.w, y: p.y + p.h / 2 + 8 }, { x: P.cluster.x, y: p.y + p.h / 2 + 8 }), 'kubectl', 0.5, null, `${l.name}>k8s-nodes:kubectl`);
+      const dst = (k, dflt) => ({ x: P.cluster.x + 16, y: gRows[k] ? gRows[k].rule : dflt });  // the line ends on the rule of its own group (#388)
+      edge('jump', curve({ x: p.x + p.w, y: p.y + p.h / 2 - 8 }, dst('slurm', p.y + p.h / 2 - 8)), 'jump host', 0.5, null, `${l.name}>nodes:jump`);
+      edge('jump', curve({ x: p.x + p.w, y: p.y + p.h / 2 + 8 }, dst('k8s', p.y + p.h / 2 + 8)), 'kubectl', 0.5, null, `${l.name}>k8s-nodes:kubectl`);
+      const eid = `${l.name}>k8s-api:kubectl`;
+      if (kapi >= 0 && (gr ? gedge(eid) : loginKind(l) !== 'slurm')) {  // kubectl on a k-login talks to the API server: out to the right, down the gap, along the channel above the Services band
+        const sp = P.svcP[kapi], x0 = { x: p.x + p.w, y: p.y + p.h - 12 }, vx = P.access.x + P.access.w + 12, hy = P.topEnd + 18 + (nS - 1 - kapi) * 11 - 5, tx = sp.x + sp.w / 2 - 16, pts = [x0, { x: vx, y: x0.y }, { x: vx, y: hy }, { x: tx, y: hy }, { x: tx, y: sp.y }];
+        edge('jump', poly(pts), 'kubectl', polyFrac(pts, 2, 0.5), null, eid);
+      }
     }
-    if (tpBox) edge('teleport', curve({ x: tpP.x + tpP.w, y: tpP.y + tpP.h / 2 }, { x: P.cluster.x, y: tpP.y + tpP.h / 2 }), 'Teleport', 0.5, null, 'teleport>nodes:teleport');
+    if (tpBox) edge('teleport', curve({ x: tpP.x + tpP.w, y: tpP.y + tpP.h / 2 }, { x: P.cluster.x + 16, y: gRows.slurm ? gRows.slurm.rule : tpP.y + tpP.h / 2 }), 'Teleport', 0.5, null, 'teleport>nodes:teleport');
   }
   for (const [a2, p] of place) {
     if (a2 === tpBox) { g.append(box('teleport', tpBox[1], tpBox[2], p, 'svc', 'teleport', 'blkacc')); continue; }
     if (Array.isArray(a2)) { g.append(accBox(a2, p)); continue; }
     const l = a2, lt = () => !loginRuns(l) ? [`${l.name} · not running`, stackUp() ? 'Selected, but nothing answers on its port 22: build it with benchctl up' : 'The stack is not running'] : [`${l.name} · ${MODE_TEXT[l.mode]}`, l.mode === 'teleport' ? 'No direct port: only through the Teleport proxy' : `${l.ip || l.name} (also 127.0.0.1:${l.port}) · click for the command`];
     const bg = asButton(sv('g', { id: 'lg-' + l.name }), `${l.name}: ${MODE_TEXT[l.mode]}${loginRuns(l) ? '' : ', not running'}. Details`, () => openPop(bg, 'login', l.name), lt);
-    const lines = col ? [`${l.name} · ${KIND_NAME[loginKind(l)]}`, MODE_TEXT[l.mode], loginRuns(l) ? (l.ip || l.name) : '✗ not running', loginRuns(l) ? portLine(l) : ''] : [`${l.name} · ${KIND_NAME[loginKind(l)]}`, MODE_TEXT[l.mode], loginRuns(l) ? loginAddr(l) : '✗ not running'];
+    const lines = col ? [`${l.name} · ${KIND_NAME[loginKind(l)]}`, MODE_TEXT[l.mode], !stackUp() ? '– offline' : loginRuns(l) ? (l.ip || l.name) : '✗ not running', stackUp() && loginRuns(l) ? portLine(l) : ''] : [`${l.name} · ${KIND_NAME[loginKind(l)]}`, MODE_TEXT[l.mode], !stackUp() ? '– offline' : loginRuns(l) ? loginAddr(l) : '✗ not running'];
     bg.append(sv('rect', { class: 'blk lgn' + (loginRuns(l) ? '' : stackUp() ? ' down' : ' off'), x: p.x, y: p.y, width: p.w, height: p.h, rx: 10 }), ...lines.map((t, n) => t ? [sv('text', { class: n ? 'sub' : 'sn', x: p.x + 12, y: p.y + mA.ys[n] }, fitText(t, n ? 'sub' : 'sn', u, p.w - 24, n ? 400 : 600))] : []).flat()); g.append(bg);
   }
   svcs.forEach(([k, label, sb], i) => g.append(box(k, label, sb, P.svcP[i], 'svc', k)));
@@ -148,7 +177,7 @@ export function buildFlowBase() {
   });
   const tm = P.tileM;
   for (const item of P.tiles) {
-    if (item[0] === 'label') { g.append(sv('text', { class: 'ftitle', x: P.cluster.x + 24, y: P.cluster.y + item[2] + 4 }, GROUP_TITLE[item[1]])); continue; }
+    if (item[0] === 'label') { g.append(sv('text', { class: 'ftitle', x: P.cluster.x + 24, y: P.cluster.y + item[2] + 4 }, GROUP_TITLE[item[1]]), sv('path', { class: 'grule', d: `M${P.cluster.x + 16} ${P.cluster.y + item[2] + ruleDrop(u)} H${P.cluster.x + P.cluster.w - 16}` })); continue; }  // the rule under a group title is where the lines to that group end (#388)
     const [, n, rx, ry] = item, x = P.cluster.x + rx, ty = P.cluster.y + ry, glyph = STATE_ICON[n.state] || '?';
     const tg = asButton(sv('g', { id: 'nd-' + n.name }), `${n.name}: ${n.label}. Details`, () => openPop(tg, 'node', n.name), () => { const c = nodeList().find(m => m.name === n.name) || n; return [`${c.name} · ${c.label}`, 'click for how to reach it and its actions']; });
     const [temp, gpu] = tileFacts(n), cr = UF.tile * u * 0.8, ccx = x + P.tw - 8 - cr, ccy = ty + tm.y1 - UF.tile * u * 0.3;

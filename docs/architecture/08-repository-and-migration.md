@@ -12,6 +12,9 @@ workbench/
 ├── sim.yaml                  # single source of truth: nodes, GPUs, users, partitions, profile budgets
 ├── profiles/                 # min.yaml std.yaml full.yaml jira-real.yaml mac-agent.yaml
 ├── benchctl/                   # Python (Typer): up/down/scale/scenario/doctor/top
+│   └── commands/               # one module per domain: health, build, lifecycle, nodeops, get, adjust, describe, wait, export, nhc,
+│                           #   lab, reset, invite, measure, scenario, load, ...; base.py (shared), groups.py (root app, shared groups);
+│                           #   cli.py only mounts them in the order --help lists them (issue 857)
 ├── governor/                 # Python daemon: signals, ladder, actions, metrics, dry-run
 ├── systemd/                  # workbench-*.slice, workbench-governor.service, oomd drop-ins
 ├── images/

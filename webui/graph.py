@@ -68,6 +68,8 @@ def build(services: dict, nodes: list, logins: list, cluster: str | None = None)
             edges.append(_edge(lg["name"], "nodes", "access", "jump", False))
         if kind in ("k8s", "both") and k8s_nodes:
             edges.append(_edge(lg["name"], "k8s-nodes", "access", "kubectl", False))
+        if kind in ("k8s", "both") and "k8s-api" in svcs:  # kubectl talks to the API server (issue 388)
+            edges.append(_edge(lg["name"], "k8s-api", "access", "kubectl", False))
     if teleport:
         edges.append(_edge("teleport", "nodes", "access", "teleport", False))
     if cluster:

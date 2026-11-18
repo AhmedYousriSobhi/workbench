@@ -37,7 +37,17 @@ def test_pyproject_declares_installable_packages():
 
     cfg = tomllib.loads((Path(__file__).parent.parent / "pyproject.toml").read_text())
     # flat layout with many top-level dirs: setuptools refuses to guess
-    assert cfg["tool"]["setuptools"]["packages"] == ["benchctl", "governor", "webui"]
+    assert cfg["tool"]["setuptools"]["packages"] == ["benchctl", "benchctl.commands", "governor", "webui"]
+
+
+def test_every_python_dependency_is_pinned_exactly():
+    """Issue 855: images and Slurm are pinned, so the Python tools are too. A new dependency needs `name==X.Y.Z`."""
+    import tomllib
+
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
+    deps = project["dependencies"] + [d for extra in project["optional-dependencies"].values() for d in extra]
+    loose = [d for d in deps if not re.fullmatch(r"[A-Za-z0-9_.-]+==\d+(\.\d+)+", d)]
+    assert deps and not loose, f"not pinned to an exact version: {loose}"
 
 
 def test_benchctl_wrapper_explains_a_missing_venv(tmp_path):

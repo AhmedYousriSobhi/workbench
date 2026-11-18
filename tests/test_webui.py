@@ -157,8 +157,9 @@ def test_governor_down_is_reported_not_crashed(tmp_path):
 
 
 def test_scenario_list_and_run_sends_slurm_steps_through_the_governor(ui):
-    names = [s["name"] for s in json.loads(req(ui, "/api/scenarios")[1])]
-    assert names == ["quick", "slow"]
+    listed = json.loads(req(ui, "/api/scenarios")[1])
+    assert [s["name"] for s in listed] == ["quick", "slow"]
+    assert all(isinstance(s["targets"], list) and s["targets"] for s in listed)  # the page groups the library by step target (#861 D2)
     assert req(ui, "/api/scenarios/quick/run", "POST")[0] == 403  # no X-Requested-With: CSRF guard
     code, _ = req(ui, "/api/scenarios/quick/run", "POST", headers={"X-Requested-With": "workbench"})
     assert code == 200
@@ -672,9 +673,10 @@ def test_state_update_keeps_the_kind_class_of_a_service_box(ui):
 def test_scenarios_live_in_the_test_run_workspace_not_a_drawer():
     """Issue 509: scenario, run, expectations and Client's eye share one workspace; the drawer is gone."""
     html = page_source()
-    for needle in ('id="tab-run"', 'id="tb-run"', 'id="scn-toggle"', 'id="run-eye"', 'id="runcli"', 'id="run-md"', 'id="run-json"', "li.classList.toggle('active'", "function scnOpen("):
+    for needle in ('id="tab-run"', 'id="tb-run"', 'id="run-eye"', 'id="runcli"', 'id="run-md"', 'id="run-json"', "li.classList.toggle('active'", "function scnOpen("):
         assert needle in html, needle
     assert "scndlg" not in html and "dialog.drawer" not in html
+    assert 'id="scn-toggle"' not in html and 'id="stackdown"' not in html  # #861 A4 and A1: the strip is status only, and the stack-down message is the Needs attention entry alone
 
 
 

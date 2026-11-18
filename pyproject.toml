@@ -1,14 +1,15 @@
 [project]
 name = "workbench"
-version = "0.11.0"
+version = "0.12.0"
 requires-python = ">=3.11"
 license = {text = "Apache-2.0 OR MIT"}
-dependencies = ["typer", "pyyaml", "starlette", "uvicorn"]
+# Every dependency is an exact pin (issue 855): raise one on purpose, in its own PR. tests/test_docs.py fails on a loose one.
+dependencies = ["typer==0.27.3", "pyyaml==6.0.3", "starlette==1.10.0", "uvicorn==0.54.0"]
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff", "coverage", "jsonschema==4.26.0"]  # jsonschema: tests only (ADR 0062)
+dev = ["pytest==9.2.0", "ruff==0.17.3", "coverage==7.17.1", "jsonschema==4.26.0"]  # jsonschema: tests only (ADR 0062)
 mcp = ["mcp==2.3.0"]  # `benchctl serve mcp` only (ADR 0064): pulls in pydantic, never imported by the web page, the governor or plain benchctl
-browser = ["playwright", "pillow"]  # UI screenshots/checks: then `playwright install chromium`
+browser = ["playwright==1.64.1", "pillow==13.0.0"]  # UI screenshots/checks: then `playwright install chromium`
 
 [project.scripts]
 benchctl = "benchctl.cli:app"
@@ -18,7 +19,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["benchctl", "governor", "webui"]
+packages = ["benchctl", "benchctl.commands", "governor", "webui"]
 
 [tool.setuptools.package-data]
 webui = ["static/*", "static/js/*", "static/fonts/*"]

@@ -40,3 +40,24 @@ A Teleport user whose role has no `kubernetes_groups` is denied.
 - `teleport.yaml` gets a `kubernetes_service` reading `compose/generated/secrets/teleport/kube.kubeconfig` (generated, mode 600, never tracked).
 - That kubeconfig uses the token user `teleport`, which may only impersonate (`k8s/fixtures/47-rbac-teleport.yaml`); it never uses the admin certificate.
 - Without the k8s part there is no `kubernetes_service` and no kubeconfig.
+
+## Audit: who ran which kubectl call
+
+Teleport writes one JSON line per audit event, one file per day, under `/var/lib/teleport/log/` in the container; on the host that folder is `compose/generated/teleport/data/log/` (gitignored). Every kubectl call through the proxy is a `kube.request` event (code `T3009I`) with the Teleport user, so you can see who read or tried to change what:
+
+```bash
+docker exec workbench-teleport-1 sh -c "find /var/lib/teleport/log -name '*.log' -exec cat {} +" | grep '"kube.request"' | tail -3
+```
+
+The fields Teleport documents for it: `user`, `kubernetes_cluster`, `verb`, `request_path`, `resource_api_group`, `resource_kind`, `resource_name`, `resource_namespace`, `response_code`, `login`, `addr.*`, `server_id`, `time`.
+
+- A read (`kubectl get node kcn001`) is `verb` `GET` with `response_code` 200.
+- A refused write (`kubectl delete pod x -n team-a`) is `DELETE` with 403: Teleport forwards it and Kubernetes RBAC refuses it.
+- The live tests assert both for `alice` (`./scripts/verify.sh --unit teleport_kube`, helpers in `benchctl/teleportaudit.py`) and fail with a clear message if the folder is missing.
+
+Status of this section:
+
+- The field list is from Teleport's audit event reference, not yet from the pinned 18.11.8.
+- The live test prints the fields 18.11.8 really writes; the live run is owner-run, so no real line is shown here yet.
+- For a user without a Kubernetes group the test records what is written and asserts only that no 200 is audited for that user.
+- `exec`, `port` and `session.*` events are not expected: nothing here opens a pod shell.

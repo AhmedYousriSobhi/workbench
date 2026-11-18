@@ -62,6 +62,15 @@ function k8s(d) {
     const q = d.queue, pend = q.pending != null ? ` (${count(q.pending, 'workload')} pending)` : '';
     out.push(q.active === false ? `Stop queue ${q.name} admitting work${pend}` : q.active === true ? `Let queue ${q.name} admit work again${pend}` : `Set queue ${q.name} to ${count(q.pending, 'pending workload')}`);
   }
+  if (d.metrics_server === 'stop') out.push('Stop metrics-server (the metrics API answers 503)');
+  else if (d.metrics_server === 'start') out.push('Start metrics-server again (the metrics API answers)');
+  if (d.gpu) {
+    const g = d.gpu;
+    out.push(g.advertised !== undefined ? `Kubernetes node ${g.node} ${g.advertised ? 'advertises its GPUs again' : 'stops advertising its GPUs (allocatable 0)'}` : `Kubernetes node ${g.node} ${g.mig.strategy === 'none' ? 'is a normal GPU node again' : `becomes a MIG node (${g.mig.strategy}, ${g.mig.profile || '1g.18gb'})`}`);
+  }
+  if (d.kubelet) out.push(d.kubelet.skew === 'same' ? `Kubernetes node ${d.kubelet.node} reports the API server's version` : `Kubernetes node ${d.kubelet.node} reports a kubelet ${d.kubelet.skew} than the API server`);
+  if (d.volcano) out.push(d.volcano.queue ? `Set Volcano queue ${d.volcano.queue} ${String(d.volcano.state).toLowerCase()}` : `Set Volcano PodGroup ${d.volcano.namespace}/${d.volcano.podgroup} to ${d.volcano.phase}`);
+  if (d.usage) out.push(`Set the CPU use of each ${d.usage.namespace}/${d.usage.deploy} pod to ${d.usage.cpu} (its autoscaler reacts)`);
   return out;
 }
 
@@ -168,6 +177,9 @@ const EXPECT = {
   'slurm.stepd': a => a.alive === false ? `No slurmstepd runs on ${a.node}` : `A slurmstepd runs on ${a.node}`,
   'k8s.node_ready': a => `Kubernetes node ${a.node} is ${a.ready === false ? 'NotReady' : 'Ready'}`,
   'k8s.pod_status': a => `Pod ${a.namespace}/${a.name} shows ${a.reason}`,
+  'k8s.metrics_api': a => `The metrics API ${a.served === false ? 'is unavailable' : 'answers'}`,
+  'k8s.node_gpus': a => `Kubernetes node ${a.node} allocates ${a.allocatable ?? 0} of ${a.resource || 'nvidia.com/gpu'}`,
+  'k8s.node_kubelet': a => `Kubernetes node ${a.node} reports a kubelet ${a.skew || 'different'} than the API server`,
   'k8s.pods_on_node': a => `At least ${count(a.min ?? 1, 'Running pod')} (${a.selector}, ${a.namespace}) on Kubernetes node ${a.node}`,
   'storage.mount': a => `${a.mount} on ${a.node || 'cn001'}: ${[a.min_used_pct != null ? pctUsed(a.min_used_pct, 'used') : '', a.min_inodes_used_pct != null ? pctUsed(a.min_inodes_used_pct, 'of its inodes used') : '',
     a.quota_exceeded ? `${a.quota_exceeded} over quota` : '', a.stale != null ? (a.stale ? 'stale' : 'not stale') : ''].filter(Boolean).join(', ') || 'mounted'}`,
@@ -251,4 +263,24 @@ export function buildReport({ preview, run, startedAt, finishedAt, speed, eye })
     data.ran_from === 'cli' ? 'Skipped steps were skipped by the CLI; they are not passes. n/a means the mock keeps no counter for it.'
       : 'Skipped steps were not run by the page (they need the host CLI); they are not passes. n/a means the mock keeps no counter for it.', ''];
   return { data, markdown: md.join('\n') };
+}
+
+
+// The scenario library's group chips (issue 861 D2). A scenario belongs to the first group, in this order, that one of its step targets
+// maps to; so a Kubernetes scenario that also touches Slurm is under Kubernetes. A target with no group lands under "Other".
+export const SCN_GROUPS = [['auth', 'Auth'], ['k8s', 'Kubernetes'], ['jira', 'Jira'], ['ssh', 'SSH'], ['network', 'Network'], ['hardware', 'Hardware'], ['slurm', 'Slurm'], ['other', 'Other']];
+const TARGET_GROUP = { auth: 'auth', k8s: 'k8s', jira: 'jira', 'jira-real': 'jira', ssh: 'ssh', netem: 'network', switch: 'network',
+  'bmc-farm': 'hardware', 'gpu-exporter': 'hardware', dcgm: 'hardware', fault: 'hardware', 'bcm-mock': 'hardware', slurm: 'slurm', 'slurm-upgrade': 'slurm' };
+export function scenarioGroup(targets) {
+  const have = new Set((targets || []).map(t => TARGET_GROUP[t] || 'other'));
+  return (SCN_GROUPS.find(([k]) => have.has(k)) || ['other'])[0];
+}
+export function groupCounts(list) {  // [[key, label, count], ...] for the groups that have a scenario, after "All"
+  const n = {}; for (const s of list) { const g = scenarioGroup(s.targets); n[g] = (n[g] || 0) + 1; }
+  return SCN_GROUPS.filter(([k]) => n[k]).map(([k, l]) => [k, l, n[k]]);
+}
+export function firstSentence(text) {  // the card's line: what the client should notice; the rest is in the detail pane (D3)
+  const t = String(text || '').trim(), re = /[.!?](?=\s|$)/g;
+  for (let m; (m = re.exec(t));) { if (!/(?:e\.g|i\.e|etc|vs)$/i.test(t.slice(0, m.index))) return t.slice(0, m.index + 1); }
+  return t;
 }

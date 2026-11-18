@@ -6,6 +6,7 @@ import { startAnalysis, stopAnalysis, leaveTraffic } from './analysis.js';
 import { clusterList, curLevel, enterCluster, paintLevelUi, setLevel } from './overview.js';
 import { dockWide, paintReach } from './inspector.js';
 import { paintConnections } from './connections.js';
+import { paintLab } from './lab.js';
 import { closeFlow, openFlow } from './flowfeed.js';
 import { paintTraffic } from './traffic.js';
 import { paintHome } from './home.js';
@@ -59,13 +60,15 @@ export function setTheme(t) {
   try { localStorage.setItem('workbench-theme', t); } catch (e) { /* private mode: not remembered */ }
 }
 // tabs: the live traffic feed runs only while its tab and the page are visible
-export const TABS = ['home', 'run', 'nodes', 'traffic', 'conn'];
+export const TABS = ['home', 'run', 'nodes', 'traffic', 'conn', 'lab'];  // 'lab' is hidden until a config lab exists (W-10)
 export function selectTab(t, focus) {
   TABS.forEach(k => { const on = k === t; $('tab-' + k).hidden = !on; $('tb-' + k).setAttribute('aria-selected', on); $('tb-' + k).tabIndex = on ? 0 : -1; });
-  $('main').dataset.tab = t; $('subseg').hidden = t !== 'nodes';  // the view choice belongs to Infrastructure
+  $('main').dataset.tab = t; document.querySelector('.shell').dataset.tab = t;  // the left tiles show on Overview only (B2, #861)
+  $('subseg').hidden = t !== 'nodes';  // the view choice belongs to Infrastructure
   if (focus) $('tb-' + t).focus();
   if ((t === 'run' || t === 'nodes' || t === 'traffic') && !document.hidden) openFlow(); else closeFlow();  // the run's Client's eye reads the same counters
   if (t === 'conn') paintConnections();
+  if (t === 'lab') paintLab();
   if (t === 'home') paintHome();
   if (t === 'run') paintRunEye();
   if (t === 'traffic') paintTraffic();
@@ -113,12 +116,12 @@ export function init2() {
 export function init3() {
   TABS.forEach((k, i) => {
     $('tb-' + k).onclick = () => selectTab(k);
-    $('tb-' + k).onkeydown = e => { const d = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key]; if (d) { e.preventDefault(); selectTab(TABS[(i + d + TABS.length) % TABS.length], true); } };
+    $('tb-' + k).onkeydown = e => { const d = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key]; if (d) { e.preventDefault(); const vis = TABS.filter(x => !$('tb-' + x).hidden); selectTab(vis[(vis.indexOf(k) + d + vis.length) % vis.length], true); } };
   });
   // start
   loadCluster(); runChip(); loadScenarios(); poll();
   let savedTab = 'home'; try { savedTab = sessionStorage.getItem('workbench-tab') || 'home'; } catch (e) { /* default */ }
-  selectTab(TABS.includes(savedTab) ? savedTab : 'home');
+  selectTab(TABS.includes(savedTab) && !$('tb-' + savedTab).hidden ? savedTab : 'home');
   // the live feed is only worth its CPU while the page is visible
   document.addEventListener('visibilitychange', () => { if (document.hidden) { closeGov(); pauseCluster(); } else { openGov(); resumeCluster(); } if (document.hidden || ($('tab-nodes').hidden && $('tab-traffic').hidden && $('tab-run').hidden)) closeFlow(); else openFlow(); if (document.hidden) stopAnalysis(); else startAnalysis(); });
 

@@ -6,6 +6,7 @@ import pytest
 from typer.testing import CliRunner
 
 from benchctl import cli, completion
+from benchctl.commands import lifecycle as cmd_lifecycle
 
 runner = CliRunner()
 ROOT = Path(__file__).resolve().parent.parent
@@ -121,12 +122,12 @@ def test_start_offers_completion_only_in_a_terminal_and_only_once(tmp_path, monk
     monkeypatch.setenv("SHELL", "/bin/bash")
     asked = []
     monkeypatch.setattr(cli.typer, "confirm", lambda *a, **k: asked.append(a) or False)
-    cli._offer_completion()  # the runner has no terminal
+    cmd_lifecycle._offer_completion()  # the runner has no terminal
     assert asked == [] and not completion.asked_flag().exists()
     monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: True, raising=False)
     monkeypatch.setattr(cli.sys.stdout, "isatty", lambda: True, raising=False)
-    cli._offer_completion()
-    cli._offer_completion()
+    cmd_lifecycle._offer_completion()
+    cmd_lifecycle._offer_completion()
     assert len(asked) == 1 and completion.asked_flag().exists()
 
 

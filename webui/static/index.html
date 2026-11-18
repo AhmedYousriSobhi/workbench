@@ -13,6 +13,19 @@
 <link rel="stylesheet" href="/static/canvas.css">
 </head>
 <body>
+<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-home" viewBox="0 0 16 16"><path d="M2 7.5 8 2.5l6 5M3.5 6.5V13.5h9V6.5M6.5 13.5v-4h3v4"/></symbol>
+<symbol id="i-play" viewBox="0 0 16 16"><path d="M4.5 2.5v11l9-5.5z"/></symbol>
+<symbol id="i-grid" viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></symbol>
+<symbol id="i-swap" viewBox="0 0 16 16"><path d="M2.5 5.5h10M10 3l2.5 2.5L10 8M13.5 10.5h-10M6 8l-2.5 2.5L6 13"/></symbol>
+<symbol id="i-target" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5"/><path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3"/></symbol>
+<symbol id="i-flask" viewBox="0 0 16 16"><path d="M6 2h4M6.5 2v4.5L3 13a1 1 0 0 0 .9 1.5h8.2A1 1 0 0 0 13 13L9.5 6.5V2"/></symbol>
+<symbol id="i-gear" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"/></symbol>
+<symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></symbol>
+<symbol id="i-pen" viewBox="0 0 16 16"><path d="M2.5 13.5l.7-3L11 2.7a1.4 1.4 0 0 1 2 2L5.5 12.8zM9.8 4l2.2 2.2"/></symbol>
+<symbol id="i-down" viewBox="0 0 16 16"><path d="M8 2.5v8M4.5 7.5 8 11l3.5-3.5M3 13.5h10"/></symbol>
+<symbol id="i-menu" viewBox="0 0 16 16"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></symbol>
+</defs></svg>
 <div id="tip" class="tip" role="tooltip" hidden></div>
 <a class="skip" href="#main">Skip to content</a>
 <header class="top">
@@ -28,17 +41,17 @@
     <button class="pillchip" id="c-mem" aria-haspopup="dialog" aria-label="Free memory: open the governor panel">Memory …</button>
     <span class="pillchip" id="c-svc">Services …</span>
     <span class="pillchip" id="c-nodes">Nodes …</span>
+    <span class="pillchip" id="c-attn" hidden></span>
     <span class="pillchip" id="c-lab" role="status" hidden></span>
-    <button class="pillchip" id="scn-toggle" aria-controls="tab-run">▶ Scenarios</button>
     <button class="pillchip" id="c-run" hidden></button>
     <span id="conn" role="status"><i></i><span>connecting…</span></span>
-    <span class="menuwrap"><button class="pillchip menubtn" id="menubtn" aria-expanded="false" aria-controls="menu">☰ Menu</button>
+    <span class="menuwrap"><button class="pillchip menubtn" id="menubtn" aria-expanded="false" aria-controls="menu"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-menu"/></svg> Menu</button>
       <div id="menu" class="menu" hidden>
         <p class="menugroup" id="mg-conf">Configure</p>
-        <button class="menuitem" id="nhcbtn" aria-haspopup="dialog"><b aria-hidden="true">✚</b><span><span class="mi-t">Health checks</span><span class="mi-h">What makes a node drain</span></span></button>
-        <button class="menuitem" id="tbbtn" aria-haspopup="dialog"><b aria-hidden="true">✎</b><span><span class="mi-t">Ticket bot</span><span class="mi-h">Pace of the fake engineers</span></span></button>
+        <button class="menuitem" id="nhcbtn" aria-haspopup="dialog"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-plus"/></svg><span><span class="mi-t">Health checks</span><span class="mi-h">What makes a node drain</span></span></button>
+        <button class="menuitem" id="tbbtn" aria-haspopup="dialog"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-pen"/></svg><span><span class="mi-t">Ticket bot</span><span class="mi-h">Pace of the fake engineers</span></span></button>
         <p class="menugroup" id="mg-share">Share</p>
-        <button class="menuitem" id="expbtn" aria-haspopup="dialog"><b aria-hidden="true">⇩</b><span><span class="mi-t">Export</span><span class="mi-h">A profile file for the monitoring client</span></span></button>
+        <button class="menuitem" id="expbtn" aria-haspopup="dialog"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-down"/></svg><span><span class="mi-t">Export</span><span class="mi-h">A profile file for the monitoring client</span></span></button>
       </div></span>
     <a class="pillchip" id="helplink" href="/help/" aria-label="Help: the manual, guides and command reference">? Help</a>
     <button class="pillchip" id="theme" aria-label="Colour theme: automatic. Press to change.">◐ Auto</button>
@@ -47,13 +60,14 @@
 <div class="shell">
 <nav class="side" aria-label="Workspaces">
   <div role="tablist" aria-orientation="vertical" aria-label="Workspaces">
-    <button role="tab" class="sidei" id="tb-home" aria-controls="tab-home" aria-selected="true"><b aria-hidden="true">⌂</b>Overview</button>
-    <button role="tab" class="sidei" id="tb-run" aria-controls="tab-run" aria-selected="false" tabindex="-1"><b aria-hidden="true">▶</b>Test run</button>
-    <button role="tab" class="sidei" id="tb-nodes" aria-controls="tab-nodes" aria-selected="false" tabindex="-1"><b aria-hidden="true">▦</b>Topology</button>
-    <button role="tab" class="sidei" id="tb-traffic" aria-controls="tab-traffic" aria-selected="false" tabindex="-1"><b aria-hidden="true">⇄</b>Traffic &amp; Communication</button>
-    <button role="tab" class="sidei" id="tb-conn" aria-controls="tab-conn" aria-selected="false" tabindex="-1"><b aria-hidden="true">⌖</b>Connections</button>
+    <button role="tab" class="sidei" id="tb-home" aria-controls="tab-home" aria-selected="true"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-home"/></svg>Overview</button>
+    <button role="tab" class="sidei" id="tb-run" aria-controls="tab-run" aria-selected="false" tabindex="-1"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-play"/></svg>Test run</button>
+    <button role="tab" class="sidei" id="tb-nodes" aria-controls="tab-nodes" aria-selected="false" tabindex="-1"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-grid"/></svg>Topology</button>
+    <button role="tab" class="sidei" id="tb-traffic" aria-controls="tab-traffic" aria-selected="false" tabindex="-1"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-swap"/></svg>Traffic &amp; Communication</button>
+    <button role="tab" class="sidei" id="tb-conn" aria-controls="tab-conn" aria-selected="false" tabindex="-1"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-target"/></svg>Connections</button>
+    <button role="tab" class="sidei" id="tb-lab" aria-controls="tab-lab" aria-selected="false" tabindex="-1" hidden><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-flask"/></svg>Lab</button>
   </div>
-  <button class="sidei" id="planbtn" aria-haspopup="dialog"><b aria-hidden="true">⚙</b>Cluster architecture</button>
+  <button class="sidei" id="planbtn" aria-haspopup="dialog"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-gear"/></svg>Cluster architecture</button>
   <div class="itabs seg rsub" id="subseg" role="group" aria-label="Infrastructure view"><button class="btn small" data-sub="all" aria-pressed="true">All</button><button class="btn small" data-sub="topo" aria-pressed="false">Topology</button><button class="btn small" data-sub="nodes" aria-pressed="false">Nodes</button></div>
   <div class="kpis" id="kpis" role="group" aria-label="Cluster at a glance"></div>
 </nav>
@@ -77,7 +91,6 @@
     </div>
   </div>
   <div id="tab-nodes" role="tabpanel" aria-labelledby="tb-nodes" hidden>
-  <div id="stackdown" class="notice" hidden>The simulation stack is not running, so there is no node data. Start it with <code>./scripts/benchctl start</code>.</div>
     <div class="nodeswrap" id="nodeswrap">
   <section class="panel trafficpanel" id="trafficpanel" aria-labelledby="traffic-h"><div class="row"><h2 class="u-m0" id="traffic-h">Infrastructure architecture</h2>
     <span class="grow"></span><button class="btn small" id="keybtn" aria-expanded="false" aria-controls="ckey">Key</button><button class="btn small" id="flowpause" aria-pressed="false" aria-label="Pause animation">Pause</button></div>
@@ -181,6 +194,7 @@
     <section class="trun-lib" aria-label="Scenario library">
       <h2 class="rh">Scenarios</h2>
       <input type="search" id="scnq" placeholder="Filter scenarios" aria-label="Filter scenarios">
+      <div class="scngroups" id="scngroups" role="group" aria-label="Scenario group"></div>
       <div class="scnopts"><label class="small">Speed <select id="speed" aria-label="Playback speed for every scenario"><option value="1">1× real time</option><option value="5">5×</option><option value="20">20×</option></select></label>
         <label class="small u-fc6"><input type="checkbox" id="trace"> Slurm trace</label></div>
       <ul class="scns" id="list"><li class="skel">Loading…</li></ul>
@@ -198,6 +212,10 @@
       </div>
       <div class="panel" id="run-eyebox"><h2 class="rh">Client's eye</h2><p class="small dim">What the monitoring client called, from the mocks' request counters. “n/a” means the mock keeps no counter for it, never zero.</p><div id="run-eye"></div></div>
     </section>
+  </div>
+  <div id="tab-lab" role="tabpanel" aria-labelledby="tb-lab" hidden>
+    <p id="lab-none" class="panel dim" hidden>No config lab yet. Import one: benchctl import lab NAME --from DIR (docs/guides/config-lab.md).</p>
+    <div id="lab-body"></div>
   </div>
   <div id="tab-conn" role="tabpanel" aria-labelledby="tb-conn" hidden>
     <div class="panel"><h2>How to reach each part</h2>

@@ -15,6 +15,7 @@ import yaml
 from typer.testing import CliRunner
 
 from benchctl import alerts, cli, contract, inventory, scenario, testreport, testwords
+from benchctl.commands import export as cmd_export
 
 pytest.importorskip("starlette")
 from webui.app import CLI_QUIET_S, Runs
@@ -223,12 +224,12 @@ def finished():
 @pytest.fixture
 def cluster_now(monkeypatch):
     monkeypatch.setattr(inventory, "_containers", lambda runner=None: {"cn001": "exited", "cn002": "running", "gpu001": "running"})
-    monkeypatch.setattr(cli, "_fault_rows", lambda: [{"target": "cn001", "kind": "compute", "state": "down", "label": "powered off"}])
+    monkeypatch.setattr(cmd_export, "_fault_rows", lambda: [{"target": "cn001", "kind": "compute", "state": "down", "label": "powered off"}])
     monkeypatch.setattr(alerts, "fetch", lambda *a, **k: [{"name": "NodeDown", "state": "firing", "severity": "critical", "labels": {"instance": "10.141.0.5:9100"}, "active_at": "t"}])
 
 
 def invoke(monkeypatch, state, *args):
-    monkeypatch.setattr(cli, "_page_run_state", lambda: state)
+    monkeypatch.setattr(cmd_export, "_page_run_state", lambda: state)
     return runner.invoke(cli.app, ["export", "test-report", *args])
 
 
@@ -281,14 +282,14 @@ def test_in_agent_mode_the_message_is_one_coded_line(monkeypatch, cluster_now):
 def test_a_page_that_does_not_answer_is_one_message(monkeypatch):
     def down():
         raise OSError("connection refused")
-    monkeypatch.setattr(cli, "_page_run_state", down)
+    monkeypatch.setattr(cmd_export, "_page_run_state", down)
     r = runner.invoke(cli.app, ["export", "test-report"])
     assert r.exit_code == 1 and "the web page does not answer" in r.stderr and "benchctl start" in r.stderr
 
 
 def test_what_cannot_be_read_is_not_measured_never_an_empty_list(monkeypatch, finished):
     monkeypatch.setattr(inventory, "_containers", lambda runner=None: (_ for _ in ()).throw(OSError("no docker")))
-    monkeypatch.setattr(cli, "_fault_rows", lambda: (_ for _ in ()).throw(OSError("no docker")))
+    monkeypatch.setattr(cmd_export, "_fault_rows", lambda: (_ for _ in ()).throw(OSError("no docker")))
     monkeypatch.setattr(alerts, "fetch", lambda *a, **k: (_ for _ in ()).throw(alerts.NotRunning("Prometheus does not answer")))
     data = json.loads(invoke(monkeypatch, finished, "last", "--json").stdout)
     assert data["at_export"]["nodes"] is None and data["at_export"]["faults"] is None and data["at_export"]["alerts"] is None

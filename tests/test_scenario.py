@@ -607,6 +607,8 @@ NO_EXPECT = {
     "jira-real-token-revoked": "no expect form for the token's 401",
     "k8s-api-throttled": "no expect form for API priority and fairness 429s",
     "k8s-cert-expired": "no expect form for the API server certificate",
+    "k8s-volcano-queue-closed": "no expect form for a Volcano queue's state",
+    "k8s-hpa-max": "no expect form for an autoscaler's replica count; the live test asserts the three HPA states",
     "k8s-queue-inactive": "no expect form for a Kueue queue's status",
     "login-node-down": "no expect form for the login node's ssh state",
     "login-node-hung": "no expect form for the login node's ssh state",

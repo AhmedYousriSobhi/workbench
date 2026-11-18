@@ -51,7 +51,7 @@ Skills live in your home directory, not in this repository (`.claude/` is not co
 
 ## MCP server: what was checked
 
-`benchctl serve mcp` has sixteen tools (the verbs above plus `scenario_status`, `fault_clear`, `capture_once` and `report_export`, which is `export test-report`). Checked so far:
+`benchctl serve mcp` has seventeen tools (the verbs above plus `scenario_status`, `fault_clear`, `capture_once`, `report_export`, which is `export test-report`, and `lab_report_export`, which is `export lab-report`). Checked so far:
 
 - **Exercised:** the server process over stdio with the MCP SDK's own client (`tests/test_mcp_stdio.py`): the handshake, the tool list and each tool's annotations (`workbench_down` and `fault_inject` are destructive; the read tools are read-only), and the calls `workbench_describe`, `scenario_run` with `dry_run` and `wait` (a precondition comes back as data, not as a protocol error).
 - **Not exercised yet:** an agent runtime configured with the server, and whether it asks the person before `workbench_down`. The annotation is set; whether a given client honours it is the client's behaviour. No client configuration snippet is published until that has been tried.

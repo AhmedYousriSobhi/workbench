@@ -18,6 +18,7 @@ from .core import Governor
 from .dockerapi import DockerAPI, socket_path
 from .executors import ARRIVALS_FLAG, Executor, UserExecutor, discover_docker
 from .hostsize import derive, read_host
+from .labrun import LabRun
 from .ladder import Ladder, Thresholds
 from .memlock import MitigationPath, lock_memory, locked_kb, raise_memlock_limit
 from .planner import Group
@@ -183,7 +184,8 @@ def main(argv: list[str] | None = None) -> None:
         return json.loads(r.stdout)
 
     def reader(argv: list[str]) -> str:
-        """`benchctl ARGV` as the repository's owner, its stdout as text (read-only verbs only, chosen by the governor, never by the page)."""
+        """`benchctl ARGV` as the repository's owner, its stdout as text. The governor chooses ARGV, never the page: read-only verbs, and
+        `run lab NAME --prepare` (issue 554), which writes only the new run's own folder (its frozen jobs and record), nothing on the cluster."""
         cmd = [py, "-m", "benchctl.cli", *argv]
         owner = Path(args.workdir).stat().st_uid
         if os.geteuid() == 0 and owner != 0:
@@ -217,6 +219,16 @@ def main(argv: list[str] | None = None) -> None:
         except (OSError, ValueError, KeyError):
             return None
 
+    def spawn(argv: list[str]) -> subprocess.Popen:
+        """A lab run's child, `benchctl ARGV`, as the checkout's owner; it ends with the run (issue 554). Its output is not kept:
+        the run writes its own state and reason to run.json and progress.json."""
+        cmd = [py, "-m", "benchctl.cli", *argv]
+        owner = Path(args.workdir).stat().st_uid
+        if os.geteuid() == 0 and owner != 0:
+            cmd = ["runuser", "-u", pwd.getpwuid(owner).pw_name, "--", *cmd]
+        return subprocess.Popen(cmd, cwd=args.workdir, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                env={**os.environ, **({"WORKBENCH_GOV_SOCKET": args.socket} if args.socket else {})})
+
     netem_ok = not args.user_mode and not args.dry_run and os.geteuid() == 0  # ADR 0056: netem exists only in the root service
     gov = Governor(sampler, ladder, groups, executor, args.dry_run, watchdog, args.watch_interval,
                    annotator, discover_docker, args.refresh_interval,
@@ -226,6 +238,10 @@ def main(argv: list[str] | None = None) -> None:
                    lab_exists=(lambda n: (Path(args.workdir) / 'compose/generated/lab' / n / 'manifest.json').is_file()) if args.workdir else None,
                    lab_status=lab_status if args.workdir else None,
                    netemer=netemer if netem_ok else None)
+    if args.workdir:  # issue 554: lab runs are supervised by a thread of this process; the work is a one-shot container
+        gov.labrun = LabRun(Path(args.workdir), lambda: gov.ladder.level, gov._note, gov.admit_locked, reader, spawn)
+        if not args.dry_run:
+            gov.labrun.recover()  # a run left by a governor that died is asked to abort; a stale pause flag is removed
     if gov.netem:
         gov.netem.clear_all("governor start")  # a crashed scenario leaves nothing behind
     srv = control.serve(args.socket, gov.handle, gov.group_names, gid=args.socket_gid) \

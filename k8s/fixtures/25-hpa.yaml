@@ -1,0 +1,67 @@
+# HorizontalPodAutoscaler fixtures for the client's workload signal "autoscaler at its maximum replicas" (issue 764).
+# The REAL HPA controller (kube-controller-manager) computes their status from the metrics API (issue 382), which KWOK feeds from the pods'
+# kwok.x-k8s.io/usage-cpu annotation. Nothing is patched, so the status survives a controller-manager restart. Requests are 100m and the
+# target is 50%, so usage 100m per pod asks for 2x the replicas, and 50m holds them. The scale-up limit is max(2 x current, 4): keep max small.
+#   hpa-limited : at max (2 of 2), usage 4x the target -> TooManyReplicas, ScalingLimited=True  (the client lists it)
+#   hpa-steady  : at max (2 of 2), usage on target     -> DesiredWithinRange, ScalingLimited=False (the client ignores it)
+#   hpa-below   : 1 of 4, usage on target              -> not at max (the client does not list it)
+# The scenario step `usage` (k8s-hpa-max) pushes hpa-below to its maximum and back.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: hpa-limited, namespace: team-a}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: hpa-limited}}
+  template:
+    metadata: {labels: {app: hpa-limited}, annotations: {kwok.x-k8s.io/usage-cpu: 400m, kwok.x-k8s.io/usage-memory: 64Mi}}
+    spec:
+      containers: [{name: c, image: "rancher/mirrored-pause:3.6", resources: {requests: {cpu: 100m, memory: 64Mi}}}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: hpa-steady, namespace: team-a}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: hpa-steady}}
+  template:
+    metadata: {labels: {app: hpa-steady}, annotations: {kwok.x-k8s.io/usage-cpu: 50m, kwok.x-k8s.io/usage-memory: 64Mi}}
+    spec:
+      containers: [{name: c, image: "rancher/mirrored-pause:3.6", resources: {requests: {cpu: 100m, memory: 64Mi}}}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: hpa-below, namespace: team-a}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: hpa-below}}
+  template:
+    metadata: {labels: {app: hpa-below}, annotations: {kwok.x-k8s.io/usage-cpu: 50m, kwok.x-k8s.io/usage-memory: 64Mi}}
+    spec:
+      containers: [{name: c, image: "rancher/mirrored-pause:3.6", resources: {requests: {cpu: 100m, memory: 64Mi}}}]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: {name: hpa-limited, namespace: team-a}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: hpa-limited}
+  minReplicas: 1
+  maxReplicas: 2
+  metrics: [{type: Resource, resource: {name: cpu, target: {type: Utilization, averageUtilization: 50}}}]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: {name: hpa-steady, namespace: team-a}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: hpa-steady}
+  minReplicas: 1
+  maxReplicas: 2
+  metrics: [{type: Resource, resource: {name: cpu, target: {type: Utilization, averageUtilization: 50}}}]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: {name: hpa-below, namespace: team-a}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: hpa-below}
+  minReplicas: 1
+  maxReplicas: 4
+  metrics: [{type: Resource, resource: {name: cpu, target: {type: Utilization, averageUtilization: 50}}}]
