@@ -27,13 +27,17 @@ from .lab_support import _guard_lab_run, _lab_request
 from .shellcompletion import _completion_install
 
 
+def _launch_script():
+    from pathlib import Path
+
+    return Path(__file__).resolve().parents[2] / "scripts" / "benchctl-launch"
+
+
 def _launcher(*args: str) -> None:
     """The one-command launcher (machine check, venv, governor, cluster, web page) lives in scripts/benchctl-launch."""
     import subprocess
-    from pathlib import Path
 
-    script = Path(__file__).resolve().parent.parent / "scripts" / "benchctl-launch"
-    raise typer.Exit(subprocess.run([str(script), *args], check=False).returncode)
+    raise typer.Exit(subprocess.run([str(_launch_script()), *args], check=False).returncode)
 
 
 @app.command()
