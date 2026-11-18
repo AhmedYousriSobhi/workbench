@@ -98,3 +98,9 @@ Still open: the live checks (all `tests/real` tests are written, none run), the 
 - A same-named simulated partition is commented out meanwhile, and `Default=YES` moves to the lab's default partition; `remove lab` restores both. Chosen over prefixing the lab partitions because the replay and the monitoring client must see the production names.
 - Not rendered: topology, partition time-scaling (the run scales times), `AllowGroups` and `DenyGroups`.
 - Unverified live (`tests/real/test_lab_nodes_real.py`): slurmd on a node whose line says 1 TB of memory (`SlurmdParameters=config_overrides` should make it work), a second `Default=YES` line, and how long slurmctld takes to see the nodes.
+
+**Addendum, issue 555 (report, 2026-11-18).** `benchctl/lab_metrics.py` and `lab_report.py` build `report.json` and `report.md` from the two sides' `sacct` export.
+- Built: wait (median, p95) per partition and QOS in production-equivalent time, still pending, preemptions and GPU-hours lost, the verdict of this ADR with thresholds in `sim.yaml lab.verdict`, a fixed suggestion catalogue, the time-scaled parameters and the list of what was not measured.
+- A wait change is relative to the larger of side A's median and a floor (`wait_floor_s`, 60 s of production time), so a near-zero baseline does not turn noise into a failure.
+- Not built, because accounting cannot say it and Prometheus needs a live stack: alerts and time to alert, flapping, scheduler load (the `lab_run` series of decision 9), Kubernetes counts, idle-but-free GPUs, pending-reason mix, fairshare usage spread, the anonymizer (issue 614) and the `lab-idle` and `lab-run` memory measurements. The report lists them as not measured.
+- `--repeat N` (median and range) is not built; every report says single run.
