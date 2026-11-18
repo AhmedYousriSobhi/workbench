@@ -264,3 +264,23 @@ export function buildReport({ preview, run, startedAt, finishedAt, speed, eye })
       : 'Skipped steps were not run by the page (they need the host CLI); they are not passes. n/a means the mock keeps no counter for it.', ''];
   return { data, markdown: md.join('\n') };
 }
+
+
+// The scenario library's group chips (issue 861 D2). A scenario belongs to the first group, in this order, that one of its step targets
+// maps to; so a Kubernetes scenario that also touches Slurm is under Kubernetes. A target with no group lands under "Other".
+export const SCN_GROUPS = [['auth', 'Auth'], ['k8s', 'Kubernetes'], ['jira', 'Jira'], ['ssh', 'SSH'], ['network', 'Network'], ['hardware', 'Hardware'], ['slurm', 'Slurm'], ['other', 'Other']];
+const TARGET_GROUP = { auth: 'auth', k8s: 'k8s', jira: 'jira', 'jira-real': 'jira', ssh: 'ssh', netem: 'network', switch: 'network',
+  'bmc-farm': 'hardware', 'gpu-exporter': 'hardware', dcgm: 'hardware', fault: 'hardware', 'bcm-mock': 'hardware', slurm: 'slurm', 'slurm-upgrade': 'slurm' };
+export function scenarioGroup(targets) {
+  const have = new Set((targets || []).map(t => TARGET_GROUP[t] || 'other'));
+  return (SCN_GROUPS.find(([k]) => have.has(k)) || ['other'])[0];
+}
+export function groupCounts(list) {  // [[key, label, count], ...] for the groups that have a scenario, after "All"
+  const n = {}; for (const s of list) { const g = scenarioGroup(s.targets); n[g] = (n[g] || 0) + 1; }
+  return SCN_GROUPS.filter(([k]) => n[k]).map(([k, l]) => [k, l, n[k]]);
+}
+export function firstSentence(text) {  // the card's line: what the client should notice; the rest is in the detail pane (D3)
+  const t = String(text || '').trim(), re = /[.!?](?=\s|$)/g;
+  for (let m; (m = re.exec(t));) { if (!/(?:e\.g|i\.e|etc|vs)$/i.test(t.slice(0, m.index))) return t.slice(0, m.index + 1); }
+  return t;
+}

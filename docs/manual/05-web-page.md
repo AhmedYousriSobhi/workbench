@@ -29,11 +29,11 @@ By hand: `.venv/bin/python -m webui [port]` serves the page on `127.0.0.1:8088` 
 
 | Area | Shows |
 |---|---|
-| **Overview cards** | in the left rail: nodes healthy, services up, GPUs busy (only with GPU nodes), faults applied |
+| **Overview cards** | in the left rail on **Overview** only: nodes healthy, services up, GPUs busy (only with GPU nodes), faults applied. Every other workspace has the same counts in the top strip |
 | **View choice** | under the nav on Infrastructure: **All** (diagram and node list), **Topology** (diagram only, wider) or **Nodes** (list and details only); remembered in this browser |
 | **Left nav** | the workspaces: **Overview**, **Test run**, **Topology** (the Infrastructure diagram), **Traffic & Communication** |
 | **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **☰ Menu**, help and the theme switch |
-| **Tabs and Needs attention** | the tabs *Nodes* and *Connections*, and one slim bar with every item that needs you, or "All clear" |
+| **Tabs and Needs attention** | the tabs *Nodes* and *Connections*, and one slim bar with every item that needs you. When nothing needs you there is no bar: the top strip shows a **✓ All clear** chip |
 
 The **stage** on Infrastructure has three areas that fill the window:
 - **Left:** the **Infrastructure architecture**. Clients are across the top, the access layer under them, the cluster nodes below that and the services in a column at the right.
@@ -44,7 +44,8 @@ The **stage** on Infrastructure has three areas that fill the window:
 
 ### The top strip and the menu
 
-- The strip is for status only.
+- The strip is for status only. Its **All clear** chip appears only when the Needs attention bar would be empty.
+- The icons in the left navigation and the menu are drawn by the page (inline SVG, one size, the text colour), so they look the same on every machine. This manual writes them as the old symbols (⌂ ▶ ▦ ⇄ ⌖ ⚙ ✚ ⇩) to point at them.
 - The theme switch cycles Auto, Light, Dark, **Midnight** (deep navy and neon accents) and **Dim** (soft slate, low glare). The choice is remembered.
 - **☰ Menu** has two groups, each item with a one-line hint. Esc closes it. Scenarios are not a chip or a menu item: open **▶ Test run** in the left navigation.
   - *Configure:* **▦ Cluster architecture** (nodes, GPUs per node, optional parts, the plan) and **✚ Health checks**
@@ -251,7 +252,7 @@ One square in a rack is one node (one per 8 nodes above 64). A square that needs
 
 #### Zoom: Fleet, Cluster, Pool
 
-One **zoom rail** above the panels (− FLEET CLUSTER POOL TRAFFIC REQUESTS +) is the way up and down.
+One **zoom rail** above the panels (− FLEET CLUSTER POOL TRAFFIC REQUESTS +) is the way up and down. It shows on **Topology** and **Traffic & Communication** only; Overview and Test run have nothing to zoom. On a phone it shows the current level with **−** and **+**.
 
 - **Traffic** is the fourth stop: the Traffic & Communication page of the cluster you are in. **Back to the cluster** returns.
 - **Requests** is one stop deeper: the request analysis (below). **Back to the links** returns. The two are never stacked on one page.
@@ -572,7 +573,7 @@ See [choose the workbench](../guides/choose-workbench.md).
 
 1. **Pick.** Click a scenario's name. You see its description, its length and every step as it will play, **before anything starts**. **Show on the diagram** shows where each step will act ([before Play](#before-play-where-a-scenario-will-act)).
 2. **Play.**
-   1. Type in *Filter scenarios*.
+   1. Pick a group chip (**Auth**, **Kubernetes**, **Jira**, **SSH**, **Network**, **Hardware**, **Slurm**; each shows how many scenarios it holds) and type in *Filter scenarios*. A scenario sits in the first of those groups, in that order, that one of its steps targets; the card shows the first sentence of its description, and the full text is in the detail pane.
    2. Pick a speed. It applies to all.
    3. Tick **Slurm trace** if you want what the jobs and Slurm's logs did around each step ([Slurm resilience](../guides/slurm-resilience.md)).
    4. Press **▶ Play**.
@@ -587,6 +588,7 @@ See [choose the workbench](../guides/choose-workbench.md).
    - The page's own buttons count the calls from the tab's reading at Play; the command uses the counters the page process keeps from Play to the end, so it does not depend on a tab being open.
 
 **Steps the page cannot run**
+- An expectation that only the CLI can check says **skipped (CLI only)** and, under the list, gives the command with a **Copy** button.
 - They are marked **↷ CLI only**, with the reason. A notice gives the command that runs everything: `./scripts/benchctl scenario run NAME` (**Copy** puts it on the clipboard).
 - The page has no Docker by design. Only its `slurm` steps (drain, resume, job and daemon steps, done by the governor) and the mocks' own steps run here.
 - The rest, and the expectations that need the host, are skipped.

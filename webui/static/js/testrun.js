@@ -51,7 +51,7 @@ export function paintPreview(s) {
   $('expects').innerHTML = p.expects.length ? '<h3 class="rh">Expectations</h3>' + p.expects.map(x => {
     const r = got.get(x.label), st = r ? r.status : !x.page && !cli ? 'skipped' : 'pending';
     return `<p class="st st-${st}"><span aria-hidden="true">${ICON[st]}</span> ${st}${!x.page && !r && !cli ? ' (CLI only)' : ''}: ${esc(expectWords(x.label))} <span class="dim">${esc(r ? r.detail : '')}</span></p>`;
-  }).join('') : '';
+  }).join('') + (!cli && p.expects.some(x => !x.page && !got.has(x.label)) ? `<p class="small">To check these, run the scenario from the host: <code id="expcmd">${esc(p.cli)}</code> <button class="btn small" id="expcopy" type="button">Copy</button></p>` : '') : '';  // D4 (#861): a skipped expectation names the command that checks it
   $('trace-out').innerHTML = on && s.trace ? '<h3 class="rh">Slurm trace</h3>' + (s.trace.map(e =>
     `<details class="small"><summary>${esc(e.label)}</summary><pre class="wrap">${esc([e.before && 'before: ' + e.before, ...e.logs.map(r => `log ${r.source} ${r.where}: ${r.line}`),
       ...Object.entries(e.more).map(([k, n]) => `... ${n} more lines in docker logs ${k}`), 'after:  ' + e.after].filter(Boolean).join('\n'))}</pre></details>`).join('')
@@ -59,7 +59,9 @@ export function paintPreview(s) {
   const finished = on && !s.running && s.steps && s.steps.length;
   $('run-export').hidden = !finished;
   if ($('stopbtn')) $('stopbtn').onclick = () => { S.runStopHide = s.name; fetch('/api/scenarios/stop', { method: 'POST', headers: H }); };  // the diagram goes back to plain
-  if ($('runcopy')) $('runcopy').onclick = async () => { try { await navigator.clipboard.writeText(p.cli); announce('Command copied'); } catch (e) { announce('Select the command and copy it by hand'); } };
+  const copy = async () => { try { await navigator.clipboard.writeText(p.cli); announce('Command copied'); } catch (e) { announce('Select the command and copy it by hand'); } };
+  if ($('runcopy')) $('runcopy').onclick = copy;
+  if ($('expcopy')) $('expcopy').onclick = copy;
 }
 
 function download(name, text, type) {  // built here and handed to the browser: nothing is stored on the server
