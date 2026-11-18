@@ -58,6 +58,15 @@ def _secrets_in_tmp(request, monkeypatch, tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
+def _no_governor_from_this_machine(request, monkeypatch, tmp_path_factory):
+    """A unit test never meets the host's governor: with the socket pointed at a missing file, `up` and `scale` skip admission instead of
+    being refused when the machine is short of memory (#890). Not applied under tests/real, which talks to the real governor."""
+    if "real" in request.node.path.parts:
+        return
+    monkeypatch.setenv("WORKBENCH_GOV_SOCKET", str(tmp_path_factory.mktemp("nogov") / "gov.sock"))
+
+
+@pytest.fixture(autouse=True)
 def _plain_help_text(monkeypatch):
     """Typer forces terminal styling when GITHUB_ACTIONS, FORCE_COLOR or PY_COLORS is set (read at import), which puts escape codes in
     the help text the tests match on. The first CI run showed it (#473)."""
