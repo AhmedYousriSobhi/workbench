@@ -49,6 +49,8 @@ refresh_governor() {  # the Grafana token only exists after the first `up`: rest
 }
 
 ui_pid() { [ -f "$pidf" ] && kill -0 "$(cat "$pidf")" 2>/dev/null && cat "$pidf"; }
+# A page of ours (`python -m webui PORT`) that the pid file does not know: started by hand, or left by a crash (issue 913).
+orphan_ui_pid() { pgrep -u "$(id -u)" -f "python -m webui $port\$" | head -n1; }
 page_url() { sed -n 's/.*workbench UI: //p' "$logf" 2>/dev/null | tail -1; }  # the log never holds the token
 # A one-time code (60 s) from the running page, never the token itself: the link may land in browser history (SEC2, #466).
 link() {
@@ -68,6 +70,8 @@ start_ui() {
       echo "web page runs on port $run, restarting it on port $port (BENCHCTL_UI_PORT)"; kill "$(ui_pid)" 2>/dev/null; rm -f "$pidf"; sleep 1
     else echo "web page already running (pid $(ui_pid))"; return 0; fi
   fi
+  local orphan; orphan="$(orphan_ui_pid)"
+  if [ -n "$orphan" ]; then echo "an older web page (pid $orphan) holds port $port; stopping it"; kill "$orphan" 2>/dev/null; sleep 1; fi
   (umask 077; nohup .venv/bin/python -m webui "$port" >"$logf" 2>&1 & echo $! >"$pidf")
   for _ in $(seq 1 50); do
     [ -n "$(page_url)" ] && ui_pid >/dev/null && curl -s -o /dev/null "http://127.0.0.1:$port/login" && return 0

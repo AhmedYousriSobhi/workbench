@@ -114,7 +114,7 @@ Source: `scripts/benchctl-launch`, `benchctl/stack.py`, `benchctl/ready.py`, ADR
 |---|---|---|
 | `NOT READY` from the machine check | a prerequisite is missing | follow the fix line printed for each problem |
 | `REFUSED` from `up` | free memory is too low for the profile | close a few programs, run it again |
-| "the web page did not start" | the port is busy, often an older page started by hand | stop that page, then run `start` again; `BENCHCTL_UI_PORT` picks another port |
+| "the web page did not start" | the port is held by something that is not a workbench page | stop that program, then run `start` again; `BENCHCTL_UI_PORT` picks another port. An older workbench page on the port is stopped by `start` itself |
 | anything else | | `./scripts/benchctl diag` writes one masked file to attach to a bug report |
 
 ## Learn more
