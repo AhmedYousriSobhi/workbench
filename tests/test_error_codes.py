@@ -5,7 +5,7 @@ from pathlib import Path
 from benchctl import checks, errors
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC = sorted((ROOT / "benchctl").glob("*.py"))
+SRC = sorted((ROOT / "benchctl").glob("*.py")) + sorted((ROOT / "benchctl" / "commands").glob("*.py"))
 LITERAL = re.compile(r"WB-[A-Z0-9]+(?:-[A-Z0-9]+)*")
 
 

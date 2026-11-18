@@ -37,7 +37,7 @@ def test_pyproject_declares_installable_packages():
 
     cfg = tomllib.loads((Path(__file__).parent.parent / "pyproject.toml").read_text())
     # flat layout with many top-level dirs: setuptools refuses to guess
-    assert cfg["tool"]["setuptools"]["packages"] == ["benchctl", "governor", "webui"]
+    assert cfg["tool"]["setuptools"]["packages"] == ["benchctl", "benchctl.commands", "governor", "webui"]
 
 
 def test_every_python_dependency_is_pinned_exactly():

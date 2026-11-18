@@ -11,7 +11,7 @@
   tests: []
 - name: infrastructure, the stack itself
   paths: ["tests/real/conftest.py", "tests/real/helpers.py", "scripts/verify.sh", "scripts/real-test.sh", "scripts/lib-*.sh", "scripts/impact.py",
-          "benchctl/stack.py", "benchctl/compose.py", "benchctl/addressing.py", "benchctl/inventory.py", "benchctl/cli.py", "benchctl/controller.py",
+          "benchctl/stack.py", "benchctl/compose.py", "benchctl/addressing.py", "benchctl/inventory.py", "benchctl/cli.py", "benchctl/commands/**", "benchctl/controller.py",
           "benchctl/ready.py", "benchctl/workbench.py", "benchctl/__init__.py", "sim.yaml", "profiles/**", "compose/*.yml", "pyproject.toml"]
   tests: ALL
 - name: node health check
