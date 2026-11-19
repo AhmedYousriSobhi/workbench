@@ -60,7 +60,7 @@ The web page shows the same text in the **Info** card of a node's panel, without
 ./scripts/benchctl exec cn001 -- hostname      # one command, no shell
 ./scripts/benchctl ssh cn001                   # a root shell (same as exec, shorter)
 ./scripts/benchctl ssh alice@cn001             # a real SSH login as alice, through the login node
-./scripts/benchctl ssh alice@gpu001 -- nvidia-smi   # one command over SSH
+./scripts/benchctl ssh alice@gpu001 -- ls /dev/workbench-gpu0   # one command over SSH (the GPUs are simulated: no nvidia-smi)
 # the long form, same result: docker exec -it workbench-cn001-1 bash
 ```
 
@@ -254,13 +254,17 @@ This adds a real Kubernetes control plane (etcd, API server, scheduler, controll
 
 The Cluster architecture sheet has a second list per login node. The diagram draws the Slurm nodes and the Kubernetes nodes as separate groups. Each login points at the group it serves (`jump host` for Slurm, `kubectl` for Kubernetes):
 
+With the default single login node (a bare `ssh`) one node serves both and listens on port 2222. Only with several login
+nodes does each get its own port, by position: here `login` (s-login) is 2222 and `login2` (k-login) is 2223.
+
 ```bash
-./scripts/benchctl up --with k8s --login ssh:slurm,ssh:k8s      # login = s-login, login2 = k-login
+./scripts/benchctl up --with k8s --login ssh:slurm,ssh:k8s      # login = s-login (2222), login2 = k-login (2223)
 ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2223 alice@127.0.0.1 kubectl get nodes
 ```
 
 From a login node a user has `kubectl` and a read-only kubeconfig (`~/.kube/config`, cluster-wide) and a namespace-limited one
-(`~/.kube/limited.yaml`, only `team-a`):
+(`~/.kube/limited.yaml`, only `team-a`). These use port 2222, the default single login node; with `--login ssh:slurm,ssh:k8s`
+use 2223, the k-login:
 
 ```bash
 ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2222 alice@127.0.0.1 kubectl get nodes

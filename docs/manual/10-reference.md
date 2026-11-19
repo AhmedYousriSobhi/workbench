@@ -37,7 +37,7 @@ What each verb does not do, exit codes, and what to use in a script: [the verbs 
 | `BENCHCTL_AGENT=1 benchctl ...` | agent mode: one-line coded errors, `--yes` required for destructive verbs, logs in a file; see the verbs guide |
 | `describe node NAME [--json]` | everything known about one node: container, Slurm, jobs, GPUs busy/idle, BMC |
 | `ssh [USER@]NODE [-- CMD]` | `benchctl ssh cn001`: a root shell on the node (docker exec). `benchctl ssh alice@cn001`: a real SSH login as that simulated user, through the first login node that takes a key (not for a Teleport-only cluster: use `tsh`). A command after `--` runs instead of a shell |
-| `exec NODE [-u USER] [-- CMD]` | shell on a node, or one command: `benchctl exec gpu001 -- nvidia-smi` |
+| `exec NODE [-u USER] [-- CMD]` | shell on a node, or one command: `benchctl exec gpu001 -- ls /dev/workbench-gpu0` (the GPUs are simulated: no `nvidia-smi`) |
 | `logs NODE [-f] [--tail N]` | container log of a node or service |
 | `plan [selection]` | estimate the memory a workbench needs against free memory; exit 1 if it does not fit ([guide](../guides/choose-workbench.md)) |
 | `up --profile P` | pre-flight, governor admission, ordered start (default profile `std`) |

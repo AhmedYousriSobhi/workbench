@@ -47,7 +47,7 @@ Every command has the same shape, like `kubectl`: `benchctl VERB [RESOURCE] [NAM
 
 ```bash
 benchctl get nodes
-benchctl exec gpu001 -- nvidia-smi
+benchctl exec gpu001 -- ls /dev/workbench-gpu0
 benchctl ssh alice@cn001
 benchctl scenario run node-down
 ```
