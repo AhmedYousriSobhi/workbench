@@ -7,7 +7,7 @@ Status: accepted. Issue 544; epic 557 (config lab A-6 and A-7). Ticks off the "Q
 - Optional `qos:` in `sim.yaml`: a list of `{name, priority, max_gpus_per_user, grace_time_s, preempt: [names]}`, and optional `slurm.priority:` (`weight_qos|age|fairshare|job_size|partition`, `decay_half_life`). No key, no change.
 - `benchctl/qos.py` is the one place that validates them and writes both outputs: slurm.conf lines (`PriorityType=priority/multifactor`, the weights, `AccountingStorageTRES=gres/gpu` when a GPU limit is set, and `PreemptType=preempt/qos` with `PreemptMode=REQUEUE` when any QOS lists `preempt`) and the idempotent `sacctmgr` lines of `accounting.sh` (add, then `modify qos where name=X set ...`, so a changed sim.yaml reaches a database that already has the QOS). Every simulated user may submit under every declared QOS; their own `qos:` stays the default.
 - QOS live in slurmdbd, so `compose.generate` refuses `qos:` or `slurm.priority:` without the accounting part, with one message that says how to add it.
-- The scenario `submit` step and `benchctl submit` take `qos:`. Scenario `preempt-burst` (SC-37) fills the GPUs with a scavenger job and asks for them under `urgent`.
+- The scenario `submit` step and `benchctl submit` take `qos:`. Scenario `preempt-burst` (SC-37) holds 2 GPUs (the example limit, #943) with a scavenger job and asks for all 8 under `urgent`.
 
 ## Found live
 
