@@ -54,7 +54,7 @@
 ## Remember
 
 - Pods never really run, so logs are canned lines.
-- The ports (2222 Slurm login, 2223 Kubernetes login) are in [Nodes and shells](../manual/04-nodes-and-shells.md).
+- The login port is 2222 by default; only with several login nodes (for example `--login ssh:slurm,ssh:k8s`) is the Kubernetes login on 2223. The ports are in [Nodes and shells](../manual/04-nodes-and-shells.md).
 
 ## Next
 

@@ -162,6 +162,8 @@ def test_set_node_freezes_a_node_for_off_and_on_and_sets_the_slurm_state_for_dow
     assert ("8081", {"node": "cn001", "state": "UP"}) in posted
     assert runner.invoke(cli.app, ["set", "node", "cn001", "down"]).exit_code == 0 and "state=down" in ran[-1] and "nodename=cn001" in ran[-1]
     assert runner.invoke(cli.app, ["set", "node", "cn001", "sideways"]).exit_code == 1
+    assert runner.invoke(cli.app, ["set", "node", "cn001", "drain", "--reason", "disk check"]).exit_code == 0 and "reason=disk check" in ran[-1]
+    assert runner.invoke(cli.app, ["set", "node", "cn001", "drain"]).exit_code == 0 and "reason=workbench power off" in ran[-1]  # default text
 
 
 def test_set_jira_activity_switches_the_mocks_background_changes(monkeypatch):

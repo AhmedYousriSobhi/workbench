@@ -31,7 +31,8 @@ def set_node(node: str = TARGET, state: str = typer.Argument(..., help="off or o
         typer.echo("state must be off, on, down, drain or resume", err=True)
         raise typer.Exit(1)
     run, post = (lambda c: stack._run(c)), (lambda url, body: scenario.post(url, body))
-    slurm_only = scenario.Step(0, "slurm", {keys[state]: [node], "reason": "workbench power off"})
+    why = reason if reason and state in ("down", "drain") else "workbench power off"  # off/on and resume keep the default text
+    slurm_only = scenario.Step(0, "slurm", {keys[state]: [node], "reason": why})
     o = scenario.execute(slurm_only if state not in ("off", "on") else
                          scenario.Step(0, "bmc-farm", {"nodes": [node], "power": "Off" if state == "off" else "On"}),  # the page's Power off/on: BMC, BCM and GPU metrics follow
                          poster=post, host=True, runner=run)

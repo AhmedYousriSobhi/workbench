@@ -48,8 +48,6 @@
 ./scripts/benchctl clear faults
 ```
 
-Known issue: `set node ... drain --reason` is accepted, but Slurm shows the reason `workbench power off` (`benchctl describe node cn001`, `sinfo -R`), not yours.
-
 ## You should see
 
 - Step 2 lists six timed steps (BMC off and BCM `DOWN` at 0 s, Slurm drain at 5 s, all back at 40 s).
