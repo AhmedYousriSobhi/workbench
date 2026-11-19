@@ -108,3 +108,23 @@ def test_prometheus_scrapes_teleport_diagnostics(tele):
     """Issue 458: the `teleport` job exists only because the part is selected, and its target answers."""
     from helpers import prom_up, wait_for
     assert wait_for(lambda: set(prom_up("teleport").values()) == {"1"}, timeout=90), prom_up("teleport")
+
+
+def test_a_teleport_outage_refuses_tsh_while_direct_ssh_keeps_working_then_recovers(tele):
+    """Issue 209 (SC-58): the `teleport_outage` auth step stops the proxy and starts it again."""
+    from benchctl import faultstate, scenario
+
+    def step(on: bool):
+        out = scenario.execute(scenario.Step(0, "auth", {"teleport_outage": on}))
+        assert out.status == "ok", out.detail
+
+    step(True)
+    try:
+        assert tsh(tele, "ls").returncode != 0                               # nothing answers on the proxy address
+        assert key_login("127.0.0.1", 2222).stdout.strip() == "login"        # direct SSH is a different path
+        assert any(r["target"] == "teleport" for r in faultstate.kube_rbac())
+    finally:
+        step(False)
+    assert tsh(tele, "ls").returncode == 0                                   # users and nodes are still known after the restart
+    assert tsh(tele, "ssh", "alice@cn001", "id -un").stdout.split() == ["alice"]
+    assert not any(r["target"] == "teleport" for r in faultstate.kube_rbac())

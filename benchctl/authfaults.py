@@ -9,6 +9,7 @@ Each step makes the real component answer with its real error; nothing is simula
   munge_restore: [nodes]         the node's own original key goes back (never the image's: keys generated at `up`, issue 465, stay safe)
   bmc_tls_expired: true|false    the BMC farm presents a certificate that ended yesterday (same key and name), or the good one again
   k8s_cert_expired: true|false   the API server restarts with a serving certificate that ended yesterday, or with the good one again
+  teleport_outage: true|false    stop the Teleport container (the proxy refuses connections; direct SSH keeps working), or start it again and wait until it answers (issue 209)
   kube_binding_missing: [tiers]  delete the Kubernetes binding of a `tsh kube` tier's group (viewer, developer, admin): Teleport lets the user in and Kubernetes says forbidden (ADR 0084 W4)
   kube_impersonation_revoked: true|false  delete the binding that lets Teleport's `teleport` user impersonate, so every `tsh kube` request fails upstream; false puts it back
   kube_binding_restore: true     re-apply the Teleport RBAC fixture (k8s/fixtures/47-rbac-teleport.yaml): every binding above comes back
@@ -25,7 +26,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 KEYS = ("slurm_token_ttl", "teleport_cert_ttl", "teleport_cert_restore", "munge_wrong_key", "munge_restore", "bmc_tls_expired", "k8s_cert_expired",
-        "kube_binding_missing", "kube_impersonation_revoked", "kube_binding_restore")
+        "kube_binding_missing", "kube_impersonation_revoked", "kube_binding_restore", "teleport_outage")
 SLURMCTLD = "workbench-slurmctld-1"
 APISERVER = "workbench-k8s-apiserver-1"
 BMC_TLS_URL = "http://127.0.0.1:8000/sim/tls"
@@ -35,7 +36,7 @@ KUBE_FIXTURE = "/k8s/fixtures/47-rbac-teleport.yaml"  # inside the kubectl conta
 KUBE_BINDINGS = {"viewer": ("clusterrolebinding", "workbench-teleport-viewers", None), "developer": ("rolebinding", "workbench-teleport-developers", "team-a"),
                  "admin": ("clusterrolebinding", "workbench-teleport-admins", None)}
 KUBE_IMPERSONATION = "workbench-teleport"  # the ClusterRoleBinding of the `teleport` user (impersonate users, groups)
-KUBE_MARK = Path("compose/generated/kube-faults.json")  # which of these faults are on: what `get faults` reads (no docker call per poll)
+KUBE_MARK = Path("compose/generated/kube-faults.json")  # which of these faults (and the Teleport outage) are on: what `get faults` reads (no docker call per poll)
 _TTL = re.compile(r"(\d+)([smh])")
 MUNGE_KEY = "/etc/munge/munge.key"
 # Keep the node's own key once (cp -n), write another one, restart munged as the munge user. A second wrong_key keeps the first backup.
@@ -66,7 +67,7 @@ def problems(do: dict, nodes: set[str], users: set[str]) -> list[str]:
                 out.append(f"{key} needs a list of {'users' if known is users else 'nodes'}")
                 continue
             out += [f"{key}: unknown {'user' if known is users else 'node'} {n!r}" for n in names if n not in known]
-    for key in ("bmc_tls_expired", "k8s_cert_expired", "kube_impersonation_revoked"):
+    for key in ("bmc_tls_expired", "k8s_cert_expired", "kube_impersonation_revoked", "teleport_outage"):
         if key in do and not isinstance(do[key], bool):
             out.append(f"{key} is true (fault) or false (restore)")
     if "kube_binding_restore" in do and do["kube_binding_restore"] is not True:
@@ -119,7 +120,28 @@ def apply(do: dict, runner: Callable, poster: Callable, sim: dict, *, now: float
         bad = k8s_cert(do["k8s_cert_expired"], runner, K8S_PKI, now)
         if bad:
             return bad
+    if "teleport_outage" in do:
+        bad = teleport_outage(do["teleport_outage"], runner, stack.dc)
+        if bad:
+            return bad
     return kube_rbac(do, runner, sim)
+
+
+def teleport_outage(down: bool, runner: Callable, dc: Callable, *, sleep: Callable[[float], None] = time.sleep, mark: Path | None = None) -> str:
+    """Stop the Teleport container (auth and proxy): `tsh` and the web terminal are refused, direct SSH to a key login node is untouched, because the
+    nodes run their own sshd. Back up, the container keeps its state, so users, nodes and identity files work again; the step waits until `tctl status` answers."""
+    from . import teleport
+    if down:
+        r = runner(dc("stop", "-t", "1", "teleport"))
+        if r.returncode:
+            return f"stop teleport: {_fail(r)}"
+        _mark({"teleport-outage"}, set(), mark)
+        return ""
+    r = runner(dc("start", "teleport"))
+    if r.returncode:
+        return f"start teleport: {_fail(r)}"
+    _mark(set(), {"teleport-outage"}, mark)
+    return "" if teleport.wait_ready(runner, dc, sleep=sleep) else "teleport did not answer within 90 s after it was started"
 
 
 def _kubectl(sim: dict, runner: Callable, *args: str):

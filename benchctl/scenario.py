@@ -189,7 +189,8 @@ NODE_KEYS = ("nodes", "drain", "down", "resume", "power_off", "power_on", "slurm
              "power_up", "reboot", "up", "cordon", "uncordon", "munge_wrong_key", "munge_restore")
 AUTH_PART = {"slurm_token_ttl": "slurmrestd", "teleport_cert_ttl": "teleport", "teleport_cert_restore": "teleport", "munge_wrong_key": "slurmctld",
              "munge_restore": "slurmctld", "bmc_tls_expired": "bmc-farm", "k8s_cert_expired": "k8s-api",
-             "kube_binding_missing": "k8s-api", "kube_impersonation_revoked": "k8s-api", "kube_binding_restore": "k8s-api"}
+             "kube_binding_missing": "k8s-api", "kube_impersonation_revoked": "k8s-api", "kube_binding_restore": "k8s-api",
+             "teleport_outage": "teleport"}
 UPGRADE_PART = {"slurmdbd": "slurmdbd", "slurmctld": "slurmctld", "slurmrestd": "slurmrestd", "login": "login"}
 
 
