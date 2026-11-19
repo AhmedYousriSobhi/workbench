@@ -127,7 +127,7 @@ def outputs(incomplete: str) -> list[str]:
 def nodes(incomplete: str) -> list[str]:
     from . import nodes as node_mod
 
-    return _starts([n for n, _ in node_mod.node_names(_sim())], incomplete)
+    return _starts([n for n, _ in node_mod.hardware_nodes(_sim())], incomplete)
 
 
 @_safe

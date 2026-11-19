@@ -577,12 +577,12 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         from benchctl import describe
 
         try:
-            info = await asyncio.to_thread(describe.gather, cluster.sim, request.path_params["node"], cluster.fetch)
+            info = await asyncio.to_thread(describe.gather, cluster.live_sim(), request.path_params["node"], cluster.fetch)
         except describe.UnknownNode as e:
             raise HTTPException(404, str(e.args[0])) from e
         from benchctl import addressing, export
 
-        node, plan = request.path_params["node"], addressing.plan(cluster.sim)
+        node, plan = request.path_params["node"], addressing.plan(cluster.live_sim())
         try:
             _, services, _ = export.configured(yaml.safe_load(sim_yaml.read_text()))
         except (export.ExportError, OSError, ValueError):
@@ -838,7 +838,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             results = await asyncio.to_thread(cluster.act, request.path_params["node"], request.path_params["action"])
         except ActionError as e:
             raise HTTPException(422, str(e)) from e
-        states = SLURM_STATE.get(request.path_params["action"], ())
+        states = () if cluster.hardware().get(request.path_params["node"], "").startswith("k8s") else SLURM_STATE.get(request.path_params["action"], ())  # a Kubernetes node is no Slurm node
         if states and any(r["status"] == "ok" for r in results):  # the BMC changed; Slurm only knows through the governor
             for state in states:
                 results.append(await asyncio.to_thread(slurm_state, request.path_params["node"], state))

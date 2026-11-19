@@ -477,3 +477,32 @@ def k8sgpu_skewed(skew: str) -> str:
     from benchctl import k8sgpu
     return k8sgpu.skewed(k8s.version(k8s.current_sim()), skew)
 
+
+
+def test_a_bmc_power_off_or_overheat_of_a_kubernetes_node_makes_it_notready_and_the_card_shows_the_machine(cluster):
+    """Issue 385: Kubernetes nodes are machines. The scenario's BMC step on a Kubernetes node also reports it NotReady (the KWOK fault stage), `clear`
+    brings it back, the page's card carries power, temperature and BCM state, and `describe node` reads it."""
+    from benchctl import describe
+    from webui import cluster as page
+
+    sim = k8s.current_sim()
+    node = k8s.node_list(sim)[0][0]
+
+    def ready() -> bool | None:
+        return k8s.node_ready(node, k8s._run)
+    try:
+        assert wait_for(lambda: ready() is True, timeout=60)
+        card = next(n for n in page.Cluster(SIM).snapshot()["nodes"] if n["name"] == node)
+        assert card["kind"] == "k8s" and card["power"] == "On" and card["temp"] is not None and card["bcm"] == "UP", card
+        assert scenario.execute(scenario.Step(0, "bmc-farm", {"nodes": [node], "power": "Off"}), sim=sim).status == "ok"
+        assert wait_for(lambda: ready() is False, timeout=60)
+        assert wait_for(lambda: next(n for n in page.Cluster(SIM).snapshot()["nodes"] if n["name"] == node)["state"] == "down", timeout=30)
+        info = describe.gather(sim, node, describe.http_get)
+        assert info["kubernetes"]["state"] == "NotReady" and info["bmc"]["power"] == "Off"
+        assert scenario.execute(scenario.Step(0, "bmc-farm", {"nodes": [node], "clear": True}), sim=sim).status == "ok"
+        assert wait_for(lambda: ready() is True, timeout=60)
+        assert scenario.execute(scenario.Step(0, "bmc-farm", {"nodes": [node], "temp": 92}), sim=sim).status == "ok"
+        assert wait_for(lambda: ready() is False, timeout=60)  # an overheat is NotReady too
+    finally:
+        scenario.execute(scenario.Step(0, "bmc-farm", {"nodes": [node], "clear": True}), sim=sim)
+    assert wait_for(lambda: ready() is True, timeout=60)

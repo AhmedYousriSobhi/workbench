@@ -2,7 +2,7 @@
 from collections.abc import Callable
 from pathlib import Path
 
-from . import compose, contract, nodes, scenario, stack
+from . import compose, contract, k8s, nodes, scenario, stack
 
 RESOURCES = ["nodes", "services", "profiles", "scenarios"]
 
@@ -14,10 +14,13 @@ def _containers(runner: Callable = stack._run) -> dict[str, str]:
     return dict(line.split(None, 1) for line in r.stdout.splitlines() if " " in line)
 
 
-def node_rows(sim: dict, runner: Callable = stack._run) -> list[dict]:
-    """Every node `sim.yaml` defines, with its container state ('absent' when not started)."""
+def node_rows(sim: dict, runner: Callable = stack._run, fetch: Callable | None = None) -> list[dict]:
+    """Every node `sim.yaml` defines, with its container state ('absent' when not started). A Kubernetes node (kind k8s-cpu, k8s-gpu) is
+    no container: its state is the API's (Ready, NotReady, Cordoned (no new pods), No data), read with the viewer's token (#385)."""
     live = _containers(runner)
-    return [{"name": n, "kind": kind, "state": live.get(n, "absent")} for n, kind in nodes.node_names(sim)]
+    hw = nodes.hardware_nodes(sim)
+    kube = {r["name"]: r["label"] for r in k8s.node_rows(sim, *([fetch] if fetch else []))} if any(k.startswith("k8s") for _, k in hw) else {}
+    return [{"name": n, "kind": kind, "state": kube.get(n, "No data") if kind.startswith("k8s") else live.get(n, "absent")} for n, kind in hw]
 
 
 def service_rows(runner: Callable = stack._run) -> list[dict]:

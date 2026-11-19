@@ -34,3 +34,8 @@ def hardware_nodes(sim: dict, compute_override: int | None = None) -> list[tuple
 
         out += [(n, "k8s-gpu" if g.get("gpus") else "k8s-cpu") for n, g in k8s.node_list(sim)]
     return out + [x for x in every if x[1] == "real-gpu"]
+
+
+def k8s_node_names(sim: dict) -> set[str]:
+    """The names of the Kubernetes nodes (empty when that part is off): they have a BMC and a BCM entry but no Slurm node and no container."""
+    return {n for n, k in hardware_nodes(sim) if k.startswith("k8s")}
