@@ -9,23 +9,34 @@ Each step makes the real component answer with its real error; nothing is simula
   munge_restore: [nodes]         the node's own original key goes back (never the image's: keys generated at `up`, issue 465, stay safe)
   bmc_tls_expired: true|false    the BMC farm presents a certificate that ended yesterday (same key and name), or the good one again
   k8s_cert_expired: true|false   the API server restarts with a serving certificate that ended yesterday, or with the good one again
+  teleport_outage: true|false    stop the Teleport container (the proxy refuses connections; direct SSH keeps working), or start it again and wait until it answers (issue 209)
+  kube_binding_missing: [tiers]  delete the Kubernetes binding of a `tsh kube` tier's group (viewer, developer, admin): Teleport lets the user in and Kubernetes says forbidden (ADR 0084 W4)
+  kube_impersonation_revoked: true|false  delete the binding that lets Teleport's `teleport` user impersonate, so every `tsh kube` request fails upstream; false puts it back
+  kube_binding_restore: true     re-apply the Teleport RBAC fixture (k8s/fixtures/47-rbac-teleport.yaml): every binding above comes back
 
 Every step runs host commands or posts to the farm, so the target needs the host CLI (the page cannot play it).
 """
 from __future__ import annotations
 
+import json
 import re
 import tempfile
 import time
 from collections.abc import Callable
 from pathlib import Path
 
-KEYS = ("slurm_token_ttl", "teleport_cert_ttl", "teleport_cert_restore", "munge_wrong_key", "munge_restore", "bmc_tls_expired", "k8s_cert_expired")
+KEYS = ("slurm_token_ttl", "teleport_cert_ttl", "teleport_cert_restore", "munge_wrong_key", "munge_restore", "bmc_tls_expired", "k8s_cert_expired",
+        "kube_binding_missing", "kube_impersonation_revoked", "kube_binding_restore", "teleport_outage")
 SLURMCTLD = "workbench-slurmctld-1"
 APISERVER = "workbench-k8s-apiserver-1"
 BMC_TLS_URL = "http://127.0.0.1:8000/sim/tls"
 TOKEN_FILE = Path("compose/generated/secrets/slurm_token")
 K8S_PKI = Path("compose/generated/secrets/k8s")
+KUBE_FIXTURE = "/k8s/fixtures/47-rbac-teleport.yaml"  # inside the kubectl container (benchctl/k8s.py kubectl_cmd mounts k8s/ there)
+KUBE_BINDINGS = {"viewer": ("clusterrolebinding", "workbench-teleport-viewers", None), "developer": ("rolebinding", "workbench-teleport-developers", "team-a"),
+                 "admin": ("clusterrolebinding", "workbench-teleport-admins", None)}
+KUBE_IMPERSONATION = "workbench-teleport"  # the ClusterRoleBinding of the `teleport` user (impersonate users, groups)
+KUBE_MARK = Path("compose/generated/kube-faults.json")  # which of these faults (and the Teleport outage) are on: what `get faults` reads (no docker call per poll)
 _TTL = re.compile(r"(\d+)([smh])")
 MUNGE_KEY = "/etc/munge/munge.key"
 # Keep the node's own key once (cp -n), write another one, restart munged as the munge user. A second wrong_key keeps the first backup.
@@ -56,9 +67,17 @@ def problems(do: dict, nodes: set[str], users: set[str]) -> list[str]:
                 out.append(f"{key} needs a list of {'users' if known is users else 'nodes'}")
                 continue
             out += [f"{key}: unknown {'user' if known is users else 'node'} {n!r}" for n in names if n not in known]
-    for key in ("bmc_tls_expired", "k8s_cert_expired"):
+    for key in ("bmc_tls_expired", "k8s_cert_expired", "kube_impersonation_revoked", "teleport_outage"):
         if key in do and not isinstance(do[key], bool):
-            out.append(f"{key} is true (expire) or false (restore)")
+            out.append(f"{key} is true (fault) or false (restore)")
+    if "kube_binding_restore" in do and do["kube_binding_restore"] is not True:
+        out.append("kube_binding_restore is true (it re-applies the RBAC fixture)")
+    if "kube_binding_missing" in do:
+        tiers = do["kube_binding_missing"]
+        if not isinstance(tiers, list) or not tiers:
+            out.append(f"kube_binding_missing needs a list of tiers ({', '.join(KUBE_BINDINGS)})")
+        else:
+            out += [f"kube_binding_missing: unknown tier {t!r} (one of {', '.join(KUBE_BINDINGS)})" for t in tiers if t not in KUBE_BINDINGS]
     return out
 
 
@@ -98,7 +117,71 @@ def apply(do: dict, runner: Callable, poster: Callable, sim: dict, *, now: float
     if "bmc_tls_expired" in do:
         poster(BMC_TLS_URL, {"expired": do["bmc_tls_expired"]})
     if "k8s_cert_expired" in do:
-        return k8s_cert(do["k8s_cert_expired"], runner, K8S_PKI, now)
+        bad = k8s_cert(do["k8s_cert_expired"], runner, K8S_PKI, now)
+        if bad:
+            return bad
+    if "teleport_outage" in do:
+        bad = teleport_outage(do["teleport_outage"], runner, stack.dc)
+        if bad:
+            return bad
+    return kube_rbac(do, runner, sim)
+
+
+def teleport_outage(down: bool, runner: Callable, dc: Callable, *, sleep: Callable[[float], None] = time.sleep, mark: Path | None = None) -> str:
+    """Stop the Teleport container (auth and proxy): `tsh` and the web terminal are refused, direct SSH to a key login node is untouched, because the
+    nodes run their own sshd. Back up, the container keeps its state, so users, nodes and identity files work again; the step waits until `tctl status` answers."""
+    from . import teleport
+    if down:
+        r = runner(dc("stop", "-t", "1", "teleport"))
+        if r.returncode:
+            return f"stop teleport: {_fail(r)}"
+        _mark({"teleport-outage"}, set(), mark)
+        return ""
+    r = runner(dc("start", "teleport"))
+    if r.returncode:
+        return f"start teleport: {_fail(r)}"
+    _mark(set(), {"teleport-outage"}, mark)
+    return "" if teleport.wait_ready(runner, dc, sleep=sleep) else "teleport did not answer within 90 s after it was started"
+
+
+def _kubectl(sim: dict, runner: Callable, *args: str):
+    from . import k8s
+    return runner(k8s.kubectl_cmd(sim, *args))
+
+
+def _mark(add: set[str], drop: set[str], path: Path | None = None) -> None:
+    path = path or KUBE_MARK
+    try:
+        have = set(json.loads(path.read_text()))
+    except (OSError, ValueError):
+        have = set()
+    have = (have | add) - drop
+    if have:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(sorted(have)))
+    else:
+        path.unlink(missing_ok=True)
+
+
+def kube_rbac(do: dict, runner: Callable, sim: dict) -> str:
+    """The `tsh kube` faults that live in Kubernetes RBAC (ADR 0084 W4), each with a restore: delete a tier's binding (Teleport allows, Kubernetes says
+    forbidden) or the one that lets `teleport` impersonate (every request fails upstream); restore re-applies the fixture. Needs the k8s part."""
+    for tier in do.get("kube_binding_missing") or []:
+        kind, name, ns = KUBE_BINDINGS[tier]
+        r = _kubectl(sim, runner, "delete", kind, name, "--ignore-not-found", *(["-n", ns] if ns else []))
+        if r.returncode:
+            return f"kubernetes binding of the {tier} tier: {_fail(r)}"
+        _mark({f"binding:{tier}"}, set())
+    if do.get("kube_impersonation_revoked"):
+        r = _kubectl(sim, runner, "delete", "clusterrolebinding", KUBE_IMPERSONATION, "--ignore-not-found")
+        if r.returncode:
+            return f"kubernetes impersonation binding: {_fail(r)}"
+        _mark({"impersonation"}, set())
+    if do.get("kube_binding_restore") or do.get("kube_impersonation_revoked") is False:
+        r = _kubectl(sim, runner, "apply", "-f", KUBE_FIXTURE)
+        if r.returncode:
+            return f"kubernetes RBAC fixture: {_fail(r)}"
+        _mark(set(), {"impersonation", *(f"binding:{t}" for t in KUBE_BINDINGS)})
     return ""
 
 

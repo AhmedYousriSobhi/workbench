@@ -152,3 +152,18 @@ def test_slurm_step_and_trace_accept_only_known_names_and_node_names():
 def test_refresh_jira_licence_takes_no_arguments():
     d = lambda r: control.dispatch(json.dumps(r).encode(), lambda c, q: {"ok": True}, lambda: {"compute"})
     assert d({"cmd": "refresh-jira-licence"})["ok"]
+
+
+def test_k8s_step_accepts_only_fixed_keys_with_validated_values():
+    d = lambda do: control.dispatch(json.dumps({"cmd": "k8s-step", "do": do}).encode(), lambda c, q: {"ok": True}, lambda: {"compute"})
+    for good in ({"down": ["kcn001"]}, {"up": ["kgpu001", "kgpu002"]}, {"cordon": ["kcn001"]}, {"uncordon": ["kcn001"]},
+                 {"pod": {"namespace": "team-a", "name": "crash-1", "fault": "crashloop", "gpus": 2, "node": "kgpu001"}},
+                 {"delete_pod": {"namespace": "team-a", "name": "crash-1"}}, {"scale": {"namespace": "team-a", "deploy": "web", "replicas": 3}}):
+        assert d(good)["ok"], good
+    for bad in ({}, {"apply": ["x.yaml"]}, {"drain": {"node": "kcn001"}}, {"down": []}, {"down": ["kcn001; rm"]}, {"down": "kcn001"}, {"down": ["a" * 9 + "001"]},
+                {"pod": {"namespace": "team-a"}}, {"pod": {"namespace": "A b", "name": "x"}}, {"pod": {"namespace": "a", "name": "x", "fault": "rm -rf"}},
+                {"pod": {"namespace": "a", "name": "x", "gpus": 99}}, {"pod": {"namespace": "a", "name": "x", "image": "evil"}},
+                {"delete_pod": {"namespace": "a", "name": "x", "extra": 1}}, {"scale": {"namespace": "a", "deploy": "web", "replicas": 1000}},
+                {"scale": {"namespace": "a", "deploy": "web", "replicas": True}}, "down", None):
+        assert d(bad)["ok"] is False, bad
+    assert control.dispatch(b'{"cmd": "k8s-step"}', lambda c, q: {"ok": True}, lambda: set())["ok"] is False

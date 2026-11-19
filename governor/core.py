@@ -32,7 +32,7 @@ LAB_VALIDATE_MB = 250  # a lab validation one-shot set (P5, ADR 0050: the replay
 CHANGE_MAX_LEVEL = 1  # scale/set-profile fork docker; GV-8 forbids that under pressure (L2+)
 RUN_EXCLUSIVE = {"scale", "set-profile", "apply-plan", "lab-apply", "lab-restore", "lab-validate", "admit"}  # would change the cluster under a lab run
 NODE_IN = re.compile(r"(?:^|-)[a-z]{2,8}[0-9]{3}(?:-|$)")  # a node container (workbench-cn001-1), not a service
-INTERFERING = {"node-state", "freeze", "thaw", "stop", "start", "netem-set", "submit-job", "slurm-step"}  # allowed during a run, recorded
+INTERFERING = {"node-state", "freeze", "thaw", "stop", "start", "netem-set", "submit-job", "slurm-step", "k8s-step"}  # allowed during a run, recorded
 
 
 class Governor:
@@ -472,6 +472,9 @@ class Governor:
                 args = (["set", "slurmd", req["node"], what.removeprefix("slurmd-")] if what.startswith("slurmd-")
                         else ["set", "slurmctld", "restart"] if what == "slurmctld-restart" else ["remove", "jobs"])
                 return self._change(f"slurm-step={what}" + (f":{req['node']}" if req.get("node") else ""), args)
+            if cmd == "k8s-step":  # issue 386: a scenario's Kubernetes step, validated in control.py and again by benchctl; kubectl runs as the user
+                do = req["do"]
+                return self._change(f"k8s-step={','.join(sorted(do))}", ["set", "k8s-step", json.dumps(do, sort_keys=True)])
             if cmd in ("lab-apply", "lab-restore"):  # issue 553: only at L0-L1 (in _change), one change at a time, audit-logged there
                 if (err := self._lab_missing(req)):
                     return err

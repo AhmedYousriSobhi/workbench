@@ -132,6 +132,32 @@ def set_slurmctld(action: str = typer.Argument(..., help="restart")) -> None:
     _daemon({"slurmctld_restart": True}, "slurmctld: restart")
 
 
+@set_app.command("k8s-step")
+def set_k8s_step(do: str = typer.Argument(..., help="a scenario's `k8s` step as JSON, e.g. '{\"down\": [\"kcn001\"]}'")) -> None:
+    """`benchctl set k8s-step '{"down": ["kcn001"]}'` plays one Kubernetes scenario step now (node down, up, cordon, uncordon, pod, delete_pod, scale,
+    drain and the rest of the `k8s` keys): the page asks the governor for it because the page has no Docker (issue 386). It is checked
+    against this cluster's Kubernetes nodes before anything runs."""
+    import json
+
+    from .. import k8s
+
+    try:
+        step = json.loads(do)
+    except ValueError as e:
+        typer.echo(f"not JSON: {e}", err=True)
+        raise typer.Exit(1) from e
+    if not isinstance(step, dict):
+        typer.echo("a k8s step is a JSON object", err=True)
+        raise typer.Exit(1)
+    sim = k8s.current_sim()
+    if bad := k8s.step_problems(step, {n for n, _ in k8s.node_list(sim)}):
+        typer.echo("\n".join(bad), err=True)
+        raise typer.Exit(1)
+    o = scenario.execute(scenario.Step(0, "k8s", step), host=True, runner=lambda c: stack._run(c))
+    typer.echo("k8s step done" if o.status == "ok" else f"cannot play the k8s step: {o.detail}", err=o.status != "ok")
+    raise typer.Exit(0 if o.status == "ok" else 1)
+
+
 @set_app.command("check")
 def set_check(name: str = CHECK, state: str = typer.Argument(None, help="on or off"), sets: list[str] = SETS, position: int = POSITION) -> None:
     """Switch a check on or off, change its parameters, or move it: `benchctl set check gpu-xid off`, `... set check gpu-hot --set max=90`, `... --position 1`."""

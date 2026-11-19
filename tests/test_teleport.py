@@ -18,7 +18,7 @@ def cp(code=0, out="", err=""):
 
 
 def test_settings_default_and_validated():
-    assert teleport.settings({}) == {"version": teleport.DEFAULT_VERSION, "cert_ttl": "12h"}
+    assert teleport.settings({}) == {"version": teleport.DEFAULT_VERSION, "cert_ttl": "12h", "kube_tier": {}}
     assert teleport.image({"teleport": {"version": "15.4.0"}}).endswith("teleport-distroless:15.4.0")
     with pytest.raises(teleport.TeleportError, match="version"):
         teleport.settings({"teleport": {"version": "latest"}})
@@ -96,7 +96,7 @@ def test_prepare_drops_certificates_signed_by_a_cluster_that_no_longer_exists(tm
 
 def run_bootstrap(tmp_path, runner, **kw):
     msgs = []
-    ok = teleport.bootstrap(SIM, IPS, runner, stack.dc, msgs.append, secrets=tmp_path,
+    ok = teleport.bootstrap(kw.pop("sim", SIM), IPS, runner, stack.dc, msgs.append, secrets=tmp_path,
                             fetch=kw.pop("fetch", lambda: "ssh-ed25519 AAAA\n"), sleep=lambda s: None, **kw)
     return ok, msgs
 
@@ -372,13 +372,51 @@ def test_config_has_a_kubernetes_service_only_when_the_k8s_part_is_selected():
     assert "kube_listen_addr" not in on["proxy_service"] and on["auth_service"]["proxy_listener_mode"] == "multiplex"
 
 
-def test_the_role_grants_the_viewers_group_only_with_the_k8s_part():
-    role = lambda kube: yaml.safe_load_all(teleport.resources(SIM, IPS, kube))
-    off = next(role(False))["spec"]["allow"]
-    on = next(role(True))["spec"]["allow"]
-    assert "kubernetes_groups" not in off and "kubernetes_labels" not in off
-    assert on["kubernetes_groups"] == [teleport.KUBE_GROUP] and on["kubernetes_labels"] == {"*": "*"}
-    assert on["logins"] == off["logins"]
+def test_the_base_role_is_ssh_only_and_the_tiers_are_roles_of_their_own_with_the_k8s_part():
+    off = list(yaml.safe_load_all(teleport.resources(SIM, IPS, False)))
+    on = list(yaml.safe_load_all(teleport.resources(SIM, IPS, True)))
+    base = on[0]
+    assert base["version"] == "v8" and base["metadata"]["name"] == teleport.ROLE and off[0]["version"] == "v8"
+    assert set(base["spec"]["allow"]) == {"logins", "node_labels"}  # no Kubernetes grant: a tier is never added to every user
+    assert base["spec"]["allow"]["logins"] == off[0]["spec"]["allow"]["logins"]
+    assert not any(d["metadata"]["name"].startswith("workbench-kube-") for d in off if d["kind"] == "role")
+    tiers = {d["metadata"]["name"]: d["spec"]["allow"] for d in on if d["kind"] == "role" and d["metadata"]["name"] != teleport.ROLE}
+    assert set(tiers) == {"workbench-kube-viewer", "workbench-kube-developer", "workbench-kube-admin"}
+    assert all(d["version"] == "v8" for d in on if d["kind"] == "role")
+    groups = {n: a["kubernetes_groups"] for n, a in tiers.items()}
+    assert groups["workbench-kube-viewer"] == [teleport.KUBE_GROUP] and len({g[0] for g in groups.values()}) == 3
+    ns = {n: a["kubernetes_resources"][0]["namespace"] for n, a in tiers.items()}
+    assert ns == {"workbench-kube-viewer": "*", "workbench-kube-developer": "team-a", "workbench-kube-admin": "*"}
+    assert all(r["api_group"] == "*" and r["kind"] == "*" for a in tiers.values() for r in a["kubernetes_resources"])
+
+
+def test_a_user_is_a_viewer_unless_sim_yaml_names_another_tier():
+    sim = {**SIM, "teleport": {"kube_tier": {"bob": "developer", "alice": "admin"}}}
+    assert [teleport.tier_of(SIM, u) for u in ("alice", "bob")] == ["viewer", "viewer"]
+    assert teleport.user_roles(sim, "bob", True) == [teleport.ROLE, "workbench-kube-developer"]
+    assert teleport.user_roles(sim, "bob", False) == [teleport.ROLE]  # the tier only matters with the k8s part
+    assert "workbench-kube-admin" in teleport.user_resource("alice", teleport.user_roles(sim, "alice", True))
+
+
+@pytest.mark.parametrize("tiers, word", [({"carol": "admin"}, "not in users"), ({"bob": "root"}, "must be one of"), (["bob"], "must map")])
+def test_a_bad_kube_tier_says_which_user_and_what_is_allowed(tiers, word):
+    with pytest.raises(teleport.TeleportError, match=word):
+        teleport.settings({**SIM, "teleport": {"kube_tier": tiers}})
+
+
+def test_bootstrap_sets_the_roles_of_an_existing_user_without_replacing_it(tmp_path):
+    (tmp_path / "hosts").mkdir()
+    calls = []
+
+    def runner(cmd):
+        calls.append(cmd[cmd.index("tctl") + 1:])
+        return cp()
+
+    sim = {**SIM, "teleport": {"kube_tier": {"bob": "developer"}}}
+    ok, _ = run_bootstrap(tmp_path, runner, sim=sim, kube=True)
+    assert ok and ["users", "update", "bob", "--set-roles=workbench-user,workbench-kube-developer"] in calls
+    assert ["users", "update", "alice", "--set-roles=workbench-user,workbench-kube-viewer"] in calls
+    assert not any(c[0] == "create" and "user-" in c[-1] for c in calls)
 
 
 def test_the_rbac_fixture_lets_teleport_impersonate_and_binds_the_group_to_the_read_only_role():
@@ -391,7 +429,14 @@ def test_the_rbac_fixture_lets_teleport_impersonate_and_binds_the_group_to_the_r
     assert binds["workbench-teleport"]["subjects"] == [{"kind": "User", "name": "teleport"}]
     viewers = binds["workbench-teleport-viewers"]
     assert viewers["subjects"][0]["name"] == teleport.KUBE_GROUP and viewers["roleRef"]["name"] == "workbench-viewer"
-    assert "cluster-admin" not in (ROOT / "k8s/fixtures/47-rbac-teleport.yaml").read_text()
+    # tiers (ADR 0084 W1): developers get a RoleBinding in team-a only, admins the built-in cluster-admin through their own group
+    dev = next(d for d in docs if d["kind"] == "RoleBinding")
+    assert dev["metadata"]["namespace"] == "team-a" and dev["subjects"][0]["name"] == teleport.TIER_GROUPS["developer"]
+    devrole = next(d for d in docs if d["kind"] == "Role")
+    assert all("secrets" not in r["resources"] and "nodes" not in r["resources"] for r in devrole["rules"])  # a Teleport-allowed request Kubernetes refuses
+    assert binds["workbench-teleport-admins"]["subjects"][0]["name"] == teleport.TIER_GROUPS["admin"]
+    assert binds["workbench-teleport-admins"]["roleRef"]["name"] == "cluster-admin"
+    assert [b["roleRef"]["name"] for n, b in binds.items() if "viewers" in n] == ["workbench-viewer"]
 
 
 def test_prepare_writes_a_token_kubeconfig_without_host_paths_and_reports_a_change(tmp_path):

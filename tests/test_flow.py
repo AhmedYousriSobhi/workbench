@@ -237,7 +237,7 @@ def test_scenario_steps_and_fault_buttons_become_injector_events(tmp_path, monke
     sim = yaml.safe_load((ROOT / "sim.yaml").read_text())
     f = make_flow(FakeMocks())
     runs = Runs(tmp_path, sim, f)
-    monkeypatch.setattr(scenario, "execute", lambda step, *a: scenario.Outcome(
+    monkeypatch.setattr(scenario, "execute", lambda step, *a, **k: scenario.Outcome(
         step.target, "skipped" if step.target == "slurm" else "ok", ""))
     runs.start("t", 1000)
     deadline = time.time() + 5

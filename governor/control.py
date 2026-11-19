@@ -12,7 +12,7 @@ from . import netem
 
 log = logging.getLogger("governor.control")
 
-ALLOWED = {"status", "scale", "freeze", "thaw", "stop", "start", "set-profile", "admit", "apply-plan", "node-state", "submit-job", "slurm-step", "slurm-trace", "slurm-stats", "capture-start", "capture-read", "capture-stop", "kube-audit", "refresh-jira-licence", "ticket-bot-set", "ticket-bot-get", "netem-set", "netem-clear"}
+ALLOWED = {"status", "scale", "freeze", "thaw", "stop", "start", "set-profile", "admit", "apply-plan", "node-state", "submit-job", "slurm-step", "k8s-step", "slurm-trace", "slurm-stats", "capture-start", "capture-read", "capture-stop", "kube-audit", "refresh-jira-licence", "ticket-bot-set", "ticket-bot-get", "netem-set", "netem-clear"}
 LAB_VERBS = {"lab-validate"}  # the config lab verbs (ADR 0049); issue 553 adds lab-apply and lab-restore here
 ALLOWED |= LAB_VERBS
 LAB_APPLY_VERBS = {"lab-apply", "lab-restore"}  # issue 553: apply a side of a lab; return to the plain cluster (never the A/B snapshot restore, which gets its own name)
@@ -31,12 +31,49 @@ LAB_NAME_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,40}")  # mirrors benchctl.lab.NAM
 NODE_RE = re.compile(r"[a-z]{2,8}[0-9]{3}")  # sim.yaml node names: cn001, gpu002
 SLURM_STEPS = ("slurmd-restart", "slurmd-stop", "slurmd-start", "slurmctld-restart", "cancel-jobs")  # resilience scenarios (#220)
 NODE_STEPS = ("slurmd-restart", "slurmd-stop", "slurmd-start")
+K8S_NAME_RE = re.compile(r"[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?")  # mirrors benchctl.k8s._NAME (a DNS-1123 label)
+K8S_FAULTS = ("crashloop", "oom", "imagepull", "jobfail")  # mirrors benchctl.k8s.FAULTS
+K8S_NODE_KEYS = ("down", "up", "cordon", "uncordon")  # node steps; the only other keys are pod, delete_pod and scale (issue 386)
 TICKET_RANGES = {"every": (10, 3600), "resolve": (10, 86400), "ignore": (0, 1), "reopen": (0, 1)}  # mirrors benchctl.workload.TICKET_KEYS
 REASON_RE = re.compile(r"[A-Za-z0-9 .,:_/()+-]{0,60}")  # a drain reason: short, no shell characters
 LOGIN_MODES = {"ssh", "teleport", "both"}  # mirrors benchctl.logins.MODES
 BMC_GROUPS = {"slurm-cpu", "slurm-gpu", "k8s-cpu", "k8s-gpu"}  # mirrors benchctl.nodes.GROUPS
 LOGIN_KINDS = {"slurm", "k8s", "both"}  # mirrors benchctl.logins.KINDS; an entry is MODE or MODE:KIND
 PLAN_PARTS = {"jira", "jira-real", "bmc", "bcm", "accounting", "teleport", "k8s", "jump", "dcgm", "real-gpu", "objectstore"}  # mirrors benchctl.workbench.PARTS
+
+
+def _int(v, lo: int, hi: int) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool) and lo <= v <= hi
+
+
+def _kname(v) -> bool:
+    return isinstance(v, str) and K8S_NAME_RE.fullmatch(v) is not None
+
+
+def k8s_step_error(req: dict) -> str | None:
+    """`k8s-step` (issue 386): the page plays a scenario's Kubernetes step through the governor, which runs `benchctl set k8s-step` as the user.
+    Only these keys, each with a fixed shape and no free text: `down|up|cordon|uncordon` (1..8 node names), `pod` (namespace, name, optional fault from
+    a fixed list, gpus 0..8, node, priority_class), `delete_pod` (namespace, name), `scale` (namespace, deploy, replicas 0..100). benchctl checks it again against the cluster."""
+    do = req.get("do")
+    if not (isinstance(do, dict) and do and set(do) <= {*K8S_NODE_KEYS, "pod", "delete_pod", "scale"}):
+        return f"k8s-step needs do: an object with only {', '.join((*K8S_NODE_KEYS, 'pod', 'delete_pod', 'scale'))}"
+    for k in K8S_NODE_KEYS:
+        if k in do and not (isinstance(do[k], list) and 1 <= len(do[k]) <= 8 and all(isinstance(n, str) and NODE_RE.fullmatch(n) for n in do[k])):
+            return f"k8s-step {k} needs 1 to 8 node names"
+    if "pod" in do:
+        p = do["pod"]
+        if not (isinstance(p, dict) and set(p) <= {"namespace", "name", "fault", "gpus", "node", "priority_class"} and _kname(p.get("namespace")) and _kname(p.get("name"))
+                and p.get("fault") in (None, *K8S_FAULTS) and (p.get("gpus") is None or _int(p["gpus"], 0, 8))
+                and (p.get("node") is None or (isinstance(p["node"], str) and NODE_RE.fullmatch(p["node"])))
+                and (p.get("priority_class") is None or _kname(p["priority_class"]))):
+            return "k8s-step pod needs namespace and name (lowercase letters, digits, -), and optionally fault, gpus 0..8, node, priority_class"
+    if "delete_pod" in do and not (isinstance(do["delete_pod"], dict) and set(do["delete_pod"]) == {"namespace", "name"}
+                                   and _kname(do["delete_pod"]["namespace"]) and _kname(do["delete_pod"]["name"])):
+        return "k8s-step delete_pod needs namespace and name"
+    if "scale" in do and not (isinstance(do["scale"], dict) and set(do["scale"]) == {"namespace", "deploy", "replicas"}
+                              and _kname(do["scale"]["namespace"]) and _kname(do["scale"]["deploy"]) and _int(do["scale"]["replicas"], 0, 100)):
+        return "k8s-step scale needs namespace, deploy and replicas 0..100"
+    return None
 
 
 def lab_args_error(cmd: str, req: dict) -> str | None:
@@ -138,6 +175,8 @@ def dispatch(line: bytes, handle: Handler, groups: Callable[[], set[str]]) -> di
         if cmd == "slurm-step" and not (req.get("name") in SLURM_STEPS
                                         and (req["name"] not in NODE_STEPS or (isinstance(req.get("node"), str) and NODE_RE.fullmatch(req["node"])))):
             return {"ok": False, "error": f"slurm-step needs name: {'|'.join(SLURM_STEPS)} (and node:NAME for slurmd-*)"}
+        if cmd == "k8s-step" and (err := k8s_step_error(req)):
+            return {"ok": False, "error": err}
         if cmd == "slurm-trace" and not (isinstance(req.get("nodes"), list) and len(req["nodes"]) <= 8
                                          and all(isinstance(n, str) and NODE_RE.fullmatch(n) for n in req["nodes"])
                                          and isinstance(req.get("since"), (int, float)) and not isinstance(req.get("since"), bool)):

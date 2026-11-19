@@ -70,6 +70,14 @@ def req(base, path, method="GET", auth=True, headers=None):
         return e.code, e.read()
 
 
+def test_the_teleport_kube_route_needs_the_token_and_is_hidden_without_the_parts(ui, monkeypatch):
+    from webui import app as webapp
+    monkeypatch.setattr(webapp, "teleport_built", lambda: False)  # the saved selection of this checkout must not decide
+    assert req(ui, "/api/teleport-kube", auth=False)[0] == 401
+    code, body = req(ui, "/api/teleport-kube")
+    assert code == 200 and json.loads(body) == {"shown": False}
+
+
 def test_everything_needs_the_token(ui):
     assert req(ui, "/api/status", auth=False)[0] == 401
     assert req(ui, "/", auth=False)[0] == 401

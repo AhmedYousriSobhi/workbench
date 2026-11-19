@@ -135,6 +135,19 @@ def gpu_util_by_node(metrics: str) -> dict[str, list[float]]:
     return out
 
 
+def merge_k8s_state(api: tuple[str, str], hw: tuple[str, str]) -> tuple[str, str]:
+    """A Kubernetes card is the worse of the API's state (Ready, NotReady, cordoned) and the machine's (power, temperature, BCM): both
+    are named when both are wrong, so NotReady from an overheat reads `NotReady (Overheating (92 °C))`. A powered-off machine wins."""
+    if hw[0] == "down":
+        return hw
+    if hw[0] in ("ok", "unknown"):
+        return hw if api[0] == "unknown" else api
+    if api[0] in ("ok", "unknown"):
+        return hw
+    order = ("warn", "fault")
+    return (api[0] if order.index(api[0] if api[0] in order else "fault") >= order.index(hw[0]) else hw[0], f"{api[1]} ({hw[1]})")
+
+
 def classify(n: dict) -> tuple[str, str]:
     """(state key, plain label) for a node card; the most serious condition wins."""
     if n["power"] is None:
@@ -157,11 +170,11 @@ def classify(n: dict) -> tuple[str, str]:
 
 
 class Cluster:
-    def __init__(self, sim: dict, fetch=http_json, poster=scenario.post):
+    def __init__(self, sim: dict, fetch=http_json, poster=scenario.post, kube=None):
         self.sim = sim
         self.nodes = node_names(sim)
         self.gpus = sim.get("gpu", {}).get("gpus_per_node", 0)
-        self.fetch, self.poster = fetch, poster
+        self.fetch, self.poster, self.kube = fetch, poster, kube  # `kube(do)`: the governor plays a Kubernetes step (the page has no Docker, issue 386)
         self.probe = port_open  # replaced in tests
 
     def _try(self, *args):
@@ -176,10 +189,40 @@ class Cluster:
         return {"name": name, "kind": kind, "gpus": self.gpus if kind == "gpu" else 1 if kind == "real-gpu" else 0,
                 "power": bmc.get("power"), "temp": bmc.get("temp"), "fans_failed": bmc.get("fans_failed", 0)}
 
+    @staticmethod
+    def _enrich(row: dict, exp: dict, bcm: dict) -> None:
+        """Add the GPU exporter's and the BCM's facts to a card and classify it (the Slurm and the Kubernetes nodes alike)."""
+        e = exp.get(row["name"], {})
+        u = e.get("gpu_util")
+        if u:
+            row["gpu_util"], row["gpus_busy"] = round(sum(u) / len(u)), sum(1 for x in u if x >= 50)
+        row["bcm"] = bcm.get(row["name"])
+        row["xid"] = e.get("xid", 0)
+        row["ib_down"], row["nic_flap"] = e.get("ib_down", 0), bool(e.get("nic_flap"))
+        row["state"], row["label"] = classify(row)
+
+    def hardware(self) -> dict[str, str]:
+        """{name: kind} of every node with a BMC: the Slurm nodes, and the Kubernetes nodes when that part is built (kind k8s-cpu or k8s-gpu)."""
+        out = dict(self.nodes)
+        if k8s_built():
+            from benchctl import k8s
+
+            out.update({n: "k8s-gpu" if g.get("gpus") else "k8s-cpu" for n, g in k8s.node_list(k8s.current_sim())})
+        return out
+
+    def live_sim(self) -> dict:
+        """The simulation with the Kubernetes part as the running cluster has it (the page's own sim is the repository's)."""
+        if not k8s_built():
+            return self.sim
+        from benchctl import k8s
+
+        cur = k8s.current_sim().get("kubernetes") or self.sim.get("kubernetes") or {}
+        return {**self.sim, "kubernetes": {**cur, "enabled": True}}
+
     def tickets(self, node: str) -> list[dict] | None:
         """The jira-mock's tickets for one node: the search `labels = "node-<name>"` (the mock labels the tickets its ops integration files that
         way). Whether a real Jira labels them is not known, so this reads the mock only. None when the mock does not answer; raises KeyError for an unknown node."""
-        if node not in {n for n, _ in self.nodes}:
+        if node not in self.hardware():
             raise KeyError(node)
         jql = urllib.parse.quote(f'labels = "node-{node}" ORDER BY created DESC')
         got = self._try(f"{JIRA}/rest/api/2/search?jql={jql}&maxResults=10&fields=summary,status,priority")
@@ -221,14 +264,7 @@ class Cluster:
         exp = self._try(f"{EXPORTER}/sim/summary")
         exp = exp if isinstance(exp, dict) else {}
         for row in rows:
-            e = exp.get(row["name"], {})
-            u = e.get("gpu_util")
-            if u:
-                row["gpu_util"], row["gpus_busy"] = round(sum(u) / len(u)), sum(1 for x in u if x >= 50)
-            row["bcm"] = bcm.get(row["name"])
-            row["xid"] = e.get("xid", 0)
-            row["ib_down"], row["nic_flap"] = e.get("ib_down", 0), bool(e.get("nic_flap"))
-            row["state"], row["label"] = classify(row)
+            self._enrich(row, exp, bcm)
         for row in rows:
             if row["kind"] == "real-gpu":  # no BMC entry yet (issue 431): the card's own exporter says whether it is up and how busy it is
                 text = self._try(f"{REAL_GPU}/metrics")
@@ -243,25 +279,29 @@ class Cluster:
         if k8s_built():  # the Kubernetes nodes are their own group beside the Slurm nodes; their state is the API's (read-only user)
             from benchctl import k8s
 
-            rows += k8s.node_rows(k8s.current_sim())
+            for api in k8s.node_rows(k8s.current_sim()):  # the card adds the machine's power, temperature and BCM state to the API's (#385)
+                row = {**self._node(api["name"], "k8s", bmc.get(api["name"])), "gpus": api["gpus"]}
+                self._enrich(row, exp, bcm)
+                row["state"], row["label"] = merge_k8s_state((api["state"], api["label"]), classify(row))
+                rows.append(row)
         return {"services": dict(zip(names, up, strict=True)), "nodes": rows, "logins": [{**lg, "up": self.probe(lg["ip"])} if lg.get("ip") else lg for lg in saved_logins(self.sim)],
                 "actions": [{"id": a, "label": v[0], "gpu_only": v[1]} for a, v in ACTIONS.items()]}
 
     def act(self, node: str, action: str) -> list[dict]:
         """Apply a fault action to one node; returns each step's outcome. Raises ActionError for bad input."""
-        kinds = dict(self.nodes)
+        kinds = self.hardware()
         if node not in kinds:
             raise ActionError(f"unknown node {node!r}")
         if action not in ACTIONS:
             raise ActionError(f"unknown action {action!r}")
         _, gpu_only, steps = ACTIONS[action]
-        if gpu_only and kinds[node] not in ("gpu", "real-gpu"):
+        if gpu_only and kinds[node] not in ("gpu", "real-gpu", "k8s-gpu"):
             raise ActionError(f"{ACTIONS[action][0]} only applies to GPU nodes")
         out = []
         for target, do in steps:
-            if action == "clear" and target == "gpu-exporter" and kinds[node] != "gpu":
+            if action == "clear" and target == "gpu-exporter" and kinds[node] not in ("gpu", "k8s-gpu"):
                 continue
             o = scenario.execute(scenario.Step(0, target, {"nodes": [node], **do}), poster=self.poster,
-                                 host=False)
+                                 host=False, sim=self.live_sim(), kube=self.kube)
             out.append({"target": target, "status": o.status, "detail": o.detail})
         return out

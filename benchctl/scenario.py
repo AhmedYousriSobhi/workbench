@@ -30,7 +30,7 @@ from . import (
     slurmupgrade,
     topology,
 )
-from .nodes import node_names
+from .nodes import hardware_nodes, k8s_node_names
 
 ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "http://127.0.0.1:8000/sim/inject",
              "bcm-mock": "http://127.0.0.1:8081/sim/inject", "jira": "http://127.0.0.1:8080/sim/failure",
@@ -45,6 +45,7 @@ JIRA_REAL_URL = "http://127.0.0.1:8083"
 JIRA_REAL_MODES = ("outage", "restore", "bad_logins", "clear_logins", "rate_limit", "rate_limit_off", "token_revoke", "token_restore",
                    "proxy_503", "proxy_429", "proxy_slow", "proxy_off")  # real faults on the real Jira (issue 303); proxy_* through benchctl/jira_proxy.py (issue 305)
 JIRA_REAL_TICKET_ACTIONS = ("create", "transition", "comment")  # `tickets:` steps on the real Jira go through the REST driver (issue 306)
+K8S_PAGE_KEYS = ("down", "up", "cordon", "uncordon", "pod", "delete_pod", "scale")  # the k8s keys the governor plays for the page; mirrors governor.control (issue 386)
 HOST_TARGETS = ("slurm", "slurm-upgrade", "ssh", "jira-real", "k8s", "dcgm", "auth", "netem")  # steps that need Docker (or the root governor service, netem) on the host
 SSH_STATES = ("down", "up", "hung")
 NODE_SSHD_STATES = ("down", "up")
@@ -123,6 +124,8 @@ def page_support(step: Step) -> str:
     """"" when the Web UI can run the step (it has no Docker: only the governor's Slurm steps), else why not. The same rules as `_apply` with host=False."""
     if step.target == "switch" or step.target == "slurm" and (set(step.do) & set(DAEMON_KEYS) or set(step.do) & set(SLURM_STATES)):
         return ""
+    if step.target == "k8s" and set(step.do) <= set(K8S_PAGE_KEYS):  # the governor's `k8s-step` (issue 386)
+        return ""
     if step.target in HOST_TARGETS:
         return f"{step.target} steps need the host CLI (no Docker access in the page)"
     return ""
@@ -188,7 +191,9 @@ TARGET_PART = {"bmc-farm": "bmc-farm", "bcm-mock": "bcm-mock", "gpu-exporter": "
 NODE_KEYS = ("nodes", "drain", "down", "resume", "power_off", "power_on", "slurmd_stop", "slurmd_start", "slurmd_restart", "power_down",
              "power_up", "reboot", "up", "cordon", "uncordon", "munge_wrong_key", "munge_restore")
 AUTH_PART = {"slurm_token_ttl": "slurmrestd", "teleport_cert_ttl": "teleport", "teleport_cert_restore": "teleport", "munge_wrong_key": "slurmctld",
-             "munge_restore": "slurmctld", "bmc_tls_expired": "bmc-farm", "k8s_cert_expired": "k8s-api"}
+             "munge_restore": "slurmctld", "bmc_tls_expired": "bmc-farm", "k8s_cert_expired": "k8s-api",
+             "kube_binding_missing": "k8s-api", "kube_impersonation_revoked": "k8s-api", "kube_binding_restore": "k8s-api",
+             "teleport_outage": "teleport"}
 UPGRADE_PART = {"slurmdbd": "slurmdbd", "slurmctld": "slurmctld", "slurmrestd": "slurmrestd", "login": "login"}
 
 
@@ -264,7 +269,7 @@ def fault_steps(steps: list[dict]) -> list[dict]:
 def validate(sc: dict, sim: dict) -> list[str]:
     """Problems found without touching the stack: unknown targets, nodes or durations."""
     problems = []
-    nodes = {n for n, _ in node_names(sim)}
+    nodes = {n for n, _ in hardware_nodes(sim)}  # Slurm and Kubernetes nodes: both have a BMC and a BCM entry (#385)
     for e, exp in enumerate(sc.get("expect") or [], 1):
         problems += [f"expect {e}: {m}" for m in expect_problems(exp)]
     for i, s in enumerate(sc.get("steps", []), 1):
@@ -455,7 +460,7 @@ def power_commands(do: dict) -> list[list[str]]:
     return cmds
 
 
-def side_effects(step: Step) -> list[Step]:
+def side_effects(step: Step, sim: dict | None = None) -> list[Step]:
     """A power change on the BMC is also a change on the BCM, the GPU exporter and the node itself (and so in Slurm):
     a scenario says it once, as the page's Power off does. `clear` powers the node on again, so it thaws it too. Every
     fault also files, and every recovery resolves, the node's Jira ticket (the mock's `fault` action, #157)."""
@@ -494,11 +499,19 @@ def side_effects(step: Step) -> list[Step]:
                                                       "detail": "The node reports healthy again."}}) for k in recovered]
     on = do.get("power") == "On" or bool(do.get("clear"))
     real = dcgm_steps(step, nodes)
+    kube = k8s_node_names(sim if sim is not None else k8s.current_sim())  # a Kubernetes node is NotReady when its machine is off or too hot (#385)
+    kn, sn = [n for n in nodes if n in kube], [n for n in nodes if n not in kube]
+    kube_steps = []
+    if kn and step.target == "bmc-farm":
+        if do.get("power") == "Off" or float(do.get("temp") or 0) >= 85:
+            kube_steps.append(Step(step.at, "k8s", {"down": kn}))
+        elif on:
+            kube_steps.append(Step(step.at, "k8s", {"up": kn}))
     if step.target != "bmc-farm" or (do.get("power") != "Off" and not on):
-        return [*real, *tickets]
+        return [*real, *kube_steps, *tickets]
     return [Step(step.at, "bcm-mock", {"nodes": nodes, "state": "UP" if on else "DOWN"}),
             Step(step.at, "gpu-exporter", {"nodes": nodes, "down": not on}), *real,
-            Step(step.at, "slurm", {"power_on" if on else "power_off": nodes}), *tickets]
+            *([Step(step.at, "slurm", {"power_on" if on else "power_off": sn})] if sn else []), *kube_steps, *tickets]
 
 
 def dcgm_steps(step: Step, nodes: list[str]) -> list[Step]:
@@ -528,20 +541,20 @@ def _dcgm(step: Step, label: str, runner) -> Outcome:
     return Outcome(label, "ok", f"{verb} {done} real exporter(s)" if done else "no real exporter on these nodes")
 
 
-def execute(step: Step, poster=post, runner=checks.run, host: bool = True, slurm=None, daemon=None) -> Outcome:
+def execute(step: Step, poster=post, runner=checks.run, host: bool = True, slurm=None, daemon=None, sim: dict | None = None, kube=None) -> Outcome:
     """Apply one step (and what it implies, see side_effects); the label names what was done, status says whether it worked.
 
     host=False is for callers without Docker access (the Web UI): `slurm(node, state, reason)` (the governor) takes
     Slurm steps when given, otherwise they are skipped, not attempted; `daemon(do)` -> (done, why not) takes the job and
-    daemon steps (DAEMON_KEYS) the same way.
+    daemon steps (DAEMON_KEYS) the same way, and `kube(do)` -> (done, why not) the `k8s` steps of K8S_PAGE_KEYS (issue 386).
     """
-    main = _apply(step, poster, runner, host, slurm, daemon)
+    main = _apply(step, poster, runner, host, slurm, daemon, kube)
     if main.status != "ok":
         return main
     lab_interference.record(f"scenario step {','.join(sorted(step.do))}", step.target, "scenario")  # issue 554: a lab run is then not comparable
     failed, notes = [], []
-    for extra in side_effects(step):
-        o = _apply(extra, poster, runner, host, slurm, daemon)
+    for extra in side_effects(step, sim):
+        o = _apply(extra, poster, runner, host, slurm, daemon, kube)
         if extra.target == "jira" and o.status == "failed":  # no Jira in this cluster: a fault is still a fault
             o = Outcome(o.label, "skipped", "no Jira to file the ticket in")
         (failed if o.status == "failed" else notes if o.status == "skipped" else []).append(f"{extra.target}: {o.detail}")
@@ -550,13 +563,13 @@ def execute(step: Step, poster=post, runner=checks.run, host: bool = True, slurm
     return Outcome(main.label, "ok", "; ".join(notes))
 
 
-def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcome:
+def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None, kube=None) -> Outcome:
     label = f"{step.target} {json.dumps(step.do, sort_keys=True)}"
     if step.target == "switch":  # a leaf switch is its nodes: down drains exactly those, up resumes exactly those (issue 543)
         sim = k8s.current_sim()
         if topology.switch_problems(step.do, sim):
             return Outcome(label, "failed", "; ".join(topology.switch_problems(step.do, sim)))
-        inner = _apply(Step(step.at, "slurm", topology.switch_step(step.do, sim)), poster, runner, host, slurm, daemon)
+        inner = _apply(Step(step.at, "slurm", topology.switch_step(step.do, sim)), poster, runner, host, slurm, daemon, kube)
         return Outcome(label, inner.status, inner.detail)
     if step.target == "slurm" and not host and daemon and set(step.do) & set(DAEMON_KEYS):  # no Docker: the governor does it
         ok, detail = daemon(step.do)
@@ -568,6 +581,9 @@ def _apply(step: Step, poster, runner, host: bool, slurm, daemon=None) -> Outcom
                 if not ok:
                     return Outcome(label, "skipped", detail)  # a refusal (calm levels only) is not a failure of the scenario
         return Outcome(label, "ok")
+    if step.target == "k8s" and not host and kube and set(step.do) <= set(K8S_PAGE_KEYS):  # no Docker: the governor does it (issue 386)
+        ok, detail = kube(step.do)
+        return Outcome(label, "ok" if ok else "skipped", detail)  # the part being off, or a refusal at a busy level, is not a failure of the scenario
     if step.target in HOST_TARGETS and not host:
         return Outcome(label, "skipped", f"{step.target} steps need the host CLI (no Docker access here)")
     try:
@@ -938,7 +954,7 @@ def check_expect(exp: dict, factor: float, sleep=time.sleep, clock=time.monotoni
 
 def run(sc: dict, speed: float = 1.0, dilation: float = 1.0, say=print, sleep=time.sleep, clock=time.monotonic,
         poster=post, runner=checks.run, host: bool = True, should_stop=lambda: False,
-        on_step=lambda step, outcome: None, on_expect=lambda outcome: None, slurm=None, daemon=None,
+        on_step=lambda step, outcome: None, on_expect=lambda outcome: None, slurm=None, daemon=None, kube=None,
         on_before=lambda step: None) -> Report:
     """Play the scenario: wait for each step's time (divided by speed x time_dilation) and apply it.
 
@@ -998,7 +1014,7 @@ def run(sc: dict, speed: float = 1.0, dilation: float = 1.0, say=print, sleep=ti
             report.stopped = True
             return report
         on_before(step)
-        outcome = execute(step, poster, runner, host, slurm, daemon)
+        outcome = execute(step, poster, runner, host, slurm, daemon, kube=kube)
         report.steps.append(outcome)
         on_step(step, outcome)
         say(f"[{step.at:6.1f}s] {outcome.status:7} {outcome.label}" + (f"  ({outcome.detail})" if outcome.detail else ""))

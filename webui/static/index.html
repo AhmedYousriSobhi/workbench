@@ -198,7 +198,7 @@
       <div class="scnopts"><label class="small">Speed <select id="speed" aria-label="Playback speed for every scenario"><option value="1">1× real time</option><option value="5">5×</option><option value="20">20×</option></select></label>
         <label class="small u-fc6"><input type="checkbox" id="trace"> Slurm trace</label></div>
       <ul class="scns" id="list"><li class="skel">Loading…</li></ul>
-      <details class="small dim"><summary>How steps run</summary><p>The page has no Docker, so it runs Slurm steps through the governor (started with <code>--workdir</code>) and the mocks' own endpoints. Steps that need the host are marked “CLI only” before you play; run those with <code>./scripts/benchctl scenario run NAME --trace</code>.</p></details>
+      <details class="small dim"><summary>How steps run</summary><p>The page has no Docker, so it runs Slurm steps, and Kubernetes node and pod steps, through the governor (started with <code>--workdir</code>) and the mocks' own endpoints. Steps that need the host are marked “CLI only” before you play; run those with <code>./scripts/benchctl scenario run NAME --trace</code>.</p></details>
     </section>
     <section class="trun-main" aria-label="Test run" aria-live="polite">
       <div class="panel" id="run-empty"><h2>Run a test</h2><p class="dim">Pick a scenario on the left. You will see what it does, step by step, and which steps this page cannot run, before anything starts. Then play it, watch what your client calls, and export a report for the bug.</p></div>

@@ -33,11 +33,11 @@ from starlette.routing import Route
 
 from benchctl import checks, nhc, scenario, slurmtrace
 
-from . import monitoring, traffic
+from . import monitoring, telekube, traffic
 from .blast import payload as blast_payload
 from .blast import preview as blast_preview
 from .blast import step_blast
-from .cluster import ActionError, Cluster
+from .cluster import TELEPORT, ActionError, Cluster, http_json, k8s_built, teleport_built
 from .flow import PAUSE_LEVEL, Flow
 from .graph import attach as attach_graph
 from .kubeaudit import KubeAudit
@@ -112,9 +112,9 @@ class SharedStatus:
 class Runs:
     """At most one scenario at a time; state is what the page polls."""
 
-    def __init__(self, root: Path, sim: dict, flow: Flow | None = None, slurm=None, daemon=None, trace=None, clock=time.monotonic, wall=time.time,
+    def __init__(self, root: Path, sim: dict, flow: Flow | None = None, slurm=None, daemon=None, kube=None, trace=None, clock=time.monotonic, wall=time.time,
                  counters=None):
-        self.root, self.sim, self.flow, self.slurm, self.daemon, self.trace = root, sim, flow, slurm, daemon, trace
+        self.root, self.sim, self.flow, self.slurm, self.daemon, self.kube, self.trace = root, sim, flow, slurm, daemon, kube, trace
         # `counters()` reads the mocks' request counters now ({totals, errors, reachable}); a run keeps them at Play and at its end, so
         # `benchctl export test-report` can say what the client called during the run, with no browser open (issue 739). None: not kept.
         self.counters = counters
@@ -273,7 +273,7 @@ class Runs:
         try:
             rep = scenario.run(sc, speed=speed, dilation=float(self.sim.get("time_dilation", 1.0)), say=lambda m: None,
                                host=False, should_stop=self.stop_flag.is_set, on_step=on_step, on_expect=on_expect,
-                               slurm=self.slurm, daemon=self.daemon, on_before=tracer.before_step if tracer else lambda step: None)
+                               slurm=self.slurm, daemon=self.daemon, kube=self.kube, on_before=tracer.before_step if tracer else lambda step: None)
             if tracer:
                 tracer.finish()
             self.state.update(ok=rep.ok, stopped=rep.stopped)
@@ -309,8 +309,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
     if counters is None and not fetch:  # a test that passes `fetch` must not reach the host's mocks: it keeps no counters unless it passes its own
         counters = live_counters
     runs = Runs(scenarios, sim, flow, counters=counters, slurm=lambda n, s, r: _governed(slurm_state(n, s, r)),
-                daemon=lambda do: daemon_step(do), trace=lambda nodes, since: slurm_trace(nodes, since))
-    cluster = Cluster(sim, **{k: v for k, v in (("fetch", fetch), ("poster", poster)) if v})  # test seams: a host stack must not answer or be hit
+                daemon=lambda do: daemon_step(do), kube=lambda do: kube_step(do), trace=lambda nodes, since: slurm_trace(nodes, since))
+    cluster = Cluster(sim, kube=lambda do: kube_step(do), **{k: v for k, v in (("fetch", fetch), ("poster", poster)) if v})  # test seams: a host stack must not answer or be hit
     wiki = Wiki(docs)
 
     def authed(request: Request) -> None:
@@ -578,12 +578,12 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         from benchctl import describe
 
         try:
-            info = await asyncio.to_thread(describe.gather, cluster.sim, request.path_params["node"], cluster.fetch)
+            info = await asyncio.to_thread(describe.gather, cluster.live_sim(), request.path_params["node"], cluster.fetch)
         except describe.UnknownNode as e:
             raise HTTPException(404, str(e.args[0])) from e
         from benchctl import addressing, export
 
-        node, plan = request.path_params["node"], addressing.plan(cluster.sim)
+        node, plan = request.path_params["node"], addressing.plan(cluster.live_sim())
         try:
             _, services, _ = export.configured(yaml.safe_load(sim_yaml.read_text()))
         except (export.ExportError, OSError, ValueError):
@@ -703,6 +703,20 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             return {"target": "slurm", "status": "skipped", "detail": "the governor is in dry-run mode or has no --workdir"}
         return {"target": "slurm", "status": "ok", "detail": f"asked the governor to set {node} {state}"}
 
+    def kube_step(do: dict) -> tuple[bool, str]:
+        """A scenario's Kubernetes step, asked of the governor (the page has no Docker, W-3); (done, why not). One message when the part is off."""
+        if not k8s_built():
+            return False, "the Kubernetes part is not built in this cluster (benchctl up --with k8s)"
+        try:
+            res = checks.governor_request({"cmd": "k8s-step", "do": do}, socket)
+        except (OSError, ValueError):
+            return False, "the governor is not reachable"
+        if not res.get("ok"):
+            return False, res.get("error", "refused")
+        if res.get("dry_run"):
+            return False, "the governor is in dry-run mode or has no --workdir"
+        return True, "asked the governor"
+
     def daemon_step(do: dict) -> tuple[bool, str]:
         """The job and daemon steps of a scenario, asked of the governor (the page has no Docker, W-3); (done, why not)."""
         reqs = [{"cmd": "slurm-step", "name": f"slurmd-{a}", "node": n} for a in ("stop", "restart", "start") for n in do.get(f"slurmd_{a}", [])]
@@ -729,6 +743,11 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         except (OSError, ValueError):
             return None
         return res.get("trace") if res.get("ok") else None
+
+    async def teleport_kube(request: Request):
+        """Teleport's Kubernetes request counters and the last kube.request audit events (issue 755); hidden unless both parts are built."""
+        data = await asyncio.to_thread(lambda: telekube.collect(teleport_built() and k8s_built(), lambda u: http_json(u, timeout=1.5), TELEPORT))
+        return JSONResponse(data)
 
     slurm_stats_cache: list = [float("-inf"), None]
 
@@ -834,7 +853,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             results = await asyncio.to_thread(cluster.act, request.path_params["node"], request.path_params["action"])
         except ActionError as e:
             raise HTTPException(422, str(e)) from e
-        states = SLURM_STATE.get(request.path_params["action"], ())
+        states = () if cluster.hardware().get(request.path_params["node"], "").startswith("k8s") else SLURM_STATE.get(request.path_params["action"], ())  # a Kubernetes node is no Slurm node
         if states and any(r["status"] == "ok" for r in results):  # the BMC changed; Slurm only knows through the governor
             for state in states:
                 results.append(await asyncio.to_thread(slurm_state, request.path_params["node"], state))
@@ -937,6 +956,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/cluster", protected(cluster_state)),
             Route("/api/flow", protected(flow_events)),
             Route("/api/slurm-stats", protected(slurm_stats)),
+            Route("/api/teleport-kube", protected(teleport_kube)),
             Route("/api/monitoring", protected(monitoring_links)),
             Route("/api/settings", protected(settings)),
             Route("/api/plan", protected(plan)),

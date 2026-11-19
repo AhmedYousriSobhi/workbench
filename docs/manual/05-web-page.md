@@ -470,7 +470,10 @@ The card also has the **ssh command** with **Copy command**.
 - *Reason* and *Jobs* come through the governor's read-only `slurm-stats` and refresh every few seconds while the panel is open.
 - When the stats are unavailable, the stack or governor is down, or the governor is at L3 or above, the page shows one notice in the Reason row and no Jobs row. `benchctl describe node NAME` still has the reason.
 - A value it cannot read says "not measured", never zero.
-- A Kubernetes node has a shorter summary (no BMC, no address).
+- A Kubernetes node has a shorter summary: no address, no SSH, no Slurm job.
+- It shows the Kubernetes state, power, temperature and BCM state, and has the BMC fault buttons (the GPU error on a GPU node).
+- The card is the worse of the API's state and the machine's, and names both: `NotReady (Overheating (92 °C))`.
+- The NotReady half of a power-off or overheat goes through the governor, which has the Docker the page lacks (`benchctl start` runs one with `--workdir`; refused at L2 and above).
 - *Tickets* is a search for the label `node-NAME`, which is how the mock's ops integration labels the tickets it files. It says "none" when there are none, and shows one notice when the mock does not answer.
 - *Tickets* reads the mock only. Whether a real Jira labels tickets that way is not known, so the row is not shown for it.
 

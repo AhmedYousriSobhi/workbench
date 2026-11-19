@@ -132,6 +132,16 @@ def auth(d) -> list[str]:
         out.append("Expire the BMC farm's TLS certificate" if has(d["bmc_tls_expired"]) else "Give the BMC farm its valid TLS certificate again")
     if "k8s_cert_expired" in d:
         out.append("Expire the Kubernetes API server's certificate" if has(d["k8s_cert_expired"]) else "Give the Kubernetes API server its valid certificate again")
+    if has(d.get("kube_binding_missing")):
+        out.append(f"Delete the Kubernetes binding of the {lst(d['kube_binding_missing'])} tier (Teleport lets the user in, Kubernetes says forbidden)")
+    if "kube_impersonation_revoked" in d:
+        out.append("Stop Teleport impersonating users in Kubernetes (every tsh kube request fails)" if has(d["kube_impersonation_revoked"])
+                   else "Let Teleport impersonate users in Kubernetes again")
+    if "teleport_outage" in d:
+        out.append("Stop the Teleport proxy (tsh and the web terminal are refused, direct SSH keeps working)" if has(d["teleport_outage"])
+                   else "Start the Teleport proxy again")
+    if has(d.get("kube_binding_restore")):
+        out.append("Put back the Kubernetes bindings of the Teleport access tiers")
     return out
 
 

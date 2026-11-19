@@ -118,16 +118,10 @@ def test_the_agents_page_links_resolve_and_the_readme_points_at_it():
     assert "docs/agents/README.md" in (ROOT / "README.md").read_text()
 
 
-# SPEC section 7 names these verbs but the CLI does not have them yet; the owner decides per verb (issue 860: build or remove).
-SPEC_VERBS_PENDING_DECISION = {"top", "jira", "workload"}
-
-
 def test_every_verb_spec_section_7_names_exists_in_the_cli():
     spec = (ROOT / "SPEC.md").read_text()
     body = spec.split("## 7. CLI (`benchctl`)", 1)[1].split("###", 1)[0]
     verbs = {v for m in re.findall(r"`([a-z][^`]*)`", body) for v in m.split()[0].split("|")}
     assert {"doctor", "up", "scenario"} <= verbs
-    missing = {v for v in verbs if agents.command_at(v) is None} - SPEC_VERBS_PENDING_DECISION
+    missing = {v for v in verbs if agents.command_at(v) is None}
     assert not missing, f"SPEC section 7 names verbs the CLI lacks: {sorted(missing)}"
-    built = {v for v in SPEC_VERBS_PENDING_DECISION if agents.command_at(v) is not None}
-    assert not built, f"built now, drop from the pending set: {sorted(built)}"

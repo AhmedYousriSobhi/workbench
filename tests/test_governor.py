@@ -532,6 +532,19 @@ def test_slurm_step_runs_the_matching_benchctl_command(tmp_path):
         assert calls == [want]
 
 
+def test_k8s_step_runs_benchctl_set_k8s_step_with_one_json_argument_and_only_when_calm(tmp_path):
+    import threading
+    calls, done = [], threading.Event()
+    g, _ = _calm_gov(tmp_path, effector=lambda a: calls.append(a) or done.set() or 0)
+    do = {"down": ["kcn001"]}
+    assert g.handle("k8s-step", {"do": do})["started"] and done.wait(5)
+    assert calls == [["set", "k8s-step", '{"down": ["kcn001"]}']]  # one argv element: no shell, no free text
+    assert any("k8s-step=down" in a for a in g.audit)
+    g.ladder.level = 2
+    refused = g.handle("k8s-step", {"do": do})
+    assert refused["ok"] is False and "refused at L2" in refused["error"]
+
+
 def test_slurm_trace_is_read_only_and_needs_a_tracer(tmp_path):
     g, _ = _calm_gov(tmp_path)
     assert g.handle("slurm-trace", {"nodes": [], "since": 1.0})["ok"] is False

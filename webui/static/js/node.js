@@ -10,10 +10,10 @@ import { nodeSummary } from './nodemodel.js';
 export function paintNodeActions(name) {
   const c = JSON.parse(S.lastCluster || '{"nodes":[],"actions":[]}'), n = c.nodes.find(x => x.name === name), fix = new Set(['power-on', 'clear']);
   const btns = (rows) => rows.map(a => `<button class="btn" data-node="${esc(name)}" data-action="${a.id}">${esc(a.label)}</button>`).join('');
-  const ok = n ? c.actions.filter(a => !a.gpu_only || kindOf(n) === 'gpu') : [];
+  const ok = n ? c.actions.filter(a => !a.gpu_only || kindOf(n) === 'gpu' || (n.kind === 'k8s' && n.gpus > 0)) : [];
   $('nodeacts-fault').innerHTML = btns(ok.filter(a => !fix.has(a.id))); $('nodeacts-fix').innerHTML = btns(ok.filter(a => fix.has(a.id)));
   document.querySelectorAll('#nodepane .actions .btn').forEach(b => b.onclick = () => nodeAction(b.dataset.node, b.dataset.action, b.textContent));
-  const jobs = n && kindOf(n) === 'gpu' ? [['1 GPU, 5 min', 1, 300], [`All ${n.gpus} GPUs, 5 min`, n.gpus, 300], ['All GPUs, 30 min', n.gpus, 1800]] : [['1 CPU, 5 min', 0, 300], ['1 CPU, 30 min', 0, 1800]];
+  const jobs = n && n.kind === 'k8s' ? [] : n && kindOf(n) === 'gpu' ? [['1 GPU, 5 min', 1, 300], [`All ${n.gpus} GPUs, 5 min`, n.gpus, 300], ['All GPUs, 30 min', n.gpus, 1800]] : [['1 CPU, 5 min', 0, 300], ['1 CPU, 30 min', 0, 1800]];
   $('nodeacts-job').innerHTML = n ? jobs.map(([l, g, d]) => `<button class="btn" data-gpus="${g}" data-dur="${d}">Run ${esc(l)}</button>`).join('') : '';
   document.querySelectorAll('#nodeacts-job .btn').forEach(b => b.onclick = () => nodeJob(name, +b.dataset.gpus, +b.dataset.dur));
   if (n) { $('nodestate').className = 'pill ' + n.state; $('nodestate').textContent = `${STATE_ICON[n.state]} ${n.label}`; }
@@ -47,9 +47,10 @@ export async function showNode(name) {
   const r = await fetch(`/api/nodes/${enc(name)}`), body = r.ok ? await r.json() : null;
   $('nodetitle').textContent = name;
   const cx = (await connections()).find(e => e.id === 'nodes'), kv = [];
-  if (cx) kv.push(['SSH', `<code>${esc(cx.command.replace('<node>', name))}</code>`], ['User and key', esc(cx.how.split('.')[0]) + ` · key file <code>${esc(cx.credential)}</code>`]);
+  const kube = (JSON.parse(S.lastCluster || '{"nodes":[]}').nodes.find(x => x.name === name) || {}).kind === 'k8s';  // no SSH or Slurm job for a Kubernetes node: its machine has a BMC and a BCM entry only
+  if (cx && !kube) kv.push(['SSH', `<code>${esc(cx.command.replace('<node>', name))}</code>`], ['User and key', esc(cx.how.split('.')[0]) + ` · key file <code>${esc(cx.credential)}</code>`]);
   const jump = cx && (cx.actions || []).find(a => a.kind === 'copy');
-  if (jump) kv.push(['As a user, from a terminal', `<button class="btn small copy" data-copy="${esc(jump.value.replace('<node>', name))}" aria-label="Copy the ssh command for ${esc(name)}">Copy benchctl ssh command</button>`]);
+  if (jump && !kube) kv.push(['As a user, from a terminal', `<button class="btn small copy" data-copy="${esc(jump.value.replace('<node>', name))}" aria-label="Copy the ssh command for ${esc(name)}">Copy benchctl ssh command</button>`]);
   const bm = (await connections()).find(e => e.id === 'bmc');
   kv.push(['BMC', `<code>${esc(bm ? bm.address : '')}</code> (HTTPS) with Host header <code>bmc-${esc(name)}</code>, user admin, password in <code>compose/generated/secrets/bmc_credentials</code>`],
     ['IP address', body && body.ip ? `<code>${esc(body.ip)}</code> (fixed; reach it from the login node)` : `run <code>./scripts/benchctl describe node ${esc(name)}</code>`]);
