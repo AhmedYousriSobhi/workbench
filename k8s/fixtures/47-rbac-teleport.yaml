@@ -21,3 +21,26 @@ kind: ClusterRoleBinding
 metadata: {name: workbench-teleport-viewers}
 subjects: [{kind: Group, name: workbench-k8s-viewers, apiGroup: rbac.authorization.k8s.io}]
 roleRef: {kind: ClusterRole, name: workbench-viewer, apiGroup: rbac.authorization.k8s.io}
+---
+# Access tiers (ADR 0084 W1). developer: read and write in team-a only, no node access, no secrets (a request Teleport lets through that this
+# Role refuses is a Kubernetes `forbidden`, not a Teleport denial). A RoleBinding, not a ClusterRoleBinding, so team-b and nodes stay closed.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: workbench-developer, namespace: team-a}
+rules:
+- {apiGroups: [""], resources: [pods, pods/log, services, configmaps, events, persistentvolumeclaims], verbs: [get, list, watch, create, update, patch, delete]}
+- {apiGroups: [apps], resources: [deployments, replicasets, statefulsets], verbs: [get, list, watch, create, update, patch, delete]}
+- {apiGroups: [batch], resources: [jobs, cronjobs], verbs: [get, list, watch, create, update, patch, delete]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: workbench-teleport-developers, namespace: team-a}
+subjects: [{kind: Group, name: workbench-k8s-developers, apiGroup: rbac.authorization.k8s.io}]
+roleRef: {kind: Role, name: workbench-developer, apiGroup: rbac.authorization.k8s.io}
+---
+# admin: the built-in cluster-admin, for the people who run the cluster.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: workbench-teleport-admins}
+subjects: [{kind: Group, name: workbench-k8s-admins, apiGroup: rbac.authorization.k8s.io}]
+roleRef: {kind: ClusterRole, name: cluster-admin, apiGroup: rbac.authorization.k8s.io}
