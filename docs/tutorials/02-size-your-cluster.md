@@ -22,13 +22,13 @@
    ./scripts/benchctl up --cpu-nodes 2 --gpu-nodes 4 --with jira
    ```
 
-4. Add or remove compute nodes later.
+4. Change the size later: run `up` again with new numbers (`scale` only works on a preset, see below).
 
    ```bash
-   ./scripts/benchctl scale 6
+   ./scripts/benchctl up --cpu-nodes 4 --gpu-nodes 4 --with jira
    ```
 
-5. Stop the cluster.
+5. Stop the cluster. The size is remembered: the next `benchctl start` or `up` brings this size back, and `up --profile min` returns to a preset.
 
    ```bash
    ./scripts/benchctl down
@@ -47,7 +47,9 @@
 
 ## You should see
 
-- `plan` prints each item's expected memory and its cap, then the total.
+- `plan` prints each item's expected memory and its cap, then the total, and ends with a line that starts `fits:`.
+- `up` ends with `stack is up in N s`; the second `up` only adds the nodes that are new (a few seconds).
+- `benchctl scale 6` on this selection refuses and tells you to use `up --cpu-nodes N`.
 - `up` refuses a size that would not fit; it never starts it and hopes.
 
 ## Next

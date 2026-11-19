@@ -1,12 +1,14 @@
 # 6. Test SSH handling
 
-**You will:** make SSH fail in five different ways and see what your client does each time. About 10 minutes.
+**You will:** make SSH fail in six different ways and see what your client does each time. About 10 minutes.
 
 ## You need
 
 - A running cluster with the client connected ([tutorial 5](05-connect-your-client.md)).
 
 ## Steps
+
+Each `scenario run` waits until the scenario ends and prints `scenario passed`: 30 s for steps 2 and 3, 60 s for steps 4 to 7. Run one at a time.
 
 1. Read what a scenario does before you run it.
 
@@ -52,6 +54,7 @@
 
 ## You should see
 
+- Step 1 prints two timed lines: `ssh {'state': 'down'}` at 0 s and `{'state': 'up'}` at 30 s.
 - Each scenario restores the good state by itself when it ends.
 - The client gives one clear message per case: refused, timed out, host key changed, key refused.
 - A hang and a refusal read differently. A client that shows the same message for both has a gap.

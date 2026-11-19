@@ -8,7 +8,7 @@
 
 ## Steps
 
-1. Open a shell on a compute node as root.
+1. Open a shell on a compute node as root (inside the container, not on your host). Type `exit` to leave.
 
    ```bash
    ./scripts/benchctl ssh cn001
@@ -20,10 +20,10 @@
    ./scripts/benchctl ssh alice@cn001
    ```
 
-3. Run one command instead of a shell.
+3. Run one command instead of a shell. The GPUs are simulated: there is no `nvidia-smi` on the nodes, only 8 fake device files.
 
    ```bash
-   ./scripts/benchctl exec gpu001 -- nvidia-smi
+   ./scripts/benchctl exec gpu001 -- ls /dev/workbench-gpu0 /dev/workbench-gpu7
    ```
 
 4. Submit a job that holds 4 GPUs for 10 minutes.
@@ -32,13 +32,13 @@
    ./scripts/benchctl submit gpu001 --gpus 4 --duration 600
    ```
 
-5. See the job and the node.
+5. See the job and the node. Run it again after about 20 seconds: `GPUs:` changes from `busy none` to `busy [0, 1, 2, 3]`.
 
    ```bash
    ./scripts/benchctl describe node gpu001
    ```
 
-6. Get a steady background of jobs.
+6. Get a steady background of jobs (`load on` prints `load: on, about 6 job(s) a minute`; the first CPU job shows in `squeue` within seconds). Cancel your job when done: `benchctl exec login -u alice -- scancel 1`.
 
    ```bash
    ./scripts/benchctl load on --rate 6
@@ -47,7 +47,8 @@
 
 ## You should see
 
-- `squeue` on the login node lists the job; the node shows `allocated`.
+- Step 4 prints `gpu001: job 1 submitted for 600 s`.
+- `squeue` on the login node lists the job (`benchctl exec login -u alice -- squeue`); the node shows `MIXED` (4 of 8 GPUs held), not `allocated`.
 - The GPU metrics show those 4 GPUs busy within about 20 seconds.
 
 ## If it does not work
