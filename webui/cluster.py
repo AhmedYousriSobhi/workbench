@@ -170,11 +170,11 @@ def classify(n: dict) -> tuple[str, str]:
 
 
 class Cluster:
-    def __init__(self, sim: dict, fetch=http_json, poster=scenario.post):
+    def __init__(self, sim: dict, fetch=http_json, poster=scenario.post, kube=None):
         self.sim = sim
         self.nodes = node_names(sim)
         self.gpus = sim.get("gpu", {}).get("gpus_per_node", 0)
-        self.fetch, self.poster = fetch, poster
+        self.fetch, self.poster, self.kube = fetch, poster, kube  # `kube(do)`: the governor plays a Kubernetes step (the page has no Docker, issue 386)
         self.probe = port_open  # replaced in tests
 
     def _try(self, *args):
@@ -302,6 +302,6 @@ class Cluster:
             if action == "clear" and target == "gpu-exporter" and kinds[node] not in ("gpu", "k8s-gpu"):
                 continue
             o = scenario.execute(scenario.Step(0, target, {"nodes": [node], **do}), poster=self.poster,
-                                 host=False, sim=self.live_sim())
+                                 host=False, sim=self.live_sim(), kube=self.kube)
             out.append({"target": target, "status": o.status, "detail": o.detail})
         return out

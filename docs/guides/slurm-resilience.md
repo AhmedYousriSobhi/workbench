@@ -40,7 +40,7 @@ and run it again.
 
 Open **Test run**, tick **Slurm trace**, press **Play**. The page has no Docker access (SPEC W-3), so everything
 goes through the governor: the job and daemon steps (`slurm-step`, `submit-job`) and the read-only trace
-(`slurm-trace`, which runs `benchctl get trace`). The governor must have been started with `--workdir` (`benchctl start`
+(`slurm-trace`, which runs `benchctl get trace`). Kubernetes steps (`down`, `up`, `cordon`, `uncordon`, `pod`, `delete_pod`, `scale`) go the same way (`k8s-step`); the rest of the `k8s` keys stay CLI only. The governor must have been started with `--workdir` (`benchctl start`
 does that); without it the steps show **skipped** and the Slurm trace box is refused with that reason.
 
 The page's trace has one entry per step, shown under the timeline. The text is the same as in the terminal.

@@ -25,7 +25,7 @@
   tests: ALL
 - name: governor
   paths: ["governor/**", "systemd/**", "scripts/install-governor.sh", "scripts/real-test-root.sh", "benchctl/checks.py", "benchctl/memory.py", "benchctl/netemfaults.py"]
-  tests: [test_real, test_root, test_netem_root, test_pressure_real, test_user_mode_real, test_apply_real, test_stack_real, test_webui_real]
+  tests: [test_real, test_root, test_netem_root, test_pressure_real, test_user_mode_real, test_apply_real, test_stack_real, test_webui_real, test_k8s_real]
 - name: config lab (offline parts)
   paths: ["benchctl/lab.py", "benchctl/lab_import.py", "benchctl/lab_slurm.py", "benchctl/lab_replay.py", "benchctl/lab_candidate.py", "benchctl/lab_diff.py", "benchctl/lab_metrics.py", "benchctl/lab_report.py", "benchctl/lab_export.py", "benchctl/lab_prom.py"]
   tests: []
