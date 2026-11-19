@@ -23,12 +23,13 @@ groups:
         for: 15s
         labels: {severity: page}
         annotations: {summary: "{{ $value }} InfiniBand port(s) down on {{ $labels.node }}", description: "The fabric link of {{ $labels.node }} is down."}
-      # A powered-off node publishes nothing, so its series vanish: a node seen 3 minutes ago and not now.
+      # A powered-off node publishes nothing, so its series vanish: a node seen 3 minutes ago and not now. It reads
+      # node_network_carrier_changes_total, which the exporter farm publishes for every node, CPU and GPU (issue 945).
       # It resolves by itself once the 3 minutes have passed; read it while the node is down.
       - alert: NodeDown
-        expr: count by (node) (DCGM_FI_DEV_GPU_TEMP offset 3m) unless count by (node) (DCGM_FI_DEV_GPU_TEMP)
+        expr: count by (node) (node_network_carrier_changes_total offset 3m) unless count by (node) (node_network_carrier_changes_total)
         labels: {severity: page}
-        annotations: {summary: "{{ $labels.node }} stopped publishing metrics", description: "{{ $labels.node }} has published no GPU series for the last scrape."}
+        annotations: {summary: "{{ $labels.node }} stopped publishing metrics", description: "{{ $labels.node }} has published no metrics for the last scrape."}
       # Slurm's own node counts (job slurm-nodes, ADR 0074): nodes carrying the DRAIN flag, however many; the ticket says how many.
       - alert: NodeDrained
         expr: slurm_nodes_drain > 0

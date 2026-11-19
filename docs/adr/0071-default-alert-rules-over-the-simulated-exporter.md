@@ -7,7 +7,7 @@ Prometheus shipped with no rules, so `get alerts` and `wait alert` (ADR 0066) al
 
 ## Decision
 - `observability/rules.yml` is mounted into Prometheus (`rule_files`, 15 s evaluation) with three rules: `GpuXid` (page), `GpuOverheat` (warning) and `NodeDown` (page).
-- They read the simulated DCGM exporter only. `GpuOverheat` follows the exporter's temperature, so a BMC temperature step does not fire it. `NodeDown` applies to GPU nodes only (compute nodes publish no exporter series) and resolves by itself after 3 minutes.
+- They read the simulated DCGM exporter only. `GpuOverheat` follows the exporter's temperature, so a BMC temperature step does not fire it. `NodeDown` first read a GPU series and so covered GPU nodes only; since issue 945 it reads `node_network_carrier_changes_total`, which the farm publishes for every node, so it covers CPU nodes too. It resolves by itself after 3 minutes.
 - The app under test keeps its own alerting; these rules exist so the read side of the agent interface has something to read.
 
 ## Consequences
