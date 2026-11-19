@@ -9,6 +9,8 @@
 
 ## Steps
 
+Notifications are off by default per cluster for Slurm, Kubernetes, storage and BCM: switch notify on in the client first. The client reads Jira every 3 min, so a shorter scenario may show nothing new.
+
 1. A drained node gets a ticket that names the cluster and the node, and resuming resolves it. It takes 50 s and ends with `scenario passed` (the node is drained at 0 s, the ticket opened at 5 s, resolved at 50 s).
 
    ```bash

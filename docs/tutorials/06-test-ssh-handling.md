@@ -8,6 +8,8 @@
 
 ## Steps
 
+Notifications for Slurm, Kubernetes, storage and BCM are off by default per cluster: switch notify on in the client first. SSH failures notify without it. The client checks reachability every 60 s, so a scenario shorter than that may show nothing new.
+
 Each `scenario run` waits until the scenario ends and prints `scenario passed`: 30 s for steps 2 and 3, 60 s for steps 4 to 7. Run one at a time.
 
 1. Read what a scenario does before you run it.
