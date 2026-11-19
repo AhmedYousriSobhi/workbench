@@ -30,6 +30,7 @@ By hand: `.venv/bin/python -m webui [port]` serves the page on `127.0.0.1:8088` 
 | Area | Shows |
 |---|---|
 | **Overview cards** | in the left rail on **Overview** only: nodes healthy, services up, GPUs busy (only with GPU nodes), faults applied. Every other workspace has the same counts in the top strip |
+| **Services count** | one definition everywhere (top strip `Services 7/7`, the Overview tile, the header line, the Services list): it counts every part the page draws, each with its own reachability test (the four mocks, the real Jira, Kubernetes API, DCGM and GPU exporters, Teleport, the jump host and the controller, when built). 7/7 means all seven drawn parts answer |
 | **View choice** | under the nav on Infrastructure: **All** (diagram and node list), **Topology** (diagram only, wider) or **Nodes** (list and details only); remembered in this browser |
 | **Left nav** | the workspaces: **Overview**, **Test run**, **Topology** (the Infrastructure diagram), **Traffic & Communication** |
 | **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **☰ Menu**, help and the theme switch |
