@@ -613,6 +613,7 @@ NO_EXPECT = {
     "kube-binding-missing": "no expect form for what tsh kube answers (Kubernetes forbidden through Teleport); the live module asserts the message",
     "kube-identity-expired": "no expect form for tsh kube's refusal of an expired identity; the live module asserts it",
     "kube-impersonation-revoked": "no expect form for what tsh kube answers (cannot impersonate); the live module asserts the message",
+    "teleport-outage": "no expect form for the Teleport proxy's state; the live test asserts tsh is refused and direct SSH works",
     "login-node-down": "no expect form for the login node's ssh state",
     "login-node-hung": "no expect form for the login node's ssh state",
     "netem-slow-link": "no expect form for link latency or packet loss; slurmctld may or may not log a delayed reply",
