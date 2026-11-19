@@ -183,3 +183,30 @@ def test_a_kubectl_failure_is_reported_and_the_fault_is_not_marked(tmp_path, mon
     monkeypatch.setattr(authfaults, "KUBE_MARK", tmp_path / "kube-faults.json")
     assert "viewer tier" in authfaults.apply({"kube_binding_missing": ["viewer"]}, lambda c: CP(code=1, err="no api"), None, SIM)
     assert not authfaults.KUBE_MARK.exists()
+
+
+# ---- Teleport outage (issue 209) ----
+
+def test_teleport_outage_is_validated_and_the_shipped_scenario_uses_it():
+    assert authfaults.problems({"teleport_outage": True}, NODES, USERS) == []
+    assert "teleport_outage is true" in "\n".join(authfaults.problems({"teleport_outage": "down"}, NODES, USERS))
+    sc = scenario.load("teleport-outage", sim=SIM)
+    assert scenario.validate(sc, SIM) == [] and [s["do"] for s in sc["steps"]] == [{"teleport_outage": True}, {"teleport_outage": False}]
+
+
+def test_the_outage_stops_the_container_and_the_restore_starts_it_and_waits(tmp_path, monkeypatch):
+    monkeypatch.setattr(authfaults, "KUBE_MARK", tmp_path / "kube-faults.json")
+    run, calls = recorder()
+    assert authfaults.apply({"teleport_outage": True}, run, None, SIM) == ""
+    assert calls[-1][-4:] == ["stop", "-t", "1", "teleport"] and json.loads(authfaults.KUBE_MARK.read_text()) == ["teleport-outage"]
+    assert authfaults.apply({"teleport_outage": False}, run, None, SIM) == ""
+    assert calls[-2][-2:] == ["start", "teleport"] and "status" in calls[-1]
+    assert not authfaults.KUBE_MARK.exists()
+
+
+def test_a_failed_stop_is_not_marked_and_a_proxy_that_never_answers_is_reported(tmp_path, monkeypatch):
+    monkeypatch.setattr(authfaults, "KUBE_MARK", tmp_path / "kube-faults.json")
+    assert authfaults.apply({"teleport_outage": True}, lambda c: CP(code=1, err="no such container"), None, SIM).startswith("stop teleport: no such container")
+    assert not authfaults.KUBE_MARK.exists()
+    monkeypatch.setattr("benchctl.teleport.wait_ready", lambda *a, **k: False)
+    assert "did not answer" in authfaults.apply({"teleport_outage": False}, lambda c: CP(), None, SIM)

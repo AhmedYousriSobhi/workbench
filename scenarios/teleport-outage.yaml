@@ -1,0 +1,6 @@
+name: teleport-outage
+ref: SC-58
+description: "The Teleport proxy stops for 60 s: tsh and the web terminal are refused (connection refused), while direct SSH to a key login node keeps working because the nodes run their own sshd; then it starts again with its users and identity files and the step waits until it answers. Needs --with teleport; the certificate expiry is SC-31"
+steps:
+  - {at: 0s,  target: auth, do: {teleport_outage: true}}
+  - {at: 60s, target: auth, do: {teleport_outage: false}}

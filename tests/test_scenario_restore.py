@@ -69,9 +69,9 @@ def _tags(target: str, do: dict) -> tuple[set[str], set[str]]:
         for key, tag in (("munge_restore", "munge"), ("teleport_cert_restore", "teleport")):
             if key in do:
                 r.add(tag)
-        for key in ("bmc_tls_expired", "k8s_cert_expired", "kube_impersonation_revoked"):
+        for key in ("bmc_tls_expired", "k8s_cert_expired", "kube_impersonation_revoked", "teleport_outage"):
             if key in do:
-                (f if do[key] else r).add(key if key != "kube_impersonation_revoked" else "kube")
+                (f if do[key] else r).add({"kube_impersonation_revoked": "kube", "teleport_outage": "tele-outage"}.get(key, key))
         if "kube_binding_missing" in do:
             f.add("kube")
         if do.get("kube_binding_restore"):

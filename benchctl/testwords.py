@@ -137,6 +137,9 @@ def auth(d) -> list[str]:
     if "kube_impersonation_revoked" in d:
         out.append("Stop Teleport impersonating users in Kubernetes (every tsh kube request fails)" if has(d["kube_impersonation_revoked"])
                    else "Let Teleport impersonate users in Kubernetes again")
+    if "teleport_outage" in d:
+        out.append("Stop the Teleport proxy (tsh and the web terminal are refused, direct SSH keeps working)" if has(d["teleport_outage"])
+                   else "Start the Teleport proxy again")
     if has(d.get("kube_binding_restore")):
         out.append("Put back the Kubernetes bindings of the Teleport access tiers")
     return out
