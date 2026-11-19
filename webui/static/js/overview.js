@@ -6,6 +6,7 @@ import { $, esc } from './util.js';
 import { renderCluster } from './cluster.js';
 import { buildFlow } from './diagram.js';
 import { hasTeleport, scoped, svcList } from './flowstate.js';
+import { servicesCount } from './servicecount.js';
 import { kindOf, sv } from './svg.js';
 import { fitKey, flowSig, loginList } from './geometry.js';
 
@@ -31,12 +32,11 @@ export function withCluster(name, fn) { const prev = S.activeCluster; S.activeCl
 export function enterCluster(name) { S.activeCluster = multi() ? name : null; $('crumb-name').textContent = clusterTitle(); setLevel('full', true); }
 export function clusterFacts() {
   const nodes = nodeList(), groups = [['Compute nodes', nodes.filter(n => n.kind === 'compute')], ['GPU nodes', nodes.filter(n => kindOf(n) === 'gpu')], ['Kubernetes nodes', nodes.filter(n => n.kind === 'k8s')]].filter(x => x[1].length);
-  const sc = S.lastCluster ? scoped() : {}, svcs = svcList(), snap = S.flowSnap && { ...S.flowSnap, reachable: sc.reachable || S.flowSnap.reachable, faults: sc.faults ?? S.flowSnap.faults }, off = !snap || !Object.values(snap.reachable).some(Boolean);
-  const up = svcs.filter(x => snap && snap.reachable[x[0]]).length;
-  return { nodes, groups, svcs, snap, off, up, ok: nodes.filter(n => n.state === 'ok').length, faults: snap ? snap.faults || 0 : 0 };
+  const sc = S.lastCluster ? scoped() : {}, svcs = svcList(), snap = S.flowSnap && { ...S.flowSnap, reachable: sc.reachable || S.flowSnap.reachable, faults: sc.faults ?? S.flowSnap.faults }, svcCount = servicesCount(sc.services), off = !snap || svcCount.stackDown;
+  return { nodes, groups, svcs, snap, off, svcCount, answers: sc.services || {}, up: svcCount.up, ok: nodes.filter(n => n.state === 'ok').length, faults: snap ? snap.faults || 0 : 0 };
 }
 export function overviewSummary(f) {
-  return `${f.ok} of ${f.nodes.length} nodes healthy · ` + (f.off ? 'services not answering' : `${f.up} of ${f.svcs.length} services answering`) + ` · ${f.faults} ${f.faults === 1 ? 'fault' : 'faults'} applied`;
+  return `${f.ok} of ${f.nodes.length} nodes healthy · ` + (f.off ? 'services not answering' : `${f.svcCount.words} services answering`) + ` · ${f.faults} ${f.faults === 1 ? 'fault' : 'faults'} applied`;
 }
 export function showPreview(x, y, name) { withCluster(name, () => showPreviewIn(x, y, name)); }
 export function showPreviewIn(x, y, name) {  // the design underneath, as a small diagram; hovering or focusing the card shows it, nothing navigates
@@ -44,7 +44,7 @@ export function showPreviewIn(x, y, name) {  // the design underneath, as a smal
   pv.innerHTML = `<b>${esc(name || clusterTitle())}: the design underneath</b><div class="pvrow"><span class="pvb">Clients<small>Monitoring app, Prometheus, curl, you</small></span><i aria-hidden="true">↓</i>
     <span class="pvb">Access<small>${[...(tp ? ['Teleport proxy'] : []), ...lg.map(l => `${esc(l.name)} (${ACCESS_WORD[l.mode] || 'SSH + Teleport'})`)].join(', ')}</small></span><i aria-hidden="true">↓ jump</i>
     <span class="pvb">Nodes<small>${f.groups.map(([t, a]) => `${a.length} ${t.toLowerCase()}`).join(', ') || 'none yet'}</small></span></div>
-    <span class="pvb pvs">Services<small>${f.svcs.map(x => esc(x[1]) + (f.snap ? (f.snap.reachable[x[0]] ? ' ✓' : f.off ? ' –' : ' ✗') : '')).join(', ')}</small></span><em>Double-click or press Enter to open</em>`;
+    <span class="pvb pvs">Services<small>${f.svcs.map(x => esc(x[1]) + (f.snap ? (f.answers[x[0]] ? ' ✓' : f.off ? ' –' : ' ✗') : '')).join(', ')}</small></span><em>Double-click or press Enter to open</em>`;
   pv.hidden = false; const host = $('trafficpanel').getBoundingClientRect(), w = pv.offsetWidth, h = pv.offsetHeight;
   pv.style.left = Math.max(8, Math.min(x - host.left + 14, host.width - w - 8)) + 'px'; pv.style.top = Math.max(8, Math.min(y - host.top + 14, host.height - h - 8)) + 'px';
 }
@@ -62,7 +62,7 @@ export function buildCard() {
   let px = x0 + 20, py = y0 + ch - 128 + 0; const rowsNeeded = (() => { let x = x0 + 20, rows = 1; for (const [, l] of f.svcs) { const w = l.length * 8 + 44; if (x + w > x0 + cw - 20) { x = x0 + 20; rows++; } x += w + 8; } return rows; })();
   py = y0 + ch - 58 - rowsNeeded * 34; const stripTop = py;
   for (const [k, l] of f.svcs) {
-    const up = f.snap && f.snap.reachable[k], mark = !f.snap || f.off ? '–' : up ? '✓' : '✗', w = l.length * 8 + 44;
+    const up = f.snap && f.answers[k], mark = !f.snap || f.off ? '–' : up ? '✓' : '✗', w = l.length * 8 + 44;
     if (px + w > x0 + cw - 20) { px = x0 + 20; py += 34; }
     card.append(sv('rect', { class: 'ovpill ' + (f.off ? 'off' : up ? 'up' : 'down'), x: px, y: py, width: w, height: 26, rx: 13 }), T(px + 14, py + 18, `${l} ${mark}`, 14, 'ovpt')); px += w + 8;
   }
@@ -105,7 +105,7 @@ export function buildOverview() {  // one card, or a grid of cards when there ar
   const names = clusterList(), g = $('flow'); g.style.removeProperty('height');
   if (names.length === 1) withCluster(names[0], buildCard); else buildGrid(names);
   S.lastOvSig = ovSig();
-  $('ovtable').innerHTML = `<table><caption>Clusters</caption><thead><tr><th>Cluster</th><th>Nodes healthy</th><th>Services answering</th><th>Faults applied</th></tr></thead><tbody>` + names.map(n => withCluster(n, () => { const f = clusterFacts(); return `<tr><td><button class="linkbtn" data-c="${esc(n)}">${esc(n)}</button></td><td>${f.ok} of ${f.nodes.length}</td><td>${f.off ? 'none (stack not running)' : f.up + ' of ' + f.svcs.length}</td><td>${f.faults}</td></tr>`; })).join('') + '</tbody></table>';
+  $('ovtable').innerHTML = `<table><caption>Clusters</caption><thead><tr><th>Cluster</th><th>Nodes healthy</th><th>Services answering</th><th>Faults applied</th></tr></thead><tbody>` + names.map(n => withCluster(n, () => { const f = clusterFacts(); return `<tr><td><button class="linkbtn" data-c="${esc(n)}">${esc(n)}</button></td><td>${f.ok} of ${f.nodes.length}</td><td>${f.off ? 'none (stack not running)' : f.svcCount.words}</td><td>${f.faults}</td></tr>`; })).join('') + '</tbody></table>';
   $('ovtable').querySelectorAll('button[data-c]').forEach(b => b.onclick = () => enterCluster(b.dataset.c));
 }
 export function refreshOverview() { if (ovSig() !== S.lastOvSig) buildOverview(); }  // states and counts change without the node list changing
@@ -119,9 +119,9 @@ export function buildGrid(names) {
   const T = (x, y, t, sz, cls, anchor) => sv('text', { class: cls, x, y, style: `font-size:${sz}px`, ...(anchor ? { 'text-anchor': anchor } : {}) }, t);
   const defs = sv('defs', {}), mk = sv('marker', { id: 'arr', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, orient: 'auto' }); mk.append(sv('path', { d: 'M0 0 L10 5 L0 10 z' })); defs.append(mk); g.append(defs);
   names.forEach((name, i) => withCluster(name, () => {
-    const f = clusterFacts(), lg = loginList(), tp = hasTeleport(), x = 12 + (i % cols) * (cwid + gap), y = 12 + Math.floor(i / cols) * (chgt + gap), bad = f.nodes.length - f.ok > 0 || (!f.off && f.up < f.svcs.length);
+    const f = clusterFacts(), lg = loginList(), tp = hasTeleport(), x = 12 + (i % cols) * (cwid + gap), y = 12 + Math.floor(i / cols) * (chgt + gap), bad = f.nodes.length - f.ok > 0 || (!f.off && f.svcCount.up < f.svcCount.all);
     const card = sv('g', { class: 'ovcard' + (bad ? ' attn' : ''), role: 'button', tabindex: 0, 'aria-label': `${name}: ${overviewSummary(f)}. Press Enter or double-click to open.` }), open = () => enterCluster(name);
-    card.append(sv('rect', { class: 'ovbg', x, y, width: cwid, height: chgt, rx: 14 }), T(x + 14, y + 26, (bad ? '▲ ' : '') + name, 17, 'ovt'), T(x + 14, y + 48, `${f.ok} of ${f.nodes.length} nodes healthy`, 13, 'ovd'), T(x + 14, y + 66, (f.off ? 'services not answering' : `${f.up} of ${f.svcs.length} services`) + ` · ${f.faults} ${f.faults === 1 ? 'fault' : 'faults'}`, 13, 'ovd'));
+    card.append(sv('rect', { class: 'ovbg', x, y, width: cwid, height: chgt, rx: 14 }), T(x + 14, y + 26, (bad ? '▲ ' : '') + name, 17, 'ovt'), T(x + 14, y + 48, `${f.ok} of ${f.nodes.length} nodes healthy`, 13, 'ovd'), T(x + 14, y + 66, (f.off ? 'services not answering' : `${f.svcCount.words} services`) + ` · ${f.faults} ${f.faults === 1 ? 'fault' : 'faults'}`, 13, 'ovd'));
     const ob = sv('g', { class: 'ovopen', role: 'button', tabindex: 0, 'aria-label': 'Open ' + name }); ob.append(sv('rect', { x: x + cwid - 74, y: y + 10, width: 62, height: 24, rx: 6 }), T(x + cwid - 43, y + 27, 'Open ▸', 13, 'ovot', 'middle'));
     ob.onclick = e => { e.stopPropagation(); open(); }; ob.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); open(); } }; card.append(ob);
     const bw = cwid - 28, all = f.nodes, sw = all.length ? bw / all.length : bw, seg = (arr, bx, by, w2) => { const s2 = arr.length ? w2 / arr.length : w2; arr.forEach((n, j) => card.append(sv('rect', { class: 'ovseg ' + (n.state === 'ok' ? 'ok' : 'bad'), x: bx + j * s2, y: by, width: Math.max(1.5, s2 - (s2 > 5 ? 1.5 : 0)), height: n.state === 'ok' ? 12 : 18, rx: 2 })))};

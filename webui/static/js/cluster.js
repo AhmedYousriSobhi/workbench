@@ -1,5 +1,6 @@
 import { S } from './state.js';
 import { $, esc, paintDyn } from './util.js';
+import { servicesCount } from './servicecount.js';
 import { kindOf } from './svg.js';
 import { clusterFacts } from './overview.js';
 import { paintHealth } from './governor.js';
@@ -21,7 +22,7 @@ export function svcRow([k, up]) {
 export function paintKpis() {  // stack down: no cards, one notice (W-10); the cluster at a glance, all from the page's own data (nodes, reachability, applied faults); nothing is invented
   const f = clusterFacts(), gpu = f.nodes.filter(n => kindOf(n) === 'gpu'), gt = gpu.reduce((a, n) => a + (n.gpus || 0), 0), gb = gpu.reduce((a, n) => a + (n.gpus_busy || 0), 0);
   const bad = f.nodes.length - f.ok, k = (cls, v, of, label) => `<div class="kpi ${cls}"><b>${v}${of == null ? '' : ` <small>of ${of}</small>`}</b><span>${label}</span></div>`;
-  $('kpis').innerHTML = !f.nodes.length || f.off ? '' : k(bad ? 'warn' : 'ok', f.ok, f.nodes.length, 'nodes healthy') + k(f.off ? 'bad' : f.up < f.svcs.length ? 'warn' : 'ok', f.up, f.svcs.length, 'services up')
+  $('kpis').innerHTML = !f.nodes.length || f.off ? '' : k(bad ? 'warn' : 'ok', f.ok, f.nodes.length, 'nodes healthy') + k(f.off ? 'bad' : f.svcCount.up < f.svcCount.all ? 'warn' : 'ok', f.svcCount.up, f.svcCount.all, 'services up')
     + (gt ? k('', gb, gt, 'GPUs busy') : '') + k(f.faults ? 'bad' : 'ok', f.faults, null, f.faults === 1 ? 'fault applied' : 'faults applied');
 }
 export function renderCluster(c) {
@@ -32,8 +33,8 @@ export function renderCluster(c) {
   const stackUp = Object.values(c.services).some(Boolean);
   $('nodeswrap').classList.toggle('solo', !stackUp);
   for (const id of ['nodesmain']) $(id).hidden = !stackUp;  // one message when down, not five
-  const svcs = Object.entries(c.services), svcUp = svcs.filter(([, u]) => u).length;
-  $('services').innerHTML = svcs.map(svcRow).join(''); $('cnt-svc').textContent = `${svcUp} of ${svcs.length} answering`; paintBlocks();
+  const svcs = Object.entries(c.services), sc = servicesCount(c.services);
+  $('services').innerHTML = svcs.map(svcRow).join(''); $('cnt-svc').textContent = `${sc.words} answering`; paintBlocks();
   for (const kind of ['compute', 'gpu', 'k8s']) {
     const rows = c.nodes.filter(n => kindOf(n) === kind);
     $('nodes-' + kind).innerHTML = rows.map(n => node(n)).join(''); paintDyn($('nodes-' + kind)); $('br-' + kind).hidden = !rows.length;

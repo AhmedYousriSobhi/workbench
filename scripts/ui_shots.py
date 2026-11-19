@@ -666,6 +666,33 @@ def check_stack_down(browser, base_url: str, ui_token: str, vp: str, size: tuple
     return bad
 
 
+SEVEN_PARTS = ("bmc-farm", "bcm-mock", "jira-mock", "gpu-exporter", "teleport", "jump", "controller")
+
+
+def check_services_count(browser, base_url: str, ui_token: str, vp: str, size: tuple[int, int], scheme: str) -> list[str]:
+    """One definition of the services count (issue 861 A3, ADR 0089): with six of seven drawn parts answering, the top-strip chip, the
+    Services list heading and (where shown) the Overview tile all say 6 of 7. Sample data, no cluster is touched."""
+    pg = browser.new_page(viewport={"width": size[0], "height": size[1]}, color_scheme=scheme)
+    pg.add_init_script(TEST_HOOK)
+    sample = {**STACK_DOWN, "services": {k: k != "jump" for k in SEVEN_PARTS}}
+    pg.route("**/api/cluster", lambda r: r.fulfill(json=sample))
+    pg.route("**/api/flow*", lambda r: r.abort())
+    pg.goto(login_url(base_url, ui_token))
+    pg.wait_for_function("typeof setTree === 'function'", timeout=15000)
+    pg.wait_for_function("document.querySelector('#c-svc').textContent.includes('/')", timeout=15000)
+    pg.wait_for_timeout(500)
+    got = pg.evaluate("[document.querySelector('#c-svc').textContent, document.querySelector('#cnt-svc').textContent, document.querySelector('#kpis').textContent]")
+    pg.close()
+    bad = []
+    if "6/7" not in got[0]:
+        bad.append(f"services count ({vp} {scheme}): the strip chip says {got[0]!r}, expected 6/7")
+    if "6 of 7" not in got[1]:
+        bad.append(f"services count ({vp} {scheme}): the Services list says {got[1]!r}, expected 6 of 7")
+    if got[2].strip() and "6 of 7" not in got[2].replace("\xa0", " "):
+        bad.append(f"services count ({vp} {scheme}): the Overview tile says {got[2]!r}, expected 6 of 7")
+    return bad
+
+
 def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -897,6 +924,8 @@ def capture(out: Path) -> dict:
                     for problem in check_stack_down(browser, base_url, ui_token, vp, (w, h), scheme, str(sdpath)):
                         result["a11y"].append(problem)
                     result["shots"].append(str(sdpath))
+                    for problem in check_services_count(browser, base_url, ui_token, vp, (w, h), scheme):
+                        result["a11y"].append(problem)
                     spath = out / f"testrun-{vp}-{scheme}.png"
                     for problem in check_run(page, str(spath)):
                         result["a11y"].append(problem)
