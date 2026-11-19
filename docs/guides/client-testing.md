@@ -20,6 +20,8 @@ The client connects to workbench as it would to a production site: SSH to a logi
 
 The cluster has partitions `cpu` (4 nodes) and `gpu` (2 nodes, 8 `h200` GPUs each) and the users `alice` and `bob`. `up` prints the `ssh:` line and the names of the secret files.
 
+Fill in the [client test worksheet](client-test-worksheet.md) while you test: one scenario per row, with what the client should show, what it showed and a verdict.
+
 Shortcuts: import the whole cluster from one file with `benchctl export profile` ([export profile](export-profile.md)), or set up one client component at a time ([client setup by component](client-setup-by-component.md)).
 
 ## Find what the client needs
@@ -464,6 +466,7 @@ Source: [ADR 0018](../adr/0018-fixed-addressing-plan.md), SPEC G5, NF-6, NF-8
 
 ## Learn more
 
+- [Client test worksheet](client-test-worksheet.md): one scenario per row, expected against observed
 - [Client setup by component](client-setup-by-component.md)
 - [SSH connection testing](ssh-connection-testing.md)
 - [Scenarios](../manual/06-scenarios.md)
