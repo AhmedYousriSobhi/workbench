@@ -290,3 +290,69 @@ def test_tsh_proxy_kube_serves_a_local_kubeconfig_that_kubectl_uses(tele):
     finally:
         p.terminate()
         p.wait(timeout=15)
+
+
+# ---- failures (issue 756, ADR 0084 W4): each through the scenario engine, read back by `get faults`, restored, a different message each ----
+
+def kube_step(**do):
+    from benchctl import scenario
+    out = scenario.execute(scenario.Step(0, "auth", do))
+    assert out.status == "ok", out.detail
+
+
+def kube_faults() -> list[str]:
+    from benchctl import faultstate
+    return [r["label"] for r in faultstate.kube_rbac()]
+
+
+def test_a_missing_binding_is_a_kubernetes_forbidden_for_a_user_teleport_let_in(tele):
+    try:
+        kube_step(kube_binding_missing=["viewer"])
+        assert any("viewer tier" in x for x in kube_faults())
+        r = kubectl(tele, "alice", "get", "nodes", "-o", "name")
+        msg = one_line(r)
+        print("binding missing:", msg)
+        assert r.returncode != 0 and "forbidden" in msg and "alice" in msg, msg
+    finally:
+        kube_step(kube_binding_restore=True)
+    assert kube_faults() == []
+    assert "node/kcn001" in kubectl(tele, "alice", "get", "nodes", "-o", "name").stdout
+
+
+def test_revoked_impersonation_fails_every_request_upstream_with_its_own_message(tele):
+    try:
+        kube_step(kube_impersonation_revoked=True)
+        assert any("impersonat" in x for x in kube_faults())
+        r = kubectl(tele, "alice", "get", "nodes", "-o", "name")
+        msg = one_line(r)
+        print("impersonation revoked:", msg)
+        assert r.returncode != 0 and "impersonat" in msg, msg
+        assert "forbidden" not in msg or "cannot impersonate" in msg  # not the same message as a missing binding
+    finally:
+        kube_step(kube_impersonation_revoked=False)
+    assert kube_faults() == [] and "node/kcn001" in kubectl(tele, "alice", "get", "nodes", "-o", "name").stdout
+
+
+def test_an_expired_identity_fails_tsh_kube_login_and_credentials(tele):
+    import time
+    try:
+        kube_step(teleport_cert_ttl={"user": "alice", "ttl": "60s"})
+        time.sleep(70)
+        r = tsh(tele, "kube", "credentials", f"--kube-cluster={CLUSTER}", f"--teleport-cluster={teleport.CLUSTER}")
+        print("identity expired:", one_line(r))
+        assert r.returncode != 0
+        assert tsh(tele, "kube", "login", CLUSTER, extra_env={"KUBECONFIG": str(tele / "kc-expired")}).returncode != 0
+    finally:
+        kube_step(teleport_cert_restore=["alice"])
+    assert "node/kcn001" in kubectl(tele, "alice", "get", "nodes", "-o", "name").stdout
+
+
+def test_an_expired_api_server_certificate_is_an_x509_error_from_teleports_upstream_call(tele):
+    try:
+        kube_step(k8s_cert_expired=True)
+        assert wait_for(lambda: "x509" in one_line(kubectl(tele, "alice", "get", "nodes")) or "expired" in one_line(kubectl(tele, "alice", "get", "nodes")),
+                        timeout=90), one_line(kubectl(tele, "alice", "get", "nodes"))
+        print("api certificate expired:", one_line(kubectl(tele, "alice", "get", "nodes")))
+    finally:
+        kube_step(k8s_cert_expired=False)
+    assert wait_for(lambda: "node/kcn001" in kubectl(tele, "alice", "get", "nodes", "-o", "name").stdout, timeout=120)

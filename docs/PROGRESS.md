@@ -3,9 +3,9 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-18. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**92% built** (40 done, 144 in review, 11 partial, 4 to do, 199 items).
+**92% built** (40 done, 145 in review, 11 partial, 4 to do, 200 items).
 
-Verified, built items by highest level: 0 client, 21 live, 27 unit only, 136 not stated.
+Verified, built items by highest level: 0 client, 21 live, 28 unit only, 136 not stated.
 
 ## Roadmap
 
@@ -14,7 +14,7 @@ flowchart LR
     p0["Baseline<br/>33%"]:::partial
     p1["Governor<br/>88%"]:::partial
     p2["Slurm<br/>100%"]:::review
-    p3["Mocks<br/>87%"]:::partial
+    p3["Mocks<br/>88%"]:::partial
     p4["People and chaos<br/>25%"]:::partial
     p5["Kubernetes<br/>100%"]:::review
     p6["Fidelity VM<br/>0%"]:::todo
@@ -156,7 +156,7 @@ _A real scheduler the app can read, built from sim.yaml._
 
 6/11 done
 
-### Mocks (87%)
+### Mocks (88%)
 
 _Fake BMC, BCM and Jira so the app's integrations can be exercised._
 
@@ -174,11 +174,12 @@ _Fake BMC, BCM and Jira so the app's integrations can be exercised._
 | Client key helper | 🔍 In review | not stated | benchctl ssh-key install|remove: copies the login key to ~/.ssh/workbench_ed25519 (mode 600) for clients that only read keys under ~/.ssh; refuses to overwrite a foreign file. Issue 80. | `benchctl/stack.py`, `benchctl/cli.py`, `benchctl/commands/sshkey.py` | - |
 | GPU metrics follow Slurm jobs | 🔍 In review | Live | slurmctld serves the GPU indexes running jobs hold (internal :9401); the exporter polls it every 3 s and shows those GPUs busy, the rest idle (last answer kept 30 s if the feed is down). Verified live: tests/real/test_gpu_follows_slurm_real.py. Issue 83. | `components/gpu-exporter-farm/exporter.py`, `images/slurm-ctl/alloc_feed.py` | - |
 | Teleport kube audit events | 🔍 In review | not stated | Helpers that read Teleport's dir-backend audit log (one JSON line per event under /var/lib/teleport/log, via docker exec), select kube.request events by user, cluster, verb, response code and start time, and fail clearly when the folder is missing. The live module asserts a read as alice is audited (GET 200), a refused write (DELETE 403) and that a user without a Kubernetes group has no audited 200; the event types seen are recorded. Unit-tested; the live run (verify.sh --unit teleport_kube) is not done. Issue 754, ADR 0084. | `benchctl/teleportaudit.py`, `tests/test_tele_audit.py`, `tests/real/test_teleport_kube_real.py`, `docs/guides/teleport-kube.md`, `docs/adr/0084-tsh-kube-production-practice.md` | - |
+| Teleport kube failure scenarios | 🔍 In review | Unit | Scenario target auth gains kube_binding_missing (delete a tier's group binding: Teleport allows, Kubernetes says forbidden), kube_impersonation_revoked (the teleport user cannot impersonate: every request fails upstream) and kube_binding_restore, each with a restore, read back by get faults from a marker file; scenarios SC-55 to SC-57 (identity expiry reuses teleport_cert_ttl); k8s_cert_expired is asserted through Teleport. No new container. Unit-tested; live tests written, not run. Issue 756, ADR 0084 W4. | `benchctl/authfaults.py`, `benchctl/faultstate.py`, `scenarios/kube-*.yaml`, `tests/test_authfaults.py`, `tests/real/test_teleport_kube_real.py`, `docs/guides/teleport-kube.md`, `docs/adr/0052-expiry-and-auth-faults-in-the-scenario-engine.md` | - |
 | Teleport Kubernetes access tiers | 🔍 In review | Unit | Roles are v8: workbench-user is SSH only, and with the k8s part three tier roles (viewer, team-a developer, admin) each have a Kubernetes group with its own binding (RoleBinding in team-a for developers, ClusterRoleBinding for viewers and admins). teleport.kube_tier in sim.yaml picks a user's tier (default viewer); bootstrap sets an existing user's roles without replacing it. Live tests written (tiers, Teleport denial vs Kubernetes forbidden, tsh kube credentials, tsh kubectl, tsh proxy kube) but not run. Issue 753, ADR 0084 W1. | `benchctl/teleport.py`, `k8s/fixtures/47-rbac-teleport.yaml`, `tests/test_teleport.py`, `tests/real/test_teleport_kube_real.py`, `docs/guides/teleport-kube.md`, `docs/adr/0084-tsh-kube-production-practice.md` | - |
 | Kubernetes through Teleport (tsh kube) | 🔍 In review | Unit | With the teleport and k8s parts both on, the existing Teleport container runs a kubernetes_service registering the simulated cluster from a static kubeconfig (token user teleport, impersonation only), same web port, role workbench-user grants group workbench-k8s-viewers bound to the read-only role; Teleport stage now starts after the Kubernetes stages and is recreated when its config changes. Unit-tested; the live run (verify.sh --unit teleport_kube) is not done. Reverses the 2026-11-14 decision of ADR 0034. Issue 383, ADR 0083. | `benchctl/teleport.py`, `benchctl/k8s.py`, `benchctl/stack.py`, `k8s/fixtures/47-rbac-teleport.yaml`, `tests/test_teleport.py`, `tests/real/test_teleport_kube_real.py`, `docs/guides/teleport-kube.md`, `docs/adr/0083-kubernetes-through-teleport.md` | - |
 | Teleport access | 🔍 In review | not stated | Optional part (--with teleport): real Teleport auth+proxy container, agentless OpenSSH nodes trusting its CA, identity file per user, benchctl add invite for tsh login (ADR 0020). Unit-tested; live test tests/real/test_teleport_real.py. `benchctl doctor` and `up` warn in one line when the local tsh is a newer major version than the server (issue 210). Not yet: outage and cert-expiry scenarios, Web UI entry, measured memory budget. Issue 39. | `benchctl/teleport.py`, `images/node-base/teleport-ssh` | - |
 
-5/15 done
+5/16 done
 
 ### People and chaos (25%)
 

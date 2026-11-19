@@ -1,0 +1,6 @@
+name: kube-binding-missing
+ref: SC-55
+description: "The Kubernetes binding of the viewer tier's group is deleted for 90 s: through Teleport a viewer is still let in (Teleport allows) but kubectl answers forbidden from Kubernetes, the documented cause of Forbidden on a Teleport-fronted cluster; then the bindings are back. Needs --with teleport --with k8s"
+steps:
+  - {at: 0s,  target: auth, do: {kube_binding_missing: [viewer]}}
+  - {at: 90s, target: auth, do: {kube_binding_restore: true}}

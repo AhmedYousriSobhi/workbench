@@ -1,0 +1,6 @@
+name: kube-impersonation-revoked
+ref: SC-56
+description: "Teleport's own Kubernetes user loses the right to impersonate for 90 s, so every tsh kube request fails upstream with 'cannot impersonate' whatever the user's tier; then it is back. Needs --with teleport --with k8s"
+steps:
+  - {at: 0s,  target: auth, do: {kube_impersonation_revoked: true}}
+  - {at: 90s, target: auth, do: {kube_impersonation_revoked: false}}

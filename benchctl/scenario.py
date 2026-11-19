@@ -188,7 +188,8 @@ TARGET_PART = {"bmc-farm": "bmc-farm", "bcm-mock": "bcm-mock", "gpu-exporter": "
 NODE_KEYS = ("nodes", "drain", "down", "resume", "power_off", "power_on", "slurmd_stop", "slurmd_start", "slurmd_restart", "power_down",
              "power_up", "reboot", "up", "cordon", "uncordon", "munge_wrong_key", "munge_restore")
 AUTH_PART = {"slurm_token_ttl": "slurmrestd", "teleport_cert_ttl": "teleport", "teleport_cert_restore": "teleport", "munge_wrong_key": "slurmctld",
-             "munge_restore": "slurmctld", "bmc_tls_expired": "bmc-farm", "k8s_cert_expired": "k8s-api"}
+             "munge_restore": "slurmctld", "bmc_tls_expired": "bmc-farm", "k8s_cert_expired": "k8s-api",
+             "kube_binding_missing": "k8s-api", "kube_impersonation_revoked": "k8s-api", "kube_binding_restore": "k8s-api"}
 UPGRADE_PART = {"slurmdbd": "slurmdbd", "slurmctld": "slurmctld", "slurmrestd": "slurmrestd", "login": "login"}
 
 
