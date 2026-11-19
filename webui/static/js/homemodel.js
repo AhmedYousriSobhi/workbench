@@ -1,6 +1,8 @@
 // Overview (screen 1) as data: what needs attention, one card per node, one chip per service. Pure, so `node --test` covers it.
 // Honesty rule: a load bar only where a counter backs it (the GPU exporter's utilisation); everything else is words.
 
+import { servicesCount } from './servicecount.js';
+
 const STATE_TEXT = { ok: '✓', warn: '▲', fault: '✗', down: '⏻', unknown: '?' };
 
 // governor status (or null), cluster snapshot (or null), the governor's level names -> [{kind: bad|warn, icon, text, node?}]
@@ -17,7 +19,7 @@ export function attentionItems(gov, cl, levelNames) {
     (gov.violations || []).slice(0, 5).forEach(v => items.push({ kind: 'warn', icon: '▲', text: 'Security finding: ' + (typeof v === 'string' ? v : JSON.stringify(v)) }));
   }
   if (cl) {
-    const svcs = Object.entries(cl.services), down = svcs.filter(([, up]) => !up).map(([k]) => k), stackDown = down.length === svcs.length;
+    const { down, stackDown } = servicesCount(cl.services);
     if (stackDown) items.push({ kind: 'warn', icon: '▲', text: 'The simulation stack is not running. Start it with ./scripts/benchctl start' });
     else {
       down.forEach(k => items.push({ kind: 'bad', icon: '✗', text: `Service ${k} is not answering.` }));
@@ -47,8 +49,8 @@ export function homeServices(services, realSet) {
 // "how many of how many" for the header line under the title
 export function homeSummary(cl) {
   if (!cl) return 'Waiting for the first snapshot…';
-  const up = Object.values(cl.services).filter(Boolean).length, all = Object.keys(cl.services).length;
-  if (all && !up) return 'The simulation stack is not running.';
+  const sc = servicesCount(cl.services);
+  if (sc.stackDown) return 'The simulation stack is not running.';
   const ok = cl.nodes.filter(n => n.state === 'ok').length;
-  return `${ok} of ${cl.nodes.length} nodes healthy · ${up} of ${all} services answering`;
+  return `${ok} of ${cl.nodes.length} nodes healthy · ${sc.words} services answering`;
 }
