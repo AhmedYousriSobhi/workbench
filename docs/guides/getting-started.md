@@ -96,9 +96,15 @@ Ubuntu has `python3`, not `python`, and `benchctl` needs a few packages. Use a v
 python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'
 ```
 
-The venv is per shell. You have two choices:
-- Activate it again in every new terminal: `. .venv/bin/activate`. Then type `benchctl ...`.
-- Skip activation: `./scripts/benchctl <command>` uses `.venv` directly, for example `./scripts/benchctl status`.
+The venv is per shell, so do not rely on activating it. Put `benchctl` on your PATH once instead (no sudo, no activation):
+
+```bash
+./scripts/install-benchctl.sh     # adds ~/.local/bin/benchctl (a link); --uninstall removes it
+benchctl status                   # works from any directory and any new terminal
+benchctl completion install       # optional: Tab completion
+```
+
+Without the install, `./scripts/benchctl <command>` from the checkout does the same. Activating the venv (`. .venv/bin/activate`) is only for running Python tools by hand (`pytest`, `ruff`).
 
 Every command below works both ways. The governor service needs no packages. It runs on the system `python3`.
 
