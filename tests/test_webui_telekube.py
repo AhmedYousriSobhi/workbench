@@ -62,3 +62,12 @@ def test_hidden_without_both_parts_one_notice_when_teleport_is_down_data_otherwi
     assert off["shown"] and "not answering" in off["notice"] and telekube.RECOVERY in off["notice"] and off["events"] == [] and "sudo" not in off["notice"]
     on = telekube.collect(True, lambda u: SCRAPE, "http://x", d)
     assert on["notice"] is None and on["counters"]["requests"] == 12 and on["counters"]["portforward"] is None and on["events"][0]["user"] == "alice"
+
+
+def test_the_real_layout_day_files_under_a_cluster_folder_and_a_dangling_events_link(tmp_path):
+    """Teleport writes log/<cluster id>/DAY.log and log/events.log, a link to a container path that does not exist on the host (found live)."""
+    sub = tmp_path / "349e9ecb-123c"
+    sub.mkdir()
+    (sub / "2026-11-19.00:00:00.log").write_text(line("alice", "GET", 200, name="n1") + "\n")
+    (tmp_path / "events.log").symlink_to("/var/lib/teleport/log/349e9ecb-123c/2026-11-19.00:00:00.log")
+    assert [e["resource"] for e in telekube.recent_events(tmp_path)] == ["nodes/n1"]

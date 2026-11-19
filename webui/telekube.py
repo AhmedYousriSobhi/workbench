@@ -36,7 +36,9 @@ def _tail(path: Path) -> str:
 
 def recent_events(log_dir: Path = LOG_DIR, n: int = RECENT) -> list[dict]:
     """The last `n` kube.request events, newest first, as {time, user, verb, resource, code}."""
-    files = sorted(log_dir.glob("*.log"), reverse=True)[:2] if log_dir.is_dir() else []
+    # Teleport writes the day files under log/<cluster id>/YYYY-MM-DD.00:00:00.log; log/events.log is a link to today's with a container path, dangling on the host
+    # (found live: the page showed no calls). A flat folder of day files still works (tests).
+    files = sorted((f for f in [*log_dir.glob("*.log"), *log_dir.glob("*/*.log")] if f.is_file()), key=lambda f: f.name, reverse=True)[:2] if log_dir.is_dir() else []
     events: list[dict] = []
     for f in files:
         try:
