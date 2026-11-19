@@ -479,12 +479,14 @@ def k8sgpu_skewed(skew: str) -> str:
 
 
 
-def test_a_bmc_power_off_or_overheat_of_a_kubernetes_node_makes_it_notready_and_the_card_shows_the_machine(cluster):
+def test_a_bmc_power_off_or_overheat_of_a_kubernetes_node_makes_it_notready_and_the_card_shows_the_machine(cluster, monkeypatch):
     """Issue 385: Kubernetes nodes are machines. The scenario's BMC step on a Kubernetes node also reports it NotReady (the KWOK fault stage), `clear`
     brings it back, the page's card carries power, temperature and BCM state, and `describe node` reads it."""
     from benchctl import describe
     from webui import cluster as page
 
+    monkeypatch.setattr("webui.cluster.k8s_built", lambda: True)  # tests/conftest.py turns it off so a developer's build does not leak in
+    workbench.save(SPEC)  # the page reads the saved selection (SAVED is a temporary file in tests)
     sim = k8s.current_sim()
     node = k8s.node_list(sim)[0][0]
 

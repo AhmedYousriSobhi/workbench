@@ -48,12 +48,10 @@ teleport:
 
 Two layers say no, with different messages. Outside the role's `kubernetes_resources` (the developer reading nodes) Teleport refuses. Inside them but not allowed by the Kubernetes Role (the developer reading secrets in `team-a`) Kubernetes answers `forbidden`, naming the user and the resource. A Teleport user whose role has no `kubernetes_groups` is denied.
 
-Other tools an app that uses `tsh` may call (written and unit-tested; the live run is owner-run, so these are not yet proven):
+Run live on 2026-11-19 (tsh 18.11.2 against Teleport 18.11.8): `tsh kube credentials` with the identity file works (it is what `kubectl` runs through the kubeconfig `tsh kube login` writes). `tsh kubectl` and `tsh proxy kube` do **not** work with only an identity file: kubectl gets no credentials and falls back to `localhost:8080`. Use `tsh kube login` and kubectl instead:
 
 ```bash
 tsh --insecure -i compose/generated/secrets/teleport/identity/alice kube credentials --kube-cluster=workbench-k8s --teleport-cluster=workbench
-tsh --insecure kubectl get nodes          # with TELEPORT_IDENTITY_FILE and TELEPORT_PROXY set as above
-tsh --proxy=10.141.255.30:3080 --insecure -i compose/generated/secrets/teleport/identity/alice proxy kube workbench-k8s   # prints a KUBECONFIG to use
 ```
 
 ## Failures to play

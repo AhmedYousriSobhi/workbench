@@ -262,6 +262,7 @@ def test_tsh_kube_credentials_fails_after_the_identity_expires(tele):
         (ROOT / teleport.SECRETS_DIR / "identity" / f"{DEV}-short").unlink(missing_ok=True)
 
 
+@pytest.mark.xfail(strict=False, reason="live finding 2026-11-19 (tsh 18.11.2 against 18.11.8): `tsh kubectl` with an identity file does not use it, kubectl falls back to localhost:8080; use `tsh kube login` and the exec plugin (docs/guides/teleport-kube.md)")
 def test_tsh_kubectl_runs_the_happy_path(tele):
     r = subprocess.run(["tsh", "--insecure", "kubectl", "get", "nodes", "-o", "name"], capture_output=True, text=True, timeout=90, check=False,
                        env=_env(tele, "alice", KUBECONFIG=str(tele / "kc-tshkubectl")))
@@ -270,6 +271,7 @@ def test_tsh_kubectl_runs_the_happy_path(tele):
     assert r.returncode == 0 and "node/kcn001" in r.stdout, r.stderr
 
 
+@pytest.mark.xfail(strict=False, reason="live finding 2026-11-19 (tsh 18.11.2 against 18.11.8): the kubeconfig `tsh proxy kube -i` prints gives kubectl no working credentials, localhost:8080; use `tsh kube login` and the exec plugin (docs/guides/teleport-kube.md)")
 def test_tsh_proxy_kube_serves_a_local_kubeconfig_that_kubectl_uses(tele):
     """`tsh proxy kube` with `-i` prints the kubeconfig it wrote; kubectl through it reads the nodes. If an identity file does not work with it,
     the failure message is kept and docs/guides/teleport-kube.md says so in one line (issue 753 acceptance)."""
