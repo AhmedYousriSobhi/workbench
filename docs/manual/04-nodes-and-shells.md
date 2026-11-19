@@ -236,6 +236,8 @@ The Teleport web UI is at `https://10.141.255.30:3080` (same login).
 This adds a real Kubernetes control plane (etcd, API server, scheduler, controller manager) and KWOK, which plays the nodes. About 0.3 GB of memory. The first start pulls about 400 MB of images.
 
 - **Nodes:** fake and separate from the Slurm nodes: `kcn001`, `kcn002` (CPU) and `kgpu001`, `kgpu002` (8 GPUs each, labelled as GPU Feature Discovery does). Change them under `kubernetes:` in `sim.yaml`, set the counts with `--k8s-nodes N` (GPU nodes) and `--k8s-cpu-nodes N`, or use the page (Cluster architecture).
+- **Machines:** the Kubernetes nodes have BMCs and BCM entries. `benchctl get nodes`, `benchctl describe node kgpu001` and the scenario BMC steps know them.
+- **Power and heat:** a BMC power-off or an overheat step also reports the node NotReady; `clear` or power-on brings it back.
 - **Pods:** they never really run, so there are no real pod logs: `kubectl logs` shows canned log lines (`crashloop` in `team-b` also has `--previous`), and `kubectl top` shows the usage set in the pods' annotations. A pod labelled `workbench_fault` (the fixtures have crash-looping, OOM-killed, image-pull and failed-job ones) shows the status a kubelet would report.
 - **DRA:** each GPU node also publishes a `ResourceSlice` (driver `gpu.sim.test`, one device per GPU, UUIDs as in the DCGM series). The pod `dra-train` in `team-a` gets its GPU through a `ResourceClaim` the real scheduler allocates (`kubectl -n team-a get resourceclaim -o yaml`, ADR 0076).
 - **Queues (Kueue):** `kubectl api-resources | grep kueue` lists `clusterqueues`, `localqueues` and `resourceflavors` (Kueue v0.20.6, v1beta2). There is no Kueue controller, so the counts are fixtures.

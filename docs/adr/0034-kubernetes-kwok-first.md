@@ -151,3 +151,9 @@ The client reads queue status with `kubectl get`, only when `kubectl api-resourc
 - **Logs and the metrics API need a reachable node address.** KWOK runs with `--node-ip=127.0.0.1`, so neither the API server (`kubectl logs`) nor metrics-server can reach its kubelet port. Prerequisite P1: the kwok-controller's fixed address, and more KWOK definitions enabled (`Logs`, `ClusterLogs`, `Metric`, `ClusterResourceUsage`). **Built in issue 872** (see the ADR 0084 addendum "built, issue 872"): nodes now advertise 10.141.255.44, and KWOK serves canned CRI log files and the kubelet resource metrics.
 - **Nodes report a real kubelet version**, the API server's, instead of `kwok-<version>`, so a client can judge version skew.
 - **The Kueue pattern** (definitions plus status, no controller) fits Volcano. It does not fit HPAs: their controller runs in the controller manager, so HPAs need the metrics API.
+
+## Addendum: Kubernetes nodes as machines on the page and in the CLI (issue 385, 2026-11-19)
+- **One list of machines.** `nodes.hardware_nodes` (Slurm nodes, then `k8s-cpu` and `k8s-gpu`) is what `benchctl get nodes`, `describe node`, completion and scenario validation use; `node_names` stays Slurm-only (ssh, Teleport, slurm.conf).
+- **Power and heat reach the node's Ready condition.** `scenario.side_effects` adds a `k8s` step for a Kubernetes node: `down` for a BMC power-off or a CPU temperature of 85 C or more, `up` for `clear` or power-on. The Slurm `power_off` step is built only for the Slurm nodes in the step. The KWOK stage `fault-node-down` already does the rest.
+- **The card is the worse of two readings.** The API's state (Ready, NotReady, cordoned) and the machine's (power, temperature, fans, BCM); a powered-off machine reads `down`, two faults read `NotReady (Overheating (92 C))`.
+- **Page limit.** The page has no Docker (SPEC W-3), so its `k8s` side effect is reported as skipped; playing it through the governor is issue 386.

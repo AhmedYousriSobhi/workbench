@@ -4,7 +4,6 @@ import { kindOf } from './svg.js';
 import { clusterFacts } from './overview.js';
 import { paintHealth } from './governor.js';
 import { showNode } from './node.js';
-import { openConnection } from './inspector.js';
 import { paintBlocks, paintTiles } from './diagram.js';
 import { paintTraffic } from './traffic.js';
 
@@ -40,7 +39,7 @@ export function renderCluster(c) {
     $('nodes-' + kind).innerHTML = rows.map(n => node(n)).join(''); paintDyn($('nodes-' + kind)); $('br-' + kind).hidden = !rows.length;
     $('cnt-' + kind).textContent = `${rows.filter(n => n.state === 'ok').length} of ${rows.length} healthy`;
   }
-  document.querySelectorAll('.node').forEach(b => b.onclick = () => { const n = c.nodes.find(x => x.name === b.dataset.node); if (n && n.kind === 'k8s') openConnection('k8s'); else showNode(b.dataset.node); });  // a Kubernetes node has no BMC or Slurm actions: its row is Connections
+  document.querySelectorAll('.node').forEach(b => b.onclick = () => { const n = c.nodes.find(x => x.name === b.dataset.node); if (n) showNode(b.dataset.node); });  // a Kubernetes node opens its panel too: it has a BMC (power, temperature) and a BCM entry, no Slurm or SSH (#385)
   if (S.openNode) { const n = c.nodes.find(x => x.name === S.openNode); if (n) { $('nodestate').className = 'pill ' + n.state; $('nodestate').textContent = `${STATE_ICON[n.state]} ${n.label}`; } }
 }
 let paused = false;

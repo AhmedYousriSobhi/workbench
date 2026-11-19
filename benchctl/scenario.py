@@ -30,7 +30,7 @@ from . import (
     slurmupgrade,
     topology,
 )
-from .nodes import node_names
+from .nodes import hardware_nodes, k8s_node_names
 
 ENDPOINTS = {"gpu-exporter": "http://127.0.0.1:9400/sim/inject", "bmc-farm": "http://127.0.0.1:8000/sim/inject",
              "bcm-mock": "http://127.0.0.1:8081/sim/inject", "jira": "http://127.0.0.1:8080/sim/failure",
@@ -266,7 +266,7 @@ def fault_steps(steps: list[dict]) -> list[dict]:
 def validate(sc: dict, sim: dict) -> list[str]:
     """Problems found without touching the stack: unknown targets, nodes or durations."""
     problems = []
-    nodes = {n for n, _ in node_names(sim)}
+    nodes = {n for n, _ in hardware_nodes(sim)}  # Slurm and Kubernetes nodes: both have a BMC and a BCM entry (#385)
     for e, exp in enumerate(sc.get("expect") or [], 1):
         problems += [f"expect {e}: {m}" for m in expect_problems(exp)]
     for i, s in enumerate(sc.get("steps", []), 1):
@@ -457,7 +457,7 @@ def power_commands(do: dict) -> list[list[str]]:
     return cmds
 
 
-def side_effects(step: Step) -> list[Step]:
+def side_effects(step: Step, sim: dict | None = None) -> list[Step]:
     """A power change on the BMC is also a change on the BCM, the GPU exporter and the node itself (and so in Slurm):
     a scenario says it once, as the page's Power off does. `clear` powers the node on again, so it thaws it too. Every
     fault also files, and every recovery resolves, the node's Jira ticket (the mock's `fault` action, #157)."""
@@ -496,11 +496,19 @@ def side_effects(step: Step) -> list[Step]:
                                                       "detail": "The node reports healthy again."}}) for k in recovered]
     on = do.get("power") == "On" or bool(do.get("clear"))
     real = dcgm_steps(step, nodes)
+    kube = k8s_node_names(sim if sim is not None else k8s.current_sim())  # a Kubernetes node is NotReady when its machine is off or too hot (#385)
+    kn, sn = [n for n in nodes if n in kube], [n for n in nodes if n not in kube]
+    kube_steps = []
+    if kn and step.target == "bmc-farm":
+        if do.get("power") == "Off" or float(do.get("temp") or 0) >= 85:
+            kube_steps.append(Step(step.at, "k8s", {"down": kn}))
+        elif on:
+            kube_steps.append(Step(step.at, "k8s", {"up": kn}))
     if step.target != "bmc-farm" or (do.get("power") != "Off" and not on):
-        return [*real, *tickets]
+        return [*real, *kube_steps, *tickets]
     return [Step(step.at, "bcm-mock", {"nodes": nodes, "state": "UP" if on else "DOWN"}),
             Step(step.at, "gpu-exporter", {"nodes": nodes, "down": not on}), *real,
-            Step(step.at, "slurm", {"power_on" if on else "power_off": nodes}), *tickets]
+            *([Step(step.at, "slurm", {"power_on" if on else "power_off": sn})] if sn else []), *kube_steps, *tickets]
 
 
 def dcgm_steps(step: Step, nodes: list[str]) -> list[Step]:
@@ -530,7 +538,7 @@ def _dcgm(step: Step, label: str, runner) -> Outcome:
     return Outcome(label, "ok", f"{verb} {done} real exporter(s)" if done else "no real exporter on these nodes")
 
 
-def execute(step: Step, poster=post, runner=checks.run, host: bool = True, slurm=None, daemon=None) -> Outcome:
+def execute(step: Step, poster=post, runner=checks.run, host: bool = True, slurm=None, daemon=None, sim: dict | None = None) -> Outcome:
     """Apply one step (and what it implies, see side_effects); the label names what was done, status says whether it worked.
 
     host=False is for callers without Docker access (the Web UI): `slurm(node, state, reason)` (the governor) takes
@@ -542,7 +550,7 @@ def execute(step: Step, poster=post, runner=checks.run, host: bool = True, slurm
         return main
     lab_interference.record(f"scenario step {','.join(sorted(step.do))}", step.target, "scenario")  # issue 554: a lab run is then not comparable
     failed, notes = [], []
-    for extra in side_effects(step):
+    for extra in side_effects(step, sim):
         o = _apply(extra, poster, runner, host, slurm, daemon)
         if extra.target == "jira" and o.status == "failed":  # no Jira in this cluster: a fault is still a fault
             o = Outcome(o.label, "skipped", "no Jira to file the ticket in")
