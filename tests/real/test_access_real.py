@@ -54,5 +54,5 @@ def test_ssh_through_the_bare_jump_host_reaches_the_login_node_and_the_controlle
     jump = ("127.0.0.1", 2220)
     assert ssh("alice", "login", 22, "hostname", jump=jump).stdout.strip() == "login"
     assert ssh("alice", "controller", 22, "hostname", jump=jump).returncode == 0
-    bare = ssh("alice", "127.0.0.1", 2220, "command -v squeue sinfo scontrol python3")
-    assert bare.returncode != 0 and bare.stdout.strip() == ""  # nothing installed on the bastion
+    bare = ssh("alice", "127.0.0.1", 2220, "command -v squeue sinfo scontrol")
+    assert bare.returncode != 0 and bare.stdout.strip() == ""  # no Slurm tools on the bastion (python3 is there only for the session counter, issue 213)
