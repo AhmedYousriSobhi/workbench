@@ -68,6 +68,8 @@ def kube_rbac(path: Path | None = None) -> list[dict]:
            for m in sorted(marks) if m.startswith("binding:")]
     if "impersonation" in marks:
         out.append(row("k8s-api", "auth", "Teleport may not impersonate users: every tsh kube request fails upstream"))
+    if "teleport-outage" in marks:
+        out.append(row("teleport", "auth", "the Teleport proxy is stopped: tsh and the web terminal are refused, direct SSH still works"))
     return out
 
 

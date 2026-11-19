@@ -54,6 +54,7 @@ SAMPLES = [  # (target, do): one per key the engine or a mock's /sim/inject acce
     ("auth", {"bmc_tls_expired": True}), ("auth", {"bmc_tls_expired": False}), ("auth", {"k8s_cert_expired": True}),
     ("auth", {"k8s_cert_expired": False}), ("auth", {"kube_binding_missing": ["viewer"]}), ("auth", {"kube_impersonation_revoked": True}),
     ("auth", {"kube_impersonation_revoked": False}), ("auth", {"kube_binding_restore": True}),
+    ("auth", {"teleport_outage": True}), ("auth", {"teleport_outage": False}),
     ("netem", {"nodes": N, "delay": "200ms", "loss": "5%", "ttl": "60s"}), ("netem", {"nodes": N, "delay": 50}), ("netem", {"clear": True}),
     ("k8s", {"down": ["kgpu001"]}), ("k8s", {"up": ["kgpu001"]}), ("k8s", {"cordon": ["kgpu001"]}), ("k8s", {"uncordon": ["kgpu001"]}),
     ("k8s", {"pod": {"namespace": "team-b", "name": "p", "fault": "imagepull"}}), ("k8s", {"pod": {"namespace": "team-b", "name": "p", "fault": "jobfail"}}),
