@@ -11,6 +11,8 @@ for, and why. Every command runs from the repository root.
 
 ## The short answer
 
+For a step-by-step walk through one goal, see the [tutorials](../tutorials/README.md).
+
 | I want to... | Run | Why this one |
 |---|---|---|
 | start everything, including the web page | `./scripts/benchctl start` | checks the machine, starts the memory governor, the cluster and the web page |

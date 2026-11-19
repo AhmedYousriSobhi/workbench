@@ -291,6 +291,9 @@ ICONS = {
     "group-manual.svg": lambda: icon("Manual", "An open book.",
                                      '<path class="fr" d="M32 16c-6-4-14-5-24-4v38c10-1 18 0 24 4c6-4 14-5 24-4V12c-10-1-18 0-24 4z"/>'
                                      '<path class="st" d="M32 16v38"/>'),
+    "group-tutorials.svg": lambda: icon("Tutorials", "A path of three steps ending in a tick.",
+                                        '<path class="st" d="M12 46h14V32h14V18h12"/><circle class="ok" cx="12" cy="46" r="5"/>'
+                                        '<circle class="ok" cx="26" cy="32" r="5"/><circle class="ok" cx="40" cy="18" r="5"/>'),
     "group-guides.svg": lambda: icon("Guides", "A list of steps.",
                                      '<path class="st" d="M24 18h28M24 32h28M24 46h28"/><circle class="ok" cx="13" cy="18" r="4.5"/>'
                                      '<circle class="ok" cx="13" cy="32" r="4.5"/><circle class="ok" cx="13" cy="46" r="4.5"/>'),

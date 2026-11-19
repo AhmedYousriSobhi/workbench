@@ -2,7 +2,7 @@
 
 workbench is a simulated HPC and AI cluster that runs on one 16 GB Ubuntu workstation. Point your monitoring client at it, break nodes, drain them, expire certificates and rate-limit Jira on command, and watch whether the client notices. Slurm is real; the BMCs, BCM, Jira and GPU metrics are faithful stand-ins; a memory governor outside the cluster keeps your machine usable.
 
-New here? Follow the three steps below, or read [The Tour](00-tour.md) (five minutes, one picture per step). Short on time, or want the commands only? [Getting started](../guides/getting-started.md) is the 10-minute version.
+New here? Follow the three steps below, or read [The Tour](00-tour.md) (five minutes, one picture per step). Want to do one thing, such as break a node or test tickets? Pick a [tutorial](../tutorials/README.md). Short on time, or want the commands only? [Getting started](../guides/getting-started.md) is the 10-minute version.
 
 Where the documents disagree, [SPEC.md](../../SPEC.md) wins. [The architecture](../architecture/README.md) explains why it is built this way, and [what works today](../PROGRESS.md) lists what is built.
 
@@ -25,6 +25,8 @@ Where the documents disagree, [SPEC.md](../../SPEC.md) wins. [The architecture](
 The same pages open inside the web page: click **? Help** in its header (http://127.0.0.1:8088/help/), with a sidebar and search. Screenshots of the web page and of real terminal output are in chapters 3, 4 and 5.
 
 ## Find your goal
+
+The [tutorials](../tutorials/README.md) walk through each goal below step by step.
 
 | I want to... | Read |
 |---|---|
