@@ -31,25 +31,27 @@
    cat compose/generated/secrets/grafana_viewer_token
    ```
 
-6. Break something while the client is connected.
+6. Switch notify on for each cluster in the client. It is off by default for Slurm, Kubernetes, storage and BCM; reachability, SSH and Teleport-expiry notices need no opt-in.
+
+7. Break something while the client is connected.
 
    ```bash
    ./scripts/benchctl scenario run node-down
    ```
 
-7. See which surfaces the client really called. With no client connected it prints `no requests recorded`.
+8. See which surfaces the client really called. With no client connected it prints `no requests recorded`.
 
    ```bash
    ./scripts/benchctl get traffic
    ```
 
-8. Attach what happened to a bug report. It prints `wrote test-report.md (test report of node-down: passed)`; run step 6 first, it reports the last run.
+9. Attach what happened to a bug report. It prints `wrote test-report.md (test report of node-down: passed)`; run step 7 first, it reports the last run.
 
    ```bash
    ./scripts/benchctl export test-report last -o test-report.md
    ```
 
-9. Remove the key copy when done (it deletes `~/.ssh/workbench_ed25519` only if it is the workbench key).
+10. Remove the key copy when done (it deletes `~/.ssh/workbench_ed25519` only if it is the workbench key).
 
    ```bash
    ./scripts/benchctl ssh-key remove

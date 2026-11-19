@@ -108,7 +108,7 @@ A tool a client calls is tested end to end even if the simulation never needed i
 4. Limited user: the limited view and the logs note.
 5. Describe and Logs on a pod, including `--previous` (760).
 6. Security: what this user may do, pod security posture.
-7. Notifications: node NotReady and back, new OOM, evictions.
+7. Notifications (off by default per cluster; switch notify on first): node NotReady and back, new OOM, evictions.
 8. A Teleport cluster: refresh by hand, expired profile, "waiting for a Teleport login" (763). Direct SSH and jump host for comparison.
 9. Scale and old versions: the largest safe node count (768); 1.29 (769).
 State what was and was not exercised in each PR (definition of done).
