@@ -18,7 +18,7 @@
    ./scripts/benchctl get alerts
    ```
 
-4. Make something fire. `node-down` takes 40 s and picks the CPU node `cn002`; `gpu-xid-storm` takes 180 s. Read the alerts (step 5) while each runs. To see `NodeDown` as well, which watches the GPU series, power a GPU node off and back on.
+4. Make something fire. `node-down` takes 40 s and picks the CPU node `cn002`; `gpu-xid-storm` takes 180 s. Read the alerts (step 5) while each runs. `NodeDown` fires for it too, about 2 minutes after the node goes off.
 
    ```bash
    ./scripts/benchctl scenario run node-down
@@ -50,7 +50,7 @@ They live in `observability/rules.yml`.
 
 ## You should see
 
-- After `node-down`: `NodeDrained` and `ExporterDown`, first `pending`, then `firing` after their 30 s (they clear after the scenario). `NodeDown` does not fire for a CPU node: it fires within about 2 minutes of a GPU node going off. `GpuXidCritical` fires about 15 s into `gpu-xid-storm`, one per GPU node.
+- After `node-down`: `NodeDrained` and `ExporterDown`, first `pending`, then `firing` after their 30 s (they clear after the scenario). `NodeDown` fires for any node, CPU or GPU, within about 2 minutes of it going off. `GpuXidCritical` fires about 15 s into `gpu-xid-storm`, one per GPU node.
 - Not exercised: the Grafana and Prometheus pages and the dashboards, only the endpoints (`/api/health` and `/api/user` answer with `admin`/`admin`).
 - GPU dashboards follow the jobs: busy GPUs read 70 to 100 %, idle ones read idle, within about 20 seconds.
 
