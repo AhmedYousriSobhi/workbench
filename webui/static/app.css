@@ -585,3 +585,8 @@
   .zoomrail { flex-wrap:nowrap; } .zoomrail [data-level]:not([aria-pressed="true"]) { display:none; } .zoomrail [data-level][aria-pressed="true"] { flex:1; }
   #trafficpanel > .row:first-child { flex-wrap:nowrap; } #trafficpanel > .row:first-child h2 { min-width:0; font-size:1.0625rem; overflow-wrap:anywhere; } #trafficpanel > .row:first-child .btn { flex:none; }
 }
+
+/* Teleport details: recent Kubernetes calls (issue 755). The outcome is a word, the border only echoes it. */
+.kube-ev { list-style:none; margin:0; padding:0; } .kube-ev li { margin:0 0 4px; overflow-wrap:anywhere; }
+.kube-code { display:inline-block; padding:0 6px; border:1px solid var(--line); border-radius:var(--r1, 4px); white-space:nowrap; }
+.kube-code[data-outcome="refused"] { border-color:var(--warn); } .kube-code[data-outcome="error"] { border-color:var(--bad); } .kube-code[data-outcome="ok"] { border-color:var(--ok); }

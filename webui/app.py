@@ -33,11 +33,11 @@ from starlette.routing import Route
 
 from benchctl import checks, nhc, scenario, slurmtrace
 
-from . import monitoring, traffic
+from . import monitoring, telekube, traffic
 from .blast import payload as blast_payload
 from .blast import preview as blast_preview
 from .blast import step_blast
-from .cluster import ActionError, Cluster
+from .cluster import TELEPORT, ActionError, Cluster, http_json, k8s_built, teleport_built
 from .flow import PAUSE_LEVEL, Flow
 from .graph import attach as attach_graph
 from .wiki import Wiki, WikiError, esc, page
@@ -729,6 +729,11 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             return None
         return res.get("trace") if res.get("ok") else None
 
+    async def teleport_kube(request: Request):
+        """Teleport's Kubernetes request counters and the last kube.request audit events (issue 755); hidden unless both parts are built."""
+        data = await asyncio.to_thread(lambda: telekube.collect(teleport_built() and k8s_built(), lambda u: http_json(u, timeout=1.5), TELEPORT))
+        return JSONResponse(data)
+
     slurm_stats_cache: list = [float("-inf"), None]
 
     async def slurm_stats(request: Request):
@@ -936,6 +941,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/cluster", protected(cluster_state)),
             Route("/api/flow", protected(flow_events)),
             Route("/api/slurm-stats", protected(slurm_stats)),
+            Route("/api/teleport-kube", protected(teleport_kube)),
             Route("/api/monitoring", protected(monitoring_links)),
             Route("/api/settings", protected(settings)),
             Route("/api/plan", protected(plan)),

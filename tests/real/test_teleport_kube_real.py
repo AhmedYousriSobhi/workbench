@@ -356,3 +356,17 @@ def test_an_expired_api_server_certificate_is_an_x509_error_from_teleports_upstr
     finally:
         kube_step(k8s_cert_expired=False)
     assert wait_for(lambda: "node/kcn001" in kubectl(tele, "alice", "get", "nodes", "-o", "name").stdout, timeout=120)
+
+
+# ---- the page's Teleport view (issue 755): counters and recent kube calls, read from the host files ----
+
+def test_a_kubectl_call_appears_in_the_pages_teleport_view(tele):
+    from webui import cluster, telekube
+    name = f"view-probe-{secrets.token_hex(3)}"
+    kubectl(tele, "alice", "get", "pod", name, "-n", "team-a")  # not found: still a kube.request, with this name in its path
+    got = wait_for(lambda: any(e["user"] == "alice" and name in e["resource"]
+                               for e in telekube.collect(True, lambda u: cluster.http_json(u, timeout=3), cluster.TELEPORT)["events"]), timeout=30)
+    data = telekube.collect(True, lambda u: cluster.http_json(u, timeout=3), cluster.TELEPORT)
+    assert got, data["events"][:3]
+    assert data["notice"] is None
+    print("kubernetes counters Teleport 18.11.8 publishes:", data["counters"])  # None means not published: recorded for the guide
