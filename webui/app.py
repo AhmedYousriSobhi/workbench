@@ -40,6 +40,7 @@ from .blast import step_blast
 from .cluster import TELEPORT, ActionError, Cluster, http_json, k8s_built, teleport_built
 from .flow import PAUSE_LEVEL, Flow, jump_address, ssh_sources
 from .graph import attach as attach_graph
+from .kubeaudit import KubeAudit
 from .wiki import Wiki, WikiError, esc, page
 
 STATIC = Path(__file__).parent / "static"
@@ -299,7 +300,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
                sim_yaml: Path = Path("sim.yaml"), interval: float = 1.0, docs: Path = DOCS,
                fetch=None, poster=None, nhc_src: Path = nhc.SRC, nhc_out: Path = nhc.OUT, counters=None) -> Starlette:
     sim = yaml.safe_load(sim_yaml.read_text())
-    flow = Flow(ssh=None if fetch else ssh_sources, jump_ip=jump_address())  # a test that passes `fetch` reaches no host counters
+    flow = Flow(ssh=None if fetch else ssh_sources, jump_ip=jump_address(),  # a test that passes `fetch` reaches no host counters
+                kube=KubeAudit(lambda req: checks.governor_request(req, socket, timeout=2)))
 
     def live_counters() -> dict:
         flow.poll(force=True)

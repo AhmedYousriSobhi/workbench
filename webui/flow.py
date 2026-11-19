@@ -66,8 +66,9 @@ def jump_address() -> str | None:
 
 
 class Flow:
-    def __init__(self, fetch=None, clock=time.monotonic, keep: int = 300, min_interval: float = 0.8, ssh=None, jump_ip: str | None = None):
+    def __init__(self, fetch=None, clock=time.monotonic, keep: int = 300, min_interval: float = 0.8, kube=None, ssh=None, jump_ip: str | None = None):
         self.fetch = fetch or (lambda url: http_json(url, timeout=PROBE_TIMEOUT))
+        self.kube = kube  # a webui.kubeaudit.KubeAudit, or None (tests, no governor)
         self.ssh_src = ssh or dict  # called on each poll: the login nodes come and go with the saved selection
         self.jump_ip = jump_ip
         self.last_src: dict[str, dict[str, int]] = {}  # per SSH counter: connections seen per source address at the last poll
@@ -200,6 +201,8 @@ class Flow:
                             n = k8s.api_requests()  # all callers, since the API server started: shown as a total, never as dots
                             if n is not None:
                                 self.totals[svc] = n
+                            if self.kube:
+                                self.kube.poll()  # asks the governor at most every 5 s, never Docker (SPEC W-3)
                         else:
                             self.latency.pop(svc, None)
                             self._down(svc, now)
@@ -221,5 +224,8 @@ class Flow:
 
     def since(self, after: int) -> dict:
         with self.lock:
-            return {"cursor": self.seq, "events": [e for e in self.events if e["id"] > after],
+            snap = {"cursor": self.seq, "events": [e for e in self.events if e["id"] > after],
                     "totals": dict(self.totals), "errors": dict(self.errors), "latency": dict(self.latency), "reachable": dict(self.reachable)}
+            if self.kube and self.reachable.get("k8s-api"):  # per-user Kubernetes requests (issue 384): only while the API answers
+                snap["kube"] = self.kube.summary()
+            return snap

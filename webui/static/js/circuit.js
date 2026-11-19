@@ -64,7 +64,7 @@ function partText(p, f) {
     case 'slurmctld': return { t: p.ctl ? 'controller · slurmctld' : 'slurmctld', s: p.present ? (!up ? OFFLINE : S.slurmNodes ? '✓ answers (sinfo)' : '– not probed') : '', m: p.ctl ? 'sshd + cmsh · BCM head node' : 'real · Slurm RPC :6817' };
     case 'slurmdbd': return { t: 'slurmdbd + MariaDB', s: p.present ? (up ? '✓ answers (sacctmgr)' : OFFLINE) : '', m: p.present ? 'real · accounting :6819' : 'accounting · not read' };
     case 'storage': return { t: 'Shared storage', s: '– planned, not built', m: 'NFS or Lustre (SPEC C-11)' };
-    case 'k8s-api': return { t: 'kube-apiserver', s: p.present ? (S.flowSnap?.reachable['k8s-api'] ? '✓ up' : up ? '✗ not reachable' : OFFLINE) : '', m: 'real · :6443' };
+    case 'k8s-api': return { t: 'kube-apiserver', s: p.present ? (S.flowSnap?.reachable['k8s-api'] ? '✓ up' : up ? '✗ not reachable' : OFFLINE) : '', m: S.flowSnap?.kube?.measured ? `${S.flowSnap.kube.users.reduce((a, u) => a + u.per_min, 0)} req/min · ${S.flowSnap.kube.scope}` : 'real · :6443' };
     case 'etcd': return { t: 'etcd', s: '', m: 'real · :2379' };
     case 'kwok': return { t: 'KWOK', s: '', m: 'plays the kubelets' };
     case 'service': return { t: p.title, s: '', m: p.sub };

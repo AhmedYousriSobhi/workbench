@@ -48,6 +48,14 @@ export function setKey(open, restore) {
   $('ckey').hidden = !open; $('keybtn').setAttribute('aria-expanded', open); if (!open && restore) $('keybtn').focus();
 }
 export const clusterNow = () => { try { return scoped(); } catch (e) { return { nodes: [], services: {}, logins: [] }; } };
+const apiUserRows = id => {  // the Kubernetes API's per-user requests (issue 384, ADR 0087): from the governor's audit read; "nodes and pods only" is the policy's scope
+  if (id !== 'k8s-api' || !S.flowSnap?.reachable['k8s-api']) return [];
+  const k = S.flowSnap.kube;
+  if (!k || !k.measured) return [['Requests per user', `not measured${k?.note ? ': ' + esc(k.note) : ''}`]];
+  const users = k.users.length ? k.users.map(u => `${esc(u.user)}: ${u.per_min} req/min`).join('<br>') : 'none in the last minute';
+  const last = k.recent.slice(0, 5).map(e => `${esc(e.verb)} ${esc(e.resource)}${e.object ? ' ' + esc(e.object) : ''} by ${esc(e.user)}: ${e.code == null ? 'no code' : e.code}`).join('<br>');
+  return [[`Requests per user (${esc(k.scope)})`, users], ...(last ? [['Last requests', last]] : [])];
+};
 export async function popInfo(kind, id) {
   const rows = await connections(), row = k => rows.find(r => r.id === k), c = clusterNow(), tp = hasTeleport();
   const conn = (r, extra = []) => r ? [['Address', `<code>${esc(r.address)}</code>`], ...extra, ['Credential', r.credential ? `<code>${esc(r.credential)}</code>` : 'none']] : [['Details', 'Open Connections']];
@@ -71,7 +79,7 @@ export async function popInfo(kind, id) {
   if (kind === 'svc') {
     const r = row(SVC_CONN[id]), l = svcList().find(x => x[0] === id) || [id, id], up = S.flowSnap?.reachable[id], t = S.flowSnap?.totals[id] || 0;
     let kube = []; if (id === 'teleport') { try { kube = kubeRows(await (await fetch('/api/teleport-kube')).json()); } catch (e) { /* the pop-up still opens */ } }
-    return { title: l[1], badge: up ? '✓ up' : S.flowSnap ? '✗ not reachable' : 'checking', cls: up ? 'ok' : 'fault', cmd: r ? r.command : '', kv: [['Call it with', SVC_METHOD[id] || ''], ['Seen', REAL_SERVICES.has(id) ? 'no request counter (up or down only)' : `${t.toLocaleString()} ${id === 'teleport' ? 'connections' : 'requests'}`], ...kube, ...conn(r)], actions: [{ label: 'Connections', fn: () => openConnection(SVC_CONN[id]) }] };
+    return { title: l[1], badge: up ? '✓ up' : S.flowSnap ? '✗ not reachable' : 'checking', cls: up ? 'ok' : 'fault', cmd: r ? r.command : '', kv: [['Call it with', SVC_METHOD[id] || ''], ['Seen', REAL_SERVICES.has(id) ? 'no request counter (up or down only)' : `${t.toLocaleString()} ${id === 'teleport' ? 'connections' : 'requests'}`], ...apiUserRows(id), ...kube, ...conn(r)], actions: [{ label: 'Connections', fn: () => openConnection(SVC_CONN[id]) }] };
   }
   return { title: id, badge: '', cmd: '', kv: [['What it is', esc(CLIENT_INFO[id] || '')]], actions: [{ label: 'Connections', fn: () => openConnection(null) }] };
 }

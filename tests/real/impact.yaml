@@ -50,6 +50,9 @@
 - name: wire capture
   paths: ["benchctl/capture.py", "benchctl/slurm_msgtypes.py", "scripts/gen_slurm_msgtypes.py"]
   tests: [test_wire_capture_real]
+- name: Kubernetes request counter
+  paths: ["benchctl/kubeaudit.py", "webui/kubeaudit.py"]
+  tests: [test_kube_audit_real]
 - name: bmc-farm
   paths: ["components/bmc-farm/**", "components/bmc-forwarder/**"]
   tests: [test_mocks_real, test_bmc_tls_real, test_power_real, test_cluster_real, test_traffic_record_real]
