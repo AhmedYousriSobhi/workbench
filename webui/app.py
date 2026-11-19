@@ -111,9 +111,9 @@ class SharedStatus:
 class Runs:
     """At most one scenario at a time; state is what the page polls."""
 
-    def __init__(self, root: Path, sim: dict, flow: Flow | None = None, slurm=None, daemon=None, trace=None, clock=time.monotonic, wall=time.time,
+    def __init__(self, root: Path, sim: dict, flow: Flow | None = None, slurm=None, daemon=None, kube=None, trace=None, clock=time.monotonic, wall=time.time,
                  counters=None):
-        self.root, self.sim, self.flow, self.slurm, self.daemon, self.trace = root, sim, flow, slurm, daemon, trace
+        self.root, self.sim, self.flow, self.slurm, self.daemon, self.kube, self.trace = root, sim, flow, slurm, daemon, kube, trace
         # `counters()` reads the mocks' request counters now ({totals, errors, reachable}); a run keeps them at Play and at its end, so
         # `benchctl export test-report` can say what the client called during the run, with no browser open (issue 739). None: not kept.
         self.counters = counters
@@ -272,7 +272,7 @@ class Runs:
         try:
             rep = scenario.run(sc, speed=speed, dilation=float(self.sim.get("time_dilation", 1.0)), say=lambda m: None,
                                host=False, should_stop=self.stop_flag.is_set, on_step=on_step, on_expect=on_expect,
-                               slurm=self.slurm, daemon=self.daemon, on_before=tracer.before_step if tracer else lambda step: None)
+                               slurm=self.slurm, daemon=self.daemon, kube=self.kube, on_before=tracer.before_step if tracer else lambda step: None)
             if tracer:
                 tracer.finish()
             self.state.update(ok=rep.ok, stopped=rep.stopped)
@@ -308,8 +308,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
     if counters is None and not fetch:  # a test that passes `fetch` must not reach the host's mocks: it keeps no counters unless it passes its own
         counters = live_counters
     runs = Runs(scenarios, sim, flow, counters=counters, slurm=lambda n, s, r: _governed(slurm_state(n, s, r)),
-                daemon=lambda do: daemon_step(do), trace=lambda nodes, since: slurm_trace(nodes, since))
-    cluster = Cluster(sim, **{k: v for k, v in (("fetch", fetch), ("poster", poster)) if v})  # test seams: a host stack must not answer or be hit
+                daemon=lambda do: daemon_step(do), kube=lambda do: kube_step(do), trace=lambda nodes, since: slurm_trace(nodes, since))
+    cluster = Cluster(sim, kube=lambda do: kube_step(do), **{k: v for k, v in (("fetch", fetch), ("poster", poster)) if v})  # test seams: a host stack must not answer or be hit
     wiki = Wiki(docs)
 
     def authed(request: Request) -> None:
@@ -701,6 +701,20 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         if res.get("dry_run"):
             return {"target": "slurm", "status": "skipped", "detail": "the governor is in dry-run mode or has no --workdir"}
         return {"target": "slurm", "status": "ok", "detail": f"asked the governor to set {node} {state}"}
+
+    def kube_step(do: dict) -> tuple[bool, str]:
+        """A scenario's Kubernetes step, asked of the governor (the page has no Docker, W-3); (done, why not). One message when the part is off."""
+        if not k8s_built():
+            return False, "the Kubernetes part is not built in this cluster (benchctl up --with k8s)"
+        try:
+            res = checks.governor_request({"cmd": "k8s-step", "do": do}, socket)
+        except (OSError, ValueError):
+            return False, "the governor is not reachable"
+        if not res.get("ok"):
+            return False, res.get("error", "refused")
+        if res.get("dry_run"):
+            return False, "the governor is in dry-run mode or has no --workdir"
+        return True, "asked the governor"
 
     def daemon_step(do: dict) -> tuple[bool, str]:
         """The job and daemon steps of a scenario, asked of the governor (the page has no Docker, W-3); (done, why not)."""
