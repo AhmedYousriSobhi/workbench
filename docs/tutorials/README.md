@@ -49,6 +49,7 @@ Commands run from the repository root. `./scripts/benchctl` needs no virtualenv 
 | point my client at the cluster | [5. Connect your client](05-connect-your-client.md) | 10 min |
 | test how it handles SSH trouble | [6. Test SSH handling](06-test-ssh-handling.md) | 10 min |
 | test tickets and Jira failures | [7. Test tickets](07-test-tickets.md) | 10 min |
+| record what the client showed, one scenario per row | [Client test worksheet](../guides/client-test-worksheet.md) | per run |
 
 ### Configuration, reports and automation
 

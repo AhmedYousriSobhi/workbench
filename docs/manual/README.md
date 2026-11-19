@@ -31,6 +31,7 @@ The [tutorials](../tutorials/README.md) walk through each goal below step by ste
 | I want to... | Read |
 |---|---|
 | test my monitoring client against a cluster | [Testing a client against workbench](../guides/client-testing.md) |
+| fill in a run-sheet while I test the client, one scenario per row | [Client test worksheet](../guides/client-test-worksheet.md) |
 | see what a cluster costs before I start it | [Choose the workbench](../guides/choose-workbench.md) |
 | import the whole cluster into the client in one step | [Export a profile](../guides/export-profile.md) |
 | connect one component at a time (Grafana, Jira, SSH, ...) | [Client setup by component](../guides/client-setup-by-component.md) |
