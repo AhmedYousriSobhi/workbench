@@ -31,7 +31,12 @@ DIAG_PORT = 3434               # diagnostics (/healthz, /metrics), published on 
 PROXY_PORT = 3080              # web UI, the API and (single-port mode, config v3) the SSH proxy
 DNS_NAME = "teleport.workbench.test"  # a container alias on the cluster network; `.test` is reserved (RFC 6761), so it never clashes with a real name
 ROLE = "workbench-user"
-KUBE_GROUP = "workbench-k8s-viewers"  # the Kubernetes group the role grants when the k8s part is on; bound to the read-only role in k8s/fixtures/47-rbac-teleport.yaml
+KUBE_GROUP = "workbench-k8s-viewers"  # the viewer tier's Kubernetes group; bound to the read-only role in k8s/fixtures/47-rbac-teleport.yaml
+TIERS = ("viewer", "developer", "admin")  # Kubernetes access tiers (ADR 0084 W1): one Teleport role and one Kubernetes group each
+DEFAULT_TIER = "viewer"
+DEV_NAMESPACE = "team-a"               # the developer tier writes here and nowhere else
+TIER_GROUPS = {"viewer": KUBE_GROUP, "developer": "workbench-k8s-developers", "admin": "workbench-k8s-admins"}
+ROLE_VERSION = "v8"                    # `kubernetes_resources` with plural kinds and api_group (Teleport roles reference)
 KUBECONFIG = "kube.kubeconfig"        # under the secrets folder (mounted at CONTAINER_SECRETS): the static kubeconfig of the Kubernetes Service
 CONF_DIR = Path("compose/generated/teleport")             # mounted read-only at /etc/teleport; data/ is writable
 SECRETS_DIR = Path("compose/generated/secrets/teleport")  # CA key, host certificates, identity files (never tracked)
@@ -52,7 +57,43 @@ def settings(sim: dict) -> dict:
         raise TeleportError(f"teleport.version must look like 18.11.8, not {t['version']!r}")
     if not _TTL.fullmatch(t["cert_ttl"]):
         raise TeleportError(f"teleport.cert_ttl must look like 30m or 12h, not {t['cert_ttl']!r}")
+    tiers = t.get("kube_tier") or {}
+    names = {u["name"] for u in sim.get("users", [])}
+    if not isinstance(tiers, dict):
+        raise TeleportError("teleport.kube_tier must map a user to a tier, e.g. {bob: developer}")
+    for user, tier in tiers.items():
+        if user not in names:
+            raise TeleportError(f"teleport.kube_tier names {user!r}, which is not in users: of sim.yaml")
+        if tier not in TIERS:
+            raise TeleportError(f"teleport.kube_tier for {user} must be one of {', '.join(TIERS)}, not {tier!r}")
+    t["kube_tier"] = dict(tiers)
     return t
+
+
+def tier_of(sim: dict, user: str) -> str:
+    """The Kubernetes access tier of a user (`teleport.kube_tier` in sim.yaml); viewer when not listed."""
+    return settings(sim)["kube_tier"].get(user, DEFAULT_TIER)
+
+
+def tier_role(tier: str) -> str:
+    return f"workbench-kube-{tier}"
+
+
+def user_roles(sim: dict, user: str, kube: bool) -> list[str]:
+    return [ROLE, tier_role(tier_of(sim, user))] if kube else [ROLE]
+
+
+def tier_roles() -> list[dict]:
+    """One role per tier, as `tctl create` documents. The Teleport layer (`kubernetes_resources`) and the Kubernetes layer (the group's
+    binding in k8s/fixtures/47-rbac-teleport.yaml) both limit the namespace: Teleport's docs say the two must line up."""
+    scope = {"viewer": ("*", ["*"]), "developer": (DEV_NAMESPACE, ["*"]), "admin": ("*", ["*"])}
+    docs = []
+    for tier in TIERS:
+        ns, verbs = scope[tier]
+        docs.append({"kind": "role", "version": ROLE_VERSION, "metadata": {"name": tier_role(tier)},
+                     "spec": {"allow": {"kubernetes_labels": {"*": "*"}, "kubernetes_groups": [TIER_GROUPS[tier]],
+                                        "kubernetes_resources": [{"kind": "*", "api_group": "*", "namespace": ns, "name": "*", "verbs": verbs}]}}})
+    return docs
 
 
 _TSH = re.compile(r"Teleport v(\d+)\.(\d+)\.(\d+)")
@@ -134,15 +175,15 @@ def targets(sim: dict, ips: dict) -> dict[str, str]:
 
 
 def resources(sim: dict, ips: dict, kube: bool = False) -> str:
-    """The role, the users and the nodes as one multi-document YAML for `tctl create -f`. With `kube` the role also allows the registered
-    cluster and impersonating KUBE_GROUP (role v7: `kubernetes_resources` left out means every resource and verb; the group's RBAC limits it)."""
+    """The roles, the nodes as one multi-document YAML for `tctl create -f`. `workbench-user` is only the SSH access (logins, nodes); with `kube`
+    three more roles carry the Kubernetes tiers (viewer, developer, admin; ADR 0084 W1) and a user gets the one `teleport.kube_tier` names.
+    Roles are v8; a user's groups are the union of its roles, so no tier is added to the base role."""
     t = settings(sim)
     users = [u["name"] for u in sim.get("users", [])]
-    allow = {"logins": users, "node_labels": {"*": "*"}}
+    docs = [{"kind": "role", "version": ROLE_VERSION, "metadata": {"name": ROLE},
+             "spec": {"options": {"max_session_ttl": t["cert_ttl"]}, "allow": {"logins": users, "node_labels": {"*": "*"}}}}]
     if kube:
-        allow |= {"kubernetes_labels": {"*": "*"}, "kubernetes_groups": [KUBE_GROUP]}
-    docs = [{"kind": "role", "version": "v7", "metadata": {"name": ROLE},
-             "spec": {"options": {"max_session_ttl": t["cert_ttl"]}, "allow": allow}}]
+        docs += tier_roles()
     for name, ip in targets(sim, ips).items():
         kind = "login" if logins.is_login(name) else "controller" if name == controller.ALIAS else "gpu" if name.startswith("gpu") else "compute"
         docs.append({"kind": "node", "version": "v2", "sub_kind": "openssh",
@@ -151,10 +192,10 @@ def resources(sim: dict, ips: dict, kube: bool = False) -> str:
     return yaml.safe_dump_all(docs, sort_keys=False)
 
 
-def user_resource(name: str) -> str:
+def user_resource(name: str, roles: list[str] | None = None) -> str:
     """One user as its own file: a user is created only when it does not exist (`bootstrap`), because `tctl create -f` replaces a user
     and with it the password and one-time code chosen from an invite."""
-    return yaml.safe_dump({"kind": "user", "version": "v2", "metadata": {"name": name}, "spec": {"roles": [ROLE]}}, sort_keys=False)
+    return yaml.safe_dump({"kind": "user", "version": "v2", "metadata": {"name": name}, "spec": {"roles": roles or [ROLE]}}, sort_keys=False)
 
 
 STATE_DIR = "state"  # under the secrets folder: a copy of Teleport's own state that survives an emptied data directory
@@ -238,7 +279,7 @@ def prepare(sim: dict, ips: dict, conf: Path = CONF_DIR, secrets: Path = SECRETS
     (conf / "resources.yaml").write_text(resources(sim, ips, kube))
     changed = old != [(conf / "teleport.yaml").read_text(), kube_text]
     for u in (u["name"] for u in sim.get("users", [])):
-        (conf / f"user-{u}.yaml").write_text(user_resource(u))
+        (conf / f"user-{u}.yaml").write_text(user_resource(u, user_roles(sim, u, kube)))
     return changed
 
 
@@ -297,7 +338,7 @@ def fetch_ca(port: int = PROXY_PORT, opener: Callable | None = None) -> str:
 
 def bootstrap(sim: dict, ips: dict, runner: Callable, dc: Callable, say: Callable[[str], None] = print,
               secrets: Path = SECRETS_DIR, fetch: Callable[[], str] | None = None,
-              sleep: Callable[[float], None] = time.sleep) -> bool:
+              sleep: Callable[[float], None] = time.sleep, kube: bool = False) -> bool:
     """Load the role, users and nodes, install the CA key, sign a host certificate for every node that has none,
     and write a fresh identity file per user. Safe to repeat. Returns False after saying why it failed."""
     if not wait_ready(runner, dc, sleep=sleep):
@@ -311,11 +352,13 @@ def bootstrap(sim: dict, ips: dict, runner: Callable, dc: Callable, say: Callabl
     if gone:
         say(f"teleport: forgot {', '.join(sorted(gone))} (no longer in the workbench)")
     for u in (u["name"] for u in sim.get("users", [])):
-        if _tctl(runner, dc, "get", f"user/{u}").returncode != 0:  # absent: create it; present: leave it, its password is the user's
+        if _tctl(runner, dc, "get", f"user/{u}").returncode != 0:  # absent: create it; present: keep its password, only set its roles
             r = _tctl(runner, dc, "create", f"/etc/teleport/user-{u}.yaml")
-            if r.returncode != 0:
-                say(f"FAILED teleport user {u}: {r.stderr.strip()[-300:]}")
-                return False
+        else:  # a tier changed in sim.yaml (or the k8s part went on or off): `users update` keeps the password and one-time code
+            r = _tctl(runner, dc, "users", "update", u, f"--set-roles={','.join(user_roles(sim, u, kube))}")
+        if r.returncode != 0:
+            say(f"FAILED teleport user {u}: {r.stderr.strip()[-300:]}")
+            return False
     try:
         (secrets / "openssh_ca.pub").write_text((fetch or fetch_ca)())
     except (OSError, TeleportError) as e:

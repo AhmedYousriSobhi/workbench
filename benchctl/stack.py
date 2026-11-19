@@ -447,7 +447,7 @@ def up(sim: dict, profile: str, runner: Runner = _run, say: Callable[[str], None
             return False
         if "mariadb" in svcs:
             grant_lab_databases(runner, path, say)  # an existing database gets the config lab's grant without a restart (issue 552)
-        if label == "teleport" and not teleport.bootstrap(sim, ips, runner, dc, say):  # before the nodes read their certificates
+        if label == "teleport" and not teleport.bootstrap(sim, ips, runner, dc, say, kube=k8s.API in todo):  # before the nodes read their certificates
             return False
         if label == "teleport" and controller.enabled(sim):  # slurmctld started in an earlier stage, before its host certificate existed
             runner(dc("exec", "-T", "slurmctld", "sh", "-c", "/usr/local/sbin/teleport-ssh && pkill -HUP -x sshd", file=path))  # trust the CA, then reload sshd

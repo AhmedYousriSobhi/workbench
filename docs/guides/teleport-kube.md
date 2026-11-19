@@ -29,11 +29,32 @@ kubectl get nodes
 
 The cluster is named after the kubeconfig context, `workbench-k8s`. kubectl calls `tsh kube credentials` for each request, so `TELEPORT_IDENTITY_FILE` and `TELEPORT_PROXY` must be set in the shell where you run kubectl; without them kubectl fails with "no SSH auth methods loaded".
 
-## What a user may do
+## What a user may do: three tiers
 
-Every user in `sim.yaml` has the Teleport role `workbench-user`. With the k8s part it grants the Kubernetes group `workbench-k8s-viewers`, bound to the
-read-only `workbench-viewer` role: `kubectl get nodes|pods|events ...` works, `kubectl create|delete ...` is refused by Kubernetes RBAC (`forbidden`).
-A Teleport user whose role has no `kubernetes_groups` is denied.
+Every user in `sim.yaml` has the base role `workbench-user` (SSH). With the k8s part each also has one Kubernetes tier role (all v8, ADR 0084):
+
+| Tier | Teleport role | Kubernetes group | May |
+|---|---|---|---|
+| viewer (default) | `workbench-kube-viewer` | `workbench-k8s-viewers` | read nodes, pods, events cluster-wide; every write is `forbidden` |
+| developer | `workbench-kube-developer` | `workbench-k8s-developers` | read and write workloads in `team-a` only; no nodes, no secrets, nothing in `team-b` |
+| admin | `workbench-kube-admin` | `workbench-k8s-admins` | everything (`cluster-admin`) |
+
+Pick a tier per user in `sim.yaml`, then `benchctl up` again (an existing user keeps its password):
+
+```yaml
+teleport:
+  kube_tier: {bob: developer, alice: admin}   # users not listed are viewers
+```
+
+Two layers say no, with different messages. Outside the role's `kubernetes_resources` (the developer reading nodes) Teleport refuses. Inside them but not allowed by the Kubernetes Role (the developer reading secrets in `team-a`) Kubernetes answers `forbidden`, naming the user and the resource. A Teleport user whose role has no `kubernetes_groups` is denied.
+
+Other tools an app that uses `tsh` may call (written and unit-tested; the live run is owner-run, so these are not yet proven):
+
+```bash
+tsh --insecure -i compose/generated/secrets/teleport/identity/alice kube credentials --kube-cluster=workbench-k8s --teleport-cluster=workbench
+tsh --insecure kubectl get nodes          # with TELEPORT_IDENTITY_FILE and TELEPORT_PROXY set as above
+tsh --proxy=10.141.255.30:3080 --insecure -i compose/generated/secrets/teleport/identity/alice proxy kube workbench-k8s   # prints a KUBECONFIG to use
+```
 
 ## How it is wired
 

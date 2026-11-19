@@ -369,3 +369,11 @@ Written and unit-tested; the live tests are written and have not been run (the o
 - **Time-slicing** stays unbuilt (owner decision Q1: the multiplying shape only if the client needs it).
 - **Not verified live:** that KWOK keeps a patched `nodeInfo` and the MIG resources (its node stages only initialise a node once, as for the fake GPUs), and that the fragmentation pod stays Pending on a fresh cluster whatever the fixtures hold (the 5-GPU pod needs 5, each node has at most 4 free after the 4-GPU pods, the total is at least 6). The owner runs `./scripts/verify.sh --unit k8s --clean`.
 
+
+## Addendum: access tiers (issue 753, W1)
+
+- **Roles.** `workbench-user` is now role v8 and only the SSH access (logins, node labels). With the k8s part, three more v8 roles carry Kubernetes: `workbench-kube-viewer`, `workbench-kube-developer`, `workbench-kube-admin`, each with its own Kubernetes group (`workbench-k8s-viewers`, `-developers`, `-admins`) and a `kubernetes_resources` entry (`kind: "*"`, `api_group: "*"`, `verbs: ["*"]`; the namespace is `team-a` for the developer, `*` for the others). A user's groups are the union of its roles, so no tier is added to the base role.
+- **Kubernetes layer.** Viewer: the existing ClusterRoleBinding. Developer: a `Role` and `RoleBinding` in `team-a` only (workloads, no secrets, no nodes). Admin: a ClusterRoleBinding to `cluster-admin`. Both layers limit the namespace, as the Teleport docs require.
+- **Mapping.** `teleport.kube_tier: {user: tier}` in `sim.yaml` (default viewer for everyone not listed; validated against `users:`). `bootstrap` creates a missing Teleport user and runs `tctl users update --set-roles` for an existing one, so a tier change keeps the password and one-time code.
+- **Two denials.** A request outside the role's `kubernetes_resources` (the developer reading nodes) is refused by Teleport; one inside them that the Kubernetes Role does not allow (the developer reading secrets in `team-a`) reaches Kubernetes and is a `forbidden` naming the user, audited with 403.
+- **Not verified live (the live run is owner-run):** that 18.11.8 accepts `kind: "*"` with `api_group: "*"` for cluster-scoped kinds such as nodes in a v8 role; the exact Teleport denial text for team-b and nodes; `tsh kubectl` and `tsh proxy kube` with an identity file. The live module prints each message for the guide.
