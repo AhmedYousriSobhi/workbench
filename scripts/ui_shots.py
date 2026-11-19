@@ -938,9 +938,12 @@ def capture(out: Path) -> dict:
                     rv = page.evaluate("({lines: document.querySelector('#pl-review').textContent, jobs: !document.querySelector('#pl-jobs').hidden, apply: document.querySelector('#pl-apply').disabled})")
                     if "cn004" not in rv["lines"] or "slurmctld" not in rv["lines"] or not rv["jobs"]:
                         result["a11y"].append(f"plan review ({vp} {scheme}): {rv}")
-                    page.evaluate("planStates = {cn004: 'allocated'}; paintReview()")  # a removed node with jobs: the tick gates Apply
-                    ak = page.evaluate("({row: !document.querySelector('#pl-ackrow').hidden, blocked: document.querySelector('#pl-apply').disabled, stop: document.querySelector('#pl-jobs').className.includes('stop')})")
-                    page.check("#pl-ack")
+                    # a removed node with jobs: the tick gates Apply. The sheet's own read of the node states can land after the first set and hide the tick again, so set,
+                    # read and tick in one step, repeated until the row is shown
+                    page.wait_for_function("""(() => { planStates = {cn004: 'allocated'}; paintReview(); if (document.querySelector('#pl-ackrow').hidden) return false;
+                      window.__ak = {row: true, blocked: document.querySelector('#pl-apply').disabled, stop: document.querySelector('#pl-jobs').className.includes('stop')};
+                      const t = document.querySelector('#pl-ack'); t.checked = true; t.dispatchEvent(new Event('change')); return true; })()""")
+                    ak = page.evaluate("window.__ak")
                     if not (ak["row"] and ak["blocked"] and ak["stop"]) or page.evaluate("document.querySelector('#pl-apply').disabled"):
                         result["a11y"].append(f"plan review: running jobs must block Apply until ticked ({vp} {scheme}): {ak}")
                     page.evaluate("planStates = null; paintReview()")
