@@ -28,7 +28,7 @@ from webui.wiki import (  # stdlib-only module: reuses the page titles and the d
     Wiki,
 )
 
-PREFIX = {"manual": "Manual", "guides": "Guide", "architecture": "Architecture", "adr": "ADR", "agents": "Agents"}
+PREFIX = {"manual": "Manual", "tutorials": "Tutorial", "guides": "Guide", "architecture": "Architecture", "adr": "ADR", "agents": "Agents"}
 # the two project callout kinds GitHub does not know: shown as a quote headed by a bold label
 PROJECT_CALLOUTS = {"HOOD": "**🔧 Under the hood**", "DIDYOUKNOW": "**💡 Did you know?**"}
 FOOTER = ("Generated from `docs/` in the repository by `scripts/sync_wiki.py`. Edit the files there, not this wiki: "

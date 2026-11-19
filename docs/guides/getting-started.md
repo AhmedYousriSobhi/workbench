@@ -2,7 +2,7 @@
 
 How to run workbench on your workstation and see it working. Keep this page in step with the commands:
 `tests/test_docs.py` fails if a `benchctl` command named here no longer exists. For everything about the tool, read the
-[user manual](../manual/README.md).
+[user manual](../manual/README.md); to do one thing step by step, pick a [tutorial](../tutorials/README.md).
 
 ## Quickest way
 

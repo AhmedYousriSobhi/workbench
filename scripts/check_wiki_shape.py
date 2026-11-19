@@ -13,13 +13,13 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-GROUPS = ("manual", "guides", "architecture", "adr", "agents")
+GROUPS = ("manual", "tutorials", "guides", "architecture", "adr", "agents")
 MAX_PARA = 150
 MAX_RUN = 120
 # One paragraph or list item in a how-to page: about four sentences of 17 words. The second pass (docs/wiki-second-pass) left
 # 19 items above it in 11 pages and none above 110; 70 is the strictest round figure those pages and the rewritten ones can meet.
 MAX_STEP = 70
-STEP_GROUPS = ("manual", "guides", "agents")  # how-to pages; architecture explains and ADRs record, so they keep MAX_PARA only
+STEP_GROUPS = ("manual", "tutorials", "guides", "agents")  # how-to pages; architecture explains and ADRs record, so they keep MAX_PARA only
 STEP_SKIP = {"docs/agents/CHANGELOG.md": "a changelog entry is a record, not a procedure"}
 # Not yet rewritten into one action per line. Remove a page when it passes; never add one (tests/test_wiki_shape.py).
 STEP_TODO = (
