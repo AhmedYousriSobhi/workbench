@@ -86,7 +86,7 @@ Profiles: `min`, `std`, `full`, `jira-real`, `mac-agent` ([architecture section 
 
 ## 7. CLI (`benchctl`)
 
-`doctor`, `up --profile`, `down`, `status`, `top`, `scale <group> <n>`, `jira mode <mock|cloud|dc>`, `scenario list|run`, `workload run`, `get|add|set|remove|validate|reload check(s)` (C-15). All state-changing commands go through the governor.
+`doctor`, `up --profile`, `down`, `status`, `scale <group> <n>`, `scenario list|run`, `load on|off` and `submit` (the synthetic workload), `get|add|set|remove|validate|reload check(s)` (C-15). All state-changing commands go through the governor. The verbs top, jira mode and workload run were dropped from this list on 2026-11-19 (ADR 0090, issue 860): resource use is in `get nodes`, `status` and the web page, the Jira mode is chosen in sim.yaml (C-5), and the workload is load and submit.
 
 ### 7a. Agent interface (approved 2026-11-13, ADR 0060 to 0068, issues 603 and 613; built, including `export lab-report`, issue 614)
 
