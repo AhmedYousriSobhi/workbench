@@ -4,7 +4,7 @@
 
 ## Steps
 
-1. Check the machine and Docker.
+1. Check the machine and Docker. Each line starts `[ok  ]`, `[WARN]` or `[FAIL]`, and a fix follows each WARN and FAIL; the host tuning advice at the end is printed only. `doctor` exits 1 if any line is `[FAIL]`. A `[FAIL] memlock: hard limit 8388608 bytes` means your shell's locked-memory limit is the Ubuntu default (8 MB); the root governor service sets it to unlimited (`./scripts/install-governor.sh`, needs sudo, optional).
 
    ```bash
    ./scripts/benchctl doctor
@@ -22,7 +22,7 @@
    ./scripts/benchctl get services
    ```
 
-4. Read one container's log.
+4. Read one container's log (the last 50 lines; add `--tail N` or `-f`).
 
    ```bash
    ./scripts/benchctl logs slurmctld
@@ -35,7 +35,7 @@
    ./scripts/benchctl start
    ```
 
-6. Still broken: write one masked bundle.
+6. Still broken: write one masked bundle. It prints a file name such as `workbench-diag-20261119-163630.tar.gz`, written in the directory you ran it from (the repository root; git ignores it).
 
    ```bash
    ./scripts/benchctl diag
@@ -45,7 +45,8 @@
 
 ## You should see
 
-- `doctor` ends with no failure line, or names exactly what to fix.
+- `doctor` shows no `[FAIL]` line, or names exactly what to fix.
+- Step 5 ends with `stack is up in N s` (about 30 s with Kubernetes and Teleport, 7 s for the smallest profile).
 - `diag` prints the path of one `.tar.gz`.
 
 ## Usual causes

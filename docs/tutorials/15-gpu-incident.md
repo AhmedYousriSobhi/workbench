@@ -14,26 +14,26 @@
    ./scripts/benchctl scenario run gpu-xid-storm --dry-run
    ```
 
-2. Play it.
+2. Play it. It takes 180 s and prints `scenario passed`; the GPU fault is cleared at 180 s. Do steps 3 to 6 in a second terminal while it runs (the alert fires after about 15 s).
 
    ```bash
    ./scripts/benchctl scenario run gpu-xid-storm
    ```
 
-3. Read the alerts Prometheus fires. `GpuXidCritical` is the first.
+3. Read the alerts Prometheus fires. `GpuXidCritical` fires first, one per node, severity `page`; `NodeDrained` follows as `pending`.
 
    ```bash
    ./scripts/benchctl get alerts
    ```
 
-4. See which nodes drained, and why.
+4. See which nodes drained, and why. `get nodes` still says `running` (that is the container); `describe` shows `IDLE+DRAIN`, reason `NHC: GPU XID 79` and `XID 79` on the GPU line.
 
    ```bash
    ./scripts/benchctl get nodes
    ./scripts/benchctl describe node gpu001
    ```
 
-5. See the injected faults.
+5. See the injected faults (`gpu001` and `gpu002`, `GPU error XID 79`).
 
    ```bash
    ./scripts/benchctl get faults
@@ -49,9 +49,9 @@
 
 ## You should see
 
-- The GPUs of both GPU nodes show XID 79 in `nvidia-smi` and DCGM, and the BMC logs a critical event.
-- The node health check drains each node with a reason starting `NHC:`, and a ticket is filed.
-- At the end the node health check resumes the nodes it drained.
+- The GPUs of both GPU nodes show XID 79 in the DCGM metrics (the nodes have no `nvidia-smi`), and the BMC logs a critical event.
+- The node health check drains each node with a reason starting `NHC:`, and a ticket is filed (in the mock, for example `OPS-17 gpu001: GPU error`, label `node-gpu001`).
+- At the end the node health check resumes the nodes it drained; allow up to a minute after `scenario passed` for `describe` to show plain `IDLE`.
 
 ## Other drills
 

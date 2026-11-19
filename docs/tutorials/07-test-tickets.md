@@ -9,13 +9,13 @@
 
 ## Steps
 
-1. A drained node gets a ticket that names the cluster and the node, and resuming resolves it.
+1. A drained node gets a ticket that names the cluster and the node, and resuming resolves it. It takes 50 s and ends with `scenario passed` (the node is drained at 0 s, the ticket opened at 5 s, resolved at 50 s).
 
    ```bash
    ./scripts/benchctl scenario run drain-ticket
    ```
 
-2. Engineers work tickets in the background.
+2. Engineers work tickets in the background. This also turns the job load on (about 6 jobs a minute); step 6 stops both. It prints `ticket bot on jira-mock: about one action every 30 s`.
 
    ```bash
    ./scripts/benchctl load on --tickets --ticket-every 30 --ticket-resolve 120
@@ -28,13 +28,15 @@
    ./scripts/benchctl get ticket-bot
    ```
 
-4. Make Jira rate-limit the client.
+   It prints `{"every": 10.0, "resolve_after": 30.0}`.
+
+4. Make Jira rate-limit the client: the next 5 calls get 429 (the scenario returns at once; the fault stays until 5 calls were refused).
 
    ```bash
    ./scripts/benchctl scenario run jira-429
    ```
 
-5. Make Jira go down, then come back.
+5. Make Jira go down, then come back: 503 for the next 20 calls, cleared at 60 s.
 
    ```bash
    ./scripts/benchctl scenario run jira-outage

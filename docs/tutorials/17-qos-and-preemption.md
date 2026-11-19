@@ -6,21 +6,32 @@
 
 - The `std` profile, which has job accounting.
 
+- The `qos:` and `slurm:` keys of `sim.yaml` switched on. They are commented out by default, and the scenario needs them. Remove the leading `# ` from these lines and set `max_gpus_per_user: 8` (with the shipped `2` the 8-GPU scavenger job never starts and the urgent job simply runs):
+
+  ```yaml
+  qos:
+    - {name: scavenger, priority: 1, max_gpus_per_user: 8}
+    - {name: urgent, priority: 1000, preempt: [scavenger], grace_time_s: 30}
+  slurm:
+    priority: {weight_qos: 1000, weight_age: 100, weight_fairshare: 10000, decay_half_life: 7-0}
+  ```
+
+  Undo it later with `git checkout sim.yaml`; do not commit it.
+
 ## Steps
 
-1. Start it.
+1. Start it. Run it again after every change to `sim.yaml` (it takes a few seconds on a running cluster).
 
    ```bash
    ./scripts/benchctl up --profile std
    ```
-
-2. List the QOS.
+2. List the QOS. You get `normal`, `scavenger` (`gres/gpu=8`) and `urgent` (preempts `scavenger`, grace time `00:00:30`).
 
    ```bash
    docker exec workbench-slurmctld-1 sacctmgr show qos format=name,priority,maxtrespu,preempt,gracetime
    ```
 
-3. Fill every GPU of `gpu001` with a scavenger job. At 20 seconds an urgent job asks for the same GPUs.
+3. Fill every GPU of `gpu001` with a scavenger job. At 20 seconds an urgent job asks for the same GPUs. It takes 150 s; run steps 4 and 5 in a second terminal (the first scavenger job runs at once, `squeue` shows the urgent job `RUNNING` and the scavenger job `PENDING BeginTime` after about 40 s).
 
    ```bash
    ./scripts/benchctl scenario run preempt-burst
@@ -40,8 +51,8 @@
 
 ## You should see
 
-- The scavenger job goes `PREEMPTED`, then `REQUEUED`, and runs again after the urgent one ends.
-- Pending jobs show reasons such as `QOSMaxGRESPerUser`, `Priority` or `Resources`.
+- `sacct` shows the scavenger job `PREEMPTED` and the urgent job `COMPLETED`. The scavenger job is requeued (`PENDING`, reason `BeginTime`); the scenario cancels it at 150 s, so it may not run again before then (not seen here).
+- Pending jobs show reasons such as `BeginTime` (after a requeue) or `QOSMaxGRESPerUser` (a job over its QOS limit, as with the shipped `max_gpus_per_user: 2`).
 
 ## Change the QOS
 

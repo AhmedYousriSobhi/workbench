@@ -5,6 +5,7 @@
 ## You need
 
 - `tsh` installed. Its major version must not be newer than the Teleport in the cluster.
+- `kubectl` on the host, for step 5.
 - Memory for Teleport and Kubernetes: [plan it first](02-size-your-cluster.md).
 
 ## Steps
@@ -15,7 +16,7 @@
    ./scripts/benchctl up --with teleport --with k8s
    ```
 
-2. Make a one-time link for `alice`.
+2. Make a one-time link for `alice`. It prints one `https://10.141.255.30:3080/web/reset/...` link.
 
    ```bash
    ./scripts/benchctl add invite alice
@@ -41,7 +42,7 @@
    kubectl get nodes
    ```
 
-6. Break it on purpose.
+6. Break it on purpose. The first takes 60 s, the second 180 s; run them one after the other and each ends with `scenario passed`. While the first runs, `tsh` hangs without an answer (stop it with Ctrl-C), and the Slurm login on port 2222 still works.
 
    ```bash
    ./scripts/benchctl scenario run teleport-outage
@@ -52,7 +53,7 @@
 
 - `kube ls` lists `workbench-k8s`; `kubectl get nodes` lists the fake nodes.
 - During the outage `tsh` and the web terminal fail; the cluster itself stays up.
-- After the second scenario the identity file is refused as expired, then works again.
+- Between 60 s and 180 s of the second scenario `tsh kube login` fails with `ssh: cert has expired` and `cannot relogin in non-interactive session`; after `scenario passed` it works again.
 
 ## If it does not work
 

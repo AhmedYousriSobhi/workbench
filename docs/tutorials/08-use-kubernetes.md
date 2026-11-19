@@ -14,41 +14,42 @@
    ./scripts/benchctl up --with k8s
    ```
 
-2. Run `kubectl` as `alice` on the Kubernetes login node.
+2. Run `kubectl` as `alice` on the login node (port 2222; a second login node, port 2223, exists only if you configured one). The first time, ssh asks you to accept the host key: answer `yes`. Rebuilding the cluster makes a new key; delete the old line from `~/.ssh/known_hosts` if ssh refuses.
 
    ```bash
-   ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2223 alice@127.0.0.1 kubectl get nodes
+   ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2222 alice@127.0.0.1 kubectl get nodes
    ```
 
 3. List the pods of every namespace.
 
    ```bash
-   ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2223 alice@127.0.0.1 kubectl get pods -A
+   ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2222 alice@127.0.0.1 kubectl get pods -A
    ```
 
-4. Make a GPU node NotReady, then recover.
+4. Make a GPU node NotReady, then recover. It takes 2 minutes: `kgpu001` is down at 0 s and back at 120 s.
 
    ```bash
    ./scripts/benchctl scenario run k8s-node-notready
    ```
 
-5. Make the API server slow.
+5. Make the API server answer 429 to the user `viewer` (what `alice` is on Kubernetes). It takes 2 minutes. Run `kubectl get nodes` as in step 2 meanwhile, in a burst, to see it.
 
    ```bash
    ./scripts/benchctl scenario run k8s-api-throttled
    ```
 
-6. See which user sent how many API requests.
+6. See which user sent how many API requests. The command prints one JSON record per request (hundreds of lines); count them by user.
 
    ```bash
-   ./scripts/benchctl get kube-audit
+   ./scripts/benchctl get kube-audit | jq -r '.[].user' | sort | uniq -c | sort -rn
    ```
 
 ## You should see
 
-- Fake nodes and pods; some pods crash-loop on purpose.
+- Step 1 ends with `stack is up in N s` and a `kubernetes:` line naming the nodes kcn001, kcn002, kgpu001, kgpu002.
+- Step 2 lists those four nodes `Ready`. Step 3 lists pods in `team-a` and `team-b`; some are `CrashLoopBackOff`, `ImagePullBackOff`, `Error` or `Pending` on purpose.
 - The nodes go NotReady and back, as the scenario says.
-- `get kube-audit` needs the governor service (`benchctl start`); it counts nodes and pods only.
+- `get kube-audit` needs the governor service (`benchctl start`). Your `kubectl` calls appear under the user `viewer`; the list also holds the control plane's own requests (leases, controllers).
 
 ## Remember
 

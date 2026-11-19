@@ -20,23 +20,23 @@
    ./scripts/benchctl scenario run node-down --dry-run
    ```
 
-3. Run it.
+3. Run it. It takes about 40 s and picks `cn002`; it ends with `scenario passed`. Do steps 4 and 5 in a second terminal while it runs.
 
    ```bash
    ./scripts/benchctl scenario run node-down
    ```
 
-4. Watch the node state change.
+4. Watch the node state change. While `cn002` is off, `get nodes` shows it `paused` and `describe` shows `IDLE+DRAIN+NOT_RESPONDING` with reason `node down`.
 
    ```bash
    ./scripts/benchctl get nodes
-   ./scripts/benchctl describe node cn001
+   ./scripts/benchctl describe node cn002
    ```
 
 5. Wait for it to be back, from a script if you like.
 
    ```bash
-   ./scripts/benchctl wait node-state cn001 running --timeout 120
+   ./scripts/benchctl wait node-state cn002 running --timeout 120
    ```
 
 ## Break one thing by hand
@@ -48,8 +48,12 @@
 ./scripts/benchctl clear faults
 ```
 
+Known issue: `set node ... drain --reason` is accepted, but Slurm shows the reason `workbench power off` (`benchctl describe node cn001`, `sinfo -R`), not yours.
+
 ## You should see
 
+- Step 2 lists six timed steps (BMC off and BCM `DOWN` at 0 s, Slurm drain at 5 s, all back at 40 s).
+- Step 5 prints a JSON block with `"outcome": "met"`.
 - The BMC and BCM mocks and Slurm all show the node down, then up again.
 - The page's node panel (`./scripts/benchctl open`) shows the same, with the scenario in its timeline.
 
