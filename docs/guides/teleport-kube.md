@@ -69,6 +69,16 @@ Each has a restore step (`./scripts/benchctl scenario run NAME`), and a differen
 
 Written and unit-tested; the live run is owner-run, so the exact messages are not yet shown here.
 
+## In the page
+
+With the `teleport` and `k8s` parts built, click the Teleport box in the Infrastructure architecture:
+
+- The details show Teleport's Kubernetes request, exec-session and port-forward counters. A counter Teleport does not publish reads `not measured`, never 0.
+- They also list the last ten `kube.request` calls: user, verb, resource and the code with a word (ok, refused, error).
+- With Teleport not answering, one line says so and gives `./scripts/benchctl up --with teleport --with k8s`.
+- The page reads Teleport's diagnostics port and the audit files in `compose/generated/teleport/data/log`, read-only, with no Docker.
+- Written and unit-tested; the live run is owner-run.
+
 ## How it is wired
 
 - `teleport.yaml` gets a `kubernetes_service` reading `compose/generated/secrets/teleport/kube.kubeconfig` (generated, mode 600, never tracked).
