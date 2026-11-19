@@ -27,6 +27,7 @@ export const S = {
   activeCluster: null, // the cluster the page is showing in full (#327); null = the single cluster, or the overview
   svcOut: {},
   svcLane: {},
+  sshLanes: {},
   flowEs: null,
   flowPaused: false,
   flowCursor: 0,

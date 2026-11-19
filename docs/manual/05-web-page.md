@@ -136,7 +136,7 @@ Every line says **how** it connects:
 | `Teleport` between the Teleport box and a login node (long dashes) | the login node is reached through the Teleport proxy (*Teleport only* or *both*) |
 | `jump host` (short dashes) | from a login node you `ssh` on to the nodes: the login node is the jump host |
 | `ssh` from Clients to the **Jump host** or **Controller** box | a key login to the bastion (`--access jump`) or to the controller (`--controller`); each box is drawn only when it is built, shows `✓ up`, `✗ not reachable` or `– offline` in words, and opens a pop-up with its address and command |
-| `ssh -J` (dashes) from the Jump host to a login node or the Controller | the bastion forwards to key-login nodes and the controller; Teleport-only logins get no such line |
+| `ssh -J` (dashes) from the Jump host to a login node or the Controller | the bastion forwards to key-login nodes and the controller; Teleport-only logins get no such line. The lines to a login node, and the direct SSH lines, light and carry dots when their counter sees sessions (see *SSH sessions in the diagram*) |
 | **DCGM (real)** box in Services, and `dcgm-exporter` in Monitoring on the Traffic & Communication diagram | the opt-in real exporter (`--with dcgm`, port 9402): up or down only, no request counter, so its line is declared wiring, never drawn as traffic; each box appears only when the part is built |
 | **GPU card** box in Services, and `real-gpu` in Monitoring | the host's own NVIDIA card with the real exporter (`--with real-gpu`, port 9403): up or down only, declared wiring like DCGM (real); drawn only when built; the node `rgpu001` sits with the GPU nodes and its state comes from the card's exporter |
 | `ssh` (short dashes) from a login node to the Controller | an admin hops on to the controller; sshd lets only whitelisted users in |
@@ -228,6 +228,17 @@ Showing the tab again reopens the feed and reads the cluster at once. Status tex
 The Teleport box and lines appear only when the Teleport part is built. The node list gets a `teleport` card with it (`answering` or `not answering`).
 
 Its rate is **connections per minute**. Every `tsh ssh` or web terminal session makes the proxy connect to a node, and Teleport counts that (`teleport_connect_to_node_attempts_total` on its diagnostics port, 127.0.0.1:3434). With no connections there are no dots.
+
+### SSH sessions in the diagram
+
+The direct SSH lines (Clients to a login node), the line to the **Jump host** and the jump host's `ssh -J` line to a login node show real traffic too.
+
+Each login container and the jump container run a small counter (`images/login/ssh_counter.py`, ADR 0088). It counts the **authenticated key logins** sshd accepts, per source address, and serves the number on 127.0.0.1: the jump host on 2320, the login nodes on 2322 and up (the sshd port plus 100). The page polls it like a mock's counter.
+
+- A dot runs along the line for each new session, and the line lights while sessions were seen in the last minute; the Timeline says "1 SSH session to login". The rate is **sessions per minute**.
+- A login that arrives from the jump host (`ssh -J`) lights the jump host's line to that login node, not the direct line.
+- Not counted: a bare TCP connect (a port check never logs in), a refused login, and a Teleport login (the Teleport box counts those). Nothing is read from a session: no user name, no command, only a number per source address.
+- With no counter answering (a cluster started before this change, the container stopped) the lines stay still and say *declared*: no counter, no dots. The controller's SSH line and the hops to compute nodes have no counter and stay declared.
 
 The login nodes come from the saved workbench: `benchctl start --login ssh,teleport,both`, or the Login nodes rows of the sheet.
 
@@ -699,9 +710,9 @@ The screenshots in this chapter come from sample data, so the numbers differ fro
 The page is a small Starlette server (`webui/app.py`) and static ES modules, with no build step. It never gets Docker or root. It talks to the governor's Unix socket (`/run/workbench/gov.sock`) and to the mocks' HTTP endpoints. Scenarios it plays run with `host=False`, so steps that need Docker are skipped, not failed.
 
 > [!HOOD]
-> The traffic dots come from the mocks' request counters, not from packet capture, and the live feed (server-sent events) is open only while the tab is visible; animation stops at governor level L3 and under reduced motion.
+> The traffic dots come from the mocks' request counters and the login and jump containers' SSH session counters (ADR 0088), not from packet capture, and the live feed (server-sent events) is open only while the tab is visible; animation stops at governor level L3 and under reduced motion.
 
-Source: `webui/app.py`, `webui/flow.py`, `webui/cluster.py`, SPEC W-3 and W-11, ADR 0007, ADR 0009.
+Source: `webui/app.py`, `webui/flow.py`, `webui/cluster.py`, SPEC W-3 and W-11, ADR 0007, ADR 0009, ADR 0088.
 
 ## Tips and gotchas
 

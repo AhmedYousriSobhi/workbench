@@ -40,3 +40,7 @@ test('every wire says its state in words, so colour and motion are never the onl
 });
 
 test('there are six planes, as in the brief', () => assert.deepEqual(PLANES, ['access', 'control', 'k8s', 'data', 'monitoring', 'management']));
+
+test('an SSH line counts sessions, not requests (issue 213)', () => {
+  assert.equal(wireLabel({ plane: 'access', rpm: 3, unit: 'sessions', label: ':22' }), ':22: Access wire, 3 sessions a minute');
+});

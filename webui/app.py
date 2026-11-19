@@ -38,7 +38,7 @@ from .blast import payload as blast_payload
 from .blast import preview as blast_preview
 from .blast import step_blast
 from .cluster import TELEPORT, ActionError, Cluster, http_json, k8s_built, teleport_built
-from .flow import PAUSE_LEVEL, Flow
+from .flow import PAUSE_LEVEL, Flow, jump_address, ssh_sources
 from .graph import attach as attach_graph
 from .wiki import Wiki, WikiError, esc, page
 
@@ -299,7 +299,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
                sim_yaml: Path = Path("sim.yaml"), interval: float = 1.0, docs: Path = DOCS,
                fetch=None, poster=None, nhc_src: Path = nhc.SRC, nhc_out: Path = nhc.OUT, counters=None) -> Starlette:
     sim = yaml.safe_load(sim_yaml.read_text())
-    flow = Flow()
+    flow = Flow(ssh=None if fetch else ssh_sources, jump_ip=jump_address())  # a test that passes `fetch` reaches no host counters
 
     def live_counters() -> dict:
         flow.poll(force=True)

@@ -45,10 +45,10 @@ CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {
     },
     # real Jira Data Center and its Postgres (ADR 0026): off by default, about 2.4 GB, P6 (the first thing the governor stops)
     "jira-real": {"jira-db": (jira_real.DB_IMAGE, jira_real.DB_LIMIT_MB, 6), "jira-real": (jira_real.IMAGE, jira_real.LIMIT_MB, 6)},
-    "access": {"login": ("workbench/login:dev", 40, 2)},
+    "access": {"login": ("workbench/login:dev", 48, 2)},  # +8 MB for the session counter (issue 213, ADR 0088; an estimate until measured)
     "dcgm": {dcgm.SERVICE: ("workbench/dcgm-exporter:dev", dcgm.LIMIT_MB, 6)},  # the real DCGM exporter on a mock NVML (issue 426); off by default
     "real-gpu": {real_gpu.SERVICE: ("workbench/dcgm-exporter:dev", real_gpu.LIMIT_MB, 6)},  # the host's own NVIDIA card with the real exporter (issue 428); off by default
-    "jump": {"jump": ("workbench/jump:dev", 24, 2)},  # a bare sshd bastion (SPEC C-21)
+    "jump": {"jump": ("workbench/jump:dev", 32, 2)},  # a bare sshd bastion (SPEC C-21) and its session counter (python3, issue 213: 24 MB + 8 estimated)
     # tier 3 of the storage tiers (ADR 0078): one Garage node speaking S3, off by default (issue 672)
     "objectstore": {objectstore.SERVICE: (objectstore.image(), objectstore.LIMIT_MB, 6)},
     # the tag is replaced from sim.yaml teleport.version (benchctl/teleport.py); the limit is a planning estimate until measured
@@ -57,6 +57,11 @@ CATALOG: dict[str, dict[str, tuple[str, int, int]]] = {
     "k8s": {n: (k8s.images({})[n], k8s.LIMITS[n], 3) for n in k8s.SERVICES},
 }
 SSH_PORT = 2222
+# The SSH session counter (issue 213, ADR 0088) of a login or jump container: inside it listens on COUNTER_PORT, on the host it is published
+# on 127.0.0.1 at its sshd's published port + COUNTER_OFFSET (jump 2320, the controller's 2321 is kept free, logins 2322 to 2329).
+COUNTER_PORT = 9922
+COUNTER_OFFSET = 100
+COUNTER_MOUNT = "../../images/login/ssh_counter.py:/usr/local/bin/ssh-counter:ro"
 # Every image whose entrypoint is node-base's installs the munge and JWT keys from this mount (images/node-base/entrypoint.sh).
 SLURM_KEY_IMAGES = ("workbench/node-base:dev", "workbench/slurm-ctl:dev", "workbench/login:dev")
 SLURM_KEYS_MOUNT = "./secrets/slurm:/run/workbench/slurm:ro"
@@ -188,7 +193,8 @@ def generate(sim: dict, profile: dict) -> dict:
         svc.setdefault("environment", {})["WORKBENCH_LOGIN_KIND"] = lkinds[lname]
         svc.update({"depends_on": ["slurmctld"] if "slurmctld" in services and lkinds[lname] != "k8s" else []})
         if mode in logins.DIRECT:
-            svc["ports"] = [f"127.0.0.1:{SSH_PORT + i}:22"]
+            svc["ports"] = [f"127.0.0.1:{SSH_PORT + i}:22", f"127.0.0.1:{SSH_PORT + i + COUNTER_OFFSET}:{COUNTER_PORT}"]
+        svc["volumes"].append(COUNTER_MOUNT)
     if controller.enabled(sim) and "slurmctld" in services:  # the controller: slurmctld's container also runs sshd for whitelisted users and is the BCM head node (issue 416)
         if problems := controller.problems(sim):
             raise controller.ControllerError("; ".join(problems))
@@ -204,8 +210,8 @@ def generate(sim: dict, profile: dict) -> dict:
         for lname in lkinds:  # the login nodes are no longer the head node: no cmsh there
             services[lname].setdefault("environment", {})["WORKBENCH_HEAD"] = "0"
     if "jump" in services:  # the bastion: sshd only, localhost fallback port, the same users and keys
-        services["jump"].update({"hostname": "jump", "ports": [f"127.0.0.1:{controller.JUMP_PORT}:22"],
-                                 "environment": {"WORKBENCH_USERS": users_env(sim)}, "volumes": ["./secrets/ssh:/run/workbench/ssh:ro"]})
+        services["jump"].update({"hostname": "jump", "ports": [f"127.0.0.1:{controller.JUMP_PORT}:22", f"127.0.0.1:{controller.JUMP_PORT + COUNTER_OFFSET}:{COUNTER_PORT}"],
+                                 "environment": {"WORKBENCH_USERS": users_env(sim)}, "volumes": ["./secrets/ssh:/run/workbench/ssh:ro", COUNTER_MOUNT]})
     if "teleport" in services:  # auth + proxy (ADR 0020): only the proxy and diagnostics ports are published, localhost only
         services["teleport"].update({
             "image": teleport.image(sim),  # its entrypoint already is `teleport start -c /etc/teleport/teleport.yaml`

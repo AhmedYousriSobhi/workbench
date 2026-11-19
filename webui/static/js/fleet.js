@@ -5,7 +5,7 @@ import { S } from './state.js';
 import { $, esc } from './util.js';
 import { buildWire } from './wire.js';
 import { STATE_ICON } from './cluster.js';
-import { recentRate } from './circuit.js';
+import { recentRate, requestRate } from './circuit.js';
 import { fleetCards } from './fleetlayout.js';
 import { zoomTo } from './zoom.js';
 
@@ -19,7 +19,7 @@ function lane(l) {
 
 export function paintFleet() {
   const host = $('fleetview'), snap = snapshot(); if (!snap) return;
-  const rate = Object.values(recentRate()).reduce((a, b) => a + b, 0), cards = fleetCards(snap, { known: true, dbd: !!S.dbdLink, rpm: S.flowSnap ? rate : null });
+  const rate = requestRate(recentRate()), cards = fleetCards(snap, { known: true, dbd: !!S.dbdLink, rpm: S.flowSnap ? rate : null });
   const s = JSON.stringify(cards); if (s === sig && host.firstChild) return; sig = s;
   host.innerHTML = cards.map((c, i) => `<article class="fl-card ${c.health.state}" data-cluster="${esc(c.name)}">
       <button type="button" class="fl-head" aria-label="Open the ${esc(c.name)} cluster"><span class="fl-name">${esc(c.name)}</span><span class="pv-pill ${c.health.state}"><b aria-hidden="true">${STATE_ICON[c.health.state] || '?'}</b> ${esc(c.health.text)}</span></button>

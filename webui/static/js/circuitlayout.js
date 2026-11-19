@@ -94,11 +94,11 @@ export function circuitSpec(f) {
   const wires = [];
   const wire = (key, from, to, plane, pts, o = {}) => wires.push({ key, from, to, plane, d: ortho(pts), present: P[from].present && P[to].present, ...o });
   // Slurm lane
-  wire('clients-login', 'clients', 'login', 'access', [{ x: 224, y: 118 }, Lf(P.login)], { link: ['clients', 'login'], label: ':22', edge: f.sLogin && `clients>${f.sLogin.name}:ssh` });
+  wire('clients-login', 'clients', 'login', 'access', [{ x: 224, y: 118 }, Lf(P.login)], { link: ['clients', 'login'], label: ':22', edge: f.sLogin && `clients>${f.sLogin.name}:ssh`, ssh: f.sLogin && `ssh:${f.sLogin.name}` });
   wire('clients-teleport', 'clients', 'teleport', 'access', [{ x: 224, y: 228 }, Lf(P.teleport)], { link: ['clients', 'teleport'], label: ':3080', edge: 'clients>teleport:api' });
   wire('teleport-login', 'teleport', 'login', 'access', [Tp(P.teleport), Bt(P.login)], { link: ['teleport', 'login'], label: 'certs', short: true });
-  wire('clients-jump', 'clients', 'jump', 'access', [{ x: 224, y: 338 }, Lf(P.jump)], { link: ['clients', 'jump'], label: ':22', edge: 'clients>jump:ssh' });
-  wire('jump-login', 'jump', 'login', 'access', [R(P.jump, -10), { x: 545, y: P.jump.y + 28 }, { x: 545, y: 132 }, R(P.login, 14)], { link: ['jump', 'login'], label: 'ssh -J' });
+  wire('clients-jump', 'clients', 'jump', 'access', [{ x: 224, y: 338 }, Lf(P.jump)], { link: ['clients', 'jump'], label: ':22', edge: 'clients>jump:ssh', ssh: 'ssh:jump' });
+  wire('jump-login', 'jump', 'login', 'access', [R(P.jump, -10), { x: 545, y: P.jump.y + 28 }, { x: 545, y: 132 }, R(P.login, 14)], { link: ['jump', 'login'], label: 'ssh -J', ssh: f.sLogin && `hop:${f.sLogin.name}` });
   wire('login-slurmctld', 'login', 'slurmctld', 'control', [R(P.login, -8), Lf(P.slurmctld, -8)], { link: ['login', 'slurmctld'], label: ':6817' });
   wire('clients-controller', 'clients', 'slurmctld', 'access', [{ x: 224, y: 173 }, { x: 612, y: 173 }, { x: 612, y: 142 }, { x: col.control, y: 142 }], { link: ['clients', 'controller'], label: 'admin SSH :2221', requires: 'ctl', edge: 'clients>controller:ssh' });
   wire('jump-controller', 'jump', 'slurmctld', 'access', [R(P.jump, 10), { x: 585, y: P.jump.y + 48 }, { x: 585, y: 150 }, { x: col.control, y: 150 }], { link: ['jump', 'controller'], label: 'ssh -J', requires: 'ctl' });
@@ -107,7 +107,7 @@ export function circuitSpec(f) {
   wire('slurmctld-dbd', 'slurmctld', 'slurmdbd', 'data', [Bt(P.slurmctld), Tp(P.slurmdbd)], { link: ['slurmctld', 'slurmdbd'], label: ':6819', short: true });
   wire('sg-storage', 'rack-sg', 'storage', 'data', [R(P['rack-sg']), { x: 1360, y: R(P['rack-sg']).y }, { x: 1360, y: R(P.storage).y }, Lf(P.storage)], { link: ['nodes', 'storage'], label: 'planned', planned: true });
   // Kubernetes lane
-  wire('clients-klogin', 'clients', 'klogin', 'access', [{ x: 224, y: 508 }, Lf(P.klogin)], { link: ['clients', 'login'], label: ':22', edge: f.kLogin && `clients>${f.kLogin.name}:ssh` });
+  wire('clients-klogin', 'clients', 'klogin', 'access', [{ x: 224, y: 508 }, Lf(P.klogin)], { link: ['clients', 'login'], label: ':22', edge: f.kLogin && `clients>${f.kLogin.name}:ssh`, ssh: f.kLogin && `ssh:${f.kLogin.name}` });
   wire('klogin-api', 'klogin', 'k8s-api', 'k8s', [R(P.klogin), Lf(P['k8s-api'])], { link: ['clients', 'k8s-api'], label: ':6443' });
   wire('api-etcd', 'k8s-api', 'etcd', 'data', [Bt(P['k8s-api']), Tp(P.etcd)], { link: ['k8s-api', 'etcd'], label: ':2379', short: true });
   wire('kwok-api', 'kwok', 'k8s-api', 'k8s', [Lf(P.kwok), { x: 600, y: R(P.kwok).y }, { x: 600, y: R(P['k8s-api'], 14).y }, Lf(P['k8s-api'], 14)], { link: ['kwok', 'k8s-api'], label: 'node status', short: true });

@@ -98,10 +98,11 @@ export function paintTrTimeline(links) {
   const now = Date.now(), from = now - S.trRange * 1000, ev = S.trHist.filter(h => h.t >= from), say = h => {
     if (h.from === 'state') return `Node ${h.label}`;
     if (h.from === 'injector') return `Fault ${h.label || 'applied'} on ${(h.nodes || []).join(', ') || h.to}`;
+    const sh = /^(ssh|hop):(.+)$/.exec(h.to || ''); if (sh) return sh[1] === 'hop' ? `jump → ${sh[2]} (SSH :22)` : `clients → ${sh[2]} (SSH :22)`;  // the SSH counters (issue 213)
     const l = links.find(k => k.from === h.from && (k.service || k.to) === h.to) || links.find(k => (k.service || k.to) === h.to);
     return `${l ? l.from : h.from} → ${l ? l.to : h.to}${l ? ` (${l.protocol} :${l.port})` : ''}`;
   };
-  $('tr-feed').innerHTML = ev.slice(-12).reverse().map(h => `<li><span class="ft">${hhmmss(h.t)}</span><span>${h.from === 'injector' || h.from === 'state' ? '<b class="f" aria-hidden="true">◆</b> ' : ''}${esc(say(h))}</span><span class="dim">${h.from === 'injector' || h.from === 'state' ? '' : h.n + ' req' + (h.ms != null ? ', ' + h.ms + ' ms' : '')}</span></li>`).join('')
+  $('tr-feed').innerHTML = ev.slice(-12).reverse().map(h => `<li><span class="ft">${hhmmss(h.t)}</span><span>${h.from === 'injector' || h.from === 'state' ? '<b class="f" aria-hidden="true">◆</b> ' : ''}${esc(say(h))}</span><span class="dim">${h.from === 'injector' || h.from === 'state' ? '' : h.n + (/^(ssh|hop):/.test(h.to || '') ? ' sessions' : ' req') + (h.ms != null ? ', ' + h.ms + ' ms' : '')}</span></li>`).join('')
     || `<li class="dim"><span></span><span>No requests seen in the last ${S.trRange >= 3600 ? '1 h' : S.trRange / 60 + ' min'}. A count rises only when a client calls a mock service.</span><span></span></li>`;
   const B = 60, w = 480, h = 120, bw = S.trRange * 1000 / B, bins = new Array(B).fill(0), faults = [];
   ev.forEach(e => { const i = Math.min(B - 1, Math.floor((e.t - from) / bw)); if (e.from === 'injector' || e.from === 'state') faults.push(i); else bins[i] += e.n; });

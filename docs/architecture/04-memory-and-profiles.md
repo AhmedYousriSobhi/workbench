@@ -51,8 +51,8 @@ per-node cost (`PER_NODE_MB`), and `tests/test_overhead.py` fails when a new per
 |---|---|---|---|
 | slurmd (each compute node) | 13 | 60 | 15 |
 | BMC forwarder (each; a static Go binary on scratch, issue 454) | 3 | 16 | 4 |
-| bmc-farm / bcm-mock / jira-mock / login | 14 / 12 / 20 / 10 | 100 / 100 / 100 / 40 | 17 / 14 / 23 / 12 |
-| jump host (bare sshd bastion, `--access jump`) | 2 | 24 | 3 |
+| bmc-farm / bcm-mock / jira-mock / login | 14 / 12 / 20 / 10 | 100 / 100 / 100 / 48 | 17 / 14 / 23 / 12 |
+| jump host (bare sshd bastion, `--access jump`) | 2 | 32 | 3 |
 | slurmctld / slurmrestd / slurmdbd | 41 / 7 / 7 | 200 / 60 / 80 | 48 / 9 / 9 |
 | mariadb (includes its 100 MB tmpfs) | 204 | 250 | 235 |
 | teleport | 222 | 320 | 256 (cap raised from 256 in issue 455: 222 MB sat 34 MB under it; the expected use is unchanged) |
@@ -61,6 +61,8 @@ per-node cost (`PER_NODE_MB`), and `tests/test_overhead.py` fails when a new per
 | jira-real | 2045 (peak, setup plus ticket run, trimmed JVM) | 2176 | 2176 (at the cap by nature: a JVM keeps what it grew) |
 | accounting-init | not measured (one-shot) | 30 | the cap |
 | **app under test** | | | **1024 (reserve)** |
+
+The login and jump caps include 8 MB each for the SSH session counter (issue 213, ADR 0088; a Python process that sleeps on a file). That 8 MB is an estimate: the measured and expected columns of those two rows are from before the counter and are not re-taken yet.
 
 The 15 percent tolerance is `memory.TOLERANCE`. Live check on the same selection (plan expected 1068 MB; 190 MB of that is
 components that are not built; 728 MiB in use): the plan sits about 17 percent above use. The app's reserve is part of
