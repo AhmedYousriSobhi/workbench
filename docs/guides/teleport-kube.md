@@ -56,6 +56,19 @@ tsh --insecure kubectl get nodes          # with TELEPORT_IDENTITY_FILE and TELE
 tsh --proxy=10.141.255.30:3080 --insecure -i compose/generated/secrets/teleport/identity/alice proxy kube workbench-k8s   # prints a KUBECONFIG to use
 ```
 
+## Failures to play
+
+Each has a restore step (`./scripts/benchctl scenario run NAME`), and a different message:
+
+| Scenario | What a user sees through Teleport |
+|---|---|
+| `kube-binding-missing` | Teleport lets the user in; Kubernetes answers `forbidden` naming the user (the tier's binding is gone) |
+| `kube-impersonation-revoked` | every request fails upstream with `cannot impersonate` (whatever the tier) |
+| `kube-identity-expired` | `tsh kube login` and `tsh kube credentials` fail: the identity file has expired |
+| `k8s-cert-expired` | the API server's certificate has expired: an x509 error from Teleport's upstream call |
+
+Written and unit-tested; the live run is owner-run, so the exact messages are not yet shown here.
+
 ## How it is wired
 
 - `teleport.yaml` gets a `kubernetes_service` reading `compose/generated/secrets/teleport/kube.kubeconfig` (generated, mode 600, never tracked).

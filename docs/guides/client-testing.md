@@ -254,9 +254,10 @@ These faults give the client real errors from the real components, for its "logi
 | `auth-munge-wrong-key` (SC-32) | `cn001` is rejected by slurmctld (`Invalid credential`); `sinfo` shows it as `idle*` (not responding), flapping with `idle`, never `down` (slurmd still answers each ping, with an authentication error) | the scenario puts the node's own key back at 120 s (`munge_restore`) |
 | `bmc-tls-expired` (SC-33) | `certificate has expired` on the BMC TLS ports (8443, 443, each node's address); same key and name, so a client that pins by key still connects | back at 60 s |
 | `k8s-cert-expired` (SC-34) | `certificate has expired` from `kubectl` and any client that checks dates; the API server restarts twice (10 to 20 s each) | back at 90 s |
+| `kube-binding-missing` (SC-55), `kube-impersonation-revoked` (SC-56), `kube-identity-expired` (SC-57) | only on the `tsh kube` path, which the monitoring client does not use: Forbidden from Kubernetes for a user Teleport let in, `cannot impersonate` upstream, an expired identity (see [Teleport Kubernetes](teleport-kube.md)) | back at 90 s, 90 s and 180 s |
 
 > [!WARNING]
-> A scenario that stops half-way leaves the fault in place. Undo it with the matching step, written as a one-step scenario: `{auth: {munge_restore: [cn001]}}`, `bmc_tls_expired: false`, `k8s_cert_expired: false` or `teleport_cert_restore: [alice]`.
+> A scenario that stops half-way leaves the fault in place. Undo it with the matching step, written as a one-step scenario: `{auth: {munge_restore: [cn001]}}`, `bmc_tls_expired: false`, `k8s_cert_expired: false`, `teleport_cert_restore: [alice]`, `kube_binding_restore: true` or `kube_impersonation_revoked: false`.
 
 ## Give the client a live queue
 

@@ -96,6 +96,9 @@ The command exits 1 when a step errors or an `expect` line does not hold.
 | SC-52 | `k8s-mig-mixed` | the first Kubernetes GPU node serves 7 `nvidia.com/mig-1g.18gb` devices and one fewer whole GPU (`mixed`), then goes back (needs `k8s`, issue 766) |
 | SC-53 | `k8s-kubelet-skew` | the first Kubernetes GPU node reports a kubelet newer than the API server, then one four minors older, then the API server's version (needs `k8s`, issue 766) |
 | SC-54 | `k8s-gpu-fragmentation` | two pods take 4 GPUs on each GPU node, then a pod asking for 5 waits: the free GPUs add up to enough but no single node has them (needs `k8s` with two GPU nodes, issue 766) |
+| SC-55 | `kube-binding-missing` | the Kubernetes binding of the viewer tier's group is deleted for 90 s: through Teleport a viewer is let in, kubectl answers `forbidden` from Kubernetes (needs `teleport` and `k8s`, issue 756) |
+| SC-56 | `kube-impersonation-revoked` | Teleport's `teleport` user may not impersonate for 90 s: every `tsh kube` request fails upstream with `cannot impersonate` (needs `teleport` and `k8s`, issue 756) |
+| SC-57 | `kube-identity-expired` | alice's identity file lives 60 s, then `tsh kube login` and `tsh kube credentials` fail as expired; signed again at 180 s (needs `teleport` and `k8s`, issue 756) |
 | SC-49 | `k8s-volcano-queue-closed` | the Volcano queue `gpu-batch` is closed and the PodGroup `train-wait` stays Pending, then the queue opens again (needs `k8s`; no controller, the step writes the status, issue 765) |
 | SC-48 | `k8s-hpa-max` | the autoscaler `hpa-below` is pushed to its maximum replicas by a rise in per-pod CPU use, then back; the real HPA controller reacts through metrics-server (needs `k8s`, issue 764) |
 | SC-18 | `pod-crashloop` | a pod crash-loops and another is OOMKilled (needs the `k8s` part) |
