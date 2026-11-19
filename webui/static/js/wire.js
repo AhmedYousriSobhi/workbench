@@ -31,8 +31,8 @@ export function pulseSeconds(rpm) {
 export const errSeconds = pulse => pulse * ERR_PERIOD / PULSE_PERIOD;
 
 // What a wire says in words, for screen readers and the tooltip: the picture is never the only carrier of the state.
-export function wireLabel({ plane, rpm = 0, errors = 0, label = '', declared = false }) {
-  const rate = rpm > 0 ? `${Math.round(rpm * 10) / 10} requests a minute` : declared ? 'declared wiring, not measured' : 'no current';
+export function wireLabel({ plane, rpm = 0, errors = 0, label = '', declared = false, unit = 'requests' }) {  // `unit`: sessions on an SSH line (issue 213)
+  const rate = rpm > 0 ? `${Math.round(rpm * 10) / 10} ${unit} a minute` : declared ? 'declared wiring, not measured' : 'no current';
   const err = errors > 0 ? `, ${errors} ${errors === 1 ? 'error' : 'errors'}` : '';
   return `${label ? label + ': ' : ''}${PLANE_NAME[plane] ?? plane} wire, ${rate}${err}`;
 }

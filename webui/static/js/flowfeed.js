@@ -41,7 +41,7 @@ export function step(now) {
 export function onFlow(snap) {
   S.flowLevel = snap.level; S.flowCursor = snap.cursor;
   snap.faults = (S.flowSnap?.faults || 0) + snap.events.filter(e => e.from === 'injector').length;
-  snap.events.forEach(e => S.recent.push({ t: Date.now(), to: e.to, n: e.from === 'clients' ? e.n : 0, fault: e.from === 'injector' }));
+  snap.events.forEach(e => S.recent.push({ t: Date.now(), to: e.to, n: e.from === 'clients' || e.from === 'jump' ? e.n : 0, fault: e.from === 'injector' }));
   snap.events.forEach(e => S.trHist.push({ t: Date.now(), from: e.from, to: e.to, n: e.n, label: e.label, nodes: e.nodes, err: e.err, ms: snap.latency?.[e.to] }));
   S.trHist = S.trHist.filter(h => h.t > Date.now() - 3600e3).slice(-800);
   S.flowSnap = snap; paintBlocks(); paintKpis(); flowNote(); paintFeed(snap.events); paintTraffic(); paintRunEye();
@@ -49,12 +49,13 @@ export function onFlow(snap) {
   const inj = snap.events.filter(e => e.from === 'injector').pop(); if (inj) { const b = blastFor(inj); if (b) setBlast(b); }
   if (animating()) snap.events.forEach(launch);
 }
+export const sshText = e => { const m = /^(ssh|hop):(.+)$/.exec(e.to || ''); return m ? `${e.n} SSH ${e.n === 1 ? 'session' : 'sessions'} ${m[1] === 'hop' ? `through the jump host to ${m[2]}` : `to ${m[2]}`}` : ''; };  // the SSH counters' events (issue 213): sessions, not requests
 export const feed = [];  // the Timeline dock: what the page was told, newest first (text only; the dots are the animation)
 export function paintFeed(events) {
   const name = k => (svcList().find(x => x[0] === k) || [k, k])[1], hh = d => d.toTimeString().slice(0, 8);
   for (const e of events) {
     const fault = e.from === 'injector';
-    feed.unshift({ t: new Date(), fault, text: fault ? `Fault ${e.label || 'applied'} on ${(e.nodes || []).length ? e.nodes.join(', ') : name(e.to)}` : `${e.n} ${e.n === 1 ? 'request' : 'requests'} to ${name(e.to)}` + (e.err ? `, ${e.err} ${e.err === 1 ? 'error' : 'errors'}` : '') });
+    feed.unshift({ t: new Date(), fault, text: fault ? `Fault ${e.label || 'applied'} on ${(e.nodes || []).length ? e.nodes.join(', ') : name(e.to)}` : sshText(e) || `${e.n} ${e.n === 1 ? 'request' : 'requests'} to ${name(e.to)}` + (e.err ? `, ${e.err} ${e.err === 1 ? 'error' : 'errors'}` : '') });
   }
   feed.length = Math.min(feed.length, 40); $('dock-empty').hidden = feed.length > 0;
   $('timeline-feed').innerHTML = feed.map(f => `<li><span class="ft">${hh(f.t)}</span><span><b class="${f.fault ? 'f' : 'r'}" aria-hidden="true">${f.fault ? '◆' : '●'}</b> ${esc(f.text)}</span></li>`).join('');
