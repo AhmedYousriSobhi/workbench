@@ -1,6 +1,6 @@
 name: gpu-xid-storm
 ref: SC-06
-description: "The GPUs of both GPU nodes fall off the bus (XID 79 in DCGM and nvidia-smi, a critical BMC event). Only the cause is injected (fault model, ADR 0006): the node health check drains each node and a ticket is filed, and the scenario asserts both. Recovery is injected too; NHC resumes the nodes it drained. The app should open tickets of its own"
+description: "The GPUs of both GPU nodes fall off the bus (XID 79 in DCGM and nvidia-smi, a critical BMC event). Only the cause is injected (fault model, ADR 0006): the node health check drains each node and a ticket is filed, and the scenario asserts both. Recovery is injected too; NHC resumes the nodes it drained. The app should open tickets of its own. The client reads only four GPU series and has no XID handling: it sees the drain reason and the BMC event text."
 steps:
   - {at: 0s, target: fault, do: {inject: gpu-fell-off-bus, nodes: [first gpu node, second gpu node]}}
   - {at: 3m, target: fault, do: {clear: gpu-fell-off-bus, nodes: [first gpu node, second gpu node]}}
