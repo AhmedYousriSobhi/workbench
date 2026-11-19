@@ -353,6 +353,14 @@ The links are also drawn as a diagram, where the plane is the line's colour and 
 - Filter by plane, software or evidence. Click a link's source to open its inspector.
 - A toolbar has plane chips, zoom, Fit and full screen.
 - Below the diagram, a **Traffic activity timeline** shows requests and faults this page was told about, from 1 m to 1 h. It is kept only while the page is open.
+- **The Kubernetes API box counts requests per user** (issue 384, ADR 0087):
+  - The box shows `N req/min · nodes and pods only`; its pop-up lists each user and the last requests.
+  - The count comes from the API server's audit log, read by the governor (the page never reads Docker).
+  - It covers only what the audit policy records: **nodes and pods only** (nodes, pods and their status, leases). Secrets, config maps and other objects are not counted.
+  - A request made through Teleport counts for the Teleport user.
+  - It covers the last 60 seconds, polled every 5 seconds, at memory levels L0-L1 only.
+  - From L2 up, with the governor down, or with a governor service not restarted since this feature, the pop-up says "not measured" and why, never 0.
+  - The "Seen" figure in the same pop-up is still the API server's own total for all callers.
 - The diagram is one fixed architecture, so every group is always drawn. A part is grayed, never dropped, when:
   - this cluster lacks it;
   - the page cannot read it yet (slurmdbd, until it answers a query);

@@ -37,8 +37,9 @@ def counter_total(scrape, name: str) -> int:
 
 
 class Flow:
-    def __init__(self, fetch=None, clock=time.monotonic, keep: int = 300, min_interval: float = 0.8):
+    def __init__(self, fetch=None, clock=time.monotonic, keep: int = 300, min_interval: float = 0.8, kube=None):
         self.fetch = fetch or (lambda url: http_json(url, timeout=PROBE_TIMEOUT))
+        self.kube = kube  # a webui.kubeaudit.KubeAudit, or None (tests, no governor)
         self.clock, self.min_interval = clock, min_interval
         self.fails: dict[str, int] = {}  # consecutive failed probes per service
         self.retry_at: dict[str, float] = {}  # a service seen down is not asked again before this time
@@ -130,6 +131,8 @@ class Flow:
                             n = k8s.api_requests()  # all callers, since the API server started: shown as a total, never as dots
                             if n is not None:
                                 self.totals[svc] = n
+                            if self.kube:
+                                self.kube.poll()  # asks the governor at most every 5 s, never Docker (SPEC W-3)
                         else:
                             self.latency.pop(svc, None)
                             self._down(svc, now)
@@ -151,5 +154,8 @@ class Flow:
 
     def since(self, after: int) -> dict:
         with self.lock:
-            return {"cursor": self.seq, "events": [e for e in self.events if e["id"] > after],
+            snap = {"cursor": self.seq, "events": [e for e in self.events if e["id"] > after],
                     "totals": dict(self.totals), "errors": dict(self.errors), "latency": dict(self.latency), "reachable": dict(self.reachable)}
+            if self.kube and self.reachable.get("k8s-api"):  # per-user Kubernetes requests (issue 384): only while the API answers
+                snap["kube"] = self.kube.summary()
+            return snap

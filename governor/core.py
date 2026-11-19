@@ -369,6 +369,17 @@ class Governor:
                 return {"ok": True, "settings": json.loads(self.reader(["get", "ticket-bot"]))}
             except Exception as e:  # noqa: BLE001
                 return {"ok": False, "error": f"ticket bot settings failed: {e}"}
+        if cmd == "kube-audit":  # a P5 read for the page's per-user Kubernetes counter (issue 384, ADR 0087): a bounded `docker logs`, L0-L1 only
+            if not self.reader:
+                return {"ok": False, "error": "no Kubernetes audit without --workdir (the governor runs `benchctl get kube-audit`)"}
+            if self.dry_run:
+                return {"ok": False, "error": "dry run: no Kubernetes audit"}
+            if (lvl := self.ladder.level) > 1:
+                return {"ok": False, "error": f"paused: memory pressure (L{lvl}); the Kubernetes request counter runs only at L0-L1", "class": "P5"}
+            try:
+                return {"ok": True, "events": json.loads(self.reader(["get", "kube-audit", "--since", str(float(req.get("since", 0)))]))[:500], "class": "P5"}
+            except Exception as e:  # noqa: BLE001
+                return {"ok": False, "error": f"kube audit failed: {e}"}
         if cmd in ("capture-start", "capture-read", "capture-stop"):  # a P5 workload: a tcpdump or an audit-log read for the Focused wire panel only
             if not self.capture:
                 return {"ok": False, "error": "no capture without --workdir (the governor runs `benchctl get capture`)"}

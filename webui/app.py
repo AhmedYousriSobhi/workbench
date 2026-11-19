@@ -40,6 +40,7 @@ from .blast import step_blast
 from .cluster import ActionError, Cluster
 from .flow import PAUSE_LEVEL, Flow
 from .graph import attach as attach_graph
+from .kubeaudit import KubeAudit
 from .wiki import Wiki, WikiError, esc, page
 
 STATIC = Path(__file__).parent / "static"
@@ -299,7 +300,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
                sim_yaml: Path = Path("sim.yaml"), interval: float = 1.0, docs: Path = DOCS,
                fetch=None, poster=None, nhc_src: Path = nhc.SRC, nhc_out: Path = nhc.OUT, counters=None) -> Starlette:
     sim = yaml.safe_load(sim_yaml.read_text())
-    flow = Flow()
+    flow = Flow(kube=KubeAudit(lambda req: checks.governor_request(req, socket, timeout=2)))
 
     def live_counters() -> dict:
         flow.poll(force=True)
