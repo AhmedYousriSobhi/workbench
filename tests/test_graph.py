@@ -48,7 +48,8 @@ def test_measured_only_where_a_counter_backs_the_edge():
     for svc in (*flow.STATS, *flow.COUNTERS):  # every service with a request counter, Teleport's connection counter included
         assert by[f"clients>{svc}:api"]["measured"], svc
     assert not by["clients>jira-real:api"]["measured"]  # the real Jira publishes no counter: declared only
-    assert not any(e["measured"] for e in g["edges"] if e["kind"] in ("ssh", "jump", "teleport"))  # nobody counts SSH hops
+    assert not any(e["measured"] for e in g["edges"] if e["kind"] in ("jump", "teleport") and e["to"] in ("nodes", "k8s-nodes", "controller"))  # nobody counts a hop to a node
+    assert all(e["measured"] for e in g["edges"] if e["kind"] == "ssh" and e["from"] == "clients" and e["to"].startswith("login"))  # the login container counts key logins (issue 213)
 
 
 def test_fault_edges_exist_only_for_what_a_scenario_can_reach():

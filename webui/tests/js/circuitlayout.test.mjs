@@ -83,3 +83,11 @@ test('a declared wire is lit but still: nothing counts it, so nothing moves and 
   assert.match(wireLabel({ plane: 'access', declared: true }), /declared wiring, not measured/);
   assert.match(wireLabel({ plane: 'access' }), /no current/);
 });
+
+test('the login, jump and hop wires name the SSH counter behind them; no other wire does (issue 213)', () => {
+  const w = (s, key) => s.wires.find(x => x.key === key);
+  const s = circuitSpec(circuitFacts(slurmOnly)), k = circuitSpec(circuitFacts(k8sOnly));
+  assert.equal(w(s, 'clients-login').ssh, 'ssh:login'); assert.equal(w(s, 'clients-jump').ssh, 'ssh:jump'); assert.equal(w(s, 'jump-login').ssh, 'hop:login');
+  assert.equal(w(k, 'clients-klogin').ssh, 'ssh:k-login');
+  assert.deepEqual(s.wires.filter(x => x.ssh).map(x => x.key).sort(), ['clients-jump', 'clients-login', 'jump-login']);  // the controller and Teleport have no counter
+});

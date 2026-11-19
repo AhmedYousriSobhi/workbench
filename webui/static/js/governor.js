@@ -1,3 +1,4 @@
+import { servicesCount } from './servicecount.js';
 import { S } from './state.js';
 import { $, esc, setHTML, setText } from './util.js';
 import { attentionItems, labChipText } from './homemodel.js';
@@ -27,9 +28,9 @@ export function paintAttention() {
 }
 export function paintHealth(c) {
   S.lastCl = c;
-  const svc = Object.values(c.services), up = svc.filter(Boolean).length, all = svc.length;
-  const bad = c.nodes.filter(n => n.state !== 'ok').length, nn = c.nodes.length, stackDown = up === 0;
-  setChip('c-svc', stackDown ? 'bad' : up < all ? 'warn' : 'good', stackDown ? '✗' : up < all ? '▲' : '✓', stackDown ? 'Stack not running' : `Services ${up}/${all}`);
+  const sc = servicesCount(c.services), up = sc.up, all = sc.all;
+  const bad = c.nodes.filter(n => n.state !== 'ok').length, nn = c.nodes.length, stackDown = sc.stackDown || all === 0;
+  setChip('c-svc', stackDown ? 'bad' : up < all ? 'warn' : 'good', stackDown ? '✗' : up < all ? '▲' : '✓', stackDown ? 'Stack not running' : `Services ${sc.ratio}`);
   setChip('c-nodes', stackDown ? 'warn' : bad ? 'warn' : 'good', stackDown ? '–' : bad ? '▲' : '✓', stackDown ? 'Nodes unknown' : `Nodes ${nn - bad}/${nn} healthy`);
   paintAttention();
 }
