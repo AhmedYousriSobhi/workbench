@@ -53,6 +53,82 @@ def test_fetch_ca_strips_the_prefix_and_rejects_anything_else():
         teleport.fetch_ca(opener=lambda url: "<html>")
 
 
+def test_no_tls_verification_is_skipped_toward_the_proxy():
+    """Issue 864: benchctl pins the proxy certificate; skipping verification must not come back."""
+    src = (ROOT / "benchctl" / "teleport.py").read_text()
+    assert "CERT_NONE" not in src and "check_hostname = False" not in src and "check_hostname, " not in src
+
+
+def _self_signed(d: Path, name: str) -> tuple[Path, Path]:
+    """A throwaway certificate like the one Teleport makes (CA:TRUE, 127.0.0.1 among its names), generated per test, never committed."""
+    cert, key = d / f"{name}.pem", d / f"{name}.key"
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-days", "1",
+                    "-keyout", str(key), "-out", str(cert), "-subj", f"/CN={name}",
+                    "-addext", f"subjectAltName=DNS:{teleport.DNS_NAME},IP:127.0.0.1",
+                    "-addext", "basicConstraints=critical,CA:TRUE", "-addext", "keyUsage=critical,digitalSignature,keyCertSign"],
+                   check=True, capture_output=True)
+    return cert, key
+
+
+@pytest.fixture
+def proxy(tmp_path):
+    """A local HTTPS server standing in for the proxy, with a Teleport-like data folder holding its certificate."""
+    import http.server
+    import ssl
+    import threading
+    if not shutil.which("openssl"):
+        pytest.skip("openssl missing")
+    conf, secrets = tmp_path / "conf", tmp_path / "sec"
+    (conf / "data").mkdir(parents=True)
+    secrets.mkdir()
+    cert, key = _self_signed(tmp_path, "proxy")
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"cert-authority ssh-ed25519 AAAA x\n")
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain(cert, key)
+    srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield srv.server_address[1], conf, secrets, cert
+    srv.shutdown()
+    srv.server_close()
+
+
+def test_fetch_ca_pins_the_proxy_certificate_from_teleports_data_folder(proxy):
+    port, conf, secrets, cert = proxy
+    shutil.copy(cert, conf / "data" / teleport.PROXY_CERT)
+    assert teleport.fetch_ca(port, conf=conf, secrets=secrets, sleep=lambda s: None) == "ssh-ed25519 AAAA x\n"
+    assert (secrets / teleport.PINNED_CA).read_text() == cert.read_text()
+    ctx = teleport.proxy_context(secrets)
+    import ssl
+    assert ctx.verify_mode == ssl.CERT_REQUIRED and ctx.check_hostname and len(ctx.get_ca_certs()) == 1
+
+
+def test_fetch_ca_refuses_a_proxy_that_does_not_present_the_pinned_certificate(proxy, tmp_path):
+    port, conf, secrets, _ = proxy
+    other, _ = _self_signed(tmp_path, "other")   # Teleport's file says one certificate, the port answers with another
+    shutil.copy(other, conf / "data" / teleport.PROXY_CERT)
+    with pytest.raises(teleport.TeleportError, match=r"did not present the pinned Teleport proxy certificate.*benchctl up --with teleport"):
+        teleport.fetch_ca(port, conf=conf, secrets=secrets, sleep=lambda s: None)
+
+
+def test_a_missing_proxy_certificate_is_one_message_with_the_recovery_command(tmp_path):
+    waits = []
+    with pytest.raises(teleport.TeleportError, match=r"has not written its proxy certificate.*benchctl up --with teleport") as e:
+        teleport.pin_proxy_cert(tmp_path / "conf", tmp_path, sleep=waits.append, tries=3)
+    assert waits == [1, 1] and "sudo" not in str(e.value)
+    with pytest.raises(teleport.TeleportError, match=r"pinned Teleport proxy certificate .* is missing: run `benchctl up --with teleport`"):
+        teleport.proxy_context(tmp_path)
+
+
 def test_compose_adds_teleport_only_when_selected():
     prof = compose.load_profile("min")
     assert "teleport" not in compose.generate({**SIM, "login": None}, prof)["services"]

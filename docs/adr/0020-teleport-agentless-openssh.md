@@ -61,6 +61,25 @@ credentials; via the sqlite backup API, safe while Teleport runs), `host_uuid` a
 `compose/generated/secrets/teleport/state` with the Teleport version. An empty data directory restores it when the
 version matches; another version starts a new cluster. The copy is taken at those moments, not continuously.
 
+## Addendum: benchctl pins the proxy certificate (issue 864)
+The proxy keeps its self-signed certificate (no `https_keypairs`). Teleport makes it at its first start in
+`data/webproxy_cert.pem`, as its own CA (CA:TRUE), naming the private IP, `teleport.workbench.test` and 127.0.0.1.
+benchctl no longer skips verification toward it:
+
+- **Pin:** `bootstrap` copies that file from the data folder on disk (written by the container, never taken from the
+  network) to `compose/generated/secrets/teleport/proxy_ca.pem`. The context that fetches the OpenSSH CA key trusts only
+  that certificate, with the name checked (`teleport.proxy_context`).
+- **Messages (no sudo):** a server on the proxy port that presents another certificate is refused (check the port, then
+  `benchctl down` and `benchctl up --with teleport`); a missing file has its own message (`benchctl up --with teleport`).
+- **Rebuilds:** the certificate is saved and restored with the rest of the state (addendum above), so the pin stays valid.
+- **Clients unchanged:** `tsh` and clients still pass `--insecure` (the client profile's `insecure: true`), because the
+  certificate is in no system trust store.
+- **Status:** the owner approved this option (1) on 2026-11-20 (recorded in ADR 0090). The live check
+  (`tests/real/test_teleport_real.py`, a wrong certificate is refused) is the one that proves it.
+- **To change it later:** edit `proxy_context` and `bootstrap` in `benchctl/teleport.py`, the matching unit tests and the live
+  test above; ADR 0090 lists what going back to skipping would take. The three `check_hostname = False` lines in
+  `benchctl/k8s.py` are a different, smaller question (the chain is already checked) and are not decided here.
+
 ## Addendum: Community Edition licence and SSO limits, read from primary sources (issue 249, 2026-11-20)
 Research only: no decision above is changed. Items that contradict or go beyond ADR 0020 are listed for the owner at the end.
 Sources were read on 2026-11-20 and are the Teleport documentation, the licence file in the Teleport repository and

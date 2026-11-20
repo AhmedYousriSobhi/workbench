@@ -15,7 +15,7 @@ Status: proven live (`./scripts/verify.sh --unit teleport_kube`, 5 passed): the 
 
 ## Use it
 
-The proxy certificate is self-signed, so every `tsh` call carries `--insecure`. An identity file needs no password or one-time code.
+The proxy certificate is self-signed, so every `tsh` call carries `--insecure`. benchctl itself does not skip the check: it pins that certificate (`compose/generated/secrets/teleport/proxy_ca.pem`, copied from Teleport's data folder by `benchctl up`) and refuses a proxy that presents another one (ADR 0020, issue 864). An identity file needs no password or one-time code.
 
 ```bash
 export TELEPORT_HOME=$(mktemp -d)           # keeps your own ~/.tsh untouched
