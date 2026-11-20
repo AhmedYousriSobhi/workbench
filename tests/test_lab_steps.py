@@ -1,6 +1,7 @@
 """Config lab run, the host side of each state (issue 554 steps 3 and 4): the driver's container, its progress lines, the lab_run
 Prometheus file, the governor's flags, the wait for calm before an abort's restore. Fakes only: no Docker, no governor."""
 import json
+import urllib.parse
 from pathlib import Path
 
 import pytest
@@ -357,3 +358,18 @@ def test_report_counts_earlier_runs_of_the_same_jobs_and_reads_alerts_per_side(r
     assert s._earlier(run) == ["Ship"]
     got = s._alerts(run)
     assert set(got) == set(run.r["sides"]) and all(v["fired"] == 1 for v in got.values()) and len(seen) == len(got)
+
+
+def test_scheduler_load_reads_the_sides_lab_run_series_and_skips_an_unknown_window(run, root, tmp_path):
+    seen = []
+
+    def prom(url):
+        seen.append(urllib.parse.unquote(url))
+        return {"data": {"result": [{"metric": {"__name__": "slurm_schedule_cycle_last"}, "values": [[1, "500"], [2, "900"]]}]}}
+    s, _ = steps(run, root, tmp_path, prom_get=prom)
+    first = run.r["sides"][0]
+    run.r["history"] += [{"state": f"{k}_{first}", "at": t} for k, t in (("replay", 100.0), ("collect", 200.0))]
+    got = s._sched(run)
+    assert got[first]["metrics"]["slurm_schedule_cycle_last"]["max"] == 900.0
+    assert all(got[x] is None for x in run.r["sides"][1:]) and len(seen) == 1
+    assert f'lab_run="prod-a/{run.r["run"]}/{first}"' in seen[0]

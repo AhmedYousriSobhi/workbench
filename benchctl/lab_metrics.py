@@ -1,7 +1,12 @@
 """Config lab metrics from one side's collected accounting (issue 555, ADR 0050). Pure functions over `sacct -P` rows; no cluster access.
 
 Times are measured in lab seconds and shown in production-equivalent time (x the run's dilation factor). What accounting cannot say
-(alerts, flapping, scheduler load, Kubernetes counts, idle-but-free GPUs, pending reasons) is listed in `NOT_MEASURED`, never guessed.
+(alerts, flapping, scheduler load, Kubernetes counts, idle-but-free GPUs, fairshare usage) is listed in `NOT_MEASURED`, never guessed;
+`lab_report.build` drops an item once a side has read it.
+
+Pending reasons come from sacct's `Reason` field, which Slurm defines as "the last reason a job was blocked from running for something
+other than Priority or Resources", kept after the job ran (sacct(1), Slurm 26.05.5; `print.c` prints `job->state_reason_prev`). So
+`None` means only Priority or Resources ever held the job back, and those two never appear in the mix.
 """
 from __future__ import annotations
 
@@ -40,7 +45,7 @@ def job_facts(row: dict[str, str]) -> dict[str, Any]:
     ready = lab_replay.parse_time(row.get("Eligible", "")) or lab_replay.parse_time(row.get("Submit", ""))
     pending = (row.get("State", "").split()[:1] or [""])[0].upper() in ("PENDING", "") or start is None
     return {"partition": row.get("Partition", ""), "qos": row.get("QOS", ""), "account": row.get("Account", ""), "kind": state,
-            "pending": pending, "wait": None if pending else _secs(ready, start), "gpus": gpus(row.get("AllocTRES", "")),
+            "pending": pending, "reason": row.get("Reason"), "wait": None if pending else _secs(ready, start), "gpus": gpus(row.get("AllocTRES", "")),
             "run": _secs(start, end) if start and end else None}
 
 
@@ -57,6 +62,19 @@ def _stats(facts: list[dict]) -> dict[str, Any]:
             "wait_median_s": statistics.median(waits) if waits else None, "wait_p95_s": percentile(waits, 95)}
 
 
+def pending_reasons(facts: list[dict]) -> dict[str, Any] | None:
+    """The pending-reason mix: jobs per sacct `Reason` other than None; None when the export has no `Reason` column (a run collected
+    before issue 555 added it), so the report lists it as not measured instead of an empty mix."""
+    if not facts or any(f.get("reason") is None for f in facts):
+        return None
+    out: dict[str, int] = {}
+    for f in facts:
+        r = (f["reason"] or "").strip()
+        if r and r != "None":
+            out[r] = out.get(r, 0) + 1
+    return {"jobs": len(facts), "with_reason": sum(out.values()), "by_reason": dict(sorted(out.items(), key=lambda kv: (-kv[1], kv[0])))}
+
+
 def side_metrics(rows: list[dict[str, str]], factor: float) -> dict[str, Any]:
     """The metrics of one side. `*_s` fields are lab seconds; `*_prod_s` the same x the dilation factor."""
     facts = [job_facts(r) for r in rows]
@@ -71,6 +89,7 @@ def side_metrics(rows: list[dict[str, str]], factor: float) -> dict[str, Any]:
            "by_partition": _group(facts, "partition"), "by_qos": _group(facts, "qos"),
            "preempted": sum(1 for f in facts if f["kind"] == "preempted"), "gpu_hours_lost": round(lost * factor, 3),
            "gpu_hours": round(sum(f["gpus"] * (f["run"] or 0) for f in facts) / 3600 * factor, 3), "account_wait_spread": spread,
+           "pending_reasons": pending_reasons(facts),
            "kinds": {k: sum(1 for f in facts if f["kind"] == k) for k in sorted({f["kind"] for f in facts})}}
     for g in (out, *out["by_partition"].values(), *out["by_qos"].values()):
         for k in ("wait_median_s", "wait_p95_s"):

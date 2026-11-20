@@ -12,6 +12,7 @@
     "single_run": {"type": "boolean"},
     "repeat": {"type": "object", "properties": {"runs": {"type": "integer"}, "verdicts": {"type": "array"}, "consistent": {"type": "boolean"}}},
     "alerts": {"type": "object"},
+    "scheduler": {"type": "object", "description": "per side: slurmctld scheduler gauges over the side's replay (max, median, samples); real controller microseconds or counts, not time-scaled"},
     "factor": {"type": "number"},
     "findings": {"type": ["object", "null"]},
     "thresholds": {"type": "object"},

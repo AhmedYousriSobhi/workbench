@@ -2,6 +2,10 @@
 
 Every JSON output of `benchctl` carries `contract_version` (`MAJOR.MINOR`); the schemas are in [schemas/](schemas/) (JSON Schema draft 2020-12). Adding a field is a minor bump. Removing or renaming a field, or changing a type, is a major bump. Every change gets a line here (SPEC AG-3, ADR 0062).
 
+## 2.6 (2026-11-20)
+
+Minor, nothing removed. `export lab-report --json` gains `scheduler` (per side: slurmctld's scheduler gauges over the side's replay, each with `what`, `max`, `median`, `samples`; read from the series labelled `lab_run`) and, in `a` and `b`, `pending_reasons` (`jobs`, `with_reason`, `by_reason`: sacct's `Reason`, the last reason other than Priority or Resources; null for a run collected without that column). `not_measured` drops "scheduler load" and "pending-reason mix" when they were read. New suggestion ids `qos-limit-pending` and `alert-flapping` (issue 555).
+
 ## 2.5 (2026-11-18)
 
 Minor, nothing removed. `export lab-report --json` (the report document) gains `repeat` (`runs`, `verdicts`, `consistent`: earlier runs of the same frozen jobs), `alerts` (per side: the alerts Prometheus saw firing, each with `first_after_prod_s` and `flaps`) and `single_run` is now false once a run has been repeated. `not_measured` no longer lists alerts when they were read (issue 555).
