@@ -134,6 +134,12 @@ An object that already exists without the lab's label (for example a PriorityCla
 
 Rows `sacctmgr` refuses to delete are listed.
 
+**Remove and a run.**
+- While the child of a run of this lab is alive, `remove lab NAME` refuses with one message naming `benchctl stop lab NAME`.
+- When no run process is left (a governor killed or restarted, a test that did not clean up), it deletes the stale `run-active.json` of that lab.
+- A later governor start then does not recover a run of a lab that is gone, and `run lab` is not refused.
+- A record that names another lab is left alone.
+
 ## Run the replay (built, not yet usable end to end)
 
 ```bash
