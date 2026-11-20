@@ -74,5 +74,8 @@ benchctl no longer skips verification toward it:
 - **Rebuilds:** the certificate is saved and restored with the rest of the state (addendum above), so the pin stays valid.
 - **Clients unchanged:** `tsh` and clients still pass `--insecure` (the client profile's `insecure: true`), because the
   certificate is in no system trust store.
-- **Status:** the owner's choice is still open (ADR 0090); this is option (1). The live check
-  (`tests/real/test_teleport_real.py`, a wrong certificate is refused) is written, not yet run.
+- **Status:** the owner approved this option (1) on 2026-11-20 (recorded in ADR 0090). The live check
+  (`tests/real/test_teleport_real.py`, a wrong certificate is refused) is the one that proves it.
+- **To change it later:** edit `proxy_context` and `bootstrap` in `benchctl/teleport.py`, the matching unit tests and the live
+  test above; ADR 0090 lists what going back to skipping would take. The three `check_hostname = False` lines in
+  `benchctl/k8s.py` are a different, smaller question (the chain is already checked) and are not decided here.

@@ -12,6 +12,7 @@ Many issues stopped on an owner question. On 2026-11-19 the owner answered "go w
 |---|---|---|
 | 384 | The Kubernetes request counter is read through a governor socket verb (SPEC W-3: the page never runs Docker). The audit policy is not widened; the counter is labelled "nodes and pods only". | ADR 0087 |
 | 213 | SSH traffic on the diagram lines is counted by a tiny counter inside each login and jump container, polled on a localhost port like `/sim/stats`. | ADR 0088 |
+| 864 | The Teleport CA is pinned: benchctl trusts only the proxy certificate Teleport made (option 1), approved by the owner on 2026-11-20. The k8s.py name checks are a separate, smaller question and are not covered. | ADR 0020 addendum (issue 864) |
 | 861 A3 | One definition of the services count: every drawn part with a reachability test (7/7 when all answer). | ADR 0089 |
 | 860 | Drop `top`, `jira mode` and `workload run` from SPEC section 7 (done in this PR, with the test that checks section 7 against the CLI). SPEC section 7 stays the full verb list. | here |
 | 388 | Keep the label `Slurm + K8s` and one kubectl line per k-login to the API box (built in PR 891). | here |
@@ -33,11 +34,12 @@ Many issues stopped on an owner question. On 2026-11-19 the owner answered "go w
 
 **898: quota 24.** The fixture needs room for the failing pods KWOK adds. *To change:* the `team-a` quota in the Kubernetes fixture under `k8s/` or `benchctl/k8s.py`; the live read tests in `tests/real/test_k8s_real.py` count pods against it.
 
+**864: pinned proxy certificate.** Verification toward the local proxy was skipped (`CERT_NONE`); it now trusts only the certificate Teleport made. *To change:* `proxy_context` and `bootstrap` in `benchctl/teleport.py` (the pin file is `compose/generated/secrets/teleport/proxy_ca.pem`), the unit tests in `tests/test_teleport*.py`, and the live check in `tests/real/test_teleport_real.py`; the addendum in ADR 0020 says what the messages are. Going back to skipping is option 2 of the register's old row: delete the pin, set the context to unverified, and state it in the Teleport guide.
+
 ## Still open
 
 | Issue | Question | Options | Recommendation |
 |---|---|---|---|
-| 864 | Pin the Teleport CA instead of skipping TLS verification toward the local proxy. | (1) Pin the CA the Teleport auth service writes; (2) keep skipping on localhost, state it in the docs. | (1), but it is a security path: the owner decides and reviews. |
 | 471 | C-5: the jira-mock `cloud` and `dc` modes. | Remove `dc` (the real Jira part covers it); build `cloud` only if the client's traffic shows v3 calls. | Wait for the client's `/sim/paths` and `/sim/traffic`. |
 | 637 | Dark twins of the 12 terminal screenshots. | Build a generator; or recapture on a live cluster. | Deferred to a live capture session (owner decision 2026-11-18). |
 | 861 B1, C2, E1 | Clearer names (B1), a hide-parts switch (C2), phone navigation (E1). | See the comments on issue 861. | None given: the owner needs a look at the page first. |
