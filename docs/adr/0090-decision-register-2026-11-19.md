@@ -13,6 +13,7 @@ Many issues stopped on an owner question. On 2026-11-19 the owner answered "go w
 | 384 | The Kubernetes request counter is read through a governor socket verb (SPEC W-3: the page never runs Docker). The audit policy is not widened; the counter is labelled "nodes and pods only". | ADR 0087 |
 | 213 | SSH traffic on the diagram lines is counted by a tiny counter inside each login and jump container, polled on a localhost port like `/sim/stats`. | ADR 0088 |
 | 864 | The Teleport CA is pinned: benchctl trusts only the proxy certificate Teleport made (option 1), approved by the owner on 2026-11-20. The k8s.py name checks are a separate, smaller question and are not covered. | ADR 0020 addendum (issue 864) |
+| 249 | Keep the current rule (the repository only names the Teleport tag; each user accepts the Community Edition licence) and add a licence notice to the Teleport guide and tutorial; no change to `benchctl up` output. The owner chose the recommended option on 2026-11-20. | ADR 0020 addendum (issue 249), `docs/guides/teleport-kube.md`, tutorial 9 |
 | 861 A3 | One definition of the services count: every drawn part with a reachability test (7/7 when all answer). | ADR 0089 |
 | 860 | Drop `top`, `jira mode` and `workload run` from SPEC section 7 (done in this PR, with the test that checks section 7 against the CLI). SPEC section 7 stays the full verb list. | here |
 | 388 | Keep the label `Slurm + K8s` and one kubectl line per k-login to the API box (built in PR 891). | here |
@@ -35,6 +36,8 @@ Many issues stopped on an owner question. On 2026-11-19 the owner answered "go w
 **898: quota 24.** The fixture needs room for the failing pods KWOK adds. *To change:* the `team-a` quota in the Kubernetes fixture under `k8s/` or `benchctl/k8s.py`; the live read tests in `tests/real/test_k8s_real.py` count pods against it.
 
 **864: pinned proxy certificate.** Verification toward the local proxy was skipped (`CERT_NONE`); it now trusts only the certificate Teleport made. *To change:* `proxy_context` and `bootstrap` in `benchctl/teleport.py` (the pin file is `compose/generated/secrets/teleport/proxy_ca.pem`), the unit tests in `tests/test_teleport*.py`, and the live check in `tests/real/test_teleport_real.py`; the addendum in ADR 0020 says what the messages are. Going back to skipping is option 2 of the register's old row: delete the pin, set the context to unverified, and state it in the Teleport guide.
+
+**249: licence notice, not a gate.** `benchctl up` does not print the licence; the notice is in the docs. *To change:* to show it at start, add a line to the Teleport start path in `benchctl/teleport.py` and a unit test; to drop Community Edition, the ADR 0020 addendum lists the alternatives (15.x, a self-built AGPLv3 binary, plain OpenSSH certificates).
 
 ## Still open
 
