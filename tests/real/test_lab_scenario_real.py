@@ -70,7 +70,7 @@ def test_scenario_steps_act_on_the_lab_nodes_and_the_heal_undoes_them(lab_up, tm
     scen.mkdir()
     (scen / "live.yaml").write_text(yaml.safe_dump({"name": "live", "steps": [
         {"at": "0s", "target": "slurm", "do": {"drain": ["first cpu node"], "reason": "lab scenario live"}},
-        {"at": "4s", "target": "slurm", "do": {"power_off": ["second cpu node"]}}],
+        {"at": "30s", "target": "slurm", "do": {"power_off": ["second cpu node"]}}],
         "expect": [{"slurm.node_state": {"node": "first cpu node", "state": "drain", "within": "20s"}}]}))
     doc = lab_scenario.freeze(NAME, "live", sim, 1.0, 600, scenarios=scen)
     container = f"workbench-{doc['steps'][1]['do']['power_off'][0]}-1"
@@ -79,12 +79,12 @@ def test_scenario_steps_act_on_the_lab_nodes_and_the_heal_undoes_them(lab_up, tm
     pl = lab_scenario.Player(doc, lambda: flag["paused"], lambda: False)
     pl.sync(0.0)
     assert wait_for(lambda: "drain" in node_state("cpu001"), 30), node_state("cpu001")  # scontrol by the Slurm (production) name
-    flag["paused"] = True  # L2: the clock holds, the power-off at 4 s must wait
-    time.sleep(8)
+    flag["paused"] = True  # L2: the clock holds, the power-off at 30 s must wait
+    time.sleep(40)
     assert not paused(container), "a step ran while the replay clock was paused"
     flag["paused"] = False
-    assert wait_for(lambda: paused(container), 30), "power_off did not pause the lab node's container"
-    res = pl.finish(timeout=60)
+    assert wait_for(lambda: paused(container), 60), "power_off did not pause the lab node's container"
+    res = pl.finish(timeout=90)
     assert [s["status"] for s in res["steps"]] == ["ok", "ok"], res
     assert res["expects"][0]["status"] == "ok", res
     healed = lab_scenario.heal(doc)

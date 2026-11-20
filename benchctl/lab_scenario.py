@@ -85,8 +85,7 @@ def problems(sc: dict, hosts: set[str], factor: float, length_s: float) -> list[
             out.append(f"step {i}: bad or missing 'at'")
             continue
         if t not in TARGETS:
-            out.append(f"step {i}: target {t} cannot act on lab nodes (a lab run plays slurm steps only: the BMC farm, BCM, GPU exporter "
-                       "and the other parts know only the simulated nodes)")
+            out.append(f"step {i}: target {t} cannot act on lab nodes")
             continue
         if bad := sorted(set(do) - set(STEP_KEYS)):
             out.append(f"step {i}: {', '.join(bad)} cannot play in a lab run (allowed: {', '.join(k for k in STEP_KEYS if k != 'reason')})")
@@ -97,6 +96,8 @@ def problems(sc: dict, hosts: set[str], factor: float, length_s: float) -> list[
         last = max(last, lab_s)
         for n in {n for _, n in _names(do)} | ({"slurmctld"} if do.get("slurmctld_restart") else set()):
             seen.setdefault(n, []).append((at, lab_s))
+    if any("cannot act on lab nodes" in m for m in out):
+        out.insert(0, "a lab run plays slurm steps only (the BMC farm, BCM, GPU exporter and the other parts know only the simulated nodes)")
     if last > length_s:
         out.append(f"the last step plays at {last:.0f} s of lab time, after the side ends ({length_s:.0f} s at time factor x{factor:g})")
     for n, times in sorted(seen.items()):
@@ -245,14 +246,15 @@ class Player:
             self.real_sleep(POLL_S)
 
     def named(self, text: str) -> str:
-        """A label with container service names (`lab-node-NNN`) put back to the Slurm names, so a report names each node one way
-        and `export lab-report --anonymize` maps all of them."""
+        """A label with container service names (`lab-node-NNN`, as a whole word) put back to the Slurm names, so a report names each
+        node one way and `export lab-report --anonymize` maps all of them. A tool's message (`detail`) is left alone: a container name
+        such as `workbench-lab-node-002-1` reveals nothing and must not become one the anonymizer cannot see."""
         hosts = self.doc.get("hosts") or {}
-        return re.sub(r"lab-node-\d{3}", lambda m: hosts.get(m.group(0), m.group(0)), text)
+        return re.sub(r"(?<![A-Za-z0-9_.-])lab-node-\d{3}(?![A-Za-z0-9_-])", lambda m: hosts.get(m.group(0), m.group(0)), text)
 
     def _run(self) -> None:
         def on_step(step: scenario.Step, o: scenario.Outcome) -> None:
-            self.steps.append({"at": step.at, "target": step.target, "label": self.named(o.label), "status": o.status, "detail": self.named(o.detail[-200:])})
+            self.steps.append({"at": step.at, "target": step.target, "label": self.named(o.label), "status": o.status, "detail": o.detail[-200:]})
         try:
             self.report = self.play(self.doc, speed=float(self.doc["factor"]), dilation=1.0, say=lambda m: None, sleep=self.sleep, clock=self.now,
                                     runner=self.runner, host=True, should_stop=self.should_stop, on_step=on_step, by=OWN)

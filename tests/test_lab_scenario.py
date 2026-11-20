@@ -113,7 +113,7 @@ def test_freeze_refuses_a_selector_the_lab_cannot_satisfy(root, scen):
 
 def test_every_problem_is_named_and_long_lists_are_cut(root, scen):
     steps = [{"at": f"{i}s", "target": "bmc-farm", "do": {"nodes": ["first cpu node"], "power": "Off"}} for i in range(8)]
-    with pytest.raises(LabError, match=r"target bmc-farm cannot act on lab nodes.*\(and 2 more\)"):
+    with pytest.raises(LabError, match=r"run: a lab run plays slurm steps only \(.*step 1: target bmc-farm cannot act on lab nodes.*\(and 3 more\)"):
         lab_scenario.freeze("prod-a", write_sc(scen, "many", {"name": "many", "steps": steps}), SIM, 1.0, 7200, root, scen)
 
 
@@ -121,7 +121,9 @@ def test_problems():
     p = lab_scenario.problems
     assert p({"steps": [{"at": "1m", "target": "slurm", "do": {"drain": ["cpu001"]}}]}, HOSTS, 1.0, 600) == []
     assert "bad or missing 'at'" in p({"steps": [{"target": "slurm", "do": {}}]}, HOSTS, 1.0, 600)[0]
-    assert "target jira cannot act on lab nodes" in p({"steps": [{"at": 0, "target": "jira", "do": {}}]}, HOSTS, 1.0, 600)[0]
+    assert p({"steps": [{"at": 0, "target": "jira", "do": {}}]}, HOSTS, 1.0, 600) == [
+        "a lab run plays slurm steps only (the BMC farm, BCM, GPU exporter and the other parts know only the simulated nodes)",
+        "step 1: target jira cannot act on lab nodes"]
     assert "cancel, submit cannot play" in p({"steps": [{"at": 0, "target": "slurm", "do": {"submit": {}, "cancel": True}}]}, HOSTS, 1.0, 600)[0]
     assert "cn001 is not a lab node" in p({"steps": [{"at": 0, "target": "slurm", "do": {"drain": ["cn001"]}}]}, HOSTS, 1.0, 600)[0]
     late = p({"steps": [{"at": "2h", "target": "slurm", "do": {"drain": ["cpu001"]}}]}, HOSTS, 2.0, 600)
@@ -510,3 +512,23 @@ def test_cli_prepare_passes_the_scenario(monkeypatch):
     r = CliRunner().invoke(cli.app, ["run", "lab", "prod-a", "--prepare", "--scenario", "lab-node-loss"])
     assert r.exit_code == 0, r.output
     assert got["scenario"] == "lab-node-loss"
+
+
+def test_named_maps_whole_service_names_only_and_the_anonymized_export_holds_no_production_node(root, scen, tmp_path):
+    from benchctl import lab_export
+    pl = lab_scenario.Player({"hosts": {"lab-node-002": "cpu002"}}, lambda: False, lambda: False)
+    assert pl.named('slurm {"power_off": ["lab-node-002"]}') == 'slurm {"power_off": ["cpu002"]}'
+    assert pl.named("Container workbench-lab-node-002-1 is not running") == "Container workbench-lab-node-002-1 is not running"
+    run, _ = prepared(root, scen)
+    run.r["scenario_result"] = {"a": {"steps": [{"label": pl.named('slurm {"power_off": ["lab-node-002"]}'), "status": "failed",
+                                                 "detail": "Container workbench-lab-node-002-1 is not running"}],
+                                      "planned_steps": 1, "expects": [{"label": 'slurm.node_state {"node": "cpu001"}', "status": "ok"}], "error": None}}
+    run.save()
+    for side in ("a", "b"):
+        run.side_dir(side).mkdir(parents=True, exist_ok=True)
+        (run.side_dir(side) / "sacct.txt").write_text("JobName|Partition|State\nj0001|cpu|COMPLETED\n")
+    lab_steps.RunSteps("prod-a", run.r["run"], root=root, gen=tmp_path / "gen", prom_get=lambda u: (_ for _ in ()).throw(OSError("no"))).report(run)
+    doc, md = lab_export.export("prod-a", run.r["run"], anonymize=True, root=root)
+    text = json.dumps(doc) + md
+    assert not any(h in text for h in HOSTS), [h for h in HOSTS if h in text]
+    assert "workbench-lab-node-002-1" in text  # a container name stays as it is
