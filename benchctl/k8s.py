@@ -467,8 +467,8 @@ def bootstrap(sim: dict, ips: dict, say: Callable[[str], None] = print, runner: 
     _REFUSED["seen"] = False
     if not ready(ips):
         if _REFUSED["seen"]:
-            say("FAILED kubernetes: the API server's certificate is not the generated one or does not name its address "
-                "(issue 970): run `benchctl down`, delete compose/generated/secrets/k8s, then `benchctl up --with k8s` (no sudo)")
+            say("FAILED kubernetes: the API server's certificate failed the check (not signed by the generated CA, does not name its address, or expired; issue 970): "
+                "run `benchctl down`, delete compose/generated/secrets/k8s, then `benchctl up --with k8s` (no sudo)")
             return False
         say("FAILED kubernetes: the API server did not become ready (docker logs workbench-k8s-apiserver-1)")
         return False

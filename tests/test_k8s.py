@@ -727,7 +727,7 @@ def test_api_reads_refuse_a_certificate_that_does_not_name_the_address(api_serve
     assert k8s.api_ready({}, timeout=0.05, sleep=lambda s: None) is False
     said = []
     assert not k8s.bootstrap(SIM, {}, said.append, ready=lambda ips: k8s.api_ready(ips, timeout=0.05, sleep=lambda s: None))
-    assert len(said) == 1 and "does not name its address" in said[0] and "benchctl up --with k8s" in said[0] and "sudo" in said[0]
+    assert len(said) == 1 and "does not name its address" in said[0] and "expired" in said[0] and "benchctl up --with k8s" in said[0] and "sudo" in said[0]
 
 
 def test_no_name_check_is_skipped_toward_the_api_server():
