@@ -406,7 +406,7 @@ class Governor:
                 return {"ok": True, "dry_run": True}
             if self.change and self.change.get("state") == "running":
                 return {"ok": False, "error": "a change is already running: wait for it, then start the run"}
-            return self.labrun.start(req["name"], bool(req.get("ab", False)), req.get("target_hours"), req.get("seed"))
+            return self.labrun.start(req["name"], bool(req.get("ab", False)), req.get("target_hours"), req.get("seed"), req.get("scenario"))
         if cmd == "lab-apply" and not self._lab_missing(req) and (refused := self._lab_apply_admit(req)):  # slow (a child): not under the lock
             return refused
         if cmd in ("freeze", "thaw", "stop", "start"):  # slow, so not under the lock: it would hold `status` up like a plan does
