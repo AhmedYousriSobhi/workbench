@@ -48,3 +48,31 @@ def test_apply_plan_shrinks_then_grows_the_running_workbench(cluster):
     assert wait_for(lambda: {"cn003", "gpu002"} <= services(), timeout=300)
     # let the second `benchctl up` finish (it saves the spec last) before the fixture stops the governor mid-run
     assert wait_for(lambda: sum("apply-plan" in x and ": done" in x for x in ask(cluster, {"cmd": "status"})["audit"]) >= 2, timeout=300)
+
+
+def test_applying_the_same_selection_twice_finishes_each_time_with_its_own_done_line(cluster):
+    """Issue 202 and 212: the page waits for a `done` it has not seen, so two identical applies must not look alike. Each apply
+    gets its own job id, `status.change` reports that job as done (what the page's applyOutcome reads), and the audit log holds
+    one distinct `done` line per job."""
+    plan = {"cmd": "apply-plan", "cpu_nodes": 3, "gpu_nodes": 2, "gpus_per_node": 8, "parts": ["jira", "bmc", "bcm"]}
+
+    def done_lines() -> list[str]:
+        return [x for x in ask(cluster, {"cmd": "status"})["audit"] if "apply-plan" in x and ": done" in x]
+
+    def change() -> dict:
+        return ask(cluster, {"cmd": "status"}).get("change") or {}
+
+    def apply_and_wait(expect_done_lines: int) -> int:
+        r = ask(cluster, plan)
+        assert r["started"] and isinstance(r["job"], int), r
+        assert wait_for(lambda: change().get("job") == r["job"] and change().get("state") == "done", timeout=300), change()
+        assert wait_for(lambda: len(done_lines()) == expect_done_lines, timeout=60), done_lines()
+        assert change()["finished"] and change()["finished"] >= change()["started"]
+        return r["job"]
+
+    before = len(done_lines())
+    jobs = [apply_and_wait(before + 1), apply_and_wait(before + 2)]
+    assert jobs[1] > jobs[0]
+    new = done_lines()[before:]
+    assert len(new) == 2 and new[0] != new[1], new  # the `(#N HH:MM:SS)` tag keeps identical changes apart
+    assert {"cn001", "cn002", "cn003", "gpu001", "gpu002"} <= services()  # the same selection left the cluster as it was

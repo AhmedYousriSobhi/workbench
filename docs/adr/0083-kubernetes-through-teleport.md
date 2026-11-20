@@ -21,7 +21,7 @@ Proven live on 2026-11-15 (`./scripts/verify.sh --unit teleport_kube`, 5 passed;
 - `tsh kube login` with an identity file works, but kubectl runs `tsh kube credentials` as an exec plugin, which needs the same identity: set `TELEPORT_IDENTITY_FILE` (and `TELEPORT_PROXY`) in kubectl's environment, or it fails with "no SSH auth methods loaded".
 - Role v7 without `kubernetes_resources` lets a viewer read the nodes (cluster-scoped), and a write is refused by Kubernetes RBAC as forbidden.
 - A user whose role has no `kubernetes_groups` is denied; Teleport's message is "Your user's Teleport role does not allow Kubernetes access" (reported as NotFound).
-- Teleport container memory with the service: to be recorded here from `docker stats` (limit 320 MB, unchanged).
+- Teleport container memory with the service (2026-11-20, `benchctl up --with teleport --with k8s`, 4 KWOK nodes; `docker stats`, `benchctl measure run`): idle 140 to 142 MiB (30 s after start, 7 samples), loaded 174 MiB peak (two identity files, four parallel loops of 40 `kubectl get nodes` and `get pods -A` calls through `tsh kube`; a first 60-call run peaked at 166 MiB), 85 MiB twenty seconds after the load stopped. Limit 320 MB, unchanged: the peak is 146 MB under it. The older 222 MB figure (2026-11-05, before the Kubernetes Service, with ssh sessions and the full load) stays the largest seen, so `MEASURED_MB` is unchanged (issue 752, issue 211).
 - Still not tested: any client of the monitoring software; what it expects from `tsh kube` (cluster name, login method, Kubernetes user, read-only or more) is an open question for the owner.
 
 ## Licence note (addendum to ADR 0020)

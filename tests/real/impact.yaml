@@ -73,7 +73,7 @@
   tests: [test_mocks_real, test_gpu_follows_slurm_real, test_gpu_grafana_real, test_dcgm_real, test_agent_recipes_real, test_alerting_real, test_prom_targets_real]
 - name: prometheus targets
   paths: ["benchctl/promtargets.py", "benchctl/k8s.py", "benchctl/teleport.py", "benchctl/dcgm.py", "benchctl/real_gpu.py"]
-  tests: [test_prom_targets_real, test_k8s_real, test_k8s_reads_real, test_teleport_real, test_teleport_kube_real, test_slurm_metrics_real]
+  tests: [test_prom_targets_real, test_k8s_real, test_k8s_reads_real, test_teleport_real, test_teleport_prune_real, test_teleport_kube_real, test_slurm_metrics_real]
 - name: typed GPU shapes
   paths: ["benchctl/mig.py", "images/slurm-ctl/alloc_feed.py", "images/node-base/entrypoint.sh"]
   tests: [test_mig_real, test_gpu_follows_slurm_real]
@@ -106,7 +106,7 @@
   tests: [test_webui_real, test_webui_browser, test_flow_real, test_cluster_real, test_launcher_real, test_traffic_record_real]
 - name: access, login and jump nodes
   paths: ["images/login/**", "images/jump/**", "benchctl/logins.py", "benchctl/teleport.py", "benchctl/teleportaudit.py", "benchctl/nodeshell.py", "benchctl/nodes.py"]
-  tests: [test_login_real, test_access_real, test_teleport_real, test_teleport_kube_real, test_node_ssh_real, test_ssh_faults_real, test_ssh_counter_real, test_node_tools_real, test_cmsh_real, test_usersim_real]
+  tests: [test_login_real, test_access_real, test_teleport_real, test_teleport_prune_real, test_teleport_kube_real, test_node_ssh_real, test_ssh_faults_real, test_ssh_counter_real, test_node_tools_real, test_cmsh_real, test_usersim_real]
 - name: a CLI run shown on the web page (ADR 0086 phase 4)
   paths: ["benchctl/pagefeed.py", "benchctl/testreport.py", "benchctl/testwords.py"]
   tests: [test_webui_real]
