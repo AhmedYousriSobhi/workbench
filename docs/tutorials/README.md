@@ -27,6 +27,7 @@ Commands run from the repository root. `./scripts/benchctl` needs no virtualenv 
 | rebooting and power-cycling nodes | [14. Reboot and power-cycle nodes](14-reboot-and-power.md) | 10 min |
 | a GPU incident, from alert to ticket | [15. Practise a GPU incident](15-gpu-incident.md) | 15 min |
 | writing a node health check | [16. Write a health check](16-write-a-health-check.md) | 10 min |
+| a check that remembers (idle and hot for a while) | [24. Write a stateful health check](24-write-a-stateful-health-check.md) | 15 min |
 | QOS limits and preemption | [17. QOS and preemption](17-qos-and-preemption.md) | 10 min |
 | a slow or lossy network | [18. Network trouble](18-network-trouble.md) | 5 min |
 | restarting or upgrading Slurm under running jobs | [19. Restart and upgrade Slurm](19-restart-and-upgrade-slurm.md) | 15 min |
