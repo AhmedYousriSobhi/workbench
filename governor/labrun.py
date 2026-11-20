@@ -113,8 +113,11 @@ class LabRun:
         return f"lab run {a.get('run') or '(preparing)'} of {a['name']} is in progress"
 
     # ---- the verbs
-    def start(self, name: str, ab: bool = False, target_hours: float | None = None, seed: int | None = None) -> dict:
-        """Answers at once (W-13): `preparing`, then the thread prepares, admits and spawns; `status.lab` shows the outcome."""
+    def start(self, name: str, ab: bool = False, target_hours: float | None = None, seed: int | None = None, scenario: str | None = None) -> dict:
+        """Answers at once (W-13): `preparing`, then the thread prepares, admits and spawns; `status.lab` shows the outcome. A `scenario`
+        (its name already checked by the control socket) must be a file in the checkout's scenarios/ folder."""
+        if scenario is not None and not (self.workdir / "scenarios" / f"{scenario}.yaml").is_file():
+            return {"ok": False, "error": f"no scenario {scenario} in scenarios/ (see: benchctl scenario list)"}
         with self._lock:
             if why := self.busy():
                 return {"ok": False, "error": f"{why}: one at a time (benchctl stop lab {self.active['name']} ends it)"}
@@ -125,7 +128,7 @@ class LabRun:
             self._flag(PAUSE_FLAG, None)
             self._flag(NORESTORE_FLAG, None)
         self.record(f"lab-run={name}: preparing ({'A/B' if ab else 'candidate only'})")
-        self.start_thread(lambda: self._launch(name, ab, target_hours, seed))
+        self.start_thread(lambda: self._launch(name, ab, target_hours, seed, scenario))
         return {"ok": True, "started": True, "state": "preparing", "name": name}
 
     def _refuse(self, name: str, why: str) -> None:
@@ -133,9 +136,10 @@ class LabRun:
         self.last = {"name": name, "state": "refused", "reason": why}
         self.active = None
 
-    def _launch(self, name: str, ab: bool, target_hours: float | None, seed: int | None) -> None:
+    def _launch(self, name: str, ab: bool, target_hours: float | None, seed: int | None, scenario: str | None = None) -> None:
         argv = ["run", "lab", name, "--prepare", "-o", "json"] + (["--ab"] if ab else [])
         argv += (["--target-hours", f"{float(target_hours):g}"] if target_hours is not None else []) + (["--seed", str(int(seed))] if seed is not None else [])
+        argv += ["--scenario", scenario] if scenario is not None else []
         try:
             prep = json.loads(self.reader(argv))
             run_id, nodes = str(prep["run"]), int(prep["lab_nodes"])

@@ -4,7 +4,9 @@ scenario engine (and the web page, which plays scenarios through it) pay nothing
 A manual fault or a scenario on the cluster while a lab run replays is allowed, but recorded: one JSON line per action in the run's
 `interference.jsonl` ({at, action, target, side, by}), and `lab_run.Run.comparable()` is then false, naming the first action. The
 governor records its own node commands (`governor/labrun.py`); this records the scenario engine's steps. Best effort: a caller
-that cannot write there (the page's restricted user) records nothing.
+that cannot write there (the page's restricted user) records nothing. The steps of the scenario attached to the run itself
+(`run lab --scenario S`, `benchctl/lab_scenario.py`) are written with `by: lab-run`: they play at the same lab times on both
+sides, so they are part of the experiment, not interference, and `Run.interference()` skips them.
 """
 from __future__ import annotations
 
@@ -18,6 +20,7 @@ ROOT = Path("compose/generated/lab")  # benchctl.lab.ROOT
 ACTIVE = "run-active.json"  # written by the governor: the run it supervises
 INTERFERENCE = "interference.jsonl"
 REPLAYING = ("replay_a", "replay_b")
+OWN = "lab-run"  # `by` of the run's own attached scenario (`run lab --scenario`): recorded, but it never makes the run not comparable
 _NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,40}")  # benchctl.lab.NAME
 _RUN = re.compile(r"\d{8}-\d{6}(-\d+)?")  # benchctl.lab_run.RUN_ID
 

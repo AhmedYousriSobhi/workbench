@@ -35,6 +35,9 @@
 - name: config lab run, snapshot and restore (live)
   paths: ["benchctl/lab_run.py", "benchctl/lab_snapshot.py"]
   tests: [test_lab_run_real]
+- name: config lab run with an attached scenario (live)
+  paths: ["benchctl/lab_scenario.py"]
+  tests: [test_lab_scenario_real]
 - name: config lab validation
   paths: ["benchctl/lab_validate.py", "scripts/verify.d/lab.sh", "tests/fixtures/lab/**"]
   tests: [test_lab_real]

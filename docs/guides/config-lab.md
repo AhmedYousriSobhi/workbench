@@ -141,6 +141,7 @@ Rows `sacctmgr` refuses to delete are listed.
 ./scripts/benchctl run lab prod-a                       # the candidate side only
 ./scripts/benchctl run lab prod-a --ab --target-hours 1 --seed 7
 ./scripts/benchctl run lab prod-a --ab --repeat 3       # the same jobs three times; the report says whether the verdicts agree
+./scripts/benchctl run lab prod-a --ab --scenario lab-node-loss   # the same Slurm faults at the same lab times on both sides
 ./scripts/benchctl status                               # one line: state, percent, submitted, running, pending, paused
 ./scripts/benchctl stop lab prod-a                      # end the run (an A/B run is put back to its snapshot)
 ```
@@ -178,6 +179,7 @@ A run goes **only through the governor** (`./scripts/benchctl start`), needs the
 - **While it runs** (and while it is preparing or being recovered): `up`, `scale`, `apply-plan`, a profile change, the other lab commands, `remove jobs` and `import lab --replace` are refused with one message naming `benchctl stop lab NAME`. Freezing, thawing or draining a node stays allowed.
 - **`down` and `stop`** are refused too (exit 3), naming two ways out: `benchctl stop lab NAME`, wait until `benchctl status` shows it ended, then `down`; or `benchctl down --force` (also `stop --force`), which aborts the run, skips its restore and keeps the snapshot (`benchctl remove lab NAME` then returns to the plain cluster). `--yes` does not override; with `BENCHCTL_AGENT=1`, `--force` needs `--yes` too.
 - **A fault or a scenario during a replay** is allowed but recorded in `reports/RUN/interference.jsonl`. The run is then not comparable, and `status` names the first action and its time.
+- **A scenario in the run** (`--scenario NAME`, a file in `scenarios/`) is part of the experiment, not interference: both sides play it at the same lab times, so its steps do not mark the run not comparable. Details below.
 - **If the governor restarts** during a run, its status says `recovering` until the run is wound up: the run is aborted and, for an A/B run, its snapshot restored once memory is calm. The same commands are refused meanwhile.
 - **L2** pauses the replay: no new job is submitted and the pause is counted. A side paused for more than 5 % of the run length marks the run not comparable. L1 does not pause it.
 - **L3** aborts it as `aborted under memory pressure (L3)`. The jobs it submitted are cancelled. An A/B run puts the cluster back to its snapshot once the level is back at L0 or L1 (status says `restore waits for L0-L1` meanwhile).
@@ -191,11 +193,22 @@ What happens, in order. With `--ab`: snapshot, apply baseline, replay A, collect
 - **Snapshot and restore.** Before run A the slurmctld state and the accounting database are saved; before run B both are put back and compared file by file, and run A's accounting is written to the report folder first (the restore erases it).
 - **Prometheus.** While a side replays, slurmctld's metrics are also scraped by the `lab-run` job with a `lab_run="NAME/RUN/SIDE"` label, so the two sides can be told apart in Grafana. Only those series carry it. A cluster started before this change needs one Prometheus restart (`benchctl up`) to learn the job.
 
+**A scenario in the run (`--scenario`, issue 554).** `benchctl run lab NAME --ab --scenario lab-node-loss` plays a scenario's faults on the lab nodes during each side.
+- **Times.** A scenario's `at:` is production time. It plays at `at` divided by the run's time factor, on the replay's own clock, so both sides see each step at the same moment of the replay. At L2 that clock stops with the replay: no step runs and no expectation is checked until the level drops.
+- **Nodes.** `first cpu node`, `second gpu node` and the other selectors pick the lab's nodes (cpu: without GPUs, gpu: with), not the simulated ones. Reports name them by their Slurm (production) name; `export lab-report --anonymize` maps them.
+- **What can play.** Only `slurm` steps on lab nodes: `drain`, `down`, `resume`, `power_off`, `power_on`, `slurmd_stop`, `slurmd_start`, `slurmd_restart`, and `slurmctld_restart`. The BMC farm, BCM, GPU exporter and the other parts know only the simulated nodes. Expectations: `slurm.node_state`, `slurm.job_state`, `slurm.stepd`. `scenarios/lab-node-loss.yaml` (SC-59) is written for a lab run.
+- **Refused at the start**, with one message per problem (no run folder is left): another target or step, a node that is not a lab node, a scenario longer than a side, and two steps on one node that the time factor puts under 1 s apart (the message names the gap the scenario needs).
+- **Cleanup.** After each side (before the A to B restore) and after an abort, once memory is calm, the run unpauses the containers it powered off, lets slurmd start again where it stopped it, and resumes every node it named. The snapshot alone would not unpause a container.
+- **Report.** A *Scenario* section lists the steps applied per side and each expectation's result on A and B, marked when the two differ. Expectations never change the verdict. Their `within` is scaled by the time factor like the steps, while Slurm's own node timeouts are not, so an expectation about Slurm noticing a dead node can fail at a high factor.
+- **Seed.** A scenario has no randomness, so `--seed` changes nothing in it.
+- **Not run live yet** (`./scripts/verify.sh --unit lab_scenario --clean`).
+
 Files of a run, under `compose/generated/lab/NAME/`:
 
 | Path | What |
 |---|---|
 | `reports/RUN/jobs.json` | the frozen jobs (read-only), lab users only |
+| `reports/RUN/scenario.json` | with `--scenario`: the frozen scenario as the run plays it (read-only), lab node names |
 | `reports/RUN/run.json`, `progress.json` | the state, history, seed, run length, progress (`percent`, `submitted`, `running`, `pending`, `paused_s`) |
 | `reports/RUN/a/sacct.txt`, `b/sacct.txt` | each side's jobs from accounting |
 | `reports/RUN/compare.json` | jobs paired by key |
