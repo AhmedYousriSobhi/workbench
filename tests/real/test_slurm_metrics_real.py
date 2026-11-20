@@ -71,6 +71,13 @@ def test_slurms_own_endpoint_answers_prometheus_for_all_four_families(cluster):
     assert wait_for(lambda: float(query("slurm_jobs_running")[0]["value"][1]) >= 1, timeout=60), query("slurm_jobs_running")
 
 
+def test_the_scheduler_gauges_the_lab_report_reads_exist(cluster):
+    """The config lab's scheduler load (issue 555, `benchctl/lab_prom.SCHED`) reads these names; they come from the Slurm source, and
+    this checks them on the real controller."""
+    from benchctl import lab_prom
+    assert wait_for(lambda: all(query(n) for n in lab_prom.SCHED), timeout=90), [n for n in lab_prom.SCHED if not query(n)]
+
+
 def test_draining_a_node_raises_node_drained_and_a_ticket_and_resume_clears_it(cluster):
     r = sh("scontrol", "update", "nodename=cn001", "state=drain", "reason=live-test", user=None, container="workbench-slurmctld-1")
     assert r.returncode == 0, r.stderr

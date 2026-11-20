@@ -1,4 +1,6 @@
 """Config lab metrics, verdict, suggestions and report (issue 555). Synthetic accounting rows, no cluster."""
+import urllib.parse
+
 import pytest
 
 from benchctl import lab_metrics, lab_report
@@ -143,3 +145,69 @@ def test_report_without_prometheus_or_earlier_runs_is_a_single_run_with_alerts_n
     doc = lab_report.build(META, rows(12), rows(12), TH, {"only_a": [], "only_b": []}, [], prom={"a": None, "b": None})
     assert doc["single_run"] is True and doc["alerts"] == {} and "alerts fired and time to alert" in doc["not_measured"]
     assert lab_report.repeats(["Ship", "Do not ship"])["consistent"] is False
+
+
+# ---------------------------------------------------------------- pending reasons, scheduler load, more suggestions (issue 555)
+
+def with_reason(rs, reasons):
+    return [{**r, "Reason": reasons[i % len(reasons)]} for i, r in enumerate(rs)]
+
+
+def test_pending_reason_mix_counts_sacct_reasons_other_than_none_and_is_none_without_the_column():
+    m = lab_metrics.side_metrics(with_reason(rows(6), ["None", "QOSMaxGRESPerUser", "QOSMaxGRESPerUser", "AssocGrpGRES", "None", "None"]), 1.0)
+    assert m["pending_reasons"] == {"jobs": 6, "with_reason": 3, "by_reason": {"QOSMaxGRESPerUser": 2, "AssocGrpGRES": 1}}
+    assert lab_metrics.side_metrics(rows(3), 1.0)["pending_reasons"] is None
+    assert lab_metrics.pending_reasons([]) is None
+
+
+def test_report_lists_pending_reasons_and_suggests_a_qos_limit_when_it_dominates():
+    a = with_reason(rows(12), ["None"])
+    b = with_reason(rows(12), ["QOSMaxGRESPerUser", "QOSGrpGRES", "AssocGrpGRES", "None"])
+    doc = lab_report.build(META, a, b, TH, {"only_a": [], "only_b": []}, [])
+    assert "pending-reason mix" not in doc["not_measured"]
+    assert any(s["id"] == "qos-limit-pending" and "6 of the 9" in s["text"] for s in doc["suggestions"])
+    md = lab_report.markdown(doc)
+    assert "## Pending reasons" in md and "| QOSMaxGRESPerUser | 0 | 3 |" in md and "| (only Priority or Resources) | 12 | 3 |" in md
+    even = with_reason(rows(4), ["QOSGrpGRES", "AssocGrpGRES"])
+    assert not any(s["id"] == "qos-limit-pending" for s in lab_report.build(META, a, even, TH, {"only_a": [], "only_b": []}, [])["suggestions"])
+
+
+def test_pending_reasons_stay_not_measured_when_one_side_has_no_reason_column():
+    doc = lab_report.build(META, rows(12), with_reason(rows(12), ["None"]), TH, {"only_a": [], "only_b": []}, [])
+    assert "pending-reason mix" in doc["not_measured"] and "## Pending reasons" in lab_report.markdown(doc)
+
+
+def test_alert_flapping_on_the_candidate_is_a_suggestion():
+    prom = {"b": {"alerts": [{"name": "NodeDown", "first_after_prod_s": 3.0, "flaps": 2}, {"name": "Calm", "first_after_prod_s": 9.0, "flaps": 0}], "fired": 2}}
+    doc = lab_report.build(META, rows(12), rows(12), TH, {"only_a": [], "only_b": []}, [], prom=prom)
+    assert next(s for s in doc["suggestions"] if s["id"] == "alert-flapping")["text"].startswith("alert(s) NodeDown fired")
+    assert not any(s["id"] == "alert-flapping" for s in lab_report.suggestions(None, doc["b"], None, None))
+
+
+def test_side_sched_reads_only_the_known_gauges_unscaled_and_is_none_without_series():
+    from benchctl import lab_prom
+    seen = []
+
+    def get(url):
+        seen.append(url)
+        return {"data": {"result": [{"metric": {"__name__": "slurm_schedule_cycle_last"}, "values": [[1, "400"], [2, "1200"], [3, "800"]]},
+                                    {"metric": {"__name__": "slurm_bf_queue_len"}, "values": [[1, "3"]]},
+                                    {"metric": {"__name__": "slurm_other"}, "values": [[1, "9"]]}]}}
+    got = lab_prom.side_sched('x/r1/a"}', 0, 10, get=get)
+    assert got["metrics"]["slurm_schedule_cycle_last"] == {"what": "main scheduling cycle (us)", "max": 1200.0, "median": 800.0, "samples": 3}
+    assert set(got["metrics"]) == {"slurm_schedule_cycle_last", "slurm_bf_queue_len"}
+    q = urllib.parse.parse_qs(urllib.parse.urlsplit(seen[0]).query)["query"][0]
+    assert q.startswith('{lab_run="x/r1/a}",__name__=~"slurm_schedule_cycle_last|')  # a quote in the label cannot close the matcher
+    assert lab_prom.side_sched("x", 0, 1, get=lambda u: {"data": {"result": []}}) is None
+
+    def down(url):
+        raise OSError("refused")
+    assert lab_prom.side_sched("x", 0, 1, get=down) is None
+
+
+def test_report_prints_scheduler_load_and_drops_it_from_not_measured():
+    sched = {"a": {"metrics": {"slurm_schedule_cycle_last": {"what": "main scheduling cycle (us)", "max": 1200.0, "median": 800.0, "samples": 3}}}, "b": None}
+    doc = lab_report.build(META, rows(12), rows(12), TH, {"only_a": [], "only_b": []}, [], sched=sched)
+    assert doc["scheduler"] == {"a": sched["a"]} and "scheduler load" not in doc["not_measured"]
+    assert "| main scheduling cycle (us) | A | 1200 | 800 | 3 |" in lab_report.markdown(doc)
+    assert "scheduler load" in lab_report.build(META, rows(12), rows(12), TH, {"only_a": [], "only_b": []}, [], sched={"a": None})["not_measured"]

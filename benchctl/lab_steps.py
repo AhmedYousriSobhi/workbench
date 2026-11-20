@@ -291,7 +291,8 @@ class RunSteps:
                 "paused_side_s": r["paused_side_s"], "comparable": run.comparable(), "rejected": r.get("rejected", {}), "collected": r["collected"],
                 "scenario": r.get("scenario"), "scenario_result": r.get("scenario_result") or {},
                 "scenario_expects": lab_scenario.expect_table(r.get("scenario_result") or {}) if r.get("scenario") else []}
-        doc = lab_report.build(meta, a, b, lab_report.thresholds(sim or {}), pairing, time_scaled, self._earlier(run), self._alerts(run))
+        doc = lab_report.build(meta, a, b, lab_report.thresholds(sim or {}), pairing, time_scaled, self._earlier(run), self._alerts(run),
+                               self._sched(run))
         lab_run.write_atomic(run.folder / "report.json", lab_run.dump(doc))
         lab_run.write_atomic(run.folder / "report.md", lab_report.markdown(doc))
 
@@ -314,6 +315,19 @@ class RunSteps:
                 out[side] = lab_prom.side_alerts(run.entered(f"replay_{side}"), run.entered(f"collect_{side}"), float(run.r["factor"]), **({"get": self.prom_get} if self.prom_get else {}))
             except lab_run.LabError:
                 out[side] = None
+        return out
+
+    def _sched(self, run: lab_run.Run) -> dict[str, dict | None]:
+        """Scheduler load per side from slurmctld's series labelled with the side's `lab_run` (decision 9), over the side's replay."""
+        out: dict[str, dict | None] = {}
+        for side in run.r["sides"]:
+            try:
+                start, end = run.entered(f"replay_{side}"), run.entered(f"collect_{side}")
+            except lab_run.LabError:
+                out[side] = None
+                continue
+            label = prom_targets(self.name, run.r["run"], side)[0]["labels"]["__lab_run"]
+            out[side] = lab_prom.side_sched(label, start, end, **({"get": self.prom_get} if self.prom_get else {}))
         return out
 
     def wait_calm(self, run: lab_run.Run, key: str = "restore_pending") -> None:
