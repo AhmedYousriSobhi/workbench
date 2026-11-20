@@ -191,7 +191,7 @@ tsh --proxy=10.141.255.30:3080 --insecure -i $ID ls                          # t
 tsh --proxy=10.141.255.30:3080 --insecure -i $ID ssh alice@cn001 hostname    # a command on a node
 ```
 
-`--insecure` is needed because the proxy's certificate is self-signed. Each `ssh` shows up in the page as a dot from the clients to the Teleport box.
+`--insecure` is needed because the proxy's certificate is self-signed. benchctl's own calls to the proxy do not skip the check: they pin that certificate (`compose/generated/secrets/teleport/proxy_ca.pem`); if `benchctl up` says the proxy did not present it, check that nothing else uses port 3080, then run `benchctl down` and `benchctl up --with teleport`. Each `ssh` shows up in the page as a dot from the clients to the Teleport box.
 
 **3. Or use `tsh login` and the browser** (a password and a one-time code, because Teleport 18 cannot turn the second factor off):
 

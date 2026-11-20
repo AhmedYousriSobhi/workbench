@@ -5,8 +5,10 @@ server, sim.yaml teleport.version) and Docker; uses its own TELEPORT_HOME so a d
 import json
 import os
 import shutil
+import socket
 import ssl
 import subprocess
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -48,10 +50,33 @@ def tele(tmp_path_factory):
 
 
 def test_the_proxy_answers_with_the_cluster_name(tele):
-    ctx = ssl.create_default_context()
-    ctx.check_hostname, ctx.verify_mode = False, ssl.CERT_NONE
-    ping = json.loads(urllib.request.urlopen(f"https://{PROXY}/webapi/ping", context=ctx, timeout=10).read())
-    assert ping["cluster_name"] == teleport.CLUSTER and ping["server_version"].count(".") == 2
+    ctx = teleport.proxy_context(ROOT / teleport.SECRETS_DIR)  # the pinned certificate (issue 864), name checked
+    for addr in (PROXY, f"127.0.0.1:{teleport.PROXY_PORT}"):  # the private address and the localhost fallback
+        ping = json.loads(urllib.request.urlopen(f"https://{addr}/webapi/ping", context=ctx, timeout=10).read())
+        assert ping["cluster_name"] == teleport.CLUSTER and ping["server_version"].count(".") == 2
+
+
+def test_the_pinned_certificate_names_teleport_workbench_test(tele):
+    ctx = teleport.proxy_context(ROOT / teleport.SECRETS_DIR)
+    raw = socket.create_connection(("127.0.0.1", teleport.PROXY_PORT), timeout=10)
+    with ctx.wrap_socket(raw, server_hostname=teleport.DNS_NAME) as s:  # verified against the name, not the address dialled
+        assert s.getpeercert()["subject"]
+
+
+def test_a_wrong_ca_is_refused_by_the_pinned_client(tele, tmp_path):
+    """Issue 864: with another certificate pinned, benchctl refuses the live proxy with the one message that names the recovery."""
+    if not shutil.which("openssl"):
+        pytest.skip("openssl missing")
+    (tmp_path / "data").mkdir()
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-days", "1",
+                    "-keyout", str(tmp_path / "k.pem"), "-out", str(tmp_path / "data" / teleport.PROXY_CERT), "-subj", "/CN=impostor",
+                    "-addext", "subjectAltName=IP:127.0.0.1"], check=True, capture_output=True)
+    with pytest.raises(teleport.TeleportError, match=r"did not present the pinned Teleport proxy certificate.*benchctl up --with teleport"):
+        teleport.fetch_ca(conf=tmp_path, secrets=tmp_path, sleep=lambda s: None)
+    with pytest.raises(urllib.error.URLError) as e:
+        urllib.request.urlopen(f"https://{PROXY}/webapi/ping", context=teleport.proxy_context(tmp_path), timeout=10)
+    assert isinstance(e.value.reason, ssl.SSLCertVerificationError)
+    assert (ROOT / teleport.SECRETS_DIR / teleport.PINNED_CA).read_text() != (tmp_path / teleport.PINNED_CA).read_text()
 
 
 def test_every_node_and_the_teleport_logins_are_registered(tele):

@@ -41,6 +41,8 @@ KUBECONFIG = "kube.kubeconfig"        # under the secrets folder (mounted at CON
 CONF_DIR = Path("compose/generated/teleport")             # mounted read-only at /etc/teleport; data/ is writable
 SECRETS_DIR = Path("compose/generated/secrets/teleport")  # CA key, host certificates, identity files (never tracked)
 CONTAINER_SECRETS = "/run/workbench/teleport"
+PROXY_CERT = "webproxy_cert.pem"  # in data/: the proxy's self-signed certificate, made by Teleport at its first start (no https_keypairs)
+PINNED_CA = "proxy_ca.pem"        # its copy under SECRETS_DIR, the only certificate benchctl trusts on the proxy port (issue 864)
 _TTL = re.compile(r"[1-9][0-9]*[smh]")
 _URL = re.compile(r"https://\S+/web/(?:invite|reset)/\S+")
 
@@ -325,12 +327,55 @@ def prune(sim: dict, ips: dict, runner: Callable, dc: Callable, secrets: Path = 
     return removed
 
 
-def fetch_ca(port: int = PROXY_PORT, opener: Callable | None = None) -> str:
-    """The OpenSSH user CA public key from the proxy (Teleport's documented source for `TrustedUserCAKeys`)."""
-    ctx = ssl.create_default_context()
-    ctx.check_hostname, ctx.verify_mode = False, ssl.CERT_NONE   # the proxy's certificate is self-signed
-    opener = opener or (lambda url: urllib.request.urlopen(url, context=ctx, timeout=10).read().decode())
-    text = opener(f"https://127.0.0.1:{port}/webapi/auth/export?type=openssh").strip()
+def pin_proxy_cert(conf: Path | None = None, secrets: Path | None = None, sleep: Callable[[float], None] = time.sleep,
+                   tries: int = 15) -> Path:
+    """Copy the proxy's self-signed certificate from Teleport's data folder (on disk, written by the container itself, never read
+    over the network) to the secrets folder, where `proxy_context` pins it. With no `https_keypairs` Teleport makes this certificate
+    at its first start (CA:TRUE, names: the private IP, `teleport.workbench.test`, 127.0.0.1); it can appear a moment after
+    `tctl status` answers, so a few tries."""
+    src, dst = (conf or CONF_DIR) / "data" / PROXY_CERT, (secrets or SECRETS_DIR) / PINNED_CA
+    for i in range(tries):
+        try:
+            text = src.read_text()
+        except OSError:
+            text = ""
+        if "BEGIN CERTIFICATE" in text:
+            dst.write_text(text)
+            return dst
+        if i < tries - 1:
+            sleep(1)
+    raise TeleportError(f"Teleport has not written its proxy certificate {src}: run `benchctl down`, then `benchctl up --with teleport`")
+
+
+def proxy_context(secrets: Path | None = None) -> ssl.SSLContext:
+    """A client context that trusts only the pinned proxy certificate and checks the name (ADR 0020, issue 864): anything else
+    answering on the proxy port is refused."""
+    ca = (secrets or SECRETS_DIR) / PINNED_CA
+    if not ca.is_file():
+        raise TeleportError(f"the pinned Teleport proxy certificate {ca} is missing: run `benchctl up --with teleport`")
+    return ssl.create_default_context(cafile=str(ca))  # CERT_REQUIRED and check_hostname stay on
+
+
+def _cert_refused(e: BaseException) -> bool:
+    return isinstance(e, ssl.SSLCertVerificationError) or isinstance(getattr(e, "reason", None), ssl.SSLCertVerificationError)
+
+
+def fetch_ca(port: int = PROXY_PORT, opener: Callable | None = None, conf: Path | None = None, secrets: Path | None = None,
+             sleep: Callable[[float], None] = time.sleep) -> str:
+    """The OpenSSH user CA public key from the proxy (Teleport's documented source for `TrustedUserCAKeys`), over TLS verified
+    against the pinned proxy certificate."""
+    if opener is None:
+        pin_proxy_cert(conf, secrets, sleep)
+        ctx = proxy_context(secrets)
+        opener = lambda url: urllib.request.urlopen(url, context=ctx, timeout=10).read().decode()
+    try:
+        text = opener(f"https://127.0.0.1:{port}/webapi/auth/export?type=openssh").strip()
+    except OSError as e:
+        if _cert_refused(e):
+            raise TeleportError(f"the server on 127.0.0.1:{port} did not present the pinned Teleport proxy certificate "
+                                f"({(secrets or SECRETS_DIR) / PINNED_CA}): refused. Check that nothing else uses port {port}, "
+                                "then run `benchctl down` and `benchctl up --with teleport`") from e
+        raise
     if not text.startswith("cert-authority"):
         raise TeleportError("the proxy did not return an OpenSSH CA key")
     return text.removeprefix("cert-authority ").strip() + "\n"
@@ -360,7 +405,7 @@ def bootstrap(sim: dict, ips: dict, runner: Callable, dc: Callable, say: Callabl
             say(f"FAILED teleport user {u}: {r.stderr.strip()[-300:]}")
             return False
     try:
-        (secrets / "openssh_ca.pub").write_text((fetch or fetch_ca)())
+        (secrets / "openssh_ca.pub").write_text((fetch or (lambda: fetch_ca(secrets=secrets, sleep=sleep)))())
     except (OSError, TeleportError) as e:
         say(f"FAILED teleport CA key: {e}")
         return False
