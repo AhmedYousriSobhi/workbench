@@ -50,7 +50,7 @@ They live in `observability/rules.yml`.
 
 ## You should see
 
-- After `node-down`: `NodeDrained` and `ExporterDown`, first `pending`, then `firing` after their 30 s (they clear after the scenario). `NodeDown` fires for any node, CPU or GPU, within about 2 minutes of it going off. `GpuXidCritical` fires about 15 s into `gpu-xid-storm`, one per GPU node.
+- After `node-down`: `NodeDrained` and `ExporterDown`, first `pending`, then `firing` after their 30 s (they clear after the scenario). `NodeDown` fires for any node, CPU or GPU, within about 2 minutes of it going off, but not in the first 3 minutes after the stack started: it compares with the series 3 minutes earlier (a fresh start shows only `ExporterDown`). `GpuXidCritical` fires about 15 s into `gpu-xid-storm`, one per GPU node.
 - Not exercised: the Grafana and Prometheus pages and the dashboards, only the endpoints (`/api/health` and `/api/user` answer with `admin`/`admin`).
 - GPU dashboards follow the jobs: busy GPUs read 70 to 100 %, idle ones read idle, within about 20 seconds.
 
