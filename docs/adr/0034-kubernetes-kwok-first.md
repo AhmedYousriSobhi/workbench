@@ -164,3 +164,9 @@ The client reads queue status with `kubectl get`, only when `kubectl api-resourc
 - **What stays on the CLI.** `apply`, `remove`, `drain`, `queue`, `volcano`, `gpu`, `kubelet`, `usage` and `metrics_server` (paths, selectors or Docker calls). The page marks them CLI only.
 - **The part off.** One message: the Kubernetes part is not built. The step is skipped, not failed, as are a refusal at L2 or higher and a governor without `--workdir`.
 - **No new capability.** The user-mode governor already runs `benchctl` as the user for `slurm-step`, `apply-plan` and `lab-*`.
+
+## Addendum: the API server's name is checked (issue 970, 2026-11-20)
+- **What changed.** `benchctl/k8s.py` no longer sets `check_hostname = False` (three places: `api_ready`, `api_up`, `api_json`). The chain was already checked against the generated `ca.crt`; now the name is too. The API server certificate names `127.0.0.1`, the API IP and the service names (`api_sans`), so nothing else changes for a healthy cluster.
+- **A refusal is one message.** When the certificate fails the chain or name check, `bootstrap` says so once and gives a recovery that needs no sudo: `benchctl down`, delete `compose/generated/secrets/k8s` (`prepare` makes the keys again), `benchctl up --with k8s`. `api_up` and `api_json` still answer "not up" and `None`, so the page shows its usual one notice.
+- **Same class as** issue 864 (Teleport proxy certificate pin, ADR 0020).
+- **Tests.** `tests/test_k8s.py` runs a local TLS server with a throwaway certificate: right name accepted, wrong name refused, a source check that no skip comes back.
