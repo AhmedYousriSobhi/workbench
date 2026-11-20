@@ -7,6 +7,7 @@
 - `tsh` installed. Its major version must not be newer than the Teleport in the cluster.
 - `kubectl` on the host, for step 5.
 - Memory for Teleport and Kubernetes: [plan it first](02-size-your-cluster.md).
+- Teleport's licence: the Teleport image is Teleport's own Community Edition, free only for organisations under 100 employees and under $10 million a year in revenue. This repository only names the image tag; you accept the licence when you start it. Details: [ADR 0020](../adr/0020-teleport-agentless-openssh.md).
 
 ## Steps
 
