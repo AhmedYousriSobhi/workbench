@@ -337,19 +337,28 @@ def kubectl(sim: dict, *args: str, kubeconfig_name: str = "component.kubeconfig"
     return runner(cmd, input=stdin) if stdin is not None else runner(cmd)
 
 
+_REFUSED = {"seen": False}
+
+
+def _cert_refused(e: BaseException) -> bool:
+    """True (and remembered for the failure message) when the API server's certificate failed the chain or the name check (issue 970)."""
+    hit = isinstance(e, ssl.SSLCertVerificationError) or isinstance(getattr(e, "reason", None), ssl.SSLCertVerificationError)
+    _REFUSED["seen"] = _REFUSED["seen"] or hit
+    return hit
+
+
 def api_ready(ips: dict, timeout: float = 90, sleep: Callable[[float], None] = time.sleep) -> bool:
     """True when /readyz answers ok (checked from the host with the admin certificate, no Docker needed)."""
     ctx = ssl.create_default_context(cafile=str(SECRETS_DIR / "ca.crt"))
     ctx.load_cert_chain(SECRETS_DIR / "admin.crt", SECRETS_DIR / "admin.key")
-    ctx.check_hostname = False
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
             with urllib.request.urlopen(f"https://{api_ip(ips)}:{API_PORT}/readyz", context=ctx, timeout=3) as r:
                 if r.status == 200:
                     return True
-        except OSError:
-            pass
+        except OSError as e:
+            _cert_refused(e)
         sleep(1)
     return False
 
@@ -389,11 +398,11 @@ def api_up(timeout: float = 1.5) -> bool:
     ctx = ssl.create_default_context(cafile=str(SECRETS_DIR / "ca.crt")) if (SECRETS_DIR / "ca.crt").exists() else None
     if ctx is None:
         return False
-    ctx.check_hostname = False  # the certificate names the cluster addresses; 127.0.0.1 is the published fallback
     try:
         with urllib.request.urlopen(f"https://127.0.0.1:{API_PORT}/readyz", context=ctx, timeout=timeout) as r:
             return r.status == 200
-    except OSError:
+    except OSError as e:
+        _cert_refused(e)
         return False
 
 
@@ -403,7 +412,6 @@ def api_json(path: str, timeout: float = 2.0, tok: str | None = None, raw: bool 
     if not tok or not (SECRETS_DIR / "ca.crt").exists():
         return None
     ctx = ssl.create_default_context(cafile=str(SECRETS_DIR / "ca.crt"))
-    ctx.check_hostname = False  # the certificate names the cluster addresses, and 127.0.0.1 is the published fallback
     req = urllib.request.Request(f"https://127.0.0.1:{API_PORT}{path}", headers={"Authorization": f"Bearer {tok}"})
     try:
         with urllib.request.urlopen(req, context=ctx, timeout=timeout) as r:
@@ -456,7 +464,12 @@ def kwok_crd_names() -> list[str]:
 def bootstrap(sim: dict, ips: dict, say: Callable[[str], None] = print, runner: Callable = _run, ready: Callable = api_ready,
               retries: int = 10, sleep: Callable[[float], None] = time.sleep) -> bool:
     """Once the API server answers: the KWOK CRDs, the stages, the nodes, then the fixtures and RBAC. Idempotent."""
+    _REFUSED["seen"] = False
     if not ready(ips):
+        if _REFUSED["seen"]:
+            say("FAILED kubernetes: the API server's certificate is not the generated one or does not name its address "
+                "(issue 970): run `benchctl down`, delete compose/generated/secrets/k8s, then `benchctl up --with k8s` (no sudo)")
+            return False
         say("FAILED kubernetes: the API server did not become ready (docker logs workbench-k8s-apiserver-1)")
         return False
     src = [(SRC.resolve(), "/k8s"), (STATE_DIR.resolve(), "/state")]
