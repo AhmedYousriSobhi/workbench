@@ -71,6 +71,7 @@ def run_lab(name: str = typer.Argument(..., help="a lab made with `benchctl impo
             ab: bool = typer.Option(False, "--ab", help="replay the baseline, restore the snapshot, replay the candidate (default: the candidate only)"),
             target_hours: float = typer.Option(None, "--target-hours", help="run length per side, 0.5 to 6 (default lab.target_hours, 2)"),
             seed: int = typer.Option(None, "--seed", min=0, help="sampling seed, recorded in the run (default 1, the one `get lab` uses)"),
+            scenario: str = typer.Option(None, "--scenario", help="play this scenario (scenarios/NAME.yaml, slurm steps on the lab nodes) at the same lab times on both sides; its faults are undone after each side"),
             repeat: int = typer.Option(1, "--repeat", min=1, max=10, help="run the same jobs N times one after the other (same seed); the report then says whether the verdicts agree"),
             prepare: bool = typer.Option(False, "--prepare", hidden=True, help="freeze the jobs and print the run (the governor's child)"),
             run_id: str = typer.Option(None, "--run", hidden=True, help="with --execute: the prepared run"),
@@ -78,15 +79,16 @@ def run_lab(name: str = typer.Argument(..., help="a lab made with `benchctl impo
             recover: bool = typer.Option(False, "--recover", hidden=True, help="restore-only: finish a run whose child is gone (the governor's child)"),
             output: str = OUTPUT) -> None:
     """Replay a config lab's sampled trace on the running cluster through the governor (L0-L1, admitted): with --ab the baseline, then
-    the candidate from the same snapshot; without it the candidate only. Returns once the run started; `benchctl status` shows it,
+    the candidate from the same snapshot; without it the candidate only. --scenario S plays a scenario's Slurm faults on the lab nodes at
+    the same lab times on both sides (its expectations are reported, never the verdict). Returns once the run started; `benchctl status` shows it,
     `benchctl stop lab NAME` ends it. L2 pauses it, L3 aborts it."""
-    from .. import lab_run, lab_steps
+    from .. import lab_run, lab_scenario, lab_steps
     if target_hours is not None and not 0.5 <= target_hours <= 6:
         typer.echo(f"--target-hours must be from 0.5 to 6, not {target_hours:g}", err=True)
         raise typer.Exit(1)
     try:
         if prepare:
-            p = lab_steps.prepare(name, _base_sim(), ab, target_hours, lab_run.DEFAULT_SEED if seed is None else seed)
+            p = lab_steps.prepare(name, _base_sim(), ab, target_hours, lab_run.DEFAULT_SEED if seed is None else seed, scenario=scenario)
             typer.echo(json.dumps(p) if output == "json" else f"run {p['run']} of lab {name}: {p['jobs']} jobs, {p['lab_nodes']} lab nodes")
             return
         if recover:
@@ -102,11 +104,13 @@ def run_lab(name: str = typer.Argument(..., help="a lab made with `benchctl impo
             run = lab_steps.execute(name, run_id, _lab_env(), lambda r: checks.governor_request(r, sock, timeout=5))
             raise typer.Exit(0 if run.state == "done" else 1)
         lab.valid_name(name)
+        if scenario is not None and not lab_scenario.NAME.fullmatch(scenario):
+            raise lab.LabError(f"--scenario must be a scenario name such as drain-mid-job (see: benchctl scenario list), not {scenario!r}")
     except lab.LabError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(1) from e
     req = {"cmd": "lab-run", "name": name, "ab": ab, **({"target_hours": target_hours} if target_hours is not None else {}),
-           **({"seed": seed} if seed is not None else {})}
+           **({"seed": seed} if seed is not None else {}), **({"scenario": scenario} if scenario is not None else {})}
     for n in range(1, repeat + 1):
         if repeat > 1:
             typer.echo(f"repeat {n} of {repeat}")

@@ -59,7 +59,7 @@
 
 ## Remember
 
-- The replay (`run lab`) is built but not usable end to end. Do not rely on it yet.
+- The replay (`run lab`, with `--ab`, `--repeat` and `--scenario`) is built and unit-tested, including the lab nodes, the lab users and the report, but it has not run live yet. The live run of `--scenario` is pending. Treat your first replay as that live check ([guide](../guides/config-lab.md)).
 
 ## Next
 

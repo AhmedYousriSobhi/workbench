@@ -153,6 +153,17 @@ def markdown(r: dict[str, Any]) -> str:
         L += ["", "## Alerts (from Prometheus, production-equivalent time)", ""]
         for side, d in sorted(r["alerts"].items()):
             L += [f"- {side.upper()}: " + ("none fired" if not d["alerts"] else "; ".join(f"{x['name']} first after {x['first_after_prod_s']:.0f}s, {x['flaps']} flap(s)" for x in d["alerts"]))]
+    if r.get("scenario"):
+        sc = r["scenario"]
+        L += ["", f"## Scenario {sc['name']} (the same steps at the same lab times on both sides; information, never the verdict)", ""]
+        for side, res in sorted((r.get("scenario_result") or {}).items()):
+            bad = [x for x in res.get("steps") or [] if x.get("status") != "ok"]
+            L.append(f"- {side.upper()}: {sum(1 for x in res.get('steps') or [] if x.get('status') == 'ok')} of {res.get('planned_steps')} steps applied"
+                     + (f"; {len(bad)} not: " + "; ".join(f"{x.get('label')} ({x.get('status')}: {x.get('detail')})" for x in bad[:3]) if bad else "")
+                     + (f"; the scenario failed: {res['error']}" if res.get("error") else ""))
+        if r.get("scenario_expects"):
+            L += ["", "| expectation | A | B | differs |", "|---|---|---|---|"]
+            L += [f"| {e['label']} | {e.get('a', '-')} | {e.get('b', '-')} | {'yes' if e.get('differs') else 'no'} |" for e in r["scenario_expects"]]
     L += ["", "## Preemption", ""] + [f"- {side.upper()}: {r[side]['preempted']} preempted, {r[side]['gpu_hours_lost']} GPU-hours lost of {r[side]['gpu_hours']}" for side in ("a", "b") if r[side]]
     if r["suggestions"]:
         L += ["", "## Suggestions"] + [f"- {s['text']}" for s in r["suggestions"]]

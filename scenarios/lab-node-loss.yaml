@@ -1,0 +1,10 @@
+name: lab-node-loss
+ref: SC-59
+description: "Made for a config lab run (benchctl run lab NAME --ab --scenario lab-node-loss): the first compute node is drained at 10 min and the second loses power from 20 to 40 min, then both return to service at 45 min (times are production time; a lab run plays them divided by its time factor on both sides). Plays on the simulated cluster too."
+steps:
+  - {at: 10m, target: slurm, do: {drain: [first cpu node], reason: "scenario lab-node-loss"}}
+  - {at: 20m, target: slurm, do: {power_off: [second cpu node]}}
+  - {at: 40m, target: slurm, do: {power_on: [second cpu node]}}
+  - {at: 45m, target: slurm, do: {resume: [first cpu node, second cpu node]}}
+expect:
+  - slurm.node_state: {node: first cpu node, state: drain, after: 10m, within: 5m}

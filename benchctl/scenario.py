@@ -541,17 +541,20 @@ def _dcgm(step: Step, label: str, runner) -> Outcome:
     return Outcome(label, "ok", f"{verb} {done} real exporter(s)" if done else "no real exporter on these nodes")
 
 
-def execute(step: Step, poster=post, runner=checks.run, host: bool = True, slurm=None, daemon=None, sim: dict | None = None, kube=None) -> Outcome:
+def execute(step: Step, poster=post, runner=checks.run, host: bool = True, slurm=None, daemon=None, sim: dict | None = None, kube=None,
+            by: str = "scenario") -> Outcome:
     """Apply one step (and what it implies, see side_effects); the label names what was done, status says whether it worked.
 
     host=False is for callers without Docker access (the Web UI): `slurm(node, state, reason)` (the governor) takes
     Slurm steps when given, otherwise they are skipped, not attempted; `daemon(do)` -> (done, why not) takes the job and
     daemon steps (DAEMON_KEYS) the same way, and `kube(do)` -> (done, why not) the `k8s` steps of K8S_PAGE_KEYS (issue 386).
+    `by` tags the step in a config lab run's interference record: a lab run's own attached scenario says `lab-run`, which does not
+    make the run not comparable (issue 554, ADR 0050 addendum).
     """
     main = _apply(step, poster, runner, host, slurm, daemon, kube)
     if main.status != "ok":
         return main
-    lab_interference.record(f"scenario step {','.join(sorted(step.do))}", step.target, "scenario")  # issue 554: a lab run is then not comparable
+    lab_interference.record(f"scenario step {','.join(sorted(step.do))}", step.target, by)  # issue 554: a lab run is then not comparable, unless by is lab-run
     failed, notes = [], []
     for extra in side_effects(step, sim):
         o = _apply(extra, poster, runner, host, slurm, daemon, kube)
@@ -955,7 +958,7 @@ def check_expect(exp: dict, factor: float, sleep=time.sleep, clock=time.monotoni
 def run(sc: dict, speed: float = 1.0, dilation: float = 1.0, say=print, sleep=time.sleep, clock=time.monotonic,
         poster=post, runner=checks.run, host: bool = True, should_stop=lambda: False,
         on_step=lambda step, outcome: None, on_expect=lambda outcome: None, slurm=None, daemon=None, kube=None,
-        on_before=lambda step: None) -> Report:
+        on_before=lambda step: None, by: str = "scenario") -> Report:
     """Play the scenario: wait for each step's time (divided by speed x time_dilation) and apply it.
 
     Every expectation is watched from the start unless it says `after: T` (watched from T) or `at_end: true` (from the moment every
@@ -1014,7 +1017,7 @@ def run(sc: dict, speed: float = 1.0, dilation: float = 1.0, say=print, sleep=ti
             report.stopped = True
             return report
         on_before(step)
-        outcome = execute(step, poster, runner, host, slurm, daemon, kube=kube)
+        outcome = execute(step, poster, runner, host, slurm, daemon, kube=kube, by=by)
         report.steps.append(outcome)
         on_step(step, outcome)
         say(f"[{step.at:6.1f}s] {outcome.status:7} {outcome.label}" + (f"  ({outcome.detail})" if outcome.detail else ""))

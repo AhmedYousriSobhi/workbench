@@ -21,6 +21,7 @@ LAB_RUN_VERBS = {"lab-run", "lab-stop"}  # issue 554: start a supervised replay 
 ALLOWED |= LAB_RUN_VERBS
 TARGET_HOURS = (0.5, 6.0)  # mirrors benchctl.lab_slurm.MIN_TARGET_HOURS, MAX_TARGET_HOURS
 MAX_SEED = 2**31 - 1
+SCENARIO_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")  # a scenario file's name (scenarios/NAME.yaml); the governor checks that the file exists
 MAX_REQUEST = 4096
 TARGETED = {"freeze", "thaw", "stop", "start"}  # require a known group name
 
@@ -85,7 +86,8 @@ def lab_args_error(cmd: str, req: dict) -> str | None:
 
 
 def lab_run_error(req: dict) -> str | None:
-    """`lab-run`: a lab name, then only an optional bool `ab`, a number `target_hours` 0.5..6 and an int `seed` 0..2^31-1 (W-3: nothing free-form)."""
+    """`lab-run`: a lab name, then only an optional bool `ab`, a number `target_hours` 0.5..6, an int `seed` 0..2^31-1 and a `scenario`
+    name (lowercase letters, digits, -; the governor checks it against scenarios/*.yaml) (W-3: nothing free-form)."""
     if not (isinstance(req.get("name"), str) and LAB_NAME_RE.fullmatch(req["name"])):
         return f"{req.get('cmd')} needs name:NAME (lowercase letters, digits, -)"
     if req.get("cmd") == "lab-stop":
@@ -98,6 +100,9 @@ def lab_run_error(req: dict) -> str | None:
     s = req.get("seed")
     if s is not None and not (isinstance(s, int) and not isinstance(s, bool) and 0 <= s <= MAX_SEED):
         return f"lab-run seed must be an int 0..{MAX_SEED}"
+    sc = req.get("scenario")
+    if sc is not None and not (isinstance(sc, str) and SCENARIO_RE.fullmatch(sc)):
+        return "lab-run scenario must be a scenario name such as drain-mid-job (lowercase letters, digits, -)"
     return None
 
 
