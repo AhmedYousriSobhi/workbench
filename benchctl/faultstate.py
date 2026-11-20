@@ -58,6 +58,21 @@ def k8s_cert(pki: Path = authfaults.K8S_PKI) -> list[dict]:
     return [row("k8s-api", "auth", "serving certificate expired")] if expired else []
 
 
+def kube_rbac(path: Path | None = None) -> list[dict]:
+    """The `tsh kube` RBAC faults of `authfaults.kube_rbac`, from the marker file it keeps (cleared by the restore step)."""
+    try:
+        marks = json.loads((path or authfaults.KUBE_MARK).read_text())
+    except (OSError, ValueError):
+        return []
+    out = [row("k8s-api", "auth", f"{m.split(':')[1]} tier's Kubernetes binding is missing: Teleport allows, Kubernetes says forbidden")
+           for m in sorted(marks) if m.startswith("binding:")]
+    if "impersonation" in marks:
+        out.append(row("k8s-api", "auth", "Teleport may not impersonate users: every tsh kube request fails upstream"))
+    if "teleport-outage" in marks:
+        out.append(row("teleport", "auth", "the Teleport proxy is stopped: tsh and the web terminal are refused, direct SSH still works"))
+    return out
+
+
 def slurm_token(path: Path = authfaults.TOKEN_FILE, now: float | None = None) -> list[dict]:
     """The saved Slurm REST token, when its own `exp` has passed (slurmrestd then answers 401)."""
     try:
@@ -120,4 +135,4 @@ def munge(nodes: list[str], runner: Callable) -> list[dict]:
 
 
 def collect(fetch: Callable, runner: Callable, running_nodes: list[str]) -> list[dict]:
-    return [*jira_failure(fetch), *bmc_tls(fetch), *k8s_cert(), *slurm_token(), *teleport_cert(), *munge(running_nodes, runner)]
+    return [*jira_failure(fetch), *bmc_tls(fetch), *k8s_cert(), *kube_rbac(), *slurm_token(), *teleport_cert(), *munge(running_nodes, runner)]

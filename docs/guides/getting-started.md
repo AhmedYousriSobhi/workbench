@@ -2,7 +2,7 @@
 
 How to run workbench on your workstation and see it working. Keep this page in step with the commands:
 `tests/test_docs.py` fails if a `benchctl` command named here no longer exists. For everything about the tool, read the
-[user manual](../manual/README.md).
+[user manual](../manual/README.md); to do one thing step by step, pick a [tutorial](../tutorials/README.md).
 
 ## Quickest way
 
@@ -47,7 +47,7 @@ Every command has the same shape, like `kubectl`: `benchctl VERB [RESOURCE] [NAM
 
 ```bash
 benchctl get nodes
-benchctl exec gpu001 -- nvidia-smi
+benchctl exec gpu001 -- ls /dev/workbench-gpu0
 benchctl ssh alice@cn001
 benchctl scenario run node-down
 ```
@@ -96,9 +96,15 @@ Ubuntu has `python3`, not `python`, and `benchctl` needs a few packages. Use a v
 python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'
 ```
 
-The venv is per shell. You have two choices:
-- Activate it again in every new terminal: `. .venv/bin/activate`. Then type `benchctl ...`.
-- Skip activation: `./scripts/benchctl <command>` uses `.venv` directly, for example `./scripts/benchctl status`.
+The venv is per shell, so do not rely on activating it. Put `benchctl` on your PATH once instead (no sudo, no activation):
+
+```bash
+./scripts/install-benchctl.sh     # adds ~/.local/bin/benchctl (a link); --uninstall removes it
+benchctl status                   # works from any directory and any new terminal
+benchctl completion install       # optional: Tab completion
+```
+
+Without the install, `./scripts/benchctl <command>` from the checkout does the same. Activating the venv (`. .venv/bin/activate`) is only for running Python tools by hand (`pytest`, `ruff`).
 
 Every command below works both ways. The governor service needs no packages. It runs on the system `python3`.
 

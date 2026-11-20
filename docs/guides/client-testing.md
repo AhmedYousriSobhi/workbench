@@ -13,12 +13,17 @@
 ./scripts/benchctl down                    # when done; always stop what you started
 ```
 
+> [!IMPORTANT]
+> Notifications are off by default per cluster for Slurm, Kubernetes, storage and BCM. Switch notify on for each cluster in the client first. Reachability, SSH and Teleport-expiry notices need no opt-in.
+
 The client connects to workbench as it would to a production site: SSH to a login node, Slurm commands, Grafana GPU metrics, Jira search, Redfish BMCs. You then play scenarios (faults, outages, workloads) and watch how the client reacts.
 
 > [!IMPORTANT]
 > Never fit workbench to one client's quirks. The client is general-purpose, so make the simulated service behave like the real one, and report a mismatch against the real product's behaviour.
 
 The cluster has partitions `cpu` (4 nodes) and `gpu` (2 nodes, 8 `h200` GPUs each) and the users `alice` and `bob`. `up` prints the `ssh:` line and the names of the secret files.
+
+Fill in the [client test worksheet](client-test-worksheet.md) while you test: one scenario per row, with what the client should show, what it showed and a verdict.
 
 Shortcuts: import the whole cluster from one file with `benchctl export profile` ([export profile](export-profile.md)), or set up one client component at a time ([client setup by component](client-setup-by-component.md)).
 
@@ -32,7 +37,7 @@ Every part has a fixed private address (`10.141.x.x`, standard ports; [ADR 0018]
 | GPU usage through Grafana `/api/ds/query` | Grafana `10.141.255.21:3000` (fallback `127.0.0.1:3000`), datasource uid `prometheus`, host label `Hostname` | Viewer token in `secrets/grafana_viewer_token` | merged |
 | Jira search (`/rest/api/3/search/jql`, fallback `/rest/api/2/search`), `/myself`, `/field`; Confluence pages (`/rest/api/search?cql=`, Cloud style `/wiki/rest/api/search`) on the same address | `http://10.141.255.11:8080` (fallback `127.0.0.1:8080`) | none in mock mode | merged (ADR 0005) |
 | BMC Redfish over TLS, certificate pinning | one address per node, `10.148.0.N:443` / `10.148.100.N:443` (fallback: one listener `127.0.0.1:8443`, node chosen by the `Host: bmc-<node>` header) | `admin` and the password in `secrets/bmc_credentials` | merged (ADR 0012); plain HTTP on `:8000` also remains. Inside the cluster network (login node, containers) the BMCs also answer on the standard `bmc-<node>:443`; on the host only `8443` is published (443 needs root) |
-| BCM (`cmsh` on a head node) | the login node is the head node: `cmsh -c "device; list"` over the same SSH connection | as for SSH | built (ADR 0013); read-only, with a small interactive console (modes, list, status); node state follows bcm-mock and scenarios; the head node's events log `/var/spool/cmd/events.log` gets a line per node state change ( format from the documented shape, not verified against a real CMDaemon) |
+| BCM (`cmsh` on a head node) | the login node is the head node: `cmsh -c "device; list"` over the same SSH connection | as for SSH | built (ADR 0013); the client reads BCM with `cmsh` over SSH on the head node, not through the JSON endpoint (`bcm-mock`), so check what the login node's `cmsh` stub returns (not confirmed live); read-only, with a small interactive console (modes, list, status); node state follows bcm-mock and scenarios; the head node's events log `/var/spool/cmd/events.log` gets a line per node state change ( format from the documented shape, not verified against a real CMDaemon) |
 | Teleport (`tsh login`, `tsh ssh`, ssh through the proxy) | proxy `10.141.255.30:3080` or `teleport.workbench.test:3080` (self-signed; `--insecure`), optional part: `benchctl up --with teleport` | identity file per user in `secrets/teleport/identity/`, or a password and one-time code set up through `benchctl add invite <user>` | built, review (ADR 0020): agentless OpenSSH nodes; with the k8s part also `tsh kube` (ADR 0083, docs/guides/teleport-kube.md); not simulated: agent extras, web/DB access. Your `tsh` major must not be newer than `teleport.version` |
 | Kubernetes (`kubectl` over the SSH session: `get nodes\|pods\|events`, `get --raw /readyz`, `auth can-i`, `describe`, `logs`) | the login node: `kubectl` as `alice` or `bob` with `~/.kube/config` (read-only, cluster-wide) and `~/.kube/limited.yaml` (namespace `team-a` only), both mode 600 and owned by the user; the API server `https://10.141.255.40:6443` (fallback `127.0.0.1:6443`); optional part: `benchctl up --with k8s` | the kubeconfigs above (tokens in `secrets/k8s/`); the host copy `secrets/k8s/admin.kubeconfig` is for you, never for a client | built, review (ADR 0034): a real API server, scheduler and controller manager; the nodes (`kcn001`, `kgpu001`...) are KWOK fakes with `nvidia.com/gpu` and GPU Feature Discovery labels, so pods never really run: no real pod logs, but `kubectl logs` answers canned kubelet log files (`--tail`, `--limit-bytes`, `--timestamps` and `--previous` work; `crashloop` in `team-b` has a previous run; the limited user has no `pods/log` right, so it is refused; issues 872 and 760), no `exec`; metrics-server v0.9.1 serves the metrics API (`kubectl top`, `nodes.metrics.k8s.io`; usage comes from the pods' `kwok.x-k8s.io/usage-cpu` and `usage-memory` annotations; issue 382; scenario `k8s-metrics-down` stops it so the API answers 503, then starts it); every node reports the API server's version as its kubelet version (a real `vX.Y.Z`, so skew can be judged); every read the client makes is listed under "Kubernetes reads, one by one"; failing pods get their status from KWOK stages. With `--login ssh:slurm,ssh:k8s` the Kubernetes entry is the k-login (`login2`) and the Slurm entry the s-login. **Exercised:** `benchctl export profile` run through the client's own profile importer (the Kubernetes entry gets `k8s`: enabled, interval, workload signals, `poolLabel pool`; host and kubeconfig stay yours), and the commands it runs (`get nodes -o json`, `get pods -A`, `get events -A`, `get --raw /readyz?verbose`, `/version`, `auth can-i`, `config view --minify`, `describe pod`, Deployments, Jobs, PVCs, DaemonSets, ResourceQuotas, HPAs) as `alice` over SSH on the k-login: all answer; the metrics API answered 404 then (before issue 382; it now answers 200 for the viewer, written and unit-tested, not yet run live). **Not exercised:** the client's own screens (Discover step, Nodes and GPUs tabs, notifications): they need the desktop app, run by you |
 
@@ -155,6 +160,7 @@ The second fails because the plugin says `interactiveMode: Always`: the Kubernet
 - **SSH:** host `10.141.255.254`, port `22` (fallback `127.0.0.1` / `2222`), user `alice`. Many clients read private keys only from `~/.ssh`. Run `./scripts/benchctl ssh-key install`: it copies the generated key to `~/.ssh/workbench_ed25519` (mode 600) and prints the path to give the client. Run `./scripts/benchctl ssh-key remove` when done. Alternatively load the key into a throwaway agent: `eval "$(ssh-agent -s)"; ssh-add compose/generated/secrets/ssh/id_ed25519`.
 - **Host key:** the first connection needs the client's trust-on-first-use confirmation. `up` keeps the same host key across restarts, so the pin stays valid.
 - **Slurm:** the client's refresh runs fixed `squeue` and `sinfo` commands. Submit work as `alice` so there is something to show: `sbatch --wrap="sleep 300" -p cpu` (add `-p gpu --gres=gpu:2` for GPUs).
+- **Notifications:** off by default per cluster for Slurm, Kubernetes, storage and BCM. Switch notify on in the client for each cluster before a scenario, or it shows no notice. Reachability, SSH and Teleport-expiry notices need no opt-in.
 - **GPU panel:** set the datasource uid to `prometheus`, the host label to `Hostname`, and the Viewer token. Per-job GPU usage appears only while the SSH user has a running job, and the GPUs of that job read busy (the others idle).
 - **Jira:** base URL `http://10.141.255.11:8080`. A client that refuses plain HTTP for a non-local host uses the fallback `http://127.0.0.1:8080`.
 - **Drain a node** for the node-issues view: `docker exec <slurmctld container> scontrol update nodename=cn004 state=drain reason="test"`, then `state=resume`.
@@ -182,7 +188,7 @@ steps:
 ./scripts/benchctl scenario run gpu-node-overheats --speed 4   # four times faster
 ```
 
-Run it while the client is connected and compare what the client shows (node state, reasons, alerts, GPU temperature and XID metrics, BMC events, Jira failures) with what the scenario did. A new kind of fault belongs in the scenario engine's targets, not in ad hoc `docker exec` commands. A scenario can also be run by its reference: `benchctl scenario run SC-02`.
+Run it while the client is connected and compare what the client shows (node state, reasons, alerts, BMC events, Jira failures; GPU series are only the four listed under "Known client behaviour") with what the scenario did. A new kind of fault belongs in the scenario engine's targets, not in ad hoc `docker exec` commands. A scenario can also be run by its reference: `benchctl scenario run SC-02`.
 
 ### Take a node down so Slurm notices
 
@@ -254,9 +260,11 @@ These faults give the client real errors from the real components, for its "logi
 | `auth-munge-wrong-key` (SC-32) | `cn001` is rejected by slurmctld (`Invalid credential`); `sinfo` shows it as `idle*` (not responding), flapping with `idle`, never `down` (slurmd still answers each ping, with an authentication error) | the scenario puts the node's own key back at 120 s (`munge_restore`) |
 | `bmc-tls-expired` (SC-33) | `certificate has expired` on the BMC TLS ports (8443, 443, each node's address); same key and name, so a client that pins by key still connects | back at 60 s |
 | `k8s-cert-expired` (SC-34) | `certificate has expired` from `kubectl` and any client that checks dates; the API server restarts twice (10 to 20 s each) | back at 90 s |
+| `teleport-outage` (SC-58) | the Teleport container is stopped: `tsh` and the web terminal are refused (connection refused), while direct SSH to a login node that takes a key still works, so a client should say "Teleport unreachable" without calling the node down | started again at 60 s; users, nodes and identity files are kept, and the step waits until Teleport answers |
+| `kube-binding-missing` (SC-55), `kube-impersonation-revoked` (SC-56), `kube-identity-expired` (SC-57) | only on the `tsh kube` path, which the monitoring client does not use: Forbidden from Kubernetes for a user Teleport let in, `cannot impersonate` upstream, an expired identity (see [Teleport Kubernetes](teleport-kube.md)) | back at 90 s, 90 s and 180 s |
 
 > [!WARNING]
-> A scenario that stops half-way leaves the fault in place. Undo it with the matching step, written as a one-step scenario: `{auth: {munge_restore: [cn001]}}`, `bmc_tls_expired: false`, `k8s_cert_expired: false` or `teleport_cert_restore: [alice]`.
+> A scenario that stops half-way leaves the fault in place. Undo it with the matching step, written as a one-step scenario: `{auth: {munge_restore: [cn001]}}`, `bmc_tls_expired: false`, `k8s_cert_expired: false`, `teleport_cert_restore: [alice]`, `teleport_outage: false`, `kube_binding_restore: true` or `kube_impersonation_revoked: false`.
 
 ## Give the client a live queue
 
@@ -396,7 +404,40 @@ Do not report one of the last row as a client defect.
 - A client's node inventory may refresh more slowly than its jobs list, so a node can look idle for a few seconds after a job starts.
 - `sinfo` folds names (`cn[001-004]`); assert on the fold, not on single names.
 
-**Known gaps:** Kubernetes has no real kubelet (pod logs are canned files, no `exec`; node and pod usage come from metrics-server over KWOK's simulated kubelet metrics); with the Teleport and k8s parts both on it is reachable through `tsh kube`. Teleport has no dynamic labels, session recording or sharing. The fake `cmsh` console is a read-only subset.
+**Known gaps:** the client does not read BCM through the CMDaemon-style JSON endpoint, only `cmsh` (see "Known client behaviour"); Kubernetes has no real kubelet (pod logs are canned files, no `exec`; node and pod usage come from metrics-server over KWOK's simulated kubelet metrics); with the Teleport and k8s parts both on it is reachable through `tsh kube`. Teleport has no dynamic labels, session recording or sharing. The fake `cmsh` console is a read-only subset.
+
+## Known client behaviour to check before reporting a bug
+
+Read from the client's code on 2026-11-20 (issue 952). **Seen in the client's code, not confirmed live.** Check each against the running client before you report a bug.
+
+**What it reads**
+- GPU: four series only (utilization, framebuffer used and free, temperature), and only for nodes of the user's own running jobs.
+- It has no XID or InfiniBand handling and no temperature alert. An XID or IB fault reaches the user only as a Slurm drain reason or as BMC event text, so `gpu-xid-storm` and `ib-port-down` show up there, not as GPU metrics.
+- BCM: `cmsh` over SSH on the head node, never the JSON endpoint.
+- Quota: read only on `lustre` or `gpfs` paths (`lfs quota`, `mmlsquota`). The `quota-exceeded` scenario must keep the type `lustre` visible to `stat -f`.
+
+**What it may show wrongly**
+- An expired API server certificate shows the generic cannot-reach text, not an x509 message (possible wording gap).
+- The node states `down*` and `idle~` lose their flags in the parser.
+- A 429 on the optional metrics or events sections is ignored.
+
+**Jira**
+- A v3 search that answers anything but 404 or 405 does not fall back to v2.
+- 401 and 403 both stop polling until the credential changes.
+- A 200 HTML page is treated as a 404.
+
+**How often it looks**
+
+| Reads | Interval |
+|---|---|
+| Reachability | 60 s |
+| SSH command | 15 s |
+| Slurm | 60 s |
+| Kubernetes | 45 s |
+| Storage | 300 s |
+| Jira | 3 min |
+
+A scenario shorter than the interval of what you watch shows nothing new. Pick a longer scenario or `--speed 1`, and wait one full interval.
 
 ## Check the client after the plan changes
 
@@ -462,6 +503,7 @@ Source: [ADR 0018](../adr/0018-fixed-addressing-plan.md), SPEC G5, NF-6, NF-8
 
 ## Learn more
 
+- [Client test worksheet](client-test-worksheet.md): one scenario per row, expected against observed
 - [Client setup by component](client-setup-by-component.md)
 - [SSH connection testing](ssh-connection-testing.md)
 - [Scenarios](../manual/06-scenarios.md)

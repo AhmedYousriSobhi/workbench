@@ -150,3 +150,63 @@ def test_the_api_server_certificate_is_really_expired_then_the_good_one_returns(
 def test_a_failing_command_is_reported_by_the_scenario_step():
     out = scenario.execute(scenario.Step(0, "auth", {"munge_wrong_key": ["cn001"]}), runner=lambda c: CP("", 1, "no such container"))
     assert out.status == "failed" and "munge on cn001: no such container" in out.detail
+
+
+# ---- tsh kube RBAC faults (issue 756, ADR 0084 W4) ----
+
+def test_kube_fault_keys_are_validated():
+    assert authfaults.problems({"kube_binding_missing": ["viewer", "admin"], "kube_impersonation_revoked": True, "kube_binding_restore": True}, NODES, USERS) == []
+    text = "\n".join(authfaults.problems({"kube_binding_missing": ["root"], "kube_impersonation_revoked": "yes", "kube_binding_restore": False}, NODES, USERS))
+    assert "unknown tier 'root'" in text and "kube_impersonation_revoked is true" in text and "kube_binding_restore is true" in text
+    assert "needs a list of tiers" in "\n".join(authfaults.problems({"kube_binding_missing": []}, NODES, USERS))
+
+
+def test_a_binding_is_deleted_per_tier_and_the_restore_reapplies_the_fixture(tmp_path, monkeypatch):
+    monkeypatch.setattr(authfaults, "KUBE_MARK", tmp_path / "kube-faults.json")
+    run, calls = recorder()
+    assert authfaults.apply({"kube_binding_missing": ["viewer", "developer"]}, run, None, SIM) == ""
+    deletes = [c[c.index("delete"):] for c in calls]
+    assert deletes == [["delete", "clusterrolebinding", "workbench-teleport-viewers", "--ignore-not-found"],
+                       ["delete", "rolebinding", "workbench-teleport-developers", "--ignore-not-found", "-n", "team-a"]]
+    assert json.loads(authfaults.KUBE_MARK.read_text()) == ["binding:developer", "binding:viewer"]
+    assert authfaults.apply({"kube_impersonation_revoked": True}, run, None, SIM) == ""
+    assert calls[-1][-3:] == ["delete", "clusterrolebinding", "workbench-teleport"] or "workbench-teleport" in calls[-1]
+    assert "impersonation" in json.loads(authfaults.KUBE_MARK.read_text())
+    assert authfaults.apply({"kube_binding_restore": True}, run, None, SIM) == ""
+    assert calls[-1][-3:] == ["apply", "-f", authfaults.KUBE_FIXTURE] and not authfaults.KUBE_MARK.exists()
+    authfaults.apply({"kube_impersonation_revoked": True}, run, None, SIM)
+    authfaults.apply({"kube_impersonation_revoked": False}, run, None, SIM)  # false is the restore of that fault
+    assert not authfaults.KUBE_MARK.exists() and calls[-1][-3:] == ["apply", "-f", authfaults.KUBE_FIXTURE]
+
+
+def test_a_kubectl_failure_is_reported_and_the_fault_is_not_marked(tmp_path, monkeypatch):
+    monkeypatch.setattr(authfaults, "KUBE_MARK", tmp_path / "kube-faults.json")
+    assert "viewer tier" in authfaults.apply({"kube_binding_missing": ["viewer"]}, lambda c: CP(code=1, err="no api"), None, SIM)
+    assert not authfaults.KUBE_MARK.exists()
+
+
+# ---- Teleport outage (issue 209) ----
+
+def test_teleport_outage_is_validated_and_the_shipped_scenario_uses_it():
+    assert authfaults.problems({"teleport_outage": True}, NODES, USERS) == []
+    assert "teleport_outage is true" in "\n".join(authfaults.problems({"teleport_outage": "down"}, NODES, USERS))
+    sc = scenario.load("teleport-outage", sim=SIM)
+    assert scenario.validate(sc, SIM) == [] and [s["do"] for s in sc["steps"]] == [{"teleport_outage": True}, {"teleport_outage": False}]
+
+
+def test_the_outage_stops_the_container_and_the_restore_starts_it_and_waits(tmp_path, monkeypatch):
+    monkeypatch.setattr(authfaults, "KUBE_MARK", tmp_path / "kube-faults.json")
+    run, calls = recorder()
+    assert authfaults.apply({"teleport_outage": True}, run, None, SIM) == ""
+    assert calls[-1][-4:] == ["stop", "-t", "1", "teleport"] and json.loads(authfaults.KUBE_MARK.read_text()) == ["teleport-outage"]
+    assert authfaults.apply({"teleport_outage": False}, run, None, SIM) == ""
+    assert calls[-2][-2:] == ["start", "teleport"] and "status" in calls[-1]
+    assert not authfaults.KUBE_MARK.exists()
+
+
+def test_a_failed_stop_is_not_marked_and_a_proxy_that_never_answers_is_reported(tmp_path, monkeypatch):
+    monkeypatch.setattr(authfaults, "KUBE_MARK", tmp_path / "kube-faults.json")
+    assert authfaults.apply({"teleport_outage": True}, lambda c: CP(code=1, err="no such container"), None, SIM).startswith("stop teleport: no such container")
+    assert not authfaults.KUBE_MARK.exists()
+    monkeypatch.setattr("benchctl.teleport.wait_ready", lambda *a, **k: False)
+    assert "did not answer" in authfaults.apply({"teleport_outage": False}, lambda c: CP(), None, SIM)

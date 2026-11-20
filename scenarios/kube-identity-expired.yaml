@@ -1,0 +1,6 @@
+name: kube-identity-expired
+ref: SC-57
+description: "alice's Teleport identity file is re-signed to live 60 s: after that tsh kube login and tsh kube credentials fail as expired (the Kubernetes side is untouched); at 180 s it is signed again with the normal life. Needs --with teleport --with k8s"
+steps:
+  - {at: 0s,   target: auth, do: {teleport_cert_ttl: {user: alice, ttl: 60s}}}
+  - {at: 180s, target: auth, do: {teleport_cert_restore: [alice]}}

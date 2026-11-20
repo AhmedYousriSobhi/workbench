@@ -114,6 +114,28 @@ Open **☰ Menu → ✚ Health checks** in the top strip. Then:
 - The page adds checks from templates only. For your own script, use the command line or a file.
 - Changes made at the same moment (two tabs, or the page and `benchctl set check`) are applied one after the other, so none is lost.
 
+## Worked example: a stateful check
+
+A check can remember between runs in `$state`, a file of its own (one per check and node, kept in `/var/tmp` on the node).
+The example flags a GPU node that is idle and hot, but only after it stayed so for `confirm_s` seconds.
+
+- Idle: Slurm state `idle` (read with `sinfo`, since a check may not call `scontrol`), GPU load at most 3 %, a GPU above `idle_temp`.
+- With a job (`allocated` or `mixed`): only `ceiling` counts, and it fails at once.
+- Any other Slurm state: the memory is cleared, unless the check has failed (`FAULT`) and the GPU is still hot. Then it keeps failing, so the drain holds.
+
+The file holds nothing (OK), `SUSPECT <time>` or `FAULT <time>`. The script is in [tutorial 24](../tutorials/24-write-a-stateful-health-check.md), step 1; add it with:
+
+```bash
+./scripts/benchctl add check idle-hot --script /tmp/idle-hot.sh --set idle_temp=50 --set confirm_s=600 --set ceiling=87
+```
+
+**Good to know**
+- The series are read from `$mine`: `DCGM_FI_DEV_GPU_TEMP` and `DCGM_FI_DEV_GPU_UTIL`, one per GPU.
+- A declared parameter is required, so `--set` gives all three. The `${P_confirm_s:-600}` defaults only matter if you copy the script elsewhere.
+- Once the check drains the node, its Slurm state is no longer `idle`. The `FAULT` memory keeps the check failing until the GPU cools. Without it the node would resume 30 s later and wait again.
+- The simulated idle GPU shows 0 to 3 % load, so "no load" means at most 3.
+- Keep the state to one small file and no loops: a check is stopped after 10 s.
+
 ## The real card (`rgpu001`)
 
 `gpu-count` and `gpu-xid` skip the real-GPU node, which has no simulated GPUs.

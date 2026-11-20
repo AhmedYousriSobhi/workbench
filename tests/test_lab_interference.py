@@ -34,7 +34,7 @@ def test_refuses_a_bad_active_record(tmp_path):
 def test_the_scenario_engine_records_an_applied_step(monkeypatch):
     seen = []
     monkeypatch.setattr(scenario, "_apply", lambda step, *a: scenario.Outcome("down cn001", "ok"))
-    monkeypatch.setattr(scenario, "side_effects", lambda step: [])
+    monkeypatch.setattr(scenario, "side_effects", lambda step, sim=None: [])
     monkeypatch.setattr(scenario.lab_interference, "record", lambda action, target, by: seen.append((action, target, by)))
     scenario.execute(scenario.Step(at=0, target="cn001", do={"down": True}), host=False)
     assert seen == [("scenario step down", "cn001", "scenario")]

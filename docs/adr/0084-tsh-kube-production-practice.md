@@ -108,7 +108,7 @@ A tool a client calls is tested end to end even if the simulation never needed i
 4. Limited user: the limited view and the logs note.
 5. Describe and Logs on a pod, including `--previous` (760).
 6. Security: what this user may do, pod security posture.
-7. Notifications: node NotReady and back, new OOM, evictions.
+7. Notifications (off by default per cluster; switch notify on first): node NotReady and back, new OOM, evictions.
 8. A Teleport cluster: refresh by hand, expired profile, "waiting for a Teleport login" (763). Direct SSH and jump host for comparison.
 9. Scale and old versions: the largest safe node count (768); 1.29 (769).
 State what was and was not exercised in each PR (definition of done).
@@ -369,3 +369,15 @@ Written and unit-tested; the live tests are written and have not been run (the o
 - **Time-slicing** stays unbuilt (owner decision Q1: the multiplying shape only if the client needs it).
 - **Not verified live:** that KWOK keeps a patched `nodeInfo` and the MIG resources (its node stages only initialise a node once, as for the fake GPUs), and that the fragmentation pod stays Pending on a fresh cluster whatever the fixtures hold (the 5-GPU pod needs 5, each node has at most 4 free after the 4-GPU pods, the total is at least 6). The owner runs `./scripts/verify.sh --unit k8s --clean`.
 
+
+## Addendum: access tiers (issue 753, W1)
+
+- **Roles.** `workbench-user` is now role v8 and only the SSH access (logins, node labels). With the k8s part, three more v8 roles carry Kubernetes: `workbench-kube-viewer`, `workbench-kube-developer`, `workbench-kube-admin`, each with its own Kubernetes group (`workbench-k8s-viewers`, `-developers`, `-admins`) and a `kubernetes_resources` entry (`kind: "*"`, `api_group: "*"`, `verbs: ["*"]`; the namespace is `team-a` for the developer, `*` for the others). A user's groups are the union of its roles, so no tier is added to the base role.
+- **Kubernetes layer.** Viewer: the existing ClusterRoleBinding. Developer: a `Role` and `RoleBinding` in `team-a` only (workloads, no secrets, no nodes). Admin: a ClusterRoleBinding to `cluster-admin`. Both layers limit the namespace, as the Teleport docs require.
+- **Mapping.** `teleport.kube_tier: {user: tier}` in `sim.yaml` (default viewer for everyone not listed; validated against `users:`). `bootstrap` creates a missing Teleport user and runs `tctl users update --set-roles` for an existing one, so a tier change keeps the password and one-time code.
+- **Two denials.** A request outside the role's `kubernetes_resources` (the developer reading nodes) is refused by Teleport; one inside them that the Kubernetes Role does not allow (the developer reading secrets in `team-a`) reaches Kubernetes and is a `forbidden` naming the user, audited with 403.
+- **Not verified live (the live run is owner-run):** that 18.11.8 accepts `kind: "*"` with `api_group: "*"` for cluster-scoped kinds such as nodes in a v8 role; the exact Teleport denial text for team-b and nodes; ~~`tsh kubectl` and `tsh proxy kube` with an identity file~~ (run live 2026-11-19, tsh 18.11.2 against 18.11.8: neither works with only an identity file, kubectl gets no credentials; `tsh kube login` plus the exec plugin works; the two tests are xfail with that reason). Also found live: the page's Teleport view read `log/*.log`, but Teleport writes `log/<cluster id>/DAY.log` (`events.log` is a dangling link), so no calls showed; fixed in `webui/telekube.py`.
+
+## Addendum: Teleport view (issue 755, W3)
+
+The page's Teleport details show Teleport's Kubernetes counters (`teleport_kubernetes_server_api_requests_total`, `..._exec_sessions_total`, `..._portforward_sessions_total`; absent means "not measured") and the last ten `kube.request` events, read from the host audit folder `compose/generated/teleport/data/log` (no Docker, SPEC W-3). `GET /api/teleport-kube`; hidden without both parts, one notice when Teleport does not answer. Not verified live: that 18.11.8 publishes the three counter names and that the host user can read the audit files.

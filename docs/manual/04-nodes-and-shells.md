@@ -60,7 +60,7 @@ The web page shows the same text in the **Info** card of a node's panel, without
 ./scripts/benchctl exec cn001 -- hostname      # one command, no shell
 ./scripts/benchctl ssh cn001                   # a root shell (same as exec, shorter)
 ./scripts/benchctl ssh alice@cn001             # a real SSH login as alice, through the login node
-./scripts/benchctl ssh alice@gpu001 -- nvidia-smi   # one command over SSH
+./scripts/benchctl ssh alice@gpu001 -- ls /dev/workbench-gpu0   # one command over SSH (the GPUs are simulated: no nvidia-smi)
 # the long form, same result: docker exec -it workbench-cn001-1 bash
 ```
 
@@ -191,7 +191,7 @@ tsh --proxy=10.141.255.30:3080 --insecure -i $ID ls                          # t
 tsh --proxy=10.141.255.30:3080 --insecure -i $ID ssh alice@cn001 hostname    # a command on a node
 ```
 
-`--insecure` is needed because the proxy's certificate is self-signed. Each `ssh` shows up in the page as a dot from the clients to the Teleport box.
+`--insecure` is needed because the proxy's certificate is self-signed. benchctl's own calls to the proxy do not skip the check: they pin that certificate (`compose/generated/secrets/teleport/proxy_ca.pem`); if `benchctl up` says the proxy did not present it, check that nothing else uses port 3080, then run `benchctl down` and `benchctl up --with teleport`. Each `ssh` shows up in the page as a dot from the clients to the Teleport box.
 
 **3. Or use `tsh login` and the browser** (a password and a one-time code, because Teleport 18 cannot turn the second factor off):
 
@@ -236,6 +236,8 @@ The Teleport web UI is at `https://10.141.255.30:3080` (same login).
 This adds a real Kubernetes control plane (etcd, API server, scheduler, controller manager) and KWOK, which plays the nodes. About 0.3 GB of memory. The first start pulls about 400 MB of images.
 
 - **Nodes:** fake and separate from the Slurm nodes: `kcn001`, `kcn002` (CPU) and `kgpu001`, `kgpu002` (8 GPUs each, labelled as GPU Feature Discovery does). Change them under `kubernetes:` in `sim.yaml`, set the counts with `--k8s-nodes N` (GPU nodes) and `--k8s-cpu-nodes N`, or use the page (Cluster architecture).
+- **Machines:** the Kubernetes nodes have BMCs and BCM entries. `benchctl get nodes`, `benchctl describe node kgpu001` and the scenario BMC steps know them.
+- **Power and heat:** a BMC power-off or an overheat step also reports the node NotReady; `clear` or power-on brings it back.
 - **Pods:** they never really run, so there are no real pod logs: `kubectl logs` shows canned log lines (`crashloop` in `team-b` also has `--previous`), and `kubectl top` shows the usage set in the pods' annotations. A pod labelled `workbench_fault` (the fixtures have crash-looping, OOM-killed, image-pull and failed-job ones) shows the status a kubelet would report.
 - **DRA:** each GPU node also publishes a `ResourceSlice` (driver `gpu.sim.test`, one device per GPU, UUIDs as in the DCGM series). The pod `dra-train` in `team-a` gets its GPU through a `ResourceClaim` the real scheduler allocates (`kubectl -n team-a get resourceclaim -o yaml`, ADR 0076).
 - **Queues (Kueue):** `kubectl api-resources | grep kueue` lists `clusterqueues`, `localqueues` and `resourceflavors` (Kueue v0.20.6, v1beta2). There is no Kueue controller, so the counts are fixtures.
@@ -252,13 +254,17 @@ This adds a real Kubernetes control plane (etcd, API server, scheduler, controll
 
 The Cluster architecture sheet has a second list per login node. The diagram draws the Slurm nodes and the Kubernetes nodes as separate groups. Each login points at the group it serves (`jump host` for Slurm, `kubectl` for Kubernetes):
 
+With the default single login node (a bare `ssh`) one node serves both and listens on port 2222. Only with several login
+nodes does each get its own port, by position: here `login` (s-login) is 2222 and `login2` (k-login) is 2223.
+
 ```bash
-./scripts/benchctl up --with k8s --login ssh:slurm,ssh:k8s      # login = s-login, login2 = k-login
+./scripts/benchctl up --with k8s --login ssh:slurm,ssh:k8s      # login = s-login (2222), login2 = k-login (2223)
 ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2223 alice@127.0.0.1 kubectl get nodes
 ```
 
 From a login node a user has `kubectl` and a read-only kubeconfig (`~/.kube/config`, cluster-wide) and a namespace-limited one
-(`~/.kube/limited.yaml`, only `team-a`):
+(`~/.kube/limited.yaml`, only `team-a`). These use port 2222, the default single login node; with `--login ssh:slurm,ssh:k8s`
+use 2223, the k-login:
 
 ```bash
 ssh -i compose/generated/secrets/ssh/id_ed25519 -o IdentitiesOnly=yes -p 2222 alice@127.0.0.1 kubectl get nodes

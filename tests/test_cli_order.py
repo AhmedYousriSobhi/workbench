@@ -8,8 +8,8 @@ from benchctl import cli
 
 TOP = ["check", "doctor", "preflight", "status", "diag", "compose", "plan", "up", "apply", "start", "stop", "open", "down", "submit", "exec", "ssh", "logs", "scale", "completion", "get", "set", "clear", "add", "remove", "validate", "reload", "refresh", "setup", "load", "run", "serve", "describe", "wait", "import", "diff", "export", "ssh-key", "scenario", "measure"]
 GROUPS = {
-    "get": ["ticket-bot", "nodes", "services", "workbench", "profiles", "checks", "trace", "slurm-stats", "slurm-checksum", "capture", "lab", "endpoints", "faults", "traffic", "alerts", "scenario-status", "scenarios"],
-    "set": ["node", "netem", "ticket-bot", "slurmd", "slurmctld", "check", "jira-activity"],
+    "get": ["ticket-bot", "nodes", "services", "workbench", "profiles", "checks", "trace", "slurm-stats", "slurm-checksum", "capture", "kube-audit", "lab", "endpoints", "faults", "traffic", "alerts", "scenario-status", "scenarios"],
+    "set": ["node", "netem", "ticket-bot", "slurmd", "slurmctld", "k8s-step", "check", "jira-activity"],
     "clear": ["faults", "netem"],
     # verbs several modules add to: the import order in commands/__init__.py is what keeps these lists
     "add": ["check", "invite", "candidate"],

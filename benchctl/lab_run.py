@@ -55,6 +55,7 @@ STATE_KINDS = {"COMPLETED": "completed", "FAILED": "failed", "TIMEOUT": "timeout
                "NODE_FAIL": "node_fail", "PREEMPTED": "preempted", "DEADLINE": "timeout", "BOOT_FAIL": "failed"}
 OOM_EXIT = 137  # ADR 0050: an out-of-memory job exits 137 in the lab
 INTERFERENCE = "interference.jsonl"  # node actions during a replay (benchctl.lab_interference, governor.labrun)
+OWN_SCENARIO = "lab-run"  # benchctl.lab_interference.OWN: the `by` of the run's own scenario steps
 
 
 def legal(path: tuple[str, ...], frm: str, to: str) -> bool:
@@ -251,7 +252,8 @@ class Run:
         return all(self.paused_s(side) <= limit for side in self.r["sides"]) and self.interference() is None
 
     def interference(self) -> dict | None:
-        """The first action recorded in the run's `interference.jsonl` ({at, action, target, side, by}), or None."""
+        """The first action recorded in the run's `interference.jsonl` ({at, action, target, side, by}), or None. Lines of the run's own
+        attached scenario (`by: lab-run`) are skipped: both sides play it at the same lab times."""
         try:
             with (self.folder / INTERFERENCE).open() as f:
                 for line in f:
@@ -259,7 +261,7 @@ class Run:
                         doc = json.loads(line)
                     except ValueError:
                         continue
-                    if isinstance(doc, dict):
+                    if isinstance(doc, dict) and doc.get("by") != OWN_SCENARIO:  # the run's own scenario is the experiment, not interference
                         return {k: doc.get(k) for k in ("at", "action", "target", "side", "by")}
         except OSError:
             return None
@@ -454,6 +456,8 @@ def _abort(run: Run, steps: Any, reason: str) -> None:
     applied = any(h["state"].startswith("apply_") for h in run.r["history"])
     run.abort(reason + (REMOVE_HINT.format(name=run.r["name"]) if applied else ""))
     if not owes_restore(run):
+        if heal := getattr(steps, "heal_after_abort", None):  # an attached scenario's faults; the A/B restore heals them itself
+            heal(run)
         return
     side = REPLAY.get(was) or (was.removeprefix("collect_") if was.startswith("collect_") else None)
     if side and side not in run.r["collected"]:

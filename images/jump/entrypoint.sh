@@ -10,4 +10,7 @@ done
 echo "AllowUsers$names" >> /etc/ssh/sshd_config
 install -m 600 /run/workbench/ssh/ssh_host_jump_ed25519_key /etc/ssh/ssh_host_ed25519_key
 install -m 644 /run/workbench/ssh/authorized_keys /etc/ssh/authorized_keys
-exec /usr/sbin/sshd -D -e
+# The session counter (issue 213, ADR 0088), as on the login nodes: sshd logs to a file, the counter follows it and serves :9922
+: > /var/log/sshd.log
+if [ -x /usr/local/bin/ssh-counter ]; then /usr/local/bin/ssh-counter 9922 /var/log/sshd.log & fi
+exec /usr/sbin/sshd -D -E /var/log/sshd.log

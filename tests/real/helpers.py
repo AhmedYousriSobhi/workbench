@@ -99,6 +99,7 @@ def ask(sock: Path, req: dict) -> dict:
 
 def start_governor(tmp: Path, *extra: str, env: dict | None = None, avail_gb: float = 8):
     """Launch a real governor driven by a signals file; returns (process, signals_file, socket)."""
+    tmp.mkdir(parents=True, exist_ok=True)
     sig, sock = tmp / "sig.json", tmp / "gov.sock"
     signals(sig, avail_gb)
     proc = subprocess.Popen(
@@ -113,6 +114,29 @@ def stop_governor(proc) -> bytes:
     proc.terminate()
     _, err = proc.communicate(timeout=10)
     return err
+
+
+def lab_run_state(sock: Path, timeout: float = 60) -> dict:
+    """`status.lab` once a governor lab run has left `preparing` (issue 969): `lab-run` answers `preparing` at once, without a run
+    id (W-13); the id, or `refused` and its reason, show in the status block only after the prepare step."""
+    wait_for(lambda: (ask(sock, {"cmd": "status"})["lab"] or {}).get("state") not in (None, "preparing"), timeout=timeout)
+    return ask(sock, {"cmd": "status"})["lab"] or {}
+
+
+def end_lab_run(sock: Path | None, workdir: Path, timeout: float = 120) -> None:
+    """Teardown of a test that started a governor lab run (issue 969): a run still active is stopped and waited for, then the
+    supervisor's run-active.json and the run flags are removed. Without this a failed test leaves the record behind and the next
+    governor started with the same --workdir recovers that run and refuses every lab-run (one at a time)."""
+    try:
+        lb = (ask(sock, {"cmd": "status"})["lab"] or {}) if sock else {}
+        if lb.get("active") and lb.get("name"):
+            ask(sock, {"cmd": "lab-stop", "name": lb["name"], "force": lb.get("state") == "recovering"})
+            wait_for(lambda: not (ask(sock, {"cmd": "status"})["lab"] or {}).get("active"), timeout=timeout)
+    except OSError:
+        pass  # the governor is gone: only the files are left to clear
+    (workdir / "compose" / "generated" / "lab" / "run-active.json").unlink(missing_ok=True)
+    for flag in ("lab.paused", "lab.abort", "lab.norestore"):
+        (workdir / "compose" / "generated" / "flags" / flag).unlink(missing_ok=True)
 
 
 def prom_up(job: str, prom: str = "http://127.0.0.1:9090") -> dict[str, str]:

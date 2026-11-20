@@ -1,6 +1,6 @@
 name: ib-port-down
 ref: SC-07
-description: An InfiniBand port goes down on a GPU node and the NIC of another flaps (fault model ib-port-down, nic-flap); the health check drains the node and a ticket opens, then both recover
+description: "An InfiniBand port goes down on a GPU node and the NIC of another flaps (fault model ib-port-down, nic-flap); the health check drains the node and a ticket opens, then both recover. The client has no InfiniBand handling: it sees only the drain reason."
 steps:
   - {at: 0s,  target: fault, do: {inject: ib-port-down, nodes: [first gpu node]}}
   - {at: 45s, target: fault, do: {inject: nic-flap, nodes: [second gpu node]}}

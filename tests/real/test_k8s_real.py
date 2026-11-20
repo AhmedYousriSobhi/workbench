@@ -477,3 +477,64 @@ def k8sgpu_skewed(skew: str) -> str:
     from benchctl import k8sgpu
     return k8sgpu.skewed(k8s.version(k8s.current_sim()), skew)
 
+
+
+def test_a_bmc_power_off_or_overheat_of_a_kubernetes_node_makes_it_notready_and_the_card_shows_the_machine(cluster, monkeypatch):
+    """Issue 385: Kubernetes nodes are machines. The scenario's BMC step on a Kubernetes node also reports it NotReady (the KWOK fault stage), `clear`
+    brings it back, the page's card carries power, temperature and BCM state, and `describe node` reads it."""
+    from benchctl import describe
+    from webui import cluster as page
+
+    monkeypatch.setattr("webui.cluster.k8s_built", lambda: True)  # tests/conftest.py turns it off so a developer's build does not leak in
+    workbench.save(SPEC)  # the page reads the saved selection (SAVED is a temporary file in tests)
+    sim = k8s.current_sim()
+    node = k8s.node_list(sim)[0][0]
+
+    def ready() -> bool | None:
+        return k8s.node_ready(node, k8s._run)
+    try:
+        assert wait_for(lambda: ready() is True, timeout=60)
+        card = next(n for n in page.Cluster(SIM).snapshot()["nodes"] if n["name"] == node)
+        assert card["kind"] == "k8s" and card["power"] == "On" and card["temp"] is not None and card["bcm"] == "UP", card
+        assert scenario.execute(scenario.Step(0, "bmc-farm", {"nodes": [node], "power": "Off"}), sim=sim).status == "ok"
+        assert wait_for(lambda: ready() is False, timeout=60)
+        assert wait_for(lambda: next(n for n in page.Cluster(SIM).snapshot()["nodes"] if n["name"] == node)["state"] == "down", timeout=30)
+        info = describe.gather(sim, node, describe.http_get)
+        assert info["kubernetes"]["state"] == "NotReady" and info["bmc"]["power"] == "Off"
+        assert scenario.execute(scenario.Step(0, "bmc-farm", {"nodes": [node], "clear": True}), sim=sim).status == "ok"
+        assert wait_for(lambda: ready() is True, timeout=60)
+        assert scenario.execute(scenario.Step(0, "bmc-farm", {"nodes": [node], "temp": 92}), sim=sim).status == "ok"
+        assert wait_for(lambda: ready() is False, timeout=60)  # an overheat is NotReady too
+    finally:
+        scenario.execute(scenario.Step(0, "bmc-farm", {"nodes": [node], "clear": True}), sim=sim)
+    assert wait_for(lambda: ready() is True, timeout=60)
+
+
+def test_the_governor_plays_kubernetes_steps_for_the_page(cluster):
+    """Issue 386: the page has no Docker, so a scenario's `k8s` step goes to the governor (`k8s-step`, run as the user). Needs a governor with --workdir
+    (`benchctl start` runs one) at L0-L1. A node goes NotReady and back; a crash-looping pod is seen by the viewer; a step outside the fixed keys is refused."""
+    from helpers import skip_no_governor
+
+    from benchctl import checks
+    sock = os.environ.get("WORKBENCH_GOV_SOCKET", checks.default_socket())
+    node = k8s.node_list(k8s.current_sim())[0][0]
+
+    def ask(do: dict) -> dict:
+        try:
+            return checks.governor_request({"cmd": "k8s-step", "do": do}, sock)
+        except OSError as e:
+            skip_no_governor(f"nothing at {sock}: {e}")
+
+    refused = ask({"apply": ["fixtures/x.yaml"]})
+    assert refused["ok"] is False and "k8s-step needs do" in refused["error"]
+    try:
+        res = ask({"down": [node]})
+        assert res.get("ok") and not res.get("dry_run"), res
+        assert wait_for(lambda: k8s.node_ready(node, k8s._run) is False, timeout=90)
+        res = ask({"pod": {"namespace": "team-a", "name": "gov-crash", "fault": "crashloop"}})
+        assert res.get("ok"), res
+        assert wait_for(lambda: "CrashLoopBackOff" in k8s.pod_reasons("team-a", "gov-crash", k8s._run), timeout=90)
+    finally:
+        ask({"up": [node]})
+        ask({"delete_pod": {"namespace": "team-a", "name": "gov-crash"}})
+    assert wait_for(lambda: k8s.node_ready(node, k8s._run) is True, timeout=90)

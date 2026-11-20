@@ -212,6 +212,17 @@ def _endpoint_rows(full: bool) -> list[dict]:
     return [{k: e.get(k) if k != "credential" else (e.get(k) or "-") for k in keep} for e in conn.entities(_sim())]
 
 
+@get_app.command("kube-audit")
+def get_kube_audit(since: float = typer.Option(0.0, "--since", help="unix seconds; only requests after this (at most 10 minutes back)")) -> None:
+    """The Kubernetes API requests of the last minutes as JSON, one record per request (user, verb, object, answer), from the API audit log
+    (issue 384, ADR 0087): nodes and pods only, the narrow policy; never a body, nothing kept. The governor runs it for the page's per-user counter."""
+    import time
+
+    from benchctl import kubeaudit
+
+    typer.echo(json.dumps(kubeaudit.read(since, time.time())))
+
+
 @get_app.command("lab")
 def get_lab(name: str = typer.Argument(..., help="a lab made with `benchctl import lab`"),
             max_nodes: int = typer.Option(None, "--max-nodes", min=1, max=64, help="lab node budget (default lab.max_nodes, 24)"),

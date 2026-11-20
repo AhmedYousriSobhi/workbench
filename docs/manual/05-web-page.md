@@ -30,6 +30,7 @@ By hand: `.venv/bin/python -m webui [port]` serves the page on `127.0.0.1:8088` 
 | Area | Shows |
 |---|---|
 | **Overview cards** | in the left rail on **Overview** only: nodes healthy, services up, GPUs busy (only with GPU nodes), faults applied. Every other workspace has the same counts in the top strip |
+| **Services count** | one definition everywhere (top strip `Services 7/7`, the Overview tile, the header line, the Services list): it counts every part the page draws, each with its own reachability test (the four mocks, the real Jira, Kubernetes API, DCGM and GPU exporters, Teleport, the jump host and the controller, when built). 7/7 means all seven drawn parts answer |
 | **View choice** | under the nav on Infrastructure: **All** (diagram and node list), **Topology** (diagram only, wider) or **Nodes** (list and details only); remembered in this browser |
 | **Left nav** | the workspaces: **Overview**, **Test run**, **Topology** (the Infrastructure diagram), **Traffic & Communication** |
 | **Top strip** | governor level, free memory, healthy services and nodes, the running scenario; then **☰ Menu**, help and the theme switch |
@@ -135,7 +136,7 @@ Every line says **how** it connects:
 | `Teleport` between the Teleport box and a login node (long dashes) | the login node is reached through the Teleport proxy (*Teleport only* or *both*) |
 | `jump host` (short dashes) | from a login node you `ssh` on to the nodes: the login node is the jump host |
 | `ssh` from Clients to the **Jump host** or **Controller** box | a key login to the bastion (`--access jump`) or to the controller (`--controller`); each box is drawn only when it is built, shows `✓ up`, `✗ not reachable` or `– offline` in words, and opens a pop-up with its address and command |
-| `ssh -J` (dashes) from the Jump host to a login node or the Controller | the bastion forwards to key-login nodes and the controller; Teleport-only logins get no such line |
+| `ssh -J` (dashes) from the Jump host to a login node or the Controller | the bastion forwards to key-login nodes and the controller; Teleport-only logins get no such line. The lines to a login node, and the direct SSH lines, light and carry dots when their counter sees sessions (see *SSH sessions in the diagram*) |
 | **DCGM (real)** box in Services, and `dcgm-exporter` in Monitoring on the Traffic & Communication diagram | the opt-in real exporter (`--with dcgm`, port 9402): up or down only, no request counter, so its line is declared wiring, never drawn as traffic; each box appears only when the part is built |
 | **GPU card** box in Services, and `real-gpu` in Monitoring | the host's own NVIDIA card with the real exporter (`--with real-gpu`, port 9403): up or down only, declared wiring like DCGM (real); drawn only when built; the node `rgpu001` sits with the GPU nodes and its state comes from the card's exporter |
 | `ssh` (short dashes) from a login node to the Controller | an admin hops on to the controller; sshd lets only whitelisted users in |
@@ -227,6 +228,17 @@ Showing the tab again reopens the feed and reads the cluster at once. Status tex
 The Teleport box and lines appear only when the Teleport part is built. The node list gets a `teleport` card with it (`answering` or `not answering`).
 
 Its rate is **connections per minute**. Every `tsh ssh` or web terminal session makes the proxy connect to a node, and Teleport counts that (`teleport_connect_to_node_attempts_total` on its diagnostics port, 127.0.0.1:3434). With no connections there are no dots.
+
+### SSH sessions in the diagram
+
+The direct SSH lines (Clients to a login node), the line to the **Jump host** and the jump host's `ssh -J` line to a login node show real traffic too.
+
+Each login container and the jump container run a small counter (`images/login/ssh_counter.py`, ADR 0088). It counts the **authenticated key logins** sshd accepts, per source address, and serves the number on 127.0.0.1: the jump host on 2320, the login nodes on 2322 and up (the sshd port plus 100). The page polls it like a mock's counter.
+
+- A dot runs along the line for each new session, and the line lights while sessions were seen in the last minute; the Timeline says "1 SSH session to login". The rate is **sessions per minute**.
+- A login that arrives from the jump host (`ssh -J`) lights the jump host's line to that login node, not the direct line.
+- Not counted: a bare TCP connect (a port check never logs in), a refused login, and a Teleport login (the Teleport box counts those). Nothing is read from a session: no user name, no command, only a number per source address.
+- With no counter answering (a cluster started before this change, the container stopped) the lines stay still and say *declared*: no counter, no dots. The controller's SSH line and the hops to compute nodes have no counter and stay declared.
 
 The login nodes come from the saved workbench: `benchctl start --login ssh,teleport,both`, or the Login nodes rows of the sheet.
 
@@ -353,6 +365,14 @@ The links are also drawn as a diagram, where the plane is the line's colour and 
 - Filter by plane, software or evidence. Click a link's source to open its inspector.
 - A toolbar has plane chips, zoom, Fit and full screen.
 - Below the diagram, a **Traffic activity timeline** shows requests and faults this page was told about, from 1 m to 1 h. It is kept only while the page is open.
+- **The Kubernetes API box counts requests per user** (issue 384, ADR 0087):
+  - The box shows `N req/min · nodes and pods only`; its pop-up lists each user and the last requests.
+  - The count comes from the API server's audit log, read by the governor (the page never reads Docker).
+  - It covers only what the audit policy records: **nodes and pods only** (nodes, pods and their status, leases). Secrets, config maps and other objects are not counted.
+  - A request made through Teleport counts for the Teleport user.
+  - It covers the last 60 seconds, polled every 5 seconds, at memory levels L0-L1 only.
+  - From L2 up, with the governor down, or with a governor service not restarted since this feature, the pop-up says "not measured" and why, never 0.
+  - The "Seen" figure in the same pop-up is still the API server's own total for all callers.
 - The diagram is one fixed architecture, so every group is always drawn. A part is grayed, never dropped, when:
   - this cluster lacks it;
   - the page cannot read it yet (slurmdbd, until it answers a query);
@@ -462,7 +482,10 @@ The card also has the **ssh command** with **Copy command**.
 - *Reason* and *Jobs* come through the governor's read-only `slurm-stats` and refresh every few seconds while the panel is open.
 - When the stats are unavailable, the stack or governor is down, or the governor is at L3 or above, the page shows one notice in the Reason row and no Jobs row. `benchctl describe node NAME` still has the reason.
 - A value it cannot read says "not measured", never zero.
-- A Kubernetes node has a shorter summary (no BMC, no address).
+- A Kubernetes node has a shorter summary: no address, no SSH, no Slurm job.
+- It shows the Kubernetes state, power, temperature and BCM state, and has the BMC fault buttons (the GPU error on a GPU node).
+- The card is the worse of the API's state and the machine's, and names both: `NotReady (Overheating (92 °C))`.
+- The NotReady half of a power-off or overheat goes through the governor, which has the Docker the page lacks (`benchctl start` runs one with `--workdir`; refused at L2 and above).
 - *Tickets* is a search for the label `node-NAME`, which is how the mock's ops integration labels the tickets it files. It says "none" when there are none, and shows one notice when the mock does not answer.
 - *Tickets* reads the mock only. Whether a real Jira labels tickets that way is not known, so the row is not shown for it.
 
@@ -695,9 +718,9 @@ The screenshots in this chapter come from sample data, so the numbers differ fro
 The page is a small Starlette server (`webui/app.py`) and static ES modules, with no build step. It never gets Docker or root. It talks to the governor's Unix socket (`/run/workbench/gov.sock`) and to the mocks' HTTP endpoints. Scenarios it plays run with `host=False`, so steps that need Docker are skipped, not failed.
 
 > [!HOOD]
-> The traffic dots come from the mocks' request counters, not from packet capture, and the live feed (server-sent events) is open only while the tab is visible; animation stops at governor level L3 and under reduced motion.
+> The traffic dots come from the mocks' request counters and the login and jump containers' SSH session counters (ADR 0088), not from packet capture, and the live feed (server-sent events) is open only while the tab is visible; animation stops at governor level L3 and under reduced motion.
 
-Source: `webui/app.py`, `webui/flow.py`, `webui/cluster.py`, SPEC W-3 and W-11, ADR 0007, ADR 0009.
+Source: `webui/app.py`, `webui/flow.py`, `webui/cluster.py`, SPEC W-3 and W-11, ADR 0007, ADR 0009, ADR 0088.
 
 ## Tips and gotchas
 

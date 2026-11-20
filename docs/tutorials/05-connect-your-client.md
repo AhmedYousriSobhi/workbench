@@ -1,0 +1,73 @@
+# 5. Connect your client
+
+**You will:** import the running cluster into your monitoring client in one step, then break something while it watches. About 10 minutes.
+
+## You need
+
+- A running cluster ([tutorial 1](01-first-cluster.md)).
+- The client installed on the same machine.
+
+## Steps
+
+1. Write a profile of the running cluster. It prints `wrote bench-profile.json (profile running containers)` and writes the file in the repository root (git ignores it).
+
+   ```bash
+   ./scripts/benchctl export profile
+   ```
+
+2. In the client, import `bench-profile.json`. SSH, Slurm, Grafana and Jira appear already filled in.
+
+3. Give the client the SSH key.
+
+   ```bash
+   ./scripts/benchctl ssh-key install
+   ```
+
+4. In the client's SSH section pick `~/.ssh/workbench_ed25519`.
+
+5. Paste the Grafana viewer token (the export prints this command, not the token). It changes after every `up`.
+
+   ```bash
+   cat compose/generated/secrets/grafana_viewer_token
+   ```
+
+6. Switch notify on for each cluster in the client. It is off by default for Slurm, Kubernetes, storage and BCM; reachability, SSH and Teleport-expiry notices need no opt-in.
+
+7. Break something while the client is connected.
+
+   ```bash
+   ./scripts/benchctl scenario run node-down
+   ```
+
+8. See which surfaces the client really called. With no client connected it prints `no requests recorded`.
+
+   ```bash
+   ./scripts/benchctl get traffic
+   ```
+
+9. Attach what happened to a bug report. It prints `wrote test-report.md (test report of node-down: passed)`; run step 7 first, it reports the last run.
+
+   ```bash
+   ./scripts/benchctl export test-report last -o test-report.md
+   ```
+
+10. Remove the key copy when done (it deletes `~/.ssh/workbench_ed25519` only if it is the workbench key).
+
+   ```bash
+   ./scripts/benchctl ssh-key remove
+   ```
+
+## You should see
+
+- The client lists the nodes, and the node you broke turns down, then recovers.
+- `get traffic` names the client's requests: caller, status and latency.
+
+## If it does not work
+
+- The import fails on a format ID: [Export a profile](../guides/export-profile.md#one-time-setting-the-clients-file-format-id).
+
+## Next
+
+- [Test SSH handling](06-test-ssh-handling.md)
+- [Test tickets](07-test-tickets.md)
+- All endpoints and what each feeds: [Testing a monitoring client](../guides/client-testing.md).

@@ -8,7 +8,7 @@ import re
 import urllib.request
 from collections.abc import Callable
 
-from . import addressing, compose, nodes
+from . import addressing, compose, k8s, nodes
 from .stack import PROJECT
 
 BMC, EXPORTER = "http://127.0.0.1:8000", "http://127.0.0.1:9400"
@@ -49,9 +49,10 @@ def _scontrol(text: str) -> dict[str, str]:
     return {k: found[k] for k in wanted if found.get(k) not in (None, "(null)", "")}
 
 
-def gather(sim: dict, name: str, fetch: Callable, runner: Callable | None = None) -> dict:
+def gather(sim: dict, name: str, fetch: Callable, runner: Callable | None = None, kube_fetch: Callable = k8s.api_json) -> dict:
     """Everything known about one node. `fetch(url)` returns parsed JSON or text and may raise OSError/ValueError."""
-    kinds = dict(nodes.node_names(sim))
+    kinds = dict(nodes.hardware_nodes(sim))  # Slurm and Kubernetes nodes (#385)
+    kube = kinds.get(name, "").startswith("k8s")
     if name not in kinds:
         raise UnknownNode(f"unknown node {name!r}; nodes: {', '.join(kinds)}")
     info: dict = {"name": name, "kind": kinds[name], "notes": []}
@@ -62,7 +63,11 @@ def gather(sim: dict, name: str, fetch: Callable, runner: Callable | None = None
         except (OSError, ValueError):
             return None
 
-    if runner:
+    if kube:  # no container and no Slurm node: the API's state, and what a client runs for the rest
+        row = next((r for r in k8s.node_rows(sim, kube_fetch) if r["name"] == name), None)
+        info["kubernetes"] = {"state": row["label"] if row else "No data", "gpus": row["gpus"] if row else 0,
+                              "describe": f"kubectl describe node {name} (from a login node that serves Kubernetes)"}
+    elif runner:
         r = runner(["docker", "inspect", f"{PROJECT}-{name}-1"])
         if r.returncode == 0 and r.stdout.strip():
             d = json.loads(r.stdout)[0]
@@ -97,19 +102,21 @@ def gather(sim: dict, name: str, fetch: Callable, runner: Callable | None = None
                        "fans": len(fans), "fans_failed": sum(1 for f in fans if f.get("Status", {}).get("Health") == "Critical")}
     else:
         info["notes"].append("BMC farm did not answer")
-    if info["kind"] == "gpu":
-        gpu = sim.get("gpu", {})
+    if info["kind"] in ("gpu", "k8s-gpu"):
+        gpu = sim.get("gpu", {}) if info["kind"] == "gpu" else next((g for n, g in k8s.node_list(sim) if n == name), {})
         metrics = get(f"{EXPORTER}/metrics")
         if isinstance(metrics, str):
             util = _util(metrics, name)
             xid = [int(float(ln.rsplit(" ", 1)[1])) for ln in metrics.splitlines()
                    if ln.startswith("DCGM_FI_DEV_XID_ERRORS") and re.search(rf'="{re.escape(name)}"', ln)]
-            info["gpus"] = {"type": gpu.get("type"), "count": gpu.get("gpus_per_node"),
+            info["gpus"] = {"type": gpu.get("type") or gpu.get("gpu_type"), "count": gpu.get("gpus_per_node") or gpu.get("gpus"),
                             "busy": sorted(g for g, u in util.items() if u >= BUSY_UTIL),
                             "idle": sorted(g for g, u in util.items() if u < BUSY_UTIL),
                             "xid": max(xid, default=0)}
         else:
             info["notes"].append("GPU exporter did not answer")
+    if kube:
+        return info
     info["ssh"] = f"ssh {name} (from the login node: benchctl exec login -u alice -- ssh {name} hostname)"
     return info
 
@@ -117,6 +124,8 @@ def gather(sim: dict, name: str, fetch: Callable, runner: Callable | None = None
 def render(info: dict) -> str:
     """Plain text, like `kubectl describe`: a header, then one block per source."""
     lines = [f"Name:        {info['name']}", f"Kind:        {info['kind']}"]
+    if k := info.get("kubernetes"):
+        lines.append(f"Kubernetes:  {k['state']} (a KWOK node; no container). {k['describe']}")
     if c := info.get("container"):
         lines.append(f"Container:   {c['state']}" + (f"  image {c['image']}, memory limit {c['memory_limit_mb']} MB, "
                                                     f"class {c['class']}" if c["state"] != "absent" else ""))
@@ -134,6 +143,7 @@ def render(info: dict) -> str:
     if b := info.get("bmc"):
         lines.append(f"BMC:         {b['address']}")
         lines.append(f"             power {b['power']}, CPU {b['cpu_temp_c']} C, fans {b['fans']} ({b['fans_failed']} failed)")
-    lines.append(f"SSH:         {info['ssh']}")
+    if "ssh" in info:
+        lines.append(f"SSH:         {info['ssh']}")
     lines += [f"Note:        {n}" for n in info["notes"]]
     return "\n".join(lines)

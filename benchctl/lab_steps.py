@@ -21,6 +21,7 @@ the governor's own metrics). The file is written on the host by this step, not b
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import time
 from collections.abc import Callable, Iterable
@@ -28,7 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import lab, lab_apply, lab_prom, lab_report, lab_run, lab_slurm, lab_snapshot
+from . import lab, lab_apply, lab_prom, lab_report, lab_run, lab_scenario, lab_slurm, lab_snapshot
 from .lab import LabError
 
 GENERATED = Path("compose/generated")
@@ -113,6 +114,8 @@ class RunSteps:
     prom_get: Callable[[str], Any] | None = None  # reads Prometheus (tests inject a fake; None means the real one)
     state: lab_snapshot.StateSteps | None = None
     applied: list[str] = field(default_factory=list)
+    player: Callable[..., lab_scenario.Player] = lab_scenario.Player  # plays the run's attached scenario (`--scenario`); tests inject a fake
+    heal_runner: Callable[[list[str]], Any] | None = None  # runs the scenario's heal commands (None: the real Docker)
 
     def __post_init__(self) -> None:
         if self.state is None:
@@ -154,10 +157,49 @@ class RunSteps:
         return self.state.snapshot()
 
     def restore(self) -> dict:
-        return self.state.restore()
+        """The A to B restore and an abort's restore: the attached scenario's faults are undone first (the snapshot does not unpause a
+        container or resume a node slurmd never answered for); both run at L0-L1 only (the caller waited)."""
+        healed = self.heal()
+        res = self.state.restore()
+        return {**res, "scenario_heal": healed} if healed is not None and isinstance(res, dict) else res
 
     def collect(self, side: str, run: lab_run.Run) -> dict[str, str]:
+        """A side's accounting. At the end of a side that was not aborted, at L0-L1 (`abort_reason` waited), the attached scenario is
+        healed first; otherwise it is healed later, after `wait_calm` (the restore, or `heal_after_abort`)."""
+        if self.flag(ABORT_FLAG) is None and self.flag(PAUSE_FLAG) is None and (healed := self.heal()) is not None:
+            run.r.setdefault("scenario_heal", {})[side] = healed
+            run.save()
         return self.state.collect(side, run)
+
+    # ---- the attached scenario (`run lab --scenario`, benchctl/lab_scenario.py)
+    def _folder(self) -> Path:
+        return lab_run.reports_dir(self.name, self.root) / self.run_id
+
+    def _scenario(self) -> dict | None:
+        try:
+            sha = (json.loads((self._folder() / "run.json").read_text()).get("scenario") or {}).get("sha256")
+        except (OSError, ValueError):
+            return None
+        return lab_scenario.load(self._folder(), sha) if sha else None
+
+    def heal(self) -> dict | None:
+        """Undo the attached scenario's faults (idempotent); None when the run has no scenario."""
+        doc = self._scenario()
+        if doc is None:
+            return None
+        return lab_scenario.heal(doc, self.heal_runner) if self.heal_runner else lab_scenario.heal(doc)
+
+    def heal_after_abort(self, run: lab_run.Run) -> None:
+        """An aborted run that owes no restore (candidate only): heal the scenario once the level is at L0-L1 (GV-8). Skipped by
+        `benchctl down --force`, which takes the cluster down anyway."""
+        if not run.r.get("scenario") or self.skip_restore():
+            return
+        try:
+            self.wait_calm(run, key="heal_pending")
+            run.r.setdefault("scenario_heal", {})["abort"] = self.heal()
+        except Exception as e:  # noqa: BLE001 - the abort reason stays; the failed heal is recorded beside it
+            run.r["scenario_heal_error"] = run.scrub(str(e)[-300:])
+        run.save()
 
     def discard(self) -> None:
         self.state.discard()
@@ -180,6 +222,9 @@ class RunSteps:
     def replay(self, side: str, run: lab_run.Run) -> str | None:
         """Run the driver for one side; returns None when it replayed every job, else why it stopped (the run then aborts)."""
         run.jobs()  # the frozen file is checked before each side
+        sc = run.r.get("scenario")
+        player = self.player(lab_scenario.load(run.folder, sc["sha256"]), lambda: self.flag(PAUSE_FLAG) is not None,
+                             lambda: self.flag(ABORT_FLAG) is not None) if sc else None
         self._prom(run, side)
         done: dict | None = None
         try:
@@ -189,11 +234,16 @@ class RunSteps:
                 if got is None:
                     continue
                 kind, doc = got
+                if player is not None and kind == "progress":
+                    player.sync(float(doc.get("replay_s") or 0.0))  # the scenario's clock is the replay's (the first line starts it)
                 self._progress(run, doc)
                 if kind == "done":
                     done = doc
             rc = proc.wait()
         finally:
+            if player is not None:
+                run.r.setdefault("scenario_result", {})[side] = player.finish()
+                run.save()
             self._prom(run, None)
             if run.r["paused_since"] is not None:
                 run.resume()
@@ -238,7 +288,9 @@ class RunSteps:
             time_scaled = []
         meta = {"contract": lab_run.CONTRACT, "name": r["name"], "run": r["run"], "ab": r["ab"], "seed": r["seed"], "jobs": r["jobs"],
                 "target_hours": r["target_hours"], "factor": r["factor"], "length_s": r["length_s"], "paused_s": run.paused_s(),
-                "paused_side_s": r["paused_side_s"], "comparable": run.comparable(), "rejected": r.get("rejected", {}), "collected": r["collected"]}
+                "paused_side_s": r["paused_side_s"], "comparable": run.comparable(), "rejected": r.get("rejected", {}), "collected": r["collected"],
+                "scenario": r.get("scenario"), "scenario_result": r.get("scenario_result") or {},
+                "scenario_expects": lab_scenario.expect_table(r.get("scenario_result") or {}) if r.get("scenario") else []}
         doc = lab_report.build(meta, a, b, lab_report.thresholds(sim or {}), pairing, time_scaled, self._earlier(run), self._alerts(run))
         lab_run.write_atomic(run.folder / "report.json", lab_run.dump(doc))
         lab_run.write_atomic(run.folder / "report.md", lab_report.markdown(doc))
@@ -264,12 +316,12 @@ class RunSteps:
                 out[side] = None
         return out
 
-    def wait_calm(self, run: lab_run.Run) -> None:
+    def wait_calm(self, run: lab_run.Run, key: str = "restore_pending") -> None:
         """Before an abort's restore: wait until the governor says L0 or L1 (GV-8). Shows `restore_pending` meanwhile. Raises when the
         governor stops answering for GOVERNOR_GONE_S (the restore is then not run and the snapshot is kept)."""
         if self.governor is None:
             return
-        run.r["restore_pending"] = True
+        run.r[key] = True
         run.save()
         gone_since = None
         while True:
@@ -286,7 +338,7 @@ class RunSteps:
             if isinstance(level, int) and level <= CALM_LEVEL:
                 break
             self.sleep(CALM_POLL_S)
-        run.r["restore_pending"] = False
+        run.r[key] = False
         run.save()
 
 
@@ -296,14 +348,25 @@ def _lines(stream: Iterable[str] | None) -> Iterable[str]:
 
 # ---------------------------------------------------------------- the CLI side (the governor's children)
 
-def prepare(name: str, sim: dict, ab: bool, target_hours: float | None, seed: int, root: Path | None = None) -> dict:
-    """Freeze a run's jobs and record it (state idle): what the governor reads to compute admission. Changes nothing on the cluster."""
+def prepare(name: str, sim: dict, ab: bool, target_hours: float | None, seed: int, root: Path | None = None,
+            scenario: str | None = None, scenarios: Path | None = None) -> dict:
+    """Freeze a run's jobs (and its attached scenario) and record it (state idle): what the governor reads to compute admission.
+    Changes nothing on the cluster. A scenario that cannot play on the lab nodes refuses the run and leaves no run folder."""
     lab.valid_name(name)
     if not lab.exists(name, root):
         raise LabError(f"no lab {name}: import it first (benchctl import lab {name} --from DIR)")
     run = lab_run.Run.create(name, sim, root, ab=ab, seed=seed, target_hours=target_hours)
+    if scenario is not None:
+        try:
+            doc = lab_scenario.freeze(name, scenario, sim, float(run.r["factor"]), float(run.r["length_s"]), root,
+                                      **({"scenarios": scenarios} if scenarios else {}))
+        except LabError:
+            shutil.rmtree(run.folder, ignore_errors=True)
+            raise
+        run.r["scenario"] = lab_scenario.write(run.folder, doc)
+        run.save()
     return {"name": name, "run": run.r["run"], "lab_nodes": run.r["lab_nodes"], "ab": ab, "jobs": run.r["jobs"],
-            "length_s": run.r["length_s"], "seed": seed}
+            "length_s": run.r["length_s"], "seed": seed, "scenario": (run.r.get("scenario") or {}).get("name")}
 
 
 def recover(name: str, run_id: str, governor: Callable[[dict], dict] | None, root: Path | None = None,
@@ -318,6 +381,8 @@ def recover(name: str, run_id: str, governor: Callable[[dict], dict] | None, roo
         lab_run.abort_and_restore(run, steps, RESTARTED)
     elif lab_run.owes_restore(run):
         lab_run.restore_after_abort(run, steps)
+    elif run.state == "aborted":
+        steps.heal_after_abort(run)  # an attached scenario's faults (idempotent: nothing to undo is not a failure)
     if run.r.get("restored_after_abort") is not False:
         steps.discard()
     return run

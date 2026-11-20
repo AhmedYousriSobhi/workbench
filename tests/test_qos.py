@@ -84,8 +84,24 @@ def test_submit_can_name_a_qos():
         workload.command(SIM, "gpu001", 1, 60, "bob", qos="ghost")
 
 
+def test_shipped_qos_example_and_preempt_burst_agree():
+    """#943: the commented example in sim.yaml must let the scenario's scavenger job start and the urgent job preempt it."""
+    import re
+    from pathlib import Path
+
+    import yaml
+    root = Path(__file__).resolve().parent.parent
+    lines = [ln[2:].strip() for ln in (root / "sim.yaml").read_text().splitlines() if re.match(r"# +- \{name: (scavenger|urgent),", ln)]
+    example = {q["name"]: q for q in yaml.safe_load("\n".join(lines))}
+    assert set(example) == {"scavenger", "urgent"}
+    steps = {s["do"]["submit"]["qos"]: s["do"]["submit"] for s in yaml.safe_load((root / "scenarios" / "preempt-burst.yaml").read_text())["steps"] if "submit" in s["do"]}
+    assert steps["scavenger"]["gpus"] <= example["scavenger"]["max_gpus_per_user"]  # not held as QOSMaxGRESPerUser
+    assert "scavenger" in example["urgent"]["preempt"] and steps["urgent"]["gpus"] > 8 - steps["scavenger"]["gpus"]  # the urgent job needs the scavenger's GPUs
+    assert "max_gpus_per_user" not in example["urgent"]
+
+
 def test_scenario_submit_passes_the_qos_and_preempt_burst_is_valid():
-    sub = {"node": "gpu001", "user": "bob", "gpus": 8, "duration": 600, "qos": "scavenger"}
+    sub = {"node": "gpu001", "user": "bob", "gpus": 2, "duration": 600, "qos": "scavenger"}
     assert scenario.daemon_problems({"submit": sub}) == []
     assert "--qos=scavenger" in scenario.submit_command(sub, sim_with(qos=QOS))[-1]
     assert scenario.validate(scenario.load("preempt-burst", sim=SIM), SIM) == []

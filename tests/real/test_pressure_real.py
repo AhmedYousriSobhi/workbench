@@ -5,6 +5,7 @@ the real effect on the containers' cgroups.
 """
 import json
 import os
+import re
 import socket
 import subprocess
 import urllib.request
@@ -12,7 +13,16 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import ask, bring_up, signals, start_governor, stop_governor, wait_for
+from helpers import (
+    ask,
+    bring_up,
+    end_lab_run,
+    lab_run_state,
+    signals,
+    start_governor,
+    stop_governor,
+    wait_for,
+)
 
 from benchctl import stack
 from governor.executors import cgroup_dir, discover_docker
@@ -29,6 +39,37 @@ def sim(monkeypatch):
     bring_up(s)
     yield s
     stack.down(say=lambda m: None)
+
+
+LAB_SPEC = {"parts": ["accounting"], "cpu_nodes": 1, "gpu_nodes": 0}  # as test_lab_run_real: the lab's partitions name QOS (slurmdbd)
+
+
+@pytest.fixture
+def lab_sim(monkeypatch):
+    """The stack for a governor lab run (issue 969): the fixture lab's partitions have `QOS=normal`, which slurmctld accepts only
+    with accounting, so on the default `min` stack the candidate's slurmctld never comes back and the run aborts before a level is
+    raised. Same selection as test_lab_run_real; forgotten after, so later modules keep their node list."""
+    from benchctl import workbench
+    monkeypatch.chdir(ROOT)
+    s, prof = workbench.effective(yaml.safe_load((ROOT / "sim.yaml").read_text()), workbench.Spec(**LAB_SPEC))
+    try:
+        bring_up(s, "workbench", prof=prof)
+        yield s
+    finally:
+        stack.down(say=lambda m: None)
+        workbench.forget()
+
+
+def lab_export(tmp: Path) -> Path:
+    """The fixture lab with its GPU nodes renamed (gpu001-002 to lgpu001-002): the governor's child (`benchctl run lab`) checks lab
+    node names against every node of sim.yaml, which simulates gpu001-002, and refuses the apply at once (issue 969)."""
+    import shutil
+    export = tmp / "export"
+    shutil.copytree(ROOT / "tests" / "fixtures" / "lab" / "full", export)
+    for f in ("slurm.conf", "gres.conf", "topology.conf"):
+        p = export / f
+        p.write_text(re.sub(r"\bgpu(\[|0)", r"lgpu\1", p.read_text()))
+    return export
 
 
 def containers() -> list[str]:
@@ -169,15 +210,15 @@ def test_l1_pause_flag_reaches_the_login_node_and_the_jira_mock_and_goes_on_calm
         stop_governor(gov)
 
 
-def test_lab_run_pauses_at_l2_and_aborts_at_l3(sim, tmp_path):
+def test_lab_run_pauses_at_l2_and_aborts_at_l3(lab_sim, tmp_path):
     """Issue 554: the governor's run thread writes flags/lab.paused at L2 (not at L1) and flags/lab.abort at L3, and the run ends
-    aborted "under memory pressure". A candidate-only run of the fixture lab (no snapshot to restore). Written, not yet run live."""
+    aborted "under memory pressure". A candidate-only run of the fixture lab (no snapshot to restore)."""
     import shutil
 
     from benchctl import lab, lab_candidate
     name = "pressure-run"
     flags = ROOT / "compose" / "generated" / "flags"
-    lab.import_lab(name, ROOT / "tests" / "fixtures" / "lab" / "full", replace=True, sim=sim)
+    lab.import_lab(name, lab_export(tmp_path), replace=True, sim=lab_sim)
     lab_candidate.init(name, replace=True)
     gov, sig, sock = start_governor(tmp_path, "--no-watchdog", "--user-mode", "--workdir", str(ROOT), "--thresholds", FAST)
 
@@ -187,8 +228,12 @@ def test_lab_run_pauses_at_l2_and_aborts_at_l3(sim, tmp_path):
         r = ask(sock, {"cmd": "lab-run", "name": name})
         if not r.get("ok") and str(r.get("error", "")).startswith("refused"):
             pytest.skip(f"ENVIRONMENT, not a code defect: {r['error']}")
-        assert r["ok"], r
-        assert wait_for(lambda: lab_block().get("run") == r["run"])
+        assert r.get("state") == "preparing", r  # answers at once, no run id yet (W-13)
+        lb = lab_run_state(sock)
+        if lb.get("state") == "refused":
+            pytest.skip(f"ENVIRONMENT, not a code defect: {lb.get('reason')}")
+        run_id = lb.get("run")
+        assert run_id and lb.get("active"), lb
         signals(sig, avail_gb=1.9, some=11)  # L1: a lab run is not paused (that is arrivals.paused only)
         assert wait_for(lambda: ask(sock, {"cmd": "status"})["level"] == 1)
         assert not wait_for(lambda: (flags / "lab.paused").exists(), timeout=3)
@@ -198,25 +243,24 @@ def test_lab_run_pauses_at_l2_and_aborts_at_l3(sim, tmp_path):
         assert wait_for(lambda: (flags / "lab.abort").exists() and "memory pressure" in (flags / "lab.abort").read_text(), timeout=30)
         signals(sig, avail_gb=8)
         assert wait_for(lambda: not lab_block().get("run"), timeout=300)  # the run's child ended
-        prog = json.loads((lab.path(name) / "reports" / r["run"] / "progress.json").read_text())
+        prog = json.loads((lab.path(name) / "reports" / run_id / "progress.json").read_text())
         assert prog["state"] == "aborted" and "memory pressure" in prog["reason"]
         assert not (flags / "lab.paused").exists()
     finally:
+        end_lab_run(sock, ROOT)  # a failed test must not leave a run for the next governor to recover (issue 969)
         stop_governor(gov)
         subprocess.run([str(ROOT / "scripts" / "benchctl"), "remove", "lab", name, "--execute"], cwd=ROOT, capture_output=True, check=False)
         shutil.rmtree(lab.path(name), ignore_errors=True)
-        (flags / "lab.abort").unlink(missing_ok=True)
 
 
-def test_lab_run_answers_at_once_refuses_down_and_recovers_after_a_governor_restart(sim, tmp_path):
+def test_lab_run_answers_at_once_refuses_down_and_recovers_after_a_governor_restart(lab_sim, tmp_path):
     """Issue 554, owner decisions round 3: `lab-run` answers `preparing` at once; `benchctl down` is refused (exit 3) while the run
-    is active; a governor restarted mid-run shows `recovering` and refuses `admit` until the old run is wound up. Written, not yet run."""
+    is active; a governor restarted mid-run shows `recovering` and refuses `admit` until the old run is wound up."""
     import shutil
 
     from benchctl import lab, lab_candidate
     name = "recover-run"
-    flags = ROOT / "compose" / "generated" / "flags"
-    lab.import_lab(name, ROOT / "tests" / "fixtures" / "lab" / "full", replace=True, sim=sim)
+    lab.import_lab(name, lab_export(tmp_path), replace=True, sim=lab_sim)
     lab_candidate.init(name, replace=True)
     gov, _sig, sock = start_governor(tmp_path, "--no-watchdog", "--user-mode", "--workdir", str(ROOT), "--thresholds", FAST)
     gov2 = None
@@ -237,10 +281,9 @@ def test_lab_run_answers_at_once_refuses_down_and_recovers_after_a_governor_rest
         assert "being recovered" in ask(sock, {"cmd": "admit", "budget_mb": 10})["error"]
         assert wait_for(lambda: not (ask(sock, {"cmd": "status"})["lab"] or {}).get("active"), timeout=600)
     finally:
+        end_lab_run(sock, ROOT)
         for g in (gov, gov2):
             if g:
                 stop_governor(g)
         subprocess.run([str(ROOT / "scripts" / "benchctl"), "remove", "lab", name, "--execute"], cwd=ROOT, capture_output=True, check=False)
         shutil.rmtree(lab.path(name), ignore_errors=True)
-        (flags / "lab.abort").unlink(missing_ok=True)
-        (ROOT / "compose" / "generated" / "lab" / "run-active.json").unlink(missing_ok=True)

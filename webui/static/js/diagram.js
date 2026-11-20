@@ -72,6 +72,8 @@ export function buildFlowBase() {
     return bg;
   };
   const svTip = k => { const l = svcList().find(x => x[0] === k); const up = S.flowSnap?.reachable[k]; return [l[1] + (REAL_SERVICES.has(k) ? ' (real)' : k === 'teleport' ? '' : ' (simulated)') + ' · ' + (up ? 'up' : S.flowSnap ? 'not reachable' : 'checking'), SVC_METHOD[k] + ' · click for address and command']; };
+  const sshLane = (key, kind, p, bz, eid) => { if (!gr || gedge(eid)) { S.svcPos[key] = p; S.svcLane[key] = bz; S.sshLanes[key] = kind; } };  // a line with an SSH counter behind it, only if the model draws it: the dots and the lit line follow it (issue 213)
+  S.sshLanes = {};
   const place = acc.map((a2, i) => [a2, P.place[i]]), tpP = tpBox && place[0][1], cb = P.clients.y + P.clients.h;
   let uu = 0, hh = 0;
   const gapTop = col ? labelFrac(cb, place[0][1].y, (cb + P.access.y) / 2) : 0.5;  // a label sits in the gap above the Access frame, never over its title (#388)
@@ -79,7 +81,7 @@ export function buildFlowBase() {
     if (tpBox) { const o = S.svcOut.teleport = { x: tpP.x + tpP.w / 2, y: cb }; S.svcLane.teleport = edge('api', poly([o, { x: o.x, y: tpP.y }]), SVC_METHOD.teleport, gapTop, 'ln-teleport', 'clients>teleport:api'); }
     for (const [l, p] of place) {
       if (Array.isArray(l)) continue;
-      if (l.mode !== 'teleport') edge('ssh', poly([{ x: p.x + p.w / 2, y: cb }, { x: p.x + p.w / 2, y: p.y }]), 'direct SSH', gapTop, null, `clients>${l.name}:ssh`);
+      if (l.mode !== 'teleport') sshLane(`ssh:${l.name}`, 'ssh', p, edge('ssh', poly([{ x: p.x + p.w / 2, y: cb }, { x: p.x + p.w / 2, y: p.y }]), 'direct SSH', gapTop, `ln-ssh-${l.name}`, `clients>${l.name}:ssh`), `clients>${l.name}:ssh`);
       if (l.mode !== 'ssh' && tpBox) { const by = p.y + p.h, uy = by + 20 + (uu++) * 26, sx = tpP.x + tpP.w / 2 - 14; edge('teleport', poly([{ x: sx, y: tpP.y + tpP.h }, { x: sx, y: uy }, { x: p.x + p.w / 2 - 14, y: uy }, { x: p.x + p.w / 2 - 14, y: by }]), '', 0.5, null, `teleport>${l.name}:teleport`); }
     }
     const gRows = groupRows(P.tiles, P.cluster.y, u), chs = channelXs(P.cluster.x, P.cols, P.tw, GAP), usedCh = [], gapMid = (P.access.y + P.access.h + P.cluster.y) / 2, accEnd = P.access.y + P.access.h;
@@ -115,20 +117,22 @@ export function buildFlowBase() {
     for (const [l, p] of place) {
       if (Array.isArray(l)) continue;
       const mid = p.y + p.h / 2;
-      if (l.mode !== 'teleport') edge('ssh', curve(out(), { x: p.x, y: mid - 12 }), 'direct SSH', 0.3, null, `clients>${l.name}:ssh`);
+      if (l.mode !== 'teleport') { const o = out(); sshLane(`ssh:${l.name}`, 'ssh', p, edge('ssh', curve(o, { x: p.x, y: mid - 12 }), 'direct SSH', 0.3, `ln-ssh-${l.name}`, `clients>${l.name}:ssh`), `clients>${l.name}:ssh`); }
       if (l.mode !== 'ssh' && tpBox) { const s = { x: tpP.x, y: tpP.y + tpP.h / 2 + 12 }, e = { x: p.x, y: mid + 12 }; edge('teleport', [s, { x: s.x - 62, y: s.y }, { x: e.x - 62, y: e.y }, e], 'Teleport', 0.5, null, `teleport>${l.name}:teleport`); }
     }
   }
   const posOf = id => (place.find(([x]) => Array.isArray(x) ? x[0] === id : x.name === id) || [])[1], keyLogins = lgs.filter(l => l.mode !== 'teleport');
   const hop = (src, dst, eid, text) => {  // ssh from one Access box to another (through the jump host, or login to controller): under the boxes, or down the left side when stacked
     const a = posOf(src), b = posOf(dst); if (!a || !b) return;
-    if (col) { const by = a.y + a.h, uy = by + 20 + (uu++) * 26, sx = a.x + a.w / 2 + 6, ex = b.x + b.w / 2 + 6; edge('jump', poly([{ x: sx, y: by }, { x: sx, y: uy }, { x: ex, y: uy }, { x: ex, y: b.y + b.h }]), text, 0.5, null, eid); }
-    else { const lx = a.x - 34 - (hh++) * 7, s = { x: a.x, y: a.y + a.h / 2 + 4 }, e = { x: b.x, y: b.y + b.h / 2 + 4 }; edge('jump', [s, { x: lx, y: s.y }, { x: lx, y: e.y }, e], text, 0.5, null, eid); }
+    const lid = src === 'jump' && dst !== 'controller' ? `ln-hop-${dst}` : null, put = bz => { if (lid) sshLane(`hop:${dst}`, 'jump', b, bz, eid); };
+    if (col) { const by = a.y + a.h, uy = by + 20 + (uu++) * 26, sx = a.x + a.w / 2 + 6, ex = b.x + b.w / 2 + 6; put(edge('jump', poly([{ x: sx, y: by }, { x: sx, y: uy }, { x: ex, y: uy }, { x: ex, y: b.y + b.h }]), text, 0.5, lid, eid)); }
+    else { const lx = a.x - 34 - (hh++) * 7, s = { x: a.x, y: a.y + a.h / 2 + 4 }, e = { x: b.x, y: b.y + b.h / 2 + 4 }; put(edge('jump', [s, { x: lx, y: s.y }, { x: lx, y: e.y }, e], text, 0.5, lid, eid)); }
   };
   for (const b of accExtra()) {  // a line from the clients to the jump host and to the controller, then the hops the declared graph has
     const p = posOf(b[0]), eid = `clients>${b[0]}:ssh`;
-    if (col) edge('ssh', poly([{ x: p.x + p.w / 2, y: cb }, { x: p.x + p.w / 2, y: p.y }]), 'ssh', gapTop, null, eid);
-    else edge('ssh', curve(out(), { x: p.x, y: p.y + p.h / 2 - 12 }), 'ssh', 0.3, null, eid);
+    const lid = b[0] === 'jump' ? 'ln-ssh-jump' : null, put = bz => { if (b[0] === 'jump') sshLane('ssh:jump', 'ssh', p, bz, eid); };
+    if (col) put(edge('ssh', poly([{ x: p.x + p.w / 2, y: cb }, { x: p.x + p.w / 2, y: p.y }]), 'ssh', gapTop, lid, eid));
+    else put(edge('ssh', curve(out(), { x: p.x, y: p.y + p.h / 2 - 12 }), 'ssh', 0.3, lid, eid));
   }
   if (hasService('jump')) { for (const l of keyLogins) hop('jump', l.name, `jump>${l.name}:jump`, 'ssh -J'); if (hasService('controller')) hop('jump', 'controller', 'jump>controller:jump', 'ssh -J'); }
   if (hasService('controller')) for (const l of keyLogins) hop(l.name, 'controller', `${l.name}>controller:jump`, 'ssh');
@@ -215,6 +219,7 @@ export function paintBlocks() {
     const si = document.getElementById('si-' + (k === 'gpu-exporter' ? 'gpu-exporter' : k)); if (si) si.textContent = k === 'jira-real' || k === 'k8s-api' || k === 'dcgm-exporter' || k === 'real-gpu' ? 'no request counter (the real service publishes none)' : `${rate[k] || 0} ${k === 'teleport' ? 'conn' : 'req'}/min · ${(S.flowSnap.totals[k] || 0).toLocaleString()} seen`;
     const ne = S.flowSnap.errors && S.flowSnap.errors[k]; $('fc-' + k).textContent = (S.flowSnap.totals[k] || 0) ? (ne ? fitBox(`${S.flowSnap.totals[k].toLocaleString()} ${S.flowSnap.totals[k] === 1 ? 'request' : 'requests'} · ${ne} ${ne === 1 ? 'error' : 'errors'}`, `${S.flowSnap.totals[k].toLocaleString()} · ${ne} ${ne === 1 ? 'error' : 'errors'}`, `${ne} ${ne === 1 ? 'error' : 'errors'}`) : fitBox(S.flowSnap.totals[k].toLocaleString() + (S.flowSnap.totals[k] === 1 ? ' request seen' : ' requests seen'), S.flowSnap.totals[k].toLocaleString() + ' requests', S.flowSnap.totals[k].toLocaleString())) : fitBox(svcList().find(x => x[0] === k)[2]);
   }
+  for (const [k, kind] of Object.entries(S.sshLanes || {})) { const el = document.getElementById('ln-' + k.replace(':', '-')); if (el) el.setAttribute('class', 'lane ' + kind + (rate[k] ? ' on' : '')); }  // an SSH line lights while sessions were seen on it in the last minute
   $('fc-clients').textContent = sent.toLocaleString() + ' requests';
   $('fc-injector').textContent = (S.flowSnap.faults || 0) + (S.flowSnap.faults === 1 ? ' fault applied' : ' faults applied');
 }

@@ -48,12 +48,12 @@ def build(services: dict, nodes: list, logins: list, cluster: str | None = None)
         edges.append(_edge("clients", "teleport", "access", "api", "teleport" in MEASURED))
     for lg in logins:
         if lg["mode"] != "teleport":
-            edges.append(_edge("clients", lg["name"], "access", "ssh", False))
+            edges.append(_edge("clients", lg["name"], "access", "ssh", True))  # the login container counts its key logins (issue 213)
         if lg["mode"] != "ssh" and teleport:
             edges.append(_edge("teleport", lg["name"], "access", "teleport", False))
     if jump:  # the bastion fronts every key-login node and the controller; Teleport nodes keep Teleport
-        edges.append(_edge("clients", "jump", "access", "ssh", False))
-        edges += [_edge("jump", lg["name"], "access", "jump", False) for lg in logins if lg["mode"] != "teleport"]
+        edges.append(_edge("clients", "jump", "access", "ssh", True))  # the jump container counts them too
+        edges += [_edge("jump", lg["name"], "access", "jump", True) for lg in logins if lg["mode"] != "teleport"]  # a login node sees the jump host as the source
         edges += [_edge("jump", "controller", "access", "jump", False)] if ctl else []
     if ctl:
         edges.append(_edge("clients", "controller", "access", "ssh", False))

@@ -39,6 +39,10 @@ function auth(d) {
   if (d.munge_restore) out.push(`Put the right munge key back on ${list(d.munge_restore)}`);
   if ('bmc_tls_expired' in d) out.push(d.bmc_tls_expired ? 'Expire the BMC farm\'s TLS certificate' : 'Give the BMC farm its valid TLS certificate again');
   if ('k8s_cert_expired' in d) out.push(d.k8s_cert_expired ? 'Expire the Kubernetes API server\'s certificate' : 'Give the Kubernetes API server its valid certificate again');
+  if (d.kube_binding_missing) out.push(`Delete the Kubernetes binding of the ${list(d.kube_binding_missing)} tier (Teleport lets the user in, Kubernetes says forbidden)`);
+  if ('kube_impersonation_revoked' in d) out.push(d.kube_impersonation_revoked ? 'Stop Teleport impersonating users in Kubernetes (every tsh kube request fails)' : 'Let Teleport impersonate users in Kubernetes again');
+  if ('teleport_outage' in d) out.push(d.teleport_outage ? 'Stop the Teleport proxy (tsh and the web terminal are refused, direct SSH keeps working)' : 'Start the Teleport proxy again');
+  if (d.kube_binding_restore) out.push('Put back the Kubernetes bindings of the Teleport access tiers');
   return out;
 }
 

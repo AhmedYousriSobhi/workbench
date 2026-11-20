@@ -32,7 +32,7 @@ LAB_VALIDATE_MB = 250  # a lab validation one-shot set (P5, ADR 0050: the replay
 CHANGE_MAX_LEVEL = 1  # scale/set-profile fork docker; GV-8 forbids that under pressure (L2+)
 RUN_EXCLUSIVE = {"scale", "set-profile", "apply-plan", "lab-apply", "lab-restore", "lab-validate", "admit"}  # would change the cluster under a lab run
 NODE_IN = re.compile(r"(?:^|-)[a-z]{2,8}[0-9]{3}(?:-|$)")  # a node container (workbench-cn001-1), not a service
-INTERFERING = {"node-state", "freeze", "thaw", "stop", "start", "netem-set", "submit-job", "slurm-step"}  # allowed during a run, recorded
+INTERFERING = {"node-state", "freeze", "thaw", "stop", "start", "netem-set", "submit-job", "slurm-step", "k8s-step"}  # allowed during a run, recorded
 
 
 class Governor:
@@ -369,6 +369,17 @@ class Governor:
                 return {"ok": True, "settings": json.loads(self.reader(["get", "ticket-bot"]))}
             except Exception as e:  # noqa: BLE001
                 return {"ok": False, "error": f"ticket bot settings failed: {e}"}
+        if cmd == "kube-audit":  # a P5 read for the page's per-user Kubernetes counter (issue 384, ADR 0087): a bounded `docker logs`, L0-L1 only
+            if not self.reader:
+                return {"ok": False, "error": "no Kubernetes audit without --workdir (the governor runs `benchctl get kube-audit`)"}
+            if self.dry_run:
+                return {"ok": False, "error": "dry run: no Kubernetes audit"}
+            if (lvl := self.ladder.level) > 1:
+                return {"ok": False, "error": f"paused: memory pressure (L{lvl}); the Kubernetes request counter runs only at L0-L1", "class": "P5"}
+            try:
+                return {"ok": True, "events": json.loads(self.reader(["get", "kube-audit", "--since", str(float(req.get("since", 0)))]))[:500], "class": "P5"}
+            except Exception as e:  # noqa: BLE001
+                return {"ok": False, "error": f"kube audit failed: {e}"}
         if cmd in ("capture-start", "capture-read", "capture-stop"):  # a P5 workload: a tcpdump or an audit-log read for the Focused wire panel only
             if not self.capture:
                 return {"ok": False, "error": "no capture without --workdir (the governor runs `benchctl get capture`)"}
@@ -395,7 +406,7 @@ class Governor:
                 return {"ok": True, "dry_run": True}
             if self.change and self.change.get("state") == "running":
                 return {"ok": False, "error": "a change is already running: wait for it, then start the run"}
-            return self.labrun.start(req["name"], bool(req.get("ab", False)), req.get("target_hours"), req.get("seed"))
+            return self.labrun.start(req["name"], bool(req.get("ab", False)), req.get("target_hours"), req.get("seed"), req.get("scenario"))
         if cmd == "lab-apply" and not self._lab_missing(req) and (refused := self._lab_apply_admit(req)):  # slow (a child): not under the lock
             return refused
         if cmd in ("freeze", "thaw", "stop", "start"):  # slow, so not under the lock: it would hold `status` up like a plan does
@@ -461,6 +472,9 @@ class Governor:
                 args = (["set", "slurmd", req["node"], what.removeprefix("slurmd-")] if what.startswith("slurmd-")
                         else ["set", "slurmctld", "restart"] if what == "slurmctld-restart" else ["remove", "jobs"])
                 return self._change(f"slurm-step={what}" + (f":{req['node']}" if req.get("node") else ""), args)
+            if cmd == "k8s-step":  # issue 386: a scenario's Kubernetes step, validated in control.py and again by benchctl; kubectl runs as the user
+                do = req["do"]
+                return self._change(f"k8s-step={','.join(sorted(do))}", ["set", "k8s-step", json.dumps(do, sort_keys=True)])
             if cmd in ("lab-apply", "lab-restore"):  # issue 553: only at L0-L1 (in _change), one change at a time, audit-logged there
                 if (err := self._lab_missing(req)):
                     return err

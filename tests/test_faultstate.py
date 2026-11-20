@@ -97,3 +97,20 @@ def test_teleport_certificate_read_from_the_identity_file_without_returning_key_
     assert "SECRETKEY" not in json.dumps(rows)
     assert faultstate.teleport_cert(tmp_path, now=10) == []  # nothing has ended yet
     assert faultstate.teleport_cert(tmp_path / "missing") == []  # Teleport not built
+
+
+def test_kube_rbac_faults_read_back_from_the_marker(tmp_path):
+    mark = tmp_path / "m.json"
+    assert faultstate.kube_rbac(mark) == []
+    mark.write_text('["binding:viewer", "impersonation"]')
+    got = faultstate.kube_rbac(mark)
+    assert [r["target"] for r in got] == ["k8s-api", "k8s-api"] and "viewer tier" in got[0]["label"] and "impersonate" in got[1]["label"]
+    mark.write_text("not json")
+    assert faultstate.kube_rbac(mark) == []
+
+
+def test_a_teleport_outage_reads_back_from_the_marker(tmp_path):
+    mark = tmp_path / "m.json"
+    mark.write_text('["teleport-outage"]')
+    got = faultstate.kube_rbac(mark)
+    assert [r["target"] for r in got] == ["teleport"] and "stopped" in got[0]["label"]

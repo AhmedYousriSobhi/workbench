@@ -11,7 +11,18 @@ export function nodeSummary(n, body, slurm = null, tickets) {
   const rows = [];
   if (n.kind === 'k8s') {
     rows.push({ k: 'Kind', v: `Kubernetes node (simulated by KWOK)${n.gpus ? `, ${n.gpus} GPUs` : ''}` });
-    rows.push({ k: 'Reason', v: `not read here; run kubectl describe node ${n.name} from a login node that serves Kubernetes` });
+    rows.push({ k: 'Reason', v: `${n.label || 'not read'}; for the Kubernetes reason run kubectl describe node ${n.name} from a login node that serves Kubernetes` });
+    const hw = [];
+    if (typeof n.temp === 'number') hw.push(`${Math.round(n.temp)} °C`);
+    hw.push(n.fans_failed == null ? 'fans ' + NOT_READ : n.fans_failed > 0 ? `${n.fans_failed} fan${n.fans_failed === 1 ? '' : 's'} failed` : 'fans ok');
+    rows.push({ k: 'Hardware', v: hw.join(' · ') });
+    rows.push({ k: 'Power', v: n.power || NOT_READ });
+    rows.push({ k: 'BCM', v: n.bcm || NOT_READ });
+    const kf = [];
+    if (n.xid > 0) kf.push(`GPU XID ${n.xid}`);
+    if (n.ib_down > 0) kf.push(`${n.ib_down} InfiniBand port${n.ib_down === 1 ? '' : 's'} down`);
+    if (n.nic_flap) kf.push('NIC flapping');
+    if (kf.length) rows.push({ k: 'Faults', v: kf.join(' · ') });
     pushTickets(rows, tickets, n.name);
     return rows;
   }

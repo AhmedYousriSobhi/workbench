@@ -68,6 +68,7 @@ login:                  # login nodes, one auth mode each: ssh | teleport | both
 teleport:               # the optional Teleport part (benchctl up --with teleport, ADR 0020)
   version: 18.11.8      # Community Edition tag; the server must not be older than your tsh major
   cert_ttl: 12h         # user certificate lifetime (max_session_ttl of the role)
+  # kube_tier: {bob: developer}   # Kubernetes access with the k8s part: viewer (default) | developer (team-a only) | admin; ADR 0084
 
 bcm:
   manage_kubernetes: true   # BCM lists the Kubernetes nodes (categories k8s-cpu, k8s-gpu); false = BCM does not manage the Kubernetes cluster (--no-bcm-k8s, issue 413)

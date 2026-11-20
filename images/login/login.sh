@@ -54,4 +54,8 @@ else
   rm -f /usr/local/bin/cmsh /usr/local/bin/events-log
 fi
 /usr/local/sbin/teleport-ssh
-exec /usr/sbin/sshd -D -e
+# The session counter (issue 213, ADR 0088): sshd logs to a file, the counter follows it, serves the count on :9922 and repeats each line to
+# `docker logs`. Compose mounts it; without it (an older mount) sshd still runs, only the diagram's SSH dots are missing.
+: > /var/log/sshd.log
+if [ -x /usr/local/bin/ssh-counter ]; then /usr/local/bin/ssh-counter 9922 /var/log/sshd.log & fi
+exec /usr/sbin/sshd -D -E /var/log/sshd.log

@@ -23,9 +23,12 @@ test('no reading is "not measured", never zero or blank; failed fans are counted
   assert.equal(get(rows, 'Hardware').v, '8 GPUs · 2 fans failed');
   assert.equal(get(rows, 'Power').v, 'not measured'); assert.equal(get(rows, 'Address').v, 'not measured'); assert.equal(get(rows, 'BMC').v, 'not measured');
 });
-test('a Kubernetes node has no BMC or address rows', () => {
-  const rows = nodeSummary({ name: 'k8s-gpu001', kind: 'k8s', gpus: 8, state: 'ok' }, null);
+test('a Kubernetes node shows its machine (power, temperature, BCM) but no BMC or address rows', () => {
+  const rows = nodeSummary({ name: 'k8s-gpu001', kind: 'k8s', gpus: 8, state: 'fault', label: 'NotReady (Powered off)', power: 'Off', temp: 18, fans_failed: 0, bcm: 'DOWN' }, null);
   assert.equal(get(rows, 'BMC'), undefined); assert.match(get(rows, 'Kind').v, /KWOK\), 8 GPUs/);
+  assert.equal(get(rows, 'Power').v, 'Off'); assert.equal(get(rows, 'BCM').v, 'DOWN'); assert.equal(get(rows, 'Hardware').v, '18 °C · fans ok');
+  assert.match(get(rows, 'Reason').v, /^NotReady \(Powered off\); /);
+  assert.equal(get(nodeSummary({ name: 'k', kind: 'k8s', state: 'unknown' }, null), 'Power').v, 'not measured');
   assert.deepEqual(nodeSummary(null, null), []);
 });
 test('lens chips: Telemetry is shown as Monitoring, ids are the plane ids, All is first', () => {

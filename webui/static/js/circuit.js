@@ -31,14 +31,20 @@ function linkFor(w, links) {
 }
 const allLinks = () => [...(clusterNow().comms || []), ...(S.monLinks || []), ...(S.dbdLink ? [S.dbdLink] : [])];
 
+const SSH_KEY = /^(ssh|hop):/;  // the SSH counters' flow keys (issue 213): sessions, never requests
+export const requestRate = rate => Object.entries(rate).reduce((a, [k, v]) => a + (SSH_KEY.test(k) ? 0 : v), 0);
 export const recentRate = () => { const r = {}, cut = Date.now() - 60000; for (const e of S.recent) if (e.t > cut) r[e.to] = (r[e.to] || 0) + e.n; return r; };
 
 // What one wire shows right now: requests a minute and errors where a counter backs it, "declared" where nothing does.
 export function wireState(w, links, rate) {
   const l = linkFor(w, links), snap = S.flowSnap;
   if (!w.present) return { rpm: 0, errors: 0, declared: false };
-  if (w.bus) return { rpm: Object.values(rate).reduce((a, b) => a + b, 0), errors: 0, declared: false };
+  if (w.bus) return { rpm: requestRate(rate), errors: 0, declared: false };
   if (w.planned) return { rpm: 0, errors: 0, declared: false };
+  if (w.ssh) {  // a login or jump line with a session counter behind it: measured while the counter answers, declared wiring otherwise (nothing invented)
+    const counted = !!(snap && snap.reachable && snap.reachable['ssh:' + w.ssh.replace(SSH_KEY, '')]);
+    return counted ? { rpm: rate[w.ssh] || 0, errors: 0, declared: false, counted: true, unit: 'sessions' } : { rpm: 0, errors: 0, declared: true };
+  }
   const svc = w.drop ? w.to : (l && l.service);
   if (l && l.measured && svc) return { rpm: rate[svc] || 0, errors: (snap && snap.errors && snap.errors[svc]) || 0, declared: false, v: trView(l) };
   if (w.drop && snap && w.to in (snap.totals || {})) return { rpm: rate[w.to] || 0, errors: (snap.errors && snap.errors[w.to]) || 0, declared: false };
@@ -58,7 +64,7 @@ function partText(p, f) {
     case 'slurmctld': return { t: p.ctl ? 'controller · slurmctld' : 'slurmctld', s: p.present ? (!up ? OFFLINE : S.slurmNodes ? '✓ answers (sinfo)' : '– not probed') : '', m: p.ctl ? 'sshd + cmsh · BCM head node' : 'real · Slurm RPC :6817' };
     case 'slurmdbd': return { t: 'slurmdbd + MariaDB', s: p.present ? (up ? '✓ answers (sacctmgr)' : OFFLINE) : '', m: p.present ? 'real · accounting :6819' : 'accounting · not read' };
     case 'storage': return { t: 'Shared storage', s: '– planned, not built', m: 'NFS or Lustre (SPEC C-11)' };
-    case 'k8s-api': return { t: 'kube-apiserver', s: p.present ? (S.flowSnap?.reachable['k8s-api'] ? '✓ up' : up ? '✗ not reachable' : OFFLINE) : '', m: 'real · :6443' };
+    case 'k8s-api': return { t: 'kube-apiserver', s: p.present ? (S.flowSnap?.reachable['k8s-api'] ? '✓ up' : up ? '✗ not reachable' : OFFLINE) : '', m: S.flowSnap?.kube?.measured ? `${S.flowSnap.kube.users.reduce((a, u) => a + u.per_min, 0)} req/min · ${S.flowSnap.kube.scope}` : 'real · :6443' };
     case 'etcd': return { t: 'etcd', s: '', m: 'real · :2379' };
     case 'kwok': return { t: 'KWOK', s: '', m: 'plays the kubelets' };
     case 'service': return { t: p.title, s: '', m: p.sub };
@@ -163,8 +169,8 @@ export function paintCircuit() {
   // the drawing is built for one set of parts and one node list; a change in either rebuilds it (called from paintTiles)
   for (const w of spec.wires) {
     const st = wireState(w, links, rate), l = linkFor(w, links);
-    updateWire(w.el, { d: w.d, plane: w.present ? w.plane : 'control', rpm: st.rpm, errors: st.errors, declared: st.declared, label: (w.label || w.key) + (l ? ` (${l.protocol} :${l.port})` : '') });
-    w.el.setAttribute('data-measured', mark(l && l.measured && !st.declared));
+    updateWire(w.el, { d: w.d, plane: w.present ? w.plane : 'control', rpm: st.rpm, errors: st.errors, declared: st.declared, unit: st.unit, label: (w.label || w.key) + (l ? ` (${l.protocol} :${l.port})` : '') });
+    w.el.setAttribute('data-measured', mark((st.counted || (l && l.measured)) && !st.declared));
   }
   for (const p of Object.values(spec.parts)) {
     const el = els[p.id]; if (!el) continue;

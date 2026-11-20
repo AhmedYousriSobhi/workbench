@@ -656,3 +656,80 @@ def test_the_metrics_server_step_runs_docker_and_says_why_it_failed(monkeypatch)
     assert out.status == "ok" and calls == [["docker", "stop", "workbench-k8s-metrics-server-1"]]
     out = scenario.execute(step, runner=lambda c, **k: bad("No such container"))
     assert out.status == "failed" and "No such container" in out.detail
+
+
+# ---- the API server's name is checked, not only its chain (issue 970) ----
+
+def _api_cert(d: Path, sans: str) -> tuple[Path, Path]:
+    """A throwaway self-signed certificate that is its own CA, generated per test, never committed."""
+    cert, key = d / "ca.crt", d / "apiserver.key"
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-days", "1",
+                    "-keyout", str(key), "-out", str(cert), "-subj", "/CN=kube-apiserver", "-addext", f"subjectAltName={sans}",
+                    "-addext", "basicConstraints=critical,CA:TRUE", "-addext", "keyUsage=critical,digitalSignature,keyCertSign"],
+                   check=True, capture_output=True)
+    return cert, key
+
+
+@pytest.fixture
+def api_server(tmp_path, monkeypatch):
+    """Returns start(sans): a local HTTPS server answering /readyz and /api/v1/nodes with a certificate naming `sans`."""
+    import http.server
+    import shutil
+    import threading
+    if not shutil.which("openssl"):
+        pytest.skip("openssl missing")
+    started = []
+    (tmp_path / "tokens.csv").write_text("tok,viewer,viewer-uid\n")
+    monkeypatch.setattr(k8s, "SECRETS_DIR", tmp_path)
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'{"items": []}' if "nodes" in self.path else b"ok")
+
+        def log_message(self, *a):
+            pass
+
+    def start(sans: str):
+        cert, key = _api_cert(tmp_path, sans)
+        shutil.copy(cert, tmp_path / "admin.crt")  # api_ready loads a client certificate; this server asks for none
+        shutil.copy(key, tmp_path / "admin.key")
+        srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(cert, key)
+        srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        started.append(srv)
+        monkeypatch.setattr(k8s, "API_PORT", srv.server_address[1])
+        monkeypatch.setattr(k8s, "api_ip", lambda ips: "127.0.0.1")
+        k8s._REFUSED["seen"] = False
+
+    yield start
+    for srv in started:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_api_reads_succeed_when_the_certificate_names_the_address(api_server):
+    api_server("DNS:workbench-k8s-apiserver,IP:127.0.0.1")
+    assert k8s.api_up() is True
+    assert k8s.api_json("/api/v1/nodes") == {"items": []}
+    assert k8s.api_ready({}, timeout=5) is True
+
+
+def test_api_reads_refuse_a_certificate_that_does_not_name_the_address(api_server):
+    """The chain is good (the same certificate is the CA) but the name is not: refused, with the one failure message."""
+    api_server("DNS:somewhere-else,IP:10.9.9.9")
+    assert k8s.api_up() is False
+    assert k8s._REFUSED["seen"] is True
+    assert k8s.api_json("/api/v1/nodes") is None
+    assert k8s.api_ready({}, timeout=0.05, sleep=lambda s: None) is False
+    said = []
+    assert not k8s.bootstrap(SIM, {}, said.append, ready=lambda ips: k8s.api_ready(ips, timeout=0.05, sleep=lambda s: None))
+    assert len(said) == 1 and "does not name its address" in said[0] and "expired" in said[0] and "benchctl up --with k8s" in said[0] and "sudo" in said[0]
+
+
+def test_no_name_check_is_skipped_toward_the_api_server():
+    src = (ROOT / "benchctl" / "k8s.py").read_text()
+    assert "check_hostname = False" not in src and "CERT_NONE" not in src

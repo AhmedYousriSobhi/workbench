@@ -54,21 +54,29 @@ tests:
               summary: "2 InfiniBand port(s) down on gpu001"
               description: "The fabric link of gpu001 is down."
 
-  - name: NodeDown fires when a node that published stops, and a node that never published is not reported
+  - name: NodeDown fires for a GPU node and a CPU node that stop publishing, and not for a node that keeps publishing
     interval: 1m
     input_series:
-      - series: 'DCGM_FI_DEV_GPU_TEMP{node="gpu001",gpu="0"}'
-        values: '60 60 60 60 stale'
-      - series: 'DCGM_FI_DEV_GPU_TEMP{node="gpu002",gpu="0"}'
-        values: '60+0x10'
+      - series: 'node_network_carrier_changes_total{node="gpu001",device="eth0"}'
+        values: '0 0 0 0 stale'
+      - series: 'node_network_carrier_changes_total{node="gpu002",device="eth0"}'
+        values: '0+0x10'
+      - series: 'node_network_carrier_changes_total{node="cn001",device="eth0"}'
+        values: '0 0 0 0 stale'
+      - series: 'node_network_carrier_changes_total{node="cn002",device="eth0"}'
+        values: '0+0x10'
     alert_rule_test:
       - eval_time: 5m
         alertname: NodeDown
         exp_alerts:
+          - exp_labels: {node: cn001, severity: page}
+            exp_annotations:
+              summary: "cn001 stopped publishing metrics"
+              description: "cn001 has published no metrics for the last scrape."
           - exp_labels: {node: gpu001, severity: page}
             exp_annotations:
               summary: "gpu001 stopped publishing metrics"
-              description: "gpu001 has published no GPU series for the last scrape."
+              description: "gpu001 has published no metrics for the last scrape."
       - eval_time: 10m
         alertname: NodeDown
         exp_alerts: []

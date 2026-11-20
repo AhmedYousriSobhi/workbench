@@ -320,6 +320,7 @@
   #flow text.elab { font:600 15px system-ui,sans-serif; fill:var(--fg); } #flow .elbg { fill:var(--panel); stroke:var(--line); stroke-width:1; }
   #flow marker path { fill:var(--dim); } #flow .lane.ssh, #flow .lane.teleport, #flow .lane.jump { stroke:var(--dim); stroke-width:2.5; opacity:.9; }
   #flow .lane.teleport { stroke-dasharray:12 6; } #flow .lane.jump { stroke-dasharray:10 8; stroke-linecap:butt; } #flow .elabs { pointer-events:none; }
+  #flow .lane.ssh.on, #flow .lane.jump.on { stroke:var(--accent); opacity:.95; }  /* a line with SSH sessions seen on it in the last minute (issue 213) */
   #flow .blk.lgn, #flow .blk.blkacc { stroke:var(--accent); } #flow .blk.lgn.down { stroke:var(--bad); stroke-dasharray:5 4; } #flow .blk.lgn.off { stroke:var(--line); stroke-dasharray:3 5; opacity:.8; } #flow .blk.blkacc.down { stroke:var(--bad); }
   .pop { position:fixed; z-index:30; width:min(360px,calc(100% - 16px)); background:var(--panel); border:1px solid var(--accent); border-radius:12px; padding:var(--sp3) var(--sp4); box-shadow:0 14px 40px var(--shade-35); font-size:0.8438rem; }
   .pop[hidden], .tip[hidden] { display:none; } .pop-h { display:flex; align-items:center; gap:var(--sp2); margin-bottom:var(--sp2); } .pop-h b { font-size:1rem; flex:1; } .pop dl.kv { margin:0 0 var(--sp2); font-size:0.8125rem; } .pop dd { overflow-wrap:break-word; } .pop dd code { overflow-wrap:anywhere; }
@@ -585,3 +586,8 @@
   .zoomrail { flex-wrap:nowrap; } .zoomrail [data-level]:not([aria-pressed="true"]) { display:none; } .zoomrail [data-level][aria-pressed="true"] { flex:1; }
   #trafficpanel > .row:first-child { flex-wrap:nowrap; } #trafficpanel > .row:first-child h2 { min-width:0; font-size:1.0625rem; overflow-wrap:anywhere; } #trafficpanel > .row:first-child .btn { flex:none; }
 }
+
+/* Teleport details: recent Kubernetes calls (issue 755). The outcome is a word, the border only echoes it. */
+.kube-ev { list-style:none; margin:0; padding:0; } .kube-ev li { margin:0 0 4px; overflow-wrap:anywhere; }
+.kube-code { display:inline-block; padding:0 6px; border:1px solid var(--line); border-radius:var(--r1, 4px); white-space:nowrap; }
+.kube-code[data-outcome="refused"] { border-color:var(--warn); } .kube-code[data-outcome="error"] { border-color:var(--bad); } .kube-code[data-outcome="ok"] { border-color:var(--ok); }

@@ -43,6 +43,8 @@ On a machine that qualifies it prints one line per check and ends with READY (re
 ./scripts/benchctl stop             # stop the web page, the cluster and your own governor
 ```
 
+`./scripts/install-benchctl.sh` puts `benchctl` on your PATH (no sudo), so the commands above also work as plain `benchctl start`.
+
 The first `start` builds images (a few minutes) and creates `.venv`. Use `./scripts/benchctl start --profile std` for a
 bigger profile. The login link signs you in once and expires after a minute (the token is never in the URL, so it stays out of browser history); `benchctl open` prints a new one. Without a link, open `/login` and paste the token from `compose/generated/secrets/ui_token`.
 
@@ -55,7 +57,7 @@ bigger profile. The login link signs you in once and expires after a minute (the
 Same result, one visible step at a time. Use this when `start` stops and you want to see which step fails:
 
 ```bash
-python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'   # once; venv is per shell
+./scripts/install-benchctl.sh                   # once: `benchctl` on your PATH, no venv activation (the first run offers to create .venv)
 ./scripts/benchctl doctor                       # host prerequisites; fix any FAIL first
 ./scripts/benchctl preflight --profile min      # would this profile fit in free memory right now?
 ./scripts/benchctl up --profile min             # governor admission, ordered start (about a minute)

@@ -46,10 +46,10 @@ A job over `max_gpus_per_user` waits with `QOSMaxGRESPerUser`. A job under a QOS
 `benchctl submit` and the scenario step take `qos:`:
 
 ```yaml
-- {at: 0s, target: slurm, do: {submit: {node: gpu001, user: bob, gpus: 8, duration: 600, qos: scavenger}}}
+- {at: 0s, target: slurm, do: {submit: {node: gpu001, user: bob, gpus: 2, duration: 600, qos: scavenger}}}
 ```
 
-Scenario `preempt-burst` (SC-37) does exactly this, then an `urgent` job for the same GPUs at 20 s; the scavenger job is requeued and runs again after the urgent job ends.
+Scenario `preempt-burst` (SC-37) does this with 2 GPUs (the `max_gpus_per_user` of the example above, so the job is not held), then an `urgent` job for all 8 GPUs of the node at 20 s; the scavenger job is requeued (`PENDING`, reason `BeginTime`). Whether it runs again before the scenario cancels it at 150 s was not observed live.
 
 ## Not exercised
 

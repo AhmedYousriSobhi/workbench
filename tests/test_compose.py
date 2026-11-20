@@ -63,7 +63,7 @@ def test_slurmd_count_follows_profile():
 def test_budget_matches_limits():
     data = compose.generate(SIM, compose.load_profile("min"))
     nodes = 4 + SIM["gpu"]["nodes"]  # every node also has its BMC forwarder
-    assert compose.budget_mb(data) == 200 + 60 + 3 * 100 + 40 + nodes * (60 + compose.JOB_MB + compose.BMC_FORWARDER_MB)
+    assert compose.budget_mb(data) == 200 + 60 + 3 * 100 + 48 + nodes * (60 + compose.JOB_MB + compose.BMC_FORWARDER_MB)
 
 
 def test_write_marks_generated(tmp_path):
@@ -104,7 +104,7 @@ def test_compute_nodes_run_sshd_with_the_shared_keys():
 
 def test_login_node_is_local_only_with_keys_mounted():
     login = compose.generate(SIM, compose.load_profile("min"))["services"]["login"]
-    assert login["ports"] == ["127.0.0.1:2222:22"]
+    assert login["ports"] == ["127.0.0.1:2222:22", "127.0.0.1:2322:9922"]
     assert "./secrets/ssh:/run/workbench/ssh:ro" in login["volumes"] and "./slurm:/etc/slurm:ro" in login["volumes"]
     assert login["build"] == "../../images/login" and login["labels"]["workbench.class"] == "P2"
     assert "cap_add" not in login and login["environment"]["WORKBENCH_USERS"]
@@ -168,7 +168,7 @@ def test_the_jump_host_is_a_bare_sshd_on_its_own_address_and_port():
     from benchctl import addressing, compose
     sim = _sim()
     out = compose.generate(sim, {"groups": ["core", "access", "jump"]})["services"]["jump"]
-    assert out["ports"] == ["127.0.0.1:2220:22"] and out["networks"]["default"]["ipv4_address"] == addressing.service_ip("jump") == "10.141.255.5"
+    assert out["ports"] == ["127.0.0.1:2220:22", "127.0.0.1:2320:9922"] and out["networks"]["default"]["ipv4_address"] == addressing.service_ip("jump") == "10.141.255.5"
     assert out["build"].endswith("images/jump") and "slurm" not in " ".join(out["volumes"])
 
 

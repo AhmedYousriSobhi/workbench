@@ -48,7 +48,7 @@ def test_addresses_skip_the_gateway_and_stay_clear_of_the_services():
 def test_compose_publishes_a_port_only_for_direct_logins_and_gives_teleport_logins_no_key():
     prof = compose.load_profile("min")
     s = compose.generate(sim("ssh", "teleport", "both"), {**prof, "groups": [*prof["groups"], "teleport"]})["services"]
-    assert s["login"]["ports"] == ["127.0.0.1:2222:22"] and "ports" not in s["login2"] and s["login3"]["ports"] == ["127.0.0.1:2224:22"]
+    assert s["login"]["ports"] == ["127.0.0.1:2222:22", "127.0.0.1:2322:9922"] and "ports" not in s["login2"] and s["login3"]["ports"] == ["127.0.0.1:2224:22", "127.0.0.1:2324:9922"]
     assert [s[n]["environment"]["WORKBENCH_LOGIN_AUTH"] for n in ("login", "login2", "login3")] == ["ssh", "teleport", "both"]
     tele = "./secrets/teleport:/run/workbench/teleport:ro"
     assert tele not in s["login"]["volumes"] and tele in s["login2"]["volumes"] and tele in s["login3"]["volumes"]
