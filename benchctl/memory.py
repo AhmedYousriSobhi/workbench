@@ -23,7 +23,7 @@ MEASURED_SETUP = "2 cpu + 2 gpu nodes (4 GPUs each), accounting, bmc, bcm, jira,
 # key -> largest working set in MiB. "slurmd" is every compute node, "bmc-forwarder" every per-node BMC address.
 MEASURED_MB: dict[str, int] = {
     "slurmd": 13, "bmc-forwarder": 3, "bmc-farm": 14, "bcm-mock": 12, "jira-mock": 20, "login": 10, "jump": 2,  # jump host: 1.9 MB peak after five forwarded sessions (issue 415)
-    "mariadb": 204, "slurmdbd": 7, "slurmctld": 41, "slurmrestd": 7, "teleport": 222,
+    "mariadb": 204, "slurmdbd": 7, "slurmctld": 41, "slurmrestd": 7, "teleport": 222,  # largest seen (2026-11-05, ssh load); with the Kubernetes Service 2026-11-20: idle 142, loaded 174 (issues 752, 211)
     "prometheus": 22, "grafana": 54, "gpu-exporter-farm": 19,
     "alertmanager": 20,  # estimate from the upstream footprint, not yet measured here (issue 460): run `benchctl measure` and replace
     # Kubernetes (ADR 0034): 4 KWOK nodes and the fixtures, one run (issue 232); etcd sat at its first 128 MB cap, so 130 is a floor
