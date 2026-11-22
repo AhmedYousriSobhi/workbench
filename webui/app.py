@@ -9,6 +9,7 @@ import asyncio
 import contextlib
 import hmac
 import json
+import os
 import re
 import secrets
 import threading
@@ -46,7 +47,10 @@ from .wiki import Wiki, WikiError, esc, page
 STATIC = Path(__file__).parent / "static"
 # The page and its modules run under a strict policy: no inline script or style (#517, ADR 0047). /help carries it too (its
 # stylesheet is static/help.css, #525).
-CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; "
+# Opt-in (#983): WORKBENCH_DESKTOP_HELPER=1 lets the page ask one loopback port for a title token (static/js/desktop-helper.js).
+_HELPER = "http://127.0.0.1:47800" if os.environ.get("WORKBENCH_DESKTOP_HELPER") == "1" else ""
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; "
+       f"connect-src 'self'{' ' + _HELPER if _HELPER else ''}; "
        "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 
 

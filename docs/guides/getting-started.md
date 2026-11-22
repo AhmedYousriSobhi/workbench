@@ -336,6 +336,16 @@ What you can do on it:
 
 The page skips steps that need Docker (`ssh` and `k8s` steps), because it has no Docker access by design. Use `./scripts/benchctl scenario run` for those. The [web page chapter](../manual/05-web-page.md) has the details.
 
+### Let a desktop helper see only this tab (optional)
+
+A desktop helper that is allowed to see this page, but not your other browser tabs, can tell the tab apart by a secret in the window title. It is off by default and needs two switches:
+
+```bash
+WORKBENCH_DESKTOP_HELPER=1 ./scripts/benchctl up --profile min   # lets the page reach 127.0.0.1:47800 (CSP)
+```
+
+and once in the browser console on the workbench page: `localStorage.setItem('workbench-desktop-helper', '1')`, then reload. With a helper running on port 47800 the title gets a token appended; with none running nothing happens. Turn it off with `localStorage.removeItem('workbench-desktop-helper')`.
+
 ## 5. When something is wrong
 
 ```bash
