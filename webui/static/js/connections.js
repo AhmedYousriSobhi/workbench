@@ -29,8 +29,15 @@ export function bindCopy() {  // Copy buttons: the label comes back after the cl
     setTimeout(() => { b.textContent = label; }, 1500);
   });
 }
+export function helperKeyOn() {  // the browser half of the desktop-helper switch (#983); the server half sets "This page"'s status
+  try { return localStorage.getItem('workbench-desktop-helper') === '1'; } catch (e) { return false; }
+}
+export const HELPER_OFF = 'Desktop helper: the browser key is set, but this page started without WORKBENCH_DESKTOP_HELPER=1, so it adds no title token. Run ./scripts/benchctl stop, then WORKBENCH_DESKTOP_HELPER=1 ./scripts/benchctl start.';
+export function withHelperStatus(rows, keyOn) {  // one message per condition: switch on (server), key without switch (here), neither (nothing)
+  return rows.map(e => e.id === 'ui' && !e.status && keyOn ? { ...e, status: HELPER_OFF } : e);
+}
 export async function paintConnections() {
-  const rows = await connections();
+  const rows = withHelperStatus(await connections(), helperKeyOn());
   $('conn-rows').innerHTML = rows.map(e => `<tr data-id="${esc(e.id)}"><td data-h="Part"><b>${esc(e.name)}</b><div class="small dim">${esc(e.how).replace(/`([^`]+)`/g, '<code>$1</code>')}</div>${e.status ? `<div class="small" role="status">${esc(e.status)}</div>` : ''}</td>
     <td data-h="Address"><code>${esc(e.address)}</code></td><td data-h="Try it"><code>${esc(e.command)}</code><button class="btn small copy" data-copy="${esc(e.command)}" aria-label="Copy the command for ${esc(e.name)}">Copy</button></td>
     <td data-h="Credential">${e.credential ? `<code>${esc(e.credential)}</code>` : '<span class="dim">none</span>'}</td>
