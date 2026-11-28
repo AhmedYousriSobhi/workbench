@@ -167,6 +167,17 @@ The second fails because the plugin says `interactiveMode: Always`: the Kubernet
 
 SSH connection handling (hung, down, changed host key, session limit), step by step with screenshots: [SSH connection testing](ssh-connection-testing.md).
 
+### Let a desktop helper see only the workbench tab
+
+A desktop helper (a screen reader or test driver allowed to see one browser tab, not the whole browser) can tell the workbench page apart by a token the page adds to its window title (issue 983). It is off by default; turning it on takes two switches, described in [getting-started.md](getting-started.md#let-a-desktop-helper-see-only-this-tab-optional): `WORKBENCH_DESKTOP_HELPER=1 ./scripts/benchctl start` on a stopped page, and the browser key `workbench-desktop-helper` set to `1`.
+
+What the helper must serve on `127.0.0.1:47800`:
+
+- `OPTIONS /token`: the browser asks first, because the page sends the header `X-Scope-Token: 1`. Answer `204` with `Access-Control-Allow-Origin` set to the page's own address (for example `http://127.0.0.1:8088`) and `Access-Control-Allow-Headers: X-Scope-Token`. Allow no other address, so no other tab can read the token.
+- `GET /token`: `200` with the token as plain text, at least 16 characters of `A-Z a-z 0-9 _ -`, with the same `Access-Control-Allow-Origin`. Anything else is ignored and the title stays `workbench`.
+
+The title then reads `workbench <token>`. **Exercised** (2026-11-28, a stand-in helper, the in-app browser): both switches on gave `workbench <token>`, and the helper saw the preflight then the GET, both from the page's address; the key off sent no request; the key on with the page started without the switch was blocked by the page's CSP (two console errors, no request reached the helper). **Not exercised:** a real desktop helper finding the tab by its title.
+
 ## Break a node and watch the client
 
 A scenario is a YAML file in `scenarios/` ([scenarios and faults](../manual/06-scenarios.md)). Steps run at offsets and can target `bmc-farm`, `bcm-mock`, `gpu-exporter`, `jira`, `slurm`, `ssh`, `k8s` and `auth`.

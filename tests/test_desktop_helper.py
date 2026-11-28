@@ -2,6 +2,7 @@
 import importlib
 import re
 
+import pytest
 from palette_lib import ROOT
 
 STATIC = ROOT / "webui/static"
@@ -9,28 +10,33 @@ JS = (STATIC / "js/desktop-helper.js").read_text()
 HTML = (STATIC / "index.html").read_text()
 
 
-def _csp(monkeypatch, value):
+@pytest.fixture
+def csp(monkeypatch):
+    """Rebuilds webui.app's CSP for an env value; reloads it once more on teardown, even after a failed assert."""
     from webui import app
 
-    if value is None:
-        monkeypatch.delenv("WORKBENCH_DESKTOP_HELPER", raising=False)
-    else:
-        monkeypatch.setenv("WORKBENCH_DESKTOP_HELPER", value)
-    return importlib.reload(app).CSP
+    def build(value):
+        if value is None:
+            monkeypatch.delenv("WORKBENCH_DESKTOP_HELPER", raising=False)
+        else:
+            monkeypatch.setenv("WORKBENCH_DESKTOP_HELPER", value)
+        return importlib.reload(app).CSP
+
+    yield build
+    monkeypatch.undo()  # back to the real environment before the final reload
+    importlib.reload(app)
 
 
-def test_csp_is_unchanged_by_default(monkeypatch):
-    csp = _csp(monkeypatch, None)
-    assert "connect-src 'self';" in csp and "127.0.0.1" not in csp
-    assert _csp(monkeypatch, "0") == csp
-    _csp(monkeypatch, None)
+def test_csp_is_unchanged_by_default(csp):
+    default = csp(None)
+    assert "connect-src 'self';" in default and "127.0.0.1" not in default
+    assert csp("0") == default
 
 
-def test_csp_adds_exactly_one_loopback_origin_when_enabled(monkeypatch):
-    csp = _csp(monkeypatch, "1")
-    assert "connect-src 'self' http://127.0.0.1:47800;" in csp
-    assert csp.count("127.0.0.1") == 1 and "unsafe-inline" not in csp
-    _csp(monkeypatch, None)
+def test_csp_adds_exactly_one_loopback_origin_when_enabled(csp):
+    on = csp("1")
+    assert "connect-src 'self' http://127.0.0.1:47800;" in on
+    assert on.count("127.0.0.1") == 1 and "unsafe-inline" not in on
 
 
 def test_script_is_opt_in_and_never_throws():
