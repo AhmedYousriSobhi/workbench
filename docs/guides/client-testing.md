@@ -176,7 +176,9 @@ What the helper must serve on `127.0.0.1:47800`:
 - `OPTIONS /token`: the browser asks first, because the page sends the header `X-Scope-Token: 1`. Answer `204` with `Access-Control-Allow-Origin` set to the page's own address (for example `http://127.0.0.1:8088`) and `Access-Control-Allow-Headers: X-Scope-Token`. Allow no other address, so no other tab can read the token.
 - `GET /token`: `200` with the token as plain text, at least 16 characters of `A-Z a-z 0-9 _ -`, with the same `Access-Control-Allow-Origin`. Anything else is ignored and the title stays `workbench`.
 
-The title then reads `workbench <token>`. **Exercised** (2026-11-28, a stand-in helper, the in-app browser): both switches on gave `workbench <token>`, and the helper saw the preflight then the GET, both from the page's address; the key off sent no request; the key on with the page started without the switch was blocked by the page's CSP (two console errors, no request reached the helper). **Not exercised:** a real desktop helper finding the tab by its title.
+The title then reads `workbench <token>`. The page first asks its own `GET /api/desktop-helper` (`{"on": true|false}`) and calls the helper only when the page started with the switch, so a missing switch makes no request and no console error. The **Connections** row **This page** says which switch is on.
+
+**Exercised** (2026-11-28, a stand-in helper, the in-app browser, before the page asked `/api/desktop-helper`): both switches on gave `workbench <token>`, and the helper saw the preflight then the GET, both from the page's address; the key off sent no request; the key on without the switch was blocked by the CSP. The same three cases are the live test `tests/real/test_desktop_helper_browser.py` (headless Chromium, the real CSP, no cluster), which also checks the console stays clean. **Not exercised:** a real desktop helper finding the tab by its title.
 
 ## Break a node and watch the client
 

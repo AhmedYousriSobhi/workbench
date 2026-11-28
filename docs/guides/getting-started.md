@@ -352,7 +352,11 @@ A desktop helper that is allowed to see this page, but not your other browser ta
 
 2. Once, in the browser console on the workbench page: `localStorage.setItem('workbench-desktop-helper', '1')`, then reload.
 
-With a helper running on port 47800 the title becomes `workbench <token>`; with none running the title stays `workbench`. Turn it off with `localStorage.removeItem('workbench-desktop-helper')`. With the key set but the page started without the switch, the browser blocks the request and logs two console errors; the title stays `workbench`. What the helper must answer: [client-testing.md](client-testing.md#let-a-desktop-helper-see-only-the-workbench-tab).
+- **Result:** with a helper running on port 47800 the title becomes `workbench <token>`; with none running it stays `workbench`.
+- **Which switch is on:** open **Connections**. The row **This page** says "Desktop helper switch on", or, when only the browser key is set, that the page started without it and how to restart it.
+- **Turn it off:** `localStorage.removeItem('workbench-desktop-helper')`.
+
+What the helper must answer: [client-testing.md](client-testing.md#let-a-desktop-helper-see-only-the-workbench-tab).
 
 ## 5. When something is wrong
 

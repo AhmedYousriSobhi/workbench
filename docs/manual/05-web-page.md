@@ -655,6 +655,7 @@ The last column, **Open**, has one-click actions for the parts that have one:
 - Not every desktop has an `ssh://` handler, so the browser may ask which app to use. **Copy benchctl ssh**, the first action of the row, works everywhere.
 - `benchctl ssh <node>` without a user is a root shell. A node's panel has the same command with the node filled in.
 - The page never opens a terminal itself (it has no Docker or root access, W-3). A part with nothing to open shows "none".
+- The row **This page** also says whether the optional desktop-helper title token is on (issue 983): "Desktop helper switch on" when the page started with `WORKBENCH_DESKTOP_HELPER=1`, or, when only your browser's key is set, that the page started without it and the command to restart it. With neither, it says nothing. How to turn it on: [getting-started](../guides/getting-started.md#let-a-desktop-helper-see-only-this-tab-optional).
 
 ## Health checks: what drains a node
 
