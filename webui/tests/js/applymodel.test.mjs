@@ -1,7 +1,7 @@
 import './setup.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyOutcome, stageRows } from '../../static/js/applymodel.js';
+import { applyOutcome, jobOf, stageRows } from '../../static/js/applymodel.js';
 
 const change = (state, stages, extra = {}) => ({ job: 4, label: 'apply-plan', state, stages, started: 100, finished: null, ...extra });
 
@@ -30,4 +30,14 @@ test('done and failed jobs say how long they took and where they stopped', () =>
   const f = applyOutcome(change('failed', [{ name: 'Slurm core', state: 'failed', secs: null }], { finished: 130 }), 4);
   assert.equal(f.kind, 'failed');
   assert.match(f.text, /Failed at slurm core \(job #4, 30 s\)\. The reason is in Governor activity/);
+});
+
+test('a job waiting behind another change says so, and is found in the list even when another one is current (#986)', () => {
+  const running = change('running', [{ name: 'Nodes', state: 'running', secs: null }], { job: 3 });
+  const mine = change('queued', [], { job: 4, started: null });
+  assert.deepEqual(applyOutcome(running, 4, [running, mine]), { kind: 'queued', text: 'Job #4: waiting for the change before it to finish' });
+  assert.equal(applyOutcome(running, 4, [running, { ...mine, state: 'done', finished: 130, started: 100 }]).text, 'Applied (job #4, 30 s).');
+  assert.equal(jobOf(running, 4, []), null);  // an older governor without `changes`: only `change` counts
+  assert.equal(applyOutcome(running, 4).kind, 'unknown');
+  assert.equal(applyOutcome(running, 3, undefined).kind, 'running');
 });

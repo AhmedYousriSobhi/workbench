@@ -16,3 +16,12 @@ The page decided that an apply had finished by matching the governor's audit tex
 ## Consequences
 
 Only the latest change is kept (one change runs at a time under the change lock). The audit lines are unchanged. Stage seconds are measured by the governor, not by the page. A failure's reason is still in Governor activity: the stage names where it stopped.
+
+## Addendum (issue 986): queued changes and the last ten
+
+A second change waits behind the running one (the change lock, issue 341), and the page and `benchctl` send changes back to back (Clear is `on` then `resume`; scenario daemon steps), so queuing stays. But `status.change` used to switch to the newest job at once: while a plan was applying, a Clear on a node made `change` show the Clear job with no stages, the plan's stage lines were dropped, and after 30 s the plan sheet said the governor no longer reported its job.
+
+- `status.change` is the running change (else the last one), as before, so an older page still works.
+- `status.changes` lists every kept change, oldest first, in the same shape plus the state `queued` (with `started: null` until it runs): all unfinished ones and the last 10 finished.
+- The page and `benchctl` (`checks.governor_job`) look their job up in `changes` first, then in `change`. A queued job reads "waiting for the change before it to finish"; a job that ended while another started is still found.
+- A lab run or validation is refused while a change runs or waits.

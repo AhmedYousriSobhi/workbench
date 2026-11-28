@@ -65,7 +65,7 @@ export const S = {
   monLinks: [],
   dbdLink: null,
   slurmNodes: null, slurmReasons: null, slurmJobs: null, nodeTickets: null,
-  change: null, applying: false, planStates: null, partsNow: null, partLabels: null, loginsNow: null,  // Cluster architecture: Slurm node states read when it opened; what runs now (Review changes)
+  change: null, changes: [], applying: false, planStates: null, partsNow: null, partLabels: null, loginsNow: null,  // Cluster architecture: Slurm node states read when it opened; what runs now (Review changes)
   trPrevOut: null,
   trHist: [],
   trRange: 300, // what this page was told since it opened (the counters are read live; nothing is stored on the server)

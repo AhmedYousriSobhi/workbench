@@ -20,10 +20,10 @@ def _lab_wait(sock: str, job: int, timeout: float = 600) -> str | None:
     while time.monotonic() < end:
         time.sleep(1)
         try:
-            ch = checks.governor_request({"cmd": "status"}, sock).get("change")
+            ch = checks.governor_job(checks.governor_request({"cmd": "status"}, sock), job)
         except OSError as e:
             return f"the governor stopped answering: {e}"
-        if ch and ch.get("job") == job and ch.get("state") != "running":
+        if ch.get("state") in ("done", "failed"):
             return None
     return f"the validation did not finish within {int(timeout)} s"
 

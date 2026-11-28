@@ -303,6 +303,8 @@ def login_url(base: str, token: str) -> str:
 def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Path("scenarios"),
                sim_yaml: Path = Path("sim.yaml"), interval: float = 1.0, docs: Path = DOCS,
                fetch=None, poster=None, nhc_src: Path = nhc.SRC, nhc_out: Path = nhc.OUT, counters=None) -> Starlette:
+    if not token.strip():  # "" would match a request that sends no cookie and no Authorization header (#986)
+        raise ValueError("the page needs a login token: an empty one would let every request in")
     sim = yaml.safe_load(sim_yaml.read_text())
     flow = Flow(ssh=None if fetch else ssh_sources, jump_ip=jump_address(),  # a test that passes `fetch` reaches no host counters
                 kube=KubeAudit(lambda req: checks.governor_request(req, socket, timeout=2)))

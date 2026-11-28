@@ -11,17 +11,23 @@ from benchctl.workbench import live_sim_path
 from .app import create_app
 
 TOKEN_FILE = Path("compose/generated/secrets/ui_token")
+MIN_TOKEN = 16  # an empty token would match a request with no cookie (#986): a shorter one is replaced
 
 
 def load_token(path: Path | None = None) -> str:
-    """The login token, created 0600 on first use and kept so bookmarks keep working."""
+    """The login token, created 0600 on first use and kept so bookmarks keep working. A missing, empty or short file (a full
+    disk during the first write, a truncated file) gets a new token, written to a temporary file and renamed into place."""
     path = path or TOKEN_FILE
-    if not path.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, "w") as f:
-            f.write(secrets.token_urlsafe(24))
-    return path.read_text().strip()
+    if path.exists() and len(token := path.read_text().strip()) >= MIN_TOKEN:
+        return token
+    path.parent.mkdir(parents=True, exist_ok=True)
+    token, tmp = secrets.token_urlsafe(24), path.with_name(path.name + ".new")
+    tmp.unlink(missing_ok=True)
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(token)
+    os.replace(tmp, path)
+    return token
 
 
 def main() -> None:
