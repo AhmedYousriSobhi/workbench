@@ -3,6 +3,8 @@
 With both the `teleport` and the `k8s` part on, Teleport's Kubernetes Service (inside the existing Teleport container) registers the simulated
 cluster, so `tsh kube` and `kubectl` through the Teleport proxy work. Same port as everything else (3080); nothing new to publish (ADR 0083, issue 383).
 
+**Licence:** the Teleport image is Teleport's Community Edition, free only for organisations under 100 employees and under $10 million a year in revenue; this repository only names the tag and each user accepts the licence (ADR 0020, issue 249).
+
 Status: proven live (`./scripts/verify.sh --unit teleport_kube`, 5 passed): the cluster registers, a viewer reads the nodes, a write is refused, and a user without a Kubernetes group is denied.
 
 ## Start it

@@ -246,6 +246,24 @@ def test_token_file_is_created_private_and_stable(tmp_path):
     assert launcher.load_token(path) == first
 
 
+@pytest.mark.parametrize("stored", ["", "\n", "short"])
+def test_an_empty_or_short_token_file_gets_a_new_token(tmp_path, stored):
+    """#986: an empty token matched a request with no cookie, so every request got in."""
+    path = tmp_path / "ui_token"
+    path.write_text(stored)
+    path.chmod(0o644)
+    token = launcher.load_token(path)
+    assert len(token) >= launcher.MIN_TOKEN and path.read_text() == token
+    assert oct(path.stat().st_mode)[-3:] == "600" and not (tmp_path / "ui_token.new").exists()
+    assert launcher.load_token(path) == token  # kept from then on
+
+
+def test_the_page_refuses_an_empty_token(tmp_path):
+    for token in ("", "  "):
+        with pytest.raises(ValueError, match="login token"):
+            create_app(token, str(tmp_path / "g.sock"), tmp_path, ROOT / "sim.yaml", fetch=no_stack, poster=no_stack)
+
+
 def test_launcher_prints_a_login_link_and_serves_with_the_token(monkeypatch, tmp_path, capsys):
     ran = {}
     monkeypatch.setattr(launcher, "TOKEN_FILE", tmp_path / "secrets" / "ui_token")

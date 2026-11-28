@@ -86,7 +86,10 @@ def verdict(findings: dict[str, list[str]], comparable: bool, ab: bool) -> str |
 
 # ---------------------------------------------------------------- suggestions (a fixed catalogue, never generated)
 
-def suggestions(a: dict | None, b: dict, findings: dict[str, list[str]] | None) -> list[dict[str, str]]:
+QOS_SHARE = 0.5  # QOS-limit reasons above this share of the candidate's jobs with a reason: "QOS limit dominating pending" (ADR 0050)
+
+
+def suggestions(a: dict | None, b: dict, findings: dict[str, list[str]] | None, alerts: dict | None = None) -> list[dict[str, str]]:
     out = []
     if b["preempted"] and (a is None or b["preempted"] > a["preempted"]):
         out.append({"id": "preemption-requeue", "text": f"{b['preempted']} job(s) were preempted ({b['gpu_hours_lost']} GPU-hours lost): check PreemptMode and the QOS preempt lists, or add a grace time"})
@@ -96,6 +99,14 @@ def suggestions(a: dict | None, b: dict, findings: dict[str, list[str]] | None) 
         out.append({"id": "pending-up", "text": "more jobs stayed pending: review partition, QOS and per-user limits that the change touched"})
     if findings and any(s.startswith("median wait") for s in findings["hard"] + findings["regress"]):
         out.append({"id": "wait-regression", "text": "a partition waits longer: review PriorityTier, PriorityWeightPartition and the backfill settings (bf_*)"})
+    pr = b.get("pending_reasons")
+    if pr and pr["with_reason"]:
+        qos = sum(n for r, n in pr["by_reason"].items() if r.startswith("QOS"))
+        if qos / pr["with_reason"] > QOS_SHARE:
+            out.append({"id": "qos-limit-pending", "text": f"{qos} of the {pr['with_reason']} job(s) held back by a limit were held by a QOS limit (sacct Reason QOS*): review the QOS limits (MaxTRESPerUser, GrpTRES, MaxJobsPerUser) of the candidate"})
+    flapping = sorted(x["name"] for x in ((alerts or {}).get("b") or {}).get("alerts", []) if x.get("flaps"))
+    if flapping:
+        out.append({"id": "alert-flapping", "text": f"alert(s) {', '.join(flapping)} fired again after clearing: review the rule's `for:` duration (and `keep_firing_for`) so one condition is one alert"})
     return out
 
 
@@ -107,7 +118,8 @@ def repeats(verdicts: list[str | None]) -> dict[str, Any]:
 
 
 def build(meta: dict, a_rows: list[dict[str, str]] | None, b_rows: list[dict[str, str]], th: dict[str, float], pairing: dict[str, Any] | None,
-          time_scaled: list[dict[str, str]], earlier: list[str | None] | None = None, prom: dict[str, dict | None] | None = None) -> dict[str, Any]:
+          time_scaled: list[dict[str, str]], earlier: list[str | None] | None = None, prom: dict[str, dict | None] | None = None,
+          sched: dict[str, dict | None] | None = None) -> dict[str, Any]:
     """The report document (report.json). `meta` carries run, seed, factor, length, comparable, paused and rejected counts."""
     f = float(meta["factor"])
     ab = a_rows is not None
@@ -117,9 +129,12 @@ def build(meta: dict, a_rows: list[dict[str, str]] | None, b_rows: list[dict[str
     v = verdict(findings, bool(meta["comparable"]), ab) if findings else None
     rep = repeats([*(earlier or []), v])
     prom = {k: x for k, x in (prom or {}).items() if x is not None}
-    nm = [n for n in lab_metrics.NOT_MEASURED if not (prom and n.startswith(("alerts fired", "alert flapping")))]
-    return {**meta, "single_run": rep["runs"] == 1, "repeat": rep, "alerts": prom, "verdict": v, "findings": findings,
-            "thresholds": th, "a": a, "b": b, "suggestions": suggestions(a, b, findings), "time_scaled": time_scaled,
+    sched = {k: x for k, x in (sched or {}).items() if x is not None}
+    measured = {"alerts fired and time to alert": bool(prom), "alert flapping": bool(prom), "scheduler load": bool(sched),
+                "pending-reason mix": all(s["pending_reasons"] is not None for s in (a, b) if s is not None)}
+    nm = [n for n in lab_metrics.NOT_MEASURED if not measured.get(n)]
+    return {**meta, "single_run": rep["runs"] == 1, "repeat": rep, "alerts": prom, "scheduler": sched, "verdict": v, "findings": findings,
+            "thresholds": th, "a": a, "b": b, "suggestions": suggestions(a, b, findings, prom), "time_scaled": time_scaled,
             "not_measured": nm}
 
 
@@ -153,6 +168,18 @@ def markdown(r: dict[str, Any]) -> str:
         L += ["", "## Alerts (from Prometheus, production-equivalent time)", ""]
         for side, d in sorted(r["alerts"].items()):
             L += [f"- {side.upper()}: " + ("none fired" if not d["alerts"] else "; ".join(f"{x['name']} first after {x['first_after_prod_s']:.0f}s, {x['flaps']} flap(s)" for x in d["alerts"]))]
+    if any(r[side] and r[side].get("pending_reasons") for side in ("a", "b")):
+        L += ["", "## Pending reasons (sacct Reason: the last reason other than Priority or Resources, kept after the job ran)", "",
+              "| reason | " + " | ".join(side.upper() for side in ("a", "b") if r[side]) + " |", "|---|" + "---|" * sum(1 for side in ("a", "b") if r[side])]
+        sides = [r[side].get("pending_reasons") or {"by_reason": {}, "with_reason": 0, "jobs": 0} for side in ("a", "b") if r[side]]
+        for reason in sorted({k for x in sides for k in x["by_reason"]}):
+            L.append(f"| {reason} | " + " | ".join(str(x["by_reason"].get(reason, 0)) for x in sides) + " |")
+        L.append("| (only Priority or Resources) | " + " | ".join(str(x["jobs"] - x["with_reason"]) for x in sides) + " |")
+    if r.get("scheduler"):
+        L += ["", "## Scheduler load (slurmctld's own series over each side's replay; real controller time, not scaled; information, never the verdict)", "",
+              "| measure | side | max | median | samples |", "|---|---|---|---|---|"]
+        for side, d in sorted(r["scheduler"].items()):
+            L += [f"| {m['what']} | {side.upper()} | {m['max']:.0f} | {m['median']:.0f} | {m['samples']} |" for m in d["metrics"].values()]
     if r.get("scenario"):
         sc = r["scenario"]
         L += ["", f"## Scenario {sc['name']} (the same steps at the same lab times on both sides; information, never the verdict)", ""]

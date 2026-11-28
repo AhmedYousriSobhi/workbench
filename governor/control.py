@@ -21,6 +21,7 @@ LAB_RUN_VERBS = {"lab-run", "lab-stop"}  # issue 554: start a supervised replay 
 ALLOWED |= LAB_RUN_VERBS
 TARGET_HOURS = (0.5, 6.0)  # mirrors benchctl.lab_slurm.MIN_TARGET_HOURS, MAX_TARGET_HOURS
 MAX_SEED = 2**31 - 1
+PROFILE_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,31}")  # a file profiles/NAME.yaml: no path, no leading dash (#986); `benchctl up` reports a missing one
 SCENARIO_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")  # a scenario file's name (scenarios/NAME.yaml); the governor checks that the file exists
 MAX_REQUEST = 4096
 TARGETED = {"freeze", "thaw", "stop", "start"}  # require a known group name
@@ -159,8 +160,8 @@ def dispatch(line: bytes, handle: Handler, groups: Callable[[], set[str]]) -> di
             and 0 <= req["n"] <= 64
         ):
             return {"ok": False, "error": "scale needs group:str and n:int 0..64"}
-        if cmd == "set-profile" and not isinstance(req.get("profile"), str):
-            return {"ok": False, "error": "set-profile needs profile:str"}
+        if cmd == "set-profile" and not (isinstance(req.get("profile"), str) and PROFILE_RE.fullmatch(req["profile"])):
+            return {"ok": False, "error": "set-profile needs profile: a profile name such as std (lowercase letters, digits, -)"}
         if cmd == "apply-plan" and (err := plan_error(req)):
             return {"ok": False, "error": err}
         if cmd == "node-state" and not (isinstance(req.get("node"), str) and NODE_RE.fullmatch(req["node"])

@@ -441,6 +441,10 @@ def test_node_state_runs_benchctl_set_node(tmp_path):
     calls, done = [], threading.Event()
     g, _ = _calm_gov(tmp_path, effector=lambda a: calls.append(a) or done.set() or 0)
     assert g.handle("node-state", {"node": "cn003", "state": "down"})["started"] and done.wait(5)
+    for _ in range(100):  # the effector returns before the governor records the result
+        if any("node-state=cn003:down: done" in a for a in g.audit):
+            break
+        threading.Event().wait(0.02)
     assert calls == [["set", "node", "cn003", "down"]] and any("node-state=cn003:down: done" in a for a in g.audit)
 
 
@@ -714,3 +718,47 @@ def test_ticket_bot_verbs_validate_and_run(tmp_path):
     g.effector = lambda a: calls.append(a) or done.set() or 0
     assert ask({"cmd": "ticket-bot-set", "every": 10, "resolve": 30, "ignore": 0.5})["ok"] is True
     assert done.wait(5) and calls == [["set", "ticket-bot", "--every", "10", "--resolve", "30", "--ignore", "0.5"]]
+
+
+def test_a_queued_change_does_not_hide_the_running_one(tmp_path):
+    """#986: a second change waits behind the first (#341); status keeps showing the first as `change` and lists both in `changes`."""
+    import threading
+    release, started = threading.Event(), threading.Event()
+
+    def streamer(args, on_line):
+        if args == ["scale", "2"]:
+            on_line('@stage {"plan": ["Nodes"]}')
+            on_line('@stage {"stage": "Nodes", "state": "running"}')
+            started.set()
+            release.wait(5)
+        return 0
+
+    g, _ = _calm_gov(tmp_path, effector=lambda a: 0)
+    g.streamer = streamer
+    assert g.handle("scale", {"group": "compute", "n": 2})["job"] == 1 and started.wait(5)
+    assert g.handle("node-state", {"node": "cn001", "state": "on"})["job"] == 2
+    st = g.handle("status", {})
+    assert st["change"]["job"] == 1 and st["change"]["state"] == "running" and st["change"]["stages"][0]["state"] == "running"
+    assert [(c["job"], c["state"]) for c in st["changes"]] == [(1, "running"), (2, "queued")]
+    assert st["changes"][1]["started"] is None
+    assert g._change_busy()  # what lab-run and lab-validate check before they start
+    release.set()
+    for _ in range(100):
+        if [c["state"] for c in g.handle("status", {})["changes"]] == ["done", "done"]:
+            break
+        threading.Event().wait(0.05)
+    st = g.handle("status", {})
+    assert [(c["job"], c["state"]) for c in st["changes"]] == [(1, "done"), (2, "done")]
+    assert st["change"]["job"] == 2 and st["changes"][1]["started"] is not None and not g._change_busy()
+
+
+def test_status_keeps_the_last_ten_finished_changes(tmp_path):
+    from governor import core
+
+    g, _ = _calm_gov(tmp_path, effector=lambda a: 0)
+    for i in range(core.JOBS_KEPT + 5):
+        g.jobs[i + 1] = {"job": i + 1, "label": "x", "state": "done", "stages": [], "started": 0, "finished": 1}
+    g._changes = core.JOBS_KEPT + 5
+    g.handle("node-state", {"node": "cn001", "state": "on"})
+    jobs = [c["job"] for c in g.handle("status", {})["changes"]]
+    assert len(jobs) <= core.JOBS_KEPT + 1 and jobs[-1] == core.JOBS_KEPT + 6

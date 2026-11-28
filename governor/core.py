@@ -29,6 +29,7 @@ EVENTS_EVERY = 5.0  # seconds between memory.events reads (one small file per co
 
 ADMIT_FLOOR = int(1.0 * 1024**3)  # MemAvailable that must remain after a start (matches benchctl preflight)
 LAB_VALIDATE_MB = 250  # a lab validation one-shot set (P5, ADR 0050: the replay and validation estimate)
+JOBS_KEPT = 10  # finished changes `status` keeps besides the unfinished ones (#986)
 CHANGE_MAX_LEVEL = 1  # scale/set-profile fork docker; GV-8 forbids that under pressure (L2+)
 RUN_EXCLUSIVE = {"scale", "set-profile", "apply-plan", "lab-apply", "lab-restore", "lab-validate", "admit"}  # would change the cluster under a lab run
 NODE_IN = re.compile(r"(?:^|-)[a-z]{2,8}[0-9]{3}(?:-|$)")  # a node container (workbench-cn001-1), not a service
@@ -65,7 +66,8 @@ class Governor:
         self.annotator = annotator
         self.effector = effector
         self.streamer = streamer
-        self.change: dict | None = None  # the latest stack change and its stages, replaced whole on every update so `status` never reads a half-written one
+        self.change: dict | None = None  # the running stack change (else the last), replaced whole on every update so `status` never reads a half-written one
+        self.jobs: dict[int, dict] = {}  # every change by job id, queued ones too (#986): the last JOBS_KEPT finished, all unfinished
         self.tracer = tracer
         self.capture = Capture(capturer, lambda: self.ladder.level, self._record) if capturer else None  # on-demand wire capture, one at a time (issue 505)
         self.statser = statser
@@ -244,12 +246,19 @@ class Governor:
         self._changes += 1
         tag = f"(#{self._changes} {time.strftime('%H:%M:%S')})"  # two identical changes must not look alike: the page waits for a line it has not seen
 
-        job = self._changes
-        self.change = {"job": job, "label": label, "state": "running", "stages": [], "started": time.time(), "finished": None}
+        job, queued = self._changes, self._change_busy()  # behind a running change it waits its turn (#341) and says so (#986)
+        self._put({"job": job, "label": label, "state": "queued" if queued else "running", "stages": [],
+                   "started": None if queued else time.time(), "finished": None}, current=not queued)
+        done = [k for k, j in self.jobs.items() if j["state"] in ("done", "failed")]
+        for k in done[:-JOBS_KEPT]:
+            del self.jobs[k]
 
         def run() -> None:
             try:
                 with self._change_lock:
+                    cur = self.jobs.get(job)
+                    if cur and cur["state"] == "queued":
+                        self._put({**cur, "state": "running", "started": time.time()}, current=True)
                     rc = self.streamer(args, lambda line: self._stage_line(job, line)) if self.streamer else self.effector(args)
             except Exception as e:  # noqa: BLE001
                 self._finish(job, False)
@@ -308,15 +317,36 @@ class Governor:
         with self._lock:
             return self._admit(budget_mb)
 
-    def _change_view(self) -> dict | None:
-        """The latest change for `status`: job id, state and stages (name, state, seconds); no timestamps of its own beyond start and end."""
-        c = self.change
+    @staticmethod
+    def _job_view(c: dict | None) -> dict | None:
+        """One change for `status`: job id, state and stages (name, state, seconds); no timestamps of its own beyond start and end."""
         return None if c is None else {**c, "stages": [{"name": s["name"], "state": s["state"], "secs": s["secs"]} for s in c["stages"]]}
+
+    def _change_view(self) -> dict | None:
+        return self._job_view(self.change)
+
+    def _changes_view(self) -> list[dict]:
+        """`status`'s `changes` (#986): the kept jobs, oldest first, so a page finds its own job even while another runs or after it ended."""
+        return [self._job_view(j) for _, j in sorted(self.jobs.items())]
+
+    def _change_busy(self) -> bool:
+        """A change is running or waiting its turn: a lab run or validation must not start under it."""
+        return bool(self.change and self.change.get("state") == "running") or any(j["state"] in ("queued", "running") for j in self.jobs.values())
+
+    def _put(self, entry: dict, current: bool = False) -> None:
+        """Store a new version of a job; it becomes `change` when it starts (`current`) or already is the current one."""
+        with self._lock:
+            self.jobs[entry["job"]] = entry
+            if current or (self.change and self.change["job"] == entry["job"]):
+                self.change = entry
+
+    def _job(self, job: int) -> dict | None:
+        return self.jobs.get(job) or (self.change if self.change and self.change["job"] == job else None)
 
     def _stage_line(self, job: int, line: str) -> None:
         """One output line of change `job`: only `@stage {json}` lines count, anything else is ignored (the log text is not an API)."""
-        cur = self.change
-        if not line.startswith(STAGE_PREFIX) or not cur or cur["job"] != job:
+        cur = self._job(job)
+        if not line.startswith(STAGE_PREFIX) or not cur:
             return
         try:
             ev = json.loads(line[len(STAGE_PREFIX):])
@@ -333,14 +363,14 @@ class Governor:
                         s["state"], s["at"] = "running", now
                     else:
                         s["state"], s["secs"] = "done", round(now - (s["at"] or now), 1)
-        self.change = {**cur, "stages": stages}
+        self._put({**cur, "stages": stages})
 
     def _finish(self, job: int, ok: bool) -> None:
-        cur = self.change
-        if not cur or cur["job"] != job:
+        cur = self._job(job)
+        if not cur:
             return
         stages = [{**s, "state": "failed"} if s["state"] == "running" and not ok else s for s in cur["stages"]]
-        self.change = {**cur, "stages": stages, "state": "done" if ok else "failed", "finished": time.time()}
+        self._put({**cur, "stages": stages, "state": "done" if ok else "failed", "finished": time.time()})
 
     def handle(self, cmd: str, req: dict) -> dict:
         """Control-socket command handler; request already validated by control.dispatch."""
@@ -404,7 +434,7 @@ class Governor:
             if self.dry_run:
                 self._record(f"dry-run: would lab-run={req['name']}")
                 return {"ok": True, "dry_run": True}
-            if self.change and self.change.get("state") == "running":
+            if self._change_busy():
                 return {"ok": False, "error": "a change is already running: wait for it, then start the run"}
             return self.labrun.start(req["name"], bool(req.get("ab", False)), req.get("target_hours"), req.get("seed"), req.get("scenario"))
         if cmd == "lab-apply" and not self._lab_missing(req) and (refused := self._lab_apply_admit(req)):  # slow (a child): not under the lock
@@ -429,6 +459,7 @@ class Governor:
                         "violations": sorted(self.violations),
                         "audit": self.audit[-60:],
                         "change": self._change_view(),
+                        "changes": self._changes_view(),
                         "lab": self._lab_view(),
                         "netem": self.netem.status() if self.netem else None}  # None: the user-mode governor offers no netem
             if cmd == "admit":
@@ -459,7 +490,7 @@ class Governor:
                     return err
                 if req.get("side", "baseline") != "baseline":
                     return {"ok": False, "error": "the candidate side is not available yet (issue 553)"}
-                if self.change and self.change.get("state") == "running":
+                if self._change_busy():
                     return {"ok": False, "error": "a change is already running: wait for it, one lab run at a time"}
                 if self.ladder.level > CHANGE_MAX_LEVEL:
                     return {"ok": False, "error": f"refused at L{self.ladder.level}: lab runs are paused (GV-8)"}

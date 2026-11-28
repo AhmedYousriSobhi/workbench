@@ -9,6 +9,7 @@ import asyncio
 import contextlib
 import hmac
 import json
+import os
 import re
 import secrets
 import threading
@@ -46,15 +47,26 @@ from .wiki import Wiki, WikiError, esc, page
 STATIC = Path(__file__).parent / "static"
 # The page and its modules run under a strict policy: no inline script or style (#517, ADR 0047). /help carries it too (its
 # stylesheet is static/help.css, #525).
-CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; "
-       "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+# Opt-in (#983): WORKBENCH_DESKTOP_HELPER=1 lets the page ask one loopback port for a title token (static/js/desktop-helper.js).
+HELPER_ORIGIN = "http://127.0.0.1:47800"
+
+
+def helper_on() -> bool:
+    return os.environ.get("WORKBENCH_DESKTOP_HELPER") == "1"
+
+
+def csp(helper: bool = False) -> str:
+    return ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; "
+            f"connect-src 'self'{' ' + HELPER_ORIGIN if helper else ''}; "
+            "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 
 
 class CSPMiddleware:
     """Pure ASGI (no buffering, so the SSE feeds stream): add the policy to the page, /static and /help responses."""
 
-    def __init__(self, app):
+    def __init__(self, app, policy: str = csp()):
         self.app = app
+        self.policy = policy.encode()
 
     async def __call__(self, scope, receive, send):
         path = scope.get("path", "")
@@ -63,7 +75,7 @@ class CSPMiddleware:
 
         async def send_with_csp(msg):
             if msg["type"] == "http.response.start":
-                msg.setdefault("headers", []).append((b"content-security-policy", CSP.encode()))
+                msg.setdefault("headers", []).append((b"content-security-policy", self.policy))
             await send(msg)
 
         await self.app(scope, receive, send_with_csp)
@@ -298,7 +310,11 @@ def login_url(base: str, token: str) -> str:
 
 def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Path("scenarios"),
                sim_yaml: Path = Path("sim.yaml"), interval: float = 1.0, docs: Path = DOCS,
-               fetch=None, poster=None, nhc_src: Path = nhc.SRC, nhc_out: Path = nhc.OUT, counters=None) -> Starlette:
+               fetch=None, poster=None, nhc_src: Path = nhc.SRC, nhc_out: Path = nhc.OUT, counters=None,
+               desktop_helper: bool | None = None) -> Starlette:
+    if not token.strip():  # "" would match a request that sends no cookie and no Authorization header (#986)
+        raise ValueError("the page needs a login token: an empty one would let every request in")
+    helper = helper_on() if desktop_helper is None else desktop_helper  # read once, at start: a running page keeps its CSP
     sim = yaml.safe_load(sim_yaml.read_text())
     flow = Flow(ssh=None if fetch else ssh_sources, jump_ip=jump_address(),  # a test that passes `fetch` reaches no host counters
                 kube=KubeAudit(lambda req: checks.governor_request(req, socket, timeout=2)))
@@ -667,7 +683,13 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
         for e in rows:
             if e["id"] == "jira-real" and licence["text"]:
                 e["status"] = licence["text"]
+            if e["id"] == "ui" and helper:
+                e["status"] = f"Desktop helper switch on: the page may ask {HELPER_ORIGIN} for a title token (issue 983)."
         return JSONResponse({"entities": rows})
+
+    async def desktop_helper_state(request: Request):
+        """Whether this page started with WORKBENCH_DESKTOP_HELPER=1, so the title script asks the helper only when the CSP allows it."""
+        return JSONResponse({"on": helper})
 
     async def export_profile(request: Request):
         """The client profile file for the cluster on disk now. Read fresh per request (the page has no Docker, W-3),
@@ -935,7 +957,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
 
     return Starlette(
         lifespan=lifespan,
-        middleware=[Middleware(CSPMiddleware)],
+        middleware=[Middleware(CSPMiddleware, policy=csp(helper))],
         routes=[
             Route("/login", login, methods=["GET", "POST"]),
             Route("/api/login-code", protected(login_code, write=True), methods=["POST"]),
@@ -970,6 +992,7 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
             Route("/api/lab/{name}/report", protected(lab_report)),
             Route("/api/lab/{name}/{action}", protected(lab_act, write=True), methods=["POST"]),
             Route("/api/connections", protected(connections)),
+            Route("/api/desktop-helper", protected(desktop_helper_state)),
             Route("/api/export/profile", protected(export_profile)),
             Route("/api/nodes/{node}", protected(node_detail)),
             Route("/api/nodes/{node}/tickets", protected(node_tickets)),

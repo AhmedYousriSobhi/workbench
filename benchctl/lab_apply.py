@@ -29,7 +29,7 @@ from pathlib import Path
 
 import yaml
 
-from . import lab, lab_candidate, lab_import, lab_nodes, lab_slurm, lab_users, lab_validate
+from . import checks, lab, lab_candidate, lab_import, lab_nodes, lab_slurm, lab_users, lab_validate
 from .lab import LabError
 
 MARKER = "active.json"
@@ -275,6 +275,7 @@ class Env:
     restart_ctld: Callable[[], bool] | None = None
     compose_file: Path = field(default_factory=lambda: Path("compose/generated/docker-compose.yml"))
     sleep: Callable[[float], None] = time.sleep
+    proc_start: Callable[[int], str | None] | None = None  # pid -> start time; None: governor.labrun.proc_start
     say: Callable[[str], None] = print
 
     def dc(self, *args: str) -> list[str]:
@@ -647,12 +648,35 @@ def _apply_roles(name: str, roles: list[dict], env: Env) -> list[str]:
 
 # ---------------------------------------------------------------- remove
 
+def _clear_stale_run(name: str, env: Env) -> None:
+    """`run-active.json` naming this lab: refuse while its child process is alive (the run still needs the lab); when no process is
+    left it is a dead supervisor's record, which a later governor start would recover as a run of a lab that no longer exists (issue 975)."""
+    path = env.root / "run-active.json"
+    try:
+        old = json.loads(path.read_text())
+        if old.get("name") != name:
+            return
+        pid, pid_start = old.get("pid"), old.get("pid_start")
+    except (OSError, ValueError, AttributeError):
+        return
+    if env.proc_start is None:
+        from governor.labrun import proc_start
+        started = proc_start
+    else:
+        started = env.proc_start
+    if pid and pid_start is not None and started(int(pid)) == pid_start:
+        raise LabError(f"a run of lab {name} is active (run {old.get('run')}): `benchctl stop lab {name}`, wait until `benchctl status` shows it ended, "
+                       f"then `benchctl remove lab {name}` again")
+    path.unlink(missing_ok=True)
+
+
 def remove(name: str, env: Env) -> dict:
     """Return to the plain cluster. Refuses (marker kept) when something the lab made cannot be reached; deletes only what the lab made."""
     lab.valid_name(name)
     m = read_marker(env.root)
     if not m or m["name"] != name:
         raise LabError(f"lab {name} is not active" + (f" (lab {m['name']} is)" if m else "") + ": nothing to remove")
+    _clear_stale_run(name, env)
     made = m.get("created_objects", {})
     need = [(bool(made.get("sacctmgr")), "slurmdbd", "accounting", "benchctl up --with accounting"),
             (bool(made.get("k8s")), "k8s-apiserver", "Kubernetes", "benchctl up --with k8s"),
@@ -807,8 +831,8 @@ def ask_governor(req: dict, name: str, request: Callable[[dict], dict], root: Pa
         return True, ["the governor is in dry-run mode: nothing was changed"]
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        ch = request({"cmd": "status"}).get("change") or {}
-        if ch.get("job") == r["job"] and ch.get("state") in ("done", "failed"):
+        ch = checks.governor_job(request({"cmd": "status"}), r["job"])
+        if ch.get("state") in ("done", "failed"):
             break
         sleep(1)
     else:

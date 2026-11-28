@@ -766,3 +766,39 @@ def test_remove_cancels_the_lab_users_jobs_before_deleting_their_accounting_rows
     cancel = next(i for i, t in enumerate(c.calls) if "scancel -u" in t)
     first_delete = next(i for i, t in enumerate(c.calls) if "sacctmgr -i delete user" in t)
     assert cancel < first_delete
+
+
+def test_remove_refuses_while_the_run_child_is_alive_and_clears_a_dead_runs_record(world):
+    """Issue 975: a stale run-active.json would make the next governor recover a run of a lab that is gone."""
+    env, _c, root = world
+    lab_apply.apply("prod-a", "baseline", env)
+    rec = root / "run-active.json"
+    rec.write_text(json.dumps({"name": "prod-a", "run": "20260101-000000", "pid": 4242, "pid_start": "777"}))
+    env.proc_start = lambda pid: "777"  # the child is alive
+    with pytest.raises(LabError, match=r"benchctl stop lab prod-a"):
+        lab_apply.remove("prod-a", env)
+    assert rec.exists() and lab_apply.read_marker(root) is not None
+    env.proc_start = lambda pid: "999"  # pid reused by another process
+    lab_apply.remove("prod-a", env)
+    assert not rec.exists() and lab_apply.read_marker(root) is None
+
+
+def test_remove_keeps_the_record_of_another_lab(world):
+    env, _c, root = world
+    lab_apply.apply("prod-a", "baseline", env)
+    rec = root / "run-active.json"
+    rec.write_text(json.dumps({"name": "prod-b", "run": "20260101-000000", "pid": 1, "pid_start": "1"}))
+    env.proc_start = lambda pid: None
+    lab_apply.remove("prod-a", env)
+    assert rec.exists()
+
+
+def test_governor_job_finds_a_job_another_one_replaced():
+    """#986: the CLI waits for its own job; a newer change in `change` must not hide that its own one ended."""
+    from benchctl.checks import governor_job
+
+    st = {"change": {"job": 3, "state": "running"}, "changes": [{"job": 2, "state": "done"}, {"job": 3, "state": "running"}]}
+    assert governor_job(st, 2)["state"] == "done" and governor_job(st, 3)["state"] == "running"
+    assert governor_job(st, 9) == {}
+    assert governor_job({"change": {"job": 2, "state": "failed"}}, 2)["state"] == "failed"  # an older governor: no `changes`
+    assert governor_job({"change": None}, 2) == {}

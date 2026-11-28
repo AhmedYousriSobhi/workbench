@@ -134,6 +134,12 @@ An object that already exists without the lab's label (for example a PriorityCla
 
 Rows `sacctmgr` refuses to delete are listed.
 
+**Remove and a run.**
+- While the child of a run of this lab is alive, `remove lab NAME` refuses with one message naming `benchctl stop lab NAME`.
+- When no run process is left (a governor killed or restarted, a test that did not clean up), it deletes the stale `run-active.json` of that lab.
+- A later governor start then does not recover a run of a lab that is gone, and `run lab` is not refused.
+- A record that names another lab is left alone.
+
 ## Run the replay (built, not yet usable end to end)
 
 ```bash
@@ -166,8 +172,16 @@ Rows `sacctmgr` refuses to delete are listed.
 - The verdict follows ADR 0050: a hard failure is "Do not ship" (a lost job, still-pending up over 20 %, or a median wait up over 20 % in a partition with enough samples). A new cost or a 5 to 20 % regression is "Ship with changes". An improvement over 5 % and nothing worse is "Ship". Within 5 % is "No effect".
 - A partition with fewer than `min_samples` started jobs never fails a run. A run that is not comparable has no verdict, and a candidate-only run has none either.
 - The thresholds are `lab.verdict` in `sim.yaml` (defaults in the commented block) and are printed in every report, with the time-scaled parameters. One run per side is labelled a single run.
-- Suggestions come from a fixed catalogue (preemptions, wait spread between accounts, pending up, wait regression). They are text only.
-- Not measured yet, and listed in every report: alerts and time to alert, flapping, scheduler load, Kubernetes counts, idle-but-free GPUs, pending reasons, fairshare usage spread.
+- Suggestions come from a fixed catalogue (preemptions, wait spread between accounts, pending up, wait regression, a QOS limit holding most jobs back, a flapping alert). They are text only.
+- Not measured yet, and listed in every report: Kubernetes counts, idle-but-free GPUs, fairshare usage spread. Alerts, flapping, scheduler load and pending reasons are listed only when they could not be read.
+- **Pending reasons (issue 555).** A table of sacct's `Reason` per side.
+  - Slurm keeps there the last reason a job was held back *other than Priority or Resources*, even after the job ran. The row "(only Priority or Resources)" counts the jobs that only waited their turn.
+  - When more than half of the candidate's held-back jobs name a QOS limit (`QOS...`), the report suggests reviewing the QOS limits.
+  - A run collected before this column existed lists the mix as not measured.
+- **Scheduler load (issue 555).** slurmctld's own gauges over each side's replay (the `lab_run`-labelled series), each as max and median of the samples.
+  - Measures: last main and backfill cycle (microseconds), both queue lengths, server threads, the agent queue, messages queued for slurmdbd.
+  - Real controller numbers: never time-scaled, never part of the verdict. The lab controller runs far fewer nodes than production, so compare A with B; do not read them as production load.
+  - If Prometheus has none of the series, the report says not measured.
 - **Alerts (issue 555).** The report lists the alerts Prometheus saw firing on each side, with the time to the first one (production-equivalent) and the flaps. If Prometheus does not answer, they stay under "not measured".
 - **Repeats (issue 555).** `benchctl run lab NAME --ab --repeat 3` runs the same jobs three times in a row (same seed, one run after the other; the command stays until the last run ends and stops if one aborts). The report then says "repeated: 2 runs" and whether the verdicts agree. One run is always labelled single-run.
 - **QOS (issue 555).** The report has a wait-by-QOS table next to the one by partition.

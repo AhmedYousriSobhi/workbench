@@ -164,6 +164,15 @@ def governor_request(req: dict, path: str = GOV_SOCKET, timeout: float = 3) -> d
         return json.loads(c.makefile().readline())
 
 
+def governor_job(status: dict, job: int) -> dict:
+    """Change `job` from a governor `status`: its `changes` list (#986), else `change` when it is that job (an older governor), else {}."""
+    for c in status.get("changes") or []:
+        if c.get("job") == job:
+            return c
+    ch = status.get("change") or {}
+    return ch if ch.get("job") == job else {}
+
+
 def check_containers(runner=run) -> Check:
     ids = runner(["docker", "ps", "-q", "--filter", "label=workbench.class"])
     if ids.returncode != 0 or not ids.stdout.split():

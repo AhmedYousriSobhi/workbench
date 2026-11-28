@@ -47,7 +47,7 @@ DB = "slurm_acct_db"
 _ROOT_SQL = 'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD"'
 DUMP_SH = f'exec mariadb-dump -uroot -p"$MARIADB_ROOT_PASSWORD" --single-transaction --skip-dump-date --skip-comments --routines --triggers {DB}'
 LOAD_SH = f'{_ROOT_SQL} -e "DROP DATABASE IF EXISTS {DB}; CREATE DATABASE {DB}" && exec {_ROOT_SQL} {DB}'
-SACCT_FIELDS = "JobID,JobName,User,Account,QOS,Partition,AllocTRES,NNodes,Timelimit,Submit,Eligible,Start,End,Elapsed,State,ExitCode"
+SACCT_FIELDS = "JobID,JobName,User,Account,QOS,Partition,AllocTRES,NNodes,Timelimit,Submit,Eligible,Start,End,Elapsed,State,ExitCode,Reason"  # Reason: issue 555 (pending-reason mix)
 _AUTO_INC = re.compile(rb" AUTO_INCREMENT=\d+")
 
 

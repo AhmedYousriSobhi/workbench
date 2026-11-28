@@ -5,7 +5,7 @@ import { kindOf } from './svg.js';
 import { nodeList } from './inspector.js';
 import { loadCluster } from './cluster.js';
 import { jobsWarning, planDiff, reviewLines } from './planmodel.js';
-import { applyOutcome, stageRows } from './applymodel.js';
+import { applyOutcome, jobOf, stageRows } from './applymodel.js';
 import { budgetView } from './budgetmodel.js';
 
 export async function loadPlan() {
@@ -175,10 +175,10 @@ export function init2() {
 
 // the Progress list under the review: the governor's stages for this job, then its one-line summary (U5)
 export function paintProgress(job) {
-  const rows = stageRows(S.change && S.change.job === job ? S.change : null), o = applyOutcome(S.change, job);
+  const rows = stageRows(jobOf(S.change, job, S.changes)), o = applyOutcome(S.change, job, S.changes);
   $('pl-prog').hidden = !rows.length;
   setHTML($('pl-stages'), rows.map(r => `<li class="${r.state}"><b aria-hidden="true">${r.icon}</b><span>${esc(r.name)}</span><span class="t">${esc(r.t)}</span></li>`).join(''));
-  if (o.kind === 'running') setText($('pl-apply-msg'), '▶ ' + o.text);
+  if (o.kind === 'running' || o.kind === 'queued') setText($('pl-apply-msg'), (o.kind === 'running' ? '▶ ' : '○ ') + o.text);
 }
 
 export function init3() {
@@ -197,11 +197,11 @@ export function init3() {
     $('pl-apply-msg').textContent = (j.started ? '▶ ' : '▲ ') + j.message;
     if (!j.started) { S.applying = false; syncApply(); return; }
     if (j.job == null) { S.applying = false; syncApply(); $('pl-apply-msg').textContent += ' This governor does not report stages: progress is in Governor activity.'; return; }
-    S.change = null; paintProgress(j.job);
+    S.change = null; S.changes = []; paintProgress(j.job);
     const t0 = Date.now(); let tick = 0;
     const timer = setInterval(() => {
       if (document.hidden) return;  // W-11: nothing polls while the tab is hidden; the next visible tick catches up
-      const o = applyOutcome(S.change, j.job), gone = o.kind === 'unknown' && Date.now() - t0 > 30000;  // the governor restarted, or never reported this job
+      const o = applyOutcome(S.change, j.job, S.changes), gone = o.kind === 'unknown' && Date.now() - t0 > 30000;  // the governor restarted, or never reported this job
       paintProgress(j.job);
       if (o.kind === 'done' || o.kind === 'failed' || gone || Date.now() - t0 > 660000) {
         clearInterval(timer); S.applying = false; syncApply(); readStates();
