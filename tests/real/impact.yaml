@@ -100,10 +100,10 @@
   tests: [test_real_gpu_real]
 - name: web page
   paths: ["webui/static/**", "scripts/ui_shots.py"]
-  tests: [test_webui_browser, test_traffic_live_browser, test_nhc_browser, test_flow_real]
+  tests: [test_webui_browser, test_traffic_live_browser, test_nhc_browser, test_flow_real, test_desktop_helper_browser]
 - name: web server
   paths: ["webui/*.py"]
-  tests: [test_webui_real, test_webui_browser, test_flow_real, test_cluster_real, test_launcher_real, test_traffic_record_real]
+  tests: [test_webui_real, test_webui_browser, test_flow_real, test_cluster_real, test_launcher_real, test_traffic_record_real, test_desktop_helper_browser]
 - name: access, login and jump nodes
   paths: ["images/login/**", "images/jump/**", "benchctl/logins.py", "benchctl/teleport.py", "benchctl/teleportaudit.py", "benchctl/nodeshell.py", "benchctl/nodes.py"]
   tests: [test_login_real, test_access_real, test_teleport_real, test_teleport_prune_real, test_teleport_kube_real, test_node_ssh_real, test_ssh_faults_real, test_ssh_counter_real, test_node_tools_real, test_cmsh_real, test_usersim_real]

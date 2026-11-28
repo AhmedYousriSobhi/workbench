@@ -8,6 +8,7 @@ import { roundedPoly } from '../../static/js/svg.js';
 import { nhcOrderAfterMove } from '../../static/js/nhc.js';
 import { describe, plain } from '../../static/js/testrunmodel.js';
 import { pathOf, rateOf, trRate, SLURM_OUT } from '../../static/js/traffic.js';
+import { withHelperStatus, HELPER_OFF } from '../../static/js/connections.js';
 
 test('esc escapes what could end an HTML text or a double-quoted attribute', () => {
   assert.equal(esc('<b a="1">&</b>'), '&lt;b a=&quot;1&quot;&gt;&amp;&lt;/b&gt;');
@@ -68,4 +69,16 @@ test('rateOf turns a growing counter into requests per second, refreshed at most
 test('SLURM_OUT matches the states that take a node out of service, not the ones that keep it in', () => {
   for (const s of ['drain', 'drained*', 'draining', 'down', 'fail', 'maint', 'unknown', 'future']) assert.ok(SLURM_OUT.test(s), s);
   for (const s of ['idle', 'mixed', 'allocated', 'completing']) assert.ok(!SLURM_OUT.test(s), s);
+});
+
+test('the desktop-helper line on "This page" says one thing per condition (#983)', () => {
+  const rows = [{ id: 'ui', name: 'This page' }, { id: 'jira', name: 'Jira mock' }];
+  assert.deepEqual(withHelperStatus(rows, false), rows);  // neither switch: nothing
+  const off = withHelperStatus(rows, true);  // key set, page started without the switch
+  assert.equal(off[0].status, HELPER_OFF);
+  assert.equal(off[1].status, undefined);
+  assert.match(HELPER_OFF, /benchctl stop, then WORKBENCH_DESKTOP_HELPER=1 \.\/scripts\/benchctl start/);
+  const on = [{ id: 'ui', status: 'Desktop helper switch on' }, rows[1]];
+  assert.equal(withHelperStatus(on, true)[0].status, 'Desktop helper switch on');  // the server's line wins
+  assert.equal(rows[0].status, undefined);  // the cached rows are not changed
 });

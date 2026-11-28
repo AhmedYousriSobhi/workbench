@@ -338,13 +338,25 @@ The page skips steps that need Docker (`ssh` and `k8s` steps), because it has no
 
 ### Let a desktop helper see only this tab (optional)
 
-A desktop helper that is allowed to see this page, but not your other browser tabs, can tell the tab apart by a secret in the window title. It is off by default and needs two switches:
+A desktop helper that is allowed to see this page, but not your other browser tabs, can tell the tab apart by a secret in the window title. It is off by default and needs two switches.
 
-```bash
-WORKBENCH_DESKTOP_HELPER=1 ./scripts/benchctl up --profile min   # lets the page reach 127.0.0.1:47800 (CSP)
-```
+1. Start the web page with the switch on. The page reads it only when it starts, so stop a running one first (`start` leaves a running page alone):
 
-and once in the browser console on the workbench page: `localStorage.setItem('workbench-desktop-helper', '1')`, then reload. With a helper running on port 47800 the title gets a token appended; with none running nothing happens. Turn it off with `localStorage.removeItem('workbench-desktop-helper')`.
+   ```bash
+   ./scripts/benchctl stop
+   ```
+
+   ```bash
+   WORKBENCH_DESKTOP_HELPER=1 ./scripts/benchctl start   # lets the page reach 127.0.0.1:47800 (CSP)
+   ```
+
+2. Once, in the browser console on the workbench page: `localStorage.setItem('workbench-desktop-helper', '1')`, then reload.
+
+- **Result:** with a helper running on port 47800 the title becomes `workbench <token>`; with none running it stays `workbench`.
+- **Which switch is on:** open **Connections**. The row **This page** says "Desktop helper switch on", or, when only the browser key is set, that the page started without it and how to restart it.
+- **Turn it off:** `localStorage.removeItem('workbench-desktop-helper')`.
+
+What the helper must answer: [client-testing.md](client-testing.md#let-a-desktop-helper-see-only-the-workbench-tab).
 
 ## 5. When something is wrong
 
