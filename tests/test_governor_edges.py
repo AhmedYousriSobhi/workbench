@@ -97,7 +97,7 @@ def test_dispatch_survives_a_crashing_handler_and_rejects_oversize_and_non_objec
     assert control.dispatch(b"[1, 2]", boom, lambda: set())["error"] == "request must be an object"
     assert "bad json" in control.dispatch(b"{nope", boom, lambda: set())["error"]
     assert control.dispatch(b'{"cmd": "scale", "group": "compute", "n": -1}', boom, lambda: {"compute"})["ok"] is False
-    assert control.dispatch(b'{"cmd": "set-profile"}', boom, lambda: set())["error"] == "set-profile needs profile:str"
+    assert control.dispatch(b'{"cmd": "set-profile"}', boom, lambda: set())["error"].startswith("set-profile needs profile: a profile name")
     assert control.dispatch(b'{"cmd": "admit", "budget_mb": "x"}', boom, lambda: set())["error"].startswith("admit needs")
 
 

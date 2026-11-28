@@ -46,6 +46,8 @@ def test_dispatch_rejects_unknown_and_bad():
     assert d(b'{"cmd":"scale","group":"compute","n":64}').get("error") != msg
     assert d(b'{"cmd":"admit","budget_mb":true}')["ok"] is False
     assert d(b'{"cmd":"set-profile"}')["ok"] is False
+    for bad in ("../../tmp/x", "/etc/x", "--help", "std yaml", "STD", "a" * 33):  # #986: no path, no option, nothing free-form
+        assert "profile name" in d(json.dumps({"cmd": "set-profile", "profile": bad}).encode())["error"], bad
     assert d(b"x" * 5000)["error"] == "request too large"
 
 
@@ -167,3 +169,26 @@ def test_k8s_step_accepts_only_fixed_keys_with_validated_values():
                 {"scale": {"namespace": "a", "deploy": "web", "replicas": True}}, "down", None):
         assert d(bad)["ok"] is False, bad
     assert control.dispatch(b'{"cmd": "k8s-step"}', lambda c, q: {"ok": True}, lambda: set())["ok"] is False
+
+
+def test_every_shipped_profile_name_passes_the_set_profile_check():
+    names = [p.stem for p in (Path(__file__).resolve().parents[1] / "profiles").glob("*.yaml")]
+    assert names and all(control.PROFILE_RE.fullmatch(n) for n in names), names
+
+
+def test_the_governors_copies_of_benchctl_rules_agree_with_benchctl():
+    """#986: the governor keeps its own copies so it does not import benchctl; a copy that drifts refuses a valid request."""
+    import yaml
+
+    from benchctl import k8s, lab, lab_slurm, logins, nodes, workload
+
+    assert set(control.K8S_FAULTS) == set(k8s.FAULTS)
+    assert control.LOGIN_MODES == set(logins.MODES) and control.LOGIN_KINDS == set(logins.KINDS)
+    assert control.BMC_GROUPS == set(nodes.GROUPS)
+    assert control.TARGET_HOURS == (lab_slurm.MIN_TARGET_HOURS, lab_slurm.MAX_TARGET_HOURS)
+    assert control.LAB_NAME_RE.pattern == lab.NAME.pattern
+    assert control.K8S_NAME_RE.pattern == k8s._NAME.replace("*", "{0,61}")  # the same, plus the 63-character limit of a DNS label
+    assert control.TICKET_RANGES == {("resolve" if k == "resolve_after" else k): v for k, v in workload.TICKET_KEYS.items()}
+    sim = yaml.safe_load((Path(__file__).resolve().parents[1] / "sim.yaml").read_text())
+    names = [n for n, _ in nodes.node_names(sim)] + sorted(nodes.k8s_node_names(sim))
+    assert names and all(control.NODE_RE.fullmatch(n) for n in names), [n for n in names if not control.NODE_RE.fullmatch(n)]

@@ -29,7 +29,7 @@ from pathlib import Path
 
 import yaml
 
-from . import lab, lab_candidate, lab_import, lab_nodes, lab_slurm, lab_users, lab_validate
+from . import checks, lab, lab_candidate, lab_import, lab_nodes, lab_slurm, lab_users, lab_validate
 from .lab import LabError
 
 MARKER = "active.json"
@@ -831,8 +831,8 @@ def ask_governor(req: dict, name: str, request: Callable[[dict], dict], root: Pa
         return True, ["the governor is in dry-run mode: nothing was changed"]
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        ch = request({"cmd": "status"}).get("change") or {}
-        if ch.get("job") == r["job"] and ch.get("state") in ("done", "failed"):
+        ch = checks.governor_job(request({"cmd": "status"}), r["job"])
+        if ch.get("state") in ("done", "failed"):
             break
         sleep(1)
     else:

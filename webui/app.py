@@ -312,6 +312,8 @@ def create_app(token: str, socket: str = checks.GOV_SOCKET, scenarios: Path = Pa
                sim_yaml: Path = Path("sim.yaml"), interval: float = 1.0, docs: Path = DOCS,
                fetch=None, poster=None, nhc_src: Path = nhc.SRC, nhc_out: Path = nhc.OUT, counters=None,
                desktop_helper: bool | None = None) -> Starlette:
+    if not token.strip():  # "" would match a request that sends no cookie and no Authorization header (#986)
+        raise ValueError("the page needs a login token: an empty one would let every request in")
     helper = helper_on() if desktop_helper is None else desktop_helper  # read once, at start: a running page keeps its CSP
     sim = yaml.safe_load(sim_yaml.read_text())
     flow = Flow(ssh=None if fetch else ssh_sources, jump_ip=jump_address(),  # a test that passes `fetch` reaches no host counters

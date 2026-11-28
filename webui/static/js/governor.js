@@ -67,7 +67,7 @@ export function render(st) {
   $('mem-lo').textContent = (lo - pad).toFixed(1) + ' GB'; $('mem-hi').textContent = (hi + pad).toFixed(1) + ' GB';
   const phi = Math.max(10, ...psi); spark('sp-psi', psi, 0, phi); $('psi-hi').textContent = phi.toFixed(0) + ' %';
   const lt = labChipText(st.lab), lc = $('c-lab'); lc.hidden = !lt; if (lt) setChip('c-lab', 'warn', '▲', lt);  // not the plain cluster: say so (issue 553)
-  S.lastLog = st.audit; S.change = st.change || null; renderLog();
+  S.lastLog = st.audit; S.change = st.change || null; S.changes = st.changes || []; renderLog();
 }
 
 let events = null;

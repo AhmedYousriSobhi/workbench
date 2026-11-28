@@ -3,16 +3,16 @@
 <!-- GENERATED from docs/progress.yaml by `python -m benchctl.progress`; do not edit. -->
 Last updated 2026-11-18. Legend: ✅ Done 🔍 In review 🟡 Partial ⬜ To do. Mermaid diagrams render on GitHub; for any browser open [progress.html](progress.html).
 
-**93% built** (40 done, 155 in review, 11 partial, 4 to do, 210 items).
+**93% built** (40 done, 156 in review, 11 partial, 4 to do, 211 items).
 
-Verified, built items by highest level: 0 client, 21 live, 35 unit only, 139 not stated.
+Verified, built items by highest level: 0 client, 21 live, 36 unit only, 139 not stated.
 
 ## Roadmap
 
 ```mermaid
 flowchart LR
     p0["Baseline<br/>33%"]:::partial
-    p1["Governor<br/>88%"]:::partial
+    p1["Governor<br/>89%"]:::partial
     p2["Slurm<br/>100%"]:::review
     p3["Mocks<br/>90%"]:::partial
     p4["People and chaos<br/>25%"]:::partial
@@ -110,7 +110,7 @@ _Measure real memory so budgets stop being guesses._
 
 1/3 done
 
-### Governor (88%)
+### Governor (89%)
 
 _A root service that keeps the host alive by escalating through a ladder._
 
@@ -128,13 +128,14 @@ _A root service that keeps the host alive by escalating through a ladder._
 | systemd unit installed permanently | 🟡 Partial | not stated | Unit and slice pass systemd-analyze and ran as a transient service in tests; scripts/install-governor.sh installs it as the standing service (printed unit tested; the sudo install itself is run by the user). | `systemd` | - |
 | systemd-oomd backstop (optional) | ✅ Done | Unit | Drop-in on workbench.slice (ManagedOOMMemoryPressure=kill, limit 60%) covering the P0-P6 container slices; only with the root installer's --with-oomd, removed by --without-oomd and --uninstall, never the host oomd.conf; doctor line oomd backstop (SPEC GV-10, ADR 0010 addendum). Unit and installer dry-run tests; the root test is run by the owner. | `systemd/workbench.slice.d/50-oomd.conf`, `scripts/install-governor.sh`, `benchctl/checks.py` | [#686](https://github.com/AhmedYousriSobhi/workbench/pull/686) |
 | Admission and real scale / set-profile | ✅ Done | Live | admit command (GV-9): refused at L2+ or if it would breach the floor; scale and set-profile run benchctl in the background at L0-L1 only (GV-8). benchctl up/scale ask first. Verified live through the socket. | `governor/core.py` | #48 |
+| Audit fixes: page token, queued changes, set-profile, rule copies (issue 986) | 🔍 In review | Unit | An empty, short or missing page token file gets a new 0600 token and create_app refuses an empty one (an empty token matched a request with no cookie). status keeps change (the running job) and adds changes (unfinished jobs and the last 10 finished, state queued while waiting), so a queued change no longer hides the running one; the page and benchctl find their job in changes and a lab run is refused while a change waits. set-profile takes a profile name only. A test compares the governor's copies of benchctl's rules with benchctl. No live or client run. | `webui/__main__.py`, `webui/app.py`, `governor/core.py`, `governor/control.py`, `benchctl/checks.py`, `webui/static/js/applymodel.js`, `webui/static/js/plan.js`, `docs/adr/0048-apply-progress-from-governor-stages.md` | - |
 | Swap storm, memory.events and compressed swap signals (issue 463) | ✅ Done | not stated | Sustained pswpout adds one level (up to L3); per-container memory.events high/oom/oom_kill in status and /metrics, oom_kill an audit event; zswap and zram pools taken off MemAvailable. Unit tests with the signals file; live in test_pressure_real. | `governor/signals.py`, `governor/ladder.py`, `governor/core.py`, `governor/metrics.py`, `docs/adr/0059-governor-signal-model.md` | - |
 | PSI trigger, pre-opened signal files, thresholds from sim.yaml (issue 464) | ✅ Done | not stated | A kernel PSI trigger (2 s window, works as a normal user) wakes the loop early, polling fallback with the reason logged; /proc files opened once and read with preadv; L1/L4/calm memory thresholds and the admission floor derive from host.reserve_gb and safety_floor_gb. Latency gain not measured. | `governor/psi.py`, `governor/hostsize.py`, `governor/signals.py`, `governor/__main__.py`, `docs/adr/0059-governor-signal-model.md` | - |
 | Governor /metrics endpoint | ✅ Done | not stated | Prometheus text (level, MemAvailable, PSI, swap, groups per priority, actions, admissions) bound to the docker bridge address, rendered once per step so a scrape does no work (GV-8). The Prometheus 'governor' target is up on the live stack. | `governor/metrics.py` | #60 |
 | Live ladder test on the real stack | ✅ Done | Live | Dry-run governor against the running containers: L0 to L3 and back, /metrics, Grafana annotations and the planned throttle/freeze/thaw actions. The root variant passes on the dev machine: L3 really freezes a live container's cgroup (cgroup.events frozen 1), keeps P1 services running, and thaws on recovery; it also exposed and fixed the nested-slice cgroup path bug (PR 64). | `tests/real/test_pressure_real.py` | #60 |
 | Host tuning script and benchctl top | ⬜ To do | not stated | zram, swappiness and THP tuning with confirmation, and a live view of the governor. | - | - |
 
-15/17 done
+15/18 done
 
 ### Slurm (100%)
 

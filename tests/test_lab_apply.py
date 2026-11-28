@@ -791,3 +791,14 @@ def test_remove_keeps_the_record_of_another_lab(world):
     env.proc_start = lambda pid: None
     lab_apply.remove("prod-a", env)
     assert rec.exists()
+
+
+def test_governor_job_finds_a_job_another_one_replaced():
+    """#986: the CLI waits for its own job; a newer change in `change` must not hide that its own one ended."""
+    from benchctl.checks import governor_job
+
+    st = {"change": {"job": 3, "state": "running"}, "changes": [{"job": 2, "state": "done"}, {"job": 3, "state": "running"}]}
+    assert governor_job(st, 2)["state"] == "done" and governor_job(st, 3)["state"] == "running"
+    assert governor_job(st, 9) == {}
+    assert governor_job({"change": {"job": 2, "state": "failed"}}, 2)["state"] == "failed"  # an older governor: no `changes`
+    assert governor_job({"change": None}, 2) == {}
